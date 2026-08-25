@@ -8,6 +8,7 @@ void ui_page_03_menu_destroy(void);
 bool ui_page_03_menu_resume(void);
 void ui_page_03_menu_suspend(void);
 bool page_03_menu_is_created(void);
+bool page_03_menu_is_visible(void);
 lv_obj_t *page_03_menu_find_obj(const char *name);
 void page_03_menu_icon_feedback(const char *name);
 void switch_to_amount_batch(void);

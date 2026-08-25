@@ -16,7 +16,11 @@ typedef struct {
     uint64_t total_us;
     uint32_t max_us;
     uint32_t count;
+    uint16_t histogram[128];
 } perf_time_accumulator_t;
+
+#define PERF_TIME_HISTOGRAM_BUCKET_US 4000U
+#define PERF_TIME_HISTOGRAM_BUCKETS 128U
 
 static perf_time_accumulator_t g_lvgl_time;
 static perf_time_accumulator_t g_loop_time;
@@ -25,10 +29,20 @@ static perf_time_accumulator_t g_main_refresh_time;
 static void perf_time_report(perf_time_accumulator_t *time,
                              uint32_t elapsed_us)
 {
+    uint32_t bucket;
+
     time->total_us += elapsed_us;
     time->count++;
     if (elapsed_us > time->max_us) {
         time->max_us = elapsed_us;
+    }
+
+    bucket = elapsed_us / PERF_TIME_HISTOGRAM_BUCKET_US;
+    if (bucket >= PERF_TIME_HISTOGRAM_BUCKETS) {
+        bucket = PERF_TIME_HISTOGRAM_BUCKETS - 1U;
+    }
+    if (time->histogram[bucket] < UINT16_MAX) {
+        time->histogram[bucket]++;
     }
 }
 
@@ -47,6 +61,7 @@ static void perf_time_sample(perf_time_accumulator_t *time,
     time->total_us = 0;
     time->max_us = 0;
     time->count = 0;
+    memset(time->histogram, 0, sizeof(time->histogram));
 }
 
 typedef struct {
@@ -101,6 +116,31 @@ static uint32_t perf_time_average_us(const perf_time_accumulator_t *time)
         return 0;
     }
     return (uint32_t)(time->total_us / time->count);
+}
+
+static uint32_t perf_time_p95_us(const perf_time_accumulator_t *time)
+{
+    uint32_t bucket;
+    uint32_t accumulated = 0;
+    uint32_t target;
+
+    if (time->count == 0) {
+        return 0;
+    }
+
+    target = (time->count * 95U + 99U) / 100U;
+    for (bucket = 0; bucket < PERF_TIME_HISTOGRAM_BUCKETS; bucket++) {
+        accumulated += time->histogram[bucket];
+        if (accumulated >= target) {
+            uint32_t upper_bound = (bucket + 1U) * PERF_TIME_HISTOGRAM_BUCKET_US;
+            if (bucket == PERF_TIME_HISTOGRAM_BUCKETS - 1U) {
+                return time->max_us;
+            }
+            return upper_bound < time->max_us ? upper_bound : time->max_us;
+        }
+    }
+
+    return time->max_us;
 }
 
 static void perf_profile_reset_window(uint32_t now_ms)
@@ -330,16 +370,19 @@ void perf_profile_poll(uint32_t now_ms)
     }
 
     uart_debug_printf(
-        "PERF page=%s(%u) act=%s fps=%u n=%u inv=%u/%llu/%u h=%u/%u loop=%u/%u "
-        "out=%u/%u/%u/%u/%u ge=%u:%llu,%u:%llu,%u:%llu "
+        "PERF page=%s(%u) act=%s fps=%u n=%u inv=%u/%llu/%u h=%u/%u/%u loop=%u/%u/%u "
+        "out=%u/%u/%u/%u/%u/%u ge=%u:%llu,%u:%llu,%u:%llu "
         "gepipe=%u/%llu/%llu/%llu/%u\n",
         g_profile.page_name, g_profile.page_id, activity,
         fps, g_profile.frames, inv_avg, (unsigned long long)pixels_avg,
         g_profile.full_screen_frames,
         perf_time_average_us(&g_profile.active_handler),
+        perf_time_p95_us(&g_profile.active_handler),
         g_profile.active_handler.max_us,
-        perf_time_average_us(&g_profile.loop), g_profile.loop.max_us,
-        perf_time_average_us(&g_profile.flush), g_profile.flush.max_us,
+        perf_time_average_us(&g_profile.loop),
+        perf_time_p95_us(&g_profile.loop), g_profile.loop.max_us,
+        perf_time_average_us(&g_profile.flush),
+        perf_time_p95_us(&g_profile.flush), g_profile.flush.max_us,
         perf_time_average_us(&g_profile.pan),
         perf_time_average_us(&g_profile.vsync),
         perf_time_average_us(&g_profile.mirror),

@@ -19,6 +19,13 @@ typedef struct {
 } multi_pass_verify_context_t;
 
 static multi_pass_verify_context_t g_verify;
+static uint32_t g_verify_revision = 1;
+
+static void multi_pass_revision_bump(void)
+{
+    g_verify_revision++;
+    if (g_verify_revision == 0) g_verify_revision = 1;
+}
 
 static int multi_pass_abs_int(int value)
 {
@@ -361,6 +368,7 @@ bool multi_pass_verification_start(uint8_t target_passes, bool add_enabled)
     memset(&g_verify, 0, sizeof(g_verify));
     g_verify.state = MULTI_PASS_VERIFY_RUNNING;
     g_verify.target_passes = target_passes;
+    multi_pass_revision_bump();
     return true;
 }
 
@@ -368,6 +376,7 @@ void multi_pass_verification_cancel(void)
 {
     multi_pass_release_all();
     memset(&g_verify, 0, sizeof(g_verify));
+    multi_pass_revision_bump();
 }
 
 bool multi_pass_verification_on_count_start(bool add_enabled)
@@ -378,6 +387,7 @@ bool multi_pass_verification_on_count_start(bool add_enabled)
         return false;
     }
     g_verify.count_armed = !add_enabled;
+    multi_pass_revision_bump();
     return g_verify.count_armed;
 }
 
@@ -441,6 +451,7 @@ multi_pass_capture_kind_t multi_pass_verification_capture(
         event->comparison = g_verify.latest_comparison;
         event->all_passes_match = multi_pass_all_captured_passes_match();
     }
+    multi_pass_revision_bump();
     return kind;
 }
 
@@ -453,8 +464,10 @@ multi_pass_capture_kind_t multi_pass_verification_confirm_same_bundle(void)
     g_verify.awaiting_bundle_confirmation = false;
     if (g_verify.captured_passes >= g_verify.target_passes) {
         g_verify.state = MULTI_PASS_VERIFY_COMPLETE;
+        multi_pass_revision_bump();
         return MULTI_PASS_CAPTURE_COMPLETE;
     }
+    multi_pass_revision_bump();
     return MULTI_PASS_CAPTURE_NEXT;
 }
 
@@ -484,6 +497,7 @@ bool multi_pass_verification_restart_from_latest(void)
     memset(&g_verify.latest_comparison, 0,
            sizeof(g_verify.latest_comparison));
     memset(g_verify.comparisons, 0, sizeof(g_verify.comparisons));
+    multi_pass_revision_bump();
     return true;
 }
 
@@ -510,4 +524,9 @@ void multi_pass_verification_get_view(multi_pass_verify_view_t *view)
 bool multi_pass_verification_is_active(void)
 {
     return g_verify.state == MULTI_PASS_VERIFY_RUNNING;
+}
+
+uint32_t multi_pass_verification_revision(void)
+{
+    return g_verify_revision;
 }

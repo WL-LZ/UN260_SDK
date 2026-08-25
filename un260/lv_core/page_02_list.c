@@ -60,6 +60,8 @@ typedef struct {
     uint8_t col_count;
     uint16_t total_row;
     uint16_t first_row;
+    uint16_t bound_first_row;
+    lv_coord_t spacer_y;
     bool pressing;
     bool press_moved;
     lv_point_t press_point;
@@ -386,6 +388,11 @@ static void page_02_scroll_section_init_config(void) // 初始化A/B/C滚动容�
     s_page_02_scroll_sections[PAGE_02_SECTION_C].page_size = PAGE_02_C_ITEM;
     s_page_02_scroll_sections[PAGE_02_SECTION_C].pool_row = PAGE_02_C_ITEM + 1;
     s_page_02_scroll_sections[PAGE_02_SECTION_C].col_count = 3;
+
+    for (int i = 0; i < PAGE_02_SECTION_COUNT; i++) {
+        s_page_02_scroll_sections[i].bound_first_row = UINT16_MAX;
+        s_page_02_scroll_sections[i].spacer_y = (lv_coord_t)-32768;
+    }
 }
 
 static void page_02_scroll_section_style_init(lv_obj_t *obj) // 统一设置滚动容器样式
@@ -481,7 +488,6 @@ static void page_02_scroll_section_spacer_refresh(page_02_scroll_section_t *sect
 
     if (section == NULL || section->spacer == NULL) return;
 
-    page_02_scroll_section_total_page_refresh(section);
     content_h = PAGE_02_SCROLL_ROW_Y_OFFSET + (lv_coord_t)section->total_row * PAGE_02_SCROLL_ROW_GAP;
     content_h += PAGE_02_SCROLL_EDGE_BUFFER;
     max_scroll_y = page_02_scroll_section_max_scroll_y_get(section);
@@ -492,7 +498,10 @@ static void page_02_scroll_section_spacer_refresh(page_02_scroll_section_t *sect
         content_h = section->h;
     }
 
-    lv_obj_set_pos(section->spacer, 0, content_h - 1);
+    if (section->spacer_y != content_h - 1) {
+        section->spacer_y = content_h - 1;
+        lv_obj_set_pos(section->spacer, 0, section->spacer_y);
+    }
 }
 
 static bool page_02_scroll_section_small_data(page_02_scroll_section_t *section) // 判断当前分区是否为小数据量
@@ -550,7 +559,6 @@ static void page_02_scroll_section_row_bind(page_02_scroll_section_t *section, u
         lv_obj_clear_flag(section->cell[pool_row][col], LV_OBJ_FLAG_HIDDEN);
         lv_obj_set_pos(section->cell[pool_row][col], section->col_x[col],
             PAGE_02_SCROLL_ROW_Y_OFFSET + data_index * PAGE_02_SCROLL_ROW_GAP);
-        lv_obj_set_style_text_font(section->cell[pool_row][col], &lv_font_instrument_sans_medium_16, 0);
     }
 
     switch (section->section_id) {
@@ -609,10 +617,14 @@ static void page_02_scroll_section_visible_refresh(page_02_scroll_section_t *sec
         first_row = last_page_first_row;
     }
     section->first_row = first_row;
+    if (section->bound_first_row == first_row) {
+        return;
+    }
 
     for (uint16_t row = 0; row < section->pool_row; row++) {
         page_02_scroll_section_row_bind(section, row, (int)first_row + row);
     }
+    section->bound_first_row = first_row;
 }
 
 static void page_02_scroll_section_status_refresh(page_02_scroll_section_t *section) // 根据滚动位置刷新页码
@@ -623,7 +635,6 @@ static void page_02_scroll_section_status_refresh(page_02_scroll_section_t *sect
 
     if (section == NULL) return;
 
-    page_02_scroll_section_total_page_refresh(section);
     scroll_top = lv_obj_get_scroll_top(section->container);
     if (scroll_top < 0) {
         scroll_top = 0;
@@ -642,16 +653,19 @@ static void page_02_scroll_section_status_refresh(page_02_scroll_section_t *sect
     switch (section->section_id) {
     case PAGE_02_SECTION_A:
         if (current_page > page_02_a_report_status.total_page) current_page = page_02_a_report_status.total_page;
+        if (page_02_a_report_status.curent_page == current_page) break;
         page_02_a_report_status.curent_page = current_page;
         page_02_a_page_num_refre();
         break;
     case PAGE_02_SECTION_B:
         if (current_page > page_02_b_report_status.total_page) current_page = page_02_b_report_status.total_page;
+        if (page_02_b_report_status.curent_page == current_page) break;
         page_02_b_report_status.curent_page = current_page;
         page_02_b_page_num_refre();
         break;
     case PAGE_02_SECTION_C:
         if (current_page > page_02_c_report_status.total_page) current_page = page_02_c_report_status.total_page;
+        if (page_02_c_report_status.curent_page == current_page) break;
         page_02_c_report_status.curent_page = current_page;
         page_02_c_page_num_refre();
         break;
@@ -869,6 +883,8 @@ void page_02_list_section_refresh(page_02_section_id_t section_id) // 刷新指�
     page_02_scroll_section_t *section = page_02_scroll_section_get(section_id);
 
     if (section == NULL || section->container == NULL || !lv_obj_is_valid(section->container)) return;
+    page_02_scroll_section_total_page_refresh(section);
+    section->bound_first_row = UINT16_MAX;
     page_02_scroll_section_visible_refresh(section);
     page_02_scroll_section_status_refresh(section);
 }
@@ -968,6 +984,7 @@ void page_02_list_section_scroll_to_page(page_02_section_id_t section_id, bool a
     page_02_scroll_section_t *section = page_02_scroll_section_get(section_id);
 
     if (section == NULL) return;
+    page_02_scroll_section_total_page_refresh(section);
     page_02_scroll_section_spacer_refresh(section);
     page_02_scroll_section_sync_to_status(section, anim_en);
 }

@@ -48,6 +48,7 @@ typedef struct {
 
 void smart_island_create(lv_obj_t *parent); //创建灵动岛
 void smart_island_destroy(void); //销毁灵动岛
+void smart_island_set_suspended(bool suspended); //主页面隐藏时暂停对象刷新
 void smart_island_refresh_time(void); //刷新默认时间显示
 void smart_island_set_visual(smart_island_visual_t visual, bool anim_en); //设置视觉形态
 void smart_island_set_scene(smart_island_scene_t scene, const char *title, const char *subtitle); //设置场景与文本

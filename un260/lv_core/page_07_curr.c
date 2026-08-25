@@ -139,6 +139,7 @@ void ui_page_07_curr_destroy(void)
 #define CURR_TRACK_Y             365
 #define CURR_TRACK_H             6
 #define CURR_DRAG_THRESHOLD      14
+#define CURR_DRAG_APPLY_MIN_PX   3
 #define CURR_FLING_FACTOR        1
 #define CURR_FLING_TRIGGER       6
 #define CURR_FLING_MAX           (CURR_CARD_STRIDE / 2)
@@ -148,7 +149,6 @@ void ui_page_07_curr_destroy(void)
 
 #define CURR_LEFT_BG_COLOR       0xEDF0F4
 #define CURR_RIGHT_BG_COLOR      0xF4F5F7
-#define CURR_CARD_BG_UNSEL       0xF7F7F7
 #define CURR_TEXT_SEL            0xFC4000
 #define CURR_TEXT_UNSEL          0xBEBFC0
 #define CURR_IMG_UNSEL           0xCDCED0
@@ -156,6 +156,7 @@ void ui_page_07_curr_destroy(void)
 #define CURR_TRACK_FG            0x75A2DF
 
 #define CURR_CARD_SELECTED_BG_PATH      "L:/usr/local/share/lvgl_data/selected_card.png"
+#define CURR_CARD_UNSELECTED_BG_PATH    "L:/usr/local/share/lvgl_data/unselected_card.png"
 #define CURR_GRID_SELECTED_MARK_PATH    "L:/usr/local/share/lvgl_data/view_selected.png"
 #define CURR_CARD_SELECTED_BG_OFS_X     18
 #define CURR_CARD_SELECTED_BG_OFS_TOP   16
@@ -225,6 +226,9 @@ static struct {
     char target_code[4];
 } g_curr_mode_transition;
 
+static int g_curr_track_x = -1;
+static int g_curr_track_w = -1;
+
 static void curr_refresh_right_views(void);
 static void curr_apply_selected_style(void);
 static void curr_style_back_button(void);
@@ -241,6 +245,18 @@ static void curr_set_img_target_width(lv_obj_t* img, const char* code, int targe
         if (zoom < 32) zoom = 32;
         lv_img_set_zoom(img, zoom);
     }
+}
+
+static void curr_set_path_target_width(lv_obj_t* img, const char* path, int target_w)
+{
+    lv_img_header_t info;
+
+    if (img == NULL || path == NULL || target_w <= 0) return;
+    if (lv_img_decoder_get_info(path, &info) != LV_RES_OK || info.w <= 0) return;
+
+    int zoom = (target_w * 256) / (int)info.w;
+    if (zoom < 32) zoom = 32;
+    lv_img_set_zoom(img, zoom);
 }
 
 static void curr_set_image_unselected_style(lv_obj_t* img)
@@ -332,8 +348,14 @@ static void curr_update_track_by_scroll(int sx)
 
     int max_scroll = curr_get_max_scroll();
     if (max_scroll <= 0 || g_page07_curr.model.visible_count <= 1) {
-        lv_obj_set_size(g_page07_curr.objects.thumb, CURR_VIEW_W, CURR_TRACK_H);
-        lv_obj_set_pos(g_page07_curr.objects.thumb, 0, CURR_TRACK_Y);
+        if (g_curr_track_w != CURR_VIEW_W) {
+            lv_obj_set_size(g_page07_curr.objects.thumb, CURR_VIEW_W, CURR_TRACK_H);
+            g_curr_track_w = CURR_VIEW_W;
+        }
+        if (g_curr_track_x != 0) {
+            lv_obj_set_pos(g_page07_curr.objects.thumb, 0, CURR_TRACK_Y);
+            g_curr_track_x = 0;
+        }
         return;
     }
 
@@ -347,8 +369,14 @@ static void curr_update_track_by_scroll(int sx)
     // 按高亮卡片索引均分滑块位置，避免尾部两档挤在一起
     int x = (idx * (CURR_VIEW_W - thumb_w)) / (g_page07_curr.model.visible_count - 1);
 
-    lv_obj_set_size(g_page07_curr.objects.thumb, thumb_w, CURR_TRACK_H);
-    lv_obj_set_pos(g_page07_curr.objects.thumb, x, CURR_TRACK_Y);
+    if (g_curr_track_w != thumb_w) {
+        lv_obj_set_size(g_page07_curr.objects.thumb, thumb_w, CURR_TRACK_H);
+        g_curr_track_w = thumb_w;
+    }
+    if (g_curr_track_x != x) {
+        lv_obj_set_pos(g_page07_curr.objects.thumb, x, CURR_TRACK_Y);
+        g_curr_track_x = x;
+    }
 }
 
 static void curr_apply_overscroll_visual(int overscroll_px)
@@ -360,7 +388,9 @@ static void curr_apply_overscroll_visual(int overscroll_px)
 
     if (g_page07_curr.objects.list == NULL) return;
 
-    lv_obj_set_x(g_page07_curr.objects.list, overscroll_px);
+    if (lv_obj_get_x(g_page07_curr.objects.list) != overscroll_px) {
+        lv_obj_set_x(g_page07_curr.objects.list, overscroll_px);
+    }
 
     if (g_page07_curr.objects.thumb == NULL) return;
 
@@ -377,8 +407,14 @@ static void curr_apply_overscroll_visual(int overscroll_px)
     if (thumb_w < 18) thumb_w = 18;
 
     thumb_x = (overscroll_px > 0) ? 0 : (CURR_VIEW_W - thumb_w);
-    lv_obj_set_size(g_page07_curr.objects.thumb, thumb_w, CURR_TRACK_H);
-    lv_obj_set_pos(g_page07_curr.objects.thumb, thumb_x, CURR_TRACK_Y);
+    if (g_curr_track_w != thumb_w) {
+        lv_obj_set_size(g_page07_curr.objects.thumb, thumb_w, CURR_TRACK_H);
+        g_curr_track_w = thumb_w;
+    }
+    if (g_curr_track_x != thumb_x) {
+        lv_obj_set_pos(g_page07_curr.objects.thumb, thumb_x, CURR_TRACK_Y);
+        g_curr_track_x = thumb_x;
+    }
 }
 
 static void curr_reset_overscroll_visual(void)
@@ -495,13 +531,20 @@ static void curr_back_btn_click_cb(lv_event_t* e)
 static void curr_scroll_to_raw(int x, bool anim, bool apply_style)
 {
     int max_scroll = curr_get_max_scroll();
+    int current_scroll;
 
     if (g_page07_curr.objects.list == NULL) return;
     if (x < 0) x = 0;
     if (x > max_scroll) x = max_scroll;
 
-    curr_reset_overscroll_visual();
-    lv_obj_scroll_to_x(g_page07_curr.objects.list, x, anim ? LV_ANIM_ON : LV_ANIM_OFF);
+    if (lv_obj_get_x(g_page07_curr.objects.list) != 0) {
+        curr_reset_overscroll_visual();
+    }
+    current_scroll = curr_scroll_x_abs();
+    if (current_scroll != x) {
+        lv_obj_scroll_to_x(g_page07_curr.objects.list, x,
+                           anim ? LV_ANIM_ON : LV_ANIM_OFF);
+    }
 
     if (g_page07_curr.model.visible_count > 0) {
         int vis_idx = curr_highlight_idx_from_scroll(x);
@@ -829,15 +872,17 @@ static void curr_apply_selected_style(void)
 
         if (i > g_page07_curr.model.selected_visible_idx) pos_x += CURR_SEL_NEXT_EXTRA_GAP;
 
-        lv_obj_set_style_border_color(g_page07_curr.cards[i].card, lv_color_hex(0xDDE3EA), 0);
-        lv_obj_set_style_radius(g_page07_curr.cards[i].card, 30, 0);
+        lv_obj_set_style_radius(g_page07_curr.cards[i].card, 0, 0);
 
         if (sel) {
-            if (g_page07_curr.cards[i].selected_bg) {
-                lv_obj_set_pos(g_page07_curr.cards[i].selected_bg,
+            if (g_page07_curr.cards[i].background) {
+                lv_img_set_src(g_page07_curr.cards[i].background,
+                               CURR_CARD_SELECTED_BG_PATH);
+                lv_img_set_zoom(g_page07_curr.cards[i].background,
+                                LV_IMG_ZOOM_NONE);
+                lv_obj_set_pos(g_page07_curr.cards[i].background,
                                pos_x - (CURR_CARD_SEL_W - CURR_CARD_W) / 2 - CURR_CARD_SELECTED_BG_OFS_X,
                                pos_y - (CURR_CARD_SEL_H - CURR_CARD_H) / 2 - CURR_CARD_SELECTED_BG_OFS_TOP);
-                lv_obj_clear_flag(g_page07_curr.cards[i].selected_bg, LV_OBJ_FLAG_HIDDEN);
             }
 
             lv_obj_set_size(g_page07_curr.cards[i].card, CURR_CARD_SEL_W, CURR_CARD_SEL_H);
@@ -852,14 +897,18 @@ static void curr_apply_selected_style(void)
             lv_obj_set_style_text_color(g_page07_curr.cards[i].no, lv_color_hex(0x202020), 0);
             curr_set_image_selected_style(g_page07_curr.cards[i].img);
         } else {
-            if (g_page07_curr.cards[i].selected_bg) {
-                lv_obj_add_flag(g_page07_curr.cards[i].selected_bg, LV_OBJ_FLAG_HIDDEN);
+            if (g_page07_curr.cards[i].background) {
+                lv_img_set_src(g_page07_curr.cards[i].background,
+                               CURR_CARD_UNSELECTED_BG_PATH);
+                curr_set_path_target_width(g_page07_curr.cards[i].background,
+                                           CURR_CARD_UNSELECTED_BG_PATH,
+                                           CURR_CARD_W);
+                lv_obj_set_pos(g_page07_curr.cards[i].background, pos_x, pos_y);
             }
 
             lv_obj_set_size(g_page07_curr.cards[i].card, CURR_CARD_W, CURR_CARD_H);
             lv_obj_set_pos(g_page07_curr.cards[i].card, pos_x, pos_y);
-            lv_obj_set_style_bg_opa(g_page07_curr.cards[i].card, LV_OPA_COVER, 0);
-            lv_obj_set_style_bg_color(g_page07_curr.cards[i].card, lv_color_hex(CURR_CARD_BG_UNSEL), 0);
+            lv_obj_set_style_bg_opa(g_page07_curr.cards[i].card, LV_OPA_TRANSP, 0);
             lv_obj_set_style_border_width(g_page07_curr.cards[i].card, 0, 0);
             lv_obj_set_style_shadow_width(g_page07_curr.cards[i].card, 0, 0);
             lv_obj_set_style_shadow_opa(g_page07_curr.cards[i].card, LV_OPA_0, 0);
@@ -921,6 +970,7 @@ static void curr_right_drag_cb(lv_event_t* e)
         if (g_page07_curr.gesture.dragging) {
             int desired_scroll = g_page07_curr.gesture.start_scroll - dx;
             int max_scroll = curr_get_max_scroll();
+            int current_scroll = curr_scroll_x_abs();
 
             if (desired_scroll < 0) {
                 curr_scroll_to_raw(0, false, false);
@@ -928,7 +978,8 @@ static void curr_right_drag_cb(lv_event_t* e)
             } else if (desired_scroll > max_scroll) {
                 curr_scroll_to_raw(max_scroll, false, false);
                 curr_apply_overscroll_visual(-(desired_scroll - max_scroll) / 3);
-            } else {
+            } else if (curr_abs_i32(desired_scroll - current_scroll) >=
+                       CURR_DRAG_APPLY_MIN_PX) {
                 curr_scroll_to_raw(desired_scroll, false, false);
             }
         }
@@ -1065,17 +1116,21 @@ static void curr_build_card_layer(void)
         g_page07_curr.cards[i].base_x = x;
         g_page07_curr.cards[i].base_y = CURR_CARD_Y;
 
-        g_page07_curr.cards[i].selected_bg = lv_img_create(g_page07_curr.objects.list);
-        lv_img_set_src(g_page07_curr.cards[i].selected_bg, CURR_CARD_SELECTED_BG_PATH);
-        lv_obj_add_flag(g_page07_curr.cards[i].selected_bg, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(g_page07_curr.cards[i].selected_bg, LV_OBJ_FLAG_CLICKABLE);
+        g_page07_curr.cards[i].background = lv_img_create(g_page07_curr.objects.list);
+        lv_img_set_src(g_page07_curr.cards[i].background,
+                       CURR_CARD_UNSELECTED_BG_PATH);
+        curr_set_path_target_width(g_page07_curr.cards[i].background,
+                                   CURR_CARD_UNSELECTED_BG_PATH,
+                                   CURR_CARD_W);
+        lv_obj_set_pos(g_page07_curr.cards[i].background, x, CURR_CARD_Y);
+        lv_obj_clear_flag(g_page07_curr.cards[i].background,
+                          LV_OBJ_FLAG_CLICKABLE);
 
         g_page07_curr.cards[i].card = lv_obj_create(g_page07_curr.objects.list);
         lv_obj_set_size(g_page07_curr.cards[i].card, CURR_CARD_W, CURR_CARD_H);
         lv_obj_set_pos(g_page07_curr.cards[i].card, x, CURR_CARD_Y);
-        lv_obj_set_style_radius(g_page07_curr.cards[i].card, 30, 0);
-        lv_obj_set_style_bg_opa(g_page07_curr.cards[i].card, LV_OPA_COVER, 0);
-        lv_obj_set_style_bg_color(g_page07_curr.cards[i].card, lv_color_hex(CURR_CARD_BG_UNSEL), 0);
+        lv_obj_set_style_radius(g_page07_curr.cards[i].card, 0, 0);
+        lv_obj_set_style_bg_opa(g_page07_curr.cards[i].card, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(g_page07_curr.cards[i].card, 0, 0);
         lv_obj_set_style_shadow_width(g_page07_curr.cards[i].card, 0, 0);
         lv_obj_set_style_shadow_opa(g_page07_curr.cards[i].card, LV_OPA_0, 0);
@@ -1394,6 +1449,8 @@ void page_07_curr_img_reset(void)
     memset(g_page07_curr.grid_items, 0, sizeof(g_page07_curr.grid_items));
     memset(g_page07_curr.model.visible_indices, 0, sizeof(g_page07_curr.model.visible_indices));
     g_page07_curr.model.visible_count = 0;
+    g_curr_track_x = -1;
+    g_curr_track_w = -1;
 }
 
 void page_07_curr_img_refre(void)

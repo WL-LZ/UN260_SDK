@@ -338,6 +338,10 @@ void smart_island_notify_warning_level(const char *warn_text,
     if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_WARNING &&
         g_si_ctx.warning.level == level &&
         strcmp(g_si_ctx.warning.text, next_warning_text) == 0) {
+        if (g_si_ctx.lifecycle.suspended) {
+            g_si_ctx.lifecycle.dirty = true;
+            return;
+        }
         if (!g_si_ctx.warning.marquee_running) {
             smart_island_warning_apply_static_layout();
             if (!fault_popup_is_showing()) {
@@ -353,6 +357,7 @@ void smart_island_notify_warning_level(const char *warn_text,
                 next_warning_text);
 
     smart_island_set_scene(SMART_ISLAND_SCENE_WARNING, g_si_ctx.warning.text, NULL);
+    if (g_si_ctx.lifecycle.suspended) return;
     g_si_ctx.view.page = SMART_ISLAND_PAGE_INFO;
     smart_island_set_visual(SMART_ISLAND_VISUAL_COMPACT, true);
     smart_island_reset_page_positions();

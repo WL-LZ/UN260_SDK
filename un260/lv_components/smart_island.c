@@ -1,4 +1,6 @@
 #include "smart_island.h"
+#include <string.h>
+
 #include "un260/lv_components/smart_island/smart_island_internal.h"
 #include "un260/lv_system/ui_text.h"
 
@@ -49,6 +51,8 @@ void smart_island_destroy(void)
     g_si_ctx.lifecycle.count_session_active = false;
 
     g_si_ctx.lifecycle.created = false;
+    g_si_ctx.lifecycle.suspended = false;
+    g_si_ctx.lifecycle.dirty = false;
 }
 
 bool smart_island_is_attached_to(lv_obj_t *parent)
@@ -66,6 +70,10 @@ bool smart_island_is_attached_to(lv_obj_t *parent)
 
 void smart_island_refresh_time(void)
 {
+    if (g_si_ctx.lifecycle.suspended) {
+        g_si_ctx.lifecycle.dirty = true;
+        return;
+    }
     if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_IDLE &&
         !(g_si_ctx.view.visual == SMART_ISLAND_VISUAL_EXPANDED &&
           g_si_ctx.view.page == SMART_ISLAND_PAGE_ACTION)) {
@@ -82,7 +90,34 @@ void smart_island_set_visual(smart_island_visual_t visual, bool anim_en)
     }
 
     g_si_ctx.view.visual = visual;
+    if (g_si_ctx.lifecycle.suspended) {
+        g_si_ctx.lifecycle.dirty = true;
+        return;
+    }
     smart_island_view_apply_visual(visual, anim_en);
+}
+
+void smart_island_set_suspended(bool suspended)
+{
+    if (g_si_ctx.lifecycle.suspended == suspended) return;
+
+    g_si_ctx.lifecycle.suspended = suspended;
+    if (suspended) {
+        /*
+         * Suspended only means that LVGL objects must not be touched while the
+         * main page is hidden.  It is not itself a data change.  Model update
+         * entry points set dirty when an update really arrives while hidden.
+         * Keeping a clean island clean avoids rebuilding the complete scene on
+         * every cached main-page resume.
+         */
+        return;
+    }
+
+    if (g_si_ctx.lifecycle.dirty && g_si_ctx.lifecycle.created) {
+        smart_island_view_apply_visual(g_si_ctx.view.visual, false);
+        smart_island_view_refresh_scene();
+        g_si_ctx.lifecycle.dirty = false;
+    }
 }
 
 void smart_island_set_scene(smart_island_scene_t scene, const char *title, const char *subtitle)
@@ -98,6 +133,10 @@ void smart_island_set_scene(smart_island_scene_t scene, const char *title, const
     if (subtitle && subtitle[0] != '\0') lv_snprintf(g_si_ctx.view.content.subtitle, sizeof(g_si_ctx.view.content.subtitle), "%s", subtitle);
     else g_si_ctx.view.content.subtitle[0] = '\0';
 
+    if (g_si_ctx.lifecycle.suspended) {
+        g_si_ctx.lifecycle.dirty = true;
+        return;
+    }
     smart_island_view_refresh_scene();
 }
 
@@ -108,6 +147,7 @@ void smart_island_notify_update(uint16_t progress, const char *text)
     smart_island_set_scene(SMART_ISLAND_SCENE_UPDATE,
         text,
         ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_UPDATE_SUBTITLE));
+    if (g_si_ctx.lifecycle.suspended) return;
     if (g_si_ctx.objects.progress && lv_obj_is_valid(g_si_ctx.objects.progress)) {
         lv_obj_clear_flag(g_si_ctx.objects.progress, LV_OBJ_FLAG_HIDDEN);
         lv_bar_set_value(g_si_ctx.objects.progress, progress, LV_ANIM_ON);
@@ -120,6 +160,7 @@ void smart_island_notify_qr(const char *text)
     smart_island_set_scene(SMART_ISLAND_SCENE_QR,
         text,
         ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_QR_INFO_SUBTITLE));
+    if (g_si_ctx.lifecycle.suspended) return;
     if (g_si_ctx.objects.progress && lv_obj_is_valid(g_si_ctx.objects.progress)) lv_obj_add_flag(g_si_ctx.objects.progress, LV_OBJ_FLAG_HIDDEN);
     smart_island_open_info_page();
 }
@@ -127,6 +168,15 @@ void smart_island_notify_qr(const char *text)
 void smart_island_restore_idle(void)
 {
     g_si_ctx.lifecycle.count_session_active = false;
+    if (g_si_ctx.lifecycle.suspended) {
+        g_si_ctx.warning.level = SMART_ISLAND_WARNING_LEVEL_WARNING;
+        g_si_ctx.warning.text[0] = '\0';
+        g_si_ctx.text.result[0] = '\0';
+        g_si_ctx.view.scene = SMART_ISLAND_SCENE_IDLE;
+        g_si_ctx.view.visual = SMART_ISLAND_VISUAL_COMPACT;
+        g_si_ctx.lifecycle.dirty = true;
+        return;
+    }
     smart_island_warning_stop();
     g_si_ctx.warning.level = SMART_ISLAND_WARNING_LEVEL_WARNING;
     smart_island_warning_fault_clear();
@@ -147,12 +197,20 @@ bool smart_island_is_expanded(void) { return g_si_ctx.view.visual == SMART_ISLAN
 
 void smart_island_refresh_language_texts(void)
 {
+    if (g_si_ctx.lifecycle.suspended) {
+        g_si_ctx.lifecycle.dirty = true;
+        return;
+    }
     smart_island_action_page_refresh_language_texts();
     smart_island_view_refresh_scene();
 }
 
 void smart_island_refresh_summary(void)
 {
+    if (g_si_ctx.lifecycle.suspended) {
+        g_si_ctx.lifecycle.dirty = true;
+        return;
+    }
     /* Warning 场景中避免外部刷新重刷样式，防止 ESC/CLEAR 造成文本“重新闪烁” */
     if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_WARNING) {
         return;
@@ -163,19 +221,40 @@ void smart_island_refresh_summary(void)
 
 void smart_island_set_idle_info_line1(const char *text)
 {
+    const char *value = text != NULL ? text : "";
+
+    if (strcmp(g_si_ctx.text.idle_line1, value) == 0) return;
     smart_island_view_set_idle_line(g_si_ctx.text.idle_line1, sizeof(g_si_ctx.text.idle_line1), text);
+    if (g_si_ctx.lifecycle.suspended) {
+        g_si_ctx.lifecycle.dirty = true;
+        return;
+    }
     smart_island_view_refresh_scene();
 }
 
 void smart_island_set_idle_info_line2(const char *text)
 {
+    const char *value = text != NULL ? text : "";
+
+    if (strcmp(g_si_ctx.text.idle_line2, value) == 0) return;
     smart_island_view_set_idle_line(g_si_ctx.text.idle_line2, sizeof(g_si_ctx.text.idle_line2), text);
+    if (g_si_ctx.lifecycle.suspended) {
+        g_si_ctx.lifecycle.dirty = true;
+        return;
+    }
     smart_island_view_refresh_scene();
 }
 
 void smart_island_set_idle_info_line3(const char *text)
 {
+    const char *value = text != NULL ? text : "";
+
+    if (strcmp(g_si_ctx.text.idle_line3, value) == 0) return;
     smart_island_view_set_idle_line(g_si_ctx.text.idle_line3, sizeof(g_si_ctx.text.idle_line3), text);
+    if (g_si_ctx.lifecycle.suspended) {
+        g_si_ctx.lifecycle.dirty = true;
+        return;
+    }
     smart_island_view_refresh_scene();
 }
 

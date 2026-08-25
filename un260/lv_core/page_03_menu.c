@@ -155,7 +155,8 @@ void page_03_menu_refresh_batch_mode(void)
                               ? lv_color_hex(0x4285F4)
                               : lv_color_hex(0x888888);
 
-    if (!page_03_get_batch_labels(&amount, &pcs)) {
+    if (!page_03_menu_is_visible() ||
+        !page_03_get_batch_labels(&amount, &pcs)) {
         return;
     }
 
@@ -169,7 +170,7 @@ void page_03_menu_refresh_batch_mode(void)
 
 void page_03_menu_refresh_batch_number(void)
 {
-    if (!menu_page || !lv_obj_is_valid(menu_page)) {
+    if (!page_03_menu_is_visible()) {
         return;
     }
 
@@ -602,6 +603,12 @@ lv_obj_t *page_03_menu_find_obj(const char *name)
 bool page_03_menu_is_created(void)
 {
     return menu_page != NULL && lv_obj_is_valid(menu_page);
+}
+
+bool page_03_menu_is_visible(void)
+{
+    return page_03_menu_is_created() &&
+           !lv_obj_has_flag(menu_page, LV_OBJ_FLAG_HIDDEN);
 }
 
 void page_03_menu_icon_feedback(const char *name)
@@ -1161,7 +1168,8 @@ void page_03_menu_function_feedback(uint8_t function, uint8_t value)
         UI_TEXT_MENU_FUNCTION_WORK,
     };
 
-    if (function > PAGE_03_FUNCTION_WORK ||
+    if (!page_03_menu_is_visible() ||
+        function > PAGE_03_FUNCTION_WORK ||
         !g_page_03_preview_orb || !lv_obj_is_valid(g_page_03_preview_orb)) {
         return;
     }

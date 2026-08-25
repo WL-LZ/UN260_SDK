@@ -776,6 +776,7 @@ void page_01_main_detail_refresh_rows_only(void)
 
 //主界面右侧详情数据初始化和写入
 void ui_refresh_main_page(void) {
+    if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_COUNTING)) return;
     uint64_t refresh_started_us = app_clock_monotonic_us();
     counting_sim_t* sim_data = counting_data_mutable();
     lv_obj_t *scroll_container = page_01_main_scroll_obj();

@@ -2,6 +2,7 @@
 #define PAGE_01_MAIN_H
 
 #include "lvgl/lvgl.h"
+#include <stdint.h>
 #include "un260/lv_resources/lv_img_init.h" 
 
 typedef enum {
@@ -18,6 +19,24 @@ lv_obj_t *page_01_main_scroll_obj(void);
 void page_01_main_scroll_reset(void);
 void page_01_main_icon_feedback(const char *name);
 void page_01_main_refresh_totals(int total_pcs, const char *amount_text);
+
+typedef enum {
+    PAGE_01_MAIN_DIRTY_MODE = 1U << 0,
+    PAGE_01_MAIN_DIRTY_ADD = 1U << 1,
+    PAGE_01_MAIN_DIRTY_WORK = 1U << 2,
+    PAGE_01_MAIN_DIRTY_BATCH = 1U << 3,
+    PAGE_01_MAIN_DIRTY_FO = 1U << 4,
+    PAGE_01_MAIN_DIRTY_CFD = 1U << 5,
+    PAGE_01_MAIN_DIRTY_SPEED = 1U << 6,
+    PAGE_01_MAIN_DIRTY_ERROR = 1U << 7,
+    PAGE_01_MAIN_DIRTY_CURRENCY = 1U << 8,
+    PAGE_01_MAIN_DIRTY_COUNTING = 1U << 9,
+    PAGE_01_MAIN_DIRTY_LANGUAGE = 1U << 10,
+    PAGE_01_MAIN_DIRTY_ALL = (1U << 11) - 1U,
+} page_01_main_dirty_flag_t;
+
+void page_01_main_mark_dirty(uint32_t flags);
+bool page_01_main_defer_refresh(uint32_t flags);
 void page_01_main_suspend(void);
 bool page_01_main_resume(void);
 void page_01_main_reveal_for_transition(void);

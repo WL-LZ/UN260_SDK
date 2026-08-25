@@ -115,6 +115,8 @@ typedef struct {
     bool created;
     bool pure_count_enabled;
     bool count_session_active;
+    bool suspended;
+    bool dirty;
 } smart_island_lifecycle_state_t;
 
 typedef struct {

@@ -22,6 +22,8 @@ typedef enum {
 
 void ui_page_06_settings_create(lv_obj_t* parent);
 void ui_page_06_settings_destroy(void);
+bool ui_page_06_settings_resume(void);
+void ui_page_06_settings_suspend(void);
 
 /* 设置页一级菜单索引，用于切换左侧大类或在指定大类下添加选项。 */
 bool page_06_settings_switch_menu(page_06_settings_menu_t menu);

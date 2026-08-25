@@ -112,7 +112,13 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .suspend = ui_page_03_menu_suspend,
         .cache_policy = UI_PAGE_RETAINED,
     },
-    [UI_PAGE_SETTING] = { ui_page_06_settings_create, ui_page_06_settings_destroy },
+    [UI_PAGE_SETTING] = {
+        .create = ui_page_06_settings_create,
+        .destroy = ui_page_06_settings_destroy,
+        .resume = ui_page_06_settings_resume,
+        .suspend = ui_page_06_settings_suspend,
+        .cache_policy = UI_PAGE_RETAINED,
+    },
     [UI_PAGE_SET_PASSAGE] = { ui_page_05_set_password_create, ui_page_05_set_password_destroy },
     [UI_PAGE_CURR] = {
         .create = ui_page_07_curr_create,

@@ -15,7 +15,7 @@ typedef enum {
 } page07_curr_view_mode_t;
 
 typedef struct {
-    lv_obj_t *selected_bg;
+    lv_obj_t *background;
     lv_obj_t *card;
     lv_obj_t *img;
     lv_obj_t *name;

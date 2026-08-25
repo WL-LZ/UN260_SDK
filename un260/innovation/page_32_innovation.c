@@ -54,6 +54,10 @@ typedef struct {
     uint8_t target_passes;
     bool pending_start_after_add_off;
     uint32_t add_request_tick;
+    uint32_t rendered_verify_revision;
+    uint8_t rendered_target_passes;
+    bool rendered_pending_start;
+    bool render_valid;
 } innovation_page_context_t;
 
 typedef struct {
@@ -203,7 +207,7 @@ static void innovation_prompt_close(void)
     g_prompt = NULL;
 }
 
-static void innovation_page_refresh(void);
+static bool innovation_page_refresh(void);
 static void innovation_prompt_single(const char *title, const char *body,
                                      const char *button_text, uint32_t accent,
                                      lv_event_cb_t callback);
@@ -850,19 +854,28 @@ static void innovation_page_refresh_timer_cb(lv_timer_t *timer)
     innovation_page_refresh();
 }
 
-static void innovation_page_refresh(void)
+static bool innovation_page_refresh(void)
 {
     multi_pass_verify_view_t view;
+    uint32_t revision;
     char text[256];
     int i;
 
-    if (g_page.root == NULL || !lv_obj_is_valid(g_page.root)) return;
+    if (g_page.root == NULL || !lv_obj_is_valid(g_page.root)) return false;
     multi_pass_verification_get_view(&view);
 
     if (view.state != MULTI_PASS_VERIFY_IDLE &&
         view.target_passes >= MULTI_PASS_VERIFY_MIN_PASSES &&
         view.target_passes <= MULTI_PASS_VERIFY_MAX_PASSES) {
         g_page.target_passes = view.target_passes;
+    }
+
+    revision = multi_pass_verification_revision();
+    if (g_page.render_valid &&
+        g_page.rendered_verify_revision == revision &&
+        g_page.rendered_target_passes == g_page.target_passes &&
+        g_page.rendered_pending_start == g_page.pending_start_after_add_off) {
+        return false;
     }
 
     lv_snprintf(text, sizeof(text), ui_text_get(UI_TEXT_INNOVATION_PASSES_FMT),
@@ -985,6 +998,12 @@ static void innovation_page_refresh(void)
             innovation_label_set_if_changed(g_page.detail_summary, text);
         }
     }
+
+    g_page.rendered_verify_revision = revision;
+    g_page.rendered_target_passes = g_page.target_passes;
+    g_page.rendered_pending_start = g_page.pending_start_after_add_off;
+    g_page.render_valid = true;
+    return true;
 }
 
 void ui_page_32_innovation_create(lv_obj_t *parent)
@@ -1163,14 +1182,23 @@ void ui_page_32_innovation_create(lv_obj_t *parent)
 
 bool ui_page_32_innovation_resume(void)
 {
+    uint64_t started_us;
+    bool refreshed;
+
     if (g_page.root == NULL || !lv_obj_is_valid(g_page.root)) {
         return false;
     }
 
-    innovation_page_refresh();
+    started_us = perf_profile_is_enabled() ? app_clock_monotonic_us() : 0;
     lv_obj_clear_flag(g_page.root, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(g_page.root);
+    refreshed = innovation_page_refresh();
     innovation_refresh_resume();
+    if (started_us != 0) {
+        perf_profile_report_event_us("INNOVATION",
+            refreshed ? "RESUME_DIRTY" : "RESUME_CLEAN",
+            app_clock_elapsed_us32(started_us, app_clock_monotonic_us()));
+    }
     return true;
 }
 

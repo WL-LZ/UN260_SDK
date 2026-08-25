@@ -23,6 +23,8 @@
 #include "un260/lv_system/ui_export_data.h"
 #include "un260/lv_system/ui_state_runtime.h"
 #include "un260/innovation/page_32_innovation.h"
+#include "un260/lv_system/app_clock.h"
+#include "aic_ui/perf_stats.h"
 #include <stdint.h>
 
 static lv_obj_t* main_page = NULL;
@@ -64,11 +66,125 @@ static lv_obj_t* s_detail_btn_a = NULL;
 static lv_obj_t* s_detail_btn_b = NULL;
 static lv_obj_t* s_detail_btn_c = NULL;
 static page_01_detail_section_t s_detail_section = PAGE_01_DETAIL_SECTION_A;
+static uint32_t s_main_dirty = PAGE_01_MAIN_DIRTY_ALL;
+static bool s_main_snapshot_valid = false;
+static machine_state_snapshot_t s_main_machine_snapshot;
+static char s_main_currency_snapshot[4];
+typedef struct {
+    denom_t denom[COUNTING_DENOM_MAX_ITEMS];
+    uint8_t denom_number;
+    int total_pcs;
+    float total_amount;
+    uint16_t err_num;
+    uint16_t err_expected;
+    int serial_count;
+    int error_detail_count;
+} page_01_counting_snapshot_t;
+static page_01_counting_snapshot_t s_main_counting_snapshot;
+static lv_obj_t *s_curr_img = NULL;
+static lv_obj_t *s_curr_label = NULL;
+static char s_curr_rendered_code[4];
+static bool s_curr_rendered_valid = false;
 
 static void page_01_detail_section_btn_style_apply(void);
 static void page_01_detail_section_btn_event_cb(lv_event_t* e);
 static void page_01_detail_section_btn_text_refresh(void);
 static void page_01_create_main_scrollable_container(void);
+
+static bool page_01_main_visible(void)
+{
+    return page_01_main_is_created() &&
+           !lv_obj_has_flag(main_page, LV_OBJ_FLAG_HIDDEN);
+}
+
+void page_01_main_mark_dirty(uint32_t flags)
+{
+    s_main_dirty |= flags;
+}
+
+bool page_01_main_defer_refresh(uint32_t flags)
+{
+    if (!page_01_main_visible()) {
+        page_01_main_mark_dirty(flags);
+        return true;
+    }
+    s_main_dirty &= ~flags;
+    return false;
+}
+
+static void page_01_main_snapshot_capture(void)
+{
+    const counting_sim_t *counting = counting_data_current();
+
+    machine_state_get_snapshot(&s_main_machine_snapshot);
+    currency_state_get_effective_code(s_main_currency_snapshot);
+    memset(&s_main_counting_snapshot, 0, sizeof(s_main_counting_snapshot));
+    if (counting != NULL) {
+        memcpy(s_main_counting_snapshot.denom, counting->denom,
+               sizeof(s_main_counting_snapshot.denom));
+        s_main_counting_snapshot.denom_number = counting->denom_number;
+        s_main_counting_snapshot.total_pcs = counting->total_pcs;
+        s_main_counting_snapshot.total_amount = counting->total_amount;
+        s_main_counting_snapshot.err_num = counting->err_num;
+        s_main_counting_snapshot.err_expected = counting->err_expected;
+        s_main_counting_snapshot.serial_count =
+            counting_data_serial_valid_count(counting);
+        s_main_counting_snapshot.error_detail_count =
+            counting_data_error_detail_count(counting);
+    }
+    s_main_snapshot_valid = true;
+}
+
+static void page_01_main_detect_snapshot_changes(void)
+{
+    machine_state_snapshot_t machine;
+    char currency[4];
+    const counting_sim_t *counting = counting_data_current();
+
+    if (!s_main_snapshot_valid) {
+        page_01_main_mark_dirty(PAGE_01_MAIN_DIRTY_ALL);
+        return;
+    }
+
+    machine_state_get_snapshot(&machine);
+    if (machine.mode != s_main_machine_snapshot.mode)
+        page_01_main_mark_dirty(PAGE_01_MAIN_DIRTY_MODE);
+    if (machine.add_enabled != s_main_machine_snapshot.add_enabled)
+        page_01_main_mark_dirty(PAGE_01_MAIN_DIRTY_ADD);
+    if (machine.work_mode != s_main_machine_snapshot.work_mode)
+        page_01_main_mark_dirty(PAGE_01_MAIN_DIRTY_WORK);
+    if (machine.batch_enabled != s_main_machine_snapshot.batch_enabled ||
+        machine.batch_num != s_main_machine_snapshot.batch_num ||
+        machine.batch_mode != s_main_machine_snapshot.batch_mode ||
+        machine.batch_amount != s_main_machine_snapshot.batch_amount)
+        page_01_main_mark_dirty(PAGE_01_MAIN_DIRTY_BATCH);
+    if (machine.fo_mode != s_main_machine_snapshot.fo_mode)
+        page_01_main_mark_dirty(PAGE_01_MAIN_DIRTY_FO);
+    if (machine.cfd_mode != s_main_machine_snapshot.cfd_mode)
+        page_01_main_mark_dirty(PAGE_01_MAIN_DIRTY_CFD);
+    if (machine.speed != s_main_machine_snapshot.speed)
+        page_01_main_mark_dirty(PAGE_01_MAIN_DIRTY_SPEED);
+
+    currency_state_get_effective_code(currency);
+    if (strcmp(currency, s_main_currency_snapshot) != 0)
+        page_01_main_mark_dirty(PAGE_01_MAIN_DIRTY_CURRENCY);
+
+    if (counting == NULL ||
+        counting->denom_number != s_main_counting_snapshot.denom_number ||
+        counting->total_pcs != s_main_counting_snapshot.total_pcs ||
+        counting->total_amount != s_main_counting_snapshot.total_amount ||
+        counting->err_num != s_main_counting_snapshot.err_num ||
+        counting->err_expected != s_main_counting_snapshot.err_expected ||
+        counting_data_serial_valid_count(counting) !=
+            s_main_counting_snapshot.serial_count ||
+        counting_data_error_detail_count(counting) !=
+            s_main_counting_snapshot.error_detail_count ||
+        memcmp(counting->denom, s_main_counting_snapshot.denom,
+               sizeof(counting->denom)) != 0) {
+        page_01_main_mark_dirty(PAGE_01_MAIN_DIRTY_COUNTING |
+                                PAGE_01_MAIN_DIRTY_ERROR);
+    }
+}
 
 static void page_01_create_main_scrollable_container(void)
 {
@@ -125,6 +241,7 @@ void page_01_mode_switch_refre(void)
 {
     const char* mode_str = "NONE";
 
+    if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_MODE)) return;
     switch (machine_state_mode()) {
     case MODE_MDC:
         mode_str = "MDC";
@@ -151,6 +268,7 @@ void page_01_mode_switch_refre(void)
 
 void page_01_add_refre(void)
 {
+    if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_ADD)) return;
     update_label_by_name(page_01_main_obj, page_01_main_len, "add_label", "%s",
                          machine_state_add_enabled() ? "ADD:ON" : "ADD:OFF");
     page_01_bottom_a_refresh_add(false);
@@ -160,6 +278,7 @@ void page_01_work_refre(void)
 {
     static const char* const work[] = { "AUTO", "MANUAL" };
 
+    if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_WORK)) return;
     update_label_by_name(page_01_main_obj, page_01_main_len, "auto_label", "%s",
                          work[machine_state_work_mode()]);
     page_01_bottom_a_refresh_work(false);
@@ -170,6 +289,7 @@ void page_01_batch_refre(void)
     static const char* const batch[] = { "BATCH :", "VBATCH :" };
     char buf[12];
 
+    if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_BATCH)) return;
     snprintf(buf, sizeof(buf), "%d", machine_state_batch_num());
     update_label_by_name(page_01_main_obj, page_01_main_len, "bacth_label", "%s",
                          batch[machine_state_batch_mode()]);
@@ -182,6 +302,7 @@ void page_01_face_refre(void)
 {
     static const char* const face[] = { "F./O. : OFF", "F.", "O.", "F./O." };
 
+    if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_FO)) return;
     update_label_by_name(page_01_main_obj, page_01_main_len, "face_label", "%s",
                          face[machine_state_fo_mode()]);
     page_01_bottom_a_refresh_fo(false);
@@ -191,6 +312,7 @@ void page_01_cfd_refre(void)
 {
     static const char* const cfd[] = { "L", "M", "H" };
 
+    if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_CFD)) return;
     update_label_by_name(page_01_main_obj, page_01_main_len,
                          "cfd_value_label", "%s", cfd[machine_state_cfd_mode()]);
 #if LV_DEBUG
@@ -203,6 +325,7 @@ void page_01_speed_refre(void)
 {
     static const int speed[] = { 600, 800, 1000 };
 
+    if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_SPEED)) return;
     update_label_by_name(page_01_main_obj, page_01_main_len,
                          "speed_num_label", "%d", speed[machine_state_speed()]);
     page_01_bottom_c_refresh_speed(false);
@@ -212,6 +335,7 @@ void page_01_err_num_refre(void)
 {
     char buf[12];
 
+    if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_ERROR)) return;
     snprintf(buf, sizeof(buf), "%d", counting_data_reject_pcs_count(counting_data_current()));
     update_label_by_name(page_01_main_obj, page_01_main_len,
                          "reject_num_label", "%s", buf);
@@ -220,18 +344,25 @@ void page_01_err_num_refre(void)
 void page_01_curr_img_refre(void)
 {
     char curr_code[4];
-    lv_obj_t* curr_img = find_obj_by_name("curr_USD_img", page_01_main_obj,
-                                          page_01_main_len);
-    lv_obj_t* curr_label = find_obj_by_name("curr_icon_label", page_01_main_obj,
-                                            page_01_main_len);
+
+    if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_CURRENCY)) return;
 
     currency_state_get_effective_code(curr_code);
-    if (curr_img && lv_obj_is_valid(curr_img)) {
-        lv_img_set_src(curr_img, get_currency_img(curr_code));
+    if (s_curr_rendered_valid && strcmp(curr_code, s_curr_rendered_code) == 0) return;
+    if (s_curr_img == NULL || !lv_obj_is_valid(s_curr_img)) {
+        s_curr_img = find_obj_by_name("curr_USD_img", page_01_main_obj,
+                                      page_01_main_len);
     }
-    if (curr_label && lv_obj_is_valid(curr_label)) {
-        lv_label_set_text(curr_label, currency_state_display_code(curr_code));
+    if (s_curr_label == NULL || !lv_obj_is_valid(s_curr_label)) {
+        s_curr_label = find_obj_by_name("curr_icon_label", page_01_main_obj,
+                                        page_01_main_len);
     }
+    if (s_curr_img && lv_obj_is_valid(s_curr_img))
+        lv_img_set_src(s_curr_img, get_currency_img(curr_code));
+    if (s_curr_label && lv_obj_is_valid(s_curr_label))
+        lv_label_set_text(s_curr_label, currency_state_display_code(curr_code));
+    snprintf(s_curr_rendered_code, sizeof(s_curr_rendered_code), "%s", curr_code);
+    s_curr_rendered_valid = true;
 }
 
 static void page_01_smart_island_action_cb(uint8_t action_id)
@@ -1385,6 +1516,8 @@ void ui_main_create(lv_obj_t* parent)
     smart_island_register_action_cb(page_01_smart_island_action_cb);
     smart_island_refresh_time(); //初始化时间显示
     page_32_innovation_handle_attach(main_page);
+    s_main_dirty = 0;
+    page_01_main_snapshot_capture();
 
 }
 
@@ -1409,6 +1542,12 @@ void ui_main_destroy(void)
         main_page = NULL;
         page_01_main_scroll_container = NULL;
     }
+    s_main_dirty = PAGE_01_MAIN_DIRTY_ALL;
+    s_main_snapshot_valid = false;
+    s_curr_img = NULL;
+    s_curr_label = NULL;
+    s_curr_rendered_valid = false;
+    s_curr_rendered_code[0] = '\0';
 }
 
 bool page_01_main_is_created(void)
@@ -1441,6 +1580,7 @@ void page_01_main_icon_feedback(const char *name)
 
 void page_01_main_refresh_totals(int total_pcs, const char *amount_text)
 {
+    if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_COUNTING)) return;
     update_label_by_name(page_01_main_obj, page_01_main_len,
                          "01_pcs_label", "%d", total_pcs);
     update_label_by_name(page_01_main_obj, page_01_main_len,
@@ -1454,7 +1594,9 @@ void page_01_main_suspend(void)
         return;
     }
 
+    page_01_main_snapshot_capture();
     pause_counting_sim();
+    smart_island_set_suspended(true);
     if (s_time_timer) {
         lv_timer_pause(s_time_timer);
     }
@@ -1463,33 +1605,47 @@ void page_01_main_suspend(void)
 
 bool page_01_main_resume(void)
 {
+    uint64_t started_us;
+    uint32_t dirty;
+
     if (!page_01_main_is_created()) {
         return false;
     }
 
+    started_us = perf_profile_is_enabled() ? app_clock_monotonic_us() : 0;
+    page_01_main_detect_snapshot_changes();
+    dirty = s_main_dirty;
     lv_obj_clear_flag(main_page, LV_OBJ_FLAG_HIDDEN);
+    smart_island_set_suspended(false);
     resume_counting_sim();
     smart_island_create(main_page);
     main_time_timer_cb(NULL);
     if (s_time_timer) {
         lv_timer_resume(s_time_timer);
     }
-    if (page_01_main_scroll_container && lv_obj_is_valid(page_01_main_scroll_container)) {
+    if (page_01_main_scroll_container &&
+        lv_obj_is_valid(page_01_main_scroll_container) &&
+        lv_obj_get_scroll_y(page_01_main_scroll_container) != 0) {
         lv_obj_scroll_to_y(page_01_main_scroll_container, 0, LV_ANIM_OFF);
     }
-    page_01_add_refre();
-    page_01_work_refre();
-    page_01_batch_refre();
-    page_01_face_refre();
-    page_01_cfd_refre();
-    page_01_speed_refre();
-    page_01_err_num_refre();
-    page_01_curr_img_refre();
-    ui_refresh_main_page();
-    if (page_01_main_scroll_container && lv_obj_is_valid(page_01_main_scroll_container)) {
-        lv_obj_scroll_to_y(page_01_main_scroll_container, 0, LV_ANIM_OFF);
-    }
+    if (dirty & PAGE_01_MAIN_DIRTY_MODE) page_01_mode_switch_refre();
+    if (dirty & PAGE_01_MAIN_DIRTY_ADD) page_01_add_refre();
+    if (dirty & PAGE_01_MAIN_DIRTY_WORK) page_01_work_refre();
+    if (dirty & PAGE_01_MAIN_DIRTY_BATCH) page_01_batch_refre();
+    if (dirty & PAGE_01_MAIN_DIRTY_FO) page_01_face_refre();
+    if (dirty & PAGE_01_MAIN_DIRTY_CFD) page_01_cfd_refre();
+    if (dirty & PAGE_01_MAIN_DIRTY_SPEED) page_01_speed_refre();
+    if (dirty & PAGE_01_MAIN_DIRTY_ERROR) page_01_err_num_refre();
+    if (dirty & PAGE_01_MAIN_DIRTY_CURRENCY) page_01_curr_img_refre();
+    if (dirty & PAGE_01_MAIN_DIRTY_COUNTING) ui_refresh_main_page();
+    if (dirty & PAGE_01_MAIN_DIRTY_LANGUAGE) page_01_update_language_texts();
     page_01_scroll_hint_on_enter();
+    page_01_main_snapshot_capture();
+    if (started_us != 0) {
+        perf_profile_report_event_us("MAIN",
+            dirty == 0 ? "RESUME_CLEAN" : "RESUME_DIRTY",
+            app_clock_elapsed_us32(started_us, app_clock_monotonic_us()));
+    }
     return true;
 }
 
@@ -1504,6 +1660,9 @@ void page_01_main_reveal_for_transition(void)
 void page_01_update_language_texts(void) //刷新主界面多语言文本
 {
     if (!page_01_main_is_created()) return;
+
+    if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_LANGUAGE |
+                                   PAGE_01_MAIN_DIRTY_ALL)) return;
 
     page_01_detail_section_btn_text_refresh();
     page_01_bottom_a_refresh_mode(false);

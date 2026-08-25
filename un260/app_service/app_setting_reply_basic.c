@@ -134,8 +134,10 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
         {
             if (len < 7) break;
             machine_state_confirm_batch(buf[5] != 200, buf[5]);
-            set_batch_switch_state(machine_state_batch_enabled());
-            page_03_menu_refresh_batch_number();
+            if (page_03_menu_is_visible()) {
+                set_batch_switch_state(machine_state_batch_enabled());
+                page_03_menu_refresh_batch_number();
+            }
             page_01_batch_refre();
             uart_debug_printf("Boot batch num: %d\n", machine_state_batch_num());
             smart_island_refresh_summary();

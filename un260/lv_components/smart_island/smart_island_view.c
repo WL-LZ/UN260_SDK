@@ -1095,6 +1095,10 @@ void smart_island_view_destroy_objects(void)
 
 void smart_island_view_apply_visual(smart_island_visual_t visual, bool anim_en)
 {
+    if (g_si_ctx.lifecycle.suspended) {
+        g_si_ctx.lifecycle.dirty = true;
+        return;
+    }
     if (anim_en) {
         smart_island_visual_apply_anim(visual);
     } else {
@@ -1107,6 +1111,10 @@ void smart_island_view_apply_visual(smart_island_visual_t visual, bool anim_en)
 
 void smart_island_view_refresh_scene(void)
 {
+    if (g_si_ctx.lifecycle.suspended) {
+        g_si_ctx.lifecycle.dirty = true;
+        return;
+    }
     smart_island_rebuild_scene_texts();
     smart_island_apply_scene_style();
 }

@@ -98,5 +98,6 @@ multi_pass_capture_kind_t multi_pass_verification_confirm_same_bundle(void);
 bool multi_pass_verification_restart_from_latest(void);
 void multi_pass_verification_get_view(multi_pass_verify_view_t *view);
 bool multi_pass_verification_is_active(void);
+uint32_t multi_pass_verification_revision(void);
 
 #endif

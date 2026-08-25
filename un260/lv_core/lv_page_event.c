@@ -618,12 +618,14 @@ void page_03_batch_set_result(bool success, const setting_batch_result_t *result
     if (success) {
         if (result->target.num > 0) {
             machine_state_confirm_batch(result->target.enable, result->target.num);
-            set_batch_switch_state(machine_state_batch_enabled());
             batch_switch_set_last_on_num(machine_state_batch_num());
-            page_03_menu_refresh_batch_number();
             page_01_batch_refre();
-            page_03_batch_num_edit_reset();
-            page_03_menu_show_batch_saved_tip();
+            if (page_03_menu_is_visible()) {
+                set_batch_switch_state(machine_state_batch_enabled());
+                page_03_menu_refresh_batch_number();
+                page_03_batch_num_edit_reset();
+                page_03_menu_show_batch_saved_tip();
+            }
         }
     }
 
@@ -633,7 +635,7 @@ void page_03_update_menu_button_states_refresh(void)
     /* boot 阶段会收到参数同步帧(0x38/0x39/0x3A/0x15等)，
        但菜单页对象可能尚未创建。这里必须做到“无对象就直接跳过”，
        否则会对 NULL 调用 lv_obj_set_style_* 导致卡死/崩溃。 */
-    if (!page_03_menu_is_created()) {
+    if (!page_03_menu_is_visible()) {
         return;
     }
 

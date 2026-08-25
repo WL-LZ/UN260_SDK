@@ -12,6 +12,7 @@
 #include "un260/device_info/device_info.h"
 #include "un260/data_collection/data_collection.h"
 #include "un260/lv_drivers/lv_drivers.h"
+#include "aic_ui/perf_stats.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -122,6 +123,17 @@ static lv_obj_t* footer_status_label = NULL;
 static lv_obj_t* footer_time_label = NULL;
 static lv_timer_t* footer_time_timer = NULL;
 
+#define SETTINGS_STATUS_TEXT_CAPACITY 32
+static char settings_status_text[SETTINGS_STATUS_TEXT_CAPACITY] = "READY";
+static lv_color_t settings_status_color;
+static bool settings_status_dirty = true;
+static bool data_collection_dirty = true;
+static bool data_collection_snapshot_valid = false;
+static data_collect_mode_t data_collection_last_mode;
+static bool data_collection_last_pending;
+static int data_collection_last_pcs;
+static char data_collection_last_status[128];
+
 static int current_menu_index = -1;
 
 static lv_obj_t* dc_btn_all = NULL;
@@ -176,21 +188,42 @@ static void style_plain(lv_obj_t* obj)
     lv_obj_set_scrollbar_mode(obj, LV_SCROLLBAR_MODE_OFF);
 }
 
-static void settings_set_status(const char* text, lv_color_t color)
+static bool settings_page_is_visible(void)
+{
+    return settings_page != NULL && lv_obj_is_valid(settings_page) &&
+           !lv_obj_has_flag(settings_page, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void settings_apply_status(void)
 {
     if (status_label) {
-        lv_label_set_text(status_label, text);
-        lv_obj_set_style_text_color(status_label, color, 0);
+        lv_label_set_text(status_label, settings_status_text);
+        lv_obj_set_style_text_color(status_label, settings_status_color, 0);
     }
 
     if (status_dot) {
-        lv_obj_set_style_bg_color(status_dot, color, 0);
+        lv_obj_set_style_bg_color(status_dot, settings_status_color, 0);
     }
 
     if (footer_status_label) {
-        lv_label_set_text(footer_status_label, text);
-        lv_obj_set_style_text_color(footer_status_label, color, 0);
+        lv_label_set_text(footer_status_label, settings_status_text);
+        lv_obj_set_style_text_color(footer_status_label, settings_status_color, 0);
     }
+
+    settings_status_dirty = false;
+}
+
+static void settings_set_status(const char* text, lv_color_t color)
+{
+    if (text == NULL) text = "";
+    if (!settings_status_dirty && strcmp(settings_status_text, text) == 0 &&
+        memcmp(&settings_status_color, &color, sizeof(color)) == 0) {
+        return;
+    }
+    snprintf(settings_status_text, sizeof(settings_status_text), "%s", text);
+    settings_status_color = color;
+    settings_status_dirty = true;
+    if (settings_page_is_visible()) settings_apply_status();
 }
 
 void page_06_settings_set_status(const char* text, lv_color_t color)
@@ -1000,42 +1033,71 @@ void page_06_data_collection_refresh(void)
 {
     data_collect_mode_t mode;
     bool request_pending;
+    int pcs;
+    const char *status;
+    bool mode_changed;
+    bool pending_changed;
+    bool pcs_changed;
+    bool status_changed;
 
-    if (!pages[SETTINGS_MENU_DATA_COLLECTION]) {
+    if (!pages[SETTINGS_MENU_DATA_COLLECTION] || !settings_page_is_visible()) {
+        data_collection_dirty = true;
         return;
     }
 
     mode = data_collection_state_mode();
     request_pending = data_collection_request_pending();
+    pcs = data_collection_state_pcs();
+    status = data_collection_state_status();
+    if (status == NULL) status = "";
+    mode_changed = data_collection_dirty || !data_collection_snapshot_valid ||
+                   mode != data_collection_last_mode;
+    pending_changed = data_collection_dirty || !data_collection_snapshot_valid ||
+                      request_pending != data_collection_last_pending;
+    pcs_changed = data_collection_dirty || !data_collection_snapshot_valid ||
+                  pcs != data_collection_last_pcs;
+    status_changed = data_collection_dirty || !data_collection_snapshot_valid ||
+                     strcmp(status, data_collection_last_status) != 0;
 
-    lv_obj_t* action_buttons[] = {
-        dc_btn_all, dc_btn_false, dc_btn_start, dc_btn_disable
-    };
-    for (size_t i = 0; i < sizeof(action_buttons) / sizeof(action_buttons[0]); i++) {
-        if (!action_buttons[i] || !lv_obj_is_valid(action_buttons[i])) continue;
-        if (request_pending) {
-            lv_obj_add_state(action_buttons[i], LV_STATE_DISABLED);
-        } else {
-            lv_obj_clear_state(action_buttons[i], LV_STATE_DISABLED);
+    if (pending_changed) {
+        lv_obj_t* action_buttons[] = {
+            dc_btn_all, dc_btn_false, dc_btn_start, dc_btn_disable
+        };
+        for (size_t i = 0; i < sizeof(action_buttons) / sizeof(action_buttons[0]); i++) {
+            if (!action_buttons[i] || !lv_obj_is_valid(action_buttons[i])) continue;
+            if (request_pending) {
+                lv_obj_add_state(action_buttons[i], LV_STATE_DISABLED);
+            } else {
+                lv_obj_clear_state(action_buttons[i], LV_STATE_DISABLED);
+            }
         }
     }
 
-    update_data_collect_btn_style(dc_btn_all, dc_label_all, dc_check_all,
-                                  mode == DATA_COLLECT_MODE_ALL);
-    update_data_collect_btn_style(dc_btn_false, dc_label_false, dc_check_false,
-                                  mode == DATA_COLLECT_MODE_FALSE);
-
-    if (dc_mode_value_label) {
-        lv_label_set_text(dc_mode_value_label, get_data_collect_mode_name(mode));
+    if (mode_changed) {
+        update_data_collect_btn_style(dc_btn_all, dc_label_all, dc_check_all,
+                                      mode == DATA_COLLECT_MODE_ALL);
+        update_data_collect_btn_style(dc_btn_false, dc_label_false, dc_check_false,
+                                      mode == DATA_COLLECT_MODE_FALSE);
+        if (dc_mode_value_label) {
+            lv_label_set_text(dc_mode_value_label, get_data_collect_mode_name(mode));
+        }
     }
 
-    if (dc_pcs_label) {
-        lv_label_set_text_fmt(dc_pcs_label, "PCS:%d", data_collection_state_pcs());
+    if (pcs_changed && dc_pcs_label) {
+        lv_label_set_text_fmt(dc_pcs_label, "PCS:%d", pcs);
     }
 
-    if (dc_status_label) {
-        lv_label_set_text(dc_status_label, data_collection_state_status());
+    if (status_changed && dc_status_label) {
+        lv_label_set_text(dc_status_label, status);
     }
+
+    data_collection_last_mode = mode;
+    data_collection_last_pending = request_pending;
+    data_collection_last_pcs = pcs;
+    snprintf(data_collection_last_status, sizeof(data_collection_last_status),
+             "%s", status);
+    data_collection_snapshot_valid = true;
+    data_collection_dirty = false;
 }
 
 void page_06_data_collection_on_reply(data_collection_reply_result_t result)
@@ -1406,11 +1468,52 @@ void ui_page_06_settings_create(lv_obj_t* parent)
     settings_set_status("READY", lv_color_hex(0x24D6A1));
 }
 
+bool ui_page_06_settings_resume(void)
+{
+    uint64_t started_us;
+    bool dirty;
+
+    if (settings_page == NULL || !lv_obj_is_valid(settings_page)) return false;
+
+    started_us = perf_profile_is_enabled() ? app_clock_monotonic_us() : 0;
+    dirty = settings_status_dirty || data_collection_dirty ||
+            !data_collection_snapshot_valid;
+    lv_obj_clear_flag(settings_page, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(settings_page);
+    if (settings_status_dirty) settings_apply_status();
+    page_06_data_collection_refresh();
+    update_footer_time();
+    if (footer_time_timer != NULL) {
+        lv_timer_resume(footer_time_timer);
+        lv_timer_reset(footer_time_timer);
+    }
+    ui_page_27_set_cfd_level_query();
+    if (started_us != 0) {
+        perf_profile_report_event_us("SETTINGS",
+            dirty ? "RESUME_DIRTY" : "RESUME_CLEAN",
+            app_clock_elapsed_us32(started_us, app_clock_monotonic_us()));
+    }
+    return true;
+}
+
+void ui_page_06_settings_suspend(void)
+{
+    settings_detail_dialog_hide();
+    settings_detail_keyboard_hide();
+    if (footer_time_timer != NULL) lv_timer_pause(footer_time_timer);
+    if (settings_page != NULL && lv_obj_is_valid(settings_page)) {
+        lv_obj_add_flag(settings_page, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
 void ui_page_06_settings_destroy(void)
 {
     if (!settings_page) {
         return;
     }
+
+    settings_detail_dialog_hide();
+    settings_detail_keyboard_hide();
 
     if (footer_time_timer) {
         lv_timer_del(footer_time_timer);
@@ -1483,4 +1586,8 @@ void ui_page_06_settings_destroy(void)
     dc_mode_value_label = NULL;
     dc_pcs_label = NULL;
     dc_status_label = NULL;
+    settings_status_dirty = true;
+    data_collection_dirty = true;
+    data_collection_snapshot_valid = false;
+    data_collection_last_status[0] = '\0';
 }
