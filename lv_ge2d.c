@@ -195,6 +195,10 @@ static int ge_run_blit(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t *draw_d
     int ret;
     bool profile_enabled = perf_profile_is_enabled();
     uint64_t profile_started_us = 0;
+    uint64_t profile_phase_started_us = 0;
+    uint32_t profile_submit_us = 0;
+    uint32_t profile_emit_us = 0;
+    uint32_t profile_sync_us = 0;
     lv_coord_t blend_w;
     lv_coord_t blend_h;
     int src_crop_x;
@@ -358,21 +362,36 @@ static int ge_run_blit(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t *draw_d
 
     if (profile_enabled) {
         profile_started_us = app_clock_monotonic_us();
+        profile_phase_started_us = profile_started_us;
     }
     ret = mpp_ge_bitblt(g_ge, &blt);
     if (ret < 0) {
         LV_LOG_ERROR("bitblt fail");
         return LV_RES_INV;
     }
+    if (profile_enabled) {
+        profile_submit_us = app_clock_elapsed_us32(
+            profile_phase_started_us, app_clock_monotonic_us());
+        profile_phase_started_us = app_clock_monotonic_us();
+    }
     ret = mpp_ge_emit(g_ge);
     if (ret < 0) {
         LV_LOG_ERROR("emit fail");
         return LV_RES_INV;
     }
+    if (profile_enabled) {
+        profile_emit_us = app_clock_elapsed_us32(
+            profile_phase_started_us, app_clock_monotonic_us());
+        profile_phase_started_us = app_clock_monotonic_us();
+    }
     ret = mpp_ge_sync(g_ge);
     if (ret < 0) {
         LV_LOG_ERROR("sync fail");
         return LV_RES_INV;
+    }
+    if (profile_enabled) {
+        profile_sync_us = app_clock_elapsed_us32(
+            profile_phase_started_us, app_clock_monotonic_us());
     }
 
     if (profile_enabled) {
@@ -380,7 +399,8 @@ static int ge_run_blit(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t *draw_d
             PERF_PROFILE_GE_BLIT,
             (uint64_t)dst_crop_w * (uint64_t)dst_crop_h,
             app_clock_elapsed_us32(profile_started_us,
-                                   app_clock_monotonic_us()));
+                                   app_clock_monotonic_us()),
+            profile_submit_us, profile_emit_us, profile_sync_us);
     }
 
     return LV_RES_OK;
@@ -393,6 +413,10 @@ static int ge_run_rotate(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t *draw
     int ret;
     bool profile_enabled = perf_profile_is_enabled();
     uint64_t profile_started_us = 0;
+    uint64_t profile_phase_started_us = 0;
+    uint32_t profile_submit_us = 0;
+    uint32_t profile_emit_us = 0;
+    uint32_t profile_sync_us = 0;
     struct ge_rotation rot = { 0 };
     lv_color_t * dest_buf = draw_ctx->buf;
     lv_coord_t dest_width = lv_area_get_width(draw_ctx->buf_area);
@@ -462,21 +486,36 @@ static int ge_run_rotate(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t *draw
 
     if (profile_enabled) {
         profile_started_us = app_clock_monotonic_us();
+        profile_phase_started_us = profile_started_us;
     }
     ret = mpp_ge_rotate(g_ge, &rot);
     if (ret < 0) {
         LV_LOG_ERROR("rotate fail");
         return LV_RES_INV;
     }
+    if (profile_enabled) {
+        profile_submit_us = app_clock_elapsed_us32(
+            profile_phase_started_us, app_clock_monotonic_us());
+        profile_phase_started_us = app_clock_monotonic_us();
+    }
     ret = mpp_ge_emit(g_ge);
     if (ret < 0) {
         LV_LOG_ERROR("emit fail");
         return LV_RES_INV;
     }
+    if (profile_enabled) {
+        profile_emit_us = app_clock_elapsed_us32(
+            profile_phase_started_us, app_clock_monotonic_us());
+        profile_phase_started_us = app_clock_monotonic_us();
+    }
     ret = mpp_ge_sync(g_ge);
     if (ret < 0) {
         LV_LOG_ERROR("sync fail");
         return LV_RES_INV;
+    }
+    if (profile_enabled) {
+        profile_sync_us = app_clock_elapsed_us32(
+            profile_phase_started_us, app_clock_monotonic_us());
     }
 
     if (profile_enabled) {
@@ -484,7 +523,8 @@ static int ge_run_rotate(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t *draw
             PERF_PROFILE_GE_ROTATE,
             (uint64_t)blend_width * (uint64_t)blend_height,
             app_clock_elapsed_us32(profile_started_us,
-                                   app_clock_monotonic_us()));
+                                   app_clock_monotonic_us()),
+            profile_submit_us, profile_emit_us, profile_sync_us);
     }
 
     return LV_RES_OK;
@@ -510,6 +550,10 @@ static int ge_run_fill(lv_draw_ctx_t * draw_ctx, unsigned int color, unsigned ch
     int ret;
     bool profile_enabled = perf_profile_is_enabled();
     uint64_t profile_started_us = 0;
+    uint64_t profile_phase_started_us = 0;
+    uint32_t profile_submit_us = 0;
+    uint32_t profile_emit_us = 0;
+    uint32_t profile_sync_us = 0;
     struct ge_fillrect fill = { 0 };
     lv_color_t * dest_buf = draw_ctx->buf;
     lv_coord_t dest_width = lv_area_get_width(draw_ctx->buf_area);
@@ -568,21 +612,36 @@ static int ge_run_fill(lv_draw_ctx_t * draw_ctx, unsigned int color, unsigned ch
 
     if (profile_enabled) {
         profile_started_us = app_clock_monotonic_us();
+        profile_phase_started_us = profile_started_us;
     }
     ret = mpp_ge_fillrect(g_ge, &fill);
     if (ret < 0) {
         LV_LOG_ERROR("fillrect1 fail");
         return LV_RES_INV;
     }
+    if (profile_enabled) {
+        profile_submit_us = app_clock_elapsed_us32(
+            profile_phase_started_us, app_clock_monotonic_us());
+        profile_phase_started_us = app_clock_monotonic_us();
+    }
     ret = mpp_ge_emit(g_ge);
     if (ret < 0) {
         LV_LOG_ERROR("emit fail");
         return LV_RES_INV;
     }
+    if (profile_enabled) {
+        profile_emit_us = app_clock_elapsed_us32(
+            profile_phase_started_us, app_clock_monotonic_us());
+        profile_phase_started_us = app_clock_monotonic_us();
+    }
     ret = mpp_ge_sync(g_ge);
     if (ret < 0) {
         LV_LOG_ERROR("sync fail");
         return LV_RES_INV;
+    }
+    if (profile_enabled) {
+        profile_sync_us = app_clock_elapsed_us32(
+            profile_phase_started_us, app_clock_monotonic_us());
     }
 
     if (profile_enabled) {
@@ -590,7 +649,8 @@ static int ge_run_fill(lv_draw_ctx_t * draw_ctx, unsigned int color, unsigned ch
             PERF_PROFILE_GE_FILL,
             (uint64_t)blend_width * (uint64_t)blend_height,
             app_clock_elapsed_us32(profile_started_us,
-                                   app_clock_monotonic_us()));
+                                   app_clock_monotonic_us()),
+            profile_submit_us, profile_emit_us, profile_sync_us);
     }
 
     return LV_RES_OK;

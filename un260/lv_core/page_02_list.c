@@ -7,10 +7,24 @@
 #include "lv_page_event.h"
 #include "aic_ui/aic_ui.h"
 #include "un260/lv_system/ui_object_utils.h"
+#include "un260/lv_system/app_clock.h"
+#include "aic_ui/perf_stats.h"
 #include <stdio.h>
 #include <string.h>
 
 static lv_obj_t* list_page = NULL;
+
+#define PAGE_02_DIRTY_SECTION_A (1U << PAGE_02_SECTION_A)
+#define PAGE_02_DIRTY_SECTION_B (1U << PAGE_02_SECTION_B)
+#define PAGE_02_DIRTY_SECTION_C (1U << PAGE_02_SECTION_C)
+#define PAGE_02_DIRTY_CURRENCY  (1U << PAGE_02_SECTION_COUNT)
+#define PAGE_02_DIRTY_ALL       (PAGE_02_DIRTY_SECTION_A | \
+                                 PAGE_02_DIRTY_SECTION_B | \
+                                 PAGE_02_DIRTY_SECTION_C | \
+                                 PAGE_02_DIRTY_CURRENCY)
+
+static uint32_t g_page_02_dirty = PAGE_02_DIRTY_ALL;
+static char g_page_02_currency_code[4];
 
 typedef struct {
     uint8_t curent_page;
@@ -866,6 +880,19 @@ void page_02_list_section_refresh_all(void) // 刷新全部分区滚动内容
     }
 }
 
+static bool page_02_list_is_visible(void)
+{
+    return list_page != NULL && lv_obj_is_valid(list_page) &&
+           !lv_obj_has_flag(list_page, LV_OBJ_FLAG_HIDDEN);
+}
+
+void page_02_list_section_mark_dirty(page_02_section_id_t section_id)
+{
+    if (section_id < PAGE_02_SECTION_COUNT) {
+        g_page_02_dirty |= (1U << section_id);
+    }
+}
+
 void page_02_list_section_data_ready(page_02_section_id_t section_id)
 {
     page_02_report_status_t *status = NULL;
@@ -896,6 +923,11 @@ void page_02_list_section_data_ready(page_02_section_id_t section_id)
     status->total_page = item_count == 0 ? 1
         : (item_count + page_size - 1) / page_size;
 
+    page_02_list_section_mark_dirty(section_id);
+    if (!page_02_list_is_visible()) {
+        return;
+    }
+
     switch (section_id) {
     case PAGE_02_SECTION_A:
         page_02_a_page_refre();
@@ -912,6 +944,7 @@ void page_02_list_section_data_ready(page_02_section_id_t section_id)
     default:
         break;
     }
+    g_page_02_dirty &= ~(1U << section_id);
 }
 
 void page_02_list_report_reset(void)
@@ -1008,25 +1041,57 @@ void ui_page_02_list_create(lv_obj_t* parent)
     page_02_b_page_num_refre();
     page_02_c_page_num_refre();
     page_02_list_section_refresh_all();
+    currency_state_get_active_code(g_page_02_currency_code);
+    g_page_02_dirty = 0;
 
 }
 
 bool ui_page_02_list_resume(void)
 {
+    char active_code[4];
+    uint32_t dirty;
+    bool profile_enabled;
+    uint64_t profile_started_us = 0;
+
     if (list_page == NULL || !lv_obj_is_valid(list_page)) {
         return false;
     }
 
+    currency_state_get_active_code(active_code);
+    if (strncmp(active_code, g_page_02_currency_code, 3) != 0) {
+        g_page_02_dirty |= PAGE_02_DIRTY_CURRENCY;
+    }
+    dirty = g_page_02_dirty;
+    profile_enabled = perf_profile_is_enabled();
+    if (profile_enabled) {
+        profile_started_us = app_clock_monotonic_us();
+    }
     lv_obj_clear_flag(list_page, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(list_page);
-    page_02_a_page_refre();
-    page_02_b_page_refre();
-    page_02_c_page_refre();
-    page_02_curr_refre();
-    page_02_a_page_num_refre();
-    page_02_b_page_num_refre();
-    page_02_c_page_num_refre();
-    page_02_list_section_refresh_all();
+    if (g_page_02_dirty & PAGE_02_DIRTY_SECTION_A) {
+        page_02_a_page_refre();
+        page_02_a_page_num_refre();
+    }
+    if (g_page_02_dirty & PAGE_02_DIRTY_SECTION_B) {
+        page_02_b_page_refre();
+        page_02_b_page_num_refre();
+    }
+    if (g_page_02_dirty & PAGE_02_DIRTY_SECTION_C) {
+        page_02_c_page_refre();
+        page_02_c_page_num_refre();
+    }
+    if (g_page_02_dirty & PAGE_02_DIRTY_CURRENCY) {
+        page_02_curr_refre();
+        memcpy(g_page_02_currency_code, active_code,
+               sizeof(g_page_02_currency_code));
+    }
+    g_page_02_dirty = 0;
+    if (profile_enabled) {
+        perf_profile_report_event_us(
+            "LIST", dirty == 0 ? "RESUME_CLEAN" : "RESUME_DIRTY",
+            app_clock_elapsed_us32(profile_started_us,
+                                   app_clock_monotonic_us()));
+    }
     return true;
 }
 
@@ -1055,4 +1120,6 @@ void ui_page_02_list_destroy(void)
         lv_obj_del(list_page);
         list_page = NULL;
     }
+    memset(g_page_02_currency_code, 0, sizeof(g_page_02_currency_code));
+    g_page_02_dirty = PAGE_02_DIRTY_ALL;
 }

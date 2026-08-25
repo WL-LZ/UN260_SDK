@@ -9,6 +9,8 @@
 #include "un260/lv_components/lv_components.h"
 #include "un260/machine_state/machine_state.h"
 #include "un260/lv_system/ui_text.h"
+#include "un260/lv_system/app_clock.h"
+#include "aic_ui/perf_stats.h"
 #include "../aic_ui/aic_ui.h"
 #include <stdlib.h>
 #include <string.h>
@@ -110,8 +112,11 @@ static lv_obj_t* g_page_03_preview_orb = NULL;
 static lv_obj_t* g_page_03_preview_flow = NULL;
 static lv_timer_t* g_page_03_preview_timer = NULL;
 static bool g_page_03_preview_feedback = false;
+static bool g_page_03_preview_needs_idle_refresh = false;
 static uint32_t g_page_03_preview_started = 0;
 static uint32_t g_page_03_preview_feedback_started = 0;
+static machine_state_snapshot_t g_page_03_snapshot;
+static bool g_page_03_snapshot_valid = false;
 
 static void page_03_create_decor(void);
 static void page_03_apply_modern_style(void);
@@ -1329,27 +1334,70 @@ void ui_page_03_menu_create(lv_obj_t* parent)
 
     //初始化fuction开关状态
     page_03_update_menu_button_states_refresh();
+    machine_state_get_snapshot(&g_page_03_snapshot);
+    g_page_03_snapshot_valid = true;
 
 }
 
 bool ui_page_03_menu_resume(void)
 {
+    machine_state_snapshot_t snapshot;
+    bool batch_dirty;
+    bool function_dirty;
+    bool profile_enabled;
+    uint64_t profile_started_us = 0;
+    const char* profile_event;
+
     if (!page_03_menu_is_created()) {
         return false;
+    }
+
+    machine_state_get_snapshot(&snapshot);
+    batch_dirty = !g_page_03_snapshot_valid ||
+                  snapshot.batch_enabled != g_page_03_snapshot.batch_enabled ||
+                  snapshot.batch_num != g_page_03_snapshot.batch_num ||
+                  snapshot.batch_mode != g_page_03_snapshot.batch_mode ||
+                  snapshot.batch_amount != g_page_03_snapshot.batch_amount;
+    function_dirty = !g_page_03_snapshot_valid ||
+                     snapshot.buzzer_enabled != g_page_03_snapshot.buzzer_enabled ||
+                     snapshot.speed != g_page_03_snapshot.speed ||
+                     snapshot.add_enabled != g_page_03_snapshot.add_enabled ||
+                     snapshot.fo_mode != g_page_03_snapshot.fo_mode ||
+                     snapshot.work_mode != g_page_03_snapshot.work_mode;
+    profile_enabled = perf_profile_is_enabled();
+    if (profile_enabled) {
+        profile_started_us = app_clock_monotonic_us();
     }
 
     lv_obj_clear_flag(menu_page, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(menu_page);
     page_03_batch_num_edit_reset();
-    page_03_menu_refresh_batch_mode();
-    page_03_menu_refresh_batch_number();
-    set_batch_switch_state(machine_state_batch_enabled());
-    page_03_update_menu_button_states_refresh();
-    page_03_menu_preview_refresh();
+    if (batch_dirty) {
+        page_03_menu_refresh_batch_mode();
+        page_03_menu_refresh_batch_number();
+        set_batch_switch_state(snapshot.batch_enabled);
+    }
+    if (function_dirty) {
+        page_03_update_menu_button_states_refresh();
+    }
+    if (g_page_03_preview_needs_idle_refresh) {
+        page_03_menu_preview_refresh();
+        g_page_03_preview_needs_idle_refresh = false;
+    }
+    g_page_03_snapshot = snapshot;
+    g_page_03_snapshot_valid = true;
     g_page_03_preview_started = lv_tick_get();
     if (g_page_03_preview_timer) {
         lv_timer_resume(g_page_03_preview_timer);
-        page_03_preview_timer_cb(g_page_03_preview_timer);
+    }
+    if (profile_enabled) {
+        profile_event = batch_dirty && function_dirty ? "RESUME_MULTI" :
+                        batch_dirty ? "RESUME_BATCH" :
+                        function_dirty ? "RESUME_FUNCTION" : "RESUME_CLEAN";
+        perf_profile_report_event_us(
+            "MENU", profile_event,
+            app_clock_elapsed_us32(profile_started_us,
+                                   app_clock_monotonic_us()));
     }
     return true;
 }
@@ -1361,10 +1409,13 @@ void ui_page_03_menu_suspend(void)
     }
 
     page_03_menu_clear_batch_tip();
+    g_page_03_preview_needs_idle_refresh = g_page_03_preview_feedback;
     g_page_03_preview_feedback = false;
     if (g_page_03_preview_timer) {
         lv_timer_pause(g_page_03_preview_timer);
     }
+    machine_state_get_snapshot(&g_page_03_snapshot);
+    g_page_03_snapshot_valid = true;
     lv_obj_add_flag(menu_page, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -1389,4 +1440,6 @@ void ui_page_03_menu_destroy(void)
     g_page_03_preview_orb = NULL;
     g_page_03_preview_flow = NULL;
     g_page_03_preview_feedback = false;
+    g_page_03_preview_needs_idle_refresh = false;
+    g_page_03_snapshot_valid = false;
 }

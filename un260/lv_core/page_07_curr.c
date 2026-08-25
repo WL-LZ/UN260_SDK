@@ -21,10 +21,13 @@
 #include "lv_page_event.h"
 #include "aic_ui/aic_ui.h"
 #include "lv_port_indev.h"
+#include "un260/lv_system/app_clock.h"
+#include "aic_ui/perf_stats.h"
 
 static lv_obj_t* curr_page = NULL;
 static currency_state_snapshot_t g_curr_page_snapshot;
 static bool g_curr_page_snapshot_valid;
+static char g_curr_page_selected_code[4];
 
 ui_element_t page_07_curr_obj[] = {
     // 背景图
@@ -92,6 +95,7 @@ void ui_page_07_curr_create(lv_obj_t* parent)
     (void)parent;
     if (curr_page) return;
     g_curr_page_snapshot_valid = false;
+    memset(g_curr_page_selected_code, 0, sizeof(g_curr_page_selected_code));
     curr_page = lv_obj_create(lv_scr_act());
     lv_obj_remove_style_all(curr_page);
     lv_obj_set_pos(curr_page, 0, 0);
@@ -1480,6 +1484,7 @@ void page_07_curr_img_refre(void)
     curr_refresh_left_buttons();
     curr_refresh_right_views();
     currency_state_get_snapshot(&g_curr_page_snapshot);
+    currency_state_get_selected_code(g_curr_page_selected_code);
     g_curr_page_snapshot_valid = true;
 }
 
@@ -1491,6 +1496,22 @@ static bool curr_cached_list_matches(const currency_state_snapshot_t* snapshot)
     }
     return memcmp(snapshot->codes, g_curr_page_snapshot.codes,
                   sizeof(snapshot->codes)) == 0;
+}
+
+static bool curr_cached_selection_matches(
+    const currency_state_snapshot_t* snapshot,
+    const char selected_code[4])
+{
+    if (!g_curr_page_snapshot_valid || snapshot == NULL ||
+        selected_code == NULL) {
+        return false;
+    }
+
+    return strncmp(snapshot->active_code,
+                   g_curr_page_snapshot.active_code, 3) == 0 &&
+           snapshot->active_currency == g_curr_page_snapshot.active_currency &&
+           snapshot->active_index == g_curr_page_snapshot.active_index &&
+           strncmp(selected_code, g_curr_page_selected_code, 3) == 0;
 }
 
 static void curr_refresh_cached_selection(void)
@@ -1536,20 +1557,39 @@ static void curr_refresh_cached_selection(void)
 bool ui_page_07_curr_resume(void)
 {
     currency_state_snapshot_t snapshot;
+    char selected_code[4];
+    bool profile_enabled;
+    uint64_t profile_started_us = 0;
+    const char* profile_event = "RESUME_CLEAN";
 
     if (curr_page == NULL || !lv_obj_is_valid(curr_page)) {
         return false;
     }
 
     currency_state_get_snapshot(&snapshot);
+    currency_state_get_selected_code(selected_code);
+    profile_enabled = perf_profile_is_enabled();
+    if (profile_enabled) {
+        profile_started_us = app_clock_monotonic_us();
+    }
     if (!curr_cached_list_matches(&snapshot)) {
+        profile_event = "RESUME_LIST";
         page_07_curr_img_refre();
-    } else {
+    } else if (!curr_cached_selection_matches(&snapshot, selected_code)) {
+        profile_event = "RESUME_SELECTION";
         curr_refresh_cached_selection();
         g_curr_page_snapshot = snapshot;
+        memcpy(g_curr_page_selected_code, selected_code,
+               sizeof(g_curr_page_selected_code));
     }
     lv_obj_clear_flag(curr_page, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(curr_page);
+    if (profile_enabled) {
+        perf_profile_report_event_us(
+            "CURRENCY", profile_event,
+            app_clock_elapsed_us32(profile_started_us,
+                                   app_clock_monotonic_us()));
+    }
     return true;
 }
 
@@ -1565,5 +1605,8 @@ void ui_page_07_curr_suspend(void)
     }
     g_page07_curr.gesture.active = false;
     g_page07_curr.gesture.dragging = false;
+    currency_state_get_snapshot(&g_curr_page_snapshot);
+    currency_state_get_selected_code(g_curr_page_selected_code);
+    g_curr_page_snapshot_valid = true;
     lv_obj_add_flag(curr_page, LV_OBJ_FLAG_HIDDEN);
 }

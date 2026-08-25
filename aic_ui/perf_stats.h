@@ -67,7 +67,8 @@ void perf_profile_set_page_context(uint32_t page_id, const char *page_name);
 void perf_profile_report_active_handler_us(uint32_t elapsed_us);
 void perf_profile_report_flush(const perf_profile_flush_sample_t *sample);
 void perf_profile_report_ge(perf_profile_ge_op_t op, uint64_t pixels,
-                            uint32_t elapsed_us);
+                            uint32_t elapsed_us, uint32_t submit_us,
+                            uint32_t emit_us, uint32_t sync_us);
 void perf_profile_report_page_switch(
     const perf_profile_page_switch_sample_t *sample);
 void perf_profile_report_event_us(const char *page_name, const char *event,

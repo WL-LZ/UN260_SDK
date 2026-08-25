@@ -51,8 +51,12 @@ static void perf_time_sample(perf_time_accumulator_t *time,
 
 typedef struct {
     uint64_t total_us;
+    uint64_t submit_us;
+    uint64_t emit_us;
+    uint64_t sync_us;
     uint64_t pixels;
     uint32_t max_us;
+    uint32_t sync_max_us;
     uint32_t count;
 } perf_profile_op_accumulator_t;
 
@@ -184,7 +188,8 @@ void perf_profile_report_flush(const perf_profile_flush_sample_t *sample)
 }
 
 void perf_profile_report_ge(perf_profile_ge_op_t op, uint64_t pixels,
-                            uint32_t elapsed_us)
+                            uint32_t elapsed_us, uint32_t submit_us,
+                            uint32_t emit_us, uint32_t sync_us)
 {
     perf_profile_op_accumulator_t *acc;
 
@@ -196,8 +201,14 @@ void perf_profile_report_ge(perf_profile_ge_op_t op, uint64_t pixels,
     acc->count++;
     acc->pixels += pixels;
     acc->total_us += elapsed_us;
+    acc->submit_us += submit_us;
+    acc->emit_us += emit_us;
+    acc->sync_us += sync_us;
     if (elapsed_us > acc->max_us) {
         acc->max_us = elapsed_us;
+    }
+    if (sync_us > acc->sync_max_us) {
+        acc->sync_max_us = sync_us;
     }
 }
 
@@ -270,6 +281,11 @@ void perf_profile_poll(uint32_t now_ms)
     uint32_t inv_avg;
     uint64_t pixels_avg;
     const char *activity;
+    uint32_t ge_commands;
+    uint64_t ge_submit_us;
+    uint64_t ge_emit_us;
+    uint64_t ge_sync_us;
+    uint32_t ge_sync_max_us;
 
     if (!g_profile.enabled) {
         return;
@@ -293,10 +309,30 @@ void perf_profile_poll(uint32_t now_ms)
         g_profile.invalid_pixels_total / g_profile.frames : 0;
     activity = g_profile.page_switches > 0 ? "SWITCH" :
                (g_profile.frames > 0 ? "RENDER" : "IDLE");
+    ge_commands = g_profile.ge[PERF_PROFILE_GE_FILL].count +
+                  g_profile.ge[PERF_PROFILE_GE_BLIT].count +
+                  g_profile.ge[PERF_PROFILE_GE_ROTATE].count;
+    ge_submit_us = g_profile.ge[PERF_PROFILE_GE_FILL].submit_us +
+                   g_profile.ge[PERF_PROFILE_GE_BLIT].submit_us +
+                   g_profile.ge[PERF_PROFILE_GE_ROTATE].submit_us;
+    ge_emit_us = g_profile.ge[PERF_PROFILE_GE_FILL].emit_us +
+                 g_profile.ge[PERF_PROFILE_GE_BLIT].emit_us +
+                 g_profile.ge[PERF_PROFILE_GE_ROTATE].emit_us;
+    ge_sync_us = g_profile.ge[PERF_PROFILE_GE_FILL].sync_us +
+                 g_profile.ge[PERF_PROFILE_GE_BLIT].sync_us +
+                 g_profile.ge[PERF_PROFILE_GE_ROTATE].sync_us;
+    ge_sync_max_us = g_profile.ge[PERF_PROFILE_GE_FILL].sync_max_us;
+    if (g_profile.ge[PERF_PROFILE_GE_BLIT].sync_max_us > ge_sync_max_us) {
+        ge_sync_max_us = g_profile.ge[PERF_PROFILE_GE_BLIT].sync_max_us;
+    }
+    if (g_profile.ge[PERF_PROFILE_GE_ROTATE].sync_max_us > ge_sync_max_us) {
+        ge_sync_max_us = g_profile.ge[PERF_PROFILE_GE_ROTATE].sync_max_us;
+    }
 
     uart_debug_printf(
         "PERF page=%s(%u) act=%s fps=%u n=%u inv=%u/%llu/%u h=%u/%u loop=%u/%u "
-        "out=%u/%u/%u/%u/%u ge=%u:%llu,%u:%llu,%u:%llu\n",
+        "out=%u/%u/%u/%u/%u ge=%u:%llu,%u:%llu,%u:%llu "
+        "gepipe=%u/%llu/%llu/%llu/%u\n",
         g_profile.page_name, g_profile.page_id, activity,
         fps, g_profile.frames, inv_avg, (unsigned long long)pixels_avg,
         g_profile.full_screen_frames,
@@ -312,7 +348,10 @@ void perf_profile_poll(uint32_t now_ms)
         g_profile.ge[PERF_PROFILE_GE_BLIT].count,
         (unsigned long long)g_profile.ge[PERF_PROFILE_GE_BLIT].total_us,
         g_profile.ge[PERF_PROFILE_GE_ROTATE].count,
-        (unsigned long long)g_profile.ge[PERF_PROFILE_GE_ROTATE].total_us);
+        (unsigned long long)g_profile.ge[PERF_PROFILE_GE_ROTATE].total_us,
+        ge_commands, (unsigned long long)ge_submit_us,
+        (unsigned long long)ge_emit_us, (unsigned long long)ge_sync_us,
+        ge_sync_max_us);
 
     perf_profile_reset_window(now_ms);
 }

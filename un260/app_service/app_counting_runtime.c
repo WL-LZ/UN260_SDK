@@ -230,6 +230,7 @@ static const counting_control_reply_hooks_t g_counting_control_hooks = {
 
 static void app_counting_runtime_on_main_data_changed(void)
 {
+    page_02_list_section_mark_dirty(PAGE_02_SECTION_A);
     ui_refresh_main_page();
 }
 
