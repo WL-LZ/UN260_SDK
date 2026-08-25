@@ -21,6 +21,26 @@ static lv_obj_t *g_fps_overlay;
 static lv_obj_t *g_fps_panel;
 static screen_recording_state_t g_last_state = SCREEN_RECORDING_IDLE;
 
+static void ui_screen_recording_set_button_visible(bool visible)
+{
+    bool is_visible;
+
+    if (g_record_button == NULL || !lv_obj_is_valid(g_record_button)) {
+        return;
+    }
+
+    is_visible = !lv_obj_has_flag(g_record_button, LV_OBJ_FLAG_HIDDEN);
+    if (is_visible == visible) {
+        return;
+    }
+
+    if (visible) {
+        lv_obj_clear_flag(g_record_button, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(g_record_button, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
 static void ui_screen_recording_fps_dialog_close(void)
 {
     if (g_fps_overlay != NULL && lv_obj_is_valid(g_fps_overlay)) {
@@ -251,14 +271,11 @@ void ui_screen_recording_indicator_poll(void)
 
     if (!enabled && state == SCREEN_RECORDING_IDLE) {
         ui_screen_recording_fps_dialog_close();
-        if (g_record_button != NULL && lv_obj_is_valid(g_record_button)) {
-            lv_obj_add_flag(g_record_button, LV_OBJ_FLAG_HIDDEN);
-        }
+        ui_screen_recording_set_button_visible(false);
         return;
     }
     ui_screen_recording_create();
-    lv_obj_clear_flag(g_record_button, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_move_foreground(g_record_button);
+    ui_screen_recording_set_button_visible(true);
     if (state != g_last_state) {
         ui_screen_recording_apply_state(state);
     }

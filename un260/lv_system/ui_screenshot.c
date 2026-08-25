@@ -17,6 +17,28 @@
 static lv_obj_t* g_screenshot_indicator = NULL;
 static uint32_t g_screenshot_poll_tick = 0;
 
+static void ui_screenshot_indicator_set_visible(bool visible)
+{
+    bool is_visible;
+
+    if (g_screenshot_indicator == NULL ||
+        !lv_obj_is_valid(g_screenshot_indicator)) {
+        return;
+    }
+
+    is_visible = !lv_obj_has_flag(g_screenshot_indicator,
+                                  LV_OBJ_FLAG_HIDDEN);
+    if (is_visible == visible) {
+        return;
+    }
+
+    if (visible) {
+        lv_obj_clear_flag(g_screenshot_indicator, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(g_screenshot_indicator, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
 typedef enum {
     UI_SCREENSHOT_OK = 0,
     UI_SCREENSHOT_USB_NOT_MOUNTED,
@@ -133,15 +155,11 @@ void ui_screenshot_indicator_poll(void)
     bool ready;
 
     if (!user_cfg_screenshot_enabled()) {
-        if (g_screenshot_indicator != NULL &&
-            lv_obj_is_valid(g_screenshot_indicator)) {
-            lv_obj_add_flag(g_screenshot_indicator, LV_OBJ_FLAG_HIDDEN);
-        }
+        ui_screenshot_indicator_set_visible(false);
         return;
     }
 
     ui_screenshot_indicator_create();
-    lv_obj_move_foreground(g_screenshot_indicator);
 
     if (g_screenshot_poll_tick != 0 &&
         (uint32_t)(now - g_screenshot_poll_tick) < UI_SCREENSHOT_POLL_MS) {
@@ -150,9 +168,5 @@ void ui_screenshot_indicator_poll(void)
     g_screenshot_poll_tick = now;
 
     ready = usb_storage_available();
-    if (ready) {
-        lv_obj_clear_flag(g_screenshot_indicator, LV_OBJ_FLAG_HIDDEN);
-    } else {
-        lv_obj_add_flag(g_screenshot_indicator, LV_OBJ_FLAG_HIDDEN);
-    }
+    ui_screenshot_indicator_set_visible(ready);
 }
