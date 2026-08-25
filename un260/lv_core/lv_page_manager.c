@@ -25,10 +25,20 @@ static ui_page_manager_context_t g_page_manager = {
 
 typedef void (*ui_page_create_fn_t)(lv_obj_t *parent);
 typedef void (*ui_page_destroy_fn_t)(void);
+typedef bool (*ui_page_resume_fn_t)(void);
+typedef void (*ui_page_suspend_fn_t)(void);
+
+typedef enum {
+    UI_PAGE_TRANSIENT = 0,
+    UI_PAGE_RETAINED,
+} ui_page_cache_policy_t;
 
 typedef struct {
     ui_page_create_fn_t create;
     ui_page_destroy_fn_t destroy;
+    ui_page_resume_fn_t resume;
+    ui_page_suspend_fn_t suspend;
+    ui_page_cache_policy_t cache_policy;
 } ui_page_registration_t;
 
 static void ui_manager_create_main(lv_obj_t *parent)
@@ -81,12 +91,36 @@ static const char *const g_page_names[UI_PAGE_COUNT] = {
 
 static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
     [UI_PAGE_BOOT_ANIM] = { ui_page_00_boot_anim_create, ui_page_00_boot_anim_destroy },
-    [UI_PAGE_MAIN] = { ui_manager_create_main, ui_main_destroy },
-    [UI_PAGE_LIST] = { ui_page_02_list_create, ui_page_02_list_destroy },
-    [UI_PAGE_MENU] = { ui_page_03_menu_create, ui_page_03_menu_destroy },
+    [UI_PAGE_MAIN] = {
+        .create = ui_manager_create_main,
+        .destroy = ui_main_destroy,
+        .resume = page_01_main_resume,
+        .suspend = page_01_main_suspend,
+        .cache_policy = UI_PAGE_RETAINED,
+    },
+    [UI_PAGE_LIST] = {
+        .create = ui_page_02_list_create,
+        .destroy = ui_page_02_list_destroy,
+        .resume = ui_page_02_list_resume,
+        .suspend = ui_page_02_list_suspend,
+        .cache_policy = UI_PAGE_RETAINED,
+    },
+    [UI_PAGE_MENU] = {
+        .create = ui_page_03_menu_create,
+        .destroy = ui_page_03_menu_destroy,
+        .resume = ui_page_03_menu_resume,
+        .suspend = ui_page_03_menu_suspend,
+        .cache_policy = UI_PAGE_RETAINED,
+    },
     [UI_PAGE_SETTING] = { ui_page_06_settings_create, ui_page_06_settings_destroy },
     [UI_PAGE_SET_PASSAGE] = { ui_page_05_set_password_create, ui_page_05_set_password_destroy },
-    [UI_PAGE_CURR] = { ui_page_07_curr_create, ui_page_07_curr_destroy },
+    [UI_PAGE_CURR] = {
+        .create = ui_page_07_curr_create,
+        .destroy = ui_page_07_curr_destroy,
+        .resume = ui_page_07_curr_resume,
+        .suspend = ui_page_07_curr_suspend,
+        .cache_policy = UI_PAGE_RETAINED,
+    },
     [UI_PAGE_BOOT] = { ui_page_08_curr_create, ui_page_08_curr_destroy },
     [UI_PAGE_CIS_CALIB] = { ui_page_cis_calib_create, ui_page_cis_calib_destroy },
     [UI_PAGE_DEBUG] = { ui_manager_create_debug, ui_page_10_debug_destroy },
@@ -111,7 +145,13 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
     [UI_PAGE_PASSWORD_CHANGE] = { ui_page_29_set_password_create, ui_page_29_set_password_destroy },
     [UI_PAGE_FACTORY_SETTING] = { ui_page_30_set_factory_create, ui_page_30_set_factory_destroy },
     [UI_PAGE_WAVE_GET] = { ui_page_31_get_wave_create, ui_page_31_get_wave_destroy },
-    [UI_PAGE_INNOVATION_CENTER] = { ui_page_32_innovation_create, ui_page_32_innovation_destroy },
+    [UI_PAGE_INNOVATION_CENTER] = {
+        .create = ui_page_32_innovation_create,
+        .destroy = ui_page_32_innovation_destroy,
+        .resume = ui_page_32_innovation_resume,
+        .suspend = ui_page_32_innovation_suspend,
+        .cache_policy = UI_PAGE_RETAINED,
+    },
 };
 
 static bool ui_manager_page_is_registered(ui_page_t page)
@@ -123,16 +163,21 @@ static bool ui_manager_page_is_registered(ui_page_t page)
 //销毁当前页面
 static const char *destroy_current_page(void)
 {
-    if (g_page_manager.current == UI_PAGE_MAIN) {
-        if (page_01_main_is_created()) {
-            page_01_main_suspend();
-            return "SUSPEND";
-        }
+    const ui_page_registration_t *registration;
+
+    if (g_page_manager.current < UI_PAGE_BOOT_ANIM ||
+        g_page_manager.current >= UI_PAGE_COUNT) {
+        return "NONE";
     }
-    if (g_page_manager.current >= UI_PAGE_BOOT_ANIM &&
-        g_page_manager.current < UI_PAGE_COUNT &&
-        g_page_registry[g_page_manager.current].destroy != NULL) {
-        g_page_registry[g_page_manager.current].destroy();
+
+    registration = &g_page_registry[g_page_manager.current];
+    if (registration->cache_policy == UI_PAGE_RETAINED &&
+        registration->suspend != NULL) {
+        registration->suspend();
+        return "SUSPEND";
+    }
+    if (registration->destroy != NULL) {
+        registration->destroy();
         return "DESTROY";
     }
     return "NONE";
@@ -140,10 +185,13 @@ static const char *destroy_current_page(void)
 
 static const char *create_new_page(ui_page_t page)
 {
-    if (page == UI_PAGE_MAIN && page_01_main_resume()) {
+    const ui_page_registration_t *registration = &g_page_registry[page];
+
+    if (registration->cache_policy == UI_PAGE_RETAINED &&
+        registration->resume != NULL && registration->resume()) {
         return "RESUME";
     }
-    g_page_registry[page].create(lv_scr_act());
+    registration->create(lv_scr_act());
     return "CREATE";
 }
 
@@ -341,6 +389,32 @@ bool ui_manager_pop_page(void)
 void ui_manager_clear_stack(void)
 {
     g_page_manager.stack_top = -1;
+}
+
+bool ui_manager_invalidate_page_cache(ui_page_t page)
+{
+    const ui_page_registration_t *registration;
+
+    if (!ui_manager_page_is_registered(page) ||
+        page == g_page_manager.current) {
+        return false;
+    }
+
+    registration = &g_page_registry[page];
+    if (registration->cache_policy != UI_PAGE_RETAINED ||
+        registration->destroy == NULL) {
+        return false;
+    }
+
+    registration->destroy();
+    return true;
+}
+
+void ui_manager_invalidate_all_page_caches(void)
+{
+    for (ui_page_t page = UI_PAGE_BOOT_ANIM; page < UI_PAGE_COUNT; page++) {
+        (void)ui_manager_invalidate_page_cache(page);
+    }
 }
 
 

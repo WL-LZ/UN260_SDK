@@ -6,6 +6,8 @@
 #include "multi_pass_verification.h"
 
 void ui_page_32_innovation_create(lv_obj_t *parent);
+bool ui_page_32_innovation_resume(void);
+void ui_page_32_innovation_suspend(void);
 void ui_page_32_innovation_destroy(void);
 
 /* The handle belongs to the main page and only recognizes a downward drag. */

@@ -1332,6 +1332,42 @@ void ui_page_03_menu_create(lv_obj_t* parent)
 
 }
 
+bool ui_page_03_menu_resume(void)
+{
+    if (!page_03_menu_is_created()) {
+        return false;
+    }
+
+    lv_obj_clear_flag(menu_page, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(menu_page);
+    page_03_batch_num_edit_reset();
+    page_03_menu_refresh_batch_mode();
+    page_03_menu_refresh_batch_number();
+    set_batch_switch_state(machine_state_batch_enabled());
+    page_03_update_menu_button_states_refresh();
+    page_03_menu_preview_refresh();
+    g_page_03_preview_started = lv_tick_get();
+    if (g_page_03_preview_timer) {
+        lv_timer_resume(g_page_03_preview_timer);
+        page_03_preview_timer_cb(g_page_03_preview_timer);
+    }
+    return true;
+}
+
+void ui_page_03_menu_suspend(void)
+{
+    if (!page_03_menu_is_created()) {
+        return;
+    }
+
+    page_03_menu_clear_batch_tip();
+    g_page_03_preview_feedback = false;
+    if (g_page_03_preview_timer) {
+        lv_timer_pause(g_page_03_preview_timer);
+    }
+    lv_obj_add_flag(menu_page, LV_OBJ_FLAG_HIDDEN);
+}
+
 void ui_page_03_menu_destroy(void)
 {
     page_03_function_button_cache_reset();

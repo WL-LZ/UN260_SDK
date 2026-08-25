@@ -465,7 +465,6 @@ static void innovation_transition_back_async(void *user_data)
     g_page_transitioning = false;
     if (!ui_manager_pop_page()) ui_manager_switch(UI_PAGE_MAIN);
     innovation_transition_surface_delete();
-    lv_async_call(innovation_preview_preload_async, NULL);
     if (started_us != 0) {
         perf_profile_report_event_us("INNOVATION", "BACK_COMMIT",
             app_clock_elapsed_us32(started_us, app_clock_monotonic_us()));
@@ -1159,6 +1158,32 @@ void ui_page_32_innovation_create(lv_obj_t *parent)
     if (started_us != 0) {
         perf_profile_report_event_us("INNOVATION", "PAGE_CREATE",
             app_clock_elapsed_us32(started_us, app_clock_monotonic_us()));
+    }
+}
+
+bool ui_page_32_innovation_resume(void)
+{
+    if (g_page.root == NULL || !lv_obj_is_valid(g_page.root)) {
+        return false;
+    }
+
+    innovation_page_refresh();
+    lv_obj_clear_flag(g_page.root, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(g_page.root);
+    innovation_refresh_resume();
+    return true;
+}
+
+void ui_page_32_innovation_suspend(void)
+{
+    innovation_refresh_pause();
+    innovation_prompt_close();
+    gesture_guide_close(false);
+    g_page_transitioning = false;
+    g_handle_gesture.pressed = false;
+    g_handle_gesture.preview_active = false;
+    if (g_page.root != NULL && lv_obj_is_valid(g_page.root)) {
+        lv_obj_add_flag(g_page.root, LV_OBJ_FLAG_HIDDEN);
     }
 }
 

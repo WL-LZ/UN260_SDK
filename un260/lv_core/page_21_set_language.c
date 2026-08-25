@@ -98,6 +98,9 @@ static void language_option_cb(lv_event_t* e)
 
     lang = (language_t)(uintptr_t)lv_event_get_user_data(e);
     ui_lang_set(lang);
+    /* Cached pages retain their label objects. Rebuild them lazily after a
+     * language change so hidden pages cannot resume with stale text. */
+    ui_manager_invalidate_all_page_caches();
     language_refresh_view();
 }
 

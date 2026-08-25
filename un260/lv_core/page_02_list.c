@@ -1011,6 +1011,43 @@ void ui_page_02_list_create(lv_obj_t* parent)
 
 }
 
+bool ui_page_02_list_resume(void)
+{
+    if (list_page == NULL || !lv_obj_is_valid(list_page)) {
+        return false;
+    }
+
+    lv_obj_clear_flag(list_page, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(list_page);
+    page_02_a_page_refre();
+    page_02_b_page_refre();
+    page_02_c_page_refre();
+    page_02_curr_refre();
+    page_02_a_page_num_refre();
+    page_02_b_page_num_refre();
+    page_02_c_page_num_refre();
+    page_02_list_section_refresh_all();
+    return true;
+}
+
+void ui_page_02_list_suspend(void)
+{
+    if (list_page == NULL || !lv_obj_is_valid(list_page)) {
+        return;
+    }
+
+    for (int i = 0; i < PAGE_02_SECTION_COUNT; i++) {
+        page_02_scroll_section_t *section = &s_page_02_scroll_sections[i];
+
+        section->pressing = false;
+        section->press_moved = false;
+        if (section->container && lv_obj_is_valid(section->container)) {
+            lv_anim_del(section->container, NULL);
+        }
+    }
+    lv_obj_add_flag(list_page, LV_OBJ_FLAG_HIDDEN);
+}
+
 void ui_page_02_list_destroy(void)
 {
     memset(s_page_02_scroll_sections, 0, sizeof(s_page_02_scroll_sections));
