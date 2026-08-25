@@ -1191,9 +1191,13 @@ static void curr_build_card_layer(void)
 
     g_page07_curr.objects.thumb = lv_obj_create(g_page07_curr.objects.card_layer);
     lv_obj_remove_style_all(g_page07_curr.objects.thumb);
+    lv_obj_set_size(g_page07_curr.objects.thumb, 1, CURR_TRACK_H);
+    lv_obj_set_pos(g_page07_curr.objects.thumb, 0, CURR_TRACK_Y);
     lv_obj_set_style_bg_color(g_page07_curr.objects.thumb, lv_color_hex(CURR_TRACK_FG), 0);
     lv_obj_set_style_bg_opa(g_page07_curr.objects.thumb, LV_OPA_90, 0);
     lv_obj_set_style_radius(g_page07_curr.objects.thumb, 3, 0);
+    g_curr_track_x = -1;
+    g_curr_track_w = -1;
 
 }
 
