@@ -8,6 +8,34 @@ DAEMON="/usr/local/bin/test_lvgl"
 DAEMONOPTS="-qws"
 PIDFILE=/var/run/test_lvgl.pid
 TSCALIB=/etc/pointercal
+CPUFREQ_GOVERNOR=/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+CPUFREQ_SAVED=/var/run/test_lvgl.cpufreq_governor
+UI_CPU_GOVERNOR=performance
+
+cpu_performance_enter() {
+      [ -r "$CPUFREQ_GOVERNOR" ] || return 0
+      [ -w "$CPUFREQ_GOVERNOR" ] || return 0
+
+      current_governor=$(cat "$CPUFREQ_GOVERNOR" 2>/dev/null)
+      if [ -n "$current_governor" ] && [ ! -f "$CPUFREQ_SAVED" ]; then
+          printf '%s\n' "$current_governor" > "$CPUFREQ_SAVED"
+      fi
+
+      if [ "$current_governor" != "$UI_CPU_GOVERNOR" ]; then
+          printf '%s\n' "$UI_CPU_GOVERNOR" > "$CPUFREQ_GOVERNOR" 2>/dev/null || true
+      fi
+}
+
+cpu_performance_leave() {
+      [ -r "$CPUFREQ_SAVED" ] || return 0
+      [ -w "$CPUFREQ_GOVERNOR" ] || return 0
+
+      saved_governor=$(cat "$CPUFREQ_SAVED" 2>/dev/null)
+      if [ -n "$saved_governor" ]; then
+          printf '%s\n' "$saved_governor" > "$CPUFREQ_GOVERNOR" 2>/dev/null || true
+      fi
+      rm -f "$CPUFREQ_SAVED"
+}
 
 start() {
       printf "Load touch driver: "
@@ -26,10 +54,12 @@ start() {
       if [ ! -f "$TSCALIB" ]; then
           /usr/bin/ts_calibrate
       fi
+      cpu_performance_enter
       sync
       "$DAEMON" $DAEMONOPTS > /dev/null 2>&1 &
       PID=$!
       if [ -z "$PID" ]; then
+          cpu_performance_leave
           printf "Fail \n"
       else
           echo "$PID" > "$PIDFILE"
@@ -40,6 +70,7 @@ start() {
 stop() {
 	printf "Stopping test_lvgl: "
         if [ ! -f "$PIDFILE" ]; then
+            cpu_performance_leave
             printf "pidfile not found \n"
             return 0
         fi
@@ -57,6 +88,7 @@ stop() {
             fi
         fi
         rm -f "$PIDFILE"
+        cpu_performance_leave
         printf "OK \n"
 }
 

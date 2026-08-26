@@ -352,7 +352,9 @@ static int ge_run_blit(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t *draw_d
 
     /* ctrl */
     blt.ctrl.flags = draw_dsc->angle / 900;
-    if(draw_dsc->opa < LV_OPA_MAX && frame->buf.format != MPP_FMT_ARGB_8888)
+    /* Opaque sources without a per-pixel alpha channel can use a plain copy.
+     * The old condition enabled GE alpha blending for this common case. */
+    if(draw_dsc->opa >= LV_OPA_MAX && frame->buf.format != MPP_FMT_ARGB_8888)
         blt.ctrl.alpha_en = 0;
     else
         blt.ctrl.alpha_en = 1;
