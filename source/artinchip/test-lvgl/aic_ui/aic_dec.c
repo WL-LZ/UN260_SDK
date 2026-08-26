@@ -188,7 +188,7 @@ static lv_fs_res_t png_get_img_size(lv_fs_file_t *fp, int *w, int *h, enum mpp_p
 
     color_type = buf[8 + 8 + 8 + 1];
     if (color_type == 2)
-        *fomat = MPP_FMT_XRGB_8888;
+        *fomat = MPP_FMT_RGB_888;
     else
         *fomat = MPP_FMT_ARGB_8888;
 
@@ -358,7 +358,6 @@ static lv_res_t aic_decoder_open(lv_img_decoder_t *decoder, lv_img_decoder_dsc_t
         else
             dsc->header.cf = LV_IMG_CF_TRUE_COLOR;
 
-        config.pix_fmt = MPP_FMT_ARGB_8888;
     } else {
         dsc->header.cf = LV_IMG_CF_TRUE_COLOR;
         jpeg_get_img_size(&image_file, &width, &height, &config.pix_fmt);
@@ -391,7 +390,10 @@ static lv_res_t aic_decoder_open(lv_img_decoder_t *decoder, lv_img_decoder_dsc_t
     alloc_frame->buf.size.height = height;
     alloc_frame->buf.format = config.pix_fmt;
     if (type == MPP_CODEC_VIDEO_DECODER_PNG) {
-        alloc_frame->buf.stride[0] =  (width * 4 + 15) & (~15);
+        if (config.pix_fmt == MPP_FMT_ARGB_8888)
+            alloc_frame->buf.stride[0] = (width * 4 + 15) & (~15);
+        else
+            alloc_frame->buf.stride[0] = (width * 3 + 15) & (~15);
     } else {
         alloc_frame->buf.size.height = (height + 15) & (~15);
         if (config.pix_fmt == MPP_FMT_YUV420P || config.pix_fmt == MPP_FMT_YUV422P) {
@@ -441,7 +443,7 @@ static lv_res_t aic_decoder_open(lv_img_decoder_t *decoder, lv_img_decoder_dsc_t
     lv_fs_close(&image_file);
 
     if (type == MPP_CODEC_VIDEO_DECODER_PNG)
-        dsc->header.cf = LV_IMG_CF_TRUE_COLOR_ALPHA;
+        dsc->header.cf = (config.pix_fmt == MPP_FMT_ARGB_8888) ? LV_IMG_CF_TRUE_COLOR_ALPHA : LV_IMG_CF_TRUE_COLOR;
     else
         dsc->header.cf = LV_IMG_CF_TRUE_COLOR;
 
