@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,10 +16,12 @@
 #include "un260/lv_system/app_clock.h"
 #include "un260/storage/usb_storage.h"
 
-#define UI_UPGRADE_FILE_PATH           USB_STORAGE_MOUNT_POINT "/update/test_lvgl"
+#define UI_UPGRADE_BUNDLE_FILE_PATH    USB_STORAGE_MOUNT_POINT "/update/UN260_UPDATE.upk"
+#define UI_UPGRADE_LEGACY_FILE_PATH    USB_STORAGE_MOUNT_POINT "/update/test_lvgl"
 #define UI_UPGRADE_RUNNING_FILE_PATH   "/proc/self/exe"
 #define UI_UPGRADE_SCRIPT_PATH         "/usr/bin/ui_update.sh"  
 #define UI_UPGRADE_STATUS_FILE_PATH    "/tmp/ui_update.status"
+#define UI_UPGRADE_INSTALLED_HASH_PATH "/var/lib/un260-updater/installed.fnv64"
 #define UI_UPGRADE_STATUS_MAX_SIZE     512U
 
 typedef struct {
@@ -46,6 +49,7 @@ static ui_upgrade_service_ctx_t g_ui_upgrade_service;
 static bool g_ui_upgrade_running_hash_ready = false;
 static uint64_t g_ui_upgrade_running_hash = 0;
 static ui_upgrade_hash_cache_t g_ui_upgrade_pkg_hash_cache;
+static bool g_ui_upgrade_bundle_selected = false;
 
 static unsigned long ui_upgrade_service_now_ms(void)
 {
@@ -151,10 +155,45 @@ static bool ui_upgrade_service_hash_file_cached(const char* path,
     return true;
 }
 
+static bool ui_upgrade_service_read_installed_bundle_hash(uint64_t* hash_out)
+{
+    FILE* fp;
+    uint64_t hash = 0;
+
+    if (hash_out == NULL) return false;
+
+    fp = fopen(UI_UPGRADE_INSTALLED_HASH_PATH, "r");
+    if (fp == NULL) return false;
+    if (fscanf(fp, "%16" SCNx64, &hash) != 1) {
+        fclose(fp);
+        return false;
+    }
+    fclose(fp);
+    *hash_out = hash;
+    return true;
+}
+
 static ui_upgrade_package_hash_status_t
-ui_upgrade_service_get_package_hash_status(void)
+ui_upgrade_service_get_package_hash_status(const char* package_path,
+                                           bool bundle_package)
 {
     uint64_t package_hash = 0;
+    uint64_t installed_hash = 0;
+
+    if (!ui_upgrade_service_hash_file_cached(package_path,
+                                             &g_ui_upgrade_pkg_hash_cache,
+                                             &package_hash)) {
+        return UI_UPGRADE_PACKAGE_HASH_ERROR;
+    }
+
+    if (bundle_package) {
+        if (!ui_upgrade_service_read_installed_bundle_hash(&installed_hash)) {
+            return UI_UPGRADE_PACKAGE_HASH_DIFFERENT;
+        }
+        return package_hash == installed_hash ?
+               UI_UPGRADE_PACKAGE_HASH_MATCH :
+               UI_UPGRADE_PACKAGE_HASH_DIFFERENT;
+    }
 
     if (!g_ui_upgrade_running_hash_ready) {
         if (!ui_upgrade_service_hash_file_fnv1a64(UI_UPGRADE_RUNNING_FILE_PATH,
@@ -162,12 +201,6 @@ ui_upgrade_service_get_package_hash_status(void)
             return UI_UPGRADE_PACKAGE_HASH_ERROR;
         }
         g_ui_upgrade_running_hash_ready = true;
-    }
-
-    if (!ui_upgrade_service_hash_file_cached(UI_UPGRADE_FILE_PATH,
-                                             &g_ui_upgrade_pkg_hash_cache,
-                                             &package_hash)) {
-        return UI_UPGRADE_PACKAGE_HASH_ERROR;
     }
 
     return package_hash == g_ui_upgrade_running_hash ?
@@ -433,6 +466,7 @@ void ui_upgrade_service_reset(void)
 
     memset(&g_ui_upgrade_service, 0, sizeof(g_ui_upgrade_service));
     ui_upgrade_service_hash_cache_clear(&g_ui_upgrade_pkg_hash_cache);
+    g_ui_upgrade_bundle_selected = false;
     g_ui_upgrade_service.child_pid = -1;
     ui_upgrade_service_set_status(false, false, false, 0,
                                   UI_UPGRADE_STAGE_NONE, "", "");
@@ -441,19 +475,29 @@ void ui_upgrade_service_reset(void)
 void ui_upgrade_service_detect(ui_upgrade_detect_info_t* info)
 {
     usb_storage_status_t storage_status;
+    bool bundle_found;
+    bool legacy_found;
+    const char* package_path = NULL;
 
     if (info == NULL) return;
 
     usb_storage_refresh(&storage_status);
     info->usb_present = storage_status.device_present;
     info->usb_mounted = storage_status.mounted;
-    info->package_found = info->usb_present && info->usb_mounted &&
-                          ui_upgrade_service_file_exists(UI_UPGRADE_FILE_PATH);
+    bundle_found = info->usb_present && info->usb_mounted &&
+                   ui_upgrade_service_file_exists(UI_UPGRADE_BUNDLE_FILE_PATH);
+    legacy_found = info->usb_present && info->usb_mounted &&
+                   ui_upgrade_service_file_exists(UI_UPGRADE_LEGACY_FILE_PATH);
+    info->package_found = bundle_found || legacy_found;
     info->package_hash_status = UI_UPGRADE_PACKAGE_HASH_NOT_CHECKED;
+    g_ui_upgrade_bundle_selected = bundle_found;
 
     if (info->package_found) {
+        package_path = bundle_found ? UI_UPGRADE_BUNDLE_FILE_PATH :
+                                     UI_UPGRADE_LEGACY_FILE_PATH;
         info->package_hash_status =
-            ui_upgrade_service_get_package_hash_status();
+            ui_upgrade_service_get_package_hash_status(package_path,
+                                                       bundle_found);
     } else {
         ui_upgrade_service_hash_cache_clear(&g_ui_upgrade_pkg_hash_cache);
     }
@@ -489,13 +533,21 @@ ui_upgrade_start_result_t ui_upgrade_service_start(void)
     if (pid < 0) return UI_UPGRADE_START_FORK_FAILED;
 
     if (pid == 0) {
+        char bundle_hash[17] = {0};
         FILE* fp = fopen("/tmp/ui_update_child.log", "a");
         if (fp) {
             dup2(fileno(fp), STDOUT_FILENO);
             dup2(fileno(fp), STDERR_FILENO);
             fclose(fp);
         }
-        execl("/bin/sh", "sh", UI_UPGRADE_SCRIPT_PATH, (char*)NULL);
+        if (g_ui_upgrade_bundle_selected && g_ui_upgrade_pkg_hash_cache.valid) {
+            snprintf(bundle_hash, sizeof(bundle_hash), "%016" PRIx64,
+                     g_ui_upgrade_pkg_hash_cache.hash);
+            execl("/bin/sh", "sh", UI_UPGRADE_SCRIPT_PATH,
+                  "--bundle-fnv", bundle_hash, (char*)NULL);
+        } else {
+            execl("/bin/sh", "sh", UI_UPGRADE_SCRIPT_PATH, (char*)NULL);
+        }
         _exit(127);
     }
 

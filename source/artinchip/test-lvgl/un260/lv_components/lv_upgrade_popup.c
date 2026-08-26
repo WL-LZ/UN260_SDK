@@ -98,6 +98,7 @@ typedef struct {
 
     upgrade_popup_state_t state;
     bool result_success;
+    char result_text[128];
     bool prompt_hiding;
     bool hide_to_prompt;
 } upgrade_popup_ctx_t;
@@ -1226,7 +1227,9 @@ static void upgrade_popup_result_timer_cb(lv_timer_t* timer)
     if (g_upgrade_popup.result_success) {
         upgrade_popup_show_success();
     } else {
-        upgrade_popup_show_fail(ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_FAIL_DESC));
+        upgrade_popup_show_fail(g_upgrade_popup.result_text[0] != '\0' ?
+                                g_upgrade_popup.result_text :
+                                ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_FAIL_DESC));
     }
 }
 
@@ -1254,6 +1257,9 @@ static void upgrade_popup_status_timer_cb(lv_timer_t* timer)
 
     if (status.finished && g_upgrade_popup.result_timer == NULL) {
         g_upgrade_popup.result_success = status.success;
+        lv_snprintf(g_upgrade_popup.result_text,
+                    sizeof(g_upgrade_popup.result_text),
+                    "%s", status.result_text);
         g_upgrade_popup.result_timer =
             lv_timer_create(upgrade_popup_result_timer_cb, UPGRADE_POPUP_RESULT_DELAY_MS, NULL);
         if (g_upgrade_popup.result_timer) {

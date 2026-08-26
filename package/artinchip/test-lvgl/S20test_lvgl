@@ -5,7 +5,7 @@
 
 
 DAEMON="/usr/local/bin/test_lvgl"
-DAEMONOPTS=" -qws"
+DAEMONOPTS="-qws"
 PIDFILE=/var/run/test_lvgl.pid
 TSCALIB=/etc/pointercal
 
@@ -23,29 +23,41 @@ start() {
       export TSLIB_TSDEVICE=/dev/input/event0
       export TSLIB_PLUGINDIR=/usr/lib/ts
 
-      if [ ! -f $TSCALIB ]; then
+      if [ ! -f "$TSCALIB" ]; then
           /usr/bin/ts_calibrate
       fi
       sync
-      PID=`$DAEMON $DAEMONOPTS > /dev/null 2>&1 & echo $!`
-      if [ -z $PID ]; then
+      "$DAEMON" $DAEMONOPTS > /dev/null 2>&1 &
+      PID=$!
+      if [ -z "$PID" ]; then
           printf "Fail \n"
       else
-          echo $PID >$PIDFILE
+          echo "$PID" > "$PIDFILE"
           printf "OK \n"
       fi
 }
 
 stop() {
 	printf "Stopping test_lvgl: "
-        PID=`cat $PIDFILE`
-        if [ -f $PIDFILE]; then
-            kill -HUP $PID
-            printf "OK \n"
-            rm -f $PIDFILE
-        else
+        if [ ! -f "$PIDFILE" ]; then
             printf "pidfile not found \n"
+            return 0
         fi
+
+        PID=$(cat "$PIDFILE" 2>/dev/null)
+        if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+            kill -TERM "$PID" 2>/dev/null || true
+            wait_count=0
+            while kill -0 "$PID" 2>/dev/null && [ "$wait_count" -lt 5 ]; do
+                sleep 1
+                wait_count=$((wait_count + 1))
+            done
+            if kill -0 "$PID" 2>/dev/null; then
+                kill -KILL "$PID" 2>/dev/null || true
+            fi
+        fi
+        rm -f "$PIDFILE"
+        printf "OK \n"
 }
 
 case "$1" in

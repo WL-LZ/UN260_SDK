@@ -251,6 +251,21 @@ function swupdate_pack_swu()
 	cd - > /dev/null
 }
 
+function run_board_post_image_hook()
+{
+	local BOARD_HOOK="${TARGET_BOARD_DIR}/post-image-extra.sh"
+
+	if [ ! -f "${BOARD_HOOK}" ]; then
+		return 0
+	fi
+
+	mk_info "Run board post-image hook ..."
+	if ! bash "${BOARD_HOOK}"; then
+		mk_error "Board post-image hook failed: ${BOARD_HOOK}"
+		exit 1
+	fi
+}
+
 function main()
 {
 	mk_uboot_env
@@ -262,6 +277,7 @@ function main()
 	mk_rsa_key
 	install_ota_image
 	mk_image_file
+	run_board_post_image_hook
 	if [ "$(grep BR2_PACKAGE_SWUPDATE=y ${BR2_CONFIG})" != "" ]; then
 		swupdate_pack_swu
 	fi
