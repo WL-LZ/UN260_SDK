@@ -25,6 +25,12 @@
 #define SIN(x) (sin((x)* PI / 180.0))
 #define COS(x) (cos((x)* PI / 180.0))
 
+/* In normal GE mode every operation is a blocking ioctl.  For a small,
+ * opaque solid fill the ioctl overhead is greater than LVGL's direct linear
+ * write.  Keep large fills and every alpha blend on GE, where the hardware
+ * still has a clear advantage. */
+#define GE_FILL_CPU_THRESHOLD_PIXELS 8192U
+
 typedef struct _img_info {
     unsigned int img_size;
     int type;
@@ -865,6 +871,7 @@ void lv_draw_aic_blend(lv_draw_ctx_t * draw_ctx, const lv_draw_sw_blend_dsc_t * 
 {
     lv_area_t blend_area;
     bool done = false;
+    bool prefer_sw_fill = false;
 
     if (dsc->mask_buf && dsc->mask_res == LV_DRAW_MASK_RES_TRANSP)
         return;
@@ -873,13 +880,23 @@ void lv_draw_aic_blend(lv_draw_ctx_t * draw_ctx, const lv_draw_sw_blend_dsc_t * 
     if (!_lv_area_intersect(&blend_area, dsc->blend_area, draw_ctx->clip_area))
         return; /*Fully clipped, nothing to do */
 
+    if (dsc->src_buf == NULL && dsc->mask_buf == NULL &&
+        dsc->blend_mode == LV_BLEND_MODE_NORMAL &&
+        dsc->opa >= LV_OPA_MAX &&
+        (uint32_t)lv_area_get_width(&blend_area) *
+            (uint32_t)lv_area_get_height(&blend_area) <=
+            GE_FILL_CPU_THRESHOLD_PIXELS) {
+        prefer_sw_fill = true;
+    }
+
     /*Make the blend area relative to the buffer*/
     lv_area_move(&blend_area, -draw_ctx->buf_area->x1, -draw_ctx->buf_area->y1);
 
     lv_disp_t * disp = _lv_refr_get_disp_refreshing();
     lv_color_t * dest_buf = draw_ctx->buf;
 
-    if (dsc->mask_buf == NULL && dsc->blend_mode == LV_BLEND_MODE_NORMAL
+    if (!prefer_sw_fill &&
+        dsc->mask_buf == NULL && dsc->blend_mode == LV_BLEND_MODE_NORMAL
         && (dest_buf == disp->driver->draw_buf->buf1 || dest_buf == disp->driver->draw_buf->buf2)
         && disp->driver->set_px_cb == NULL ) {
         int ret = LV_RES_INV;
