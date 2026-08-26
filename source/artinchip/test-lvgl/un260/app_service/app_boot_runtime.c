@@ -17,10 +17,58 @@
 #include "un260/lv_system/counting_ui_runtime.h"
 
 #define APP_BOOT_FINISH_DELAY_MS       2000
+#define APP_BOOT_PREWARM_PERIOD_MS       80
 #define APP_BOOT_CURRENCY_LIST_CMD     0x56
 #define APP_BOOT_CURRENCY_LIST_REQUEST 0x01
 
 static lv_timer_t *g_boot_finish_timer = NULL;
+static lv_timer_t *g_boot_prewarm_timer = NULL;
+static size_t g_boot_prewarm_index = 0;
+
+static const ui_page_t g_boot_prewarm_pages[] = {
+    UI_PAGE_MENU,
+    UI_PAGE_CURR,
+    UI_PAGE_LIST,
+    UI_PAGE_SETTING,
+    UI_PAGE_INNOVATION_CENTER,
+};
+
+static void app_boot_runtime_cancel_prewarm(void)
+{
+    if (g_boot_prewarm_timer == NULL) {
+        return;
+    }
+    lv_timer_del(g_boot_prewarm_timer);
+    g_boot_prewarm_timer = NULL;
+}
+
+static void app_boot_runtime_prewarm_timer_cb(lv_timer_t *timer)
+{
+    if (timer == NULL || ui_manager_get_current_page() != UI_PAGE_BOOT) {
+        app_boot_runtime_cancel_prewarm();
+        return;
+    }
+
+    if (g_boot_prewarm_index <
+        sizeof(g_boot_prewarm_pages) / sizeof(g_boot_prewarm_pages[0])) {
+        (void)ui_manager_prewarm_page(
+            g_boot_prewarm_pages[g_boot_prewarm_index++]);
+    }
+
+    if (g_boot_prewarm_index >=
+        sizeof(g_boot_prewarm_pages) / sizeof(g_boot_prewarm_pages[0])) {
+        app_boot_runtime_cancel_prewarm();
+    }
+}
+
+static void app_boot_runtime_start_prewarm(void)
+{
+    app_boot_runtime_cancel_prewarm();
+    g_boot_prewarm_index = 0;
+    g_boot_prewarm_timer = lv_timer_create(app_boot_runtime_prewarm_timer_cb,
+                                            APP_BOOT_PREWARM_PERIOD_MS,
+                                            NULL);
+}
 
 static void app_boot_runtime_cancel_finish(void)
 {
@@ -59,6 +107,7 @@ static void app_boot_runtime_send_next_selftest(void)
 
 static void app_boot_runtime_finish(counting_session_state_t *counting_session)
 {
+    app_boot_runtime_cancel_prewarm();
     boot_selftest_list_finish();
     sim_data_init();
     app_counting_runtime_reset_session(counting_session, "boot finish");
@@ -105,6 +154,7 @@ void app_boot_runtime_handle_reply(counting_session_state_t *counting_session,
             return;
         }
         app_boot_runtime_request_currency_list();
+        app_boot_runtime_start_prewarm();
         g_boot_finish_timer = lv_timer_create(app_boot_runtime_finish_timer_cb,
                                               APP_BOOT_FINISH_DELAY_MS,
                                               counting_session);
@@ -123,6 +173,7 @@ void app_boot_runtime_poll(uint32_t now_ms, bool boot_page_active)
 
     if (!boot_page_active) {
         app_boot_runtime_cancel_finish();
+        app_boot_runtime_cancel_prewarm();
         return;
     }
 

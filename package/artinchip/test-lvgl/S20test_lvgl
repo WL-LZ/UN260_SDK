@@ -7,10 +7,14 @@
 DAEMON="/usr/local/bin/test_lvgl"
 DAEMONOPTS="-qws"
 PIDFILE=/var/run/test_lvgl.pid
+DEFER_PIDFILE=/var/run/test_lvgl.defer.pid
+MDEV_PIDFILE=/var/run/mdev.pid
+STARTUP_LOG=/tmp/test_lvgl.startup.log
 TSCALIB=/etc/pointercal
 CPUFREQ_GOVERNOR=/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
 CPUFREQ_SAVED=/var/run/test_lvgl.cpufreq_governor
 UI_CPU_GOVERNOR=performance
+REQUIRED_DEVICES="/dev/fb0 /dev/ge /dev/input/event0 /dev/ttyS4 /dev/ttyS5 /dev/ttyS6"
 
 cpu_performance_enter() {
       [ -r "$CPUFREQ_GOVERNOR" ] || return 0
@@ -37,11 +41,68 @@ cpu_performance_leave() {
       rm -f "$CPUFREQ_SAVED"
 }
 
+wait_required_devices() {
+      wait_count=0
+      while [ "$wait_count" -lt 10 ]; do
+          missing_devices=""
+          for device in $REQUIRED_DEVICES; do
+              [ -e "$device" ] || missing_devices="$missing_devices $device"
+          done
+          if [ -z "$missing_devices" ]; then
+              return 0
+          fi
+          echo "Waiting for UI devices:$missing_devices"
+          sleep 1
+          wait_count=$((wait_count + 1))
+      done
+
+      echo "UI device readiness timeout; missing:$missing_devices"
+      return 1
+}
+
 start() {
+      if [ "${UN260_MDEV_READY:-0}" != "1" ]; then
+          : > "$STARTUP_LOG"
+          (
+              wait_count=0
+              while [ "$wait_count" -lt 10 ]; do
+                  mdev_pid=$(cat "$MDEV_PIDFILE" 2>/dev/null)
+                  if [ -n "$mdev_pid" ] && kill -0 "$mdev_pid" 2>/dev/null; then
+                      rm -f "$DEFER_PIDFILE"
+                      UN260_MDEV_READY=1 "$0" start >> "$STARTUP_LOG" 2>&1
+                      exit $?
+                  fi
+                  sleep 1
+                  wait_count=$((wait_count + 1))
+              done
+              echo "Starting test_lvgl: Fail (mdev readiness timeout)" >> "$STARTUP_LOG"
+              rm -f "$DEFER_PIDFILE"
+              exit 1
+          ) &
+          defer_pid=$!
+          echo "$defer_pid" > "$DEFER_PIDFILE"
+          printf "Starting test_lvgl: deferred until mdev is ready\n"
+          return 0
+      fi
+
+      if [ -f "$PIDFILE" ]; then
+          old_pid=$(cat "$PIDFILE" 2>/dev/null)
+          if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
+              printf "test_lvgl already running (pid %s)\n" "$old_pid"
+              return 0
+          fi
+          rm -f "$PIDFILE"
+      fi
+
       printf "Load touch driver: "
       cd /lib/modules/5.10.44/kernel/drivers/input/touchscreen/gt9xx/
       modprobe gt9xx_core.ko
       cd -
+
+      if ! wait_required_devices; then
+          printf "Starting test_lvgl: Fail (device readiness timeout, log=%s)\n" "$STARTUP_LOG"
+          return 1
+      fi
 
       printf "Starting test_lvgl: "
 
@@ -56,19 +117,39 @@ start() {
       fi
       cpu_performance_enter
       sync
-      "$DAEMON" $DAEMONOPTS > /dev/null 2>&1 &
+      : > "$STARTUP_LOG"
+      "$DAEMON" $DAEMONOPTS >> "$STARTUP_LOG" 2>&1 &
       PID=$!
       if [ -z "$PID" ]; then
           cpu_performance_leave
           printf "Fail \n"
-      else
-          echo "$PID" > "$PIDFILE"
-          printf "OK \n"
+          return 1
       fi
+
+      echo "$PID" > "$PIDFILE"
+      sleep 1
+      if ! kill -0 "$PID" 2>/dev/null; then
+          wait "$PID" 2>/dev/null
+          status=$?
+          rm -f "$PIDFILE"
+          cpu_performance_leave
+          printf "Fail (exit=%s, log=%s)\n" "$status" "$STARTUP_LOG"
+          return 1
+      fi
+
+      printf "OK \n"
+      return 0
 }
 
 stop() {
 	printf "Stopping test_lvgl: "
+        if [ -f "$DEFER_PIDFILE" ]; then
+            defer_pid=$(cat "$DEFER_PIDFILE" 2>/dev/null)
+            if [ -n "$defer_pid" ] && kill -0 "$defer_pid" 2>/dev/null; then
+                kill -TERM "$defer_pid" 2>/dev/null || true
+            fi
+            rm -f "$DEFER_PIDFILE"
+        fi
         if [ ! -f "$PIDFILE" ]; then
             cpu_performance_leave
             printf "pidfile not found \n"

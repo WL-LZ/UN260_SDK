@@ -1,5 +1,6 @@
 
 #include "lvgl/lvgl.h"
+#include <string.h>
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_system/counting_ui_runtime.h"
 #include "un260/counting/counting_data_store_internal.h"
@@ -22,6 +23,8 @@ static ui_page_manager_context_t g_page_manager = {
     .current = UI_PAGE_INVALID,
     .stack_top = -1,
 };
+
+static bool g_page_cache_ready[UI_PAGE_COUNT];
 
 typedef void (*ui_page_create_fn_t)(lv_obj_t *parent);
 typedef void (*ui_page_destroy_fn_t)(void);
@@ -180,6 +183,7 @@ static const char *destroy_current_page(void)
     if (registration->cache_policy == UI_PAGE_RETAINED &&
         registration->suspend != NULL) {
         registration->suspend();
+        g_page_cache_ready[g_page_manager.current] = true;
         return "SUSPEND";
     }
     if (registration->destroy != NULL) {
@@ -195,9 +199,13 @@ static const char *create_new_page(ui_page_t page)
 
     if (registration->cache_policy == UI_PAGE_RETAINED &&
         registration->resume != NULL && registration->resume()) {
+        g_page_cache_ready[page] = true;
         return "RESUME";
     }
     registration->create(lv_scr_act());
+    if (registration->cache_policy == UI_PAGE_RETAINED) {
+        g_page_cache_ready[page] = true;
+    }
     return "CREATE";
 }
 
@@ -237,6 +245,7 @@ void ui_manager_switch(ui_page_t page)
 {
     ui_page_t from = g_page_manager.current;
     perf_profile_page_switch_sample_t sample = {
+        .started_us = 0,
         .from_id = (uint32_t)from,
         .from_name = ui_manager_page_name(from),
         .to_id = (uint32_t)page,
@@ -255,6 +264,7 @@ void ui_manager_switch(ui_page_t page)
     profile_enabled = perf_profile_is_enabled();
     if (profile_enabled) {
         total_started_us = app_clock_monotonic_us();
+        sample.started_us = total_started_us;
         phase_started_us = total_started_us;
     }
     ui_manager_notify_page_switch(from, page);
@@ -283,6 +293,7 @@ void ui_manager_switch(ui_page_t page)
 void ui_manager_init(void) {
     // 初始化堆栈
     g_page_manager.stack_top = -1;
+    memset(g_page_cache_ready, 0, sizeof(g_page_cache_ready));
 
     // 显示主页面
 
@@ -320,6 +331,7 @@ bool ui_manager_adopt_precreated_page(ui_page_t page)
     int i;
     ui_page_t from = g_page_manager.current;
     perf_profile_page_switch_sample_t sample = {
+        .started_us = 0,
         .from_id = (uint32_t)from,
         .from_name = ui_manager_page_name(from),
         .to_id = (uint32_t)page,
@@ -336,6 +348,7 @@ bool ui_manager_adopt_precreated_page(ui_page_t page)
     profile_enabled = perf_profile_is_enabled();
     if (profile_enabled) {
         total_started_us = app_clock_monotonic_us();
+        sample.started_us = total_started_us;
         phase_started_us = total_started_us;
     }
     if (from != UI_PAGE_INVALID) {
@@ -363,6 +376,9 @@ bool ui_manager_adopt_precreated_page(ui_page_t page)
         phase_started_us = app_clock_monotonic_us();
     }
     g_page_manager.current = page;
+    if (g_page_registry[page].cache_policy == UI_PAGE_RETAINED) {
+        g_page_cache_ready[page] = true;
+    }
     if (profile_enabled) {
         sample.commit_us = ui_manager_profile_elapsed_us(phase_started_us);
         sample.total_us = ui_manager_profile_elapsed_us(total_started_us);
@@ -413,6 +429,7 @@ bool ui_manager_invalidate_page_cache(ui_page_t page)
     }
 
     registration->destroy();
+    g_page_cache_ready[page] = false;
     return true;
 }
 
@@ -421,6 +438,42 @@ void ui_manager_invalidate_all_page_caches(void)
     for (ui_page_t page = UI_PAGE_BOOT_ANIM; page < UI_PAGE_COUNT; page++) {
         (void)ui_manager_invalidate_page_cache(page);
     }
+}
+
+bool ui_manager_prewarm_page(ui_page_t page)
+{
+    const ui_page_registration_t *registration;
+    bool profile_enabled;
+    uint64_t started_us = 0;
+
+    if (!ui_manager_page_is_registered(page) ||
+        page == g_page_manager.current ||
+        g_page_cache_ready[page]) {
+        return false;
+    }
+
+    registration = &g_page_registry[page];
+    if (registration->cache_policy != UI_PAGE_RETAINED ||
+        registration->create == NULL ||
+        registration->suspend == NULL) {
+        return false;
+    }
+
+    profile_enabled = perf_profile_is_enabled();
+    if (profile_enabled) {
+        started_us = app_clock_monotonic_us();
+    }
+
+    registration->create(lv_scr_act());
+    registration->suspend();
+    g_page_cache_ready[page] = true;
+
+    if (profile_enabled) {
+        perf_profile_report_event_us(
+            ui_manager_page_name(page), "PREWARM",
+            app_clock_elapsed_us32(started_us, app_clock_monotonic_us()));
+    }
+    return true;
 }
 
 

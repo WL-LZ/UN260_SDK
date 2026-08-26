@@ -23,6 +23,7 @@ typedef struct {
 } perf_profile_flush_sample_t;
 
 typedef struct {
+    uint64_t started_us;
     uint32_t from_id;
     const char *from_name;
     uint32_t to_id;

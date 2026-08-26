@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "un260/lv_drivers/uart_io.h"
+#include "un260/lv_system/app_clock.h"
 
 #include "cpu_mem.h"
 #include "lv_port_disp.h"
@@ -84,6 +85,18 @@ typedef struct {
 } perf_profile_event_sample_t;
 
 typedef struct {
+    bool valid;
+    bool first_frame_ready;
+    uint32_t page_id;
+    const char *page_name;
+    const char *mode;
+    uint64_t started_us;
+    uint32_t switch_us;
+    uint32_t first_frame_us;
+    uint32_t total_us;
+} perf_profile_page_open_sample_t;
+
+typedef struct {
     bool enabled;
     uint32_t window_started_ms;
     uint32_t frame_sequence;
@@ -104,6 +117,7 @@ typedef struct {
     perf_profile_op_accumulator_t ge[PERF_PROFILE_GE_COUNT];
     bool pending_switch_valid;
     perf_profile_page_switch_sample_t pending_switch;
+    perf_profile_page_open_sample_t pending_open;
     uint8_t pending_event_count;
     perf_profile_event_sample_t pending_events[PERF_PROFILE_EVENT_CAPACITY];
 } perf_profile_state_t;
@@ -173,6 +187,7 @@ void perf_profile_set_enabled(bool enabled)
         g_profile.page_name = "INVALID";
     }
     g_profile.pending_switch_valid = false;
+    g_profile.pending_open = (perf_profile_page_open_sample_t){0};
     g_profile.pending_event_count = 0;
     perf_profile_reset_window(0);
 }
@@ -225,6 +240,18 @@ void perf_profile_report_flush(const perf_profile_flush_sample_t *sample)
     perf_time_report(&g_profile.pan, sample->pan_us);
     perf_time_report(&g_profile.vsync, sample->vsync_us);
     perf_time_report(&g_profile.mirror, sample->mirror_us);
+
+    if (g_profile.pending_open.valid &&
+        !g_profile.pending_open.first_frame_ready) {
+        uint32_t total_us = app_clock_elapsed_us32(
+            g_profile.pending_open.started_us, app_clock_monotonic_us());
+
+        g_profile.pending_open.total_us = total_us;
+        g_profile.pending_open.first_frame_us =
+            total_us > g_profile.pending_open.switch_us ?
+            total_us - g_profile.pending_open.switch_us : 0;
+        g_profile.pending_open.first_frame_ready = true;
+    }
 }
 
 void perf_profile_report_ge(perf_profile_ge_op_t op, uint64_t pixels,
@@ -261,6 +288,14 @@ void perf_profile_report_page_switch(
 
     g_profile.pending_switch = *sample;
     g_profile.pending_switch_valid = true;
+    g_profile.pending_open = (perf_profile_page_open_sample_t){
+        .valid = sample->started_us != 0,
+        .page_id = sample->to_id,
+        .page_name = sample->to_name,
+        .mode = sample->enter_action,
+        .started_us = sample->started_us,
+        .switch_us = sample->total_us,
+    };
 }
 
 void perf_profile_report_event_us(const char *page_name, const char *event,
@@ -301,6 +336,25 @@ static void perf_profile_emit_pending_events(void)
             sample->enter_action != NULL ? sample->enter_action : "NONE",
             sample->enter_us, sample->commit_us, sample->total_us);
         g_profile.pending_switch_valid = false;
+    }
+
+    if (g_profile.pending_open.valid &&
+        g_profile.pending_open.first_frame_ready) {
+        const perf_profile_page_open_sample_t *sample =
+            &g_profile.pending_open;
+        const char *temperature =
+            sample->mode != NULL && strcmp(sample->mode, "CREATE") == 0 ?
+            "COLD" : "WARM";
+
+        uart_debug_printf(
+            "PERF_OPEN page=%s(%u) type=%s mode=%s "
+            "switch_us=%u first_frame_us=%u total_us=%u total_ms=%u.%03u\n",
+            sample->page_name != NULL ? sample->page_name : "INVALID",
+            sample->page_id, temperature,
+            sample->mode != NULL ? sample->mode : "UNKNOWN",
+            sample->switch_us, sample->first_frame_us, sample->total_us,
+            sample->total_us / 1000U, sample->total_us % 1000U);
+        g_profile.pending_open = (perf_profile_page_open_sample_t){0};
     }
 
     for (i = 0; i < g_profile.pending_event_count; i++) {
