@@ -25,11 +25,13 @@ static ui_page_manager_context_t g_page_manager = {
 };
 
 static bool g_page_cache_ready[UI_PAGE_COUNT];
+static ui_data_topic_t g_page_data_dirty[UI_PAGE_COUNT];
 
 typedef void (*ui_page_create_fn_t)(lv_obj_t *parent);
 typedef void (*ui_page_destroy_fn_t)(void);
 typedef bool (*ui_page_resume_fn_t)(void);
 typedef void (*ui_page_suspend_fn_t)(void);
+typedef void (*ui_page_refresh_fn_t)(ui_data_topic_t topics);
 
 typedef enum {
     UI_PAGE_TRANSIENT = 0,
@@ -42,6 +44,8 @@ typedef struct {
     ui_page_resume_fn_t resume;
     ui_page_suspend_fn_t suspend;
     ui_page_cache_policy_t cache_policy;
+    ui_data_topic_t data_topics;
+    ui_page_refresh_fn_t refresh_data;
 } ui_page_registration_t;
 
 static void ui_manager_create_main(lv_obj_t *parent)
@@ -121,6 +125,8 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .resume = ui_page_06_settings_resume,
         .suspend = ui_page_06_settings_suspend,
         .cache_policy = UI_PAGE_RETAINED,
+        .data_topics = UI_DATA_TOPIC_DEVICE_VERSION,
+        .refresh_data = ui_page_06_settings_refresh_data,
     },
     [UI_PAGE_SET_PASSAGE] = { ui_page_05_set_password_create, ui_page_05_set_password_destroy },
     [UI_PAGE_CURR] = {
@@ -198,6 +204,14 @@ static const char *create_new_page(ui_page_t page)
     const ui_page_registration_t *registration = &g_page_registry[page];
 
     if (registration->cache_policy == UI_PAGE_RETAINED &&
+        g_page_cache_ready[page]) {
+        if (g_page_data_dirty[page] != UI_DATA_TOPIC_NONE &&
+            registration->refresh_data != NULL) {
+            registration->refresh_data(g_page_data_dirty[page]);
+            g_page_data_dirty[page] = UI_DATA_TOPIC_NONE;
+        }
+    }
+    if (registration->cache_policy == UI_PAGE_RETAINED &&
         registration->resume != NULL && registration->resume()) {
         g_page_cache_ready[page] = true;
         return "RESUME";
@@ -205,6 +219,7 @@ static const char *create_new_page(ui_page_t page)
     registration->create(lv_scr_act());
     if (registration->cache_policy == UI_PAGE_RETAINED) {
         g_page_cache_ready[page] = true;
+        g_page_data_dirty[page] = UI_DATA_TOPIC_NONE;
     }
     return "CREATE";
 }
@@ -294,6 +309,7 @@ void ui_manager_init(void) {
     // 初始化堆栈
     g_page_manager.stack_top = -1;
     memset(g_page_cache_ready, 0, sizeof(g_page_cache_ready));
+    memset(g_page_data_dirty, 0, sizeof(g_page_data_dirty));
 
     // 显示主页面
 
@@ -430,6 +446,7 @@ bool ui_manager_invalidate_page_cache(ui_page_t page)
 
     registration->destroy();
     g_page_cache_ready[page] = false;
+    g_page_data_dirty[page] = UI_DATA_TOPIC_NONE;
     return true;
 }
 
@@ -467,6 +484,7 @@ bool ui_manager_prewarm_page(ui_page_t page)
     registration->create(lv_scr_act());
     registration->suspend();
     g_page_cache_ready[page] = true;
+    g_page_data_dirty[page] = UI_DATA_TOPIC_NONE;
 
     if (profile_enabled) {
         perf_profile_report_event_us(
@@ -489,4 +507,30 @@ const char *ui_manager_page_name(ui_page_t page)
 // 读取当前页
 ui_page_t ui_manager_get_current_page(void) {
     return g_page_manager.current;
+}
+
+void ui_manager_publish_data_changed(ui_data_topic_t topics)
+{
+    ui_page_t page;
+
+    if (topics == UI_DATA_TOPIC_NONE) {
+        return;
+    }
+
+    for (page = UI_PAGE_BOOT_ANIM; page < UI_PAGE_COUNT; page++) {
+        const ui_page_registration_t *registration = &g_page_registry[page];
+        ui_data_topic_t affected = registration->data_topics & topics;
+
+        if (affected == UI_DATA_TOPIC_NONE) {
+            continue;
+        }
+
+        g_page_data_dirty[page] |= affected;
+        if (page == g_page_manager.current &&
+            g_page_cache_ready[page] &&
+            registration->refresh_data != NULL) {
+            registration->refresh_data(g_page_data_dirty[page]);
+            g_page_data_dirty[page] = UI_DATA_TOPIC_NONE;
+        }
+    }
 }

@@ -151,8 +151,13 @@ static diagnostic_reply_result_t diagnostic_calibration_reply_handle(
     /* 状态字节之后还应有校验字节。 */
     if (buf == NULL || len < 6) return DIAGNOSTIC_REPLY_INVALID;
     if (!g_calibration_state.session_active) return DIAGNOSTIC_REPLY_IGNORED;
-    if ((cmd == 0x5B && g_calibration_state.target != CALIB_TARGET_CIS) ||
-        (cmd == 0x5F && g_calibration_state.target != CALIB_TARGET_CB)) {
+    /*
+     * Protocol 0x5F starts color-balance calibration, but both CIS and
+     * color-balance status are reported with command 0x5B.  Decode 0x5B
+     * according to the single active calibration session.  Keep accepting
+     * a 0x5F status for compatibility with older controller firmware.
+     */
+    if (cmd == 0x5F && g_calibration_state.target != CALIB_TARGET_CB) {
         return DIAGNOSTIC_REPLY_IGNORED;
     }
 

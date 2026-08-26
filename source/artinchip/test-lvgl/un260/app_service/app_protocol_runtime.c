@@ -6,6 +6,7 @@
 #include "un260/device_info/device_info.h"
 #include "un260/diagnostic/diagnostic.h"
 #include "un260/lv_core/page_06_settings.h"
+#include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/page_09_cis_cala.h"
 #include "un260/lv_core/page_14_main_upgrade.h"
 #include "un260/lv_core/page_15_image_upgrade.h"
@@ -21,7 +22,11 @@ static void handle_device_reply(uint8_t cmd, const uint8_t *buf, uint8_t len)
     device_reply_result_t reply = device_reply_dispatch(cmd, buf, len);
 
     if (reply.kind == DEVICE_REPLY_VERSION_UPDATED) {
-        uart_debug_printf("Version Info Received\n");
+        ui_manager_publish_data_changed(UI_DATA_TOPIC_DEVICE_VERSION);
+        uart_debug_printf("Version Info Received: main=%s image=%s fpga=%s main_boot=%s image_boot=%s\n",
+                          device_info_main_app(), device_info_image_app(),
+                          device_info_fpga(), device_info_main_boot(),
+                          device_info_image_boot());
     } else if (reply.kind == DEVICE_REPLY_MAIN_UPGRADE_STATUS) {
         ui_page_14_main_upgrade_on_reply(0xA1, reply.status);
         uart_debug_printf("0xA1 res=0x%02X\n", reply.status);

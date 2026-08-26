@@ -154,6 +154,7 @@ void smart_island_page_indicator_sync(bool anim_en);
 void smart_island_view_destroy_objects(void);
 void smart_island_view_apply_visual(smart_island_visual_t visual, bool anim_en);
 void smart_island_view_refresh_scene(void);
+void smart_island_view_update_serial_ticker(void);
 void smart_island_view_set_idle_line(char *dst,
                                      size_t dst_size,
                                      const char *text);

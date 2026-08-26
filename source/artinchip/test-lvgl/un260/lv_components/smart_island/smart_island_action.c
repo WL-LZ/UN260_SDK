@@ -222,8 +222,29 @@ static void smart_island_swipe_cb(lv_event_t *e)
     lv_indev_t *indev;
     lv_point_t pt;
 
-    if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_WARNING) return;
-    if (g_si_ctx.view.visual != SMART_ISLAND_VISUAL_EXPANDED) return;
+    code = lv_event_get_code(e);
+
+    /* Always close the previous gesture lifecycle, even if the island was
+     * collapsed or changed visual state while the finger was down. */
+    if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        g_si_ctx.view.swipe.pressed = false;
+        g_si_ctx.view.swipe.swiped = false;
+        return;
+    }
+
+    /* A swipe is eligible only when this press begins on a fully expanded,
+     * stable island.  Clearing first prevents a stale press from a previous
+     * page/island instance enabling a swipe on the compact island. */
+    if (code == LV_EVENT_PRESSED) {
+        g_si_ctx.view.swipe.pressed = false;
+        g_si_ctx.view.swipe.swiped = false;
+    }
+
+    if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_WARNING ||
+        g_si_ctx.view.visual != SMART_ISLAND_VISUAL_EXPANDED ||
+        g_si_ctx.view.anim_running) {
+        return;
+    }
 
     indev = lv_event_get_indev(e);
     if (indev == NULL) {
@@ -232,8 +253,6 @@ static void smart_island_swipe_cb(lv_event_t *e)
     }
 
     lv_indev_get_point(indev, &pt);
-    code = lv_event_get_code(e);
-
     if (code == LV_EVENT_PRESSED) {
         g_si_ctx.view.swipe.pressed = true;
         g_si_ctx.view.swipe.swiped = false;
@@ -280,10 +299,6 @@ static void smart_island_swipe_cb(lv_event_t *e)
         return;
     }
 
-    if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
-        g_si_ctx.view.swipe.pressed = false;
-        g_si_ctx.view.swipe.swiped = false;
-    }
 }
 
 void smart_island_enable_gesture_on_obj(lv_obj_t *obj)
@@ -296,6 +311,7 @@ void smart_island_enable_gesture_on_obj(lv_obj_t *obj)
     lv_obj_add_event_cb(obj, smart_island_swipe_cb, LV_EVENT_PRESSED, NULL);
     lv_obj_add_event_cb(obj, smart_island_swipe_cb, LV_EVENT_PRESSING, NULL);
     lv_obj_add_event_cb(obj, smart_island_swipe_cb, LV_EVENT_RELEASED, NULL);
+    lv_obj_add_event_cb(obj, smart_island_swipe_cb, LV_EVENT_PRESS_LOST, NULL);
 }
 
 void smart_island_modal_click_cb(lv_event_t *e)

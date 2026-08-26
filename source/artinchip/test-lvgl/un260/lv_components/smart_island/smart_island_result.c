@@ -27,6 +27,14 @@ void smart_island_result_stop_timer(void)
 
 void smart_island_notify_count_start(void)
 {
+    /* 0x0E is emitted for every accepted note.  Starting an already active
+     * counting scene again would clear the live serial, rebuild the complete
+     * island and restart its animation once per banknote. */
+    if (g_si_ctx.lifecycle.count_session_active &&
+        g_si_ctx.view.scene == SMART_ISLAND_SCENE_COUNTING) {
+        return;
+    }
+
     /* 新会话开始前先清掉上一轮残留的结束动画状态。 */
     ui_count_end_anim_cancel();
 
@@ -59,7 +67,7 @@ void smart_island_notify_serial_number(int denomination, const char *serial_numb
                     sizeof(g_si_ctx.text.serial_ticker),
                     "%s", serial_number);
     }
-    smart_island_refresh_summary();
+    smart_island_view_update_serial_ticker();
 }
 
 void smart_island_notify_count_end(const char *result_text)

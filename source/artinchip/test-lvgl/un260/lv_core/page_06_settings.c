@@ -147,6 +147,7 @@ static lv_obj_t* dc_check_false = NULL;
 static lv_obj_t* dc_mode_value_label = NULL;
 static lv_obj_t* dc_pcs_label = NULL;
 static lv_obj_t* dc_status_label = NULL;
+static lv_obj_t* version_value_labels[6] = { NULL };
 
 static void page_06_update_menu_state(int index);
 static void page_06_switch_sub_page(int index);
@@ -723,9 +724,10 @@ static lv_obj_t* create_page(lv_obj_t* parent)
     return page;
 }
 
-static lv_obj_t* create_tile(lv_obj_t* parent, int col, int row,
-                             const char* title, const char* value,
-                             bool accent, lv_event_cb_t cb, void* user_data)
+static lv_obj_t* create_tile_ex(lv_obj_t* parent, int col, int row,
+                                const char* title, const char* value,
+                                bool accent, lv_event_cb_t cb, void* user_data,
+                                lv_obj_t** value_label_out)
 {
     lv_coord_t x = 31 + col * (SETTINGS_TILE_W + SETTINGS_TILE_GAP_X);
     lv_coord_t y = 18 + row * (SETTINGS_TILE_H + SETTINGS_TILE_GAP_Y);
@@ -770,9 +772,15 @@ static lv_obj_t* create_tile(lv_obj_t* parent, int col, int row,
         lv_obj_set_pos(no_label, 368, 12);
     }
 
+    if (value_label_out != NULL) {
+        *value_label_out = NULL;
+    }
     if (value && value[0] != '\0') {
         lv_obj_t* value_label = create_label(tile, value, &lv_font_instrument_sans_medium_14, color_muted());
         lv_obj_align(value_label, LV_ALIGN_RIGHT_MID, -26, 0);
+        if (value_label_out != NULL) {
+            *value_label_out = value_label;
+        }
     }
 
     (void)accent;
@@ -783,6 +791,14 @@ static lv_obj_t* create_tile(lv_obj_t* parent, int col, int row,
     }
 
     return tile;
+}
+
+static lv_obj_t* create_tile(lv_obj_t* parent, int col, int row,
+                             const char* title, const char* value,
+                             bool accent, lv_event_cb_t cb, void* user_data)
+{
+    return create_tile_ex(parent, col, row, title, value, accent, cb,
+                          user_data, NULL);
 }
 
 static void enter_page_event_cb(lv_event_t* e)
@@ -977,27 +993,63 @@ static void create_user_page_content(lv_obj_t* parent)
                 enter_page_event_cb, (void*)(uintptr_t)UI_PAGE_CFD_LEVEL_SETTING);
 }
 
-static lv_obj_t* create_version_row(lv_obj_t* parent, int row, const char* title, const char* value)
+static lv_obj_t* create_version_row(lv_obj_t* parent, int row,
+                                    const char* title, const char* value,
+                                    lv_obj_t** value_label)
 {
     char text[96];
     lv_snprintf(text, sizeof(text), "%s", value ? value : "---");
-    return create_tile(parent, row % 2, row / 2, title, text, row < 2, NULL, NULL);
+    return create_tile_ex(parent, row % 2, row / 2, title, text, row < 2,
+                          NULL, NULL, value_label);
 }
 
 static void create_version_page_content(lv_obj_t* parent)
 {
-    if (!device_info_is_valid()) {
-        create_tile(parent, 0, 0, ui_text_get(UI_TEXT_SETTINGS_VERSION),
-                    ui_text_get(UI_TEXT_SETTINGS_NOT_AVAILABLE), true, NULL, NULL);
+    const char* unavailable = ui_text_get(UI_TEXT_SETTINGS_NOT_AVAILABLE);
+    bool valid = device_info_is_valid();
+
+    create_version_row(parent, 0, "Main App", valid ? device_info_main_app() : unavailable,
+                       &version_value_labels[0]);
+    create_version_row(parent, 1, "Image App", valid ? device_info_image_app() : unavailable,
+                       &version_value_labels[1]);
+    create_version_row(parent, 2, "FPGA", valid ? device_info_fpga() : unavailable,
+                       &version_value_labels[2]);
+    create_version_row(parent, 3, "Main BOOT", valid ? device_info_main_boot() : unavailable,
+                       &version_value_labels[3]);
+    create_version_row(parent, 4, "Image BOOT", valid ? device_info_image_boot() : unavailable,
+                       &version_value_labels[4]);
+    create_version_row(parent, 5, "Display App", device_info_display_app()[0] != '\0' ?
+                       device_info_display_app() : unavailable, &version_value_labels[5]);
+}
+
+void ui_page_06_settings_refresh_data(uint32_t topics)
+{
+    const char* unavailable;
+    const char* values[6];
+    bool valid;
+    int i;
+
+    if ((topics & UI_DATA_TOPIC_DEVICE_VERSION) == 0U || settings_page == NULL) {
         return;
     }
 
-    create_version_row(parent, 0, "Main App", device_info_main_app());
-    create_version_row(parent, 1, "Image App", device_info_image_app());
-    create_version_row(parent, 2, "FPGA", device_info_fpga());
-    create_version_row(parent, 3, "Main BOOT", device_info_main_boot());
-    create_version_row(parent, 4, "Image BOOT", device_info_image_boot());
-    create_version_row(parent, 5, "Display App", device_info_display_app());
+    unavailable = ui_text_get(UI_TEXT_SETTINGS_NOT_AVAILABLE);
+    valid = device_info_is_valid();
+    values[0] = valid ? device_info_main_app() : unavailable;
+    values[1] = valid ? device_info_image_app() : unavailable;
+    values[2] = valid ? device_info_fpga() : unavailable;
+    values[3] = valid ? device_info_main_boot() : unavailable;
+    values[4] = valid ? device_info_image_boot() : unavailable;
+    values[5] = device_info_display_app()[0] != '\0' ?
+                device_info_display_app() : unavailable;
+
+    for (i = 0; i < 6; i++) {
+        if (version_value_labels[i] != NULL &&
+            lv_obj_is_valid(version_value_labels[i]) &&
+            strcmp(lv_label_get_text(version_value_labels[i]), values[i]) != 0) {
+            lv_label_set_text(version_value_labels[i], values[i]);
+        }
+    }
 }
 
 static const char* get_data_collect_mode_name(data_collect_mode_t mode)
@@ -1547,6 +1599,7 @@ void ui_page_06_settings_destroy(void)
         menu_labels[i] = NULL;
         pages[i] = NULL;
     }
+    memset(version_value_labels, 0, sizeof(version_value_labels));
 
     for (int i = 0; i < SETTINGS_INTERNAL_PAGE_MAX; i++) {
         internal_pages[i].page = NULL;

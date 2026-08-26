@@ -1422,8 +1422,9 @@ void ui_page_03_menu_suspend(void)
     if (g_page_03_preview_timer) {
         lv_timer_pause(g_page_03_preview_timer);
     }
-    machine_state_get_snapshot(&g_page_03_snapshot);
-    g_page_03_snapshot_valid = true;
+    /* The cached snapshot represents rendered controls.  Do not overwrite it
+     * with newer model data during suspend, otherwise resume can skip a
+     * required refresh after an asynchronous command result. */
     lv_obj_add_flag(menu_page, LV_OBJ_FLAG_HIDDEN);
 }
 

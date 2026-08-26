@@ -1666,8 +1666,12 @@ void ui_page_07_curr_suspend(void)
     }
     g_page07_curr.gesture.active = false;
     g_page07_curr.gesture.dragging = false;
-    currency_state_get_snapshot(&g_curr_page_snapshot);
-    currency_state_get_selected_code(g_curr_page_selected_code);
-    g_curr_page_snapshot_valid = true;
+    /*
+     * g_curr_page_snapshot describes what has actually been rendered, not
+     * merely the latest model state.  A successful currency command can
+     * switch to MAIN before this cached page has moved its card viewport.
+     * Capturing the model here would make resume incorrectly treat the stale
+     * viewport as current and skip RESUME_SELECTION.
+     */
     lv_obj_add_flag(curr_page, LV_OBJ_FLAG_HIDDEN);
 }

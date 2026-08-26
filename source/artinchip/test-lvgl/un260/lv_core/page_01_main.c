@@ -1594,7 +1594,9 @@ void page_01_main_suspend(void)
         return;
     }
 
-    page_01_main_snapshot_capture();
+    /* Keep the snapshot tied to the last completed UI refresh.  Capturing
+     * model data while hiding a cached page can conceal an update that has
+     * not reached the objects yet. */
     pause_counting_sim();
     smart_island_set_suspended(true);
     if (s_time_timer) {

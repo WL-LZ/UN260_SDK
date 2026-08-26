@@ -45,6 +45,7 @@ static void smart_island_clear_object_refs(void);
 static void smart_island_pulse_stop(void);
 static void smart_island_visual_apply_now(smart_island_visual_t visual);
 static void smart_island_visual_apply_anim(smart_island_visual_t visual);
+static void smart_island_prepare_reparent(void);
 static void smart_island_modal_update(void);
 static void smart_island_bg_color_apply_anim(uint32_t dst_hex);
 static void smart_island_bg_color_anim_ready_cb(lv_anim_t *animation);
@@ -875,6 +876,39 @@ static void smart_island_pulse_stop(void)
     lv_obj_set_style_transform_zoom(g_si_ctx.objects.root, 256, 0);
 }
 
+/* A cached island can be moved from the main page to another live page (PURE
+ * currently does this).  Page switching may happen while collapse/page-slide
+ * animations are still running.  Their ready callbacks are not a reliable
+ * lifecycle boundary after reparenting, so settle the component explicitly
+ * before it is attached to the new page. */
+static void smart_island_prepare_reparent(void)
+{
+    lv_obj_t *animated_objects[] = {
+        g_si_ctx.objects.root,
+        g_si_ctx.objects.page_info,
+        g_si_ctx.objects.page_action,
+        g_si_ctx.objects.action_track,
+        g_si_ctx.objects.title,
+        g_si_ctx.objects.dot,
+        g_si_ctx.objects.time,
+    };
+    size_t i;
+
+    for (i = 0; i < sizeof(animated_objects) / sizeof(animated_objects[0]); i++) {
+        if (animated_objects[i] && lv_obj_is_valid(animated_objects[i])) {
+            lv_anim_del(animated_objects[i], NULL);
+        }
+    }
+
+    g_si_ctx.view.anim_running = false;
+    g_si_ctx.view.bg_anim_running = false;
+    g_si_ctx.view.page_slide_dir = 0;
+    g_si_ctx.view.swipe.pressed = false;
+    g_si_ctx.view.swipe.swiped = false;
+    g_si_ctx.action.ignore_click_once = false;
+    g_si_ctx.action.ignore_action_click_once = false;
+}
+
 void smart_island_create(lv_obj_t *parent)
 {
     if (parent == NULL || !lv_obj_is_valid(parent)) return;
@@ -882,12 +916,24 @@ void smart_island_create(lv_obj_t *parent)
     if (g_si_ctx.lifecycle.created && g_si_ctx.objects.root && lv_obj_is_valid(g_si_ctx.objects.root)) {
         lv_obj_t *cur_parent = lv_obj_get_parent(g_si_ctx.objects.root);
         if (cur_parent != parent) {
+            smart_island_prepare_reparent();
             if (g_si_ctx.objects.modal && lv_obj_is_valid(g_si_ctx.objects.modal)) {
                 lv_obj_set_parent(g_si_ctx.objects.modal, parent);
                 lv_obj_set_pos(g_si_ctx.objects.modal, 0, 0);
             }
             lv_obj_set_parent(g_si_ctx.objects.root, parent);
             lv_obj_move_foreground(g_si_ctx.objects.root);
+
+            /* create(parent) means that this instance is active on parent.
+             * Do not inherit the cached main page's suspended state. */
+            g_si_ctx.lifecycle.suspended = false;
+            smart_island_visual_apply_now(g_si_ctx.view.visual);
+            smart_island_reset_page_positions();
+            if (g_si_ctx.lifecycle.dirty) {
+                smart_island_rebuild_scene_texts();
+                smart_island_apply_scene_style();
+                g_si_ctx.lifecycle.dirty = false;
+            }
             smart_island_modal_update();
         }
         return;
@@ -1117,6 +1163,35 @@ void smart_island_view_refresh_scene(void)
     }
     smart_island_rebuild_scene_texts();
     smart_island_apply_scene_style();
+}
+
+void smart_island_view_update_serial_ticker(void)
+{
+    lv_obj_t *title = g_si_ctx.objects.title;
+    const char *current_text;
+    const lv_coord_t ticker_width = SMART_ISLAND_W - 52;
+
+    if (g_si_ctx.lifecycle.suspended) {
+        g_si_ctx.lifecycle.dirty = true;
+        return;
+    }
+    if (g_si_ctx.view.scene != SMART_ISLAND_SCENE_COUNTING ||
+        g_si_ctx.text.serial_ticker[0] == '\0' ||
+        title == NULL || !lv_obj_is_valid(title)) {
+        return;
+    }
+
+    current_text = lv_label_get_text(title);
+    if (current_text == NULL ||
+        strcmp(current_text, g_si_ctx.text.serial_ticker) != 0) {
+        lv_label_set_text(title, g_si_ctx.text.serial_ticker);
+    }
+    if (lv_label_get_long_mode(title) != LV_LABEL_LONG_SCROLL_CIRCULAR) {
+        lv_label_set_long_mode(title, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    }
+    if (lv_obj_get_width(title) != ticker_width) {
+        lv_obj_set_width(title, ticker_width);
+    }
 }
 
 void smart_island_view_set_idle_line(char *dst,

@@ -2,6 +2,7 @@
 #define LV_PAGE_MANAGER_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,6 +45,23 @@ typedef enum {
     UI_PAGE_COUNT
 } ui_page_t;
 
+/*
+ * Asynchronous model updates are independent from page lifetime.  Retained
+ * pages subscribe to the topics they render; an update refreshes the active
+ * page immediately and is remembered for hidden cached pages until resume.
+ */
+typedef uint32_t ui_data_topic_t;
+
+enum {
+    UI_DATA_TOPIC_NONE             = 0U,
+    UI_DATA_TOPIC_DEVICE_VERSION   = 1U << 0,
+    UI_DATA_TOPIC_CURRENCY_CATALOG = 1U << 1,
+    UI_DATA_TOPIC_COUNTING_RESULT  = 1U << 2,
+    UI_DATA_TOPIC_MACHINE_SETTINGS = 1U << 3,
+    UI_DATA_TOPIC_DIAGNOSTICS      = 1U << 4,
+    UI_DATA_TOPIC_ALL              = UINT32_MAX,
+};
+
 void ui_manager_init(void); // page管理
 void ui_manager_switch(ui_page_t page); // page切换
 void ui_manager_push_page(ui_page_t page); // 页面堆栈：进入新页面
@@ -55,6 +73,7 @@ void ui_manager_invalidate_all_page_caches(void); // 释放所有非活动缓存
 bool ui_manager_prewarm_page(ui_page_t page); // 在不切换当前页面的前提下创建并暂停缓存页
 ui_page_t ui_manager_get_current_page(void); // 获取当前页
 const char *ui_manager_page_name(ui_page_t page); // 获取页面诊断名称
+void ui_manager_publish_data_changed(ui_data_topic_t topics); // 发布异步数据更新
 
 #ifdef __cplusplus
 }

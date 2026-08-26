@@ -445,7 +445,6 @@ void app_counting_runtime_handle_info(counting_session_state_t *session,
         if (fault_popup_get_auto_enabled() ||
             !fault_popup_has_pending_start_issue()) {
             smart_island_notify_count_start();
-            smart_island_refresh_summary();
         }
     } else if (result.kind == COUNTING_INFO_REPLY_FINISHED) {
         int current_pcs = result.final_pcs;
