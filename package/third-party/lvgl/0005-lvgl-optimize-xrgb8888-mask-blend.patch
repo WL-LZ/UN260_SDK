@@ -1,0 +1,73 @@
+From: Codex <codex@openai.com>
+Date: Thu, 27 Aug 2026 16:45:00 +0800
+Subject: [PATCH] lvgl: optimize XRGB8888 masked solid-color blending
+
+Skip fully transparent mask pixels instead of mixing and writing the original
+destination color.  For partially covered XRGB8888 pixels, calculate red and
+blue in independent 16-bit lanes while preserving lv_color_mix bit-for-bit.
+
+This is the common software path used by antialiased glyph rendering on the
+UN260 framebuffer.  It changes neither invalidation nor display synchronization.
+
+---
+ src/draw/sw/lv_draw_sw_blend.c | 48 +++++++++++++++++++++++++++++++++++------
+ 1 file changed, 42 insertions(+), 6 deletions(-)
+
+diff --git a/src/draw/sw/lv_draw_sw_blend.c b/src/draw/sw/lv_draw_sw_blend.c
+--- a/src/draw/sw/lv_draw_sw_blend.c
++++ b/src/draw/sw/lv_draw_sw_blend.c
+@@ -70,11 +70,47 @@ static inline lv_color_t color_blend_true_color_multiply(lv_color_t fg, lv_color
+ /**********************
+  *      MACROS
+  **********************/
+-#define FILL_NORMAL_MASK_PX(color)                                                          \
+-    if(*mask == LV_OPA_COVER) *dest_buf = color;                                 \
+-    else *dest_buf = lv_color_mix(color, *dest_buf, *mask);            \
+-    mask++;                                                         \
+-    dest_buf++;
++#if LV_COLOR_DEPTH == 32
++/* Blend two XRGB8888 colors exactly like lv_color_mix(), but process the red
++ * and blue channels as two independent 16-bit lanes.  The weighted sum of
++ * either lane cannot exceed 255 * 255, therefore the lanes cannot carry into
++ * each other.  x / 255 == (x + 1 + (x >> 8)) >> 8 for this complete range. */
++LV_ATTRIBUTE_FAST_MEM static inline lv_color_t color_mix_masked_32(lv_color_t fg,
++                                                                    lv_color_t bg,
++                                                                    lv_opa_t mix)
++{
++    uint32_t inv = 255U - mix;
++    uint32_t rb = (fg.full & 0x00FF00FFU) * mix +
++                  (bg.full & 0x00FF00FFU) * inv;
++    uint32_t g = ((fg.full >> 8) & 0xFFU) * mix +
++                 ((bg.full >> 8) & 0xFFU) * inv;
++    lv_color_t result;
++
++    rb += 0x00010001U + ((rb >> 8) & 0x00FF00FFU);
++    g += 1U + (g >> 8);
++    result.full = 0xFF000000U |
++                  ((rb >> 8) & 0x00FF00FFU) |
++                  ((g >> 8) << 8);
++    return result;
++}
++#define FILL_NORMAL_MASK_MIX(color, bg, mask_opa) \
++    color_mix_masked_32((color), (bg), (mask_opa))
++#else
++#define FILL_NORMAL_MASK_MIX(color, bg, mask_opa) \
++    lv_color_mix((color), (bg), (mask_opa))
++#endif
++
++/* Glyph masks contain many fully transparent pixels.  Treat them as a strict
++ * no-op instead of running a color mix which mathematically writes the old
++ * destination value back to the same address. */
++#define FILL_NORMAL_MASK_PX(color) do {                                      \
++        lv_opa_t mask_opa = *mask;                                           \
++        if(mask_opa == LV_OPA_COVER) *dest_buf = color;                      \
++        else if(mask_opa != LV_OPA_TRANSP)                                   \
++            *dest_buf = FILL_NORMAL_MASK_MIX(color, *dest_buf, mask_opa);    \
++        mask++;                                                              \
++        dest_buf++;                                                          \
++    } while(0);
+
+ #define MAP_NORMAL_MASK_PX(x)                                                          \
+     if(*mask_tmp_x) {          \
+--
+2.34.1
