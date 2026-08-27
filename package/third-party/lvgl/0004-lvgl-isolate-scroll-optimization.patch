@@ -1,0 +1,133 @@
+From: Codex <codex@openai.com>
+Date: Thu, 27 Aug 2026 14:45:00 +0800
+Subject: [PATCH] lvgl: enable O1 with safe scroll range arithmetic
+
+Compile LVGL with O1 while keeping scroll range calculations correct on the
+D211 RISC-V GCC 10.2 toolchain. Use explicit 32-bit intermediates, an explicit
+child-presence state, and a final coordinate clamp instead of disabling
+optimization for the bottom/right range getters.
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -8,7 +8,9 @@ if(NOT ESP_PLATFORM)
+   project(lvgl HOMEPAGE_URL https://github.com/lvgl/lvgl)
+ endif()
+ 
+-set(CMAKE_C_FLAGS "-O0 -g0")
++# Optimize LVGL after making the scroll remaining-range calculations explicit
++# and safe for the D211 RISC-V toolchain.
++set(CMAKE_C_FLAGS "-O1 -g0")
+ 
+ set(LVGL_ROOT_DIR ${CMAKE_CURRENT_LIST_DIR})
+ 
+diff --git a/src/core/lv_obj_scroll.c b/src/core/lv_obj_scroll.c
+--- a/src/core/lv_obj_scroll.c
++++ b/src/core/lv_obj_scroll.c
+@@ -135,27 +135,35 @@ lv_coord_t lv_obj_get_scroll_bottom(lv_obj_t * obj)
+ {
+     LV_ASSERT_OBJ(obj, MY_CLASS);
+ 
+-    lv_coord_t child_res = LV_COORD_MIN;
+-    uint32_t i;
++    int32_t child_edge = 0;
++    bool child_found = false;
+     uint32_t child_cnt = lv_obj_get_child_cnt(obj);
++    uint32_t i;
+     for(i = 0; i < child_cnt; i++) {
+         lv_obj_t * child = obj->spec_attr->children[i];
+         if(lv_obj_has_flag_any(child,  LV_OBJ_FLAG_HIDDEN | LV_OBJ_FLAG_FLOATING)) continue;
+-        child_res = LV_MAX(child_res, child->coords.y2);
+-    }
+-
+-    lv_coord_t pad_top = lv_obj_get_style_pad_top(obj, LV_PART_MAIN);
+-    lv_coord_t pad_bottom = lv_obj_get_style_pad_bottom(obj, LV_PART_MAIN);
+-    lv_coord_t border_width = lv_obj_get_style_border_width(obj, LV_PART_MAIN);
+-
+-    if(child_res != LV_COORD_MIN) {
+-        child_res -= (obj->coords.y2 - pad_bottom - border_width);
+-    }
+-
+-    lv_coord_t self_h = lv_obj_get_self_height(obj);
+-    self_h = self_h - (lv_obj_get_height(obj) - pad_top - pad_bottom - 2 * border_width);
+-    self_h -= lv_obj_get_scroll_y(obj);
+-    return LV_MAX(child_res, self_h);
++        int32_t edge = (int32_t)child->coords.y2;
++        if(!child_found || edge > child_edge) child_edge = edge;
++        child_found = true;
++    }
++
++    int32_t pad_top = (int32_t)lv_obj_get_style_pad_top(obj, LV_PART_MAIN);
++    int32_t pad_bottom = (int32_t)lv_obj_get_style_pad_bottom(obj, LV_PART_MAIN);
++    int32_t border_width = (int32_t)lv_obj_get_style_border_width(obj, LV_PART_MAIN);
++    int32_t child_remaining = LV_COORD_MIN;
++    if(child_found) {
++        int32_t content_bottom = (int32_t)obj->coords.y2 - pad_bottom - border_width;
++        child_remaining = child_edge - content_bottom;
++    }
++
++    int32_t inner_height = (int32_t)lv_obj_get_height(obj) - pad_top -
++                           pad_bottom - 2 * border_width;
++    int32_t self_remaining = (int32_t)lv_obj_get_self_height(obj) - inner_height -
++                             (int32_t)lv_obj_get_scroll_y(obj);
++    int32_t result = child_remaining > self_remaining ? child_remaining : self_remaining;
++    if(result > LV_COORD_MAX) result = LV_COORD_MAX;
++    if(result < LV_COORD_MIN) result = LV_COORD_MIN;
++    return (lv_coord_t)result;
+ }
+ 
+ lv_coord_t lv_obj_get_scroll_left(lv_obj_t * obj)
+@@ -213,28 +221,35 @@ lv_coord_t lv_obj_get_scroll_right(lv_obj_t * obj)
+     }
+ 
+     /*With other base direction (LTR) scrolling to the right is normal so find the right most coordinate*/
+-    lv_coord_t child_res = LV_COORD_MIN;
+-    uint32_t i;
++    int32_t child_edge = 0;
++    bool child_found = false;
+     uint32_t child_cnt = lv_obj_get_child_cnt(obj);
++    uint32_t i;
+     for(i = 0; i < child_cnt; i++) {
+         lv_obj_t * child = obj->spec_attr->children[i];
+         if(lv_obj_has_flag_any(child,  LV_OBJ_FLAG_HIDDEN | LV_OBJ_FLAG_FLOATING)) continue;
+-        child_res = LV_MAX(child_res, child->coords.x2);
+-    }
+-
+-    lv_coord_t pad_right = lv_obj_get_style_pad_right(obj, LV_PART_MAIN);
+-    lv_coord_t pad_left = lv_obj_get_style_pad_left(obj, LV_PART_MAIN);
+-    lv_coord_t border_width = lv_obj_get_style_border_width(obj, LV_PART_MAIN);
+-
+-    if(child_res != LV_COORD_MIN) {
+-        child_res -= (obj->coords.x2 - pad_right - border_width);
+-    }
+-
+-    lv_coord_t self_w;
+-    self_w = lv_obj_get_self_width(obj);
+-    self_w = self_w - (lv_obj_get_width(obj) - pad_right - pad_left - 2 * border_width);
+-    self_w -= lv_obj_get_scroll_x(obj);
+-    return LV_MAX(child_res, self_w);
++        int32_t edge = (int32_t)child->coords.x2;
++        if(!child_found || edge > child_edge) child_edge = edge;
++        child_found = true;
++    }
++
++    int32_t pad_right = (int32_t)lv_obj_get_style_pad_right(obj, LV_PART_MAIN);
++    int32_t pad_left = (int32_t)lv_obj_get_style_pad_left(obj, LV_PART_MAIN);
++    int32_t border_width = (int32_t)lv_obj_get_style_border_width(obj, LV_PART_MAIN);
++    int32_t child_remaining = LV_COORD_MIN;
++    if(child_found) {
++        int32_t content_right = (int32_t)obj->coords.x2 - pad_right - border_width;
++        child_remaining = child_edge - content_right;
++    }
++
++    int32_t inner_width = (int32_t)lv_obj_get_width(obj) - pad_right -
++                          pad_left - 2 * border_width;
++    int32_t self_remaining = (int32_t)lv_obj_get_self_width(obj) - inner_width -
++                             (int32_t)lv_obj_get_scroll_x(obj);
++    int32_t result = child_remaining > self_remaining ? child_remaining : self_remaining;
++    if(result > LV_COORD_MAX) result = LV_COORD_MAX;
++    if(result < LV_COORD_MIN) result = LV_COORD_MIN;
++    return (lv_coord_t)result;
+ }
+ 
+ void lv_obj_get_scroll_end(struct _lv_obj_t  * obj, lv_point_t * end)

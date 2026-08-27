@@ -8,7 +8,9 @@ set(ignore ${BUILD_DOC} ${BUILD_DOCS} ${BUILD_EXAMPLE} ${BUILD_EXAMPLES}
 
 add_compile_options(-Wall)
 
-set(CMAKE_C_FLAGS "-O0 -g0")
+# Sealed UN260 application optimization level. LVGL uses the same O1 level;
+# its scroll-range arithmetic is made optimization-safe by the package patch.
+set(CMAKE_C_FLAGS "-O1 -g0")
 
 include_directories(. ./aic_ui)
 include_directories(. ./guider_lvgl_demo)
