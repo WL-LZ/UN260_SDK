@@ -17,6 +17,7 @@
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/counting/counting_reject_reason.h"
 #include "un260/lv_system/app_clock.h"
+#include "un260/lv_system/ui_update_batch.h"
 #include "aic_ui/perf_stats.h"
 // 全局变量定义
 
@@ -54,6 +55,10 @@ typedef struct {
 } page_01_main_cache_t;
 
 static page_01_main_cache_t g_main_cache;
+
+#define PAGE_01_MAIN_DETAIL_POOL_ROWS 10
+#define PAGE_01_MAIN_DETAIL_ALL_ROWS_MASK \
+    ((uint16_t)((1U << PAGE_01_MAIN_DETAIL_POOL_ROWS) - 1U))
 
 #define COUNTING_SIM_SN_LENGTH 11
 #define COUNTING_SIM_MAX_ITEMS COUNTING_DATA_MAX_ITEMS
@@ -597,7 +602,8 @@ static bool page_01_main_detail_chrome_changed(page_01_detail_section_t section)
 }
 
 static void page_01_main_detail_row_layout_apply(page_01_detail_section_t section,
-    lv_obj_t* col_1, lv_obj_t* col_2, lv_obj_t* col_3, int data_row)
+    lv_obj_t* col_1, lv_obj_t* col_2, lv_obj_t* col_3, int data_row,
+    bool apply_static_style)
 {
     lv_coord_t row_y = 0;
     const lv_font_t* col_1_font = &lv_font_instrument_sans_medium_16;
@@ -612,6 +618,7 @@ static void page_01_main_detail_row_layout_apply(page_01_detail_section_t sectio
         lv_obj_set_pos(col_1, 8, row_y);
         lv_obj_set_pos(col_2, 60, row_y);
         lv_obj_set_pos(col_3, 215, row_y);
+        if (!apply_static_style) break;
         lv_obj_set_width(col_1, 40);
         lv_obj_set_width(col_2, 150);
         lv_obj_set_width(col_3, 78);
@@ -624,6 +631,7 @@ static void page_01_main_detail_row_layout_apply(page_01_detail_section_t sectio
         lv_obj_set_pos(col_1, 8, row_y);
         lv_obj_set_pos(col_2, 60, row_y);
         lv_obj_set_pos(col_3, 130, row_y);
+        if (!apply_static_style) break;
         lv_obj_set_width(col_1, 40);
         lv_obj_set_width(col_2, 60);
         lv_obj_set_width(col_3, 170);
@@ -637,6 +645,7 @@ static void page_01_main_detail_row_layout_apply(page_01_detail_section_t sectio
         lv_obj_set_pos(col_1, 8, row_y);
         lv_obj_set_pos(col_2, 106, row_y);
         lv_obj_set_pos(col_3, 213, row_y);
+        if (!apply_static_style) break;
         lv_obj_set_width(col_1, 77);
         lv_obj_set_width(col_2, 54);
         lv_obj_set_width(col_3, 80);
@@ -646,31 +655,88 @@ static void page_01_main_detail_row_layout_apply(page_01_detail_section_t sectio
         break;
     }
 
-    lv_obj_set_style_text_font(col_1, col_1_font, 0);
-    lv_obj_set_style_text_font(col_2, col_2_font, 0);
-    lv_obj_set_style_text_font(col_3, col_3_font, 0);
+    if (apply_static_style) {
+        lv_obj_set_style_text_font(col_1, col_1_font, 0);
+        lv_obj_set_style_text_font(col_2, col_2_font, 0);
+        lv_obj_set_style_text_font(col_3, col_3_font, 0);
+    }
 }
 
-static bool page_01_main_detail_row_layout_changed(
-    page_01_detail_section_t section, int first_row)
+static void page_01_main_detail_rows_rotate(int delta)
 {
-    bool changed = !g_main_detail_row_layout_valid ||
-                   g_main_detail_row_layout_section != section ||
-                   g_main_detail_row_layout_first_row != first_row;
+    page_01_main_row_cache_t recycled;
+
+    while (delta > 0) {
+        recycled = g_main_cache.rows[0];
+        memmove(&g_main_cache.rows[0], &g_main_cache.rows[1],
+                sizeof(g_main_cache.rows[0]) *
+                (PAGE_01_MAIN_DETAIL_POOL_ROWS - 1));
+        g_main_cache.rows[PAGE_01_MAIN_DETAIL_POOL_ROWS - 1] = recycled;
+        delta--;
+    }
+
+    while (delta < 0) {
+        recycled = g_main_cache.rows[PAGE_01_MAIN_DETAIL_POOL_ROWS - 1];
+        memmove(&g_main_cache.rows[1], &g_main_cache.rows[0],
+                sizeof(g_main_cache.rows[0]) *
+                (PAGE_01_MAIN_DETAIL_POOL_ROWS - 1));
+        g_main_cache.rows[0] = recycled;
+        delta++;
+    }
+}
+
+static uint16_t page_01_main_detail_row_layout_plan(
+    page_01_detail_section_t section, int first_row, bool *apply_static_style)
+{
+    uint16_t layout_mask;
+    int delta;
+
+    if (apply_static_style != NULL) {
+        *apply_static_style = false;
+    }
+
+    if (!g_main_detail_row_layout_valid ||
+        g_main_detail_row_layout_section != section) {
+        layout_mask = PAGE_01_MAIN_DETAIL_ALL_ROWS_MASK;
+        if (apply_static_style != NULL) {
+            *apply_static_style = true;
+        }
+    } else {
+        delta = first_row - g_main_detail_row_layout_first_row;
+        if (delta == 0) {
+            return 0;
+        }
+
+        if (delta > -PAGE_01_MAIN_DETAIL_POOL_ROWS &&
+            delta < PAGE_01_MAIN_DETAIL_POOL_ROWS) {
+            page_01_main_detail_rows_rotate(delta);
+            if (delta > 0) {
+                layout_mask = (uint16_t)(PAGE_01_MAIN_DETAIL_ALL_ROWS_MASK &
+                    ~((1U << (PAGE_01_MAIN_DETAIL_POOL_ROWS - delta)) - 1U));
+            } else {
+                layout_mask = (uint16_t)((1U << (-delta)) - 1U);
+            }
+        } else {
+            layout_mask = PAGE_01_MAIN_DETAIL_ALL_ROWS_MASK;
+        }
+    }
 
     g_main_detail_row_layout_valid = true;
     g_main_detail_row_layout_section = section;
     g_main_detail_row_layout_first_row = first_row;
-    return changed;
+    return layout_mask;
 }
 
 static void page_01_main_detail_rows_refresh(page_01_detail_section_t section,
                                               int first_row,
-                                              bool apply_layout)
+                                              uint16_t layout_rows_mask,
+                                              bool apply_static_style)
 {
     counting_sim_t* sim_data = counting_data_mutable();
+    int b_valid_total = section == PAGE_01_DETAIL_SECTION_B ?
+        page_01_main_b_valid_count_get() : 0;
 
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < PAGE_01_MAIN_DETAIL_POOL_ROWS; i++)
     {
         int row = i + 1;
         int data_row = first_row + i;
@@ -692,14 +758,14 @@ static void page_01_main_detail_rows_refresh(page_01_detail_section_t section,
         }
 
         // 行位置按真实数据行号布局，滚动时每一行跟着内容一起移动
-        if (apply_layout) {
-            page_01_main_detail_row_layout_apply(section, denom, pcs, amount, data_row);
+        if ((layout_rows_mask & (1U << i)) != 0U) {
+            page_01_main_detail_row_layout_apply(section, denom, pcs, amount,
+                                                 data_row, apply_static_style);
         }
 
         switch (section) {
         case PAGE_01_DETAIL_SECTION_B:
         {
-            int b_valid_total = page_01_main_b_valid_count_get();
             int actual_idx = -1;
 
             if (data_row < b_valid_total) {
@@ -761,16 +827,37 @@ static void page_01_main_detail_rows_refresh(page_01_detail_section_t section,
     }
 }
 
-void page_01_main_detail_refresh_rows_only(void)
+static void page_01_main_detail_refresh_rows_internal(bool parent_already_invalidated)
 {
     uint64_t refresh_started_us = app_clock_monotonic_us();
     page_01_detail_section_t section = page_01_detail_section_get();
     int first_row = page_01_detail_scroll_first_row_get(section);
-    bool apply_layout = page_01_main_detail_row_layout_changed(section, first_row);
+    bool apply_static_style;
+    ui_update_batch_t batch;
+    uint16_t layout_rows_mask = page_01_main_detail_row_layout_plan(
+        section, first_row, &apply_static_style);
 
-    page_01_main_detail_rows_refresh(section, first_row, apply_layout);
+    if (parent_already_invalidated && layout_rows_mask != 0U) {
+        ui_update_batch_begin(&batch, page_01_main_scroll_obj(),
+                              UI_UPDATE_BATCH_COVERED_BY_PARENT);
+    } else {
+        memset(&batch, 0, sizeof(batch));
+    }
+    page_01_main_detail_rows_refresh(section, first_row, layout_rows_mask,
+                                     apply_static_style);
+    ui_update_batch_end(&batch);
     perf_stats_report_main_refresh_time_us(app_clock_elapsed_us32(
         refresh_started_us, app_clock_monotonic_us()));
+}
+
+void page_01_main_detail_refresh_rows_only(void)
+{
+    page_01_main_detail_refresh_rows_internal(false);
+}
+
+void page_01_main_detail_refresh_rows_during_scroll(void)
+{
+    page_01_main_detail_refresh_rows_internal(true);
 }
 
 
@@ -788,6 +875,8 @@ void ui_refresh_main_page(void) {
     float right_total_amount = 0.0f;
     bool cache_was_empty = g_main_cache.currency == NULL;
     bool apply_chrome;
+    bool apply_static_style;
+    uint16_t layout_rows_mask;
 
     page_01_curr_img_refre();
 
@@ -825,9 +914,10 @@ void ui_refresh_main_page(void) {
 
     page_01_main_detail_header_apply(section, apply_chrome);
 
-    page_01_main_detail_rows_refresh(
-        section, first_row,
-        page_01_main_detail_row_layout_changed(section, first_row));
+    layout_rows_mask = page_01_main_detail_row_layout_plan(
+        section, first_row, &apply_static_style);
+    page_01_main_detail_rows_refresh(section, first_row, layout_rows_mask,
+                                     apply_static_style);
 
     for (int i = 0; i < sim_data->denom_number &&
                     i < (int)(sizeof(sim_data->denom) / sizeof(sim_data->denom[0])); i++) {

@@ -15,6 +15,7 @@ void sim_reset_for_currency(counting_sim_t *sim_data);
 
 void ui_refresh_main_page(void);
 void page_01_main_detail_refresh_rows_only(void);
+void page_01_main_detail_refresh_rows_during_scroll(void);
 void ui_count_end_anim_cancel(void);
 void ui_count_end_anim_begin(const char *result_text);
 void ui_count_end_anim_poll(void);

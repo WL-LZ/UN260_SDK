@@ -27,6 +27,7 @@
 #define INNOVATION_GREEN          0x27B36A
 #define INNOVATION_RED            0xE45454
 #define INNOVATION_LINE           0xDDE5EA
+#define INNOVATION_PREVIEW_ARM_DY 1
 
 typedef struct {
     lv_obj_t *root;
@@ -77,11 +78,13 @@ static innovation_page_context_t g_page = {
 static lv_obj_t *g_handle_touch;
 static lv_obj_t *g_prompt;
 static lv_obj_t *g_transition_surface;
+static lv_obj_t *g_transition_title;
 static innovation_handle_gesture_t g_handle_gesture;
 static bool g_page_transitioning;
 static void innovation_preview_preload_async(void *user_data);
 static lv_obj_t *innovation_label(lv_obj_t *parent, const char *text,
                                   const lv_font_t *font, uint32_t color);
+static void innovation_label_set_if_changed(lv_obj_t *label, const char *text);
 static lv_obj_t *innovation_box(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
                                 lv_coord_t width, lv_coord_t height,
                                 uint32_t color, lv_coord_t radius);
@@ -92,6 +95,18 @@ static void innovation_transition_surface_delete(void)
         lv_obj_del(g_transition_surface);
     }
     g_transition_surface = NULL;
+    g_transition_title = NULL;
+}
+
+static void innovation_transition_surface_park(void)
+{
+    if (g_transition_surface == NULL || !lv_obj_is_valid(g_transition_surface)) {
+        g_transition_surface = NULL;
+        g_transition_title = NULL;
+        return;
+    }
+    lv_anim_del(g_transition_surface, NULL);
+    lv_obj_set_y(g_transition_surface, -400);
 }
 
 static lv_obj_t *innovation_transition_surface_create(lv_coord_t y)
@@ -101,7 +116,18 @@ static lv_obj_t *innovation_transition_surface_create(lv_coord_t y)
     uint64_t started_us = perf_profile_is_enabled() ?
         app_clock_monotonic_us() : 0;
 
-    innovation_transition_surface_delete();
+    if (g_transition_surface != NULL && lv_obj_is_valid(g_transition_surface)) {
+        if (g_transition_title != NULL && lv_obj_is_valid(g_transition_title)) {
+            innovation_label_set_if_changed(
+                g_transition_title,
+                ui_text_get(UI_TEXT_INNOVATION_CENTER_TITLE));
+        }
+        lv_obj_set_y(g_transition_surface, y);
+        lv_obj_move_foreground(g_transition_surface);
+        return g_transition_surface;
+    }
+    g_transition_surface = NULL;
+    g_transition_title = NULL;
     g_transition_surface = innovation_box(lv_scr_act(), 0, y, 1280, 400,
                                            INNOVATION_BG, 0);
     header = innovation_box(g_transition_surface, 16, 12, 1248, 50,
@@ -109,6 +135,7 @@ static lv_obj_t *innovation_transition_surface_create(lv_coord_t y)
     label = innovation_label(header, ui_text_get(UI_TEXT_INNOVATION_CENTER_TITLE),
                              &lv_font_instrument_sans_bold_20,
                              INNOVATION_TEXT);
+    g_transition_title = label;
     lv_obj_set_pos(label, 22, 13);
     innovation_box(g_transition_surface, 16, 72, 238, 314,
                    INNOVATION_CARD, 22);
@@ -444,7 +471,7 @@ static void innovation_transition_commit_async(void *user_data)
     if (!ui_manager_adopt_precreated_page(UI_PAGE_INNOVATION_CENTER)) {
         ui_manager_push_page(UI_PAGE_INNOVATION_CENTER);
     }
-    innovation_transition_surface_delete();
+    innovation_transition_surface_park();
     innovation_refresh_resume();
     if (started_us != 0) {
         perf_profile_report_event_us("INNOVATION", "OPEN_COMMIT",
@@ -457,7 +484,7 @@ static void innovation_transition_cancel_async(void *user_data)
     (void)user_data;
     g_page_transitioning = false;
     g_handle_gesture.preview_active = false;
-    innovation_transition_surface_delete();
+    innovation_transition_surface_park();
 }
 
 static void innovation_transition_back_async(void *user_data)
@@ -468,7 +495,7 @@ static void innovation_transition_back_async(void *user_data)
     (void)user_data;
     g_page_transitioning = false;
     if (!ui_manager_pop_page()) ui_manager_switch(UI_PAGE_MAIN);
-    innovation_transition_surface_delete();
+    innovation_transition_surface_park();
     if (started_us != 0) {
         perf_profile_report_event_us("INNOVATION", "BACK_COMMIT",
             app_clock_elapsed_us32(started_us, app_clock_monotonic_us()));
@@ -594,6 +621,7 @@ static void innovation_handle_event_cb(lv_event_t *event)
 {
     lv_event_code_t code = lv_event_get_code(event);
     lv_indev_t *indev = lv_indev_get_act();
+    lv_point_t point;
 
     if (indev == NULL) return;
     if (code == LV_EVENT_PRESSED) {
@@ -604,12 +632,21 @@ static void innovation_handle_event_cb(lv_event_t *event)
         g_handle_gesture.start_tick = lv_tick_get();
         g_handle_gesture.last_render_tick = g_handle_gesture.start_tick;
         g_handle_gesture.last_render_y = 0;
-        if (!innovation_handle_preview_begin()) {
-            g_handle_gesture.pressed = false;
-        }
         return;
     }
     if (code == LV_EVENT_PRESSING) {
+        if (!g_handle_gesture.pressed) return;
+        if (!g_handle_gesture.preview_active) {
+            lv_indev_get_point(indev, &point);
+            if ((point.y - g_handle_gesture.start.y) <
+                INNOVATION_PREVIEW_ARM_DY) {
+                return;
+            }
+            if (!innovation_handle_preview_begin()) {
+                g_handle_gesture.pressed = false;
+                return;
+            }
+        }
         innovation_handle_drag_update(indev);
         return;
     }
@@ -672,6 +709,7 @@ static void innovation_preview_preload_async(void *user_data)
     innovation_refresh_pause();
     lv_obj_set_y(g_page.root, -400);
     lv_obj_add_flag(g_page.root, LV_OBJ_FLAG_HIDDEN);
+    innovation_transition_surface_create(-400);
 }
 
 void page_32_innovation_handle_detach(void)
@@ -1226,6 +1264,7 @@ void ui_page_32_innovation_destroy(void)
     if (g_page.root != NULL && lv_obj_is_valid(g_page.root)) {
         lv_obj_del(g_page.root);
     }
+    innovation_transition_surface_delete();
     memset(&g_page, 0, sizeof(g_page));
     g_page.target_passes = MULTI_PASS_VERIFY_MIN_PASSES;
 }

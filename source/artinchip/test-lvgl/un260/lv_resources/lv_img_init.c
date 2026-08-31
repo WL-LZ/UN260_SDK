@@ -370,4 +370,3 @@ const char* get_currency_img(const char* code)
     return NULL;
 }
 
-

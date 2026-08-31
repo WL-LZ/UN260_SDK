@@ -1,0 +1,124 @@
+From: Codex <codex@openai.com>
+Date: Thu, 27 Aug 2026 15:50:00 +0800
+Subject: [PATCH] lvgl: expose optional label rendering profiler
+
+Expose a debug-only callback pair around complete label draws.  Production
+rendering keeps the original path when the callbacks are NULL, while the UN260
+performance monitor can attribute handler time to text rasterization.
+
+---
+ src/draw/lv_draw_label.c | 47 ++++++++++++++++++++++++++++++++++++++++---
+ src/draw/lv_draw_label.h | 12 ++++++++++++
+ 2 files changed, 56 insertions(+), 3 deletions(-)
+
+diff --git a/src/draw/lv_draw_label.h b/src/draw/lv_draw_label.h
+--- a/src/draw/lv_draw_label.h
++++ b/src/draw/lv_draw_label.h
+@@ -64,6 +64,11 @@ typedef struct _lv_draw_label_hint_t {
+ } lv_draw_label_hint_t;
+
+ struct _lv_draw_ctx_t;
++
++typedef uint64_t (*lv_draw_label_profile_clock_cb_t)(void);
++typedef void (*lv_draw_label_profile_report_cb_t)(uint32_t elapsed_us,
++                                                   uint32_t text_bytes,
++                                                   uint32_t visible_pixels);
+ /**********************
+  * GLOBAL PROTOTYPES
+  **********************/
+@@ -82,6 +87,13 @@ LV_ATTRIBUTE_FAST_MEM void lv_draw_label_dsc_init(lv_draw_label_dsc_t * dsc);
+ LV_ATTRIBUTE_FAST_MEM void lv_draw_label(struct _lv_draw_ctx_t * draw_ctx, const lv_draw_label_dsc_t * dsc,
+                                          const lv_area_t * coords, const char * txt, lv_draw_label_hint_t * hint);
+
++/**
++ * Install optional draw-label profiling hooks. Passing NULL disables the
++ * hooks and leaves the normal rendering path with one predictable branch.
++ */
++void lv_draw_label_set_profile_cb(lv_draw_label_profile_clock_cb_t clock_cb,
++                                  lv_draw_label_profile_report_cb_t report_cb);
++
+ void lv_draw_letter(struct _lv_draw_ctx_t * draw_ctx, const lv_draw_label_dsc_t * dsc,  const lv_point_t * pos_p,
+                     uint32_t letter);
+
+diff --git a/src/draw/lv_draw_label.c b/src/draw/lv_draw_label.c
+--- a/src/draw/lv_draw_label.c
++++ b/src/draw/lv_draw_label.c
+@@ -14,6 +14,8 @@
+ #include "../misc/lv_bidi.h"
+ #include "../misc/lv_assert.h"
+
++#include <string.h>
++
+ /*********************
+  *      DEFINES
+  *********************/
+@@ -39,6 +41,8 @@ static uint8_t hex_char_to_num(char hex);
+ /**********************
+  *  STATIC VARIABLES
+  **********************/
++static lv_draw_label_profile_clock_cb_t label_profile_clock_cb;
++static lv_draw_label_profile_report_cb_t label_profile_report_cb;
+
+ /**********************
+  *  GLOBAL VARIABLES
+@@ -74,8 +78,11 @@ void lv_draw_label_dsc_init(lv_draw_label_dsc_t * dsc)
+  * @param hint pointer to a `lv_draw_label_hint_t` variable.
+  * It is managed by the draw to speed up the drawing of very long texts (thousands of lines).
+  */
+-LV_ATTRIBUTE_FAST_MEM void lv_draw_label(lv_draw_ctx_t * draw_ctx, const lv_draw_label_dsc_t * dsc,
+-                                         const lv_area_t * coords, const char * txt, lv_draw_label_hint_t * hint)
++static LV_ATTRIBUTE_FAST_MEM void lv_draw_label_core(lv_draw_ctx_t * draw_ctx,
++                                                      const lv_draw_label_dsc_t * dsc,
++                                                      const lv_area_t * coords,
++                                                      const char * txt,
++                                                      lv_draw_label_hint_t * hint)
+ {
+     if(dsc->opa <= LV_OPA_MIN) return;
+     if(dsc->font == NULL) {
+@@ -361,6 +368,44 @@ LV_ATTRIBUTE_FAST_MEM void lv_draw_label(lv_draw_ctx_t * draw_ctx, const lv_draw
+     LV_ASSERT_MEM_INTEGRITY();
+ }
+
++LV_ATTRIBUTE_FAST_MEM void lv_draw_label(lv_draw_ctx_t * draw_ctx,
++                                         const lv_draw_label_dsc_t * dsc,
++                                         const lv_area_t * coords,
++                                         const char * txt,
++                                         lv_draw_label_hint_t * hint)
++{
++    uint64_t started_us;
++    uint64_t elapsed_us;
++    uint32_t visible_pixels = 0;
++    lv_area_t visible_area;
++
++    if(label_profile_clock_cb == NULL || label_profile_report_cb == NULL) {
++        lv_draw_label_core(draw_ctx, dsc, coords, txt, hint);
++        return;
++    }
++
++    started_us = label_profile_clock_cb();
++    lv_draw_label_core(draw_ctx, dsc, coords, txt, hint);
++    elapsed_us = label_profile_clock_cb() - started_us;
++
++    if(draw_ctx != NULL && coords != NULL &&
++       _lv_area_intersect(&visible_area, coords, draw_ctx->clip_area)) {
++        visible_pixels = (uint32_t)lv_area_get_width(&visible_area) *
++                         (uint32_t)lv_area_get_height(&visible_area);
++    }
++    label_profile_report_cb(elapsed_us > UINT32_MAX ? UINT32_MAX :
++                            (uint32_t)elapsed_us,
++                            txt != NULL ? (uint32_t)strlen(txt) : 0U,
++                            visible_pixels);
++}
++
++void lv_draw_label_set_profile_cb(lv_draw_label_profile_clock_cb_t clock_cb,
++                                  lv_draw_label_profile_report_cb_t report_cb)
++{
++    label_profile_clock_cb = clock_cb;
++    label_profile_report_cb = report_cb;
++}
++
+ void lv_draw_letter(lv_draw_ctx_t * draw_ctx, const lv_draw_label_dsc_t * dsc,  const lv_point_t * pos_p,
+                     uint32_t letter)
+ {
+--
+2.34.1

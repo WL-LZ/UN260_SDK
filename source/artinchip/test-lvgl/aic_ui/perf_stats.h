@@ -74,6 +74,8 @@ void perf_profile_report_page_switch(
     const perf_profile_page_switch_sample_t *sample);
 void perf_profile_report_event_us(const char *page_name, const char *event,
                                   uint32_t elapsed_us);
+void perf_profile_watch_invalidation(const void *obj, const char *name);
+void perf_profile_unwatch_invalidation(const void *obj);
 void perf_profile_poll(uint32_t now_ms);
 
 #endif

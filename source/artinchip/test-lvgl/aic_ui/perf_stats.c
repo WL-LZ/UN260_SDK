@@ -7,6 +7,7 @@
 #include "un260/lv_system/app_clock.h"
 
 #include "cpu_mem.h"
+#include "lvgl/lvgl.h"
 #include "lv_port_disp.h"
 
 static perf_stats_snapshot_t g_perf_stats = {0};
@@ -115,6 +116,11 @@ typedef struct {
     perf_time_accumulator_t vsync;
     perf_time_accumulator_t mirror;
     perf_profile_op_accumulator_t ge[PERF_PROFILE_GE_COUNT];
+    uint32_t label_calls;
+    uint64_t label_text_bytes;
+    uint64_t label_visible_pixels;
+    uint64_t label_total_us;
+    uint32_t label_max_us;
     bool pending_switch_valid;
     perf_profile_page_switch_sample_t pending_switch;
     perf_profile_page_open_sample_t pending_open;
@@ -123,6 +129,81 @@ typedef struct {
 } perf_profile_state_t;
 
 static perf_profile_state_t g_profile;
+
+#define PERF_PROFILE_INV_WATCH_CAPACITY 12U
+
+typedef struct {
+    const lv_obj_t *obj;
+    const char *name;
+    uint32_t calls;
+    uint32_t duplicates;
+    uint64_t pixels;
+    uint32_t last_frame_sequence;
+} perf_profile_inv_watch_t;
+
+static perf_profile_inv_watch_t
+    g_inv_watch[PERF_PROFILE_INV_WATCH_CAPACITY];
+static uint32_t g_inv_requests;
+static uint32_t g_inv_duplicates;
+static uint64_t g_inv_pixels;
+
+static uint64_t perf_profile_label_clock_us(void)
+{
+    return app_clock_monotonic_us();
+}
+
+static void perf_profile_report_label_draw(uint32_t elapsed_us,
+                                           uint32_t text_bytes,
+                                           uint32_t visible_pixels)
+{
+    if (!g_profile.enabled) {
+        return;
+    }
+
+    g_profile.label_calls++;
+    g_profile.label_text_bytes += text_bytes;
+    g_profile.label_visible_pixels += visible_pixels;
+    g_profile.label_total_us += elapsed_us;
+    if (elapsed_us > g_profile.label_max_us) {
+        g_profile.label_max_us = elapsed_us;
+    }
+}
+
+static void perf_profile_invalidation_cb(const lv_obj_t *obj,
+                                         const lv_area_t *area)
+{
+    uint64_t pixels;
+    uint32_t i;
+
+    if (!g_profile.enabled || obj == NULL || area == NULL) {
+        return;
+    }
+
+    pixels = (uint64_t)lv_area_get_width(area) *
+             (uint64_t)lv_area_get_height(area);
+    g_inv_requests++;
+    g_inv_pixels += pixels;
+
+    for (i = 0; i < PERF_PROFILE_INV_WATCH_CAPACITY; i++) {
+        perf_profile_inv_watch_t *watch = &g_inv_watch[i];
+        const lv_obj_t *ancestor = obj;
+
+        while (ancestor != NULL && ancestor != watch->obj) {
+            ancestor = lv_obj_get_parent(ancestor);
+        }
+        if (ancestor == NULL) {
+            continue;
+        }
+        watch->calls++;
+        watch->pixels += pixels;
+        if (watch->last_frame_sequence == g_profile.frame_sequence) {
+            watch->duplicates++;
+            g_inv_duplicates++;
+        }
+        watch->last_frame_sequence = g_profile.frame_sequence;
+        break;
+    }
+}
 
 static uint32_t perf_time_average_us(const perf_time_accumulator_t *time)
 {
@@ -159,6 +240,8 @@ static uint32_t perf_time_p95_us(const perf_time_accumulator_t *time)
 
 static void perf_profile_reset_window(uint32_t now_ms)
 {
+    uint32_t i;
+
     g_profile.window_started_ms = now_ms;
     g_profile.frames = 0;
     g_profile.page_switches = 0;
@@ -173,6 +256,20 @@ static void perf_profile_reset_window(uint32_t now_ms)
     g_profile.vsync = (perf_time_accumulator_t){0};
     g_profile.mirror = (perf_time_accumulator_t){0};
     memset(g_profile.ge, 0, sizeof(g_profile.ge));
+    g_profile.label_calls = 0;
+    g_profile.label_text_bytes = 0;
+    g_profile.label_visible_pixels = 0;
+    g_profile.label_total_us = 0;
+    g_profile.label_max_us = 0;
+    g_inv_requests = 0;
+    g_inv_duplicates = 0;
+    g_inv_pixels = 0;
+    for (i = 0; i < PERF_PROFILE_INV_WATCH_CAPACITY; i++) {
+        g_inv_watch[i].calls = 0;
+        g_inv_watch[i].duplicates = 0;
+        g_inv_watch[i].pixels = 0;
+        g_inv_watch[i].last_frame_sequence = UINT32_MAX;
+    }
 }
 
 void perf_profile_set_enabled(bool enabled)
@@ -182,6 +279,10 @@ void perf_profile_set_enabled(bool enabled)
     }
 
     g_profile.enabled = enabled;
+    lv_obj_set_invalidation_monitor_cb(enabled ?
+        perf_profile_invalidation_cb : NULL);
+    lv_draw_label_set_profile_cb(enabled ? perf_profile_label_clock_us : NULL,
+                                 enabled ? perf_profile_report_label_draw : NULL);
     if (enabled) {
         g_profile.page_id = UINT32_MAX;
         g_profile.page_name = "INVALID";
@@ -190,6 +291,54 @@ void perf_profile_set_enabled(bool enabled)
     g_profile.pending_open = (perf_profile_page_open_sample_t){0};
     g_profile.pending_event_count = 0;
     perf_profile_reset_window(0);
+    uart_debug_printf(
+        "PERF_PROFILE state=%s channel=UART inv_source=%s period_ms=1000\n",
+        enabled ? "ON" : "OFF", enabled ? "ON" : "OFF");
+}
+
+void perf_profile_watch_invalidation(const void *obj, const char *name)
+{
+    uint32_t i;
+    uint32_t free_index = PERF_PROFILE_INV_WATCH_CAPACITY;
+
+    if (obj == NULL || name == NULL) {
+        return;
+    }
+
+    for (i = 0; i < PERF_PROFILE_INV_WATCH_CAPACITY; i++) {
+        if (g_inv_watch[i].obj == obj) {
+            g_inv_watch[i].name = name;
+            return;
+        }
+        if (free_index == PERF_PROFILE_INV_WATCH_CAPACITY &&
+            g_inv_watch[i].obj == NULL) {
+            free_index = i;
+        }
+    }
+    if (free_index == PERF_PROFILE_INV_WATCH_CAPACITY) {
+        return;
+    }
+
+    g_inv_watch[free_index] = (perf_profile_inv_watch_t){
+        .obj = (const lv_obj_t *)obj,
+        .name = name,
+        .last_frame_sequence = UINT32_MAX,
+    };
+}
+
+void perf_profile_unwatch_invalidation(const void *obj)
+{
+    uint32_t i;
+
+    if (obj == NULL) {
+        return;
+    }
+    for (i = 0; i < PERF_PROFILE_INV_WATCH_CAPACITY; i++) {
+        if (g_inv_watch[i].obj == obj) {
+            g_inv_watch[i] = (perf_profile_inv_watch_t){0};
+            return;
+        }
+    }
 }
 
 bool perf_profile_is_enabled(void)
@@ -450,6 +599,34 @@ void perf_profile_poll(uint32_t now_ms)
         (unsigned long long)ge_emit_us, (unsigned long long)ge_sync_us,
         ge_sync_max_us);
 
+    uart_debug_printf(
+        "PERF_INV page=%s(%u) req=%u px=%llu watched_dup=%u\n",
+        g_profile.page_name, g_profile.page_id,
+        g_inv_requests, (unsigned long long)g_inv_pixels,
+        g_inv_duplicates);
+    uart_debug_printf(
+        "PERF_DRAW page=%s(%u) label=%u/%llu/%llu/%llu/%u avg_us=%llu\n",
+        g_profile.page_name, g_profile.page_id,
+        g_profile.label_calls,
+        (unsigned long long)g_profile.label_text_bytes,
+        (unsigned long long)g_profile.label_visible_pixels,
+        (unsigned long long)g_profile.label_total_us,
+        g_profile.label_max_us,
+        (unsigned long long)(g_profile.label_calls > 0 ?
+            g_profile.label_total_us / g_profile.label_calls : 0));
+    for (uint32_t i = 0; i < PERF_PROFILE_INV_WATCH_CAPACITY; i++) {
+        const perf_profile_inv_watch_t *watch = &g_inv_watch[i];
+
+        if (watch->obj != NULL && watch->calls > 0) {
+            uart_debug_printf(
+                "PERF_INV_OBJ page=%s name=%s calls=%u px=%llu dup=%u\n",
+                g_profile.page_name,
+                watch->name != NULL ? watch->name : "UNKNOWN",
+                watch->calls, (unsigned long long)watch->pixels,
+                watch->duplicates);
+        }
+    }
+
     perf_profile_reset_window(now_ms);
 }
 
@@ -471,6 +648,9 @@ void perf_stats_init(void)
     g_loop_time = (perf_time_accumulator_t){0};
     g_main_refresh_time = (perf_time_accumulator_t){0};
     memset(&g_profile, 0, sizeof(g_profile));
+    memset(g_inv_watch, 0, sizeof(g_inv_watch));
+    lv_obj_set_invalidation_monitor_cb(NULL);
+    lv_draw_label_set_profile_cb(NULL, NULL);
     g_cpu_prev_valid = (cpu_occupy_get(&g_cpu_prev) == 0);
 }
 

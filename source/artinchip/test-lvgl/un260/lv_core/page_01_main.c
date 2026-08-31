@@ -235,6 +235,8 @@ static void page_01_create_main_scrollable_container(void)
     }
 
     page_01_detail_scroll_attach(main_page, page_01_main_scroll_container);
+    perf_profile_watch_invalidation(page_01_main_scroll_container,
+                                    "MAIN_DETAIL_SCROLL");
 }
 
 void page_01_mode_switch_refre(void)
@@ -1538,6 +1540,7 @@ void ui_main_destroy(void)
         page_01_bottom_bg_destroy_all();
         smart_island_destroy(); //销毁灵动岛
         page_32_innovation_handle_detach();
+        perf_profile_unwatch_invalidation(page_01_main_scroll_container);
         lv_obj_del(main_page);
         main_page = NULL;
         page_01_main_scroll_container = NULL;

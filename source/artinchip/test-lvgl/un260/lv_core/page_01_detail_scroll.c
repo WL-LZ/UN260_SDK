@@ -116,11 +116,14 @@ static lv_coord_t page_01_detail_max_scroll_y_get(page_01_detail_section_t secti
 {
     lv_coord_t content_h;
     lv_coord_t view_h;
+    int row_count = page_01_detail_row_count_get(section);
 
-    if (page_01_detail_row_count_get(section) <= page_01_detail_visible_row_limit_get(section)) {
+    if (row_count <= page_01_detail_visible_row_limit_get(section)) {
         return 0;
     }
-    content_h = page_01_detail_content_h_get(section);
+    content_h = PAGE_01_DETAIL_ROW_Y_OFFSET
+        + (lv_coord_t)row_count * page_01_detail_row_gap_get(section)
+        + PAGE_01_DETAIL_SCROLL_EDGE_BUFFER;
     view_h = page_01_detail_view_h_get(section);
     return content_h > view_h ? content_h - view_h : 0;
 }
@@ -248,7 +251,15 @@ static void page_01_scroll_hint_refresh(void)
     if (!page_01_scroll_container_is_valid() || !page_01_detail_section_is_valid(section)) return;
     row_count = page_01_detail_row_count_get(section);
     visible_limit = page_01_detail_visible_row_limit_get(section);
-    max_scroll = page_01_detail_max_scroll_y_get(section);
+    if (row_count <= visible_limit) {
+        max_scroll = 0;
+    } else {
+        lv_coord_t content_h = PAGE_01_DETAIL_ROW_Y_OFFSET
+            + (lv_coord_t)row_count * page_01_detail_row_gap_get(section)
+            + PAGE_01_DETAIL_SCROLL_EDGE_BUFFER;
+        lv_coord_t view_h = page_01_detail_view_h_get(section);
+        max_scroll = content_h > view_h ? content_h - view_h : 0;
+    }
     top_hidden = lv_obj_get_scroll_top(page_01_main_scroll_obj());
     if (top_hidden < 0) top_hidden = 0;
     top_show = top_hidden > 0;
@@ -275,7 +286,7 @@ static void page_01_scroll_hint_event_cb(lv_event_t* e)
             int first_row = (int)s_detail_first_row_cache[section];
             if (s_detail_last_render_first_row[section] != first_row) {
                 s_detail_last_render_first_row[section] = (int16_t)first_row;
-                page_01_main_detail_refresh_rows_only();
+                page_01_main_detail_refresh_rows_during_scroll();
             }
         }
         page_01_scroll_hint_refresh();

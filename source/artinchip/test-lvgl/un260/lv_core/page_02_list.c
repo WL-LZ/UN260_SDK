@@ -8,6 +8,7 @@
 #include "aic_ui/aic_ui.h"
 #include "un260/lv_system/ui_object_utils.h"
 #include "un260/lv_system/app_clock.h"
+#include "un260/lv_system/ui_update_batch.h"
 #include "aic_ui/perf_stats.h"
 #include <stdio.h>
 #include <string.h>
@@ -68,6 +69,11 @@ typedef struct {
 } page_02_scroll_section_t;
 
 static page_02_scroll_section_t s_page_02_scroll_sections[PAGE_02_SECTION_COUNT];
+static const char *s_page_02_inv_names[PAGE_02_SECTION_COUNT] = {
+    "LIST_DENOM_SCROLL",
+    "LIST_SERIAL_SCROLL",
+    "LIST_ERROR_SCROLL",
+};
 
 static int page_02_a_valid_count_get(void); // 获取A区有效面额条数
 static int page_02_b_valid_count_get(void); // 获取B区有效冠字号条数
@@ -82,7 +88,8 @@ static void page_02_scroll_section_total_page_refresh(page_02_scroll_section_t *
 static void page_02_scroll_section_spacer_refresh(page_02_scroll_section_t *section); // 刷新滚动内容高度
 static void page_02_scroll_section_status_refresh(page_02_scroll_section_t *section); // 根据滚动位置刷新页码
 static void page_02_scroll_section_row_bind(page_02_scroll_section_t *section, uint16_t pool_row, int data_index); // 绑定滚动行内容
-static void page_02_scroll_section_visible_refresh(page_02_scroll_section_t *section); // 刷新可见行
+static void page_02_scroll_section_rows_rotate(page_02_scroll_section_t *section, int delta); // 滚动跨行时仅回收边缘行
+static void page_02_scroll_section_visible_refresh(page_02_scroll_section_t *section, bool parent_already_invalidated); // 刷新可见行
 static void page_02_scroll_section_sync_to_status(page_02_scroll_section_t *section, bool anim_en); // 根据页码同步滚动位置
 static bool page_02_scroll_section_small_data(page_02_scroll_section_t *section); // 判断当前分区是否为小数据量
 static uint16_t page_02_scroll_section_last_page_first_row_get(page_02_scroll_section_t *section); // 获取最后一页的起始行
@@ -550,13 +557,17 @@ static void page_02_scroll_section_row_bind(page_02_scroll_section_t *section, u
 
     if (data_index < 0 || data_index >= section->total_row) {
         for (int col = 0; col < section->col_count; col++) {
-            lv_obj_add_flag(section->cell[pool_row][col], LV_OBJ_FLAG_HIDDEN);
+            if (!lv_obj_has_flag(section->cell[pool_row][col], LV_OBJ_FLAG_HIDDEN)) {
+                lv_obj_add_flag(section->cell[pool_row][col], LV_OBJ_FLAG_HIDDEN);
+            }
         }
         return;
     }
 
     for (int col = 0; col < section->col_count; col++) {
-        lv_obj_clear_flag(section->cell[pool_row][col], LV_OBJ_FLAG_HIDDEN);
+        if (lv_obj_has_flag(section->cell[pool_row][col], LV_OBJ_FLAG_HIDDEN)) {
+            lv_obj_clear_flag(section->cell[pool_row][col], LV_OBJ_FLAG_HIDDEN);
+        }
         lv_obj_set_pos(section->cell[pool_row][col], section->col_x[col],
             PAGE_02_SCROLL_ROW_Y_OFFSET + data_index * PAGE_02_SCROLL_ROW_GAP);
     }
@@ -571,7 +582,9 @@ static void page_02_scroll_section_row_bind(page_02_scroll_section_t *section, u
         actual_index = page_02_b_nth_valid_index_get(data_index);
         if (actual_index < 0) {
             for (int col = 0; col < section->col_count; col++) {
-                lv_obj_add_flag(section->cell[pool_row][col], LV_OBJ_FLAG_HIDDEN);
+                if (!lv_obj_has_flag(section->cell[pool_row][col], LV_OBJ_FLAG_HIDDEN)) {
+                    lv_obj_add_flag(section->cell[pool_row][col], LV_OBJ_FLAG_HIDDEN);
+                }
             }
             return;
         }
@@ -598,9 +611,55 @@ static void page_02_scroll_section_row_bind(page_02_scroll_section_t *section, u
     }
 }
 
-static void page_02_scroll_section_visible_refresh(page_02_scroll_section_t *section) // 刷新可见行
+static void page_02_scroll_section_rows_rotate(page_02_scroll_section_t *section, int delta)
+{
+    lv_obj_t *recycled[PAGE_02_SCROLL_COL_MAX];
+    int current_first;
+
+    if (section == NULL || delta == 0) return;
+
+    current_first = section->bound_first_row;
+    while (delta > 0) {
+        for (int col = 0; col < section->col_count; col++) {
+            recycled[col] = section->cell[0][col];
+        }
+        for (int row = 0; row < section->pool_row - 1; row++) {
+            for (int col = 0; col < section->col_count; col++) {
+                section->cell[row][col] = section->cell[row + 1][col];
+            }
+        }
+        for (int col = 0; col < section->col_count; col++) {
+            section->cell[section->pool_row - 1][col] = recycled[col];
+        }
+        current_first++;
+        page_02_scroll_section_row_bind(section, section->pool_row - 1,
+                                        current_first + section->pool_row - 1);
+        delta--;
+    }
+
+    while (delta < 0) {
+        for (int col = 0; col < section->col_count; col++) {
+            recycled[col] = section->cell[section->pool_row - 1][col];
+        }
+        for (int row = section->pool_row - 1; row > 0; row--) {
+            for (int col = 0; col < section->col_count; col++) {
+                section->cell[row][col] = section->cell[row - 1][col];
+            }
+        }
+        for (int col = 0; col < section->col_count; col++) {
+            section->cell[0][col] = recycled[col];
+        }
+        current_first--;
+        page_02_scroll_section_row_bind(section, 0, current_first);
+        delta++;
+    }
+}
+
+static void page_02_scroll_section_visible_refresh(page_02_scroll_section_t *section, bool parent_already_invalidated) // 刷新可见行
 {
     lv_coord_t scroll_top;
+    int delta;
+    ui_update_batch_t batch;
     uint16_t first_row;
     uint16_t last_page_first_row;
 
@@ -621,10 +680,28 @@ static void page_02_scroll_section_visible_refresh(page_02_scroll_section_t *sec
         return;
     }
 
+    if (parent_already_invalidated) {
+        ui_update_batch_begin(&batch, section->container,
+                              UI_UPDATE_BATCH_COVERED_BY_PARENT);
+    } else {
+        memset(&batch, 0, sizeof(batch));
+    }
+
+    if (section->bound_first_row != UINT16_MAX) {
+        delta = (int)first_row - (int)section->bound_first_row;
+        if (delta > -(int)section->pool_row && delta < (int)section->pool_row) {
+            page_02_scroll_section_rows_rotate(section, delta);
+            section->bound_first_row = first_row;
+            ui_update_batch_end(&batch);
+            return;
+        }
+    }
+
     for (uint16_t row = 0; row < section->pool_row; row++) {
         page_02_scroll_section_row_bind(section, row, (int)first_row + row);
     }
     section->bound_first_row = first_row;
+    ui_update_batch_end(&batch);
 }
 
 static void page_02_scroll_section_status_refresh(page_02_scroll_section_t *section) // 根据滚动位置刷新页码
@@ -705,7 +782,7 @@ static void page_02_scroll_section_sync_to_status(page_02_scroll_section_t *sect
     }
 
     lv_obj_scroll_to_y(section->container, first_row * PAGE_02_SCROLL_ROW_GAP, anim_en ? LV_ANIM_ON : LV_ANIM_OFF);
-    page_02_scroll_section_visible_refresh(section);
+    page_02_scroll_section_visible_refresh(section, false);
     page_02_scroll_section_status_refresh(section);
 }
 
@@ -751,20 +828,20 @@ static void page_02_scroll_section_event_cb(lv_event_t *e) // 处理滚动与点
     }
 
     if (code == LV_EVENT_SCROLL) {
-        page_02_scroll_section_visible_refresh(section);
+        page_02_scroll_section_visible_refresh(section, true);
         page_02_scroll_section_status_refresh(section);
         return;
     }
 
     if (code == LV_EVENT_SCROLL_END) {
         if (section->pressing) {
-            page_02_scroll_section_visible_refresh(section);
+            page_02_scroll_section_visible_refresh(section, true);
             page_02_scroll_section_status_refresh(section);
             return;
         }
         if (page_02_scroll_section_small_data(section)) {
             lv_obj_scroll_to_y(section->container, 0, LV_ANIM_ON);
-            page_02_scroll_section_visible_refresh(section);
+            page_02_scroll_section_visible_refresh(section, true);
             page_02_scroll_section_status_refresh(section);
             return;
         }
@@ -793,7 +870,7 @@ static void page_02_scroll_section_event_cb(lv_event_t *e) // 处理滚动与点
                 return;
             }
         }
-        page_02_scroll_section_visible_refresh(section);
+        page_02_scroll_section_visible_refresh(section, true);
         page_02_scroll_section_status_refresh(section);
         return;
     }
@@ -885,7 +962,7 @@ void page_02_list_section_refresh(page_02_section_id_t section_id) // 刷新指�
     if (section == NULL || section->container == NULL || !lv_obj_is_valid(section->container)) return;
     page_02_scroll_section_total_page_refresh(section);
     section->bound_first_row = UINT16_MAX;
-    page_02_scroll_section_visible_refresh(section);
+    page_02_scroll_section_visible_refresh(section, false);
     page_02_scroll_section_status_refresh(section);
 }
 
@@ -1049,6 +1126,9 @@ void ui_page_02_list_create(lv_obj_t* parent)
     page_02_scroll_section_init_config();
     for (int i = 0; i < PAGE_02_SECTION_COUNT; i++) {
         page_02_scroll_section_create(&s_page_02_scroll_sections[i]);
+        perf_profile_watch_invalidation(
+            s_page_02_scroll_sections[i].container,
+            s_page_02_inv_names[i]);
     }
     page_02_a_page_refre();
     page_02_b_page_refre();
@@ -1132,6 +1212,10 @@ void ui_page_02_list_suspend(void)
 
 void ui_page_02_list_destroy(void)
 {
+    for (int i = 0; i < PAGE_02_SECTION_COUNT; i++) {
+        perf_profile_unwatch_invalidation(
+            s_page_02_scroll_sections[i].container);
+    }
     memset(s_page_02_scroll_sections, 0, sizeof(s_page_02_scroll_sections));
     if (list_page) {
         lv_obj_del(list_page);

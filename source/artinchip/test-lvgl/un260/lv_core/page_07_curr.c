@@ -228,6 +228,8 @@ static struct {
 
 static int g_curr_track_x = -1;
 static int g_curr_track_w = -1;
+static int g_curr_card_styled_visible_idx = -1;
+static int g_curr_grid_styled_abs_idx = -1;
 
 static void curr_refresh_right_views(void);
 static void curr_apply_selected_style(void);
@@ -863,16 +865,35 @@ static void curr_fav_press_feedback_cb(lv_event_t* e)
 
 static void curr_apply_selected_style(void)
 {
+    bool selection_changed;
+    int previous_selected_idx;
+
     if (g_page07_curr.objects.card_layer == NULL || g_page07_curr.model.visible_count <= 0) return;
+
+    previous_selected_idx = g_curr_card_styled_visible_idx;
+    selection_changed =
+        previous_selected_idx !=
+        g_page07_curr.model.selected_visible_idx;
 
     for (int i = 0; i < g_page07_curr.model.visible_count; i++) {
         bool sel = (i == g_page07_curr.model.selected_visible_idx);
         int pos_x = g_page07_curr.cards[i].base_x;
         int pos_y = g_page07_curr.cards[i].base_y;
+        int previous_pos_x = g_page07_curr.cards[i].base_x;
+        bool previous_sel = i == previous_selected_idx;
+        bool visual_changed;
 
         if (i > g_page07_curr.model.selected_visible_idx) pos_x += CURR_SEL_NEXT_EXTRA_GAP;
+        if (i > previous_selected_idx) previous_pos_x += CURR_SEL_NEXT_EXTRA_GAP;
 
-        lv_obj_set_style_radius(g_page07_curr.cards[i].card, 0, 0);
+        visual_changed = previous_selected_idx < 0 ||
+                         previous_sel != sel ||
+                         previous_pos_x != pos_x;
+
+        if (!selection_changed || !visual_changed) {
+            curr_update_card_fav_ui(i);
+            continue;
+        }
 
         if (sel) {
             if (g_page07_curr.cards[i].background) {
@@ -919,6 +940,9 @@ static void curr_apply_selected_style(void)
 
         curr_update_card_fav_ui(i);
     }
+
+    g_curr_card_styled_visible_idx =
+        g_page07_curr.model.selected_visible_idx;
 }
 
 static void curr_right_drag_cb(lv_event_t* e)
@@ -1090,6 +1114,10 @@ static void curr_grid_item_click_cb(lv_event_t* e)
 static void curr_build_card_layer(void)
 {
     g_page07_curr.objects.card_layer = lv_obj_create(g_page07_curr.objects.right_area);
+    /* Build the complete layer while hidden. Child creation and style setup
+     * then cannot enqueue hundreds of intermediate invalid areas. Showing the
+     * finished layer produces one coherent first frame. */
+    lv_obj_add_flag(g_page07_curr.objects.card_layer, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_style_all(g_page07_curr.objects.card_layer);
     lv_obj_set_size(g_page07_curr.objects.card_layer, CURR_VIEW_W, CURR_VIEW_H);
     lv_obj_set_pos(g_page07_curr.objects.card_layer, 0, 0);
@@ -1104,6 +1132,8 @@ static void curr_build_card_layer(void)
     lv_obj_set_style_bg_opa(g_page07_curr.objects.list, LV_OPA_TRANSP, 0);
     lv_obj_set_scrollbar_mode(g_page07_curr.objects.list, LV_SCROLLBAR_MODE_OFF);
     lv_obj_clear_flag(g_page07_curr.objects.list, LV_OBJ_FLAG_SCROLLABLE);
+    perf_profile_watch_invalidation(g_page07_curr.objects.list,
+                                    "CURRENCY_CARD_SCROLL");
 
     for (int i = 0; i < g_page07_curr.model.visible_count; i++) {
         int abs_idx = g_page07_curr.model.visible_indices[i];
@@ -1198,12 +1228,16 @@ static void curr_build_card_layer(void)
     lv_obj_set_style_radius(g_page07_curr.objects.thumb, 3, 0);
     g_curr_track_x = -1;
     g_curr_track_w = -1;
+    g_curr_card_styled_visible_idx = -1;
 
 }
 
 static void curr_build_grid_layer(void)
 {
     g_page07_curr.objects.grid_layer = lv_obj_create(g_page07_curr.objects.right_area);
+    /* Keep the incomplete grid invisible for the same reason as the card
+     * layer: only publish it after every child is ready. */
+    lv_obj_add_flag(g_page07_curr.objects.grid_layer, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_style_all(g_page07_curr.objects.grid_layer);
     lv_obj_set_size(g_page07_curr.objects.grid_layer, CURR_VIEW_W, CURR_VIEW_H);
     lv_obj_set_pos(g_page07_curr.objects.grid_layer, 0, 0);
@@ -1219,6 +1253,8 @@ static void curr_build_grid_layer(void)
     lv_obj_set_scroll_dir(g_page07_curr.objects.grid_scroll, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(g_page07_curr.objects.grid_scroll, LV_SCROLLBAR_MODE_OFF);
     lv_obj_add_flag(g_page07_curr.objects.grid_scroll, LV_OBJ_FLAG_SCROLLABLE);
+    perf_profile_watch_invalidation(g_page07_curr.objects.grid_scroll,
+                                    "CURRENCY_GRID_SCROLL");
 
     int rows = (g_page07_curr.model.visible_count + CURR_GRID_COLS - 1) / CURR_GRID_COLS;
     int content_h = CURR_GRID_START_Y + rows * CURR_GRID_ROW_STEP + 10;
@@ -1308,23 +1344,91 @@ static void curr_build_grid_layer(void)
     }
 
     g_page07_curr.objects.empty_label = NULL;
+    g_curr_grid_styled_abs_idx = g_page07_curr.model.selected_abs_idx;
+}
+
+static void curr_apply_grid_selected_style(void)
+{
+    if (g_page07_curr.objects.grid_layer == NULL ||
+        g_curr_grid_styled_abs_idx ==
+            g_page07_curr.model.selected_abs_idx) {
+        return;
+    }
+
+    for (int i = 0; i < g_page07_curr.model.visible_count; i++) {
+        int abs_idx = g_page07_curr.grid_items[i].abs_idx;
+        bool selected = abs_idx == g_page07_curr.model.selected_abs_idx;
+
+        if (selected) {
+            lv_obj_clear_flag(g_page07_curr.grid_items[i].selected_mark,
+                              LV_OBJ_FLAG_HIDDEN);
+            curr_set_image_selected_style(g_page07_curr.grid_items[i].img);
+        } else {
+            lv_obj_add_flag(g_page07_curr.grid_items[i].selected_mark,
+                            LV_OBJ_FLAG_HIDDEN);
+            curr_set_image_unselected_style(g_page07_curr.grid_items[i].img);
+        }
+        lv_obj_set_style_text_color(
+            g_page07_curr.grid_items[i].name,
+            selected ? lv_color_hex(CURR_TEXT_SEL)
+                     : lv_color_hex(0x7E7E7E), 0);
+    }
+
+    g_curr_grid_styled_abs_idx = g_page07_curr.model.selected_abs_idx;
 }
 
 static void curr_set_mode_visible(void)
 {
     if (g_page07_curr.model.view_mode == PAGE07_CURR_VIEW_CARD) {
+        if (g_page07_curr.objects.grid_layer) {
+            lv_obj_add_flag(g_page07_curr.objects.grid_layer,
+                            LV_OBJ_FLAG_HIDDEN);
+        }
         if (g_page07_curr.objects.card_layer) {
             lv_obj_clear_flag(g_page07_curr.objects.card_layer, LV_OBJ_FLAG_HIDDEN);
             curr_apply_selected_style();
             curr_update_track_by_scroll(curr_scroll_x_abs());
         }
     } else {
+        if (g_page07_curr.objects.card_layer) {
+            lv_obj_add_flag(g_page07_curr.objects.card_layer,
+                            LV_OBJ_FLAG_HIDDEN);
+        }
         if (g_page07_curr.objects.grid_layer) {
             lv_obj_clear_flag(g_page07_curr.objects.grid_layer, LV_OBJ_FLAG_HIDDEN);
+            curr_apply_grid_selected_style();
             for (int i = 0; i < g_page07_curr.model.visible_count; i++) {
                 curr_update_grid_fav_ui(i);
             }
         }
+    }
+}
+
+static void curr_switch_cached_view(void)
+{
+    if (g_page07_curr.model.visible_count <= 0) {
+        curr_refresh_right_views();
+        return;
+    }
+
+    if (g_page07_curr.model.view_mode == PAGE07_CURR_VIEW_CARD) {
+        if (g_page07_curr.objects.card_layer == NULL ||
+            !lv_obj_is_valid(g_page07_curr.objects.card_layer)) {
+            memset(g_page07_curr.cards, 0, sizeof(g_page07_curr.cards));
+            curr_build_card_layer();
+        }
+    } else if (g_page07_curr.objects.grid_layer == NULL ||
+               !lv_obj_is_valid(g_page07_curr.objects.grid_layer)) {
+        memset(g_page07_curr.grid_items, 0,
+               sizeof(g_page07_curr.grid_items));
+        curr_build_grid_layer();
+    }
+
+    curr_set_mode_visible();
+    if (g_page07_curr.model.view_mode == PAGE07_CURR_VIEW_CARD) {
+        curr_scroll_to_visible_idx(
+            g_page07_curr.model.selected_visible_idx, false, true);
+        curr_update_track_by_scroll(curr_scroll_x_abs());
     }
 }
 
@@ -1346,6 +1450,7 @@ static void curr_refresh_right_views(void)
     g_page07_curr.model.selected_visible_idx = page07_curr_model_find_visible_pos(g_page07_curr.model.selected_abs_idx);
 
     if (g_page07_curr.objects.card_layer && lv_obj_is_valid(g_page07_curr.objects.card_layer)) {
+        perf_profile_unwatch_invalidation(g_page07_curr.objects.list);
         lv_obj_del(g_page07_curr.objects.card_layer);
         g_page07_curr.objects.card_layer = NULL;
         g_page07_curr.objects.list = NULL;
@@ -1354,6 +1459,7 @@ static void curr_refresh_right_views(void)
     }
 
     if (g_page07_curr.objects.grid_layer && lv_obj_is_valid(g_page07_curr.objects.grid_layer)) {
+        perf_profile_unwatch_invalidation(g_page07_curr.objects.grid_scroll);
         lv_obj_del(g_page07_curr.objects.grid_layer);
         g_page07_curr.objects.grid_layer = NULL;
         g_page07_curr.objects.grid_scroll = NULL;
@@ -1391,7 +1497,7 @@ static void curr_view_btn_click_cb(lv_event_t* e)
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
 
     g_page07_curr.model.view_mode = (g_page07_curr.model.view_mode == PAGE07_CURR_VIEW_CARD) ? PAGE07_CURR_VIEW_GRID : PAGE07_CURR_VIEW_CARD;
-    curr_refresh_right_views();
+    curr_switch_cached_view();
     curr_refresh_left_buttons();
     page07_curr_model_save();
 
@@ -1413,6 +1519,9 @@ void page_07_curr_img_reset(void)
         lv_timer_del(g_page07_curr.gesture.snap_timer);
         g_page07_curr.gesture.snap_timer = NULL;
     }
+
+    perf_profile_unwatch_invalidation(g_page07_curr.objects.list);
+    perf_profile_unwatch_invalidation(g_page07_curr.objects.grid_scroll);
 
     if (g_page07_curr.objects.root && lv_obj_is_valid(g_page07_curr.objects.root)) {
         lv_obj_del(g_page07_curr.objects.root);
@@ -1455,6 +1564,8 @@ void page_07_curr_img_reset(void)
     g_page07_curr.model.visible_count = 0;
     g_curr_track_x = -1;
     g_curr_track_w = -1;
+    g_curr_card_styled_visible_idx = -1;
+    g_curr_grid_styled_abs_idx = -1;
 }
 
 void page_07_curr_img_refre(void)
@@ -1613,6 +1724,7 @@ static void curr_refresh_cached_selection(void)
                                              : lv_color_hex(0x7E7E7E), 0);
         curr_update_grid_fav_ui(i);
     }
+    g_curr_grid_styled_abs_idx = g_page07_curr.model.selected_abs_idx;
 }
 
 bool ui_page_07_curr_resume(void)
