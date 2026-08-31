@@ -12,7 +12,9 @@ extern "C" {
 
 #include <stdint.h>
 
-#define IMG_CACHE_NUM 10
+/* Keep the active page's background, card skins, flags and controls resident.
+ * Currency alone can use more than ten distinct decoded images in one frame. */
+#define IMG_CACHE_NUM 16
 #define CONN(x, y) x#y
 
 //#define USE_TMPFS

@@ -18,6 +18,8 @@
 #include "dma_allocator.h"
 #include "aic_dec.h"
 #include "aic_ui.h"
+#include "aic_ui/perf_stats.h"
+#include "un260/lv_system/app_clock.h"
 
 #define PNG_HEADER_SIZE (8 + 12 + 13) //png signature + IHDR chuck
 #define PNGSIG 0x89504e470d0a1a0aull
@@ -342,6 +344,11 @@ static lv_res_t aic_decoder_open(lv_img_decoder_t *decoder, lv_img_decoder_dsc_t
     enum mpp_codec_type type = MPP_CODEC_VIDEO_DECODER_PNG;
     char *ptr = NULL;
     struct decode_config config = { 0 };
+    uint64_t profile_started_us = 0;
+
+    if (perf_profile_is_enabled()) {
+        profile_started_us = app_clock_monotonic_us();
+    }
 
     ptr = strrchr(dsc->src, '.');
     if ((!strcmp(ptr, ".jpg")) || (!strcmp(ptr, ".jpeg")))
@@ -448,6 +455,17 @@ static lv_res_t aic_decoder_open(lv_img_decoder_t *decoder, lv_img_decoder_dsc_t
         dsc->header.cf = LV_IMG_CF_TRUE_COLOR;
 
     dsc->img_data = (unsigned char *)alloc_frame;
+
+    if (profile_started_us != 0) {
+        uint64_t decoded_bytes =
+            (uint64_t)alloc_frame->buf.stride[0] *
+            (uint64_t)alloc_frame->buf.size.height;
+        perf_profile_report_image_decode(
+            dsc->src,
+            app_clock_elapsed_us32(profile_started_us,
+                                   app_clock_monotonic_us()),
+            decoded_bytes);
+    }
 
     return LV_RES_OK;
 

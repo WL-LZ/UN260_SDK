@@ -78,6 +78,8 @@ typedef struct {
 } perf_profile_op_accumulator_t;
 
 #define PERF_PROFILE_EVENT_CAPACITY 8
+#define PERF_PROFILE_IMAGE_CAPACITY 8
+#define PERF_PROFILE_IMAGE_NAME_CAPACITY 48
 
 typedef struct {
     const char *page_name;
@@ -96,6 +98,14 @@ typedef struct {
     uint32_t first_frame_us;
     uint32_t total_us;
 } perf_profile_page_open_sample_t;
+
+typedef struct {
+    char name[PERF_PROFILE_IMAGE_NAME_CAPACITY];
+    uint32_t count;
+    uint64_t total_us;
+    uint32_t max_us;
+    uint64_t decoded_bytes;
+} perf_profile_image_decode_accumulator_t;
 
 typedef struct {
     bool enabled;
@@ -121,6 +131,12 @@ typedef struct {
     uint64_t label_visible_pixels;
     uint64_t label_total_us;
     uint32_t label_max_us;
+    uint32_t image_decode_count;
+    uint64_t image_decode_total_us;
+    uint32_t image_decode_max_us;
+    uint64_t image_decode_bytes;
+    perf_profile_image_decode_accumulator_t
+        image_decode[PERF_PROFILE_IMAGE_CAPACITY];
     bool pending_switch_valid;
     perf_profile_page_switch_sample_t pending_switch;
     perf_profile_page_open_sample_t pending_open;
@@ -261,6 +277,11 @@ static void perf_profile_reset_window(uint32_t now_ms)
     g_profile.label_visible_pixels = 0;
     g_profile.label_total_us = 0;
     g_profile.label_max_us = 0;
+    g_profile.image_decode_count = 0;
+    g_profile.image_decode_total_us = 0;
+    g_profile.image_decode_max_us = 0;
+    g_profile.image_decode_bytes = 0;
+    memset(g_profile.image_decode, 0, sizeof(g_profile.image_decode));
     g_inv_requests = 0;
     g_inv_duplicates = 0;
     g_inv_pixels = 0;
@@ -463,6 +484,56 @@ void perf_profile_report_event_us(const char *page_name, const char *event,
     sample->elapsed_us = elapsed_us;
 }
 
+void perf_profile_report_image_decode(const char *src, uint32_t elapsed_us,
+                                      uint64_t decoded_bytes)
+{
+    const char *name;
+    uint32_t free_index = PERF_PROFILE_IMAGE_CAPACITY;
+    uint32_t i;
+
+    if (!g_profile.enabled || src == NULL) {
+        return;
+    }
+
+    name = strrchr(src, '/');
+    name = name != NULL ? name + 1 : src;
+    g_profile.image_decode_count++;
+    g_profile.image_decode_total_us += elapsed_us;
+    g_profile.image_decode_bytes += decoded_bytes;
+    if (elapsed_us > g_profile.image_decode_max_us) {
+        g_profile.image_decode_max_us = elapsed_us;
+    }
+
+    for (i = 0; i < PERF_PROFILE_IMAGE_CAPACITY; i++) {
+        perf_profile_image_decode_accumulator_t *acc =
+            &g_profile.image_decode[i];
+
+        if (acc->name[0] != '\0' && strcmp(acc->name, name) == 0) {
+            free_index = i;
+            break;
+        }
+        if (free_index == PERF_PROFILE_IMAGE_CAPACITY &&
+            acc->name[0] == '\0') {
+            free_index = i;
+        }
+    }
+    if (free_index == PERF_PROFILE_IMAGE_CAPACITY) {
+        return;
+    }
+
+    perf_profile_image_decode_accumulator_t *acc =
+        &g_profile.image_decode[free_index];
+    if (acc->name[0] == '\0') {
+        snprintf(acc->name, sizeof(acc->name), "%s", name);
+    }
+    acc->count++;
+    acc->total_us += elapsed_us;
+    acc->decoded_bytes += decoded_bytes;
+    if (elapsed_us > acc->max_us) {
+        acc->max_us = elapsed_us;
+    }
+}
+
 static void perf_profile_emit_pending_events(void)
 {
     uint8_t i;
@@ -614,6 +685,28 @@ void perf_profile_poll(uint32_t now_ms)
         g_profile.label_max_us,
         (unsigned long long)(g_profile.label_calls > 0 ?
             g_profile.label_total_us / g_profile.label_calls : 0));
+    uart_debug_printf(
+        "PERF_IMG page=%s(%u) decode=%u/%llu/%u bytes=%llu avg_us=%llu\n",
+        g_profile.page_name, g_profile.page_id,
+        g_profile.image_decode_count,
+        (unsigned long long)g_profile.image_decode_total_us,
+        g_profile.image_decode_max_us,
+        (unsigned long long)g_profile.image_decode_bytes,
+        (unsigned long long)(g_profile.image_decode_count > 0 ?
+            g_profile.image_decode_total_us / g_profile.image_decode_count :
+            0));
+    for (uint32_t i = 0; i < PERF_PROFILE_IMAGE_CAPACITY; i++) {
+        const perf_profile_image_decode_accumulator_t *acc =
+            &g_profile.image_decode[i];
+
+        if (acc->count > 0) {
+            uart_debug_printf(
+                "PERF_IMG_SRC page=%s name=%s n=%u us=%llu max=%u bytes=%llu\n",
+                g_profile.page_name, acc->name, acc->count,
+                (unsigned long long)acc->total_us, acc->max_us,
+                (unsigned long long)acc->decoded_bytes);
+        }
+    }
     for (uint32_t i = 0; i < PERF_PROFILE_INV_WATCH_CAPACITY; i++) {
         const perf_profile_inv_watch_t *watch = &g_inv_watch[i];
 

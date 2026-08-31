@@ -3,7 +3,7 @@
 
 #define LV_USE_PERF_MONITOR         0
 #define LV_COLOR_DEPTH              32
-#define LV_IMG_CACHE_DEF_SIZE 12
+#define LV_IMG_CACHE_DEF_SIZE 16
 #define LV_USE_MEM_MONITOR 0
 #define LV_INDEV_DEF_READ_PERIOD 10
 #define LV_DISP_DEF_REFR_PERIOD 10
