@@ -14,7 +14,10 @@ TSCALIB=/etc/pointercal
 CPUFREQ_GOVERNOR=/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
 CPUFREQ_SAVED=/var/run/test_lvgl.cpufreq_governor
 UI_CPU_GOVERNOR=performance
-REQUIRED_DEVICES="/dev/fb0 /dev/ge /dev/input/event0 /dev/ttyS4 /dev/ttyS5 /dev/ttyS6"
+REQUIRED_DEVICES="/dev/fb0 /dev/ge /dev/ttyS4 /dev/ttyS5 /dev/ttyS6"
+TOUCH_MODULE_NAME=gt9xx_core
+TOUCH_MODULE_FILE="/lib/modules/$(uname -r)/kernel/drivers/input/touchscreen/gt9xx/gt9xx_core.ko"
+TOUCH_DEVICE=""
 
 cpu_performance_enter() {
       [ -r "$CPUFREQ_GOVERNOR" ] || return 0
@@ -48,6 +51,9 @@ wait_required_devices() {
           for device in $REQUIRED_DEVICES; do
               [ -e "$device" ] || missing_devices="$missing_devices $device"
           done
+          if ! find_touch_device; then
+              missing_devices="$missing_devices touchscreen"
+          fi
           if [ -z "$missing_devices" ]; then
               return 0
           fi
@@ -57,6 +63,41 @@ wait_required_devices() {
       done
 
       echo "UI device readiness timeout; missing:$missing_devices"
+      return 1
+}
+
+load_touch_driver() {
+      if grep -q "^${TOUCH_MODULE_NAME} " /proc/modules 2>/dev/null; then
+          return 0
+      fi
+
+      if modprobe "$TOUCH_MODULE_NAME" 2>/dev/null; then
+          return 0
+      fi
+
+      if [ -f "$TOUCH_MODULE_FILE" ] && insmod "$TOUCH_MODULE_FILE" 2>/dev/null; then
+          return 0
+      fi
+
+      echo "touch module unavailable: $TOUCH_MODULE_NAME ($TOUCH_MODULE_FILE)"
+      return 1
+}
+
+find_touch_device() {
+      for event_path in /sys/class/input/event*; do
+          [ -r "$event_path/device/name" ] || continue
+          input_name=$(cat "$event_path/device/name" 2>/dev/null)
+          case "$input_name" in
+              goodix-ts|*goodix*|*Goodix*|*touch*|*Touch*)
+                  candidate="/dev/input/${event_path##*/}"
+                  if [ -c "$candidate" ]; then
+                      TOUCH_DEVICE="$candidate"
+                      return 0
+                  fi
+                  ;;
+          esac
+      done
+
       return 1
 }
 
@@ -95,9 +136,12 @@ start() {
       fi
 
       printf "Load touch driver: "
-      cd /lib/modules/5.10.44/kernel/drivers/input/touchscreen/gt9xx/
-      modprobe gt9xx_core.ko
-      cd -
+      if load_touch_driver; then
+          echo "OK"
+      else
+          echo "driver load failed; waiting for an existing input device"
+      fi
+      mdev -s 2>/dev/null || true
 
       if ! wait_required_devices; then
           printf "Starting test_lvgl: Fail (device readiness timeout, log=%s)\n" "$STARTUP_LOG"
@@ -109,8 +153,11 @@ start() {
       export TSLIB_FBDEVICE=/dev/fb0
       export POINTERCAL_CALIBFILE=$TSCALIB
       export TSLIB_CONSOLEDEVICE=none
-      export TSLIB_TSDEVICE=/dev/input/event0
+      export TSLIB_TSDEVICE="$TOUCH_DEVICE"
+      export LVGL_EVDEV_DEVICE="$TOUCH_DEVICE"
       export TSLIB_PLUGINDIR=/usr/lib/ts
+
+      echo "Touch input: $TOUCH_DEVICE"
 
       if [ ! -f "$TSCALIB" ]; then
           /usr/bin/ts_calibrate

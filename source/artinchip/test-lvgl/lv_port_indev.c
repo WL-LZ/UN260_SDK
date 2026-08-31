@@ -8,10 +8,12 @@
 #include "lvgl/lvgl.h"
 #if USE_EVDEV != 0 || USE_BSD_EVDEV
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdbool.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #if USE_BSD_EVDEV
 #include <dev/evdev/input.h>
 #else
@@ -28,7 +30,7 @@ struct tsdev *ts;
 #endif /* USE_TSLIB */
 
 
-bool evdev_set_file(char* dev_name);
+bool evdev_set_file(const char* dev_name);
 int map(int x, int in_min, int in_max, int out_min, int out_max);
 
 /**********************
@@ -57,6 +59,66 @@ typedef struct {
 
 static evdev_mt_slot_t g_mt_slots[EVDEV_MT_SLOT_COUNT];
 static int g_mt_slot;
+
+static bool evdev_is_touch_device(const char *dev_name)
+{
+    struct input_absinfo abs_info;
+    char input_name[64] = {0};
+    int fd;
+    bool has_x;
+    bool has_y;
+
+    fd = open(dev_name, O_RDONLY | O_NOCTTY | O_NONBLOCK);
+    if(fd < 0)
+        return false;
+
+    (void)ioctl(fd, EVIOCGNAME(sizeof(input_name)), input_name);
+    has_x = ioctl(fd, EVIOCGABS(ABS_MT_POSITION_X), &abs_info) == 0 ||
+            ioctl(fd, EVIOCGABS(ABS_X), &abs_info) == 0;
+    has_y = ioctl(fd, EVIOCGABS(ABS_MT_POSITION_Y), &abs_info) == 0 ||
+            ioctl(fd, EVIOCGABS(ABS_Y), &abs_info) == 0;
+    close(fd);
+
+    if(strstr(input_name, "goodix") != NULL || strstr(input_name, "touch") != NULL)
+        return true;
+
+    return has_x && has_y;
+}
+
+static bool evdev_open_runtime_device(void)
+{
+    const char *runtime_name = getenv("LVGL_EVDEV_DEVICE");
+    char candidate[32];
+    int index;
+
+    if(runtime_name == NULL || runtime_name[0] == '\0')
+        runtime_name = getenv("TSLIB_TSDEVICE");
+
+    if(runtime_name != NULL && runtime_name[0] != '\0' &&
+       evdev_set_file(runtime_name)) {
+        fprintf(stderr, "evdev input: %s (runtime)\n", runtime_name);
+        return true;
+    }
+
+    if((runtime_name == NULL || strcmp(runtime_name, EVDEV_NAME) != 0) &&
+       evdev_set_file(EVDEV_NAME)) {
+        fprintf(stderr, "evdev input: %s (configured fallback)\n", EVDEV_NAME);
+        return true;
+    }
+
+    for(index = 0; index < 16; index++) {
+        snprintf(candidate, sizeof(candidate), "/dev/input/event%d", index);
+        if(!evdev_is_touch_device(candidate))
+            continue;
+        if(evdev_set_file(candidate)) {
+            fprintf(stderr, "evdev input: %s (auto detected)\n", candidate);
+            return true;
+        }
+    }
+
+    fprintf(stderr, "evdev input: no usable touchscreen device found\n");
+    return false;
+}
 
 /**********************
  *      MACROS
@@ -124,7 +186,7 @@ void lv_port_indev_set_drag_obj(lv_obj_t *obj, bool enable)
  */
 void evdev_init(void)
 {
-    if (!evdev_set_file(EVDEV_NAME)) {
+    if (!evdev_open_runtime_device()) {
         return;
     }
 
@@ -138,7 +200,7 @@ void evdev_init(void)
  * @return true: the device file set complete
  *         false: the device file doesn't exist current system
  */
-bool evdev_set_file(char* dev_name)
+bool evdev_set_file(const char* dev_name)
 {
      if(evdev_fd != -1) {
         close(evdev_fd);
