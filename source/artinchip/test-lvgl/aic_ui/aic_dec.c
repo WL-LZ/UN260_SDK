@@ -18,6 +18,7 @@
 #include "dma_allocator.h"
 #include "aic_dec.h"
 #include "aic_ui.h"
+#include "lv_ge2d.h"
 #include "aic_ui/perf_stats.h"
 #include "un260/lv_system/app_clock.h"
 
@@ -489,6 +490,7 @@ static void aic_decoder_close(lv_img_decoder_t * decoder, lv_img_decoder_dsc_t *
 {
     if (dsc->img_data) {
         struct mpp_frame *alloc_frame = (struct mpp_frame *)dsc->img_data;
+        lv_ge2d_scaled_cache_drop_source(alloc_frame);
         mpp_buf_free(&alloc_frame->buf);
         free(alloc_frame);
         dsc->img_data = NULL;

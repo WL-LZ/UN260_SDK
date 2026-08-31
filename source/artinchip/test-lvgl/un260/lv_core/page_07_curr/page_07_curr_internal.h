@@ -9,19 +9,26 @@
 
 #define PAGE07_CURR_MAX_ITEMS MAX_CURRENCIES
 
+typedef struct lv_dma_snapshot lv_dma_snapshot_t;
+
 typedef enum {
     PAGE07_CURR_VIEW_CARD = 0,
     PAGE07_CURR_VIEW_GRID,
 } page07_curr_view_mode_t;
 
 typedef struct {
+    lv_obj_t *render_root;
     lv_obj_t *background;
+    lv_obj_t *visual_card;
+    lv_obj_t *composite;
     lv_obj_t *card;
     lv_obj_t *img;
     lv_obj_t *name;
     lv_obj_t *no;
     lv_obj_t *fav_btn;
     lv_obj_t *fav_icon;
+    lv_dma_snapshot_t *unselected_cache;
+    lv_dma_snapshot_t *selected_cache;
     int base_x;
     int base_y;
     int abs_idx;

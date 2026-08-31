@@ -1,0 +1,344 @@
+#include "un260/lv_components/lv_dma_snapshot_cache.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "dma_allocator.h"
+#include "aic_ui/perf_stats.h"
+#include "lv_ge2d.h"
+#include "lvgl/src/extra/others/snapshot/lv_snapshot.h"
+
+#define DMA_SNAPSHOT_MAX_TOTAL_BYTES (4U * 1024U * 1024U)
+#define DMA_SNAPSHOT_NAME_LEN 48U
+#define DMA_SNAPSHOT_CACHE_CAPACITY 32U
+
+struct lv_dma_snapshot {
+    lv_img_dsc_t image;
+    struct mpp_frame frame;
+    uint32_t bytes;
+    uint32_t last_used_tick;
+    uint16_t references;
+    int16_t cache_slot;
+    char name[DMA_SNAPSHOT_NAME_LEN];
+};
+
+static int g_dma_snapshot_device = -1;
+static uint32_t g_dma_snapshot_total_bytes;
+static lv_dma_snapshot_t *g_dma_snapshot_cache[DMA_SNAPSHOT_CACHE_CAPACITY];
+
+static void snapshot_destroy_storage(lv_dma_snapshot_t *snapshot);
+
+static int snapshot_cache_find_key(const char *cache_key)
+{
+    if (cache_key == NULL || cache_key[0] == '\0') return -1;
+
+    for (uint32_t i = 0; i < DMA_SNAPSHOT_CACHE_CAPACITY; i++) {
+        lv_dma_snapshot_t *snapshot = g_dma_snapshot_cache[i];
+
+        if (snapshot != NULL && strcmp(snapshot->name, cache_key) == 0) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+static int snapshot_cache_find_free_slot(void)
+{
+    for (uint32_t i = 0; i < DMA_SNAPSHOT_CACHE_CAPACITY; i++) {
+        if (g_dma_snapshot_cache[i] == NULL) return (int)i;
+    }
+    return -1;
+}
+
+static int snapshot_cache_find_lru_unused(void)
+{
+    int victim = -1;
+    uint32_t oldest_age = 0;
+
+    for (uint32_t i = 0; i < DMA_SNAPSHOT_CACHE_CAPACITY; i++) {
+        lv_dma_snapshot_t *snapshot = g_dma_snapshot_cache[i];
+        uint32_t age;
+
+        if (snapshot == NULL || snapshot->references != 0) continue;
+        age = lv_tick_elaps(snapshot->last_used_tick);
+        if (victim < 0 || age >= oldest_age) {
+            victim = (int)i;
+            oldest_age = age;
+        }
+    }
+    return victim;
+}
+
+static bool snapshot_cache_evict_one(void)
+{
+    int slot = snapshot_cache_find_lru_unused();
+    lv_dma_snapshot_t *snapshot;
+
+    if (slot < 0) return false;
+    snapshot = g_dma_snapshot_cache[slot];
+    g_dma_snapshot_cache[slot] = NULL;
+    snapshot->cache_slot = -1;
+    if (perf_profile_is_enabled()) {
+        printf("DMA_SNAPSHOT evict name=%s bytes=%u total_before=%u\n",
+               snapshot->name, snapshot->bytes, g_dma_snapshot_total_bytes);
+    }
+    snapshot_destroy_storage(snapshot);
+    return true;
+}
+
+static bool snapshot_cache_reserve(uint32_t bytes)
+{
+    while (g_dma_snapshot_total_bytes + bytes >
+           DMA_SNAPSHOT_MAX_TOTAL_BYTES) {
+        if (!snapshot_cache_evict_one()) return false;
+    }
+
+    while (snapshot_cache_find_free_slot() < 0) {
+        if (!snapshot_cache_evict_one()) return false;
+    }
+    return true;
+}
+
+static void snapshot_release_frame(lv_dma_snapshot_t *snapshot)
+{
+    if (snapshot == NULL || snapshot->frame.buf.fd[0] < 0) return;
+
+    mpp_buf_free(&snapshot->frame.buf);
+    snapshot->frame.buf.fd[0] = -1;
+}
+
+lv_dma_snapshot_t *lv_dma_snapshot_create(lv_obj_t *obj,
+                                          const char *debug_name)
+{
+    lv_dma_snapshot_t *snapshot = NULL;
+    lv_img_dsc_t cpu_image;
+    unsigned char *cpu_pixels = NULL;
+    unsigned char *dma_pixels = NULL;
+    uint32_t cpu_bytes;
+    uint32_t row_bytes;
+    uint32_t stride;
+    uint32_t dma_bytes;
+    bool capture_ok;
+
+    if (obj == NULL || !lv_obj_is_valid(obj)) return NULL;
+
+    cpu_bytes = lv_snapshot_buf_size_needed(obj,
+                                            LV_IMG_CF_TRUE_COLOR_ALPHA);
+    if (cpu_bytes == 0) return NULL;
+
+    cpu_pixels = lv_mem_alloc(cpu_bytes);
+    if (cpu_pixels == NULL) return NULL;
+
+    lv_ge2d_offscreen_capture_begin();
+    if (lv_snapshot_take_to_buf(obj, LV_IMG_CF_TRUE_COLOR_ALPHA,
+                                &cpu_image, cpu_pixels,
+                                cpu_bytes) != LV_RES_OK) {
+        (void)lv_ge2d_offscreen_capture_end();
+        lv_mem_free(cpu_pixels);
+        return NULL;
+    }
+    capture_ok = lv_ge2d_offscreen_capture_end();
+    if (!capture_ok || cpu_image.header.w <= 0 || cpu_image.header.h <= 0) {
+        lv_mem_free(cpu_pixels);
+        return NULL;
+    }
+
+    row_bytes = (uint32_t)cpu_image.header.w * 4U;
+    stride = (row_bytes + 15U) & ~15U;
+    dma_bytes = stride * (uint32_t)cpu_image.header.h;
+    if (dma_bytes == 0 || !snapshot_cache_reserve(dma_bytes)) {
+        lv_mem_free(cpu_pixels);
+        return NULL;
+    }
+
+    if (g_dma_snapshot_device < 0) {
+        g_dma_snapshot_device = dmabuf_device_open();
+        if (g_dma_snapshot_device < 0) {
+            lv_mem_free(cpu_pixels);
+            return NULL;
+        }
+    }
+
+    snapshot = calloc(1, sizeof(*snapshot));
+    if (snapshot == NULL) {
+        lv_mem_free(cpu_pixels);
+        return NULL;
+    }
+    snapshot->frame.buf.fd[0] = -1;
+    snapshot->cache_slot = -1;
+    snapshot->frame.buf.size.width = cpu_image.header.w;
+    snapshot->frame.buf.size.height = cpu_image.header.h;
+    snapshot->frame.buf.stride[0] = stride;
+    snapshot->frame.buf.format = MPP_FMT_ARGB_8888;
+    if (mpp_buf_alloc(g_dma_snapshot_device, &snapshot->frame.buf) < 0) {
+        free(snapshot);
+        lv_mem_free(cpu_pixels);
+        return NULL;
+    }
+
+    dma_pixels = dmabuf_mmap(snapshot->frame.buf.fd[0], (int)dma_bytes);
+    if (dma_pixels == NULL) {
+        snapshot_release_frame(snapshot);
+        free(snapshot);
+        lv_mem_free(cpu_pixels);
+        return NULL;
+    }
+
+    for (int y = 0; y < cpu_image.header.h; y++) {
+        memcpy(dma_pixels + (uint32_t)y * stride,
+               cpu_pixels + (uint32_t)y * row_bytes, row_bytes);
+        if (stride > row_bytes) {
+            memset(dma_pixels + (uint32_t)y * stride + row_bytes, 0,
+                   stride - row_bytes);
+        }
+    }
+    dmabuf_sync(snapshot->frame.buf.fd[0], CACHE_CLEAN);
+    dmabuf_munmap(dma_pixels, (int)dma_bytes);
+    lv_mem_free(cpu_pixels);
+
+    snapshot->bytes = dma_bytes;
+    snapshot->last_used_tick = lv_tick_get();
+    if (debug_name != NULL) {
+        snprintf(snapshot->name, sizeof(snapshot->name), "%s", debug_name);
+    } else {
+        snprintf(snapshot->name, sizeof(snapshot->name), "DMA_SNAPSHOT");
+    }
+
+    snapshot->image.header.always_zero = 0;
+    snapshot->image.header.w = cpu_image.header.w;
+    snapshot->image.header.h = cpu_image.header.h;
+    snapshot->image.header.cf = LV_IMG_CF_TRUE_COLOR_ALPHA;
+    snapshot->image.data_size = dma_bytes;
+    snapshot->image.data = (const uint8_t *)snapshot;
+
+    if (!lv_ge2d_register_dma_image(snapshot->image.data,
+                                    &snapshot->frame,
+                                    snapshot->name)) {
+        snapshot_release_frame(snapshot);
+        free(snapshot);
+        return NULL;
+    }
+
+    g_dma_snapshot_total_bytes += dma_bytes;
+    if (perf_profile_is_enabled()) {
+        printf("DMA_SNAPSHOT create name=%s size=%dx%d bytes=%u total=%u\n",
+               snapshot->name, snapshot->image.header.w,
+               snapshot->image.header.h, snapshot->bytes,
+               g_dma_snapshot_total_bytes);
+    }
+    return snapshot;
+}
+
+static void snapshot_destroy_storage(lv_dma_snapshot_t *snapshot)
+{
+    if (snapshot == NULL) return;
+
+    lv_ge2d_unregister_dma_image(snapshot->image.data);
+    snapshot_release_frame(snapshot);
+    if (g_dma_snapshot_total_bytes >= snapshot->bytes) {
+        g_dma_snapshot_total_bytes -= snapshot->bytes;
+    } else {
+        g_dma_snapshot_total_bytes = 0;
+    }
+    free(snapshot);
+}
+
+void lv_dma_snapshot_destroy(lv_dma_snapshot_t *snapshot)
+{
+    if (snapshot == NULL) return;
+
+    if (snapshot->cache_slot >= 0 &&
+        snapshot->cache_slot < (int)DMA_SNAPSHOT_CACHE_CAPACITY &&
+        g_dma_snapshot_cache[snapshot->cache_slot] == snapshot) {
+        g_dma_snapshot_cache[snapshot->cache_slot] = NULL;
+    }
+    snapshot->cache_slot = -1;
+    snapshot_destroy_storage(snapshot);
+}
+
+lv_dma_snapshot_t *lv_dma_snapshot_cache_acquire(const char *cache_key)
+{
+    int slot = snapshot_cache_find_key(cache_key);
+    lv_dma_snapshot_t *snapshot;
+
+    if (slot < 0) return NULL;
+    snapshot = g_dma_snapshot_cache[slot];
+    if (snapshot->references < UINT16_MAX) snapshot->references++;
+    snapshot->last_used_tick = lv_tick_get();
+    if (perf_profile_is_enabled()) {
+        printf("DMA_SNAPSHOT hit name=%s refs=%u total=%u\n",
+               snapshot->name, snapshot->references,
+               g_dma_snapshot_total_bytes);
+    }
+    return snapshot;
+}
+
+lv_dma_snapshot_t *lv_dma_snapshot_cache_acquire_or_create(
+    lv_obj_t *obj, const char *cache_key)
+{
+    lv_dma_snapshot_t *snapshot;
+    int slot;
+
+    snapshot = lv_dma_snapshot_cache_acquire(cache_key);
+    if (snapshot != NULL) return snapshot;
+
+    snapshot = lv_dma_snapshot_create(obj, cache_key);
+    if (snapshot == NULL) return NULL;
+
+    slot = snapshot_cache_find_free_slot();
+    if (slot < 0) {
+        lv_dma_snapshot_destroy(snapshot);
+        return NULL;
+    }
+    snapshot->cache_slot = (int16_t)slot;
+    snapshot->references = 1;
+    snapshot->last_used_tick = lv_tick_get();
+    g_dma_snapshot_cache[slot] = snapshot;
+    return snapshot;
+}
+
+void lv_dma_snapshot_cache_release(lv_dma_snapshot_t *snapshot)
+{
+    if (snapshot == NULL) return;
+    if (snapshot->cache_slot < 0 ||
+        snapshot->cache_slot >= (int)DMA_SNAPSHOT_CACHE_CAPACITY ||
+        g_dma_snapshot_cache[snapshot->cache_slot] != snapshot) {
+        lv_dma_snapshot_destroy(snapshot);
+        return;
+    }
+
+    if (snapshot->references > 0) snapshot->references--;
+    snapshot->last_used_tick = lv_tick_get();
+}
+
+void lv_dma_snapshot_cache_trim(void)
+{
+    while (snapshot_cache_evict_one()) {
+    }
+}
+
+uint32_t lv_dma_snapshot_cache_item_count(void)
+{
+    uint32_t count = 0;
+
+    for (uint32_t i = 0; i < DMA_SNAPSHOT_CACHE_CAPACITY; i++) {
+        if (g_dma_snapshot_cache[i] != NULL) count++;
+    }
+    return count;
+}
+
+const lv_img_dsc_t *lv_dma_snapshot_image(const lv_dma_snapshot_t *snapshot)
+{
+    return snapshot != NULL ? &snapshot->image : NULL;
+}
+
+uint32_t lv_dma_snapshot_size(const lv_dma_snapshot_t *snapshot)
+{
+    return snapshot != NULL ? snapshot->bytes : 0;
+}
+
+uint32_t lv_dma_snapshot_total_size(void)
+{
+    return g_dma_snapshot_total_bytes;
+}

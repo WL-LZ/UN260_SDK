@@ -2,9 +2,11 @@
 #include "un260/lv_core/page_07_curr/page_07_curr_internal.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "un260/lv_components/lv_components.h"
+#include "un260/lv_components/lv_dma_snapshot_cache.h"
 #include "un260/lv_components/smart_island.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/page_01_main.h"
@@ -28,6 +30,9 @@ static lv_obj_t* curr_page = NULL;
 static currency_state_snapshot_t g_curr_page_snapshot;
 static bool g_curr_page_snapshot_valid;
 static char g_curr_page_selected_code[4];
+static lv_timer_t *g_curr_snapshot_prewarm_timer;
+
+static void curr_snapshot_prewarm_timer_cb(lv_timer_t *timer);
 
 ui_element_t page_07_curr_obj[] = {
     // 背景图
@@ -104,11 +109,19 @@ void ui_page_07_curr_create(lv_obj_t* parent)
     lv_obj_set_scrollbar_mode(curr_page, LV_SCROLLBAR_MODE_OFF);
     lv_ui_obj_init(curr_page, page_07_curr_obj, page_07_curr_len);
     page_07_curr_img_refre();
+    if (g_curr_snapshot_prewarm_timer == NULL) {
+        g_curr_snapshot_prewarm_timer =
+            lv_timer_create(curr_snapshot_prewarm_timer_cb, 120, NULL);
+    }
 
 };
 
 void ui_page_07_curr_destroy(void)
 {
+    if (g_curr_snapshot_prewarm_timer != NULL) {
+        lv_timer_del(g_curr_snapshot_prewarm_timer);
+        g_curr_snapshot_prewarm_timer = NULL;
+    }
     if (curr_page)
     {
         page_07_curr_img_reset();
@@ -135,6 +148,18 @@ void ui_page_07_curr_destroy(void)
 #define CURR_CARD_PAD_RIGHT      580
 #define CURR_SEL_NEXT_EXTRA_GAP  10
 #define CURR_LEFT_PEEK_W         ((CURR_CARD_W * 2) / 3)
+
+/* The selected card renderer includes its shadow/background padding and is
+ * taller than the interactive card itself.  Keep the scroll invalidation
+ * layer only as tall as that real visual footprint; the progress track below
+ * is a sibling and must not make every horizontal drag repaint empty rows. */
+#define CURR_CARD_SELECTED_RENDER_W 256
+#define CURR_CARD_SELECTED_RENDER_H 328
+#define CURR_CARD_SELECTED_RENDER_Y \
+    (CURR_CARD_Y - (CURR_CARD_SEL_H - CURR_CARD_H) / 2 - \
+     CURR_CARD_SELECTED_BG_OFS_TOP)
+#define CURR_CARD_SCROLL_H       \
+    (CURR_CARD_SELECTED_RENDER_Y + CURR_CARD_SELECTED_RENDER_H + 1)
 
 #define CURR_TRACK_Y             365
 #define CURR_TRACK_H             6
@@ -233,6 +258,8 @@ static int g_curr_grid_styled_abs_idx = -1;
 
 static void curr_refresh_right_views(void);
 static void curr_apply_selected_style(void);
+static void curr_apply_card_visual(int i, bool selected,
+                                   int pos_x, int pos_y);
 static void curr_style_back_button(void);
 static int curr_abs_i32(int v)
 {
@@ -863,6 +890,199 @@ static void curr_fav_press_feedback_cb(lv_event_t* e)
     }
 }
 
+static void curr_set_card_render_state(int i, bool selected,
+                                       int pos_x, int pos_y)
+{
+    page07_curr_card_t *card;
+
+    if (i < 0 || i >= g_page07_curr.model.visible_count) return;
+    card = &g_page07_curr.cards[i];
+    if (card->render_root == NULL || card->background == NULL ||
+        card->visual_card == NULL) return;
+
+    if (selected) {
+        lv_obj_set_size(card->render_root,
+                        CURR_CARD_SELECTED_RENDER_W,
+                        CURR_CARD_SELECTED_RENDER_H);
+        lv_obj_set_pos(card->render_root,
+                       pos_x - (CURR_CARD_SEL_W - CURR_CARD_W) / 2 -
+                           CURR_CARD_SELECTED_BG_OFS_X,
+                       pos_y - (CURR_CARD_SEL_H - CURR_CARD_H) / 2 -
+                           CURR_CARD_SELECTED_BG_OFS_TOP);
+        lv_img_set_src(card->background, CURR_CARD_SELECTED_BG_PATH);
+        lv_img_set_zoom(card->background, LV_IMG_ZOOM_NONE);
+        lv_obj_set_pos(card->background, 0, 0);
+        lv_obj_set_size(card->visual_card, CURR_CARD_SEL_W,
+                        CURR_CARD_SEL_H);
+        lv_obj_set_pos(card->visual_card,
+                       CURR_CARD_SELECTED_BG_OFS_X,
+                       CURR_CARD_SELECTED_BG_OFS_TOP);
+        lv_obj_set_style_text_color(card->name,
+                                    lv_color_hex(CURR_TEXT_SEL), 0);
+        lv_obj_set_style_text_color(card->no, lv_color_hex(0x202020), 0);
+        curr_set_image_selected_style(card->img);
+    } else {
+        lv_obj_set_size(card->render_root, CURR_CARD_W, CURR_CARD_H);
+        lv_obj_set_pos(card->render_root, pos_x, pos_y);
+        lv_img_set_src(card->background, CURR_CARD_UNSELECTED_BG_PATH);
+        curr_set_path_target_width(card->background,
+                                   CURR_CARD_UNSELECTED_BG_PATH,
+                                   CURR_CARD_W);
+        lv_obj_set_pos(card->background, 0, 0);
+        lv_obj_set_size(card->visual_card, CURR_CARD_W, CURR_CARD_H);
+        lv_obj_set_pos(card->visual_card, 0, 0);
+        lv_obj_set_style_text_color(card->name, lv_color_hex(0x7E7E7E), 0);
+        lv_obj_set_style_text_color(card->no,
+                                    lv_color_hex(CURR_TEXT_UNSEL), 0);
+        curr_set_image_unselected_style(card->img);
+    }
+}
+
+static bool curr_card_snapshot_key(int i, bool selected,
+                                   char key[48])
+{
+    page07_curr_card_t *card;
+    char curr_code[4];
+
+    if (i < 0 || i >= g_page07_curr.model.visible_count || key == NULL) {
+        return false;
+    }
+    card = &g_page07_curr.cards[i];
+    if (!currency_state_get_code((uint8_t)card->abs_idx, curr_code)) {
+        return false;
+    }
+
+    /* The sequence number is rendered into the card. Keep it in the visual
+     * identity so a controller-provided catalog reorder cannot reuse a stale
+     * NO.xx image for the same currency code. */
+    snprintf(key, 48, "CURR_CARD_%s_%02d_%s", curr_code,
+             card->abs_idx + 1, selected ? "SELECTED" : "NORMAL");
+    return true;
+}
+
+static bool curr_acquire_card_snapshot(int i, bool selected,
+                                       bool create_on_miss)
+{
+    page07_curr_card_t *card;
+    lv_dma_snapshot_t **target;
+    char cache_key[48];
+
+    if (i < 0 || i >= g_page07_curr.model.visible_count) return false;
+    card = &g_page07_curr.cards[i];
+    if (card->render_root == NULL ||
+        !curr_card_snapshot_key(i, selected, cache_key)) {
+        return false;
+    }
+
+    target = selected ? &card->selected_cache :
+                        &card->unselected_cache;
+    if (*target != NULL) return true;
+
+    if (create_on_miss) {
+        curr_set_card_render_state(i, selected,
+                                   card->base_x, card->base_y);
+        *target = lv_dma_snapshot_cache_acquire_or_create(
+            card->render_root, cache_key);
+    } else {
+        *target = lv_dma_snapshot_cache_acquire(cache_key);
+    }
+    return *target != NULL;
+}
+
+static void curr_attach_cached_card_snapshots(int i)
+{
+    (void)curr_acquire_card_snapshot(i, false, false);
+    (void)curr_acquire_card_snapshot(i, true, false);
+}
+
+static bool curr_build_one_missing_card_snapshot(void)
+{
+    for (int i = 0; i < g_page07_curr.model.visible_count; i++) {
+        page07_curr_card_t *card = &g_page07_curr.cards[i];
+        bool selected;
+        int pos_x;
+
+        if (card->render_root == NULL) continue;
+        if (card->unselected_cache != NULL &&
+            card->selected_cache != NULL) {
+            continue;
+        }
+
+        selected = i == g_page07_curr.model.selected_visible_idx;
+        pos_x = card->base_x;
+        if (i > g_page07_curr.model.selected_visible_idx) {
+            pos_x += CURR_SEL_NEXT_EXTRA_GAP;
+        }
+
+        if (card->unselected_cache == NULL) {
+            (void)curr_acquire_card_snapshot(i, false, true);
+        } else {
+            (void)curr_acquire_card_snapshot(i, true, true);
+        }
+
+        /* Snapshot capture temporarily changes the hidden live renderer.
+         * Restore exactly the visual state that the cached page expects. */
+        curr_apply_card_visual(i, selected, pos_x, card->base_y);
+        return true;
+    }
+
+    return false;
+}
+
+static void curr_release_card_snapshots(void)
+{
+    for (int i = 0; i < PAGE07_CURR_MAX_ITEMS; i++) {
+        lv_dma_snapshot_cache_release(
+            g_page07_curr.cards[i].unselected_cache);
+        lv_dma_snapshot_cache_release(
+            g_page07_curr.cards[i].selected_cache);
+        g_page07_curr.cards[i].unselected_cache = NULL;
+        g_page07_curr.cards[i].selected_cache = NULL;
+    }
+}
+
+static void curr_apply_card_visual(int i, bool selected,
+                                   int pos_x, int pos_y)
+{
+    page07_curr_card_t *card = &g_page07_curr.cards[i];
+    lv_dma_snapshot_t *snapshot = selected ? card->selected_cache
+                                           : card->unselected_cache;
+
+    if (snapshot != NULL && card->composite != NULL) {
+        const lv_img_dsc_t *image = lv_dma_snapshot_image(snapshot);
+
+        lv_obj_add_flag(card->render_root, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(card->composite, LV_OBJ_FLAG_HIDDEN);
+        lv_img_set_src(card->composite, image);
+        lv_img_set_zoom(card->composite, LV_IMG_ZOOM_NONE);
+        if (selected) {
+            lv_obj_set_pos(card->composite,
+                           pos_x - (CURR_CARD_SEL_W - CURR_CARD_W) / 2 -
+                               CURR_CARD_SELECTED_BG_OFS_X,
+                           pos_y - (CURR_CARD_SEL_H - CURR_CARD_H) / 2 -
+                               CURR_CARD_SELECTED_BG_OFS_TOP);
+        } else {
+            lv_obj_set_pos(card->composite, pos_x, pos_y);
+        }
+    } else {
+        if (card->composite != NULL) {
+            lv_obj_add_flag(card->composite, LV_OBJ_FLAG_HIDDEN);
+        }
+        lv_obj_clear_flag(card->render_root, LV_OBJ_FLAG_HIDDEN);
+        curr_set_card_render_state(i, selected, pos_x, pos_y);
+    }
+
+    if (selected) {
+        lv_obj_set_size(card->card, CURR_CARD_SEL_W, CURR_CARD_SEL_H);
+        lv_obj_set_pos(card->card,
+                       pos_x - (CURR_CARD_SEL_W - CURR_CARD_W) / 2,
+                       pos_y - (CURR_CARD_SEL_H - CURR_CARD_H) / 2);
+    } else {
+        lv_obj_set_size(card->card, CURR_CARD_W, CURR_CARD_H);
+        lv_obj_set_pos(card->card, pos_x, pos_y);
+    }
+}
+
 static void curr_apply_selected_style(void)
 {
     bool selection_changed;
@@ -895,48 +1115,7 @@ static void curr_apply_selected_style(void)
             continue;
         }
 
-        if (sel) {
-            if (g_page07_curr.cards[i].background) {
-                lv_img_set_src(g_page07_curr.cards[i].background,
-                               CURR_CARD_SELECTED_BG_PATH);
-                lv_img_set_zoom(g_page07_curr.cards[i].background,
-                                LV_IMG_ZOOM_NONE);
-                lv_obj_set_pos(g_page07_curr.cards[i].background,
-                               pos_x - (CURR_CARD_SEL_W - CURR_CARD_W) / 2 - CURR_CARD_SELECTED_BG_OFS_X,
-                               pos_y - (CURR_CARD_SEL_H - CURR_CARD_H) / 2 - CURR_CARD_SELECTED_BG_OFS_TOP);
-            }
-
-            lv_obj_set_size(g_page07_curr.cards[i].card, CURR_CARD_SEL_W, CURR_CARD_SEL_H);
-            lv_obj_set_pos(g_page07_curr.cards[i].card,
-                           pos_x - (CURR_CARD_SEL_W - CURR_CARD_W) / 2,
-                           pos_y - (CURR_CARD_SEL_H - CURR_CARD_H) / 2);
-            lv_obj_set_style_bg_opa(g_page07_curr.cards[i].card, LV_OPA_TRANSP, 0);
-            lv_obj_set_style_border_width(g_page07_curr.cards[i].card, 0, 0);
-            lv_obj_set_style_shadow_width(g_page07_curr.cards[i].card, 0, 0);
-            lv_obj_set_style_shadow_opa(g_page07_curr.cards[i].card, LV_OPA_0, 0);
-            lv_obj_set_style_text_color(g_page07_curr.cards[i].name, lv_color_hex(CURR_TEXT_SEL), 0);
-            lv_obj_set_style_text_color(g_page07_curr.cards[i].no, lv_color_hex(0x202020), 0);
-            curr_set_image_selected_style(g_page07_curr.cards[i].img);
-        } else {
-            if (g_page07_curr.cards[i].background) {
-                lv_img_set_src(g_page07_curr.cards[i].background,
-                               CURR_CARD_UNSELECTED_BG_PATH);
-                curr_set_path_target_width(g_page07_curr.cards[i].background,
-                                           CURR_CARD_UNSELECTED_BG_PATH,
-                                           CURR_CARD_W);
-                lv_obj_set_pos(g_page07_curr.cards[i].background, pos_x, pos_y);
-            }
-
-            lv_obj_set_size(g_page07_curr.cards[i].card, CURR_CARD_W, CURR_CARD_H);
-            lv_obj_set_pos(g_page07_curr.cards[i].card, pos_x, pos_y);
-            lv_obj_set_style_bg_opa(g_page07_curr.cards[i].card, LV_OPA_TRANSP, 0);
-            lv_obj_set_style_border_width(g_page07_curr.cards[i].card, 0, 0);
-            lv_obj_set_style_shadow_width(g_page07_curr.cards[i].card, 0, 0);
-            lv_obj_set_style_shadow_opa(g_page07_curr.cards[i].card, LV_OPA_0, 0);
-            lv_obj_set_style_text_color(g_page07_curr.cards[i].name, lv_color_hex(0x7E7E7E), 0);
-            lv_obj_set_style_text_color(g_page07_curr.cards[i].no, lv_color_hex(CURR_TEXT_UNSEL), 0);
-            curr_set_image_unselected_style(g_page07_curr.cards[i].img);
-        }
+        curr_apply_card_visual(i, sel, pos_x, pos_y);
 
         curr_update_card_fav_ui(i);
     }
@@ -1127,7 +1306,8 @@ static void curr_build_card_layer(void)
 
     g_page07_curr.objects.list = lv_obj_create(g_page07_curr.objects.card_layer);
     lv_obj_remove_style_all(g_page07_curr.objects.list);
-    lv_obj_set_size(g_page07_curr.objects.list, CURR_VIEW_W, CURR_TRACK_Y);
+    lv_obj_set_size(g_page07_curr.objects.list,
+                    CURR_VIEW_W, CURR_CARD_SCROLL_H);
     lv_obj_set_pos(g_page07_curr.objects.list, 0, 0);
     lv_obj_set_style_bg_opa(g_page07_curr.objects.list, LV_OPA_TRANSP, 0);
     lv_obj_set_scrollbar_mode(g_page07_curr.objects.list, LV_SCROLLBAR_MODE_OFF);
@@ -1146,50 +1326,94 @@ static void curr_build_card_layer(void)
         g_page07_curr.cards[i].base_x = x;
         g_page07_curr.cards[i].base_y = CURR_CARD_Y;
 
-        g_page07_curr.cards[i].background = lv_img_create(g_page07_curr.objects.list);
+        g_page07_curr.cards[i].render_root =
+            lv_obj_create(g_page07_curr.objects.list);
+        lv_obj_remove_style_all(g_page07_curr.cards[i].render_root);
+        lv_obj_set_style_bg_opa(g_page07_curr.cards[i].render_root,
+                                LV_OPA_TRANSP, 0);
+        lv_obj_clear_flag(g_page07_curr.cards[i].render_root,
+                          LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_scrollbar_mode(g_page07_curr.cards[i].render_root,
+                                  LV_SCROLLBAR_MODE_OFF);
+
+        g_page07_curr.cards[i].background =
+            lv_img_create(g_page07_curr.cards[i].render_root);
         lv_img_set_src(g_page07_curr.cards[i].background,
                        CURR_CARD_UNSELECTED_BG_PATH);
         curr_set_path_target_width(g_page07_curr.cards[i].background,
                                    CURR_CARD_UNSELECTED_BG_PATH,
                                    CURR_CARD_W);
-        lv_obj_set_pos(g_page07_curr.cards[i].background, x, CURR_CARD_Y);
+        lv_obj_set_pos(g_page07_curr.cards[i].background, 0, 0);
         lv_obj_clear_flag(g_page07_curr.cards[i].background,
                           LV_OBJ_FLAG_CLICKABLE);
 
-        g_page07_curr.cards[i].card = lv_obj_create(g_page07_curr.objects.list);
-        lv_obj_set_size(g_page07_curr.cards[i].card, CURR_CARD_W, CURR_CARD_H);
-        lv_obj_set_pos(g_page07_curr.cards[i].card, x, CURR_CARD_Y);
-        lv_obj_set_style_radius(g_page07_curr.cards[i].card, 0, 0);
-        lv_obj_set_style_bg_opa(g_page07_curr.cards[i].card, LV_OPA_TRANSP, 0);
-        lv_obj_set_style_border_width(g_page07_curr.cards[i].card, 0, 0);
-        lv_obj_set_style_shadow_width(g_page07_curr.cards[i].card, 0, 0);
-        lv_obj_set_style_shadow_opa(g_page07_curr.cards[i].card, LV_OPA_0, 0);
-        lv_obj_set_scrollbar_mode(g_page07_curr.cards[i].card, LV_SCROLLBAR_MODE_OFF);
-        lv_obj_clear_flag(g_page07_curr.cards[i].card, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_flag(g_page07_curr.cards[i].card, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_EVENT_BUBBLE);
-        lv_port_indev_set_drag_obj(g_page07_curr.cards[i].card, true);
-        lv_obj_add_event_cb(g_page07_curr.cards[i].card, curr_card_click_cb, LV_EVENT_CLICKED, (void*)(intptr_t)i);
-        lv_obj_add_event_cb(g_page07_curr.cards[i].card, curr_right_drag_cb, LV_EVENT_PRESSED, NULL);
-        lv_obj_add_event_cb(g_page07_curr.cards[i].card, curr_right_drag_cb, LV_EVENT_PRESSING, NULL);
-        lv_obj_add_event_cb(g_page07_curr.cards[i].card, curr_right_drag_cb, LV_EVENT_RELEASED, NULL);
+        g_page07_curr.cards[i].visual_card =
+            lv_obj_create(g_page07_curr.cards[i].render_root);
+        lv_obj_remove_style_all(g_page07_curr.cards[i].visual_card);
+        lv_obj_set_style_bg_opa(g_page07_curr.cards[i].visual_card,
+                                LV_OPA_TRANSP, 0);
+        lv_obj_clear_flag(g_page07_curr.cards[i].visual_card,
+                          LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_scrollbar_mode(g_page07_curr.cards[i].visual_card,
+                                  LV_SCROLLBAR_MODE_OFF);
 
-        g_page07_curr.cards[i].img = lv_img_create(g_page07_curr.cards[i].card);
+        g_page07_curr.cards[i].img =
+            lv_img_create(g_page07_curr.cards[i].visual_card);
         lv_img_set_src(g_page07_curr.cards[i].img, get_currency_img(curr_code));
         curr_set_img_target_width(g_page07_curr.cards[i].img, curr_code, CURR_FLAG_TARGET_W);
         lv_obj_set_pos(g_page07_curr.cards[i].img, -35, CURR_FLAG_Y_IN_CARD);
 
-        g_page07_curr.cards[i].name = lv_label_create(g_page07_curr.cards[i].card);
+        g_page07_curr.cards[i].name =
+            lv_label_create(g_page07_curr.cards[i].visual_card);
         lv_label_set_text(g_page07_curr.cards[i].name,
                           currency_state_display_code(curr_code));
         lv_obj_set_pos(g_page07_curr.cards[i].name, 21, 174);
         lv_obj_set_style_text_font(g_page07_curr.cards[i].name, &lv_font_instrument_sans_medium_30, 0);
 
-        g_page07_curr.cards[i].no = lv_label_create(g_page07_curr.cards[i].card);
+        g_page07_curr.cards[i].no =
+            lv_label_create(g_page07_curr.cards[i].visual_card);
         lv_label_set_text_fmt(g_page07_curr.cards[i].no, "NO.%02d", abs_idx + 1);
         lv_obj_set_pos(g_page07_curr.cards[i].no, 21, 224);
         lv_obj_set_style_text_font(g_page07_curr.cards[i].no, &lv_font_instrument_sans_medium_14, 0);
 
-        g_page07_curr.cards[i].fav_btn = lv_obj_create(g_page07_curr.cards[i].card);
+        /* Page construction must stay cheap. Reuse an existing DMA image if
+         * available; missing images are captured later by the idle prewarmer
+         * while the Currency page is hidden. */
+        curr_attach_cached_card_snapshots(i);
+
+        g_page07_curr.cards[i].composite =
+            lv_img_create(g_page07_curr.objects.list);
+        lv_obj_clear_flag(g_page07_curr.cards[i].composite,
+                          LV_OBJ_FLAG_CLICKABLE);
+
+        g_page07_curr.cards[i].card = lv_obj_create(g_page07_curr.objects.list);
+        lv_obj_set_size(g_page07_curr.cards[i].card, CURR_CARD_W,
+                        CURR_CARD_H);
+        lv_obj_set_pos(g_page07_curr.cards[i].card, x, CURR_CARD_Y);
+        lv_obj_set_style_radius(g_page07_curr.cards[i].card, 0, 0);
+        lv_obj_set_style_bg_opa(g_page07_curr.cards[i].card,
+                                LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(g_page07_curr.cards[i].card, 0, 0);
+        lv_obj_set_style_shadow_width(g_page07_curr.cards[i].card, 0, 0);
+        lv_obj_set_style_shadow_opa(g_page07_curr.cards[i].card, LV_OPA_0, 0);
+        lv_obj_set_scrollbar_mode(g_page07_curr.cards[i].card,
+                                  LV_SCROLLBAR_MODE_OFF);
+        lv_obj_clear_flag(g_page07_curr.cards[i].card,
+                          LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(g_page07_curr.cards[i].card,
+                        LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_port_indev_set_drag_obj(g_page07_curr.cards[i].card, true);
+        lv_obj_add_event_cb(g_page07_curr.cards[i].card, curr_card_click_cb,
+                            LV_EVENT_CLICKED, (void*)(intptr_t)i);
+        lv_obj_add_event_cb(g_page07_curr.cards[i].card, curr_right_drag_cb,
+                            LV_EVENT_PRESSED, NULL);
+        lv_obj_add_event_cb(g_page07_curr.cards[i].card, curr_right_drag_cb,
+                            LV_EVENT_PRESSING, NULL);
+        lv_obj_add_event_cb(g_page07_curr.cards[i].card, curr_right_drag_cb,
+                            LV_EVENT_RELEASED, NULL);
+
+        g_page07_curr.cards[i].fav_btn =
+            lv_obj_create(g_page07_curr.cards[i].card);
         lv_obj_set_size(g_page07_curr.cards[i].fav_btn, CURR_FAV_BTN_IN_CARD_W, CURR_FAV_BTN_IN_CARD_H);
         lv_obj_set_pos(g_page07_curr.cards[i].fav_btn, CURR_FAV_BTN_IN_CARD_X, CURR_FAV_BTN_IN_CARD_Y);
         lv_obj_set_style_radius(g_page07_curr.cards[i].fav_btn, 14, 0);
@@ -1205,6 +1429,8 @@ static void curr_build_card_layer(void)
         g_page07_curr.cards[i].fav_icon = lv_img_create(g_page07_curr.cards[i].fav_btn);
         lv_img_set_src(g_page07_curr.cards[i].fav_icon, "L:/usr/local/share/lvgl_data/unfav.png");
         lv_obj_center(g_page07_curr.cards[i].fav_icon);
+
+        curr_apply_card_visual(i, false, x, CURR_CARD_Y);
     }
 
     lv_obj_t* tail = lv_obj_create(g_page07_curr.objects.list);
@@ -1452,6 +1678,7 @@ static void curr_refresh_right_views(void)
     if (g_page07_curr.objects.card_layer && lv_obj_is_valid(g_page07_curr.objects.card_layer)) {
         perf_profile_unwatch_invalidation(g_page07_curr.objects.list);
         lv_obj_del(g_page07_curr.objects.card_layer);
+        curr_release_card_snapshots();
         g_page07_curr.objects.card_layer = NULL;
         g_page07_curr.objects.list = NULL;
         g_page07_curr.objects.track = NULL;
@@ -1526,6 +1753,7 @@ void page_07_curr_img_reset(void)
     if (g_page07_curr.objects.root && lv_obj_is_valid(g_page07_curr.objects.root)) {
         lv_obj_del(g_page07_curr.objects.root);
     }
+    curr_release_card_snapshots();
 
     g_page07_curr.objects.root = NULL;
     g_page07_curr.objects.left_panel = NULL;
@@ -1670,6 +1898,51 @@ static bool curr_cached_list_matches(const currency_state_snapshot_t* snapshot)
                   sizeof(snapshot->codes)) == 0;
 }
 
+static void curr_snapshot_prewarm_timer_cb(lv_timer_t *timer)
+{
+    currency_state_snapshot_t snapshot;
+
+    if (timer == NULL || curr_page == NULL ||
+        !lv_obj_is_valid(curr_page) ||
+        !lv_obj_has_flag(curr_page, LV_OBJ_FLAG_HIDDEN)) {
+        return;
+    }
+
+    /* Snapshot capture is intentionally confined to a quiet UI window.  Do
+     * not gate it on lv_anim_count_running(): cached/hidden pages and shared
+     * loaders own infinite animations, so that global count may never reach
+     * zero even when the operator-visible page is idle.  Currency is hidden
+     * here and its gesture timer/flags are stopped by suspend; input idle is
+     * therefore the relevant foreground-safety condition. */
+    if (lv_disp_get_inactive_time(NULL) < 1200U ||
+        g_page07_curr.gesture.active ||
+        g_page07_curr.gesture.dragging ||
+        g_page07_curr.gesture.snap_timer != NULL) {
+        return;
+    }
+    if (currency_state_count() <= 0) return;
+
+    currency_state_get_snapshot(&snapshot);
+    if (!curr_cached_list_matches(&snapshot)) {
+        page_07_curr_img_refre();
+        lv_timer_set_period(timer, 120);
+        return;
+    }
+
+    if (g_page07_curr.model.view_mode != PAGE07_CURR_VIEW_CARD ||
+        g_page07_curr.objects.card_layer == NULL ||
+        !lv_obj_is_valid(g_page07_curr.objects.card_layer)) {
+        lv_timer_set_period(timer, 500);
+        return;
+    }
+
+    if (curr_build_one_missing_card_snapshot()) {
+        lv_timer_set_period(timer, 120);
+    } else {
+        lv_timer_set_period(timer, 500);
+    }
+}
+
 static bool curr_cached_selection_matches(
     const currency_state_snapshot_t* snapshot,
     const char selected_code[4])
@@ -1784,6 +2057,10 @@ void ui_page_07_curr_suspend(void)
      * switch to MAIN before this cached page has moved its card viewport.
      * Capturing the model here would make resume incorrectly treat the stale
      * viewport as current and skip RESUME_SELECTION.
-     */
+    */
     lv_obj_add_flag(curr_page, LV_OBJ_FLAG_HIDDEN);
+    if (g_curr_snapshot_prewarm_timer != NULL) {
+        lv_timer_set_period(g_curr_snapshot_prewarm_timer, 120);
+        lv_timer_ready(g_curr_snapshot_prewarm_timer);
+    }
 }

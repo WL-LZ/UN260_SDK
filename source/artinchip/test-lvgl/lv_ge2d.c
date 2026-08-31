@@ -17,6 +17,7 @@
 #include "lv_ge2d.h"
 #include "mpp_ge.h"
 #include "mpp_decoder.h"
+#include "dma_allocator.h"
 #include "lv_fbdev.h"
 #include "aic_ui/perf_stats.h"
 #include "un260/lv_system/app_clock.h"
@@ -31,6 +32,15 @@
  * still has a clear advantage. */
 #define GE_FILL_CPU_THRESHOLD_PIXELS 8192U
 
+/* Runtime image scaling is substantially more expensive than 1:1 alpha
+ * blending on D21x GE. Keep a bounded cache of stable down-scaled DMA images.
+ * The source decoder owns the original frame and explicitly drops all related
+ * variants before closing its dma-buf, so an fd can never be reused stale. */
+#define GE_SCALE_CACHE_CAPACITY 24U
+#define GE_SCALE_CACHE_MAX_BYTES (2U * 1024U * 1024U)
+#define GE_SCALE_CACHE_MAX_ENTRY_BYTES (512U * 1024U)
+#define GE_DMA_IMAGE_REGISTRY_CAPACITY 48U
+
 typedef struct _img_info {
     unsigned int img_size;
     int type;
@@ -38,6 +48,37 @@ typedef struct _img_info {
 } img_info;
 
 static struct mpp_ge *g_ge = NULL;
+/* LVGL opens and draws an image synchronously on the UI thread. Keep the
+ * current file source only long enough to attribute the following GE blit in
+ * performance diagnostics. It is never used by the rendering decision. */
+static const char *g_profile_image_source;
+
+typedef struct {
+    bool used;
+    int source_fd;
+    int source_width;
+    int source_height;
+    int target_width;
+    int target_height;
+    uint32_t bytes;
+    uint32_t last_use;
+    struct mpp_frame frame;
+} ge_scale_cache_entry_t;
+
+static ge_scale_cache_entry_t g_scale_cache[GE_SCALE_CACHE_CAPACITY];
+static uint32_t g_scale_cache_bytes;
+static uint32_t g_scale_cache_clock;
+static int g_scale_cache_dma_device = -1;
+
+typedef struct {
+    const void *data_key;
+    const struct mpp_frame *frame;
+    const char *profile_name;
+} ge_dma_image_entry_t;
+
+static ge_dma_image_entry_t g_dma_image_registry[GE_DMA_IMAGE_REGISTRY_CAPACITY];
+static bool g_offscreen_capture_active;
+static bool g_offscreen_capture_failed;
 
 void lv_draw_aic_blend(lv_draw_ctx_t * draw_ctx, const lv_draw_sw_blend_dsc_t * dsc);
 lv_res_t lv_draw_aic_draw_img(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t * draw_dsc,
@@ -46,6 +87,147 @@ LV_ATTRIBUTE_FAST_MEM void lv_draw_aic_img_decoded(struct _lv_draw_ctx_t * draw_
                                                    const lv_draw_img_dsc_t * draw_dsc,
                                                    const lv_area_t * coords,
                                                    const uint8_t *src_buf, lv_img_cf_t cf);
+
+static const struct mpp_frame *ge_dma_image_lookup(const void *data_key,
+                                                   const char **profile_name)
+{
+    if (data_key == NULL) return NULL;
+
+    for (uint32_t i = 0; i < GE_DMA_IMAGE_REGISTRY_CAPACITY; i++) {
+        if (g_dma_image_registry[i].data_key == data_key) {
+            if (profile_name != NULL) {
+                *profile_name = g_dma_image_registry[i].profile_name;
+            }
+            return g_dma_image_registry[i].frame;
+        }
+    }
+    return NULL;
+}
+
+bool lv_ge2d_register_dma_image(const void *data_key,
+                                const struct mpp_frame *frame,
+                                const char *profile_name)
+{
+    ge_dma_image_entry_t *free_entry = NULL;
+
+    if (data_key == NULL || frame == NULL || frame->buf.fd[0] < 0) {
+        return false;
+    }
+
+    for (uint32_t i = 0; i < GE_DMA_IMAGE_REGISTRY_CAPACITY; i++) {
+        ge_dma_image_entry_t *entry = &g_dma_image_registry[i];
+
+        if (entry->data_key == data_key) {
+            entry->frame = frame;
+            entry->profile_name = profile_name;
+            return true;
+        }
+        if (free_entry == NULL && entry->data_key == NULL) {
+            free_entry = entry;
+        }
+    }
+
+    if (free_entry == NULL) return false;
+    free_entry->data_key = data_key;
+    free_entry->frame = frame;
+    free_entry->profile_name = profile_name;
+    return true;
+}
+
+void lv_ge2d_unregister_dma_image(const void *data_key)
+{
+    if (data_key == NULL) return;
+
+    for (uint32_t i = 0; i < GE_DMA_IMAGE_REGISTRY_CAPACITY; i++) {
+        if (g_dma_image_registry[i].data_key == data_key) {
+            memset(&g_dma_image_registry[i], 0,
+                   sizeof(g_dma_image_registry[i]));
+            return;
+        }
+    }
+}
+
+void lv_ge2d_offscreen_capture_begin(void)
+{
+    g_offscreen_capture_active = true;
+    g_offscreen_capture_failed = false;
+}
+
+bool lv_ge2d_offscreen_capture_end(void)
+{
+    bool ok = !g_offscreen_capture_failed;
+
+    g_offscreen_capture_active = false;
+    g_offscreen_capture_failed = false;
+    return ok;
+}
+
+static bool draw_target_is_display_buffer(const lv_draw_ctx_t *draw_ctx)
+{
+    lv_disp_t *disp = _lv_refr_get_disp_refreshing();
+
+    return draw_ctx != NULL && disp != NULL && disp->driver != NULL &&
+           disp->driver->draw_buf != NULL &&
+           (draw_ctx->buf == disp->driver->draw_buf->buf1 ||
+            draw_ctx->buf == disp->driver->draw_buf->buf2) &&
+           disp->driver->set_px_cb == NULL;
+}
+
+static bool draw_dma_frame_software(lv_draw_ctx_t *draw_ctx,
+                                    const lv_draw_img_dsc_t *draw_dsc,
+                                    const lv_area_t *coords,
+                                    const struct mpp_frame *frame,
+                                    lv_img_cf_t cf)
+{
+    unsigned char *mapped = NULL;
+    unsigned char *tight = NULL;
+    const uint8_t *pixels;
+    uint32_t row_bytes;
+    uint32_t stride;
+    uint32_t bytes;
+
+    if (frame == NULL || frame->buf.buf_type != MPP_DMA_BUF_FD ||
+        frame->buf.fd[0] < 0 || frame->buf.size.width <= 0 ||
+        frame->buf.size.height <= 0 ||
+        frame->buf.format != MPP_FMT_ARGB_8888) {
+        if (g_offscreen_capture_active) g_offscreen_capture_failed = true;
+        return false;
+    }
+
+    row_bytes = (uint32_t)frame->buf.size.width * 4U;
+    stride = frame->buf.stride[0];
+    if (stride < row_bytes) {
+        if (g_offscreen_capture_active) g_offscreen_capture_failed = true;
+        return false;
+    }
+    bytes = stride * (uint32_t)frame->buf.size.height;
+    mapped = dmabuf_mmap(frame->buf.fd[0], (int)bytes);
+    if (mapped == NULL) {
+        if (g_offscreen_capture_active) g_offscreen_capture_failed = true;
+        return false;
+    }
+    dmabuf_sync(frame->buf.fd[0], CACHE_INVALID);
+
+    pixels = mapped;
+    if (stride != row_bytes) {
+        tight = lv_mem_alloc(row_bytes * (uint32_t)frame->buf.size.height);
+        if (tight == NULL) {
+            dmabuf_munmap(mapped, (int)bytes);
+            if (g_offscreen_capture_active) g_offscreen_capture_failed = true;
+            return false;
+        }
+        for (int y = 0; y < frame->buf.size.height; y++) {
+            memcpy(tight + (uint32_t)y * row_bytes,
+                   mapped + (uint32_t)y * stride, row_bytes);
+        }
+        pixels = tight;
+    }
+
+    lv_draw_sw_img_decoded(draw_ctx, draw_dsc, coords, pixels, cf);
+    if (tight != NULL) lv_mem_free(tight);
+    dmabuf_munmap(mapped, (int)bytes);
+    return true;
+}
 
 static img_info *img_info_init(const char *src)
 {
@@ -123,6 +305,7 @@ void lv_draw_aic_ctx_deinit(lv_disp_drv_t * drv, lv_draw_ctx_t * draw_ctx)
 {
     LV_UNUSED(drv);
     LV_UNUSED(draw_ctx);
+    lv_ge2d_scaled_cache_drop_source(NULL);
 }
 
 static inline bool is_rgb(enum mpp_pixel_format format)
@@ -153,6 +336,205 @@ static inline bool is_rgb(enum mpp_pixel_format format)
         break;
     }
     return false;
+}
+
+static int ge_scale_cache_bytes_per_pixel(enum mpp_pixel_format format)
+{
+    switch (format) {
+    case MPP_FMT_ARGB_8888:
+    case MPP_FMT_ABGR_8888:
+    case MPP_FMT_RGBA_8888:
+    case MPP_FMT_BGRA_8888:
+    case MPP_FMT_XRGB_8888:
+    case MPP_FMT_XBGR_8888:
+    case MPP_FMT_RGBX_8888:
+    case MPP_FMT_BGRX_8888:
+        return 4;
+    case MPP_FMT_RGB_888:
+    case MPP_FMT_BGR_888:
+        return 3;
+    case MPP_FMT_ARGB_1555:
+    case MPP_FMT_ABGR_1555:
+    case MPP_FMT_RGBA_5551:
+    case MPP_FMT_BGRA_5551:
+    case MPP_FMT_RGB_565:
+    case MPP_FMT_BGR_565:
+    case MPP_FMT_ARGB_4444:
+    case MPP_FMT_ABGR_4444:
+    case MPP_FMT_RGBA_4444:
+    case MPP_FMT_BGRA_4444:
+        return 2;
+    default:
+        return 0;
+    }
+}
+
+static void ge_scale_cache_release(ge_scale_cache_entry_t *entry)
+{
+    if (entry == NULL || !entry->used) {
+        return;
+    }
+
+    mpp_buf_free(&entry->frame.buf);
+    if (g_scale_cache_bytes >= entry->bytes) {
+        g_scale_cache_bytes -= entry->bytes;
+    } else {
+        g_scale_cache_bytes = 0;
+    }
+    memset(entry, 0, sizeof(*entry));
+}
+
+void lv_ge2d_scaled_cache_drop_source(const void *source_frame)
+{
+    const struct mpp_frame *source = source_frame;
+    int source_fd = source != NULL ? source->buf.fd[0] : -1;
+
+    for (uint32_t i = 0; i < GE_SCALE_CACHE_CAPACITY; i++) {
+        if (!g_scale_cache[i].used) {
+            continue;
+        }
+        if (source == NULL || g_scale_cache[i].source_fd == source_fd) {
+            ge_scale_cache_release(&g_scale_cache[i]);
+        }
+    }
+
+    if (source == NULL && g_scale_cache_dma_device >= 0) {
+        dmabuf_device_close(g_scale_cache_dma_device);
+        g_scale_cache_dma_device = -1;
+    }
+}
+
+static ge_scale_cache_entry_t *ge_scale_cache_find_slot(uint32_t bytes)
+{
+    ge_scale_cache_entry_t *slot = NULL;
+
+    while (g_scale_cache_bytes + bytes > GE_SCALE_CACHE_MAX_BYTES) {
+        ge_scale_cache_entry_t *oldest = NULL;
+
+        for (uint32_t i = 0; i < GE_SCALE_CACHE_CAPACITY; i++) {
+            if (g_scale_cache[i].used &&
+                (oldest == NULL ||
+                 g_scale_cache[i].last_use < oldest->last_use)) {
+                oldest = &g_scale_cache[i];
+            }
+        }
+        if (oldest == NULL) {
+            return NULL;
+        }
+        ge_scale_cache_release(oldest);
+    }
+
+    for (uint32_t i = 0; i < GE_SCALE_CACHE_CAPACITY; i++) {
+        if (!g_scale_cache[i].used) {
+            return &g_scale_cache[i];
+        }
+        if (slot == NULL || g_scale_cache[i].last_use < slot->last_use) {
+            slot = &g_scale_cache[i];
+        }
+    }
+
+    ge_scale_cache_release(slot);
+    return slot;
+}
+
+static struct mpp_frame *ge_scale_cache_get(struct mpp_frame *source,
+                                            int target_width,
+                                            int target_height)
+{
+    ge_scale_cache_entry_t *slot;
+    struct ge_bitblt blt = {0};
+    int bytes_per_pixel;
+    uint32_t stride;
+    uint32_t bytes;
+
+    if (source == NULL || g_ge == NULL ||
+        mpp_ge_get_mode(g_ge) != GE_MODE_NORMAL ||
+        source->buf.buf_type != MPP_DMA_BUF_FD ||
+        source->buf.fd[0] < 0 || target_width <= 0 || target_height <= 0) {
+        return NULL;
+    }
+
+    bytes_per_pixel = ge_scale_cache_bytes_per_pixel(source->buf.format);
+    if (bytes_per_pixel == 0) {
+        return NULL;
+    }
+
+    stride = ((uint32_t)target_width * (uint32_t)bytes_per_pixel + 15U) & ~15U;
+    bytes = stride * (uint32_t)target_height;
+    if (bytes == 0 || bytes > GE_SCALE_CACHE_MAX_ENTRY_BYTES) {
+        return NULL;
+    }
+
+    g_scale_cache_clock++;
+    for (uint32_t i = 0; i < GE_SCALE_CACHE_CAPACITY; i++) {
+        ge_scale_cache_entry_t *entry = &g_scale_cache[i];
+
+        if (entry->used && entry->source_fd == source->buf.fd[0] &&
+            entry->source_width == source->buf.size.width &&
+            entry->source_height == source->buf.size.height &&
+            entry->target_width == target_width &&
+            entry->target_height == target_height) {
+            entry->last_use = g_scale_cache_clock;
+            return &entry->frame;
+        }
+    }
+
+    if (g_scale_cache_dma_device < 0) {
+        g_scale_cache_dma_device = dmabuf_device_open();
+        if (g_scale_cache_dma_device < 0) {
+            return NULL;
+        }
+    }
+
+    slot = ge_scale_cache_find_slot(bytes);
+    if (slot == NULL) {
+        return NULL;
+    }
+
+    memset(slot, 0, sizeof(*slot));
+    slot->frame.buf.size.width = target_width;
+    slot->frame.buf.size.height = target_height;
+    slot->frame.buf.format = source->buf.format;
+    slot->frame.buf.stride[0] = (int)stride;
+    if (mpp_buf_alloc(g_scale_cache_dma_device, &slot->frame.buf) < 0) {
+        memset(slot, 0, sizeof(*slot));
+        return NULL;
+    }
+
+    blt.src_buf = source->buf;
+    blt.src_buf.crop_en = 1;
+    blt.src_buf.crop.x = 0;
+    blt.src_buf.crop.y = 0;
+    blt.src_buf.crop.width = source->buf.size.width;
+    blt.src_buf.crop.height = source->buf.size.height;
+    blt.dst_buf = slot->frame.buf;
+    blt.dst_buf.crop_en = 1;
+    blt.dst_buf.crop.x = 0;
+    blt.dst_buf.crop.y = 0;
+    blt.dst_buf.crop.width = target_width;
+    blt.dst_buf.crop.height = target_height;
+    /* Preserve the source alpha channel in the generated pixels. Do not blend
+     * against the uninitialized cache destination. */
+    blt.ctrl.alpha_en = 0;
+    blt.ctrl.flags = MPP_ROTATION_0;
+
+    if (mpp_ge_bitblt(g_ge, &blt) < 0 ||
+        mpp_ge_emit(g_ge) < 0 || mpp_ge_sync(g_ge) < 0) {
+        mpp_buf_free(&slot->frame.buf);
+        memset(slot, 0, sizeof(*slot));
+        return NULL;
+    }
+
+    slot->used = true;
+    slot->source_fd = source->buf.fd[0];
+    slot->source_width = source->buf.size.width;
+    slot->source_height = source->buf.size.height;
+    slot->target_width = target_width;
+    slot->target_height = target_height;
+    slot->bytes = bytes;
+    slot->last_use = g_scale_cache_clock;
+    g_scale_cache_bytes += bytes;
+    return &slot->frame;
 }
 
 static void transform_upscaled(const lv_draw_img_dsc_t *draw_dsc, int32_t xin,
@@ -205,6 +587,7 @@ static int ge_run_blit(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t *draw_d
     uint32_t profile_submit_us = 0;
     uint32_t profile_emit_us = 0;
     uint32_t profile_sync_us = 0;
+    uint32_t profile_elapsed_us = 0;
     lv_coord_t blend_w;
     lv_coord_t blend_h;
     int src_crop_x;
@@ -217,11 +600,35 @@ static int ge_run_blit(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t *draw_d
     int dst_crop_h;
     lv_area_t blend_area;
     struct ge_bitblt blt = { 0 };
+    lv_draw_img_dsc_t cached_draw_dsc;
+    lv_area_t cached_coords;
     lv_color_t * dest_buf = draw_ctx->buf;
     lv_coord_t dest_width = lv_area_get_width(draw_ctx->buf_area);
     lv_coord_t dest_height = lv_area_get_height(draw_ctx->buf_area);
     int line_length = draw_buf_pitch();
     enum mpp_pixel_format fmt = draw_buf_fmt();
+
+    if (draw_dsc->angle == 0 &&
+        draw_dsc->zoom >= 64 && draw_dsc->zoom < LV_IMG_ZOOM_NONE) {
+        struct mpp_frame *cached_frame;
+
+        _lv_img_buf_get_transformed_area(
+            &cached_coords, frame->buf.size.width, frame->buf.size.height,
+            0, draw_dsc->zoom, &draw_dsc->pivot);
+        lv_area_move(&cached_coords, coords->x1, coords->y1);
+        cached_frame = ge_scale_cache_get(
+            frame, lv_area_get_width(&cached_coords),
+            lv_area_get_height(&cached_coords));
+        if (cached_frame != NULL) {
+            cached_draw_dsc = *draw_dsc;
+            cached_draw_dsc.zoom = LV_IMG_ZOOM_NONE;
+            cached_draw_dsc.pivot.x = 0;
+            cached_draw_dsc.pivot.y = 0;
+            draw_dsc = &cached_draw_dsc;
+            frame = cached_frame;
+            coords = &cached_coords;
+        }
+    }
 
     if (draw_dsc->zoom == LV_IMG_ZOOM_NONE && draw_dsc->angle == 0) {
         if(!_lv_area_intersect(&blend_area, coords, clip_area))
@@ -403,12 +810,24 @@ static int ge_run_blit(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t *draw_d
     }
 
     if (profile_enabled) {
+        profile_elapsed_us = app_clock_elapsed_us32(
+            profile_started_us, app_clock_monotonic_us());
         perf_profile_report_ge(
             PERF_PROFILE_GE_BLIT,
             (uint64_t)dst_crop_w * (uint64_t)dst_crop_h,
-            app_clock_elapsed_us32(profile_started_us,
-                                   app_clock_monotonic_us()),
+            profile_elapsed_us,
             profile_submit_us, profile_emit_us, profile_sync_us);
+        perf_profile_report_ge_blit_path(
+            blt.ctrl.alpha_en != 0,
+            src_crop_w != dst_crop_w || src_crop_h != dst_crop_h,
+            (uint64_t)dst_crop_w * (uint64_t)dst_crop_h,
+            profile_elapsed_us);
+        perf_profile_report_ge_image_source(
+            g_profile_image_source,
+            blt.ctrl.alpha_en != 0,
+            src_crop_w != dst_crop_w || src_crop_h != dst_crop_h,
+            (uint64_t)dst_crop_w * (uint64_t)dst_crop_h,
+            profile_elapsed_us);
     }
 
     return LV_RES_OK;
@@ -746,15 +1165,34 @@ lv_res_t lv_draw_aic_draw_img(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t 
     lv_area_t draw_area;
     bool fake_image = false;
     char* ptr = NULL;
+    lv_img_src_t src_type;
+    const char *dma_profile_name = NULL;
 
-    ptr = strrchr(src, '.');
+    src_type = lv_img_src_get_type(src);
+    if (src_type == LV_IMG_SRC_VARIABLE) {
+        const lv_img_dsc_t *img_dsc = src;
 
-    if (lv_img_src_get_type(src) != LV_IMG_SRC_FILE) {
         file_type = false;
+        if (img_dsc != NULL &&
+            ge_dma_image_lookup(img_dsc->data, &dma_profile_name) != NULL) {
+            g_profile_image_source = dma_profile_name;
+        } else {
+            g_profile_image_source = NULL;
+        }
+        return LV_RES_INV;
+    }
+
+    if (src_type != LV_IMG_SRC_FILE) {
+        file_type = false;
+        g_profile_image_source = NULL;
         return LV_RES_INV;
     } else {
         file_type = true;
+        g_profile_image_source = src;
     }
+
+    ptr = strrchr(src, '.');
+    if (ptr == NULL) return LV_RES_INV;
 
     if (!strcmp(ptr, ".fake"))
         fake_image = true;
@@ -788,12 +1226,8 @@ lv_res_t lv_draw_aic_draw_img(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t 
             lv_area_copy(&blend_area, draw_ctx->clip_area);
         }
 
-        lv_disp_t * disp = _lv_refr_get_disp_refreshing();
-        lv_color_t * dest_buf = draw_ctx->buf;
-
         if (blend_dsc.mask_buf == NULL && blend_dsc.blend_mode == LV_BLEND_MODE_NORMAL
-            && (dest_buf == disp->driver->draw_buf->buf1 || dest_buf == disp->driver->draw_buf->buf2)
-            && disp->driver->set_px_cb == NULL ) {
+            && draw_target_is_display_buffer(draw_ctx)) {
 
             if (fake_image) {
                 int width;
@@ -821,6 +1255,33 @@ LV_ATTRIBUTE_FAST_MEM void lv_draw_aic_img_decoded(struct _lv_draw_ctx_t * draw_
     bool mask_any;
     lv_area_t b_area;
     lv_draw_sw_blend_dsc_t blend_dsc;
+    const struct mpp_frame *registered_frame;
+    const char *dma_profile_name = NULL;
+
+    registered_frame = ge_dma_image_lookup(src_buf, &dma_profile_name);
+    if (registered_frame != NULL) {
+        g_profile_image_source = dma_profile_name;
+        lv_area_copy(&draw_area, draw_ctx->clip_area);
+        mask_any = lv_draw_mask_is_any(&draw_area);
+
+        if (!mask_any && draw_dsc->recolor_opa == LV_OPA_TRANSP &&
+            draw_dsc->blend_mode == LV_BLEND_MODE_NORMAL &&
+            draw_target_is_display_buffer(draw_ctx)) {
+            lv_area_t blend_area;
+
+            lv_area_copy(&blend_area, draw_ctx->clip_area);
+            if (is_fix_angle(draw_dsc->angle)) {
+                ge_run_blit(draw_ctx, draw_dsc,
+                            (struct mpp_frame *)registered_frame,
+                            &blend_area, coords);
+                return;
+            }
+        }
+
+        draw_dma_frame_software(draw_ctx, draw_dsc, coords,
+                                registered_frame, cf);
+        return;
+    }
 
     if (!file_type) {
         lv_draw_sw_img_decoded(draw_ctx, draw_dsc, coords, src_buf, cf);
@@ -841,12 +1302,8 @@ LV_ATTRIBUTE_FAST_MEM void lv_draw_aic_img_decoded(struct _lv_draw_ctx_t * draw_
         lv_area_t blend_area;
 
         lv_area_copy(&blend_area, draw_ctx->clip_area);
-        lv_disp_t * disp = _lv_refr_get_disp_refreshing();
-        lv_color_t * dest_buf = draw_ctx->buf;
-
         if (blend_dsc.mask_buf == NULL && blend_dsc.blend_mode == LV_BLEND_MODE_NORMAL
-            && (dest_buf == disp->driver->draw_buf->buf1 || dest_buf == disp->driver->draw_buf->buf2)
-            && disp->driver->set_px_cb == NULL ) {
+            && draw_target_is_display_buffer(draw_ctx)) {
 
             struct mpp_frame frame;
             memcpy(&frame, src_buf, sizeof(frame));
@@ -860,7 +1317,9 @@ LV_ATTRIBUTE_FAST_MEM void lv_draw_aic_img_decoded(struct _lv_draw_ctx_t * draw_
                 return;
             }
         } else {
-            lv_draw_sw_img_decoded(draw_ctx, draw_dsc, coords, src_buf, cf);
+            const struct mpp_frame *frame = (const struct mpp_frame *)src_buf;
+
+            draw_dma_frame_software(draw_ctx, draw_dsc, coords, frame, cf);
         }
     }
 
@@ -892,13 +1351,10 @@ void lv_draw_aic_blend(lv_draw_ctx_t * draw_ctx, const lv_draw_sw_blend_dsc_t * 
     /*Make the blend area relative to the buffer*/
     lv_area_move(&blend_area, -draw_ctx->buf_area->x1, -draw_ctx->buf_area->y1);
 
-    lv_disp_t * disp = _lv_refr_get_disp_refreshing();
-    lv_color_t * dest_buf = draw_ctx->buf;
-
     if (!prefer_sw_fill &&
-        dsc->mask_buf == NULL && dsc->blend_mode == LV_BLEND_MODE_NORMAL
-        && (dest_buf == disp->driver->draw_buf->buf1 || dest_buf == disp->driver->draw_buf->buf2)
-        && disp->driver->set_px_cb == NULL ) {
+        dsc->mask_buf == NULL &&
+        dsc->blend_mode == LV_BLEND_MODE_NORMAL &&
+        draw_target_is_display_buffer(draw_ctx)) {
         int ret = LV_RES_INV;
         unsigned int color = dsc->color.full;
         unsigned char opa = dsc->opa;
