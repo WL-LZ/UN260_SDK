@@ -76,6 +76,8 @@ void perf_profile_report_ge_blit_path(bool alpha, bool scaled,
 void perf_profile_report_ge_image_source(const char *src, bool alpha,
                                          bool scaled, uint64_t pixels,
                                          uint32_t elapsed_us);
+void perf_profile_begin_page_open(uint32_t page_id, const char *page_name,
+                                  uint64_t started_us);
 void perf_profile_report_page_switch(
     const perf_profile_page_switch_sample_t *sample);
 void perf_profile_report_event_us(const char *page_name, const char *event,

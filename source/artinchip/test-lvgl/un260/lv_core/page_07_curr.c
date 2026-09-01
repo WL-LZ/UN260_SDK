@@ -997,13 +997,41 @@ static void curr_attach_cached_card_snapshots(int i)
 
 static bool curr_build_one_missing_card_snapshot(void)
 {
+    /* Prioritize NORMAL snapshots across the complete catalog.  With a
+     * bounded cache, creating NORMAL+SELECTED pairs per card exhausted the
+     * budget after only a few currencies and left every later card on the
+     * expensive live-render path. */
     for (int i = 0; i < g_page07_curr.model.visible_count; i++) {
         page07_curr_card_t *card = &g_page07_curr.cards[i];
         bool selected;
         int pos_x;
+        bool created;
 
-        if (card->render_root == NULL) continue;
-        if (card->unselected_cache != NULL &&
+        if (card->render_root == NULL ||
+            card->unselected_cache != NULL) {
+            continue;
+        }
+
+        selected = i == g_page07_curr.model.selected_visible_idx;
+        pos_x = card->base_x;
+        if (i > g_page07_curr.model.selected_visible_idx) {
+            pos_x += CURR_SEL_NEXT_EXTRA_GAP;
+        }
+
+        created = curr_acquire_card_snapshot(i, false, true);
+        curr_apply_card_visual(i, selected, pos_x, card->base_y);
+        return created;
+    }
+
+    /* Only after normal scrolling coverage is complete, use remaining
+     * capacity for selected-state snapshots. */
+    for (int i = 0; i < g_page07_curr.model.visible_count; i++) {
+        page07_curr_card_t *card = &g_page07_curr.cards[i];
+        bool selected;
+        int pos_x;
+        bool created;
+
+        if (card->render_root == NULL ||
             card->selected_cache != NULL) {
             continue;
         }
@@ -1014,16 +1042,9 @@ static bool curr_build_one_missing_card_snapshot(void)
             pos_x += CURR_SEL_NEXT_EXTRA_GAP;
         }
 
-        if (card->unselected_cache == NULL) {
-            (void)curr_acquire_card_snapshot(i, false, true);
-        } else {
-            (void)curr_acquire_card_snapshot(i, true, true);
-        }
-
-        /* Snapshot capture temporarily changes the hidden live renderer.
-         * Restore exactly the visual state that the cached page expects. */
+        created = curr_acquire_card_snapshot(i, true, true);
         curr_apply_card_visual(i, selected, pos_x, card->base_y);
-        return true;
+        return created;
     }
 
     return false;

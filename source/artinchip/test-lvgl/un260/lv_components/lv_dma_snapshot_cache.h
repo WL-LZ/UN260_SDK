@@ -11,6 +11,20 @@ extern "C" {
 
 typedef struct lv_dma_snapshot lv_dma_snapshot_t;
 
+typedef struct {
+    uint32_t hits;
+    uint32_t misses;
+    uint32_t creates;
+    uint32_t no_space;
+    uint32_t errors;
+    uint32_t capture_count;
+    uint64_t capture_total_us;
+    uint32_t capture_max_us;
+    uint32_t item_count;
+    uint32_t total_bytes;
+    uint32_t max_bytes;
+} lv_dma_snapshot_cache_stats_t;
+
 /* Capture one LVGL object subtree into an application-owned ARGB DMA image.
  * The cache is bounded globally and creation is fail-safe: callers keep their
  * normal object tree as the fallback whenever NULL is returned. */
@@ -32,6 +46,8 @@ lv_dma_snapshot_t *lv_dma_snapshot_cache_acquire_or_create(
 void lv_dma_snapshot_cache_release(lv_dma_snapshot_t *snapshot);
 void lv_dma_snapshot_cache_trim(void);
 uint32_t lv_dma_snapshot_cache_item_count(void);
+
+void lv_dma_snapshot_cache_take_stats(lv_dma_snapshot_cache_stats_t *out);
 
 const lv_img_dsc_t *lv_dma_snapshot_image(const lv_dma_snapshot_t *snapshot);
 uint32_t lv_dma_snapshot_size(const lv_dma_snapshot_t *snapshot);

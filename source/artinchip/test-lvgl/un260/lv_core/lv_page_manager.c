@@ -281,6 +281,9 @@ void ui_manager_switch(ui_page_t page)
         total_started_us = app_clock_monotonic_us();
         sample.started_us = total_started_us;
         phase_started_us = total_started_us;
+        perf_profile_begin_page_open((uint32_t)page,
+                                     ui_manager_page_name(page),
+                                     total_started_us);
     }
     ui_manager_notify_page_switch(from, page);
     if (profile_enabled) {
@@ -366,6 +369,9 @@ bool ui_manager_adopt_precreated_page(ui_page_t page)
         total_started_us = app_clock_monotonic_us();
         sample.started_us = total_started_us;
         phase_started_us = total_started_us;
+        perf_profile_begin_page_open((uint32_t)page,
+                                     ui_manager_page_name(page),
+                                     total_started_us);
     }
     if (from != UI_PAGE_INVALID) {
         if (g_page_manager.stack_top < UI_PAGE_STACK_CAPACITY - 1) {

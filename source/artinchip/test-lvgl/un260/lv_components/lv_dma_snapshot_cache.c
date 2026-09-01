@@ -7,11 +7,19 @@
 #include "dma_allocator.h"
 #include "aic_ui/perf_stats.h"
 #include "lv_ge2d.h"
+#include "un260/lv_system/app_clock.h"
 #include "lvgl/src/extra/others/snapshot/lv_snapshot.h"
 
-#define DMA_SNAPSHOT_MAX_TOTAL_BYTES (4U * 1024U * 1024U)
+/* The production catalog currently exposes 15 cards.  A normal+selected
+ * ARGB pair needs about 548 KiB, so the former 4 MiB limit retained only
+ * 18 of the 30 visual states and left most selected cards on the expensive
+ * live-object draw path.  Eight MiB covers the complete current catalog
+ * while staying below the measured free contiguous-memory margin.  Every
+ * allocation remains fail-safe: an exhausted heap simply keeps the live
+ * object fallback. */
+#define DMA_SNAPSHOT_MAX_TOTAL_BYTES (8U * 1024U * 1024U)
 #define DMA_SNAPSHOT_NAME_LEN 48U
-#define DMA_SNAPSHOT_CACHE_CAPACITY 32U
+#define DMA_SNAPSHOT_CACHE_CAPACITY 48U
 
 struct lv_dma_snapshot {
     lv_img_dsc_t image;
@@ -26,6 +34,7 @@ struct lv_dma_snapshot {
 static int g_dma_snapshot_device = -1;
 static uint32_t g_dma_snapshot_total_bytes;
 static lv_dma_snapshot_t *g_dma_snapshot_cache[DMA_SNAPSHOT_CACHE_CAPACITY];
+static lv_dma_snapshot_cache_stats_t g_dma_snapshot_stats;
 
 static void snapshot_destroy_storage(lv_dma_snapshot_t *snapshot);
 
@@ -119,7 +128,14 @@ lv_dma_snapshot_t *lv_dma_snapshot_create(lv_obj_t *obj,
     uint32_t row_bytes;
     uint32_t stride;
     uint32_t dma_bytes;
+    uint32_t captured_stride;
+    uint32_t captured_dma_bytes;
     bool capture_ok;
+    lv_coord_t snapshot_w;
+    lv_coord_t snapshot_h;
+    lv_coord_t ext_size;
+    uint64_t capture_started_us;
+    uint32_t capture_us;
 
     if (obj == NULL || !lv_obj_is_valid(obj)) return NULL;
 
@@ -127,27 +143,66 @@ lv_dma_snapshot_t *lv_dma_snapshot_create(lv_obj_t *obj,
                                             LV_IMG_CF_TRUE_COLOR_ALPHA);
     if (cpu_bytes == 0) return NULL;
 
-    cpu_pixels = lv_mem_alloc(cpu_bytes);
-    if (cpu_pixels == NULL) return NULL;
+    /* Capacity must be checked before the expensive off-screen render.  The
+     * old order rendered a full card and only then discovered that the
+     * bounded cache had no evictable entry, so a hidden-page prewarmer could
+     * repeat the same discarded render indefinitely. */
+    ext_size = _lv_obj_get_ext_draw_size(obj);
+    snapshot_w = lv_obj_get_width(obj) + ext_size * 2;
+    snapshot_h = lv_obj_get_height(obj) + ext_size * 2;
+    if (snapshot_w <= 0 || snapshot_h <= 0) {
+        g_dma_snapshot_stats.errors++;
+        return NULL;
+    }
+    row_bytes = (uint32_t)snapshot_w * 4U;
+    if (row_bytes * (uint32_t)snapshot_h != cpu_bytes) {
+        g_dma_snapshot_stats.errors++;
+        return NULL;
+    }
+    stride = (row_bytes + 15U) & ~15U;
+    dma_bytes = stride * (uint32_t)snapshot_h;
+    if (dma_bytes == 0 || !snapshot_cache_reserve(dma_bytes)) {
+        g_dma_snapshot_stats.no_space++;
+        return NULL;
+    }
 
+    cpu_pixels = lv_mem_alloc(cpu_bytes);
+    if (cpu_pixels == NULL) {
+        g_dma_snapshot_stats.errors++;
+        return NULL;
+    }
+
+    capture_started_us = app_clock_monotonic_us();
     lv_ge2d_offscreen_capture_begin();
     if (lv_snapshot_take_to_buf(obj, LV_IMG_CF_TRUE_COLOR_ALPHA,
                                 &cpu_image, cpu_pixels,
                                 cpu_bytes) != LV_RES_OK) {
         (void)lv_ge2d_offscreen_capture_end();
+        g_dma_snapshot_stats.errors++;
         lv_mem_free(cpu_pixels);
         return NULL;
     }
     capture_ok = lv_ge2d_offscreen_capture_end();
+    capture_us = app_clock_elapsed_us32(capture_started_us,
+                                        app_clock_monotonic_us());
+    g_dma_snapshot_stats.capture_count++;
+    g_dma_snapshot_stats.capture_total_us += capture_us;
+    if (capture_us > g_dma_snapshot_stats.capture_max_us) {
+        g_dma_snapshot_stats.capture_max_us = capture_us;
+    }
     if (!capture_ok || cpu_image.header.w <= 0 || cpu_image.header.h <= 0) {
+        g_dma_snapshot_stats.errors++;
         lv_mem_free(cpu_pixels);
         return NULL;
     }
 
     row_bytes = (uint32_t)cpu_image.header.w * 4U;
-    stride = (row_bytes + 15U) & ~15U;
-    dma_bytes = stride * (uint32_t)cpu_image.header.h;
-    if (dma_bytes == 0 || !snapshot_cache_reserve(dma_bytes)) {
+    captured_stride = (row_bytes + 15U) & ~15U;
+    captured_dma_bytes = captured_stride * (uint32_t)cpu_image.header.h;
+    if (cpu_image.header.w != snapshot_w ||
+        cpu_image.header.h != snapshot_h ||
+        captured_stride != stride || captured_dma_bytes != dma_bytes) {
+        g_dma_snapshot_stats.errors++;
         lv_mem_free(cpu_pixels);
         return NULL;
     }
@@ -155,6 +210,7 @@ lv_dma_snapshot_t *lv_dma_snapshot_create(lv_obj_t *obj,
     if (g_dma_snapshot_device < 0) {
         g_dma_snapshot_device = dmabuf_device_open();
         if (g_dma_snapshot_device < 0) {
+            g_dma_snapshot_stats.errors++;
             lv_mem_free(cpu_pixels);
             return NULL;
         }
@@ -162,6 +218,7 @@ lv_dma_snapshot_t *lv_dma_snapshot_create(lv_obj_t *obj,
 
     snapshot = calloc(1, sizeof(*snapshot));
     if (snapshot == NULL) {
+        g_dma_snapshot_stats.errors++;
         lv_mem_free(cpu_pixels);
         return NULL;
     }
@@ -172,6 +229,7 @@ lv_dma_snapshot_t *lv_dma_snapshot_create(lv_obj_t *obj,
     snapshot->frame.buf.stride[0] = stride;
     snapshot->frame.buf.format = MPP_FMT_ARGB_8888;
     if (mpp_buf_alloc(g_dma_snapshot_device, &snapshot->frame.buf) < 0) {
+        g_dma_snapshot_stats.errors++;
         free(snapshot);
         lv_mem_free(cpu_pixels);
         return NULL;
@@ -179,6 +237,7 @@ lv_dma_snapshot_t *lv_dma_snapshot_create(lv_obj_t *obj,
 
     dma_pixels = dmabuf_mmap(snapshot->frame.buf.fd[0], (int)dma_bytes);
     if (dma_pixels == NULL) {
+        g_dma_snapshot_stats.errors++;
         snapshot_release_frame(snapshot);
         free(snapshot);
         lv_mem_free(cpu_pixels);
@@ -215,12 +274,14 @@ lv_dma_snapshot_t *lv_dma_snapshot_create(lv_obj_t *obj,
     if (!lv_ge2d_register_dma_image(snapshot->image.data,
                                     &snapshot->frame,
                                     snapshot->name)) {
+        g_dma_snapshot_stats.errors++;
         snapshot_release_frame(snapshot);
         free(snapshot);
         return NULL;
     }
 
     g_dma_snapshot_total_bytes += dma_bytes;
+    g_dma_snapshot_stats.creates++;
     if (perf_profile_is_enabled()) {
         printf("DMA_SNAPSHOT create name=%s size=%dx%d bytes=%u total=%u\n",
                snapshot->name, snapshot->image.header.w,
@@ -262,7 +323,11 @@ lv_dma_snapshot_t *lv_dma_snapshot_cache_acquire(const char *cache_key)
     int slot = snapshot_cache_find_key(cache_key);
     lv_dma_snapshot_t *snapshot;
 
-    if (slot < 0) return NULL;
+    if (slot < 0) {
+        g_dma_snapshot_stats.misses++;
+        return NULL;
+    }
+    g_dma_snapshot_stats.hits++;
     snapshot = g_dma_snapshot_cache[slot];
     if (snapshot->references < UINT16_MAX) snapshot->references++;
     snapshot->last_used_tick = lv_tick_get();
@@ -326,6 +391,17 @@ uint32_t lv_dma_snapshot_cache_item_count(void)
         if (g_dma_snapshot_cache[i] != NULL) count++;
     }
     return count;
+}
+
+void lv_dma_snapshot_cache_take_stats(lv_dma_snapshot_cache_stats_t *out)
+{
+    if (out == NULL) return;
+
+    *out = g_dma_snapshot_stats;
+    out->item_count = lv_dma_snapshot_cache_item_count();
+    out->total_bytes = g_dma_snapshot_total_bytes;
+    out->max_bytes = DMA_SNAPSHOT_MAX_TOTAL_BYTES;
+    g_dma_snapshot_stats = (lv_dma_snapshot_cache_stats_t){0};
 }
 
 const lv_img_dsc_t *lv_dma_snapshot_image(const lv_dma_snapshot_t *snapshot)

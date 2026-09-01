@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "un260/lv_drivers/uart_io.h"
+#include "un260/lv_components/lv_dma_snapshot_cache.h"
 #include "un260/lv_system/app_clock.h"
 
 #include "cpu_mem.h"
@@ -108,6 +109,19 @@ typedef struct {
     uint32_t switch_us;
     uint32_t first_frame_us;
     uint32_t total_us;
+    uint32_t decode_count;
+    uint64_t decode_us;
+    uint64_t decode_bytes;
+    uint32_t label_calls;
+    uint64_t label_us;
+    uint32_t ge_commands;
+    uint64_t ge_us;
+    uint32_t flush_us;
+    uint32_t pan_us;
+    uint32_t vsync_us;
+    uint32_t mirror_us;
+    uint32_t invalid_area_count;
+    uint64_t invalid_pixels;
 } perf_profile_page_open_sample_t;
 
 typedef struct {
@@ -202,6 +216,11 @@ static void perf_profile_report_label_draw(uint32_t elapsed_us,
         return;
     }
 
+    if (g_profile.pending_open.valid &&
+        !g_profile.pending_open.first_frame_ready) {
+        g_profile.pending_open.label_calls++;
+        g_profile.pending_open.label_us += elapsed_us;
+    }
     g_profile.label_calls++;
     g_profile.label_text_bytes += text_bytes;
     g_profile.label_visible_pixels += visible_pixels;
@@ -427,6 +446,15 @@ void perf_profile_report_flush(const perf_profile_flush_sample_t *sample)
         return;
     }
 
+    if (g_profile.pending_open.valid &&
+        !g_profile.pending_open.first_frame_ready) {
+        g_profile.pending_open.flush_us = sample->total_us;
+        g_profile.pending_open.pan_us = sample->pan_us;
+        g_profile.pending_open.vsync_us = sample->vsync_us;
+        g_profile.pending_open.mirror_us = sample->mirror_us;
+        g_profile.pending_open.invalid_area_count = sample->invalid_area_count;
+        g_profile.pending_open.invalid_pixels = sample->invalid_pixels;
+    }
     g_profile.frame_sequence++;
     g_profile.frames++;
     g_profile.invalid_area_total += sample->invalid_area_count;
@@ -465,6 +493,11 @@ void perf_profile_report_ge(perf_profile_ge_op_t op, uint64_t pixels,
         return;
     }
 
+    if (g_profile.pending_open.valid &&
+        !g_profile.pending_open.first_frame_ready) {
+        g_profile.pending_open.ge_commands++;
+        g_profile.pending_open.ge_us += elapsed_us;
+    }
     acc = &g_profile.ge[op];
     acc->count++;
     acc->pixels += pixels;
@@ -519,6 +552,19 @@ void perf_profile_report_ge_blit_path(bool alpha, bool scaled,
     }
 }
 
+void perf_profile_begin_page_open(uint32_t page_id, const char *page_name,
+                                  uint64_t started_us)
+{
+    if (!g_profile.enabled || started_us == 0) return;
+
+    g_profile.pending_open = (perf_profile_page_open_sample_t){
+        .valid = true,
+        .page_id = page_id,
+        .page_name = page_name != NULL ? page_name : "INVALID",
+        .started_us = started_us,
+    };
+}
+
 void perf_profile_report_page_switch(
     const perf_profile_page_switch_sample_t *sample)
 {
@@ -528,14 +574,17 @@ void perf_profile_report_page_switch(
 
     g_profile.pending_switch = *sample;
     g_profile.pending_switch_valid = true;
-    g_profile.pending_open = (perf_profile_page_open_sample_t){
-        .valid = sample->started_us != 0,
-        .page_id = sample->to_id,
-        .page_name = sample->to_name,
-        .mode = sample->enter_action,
-        .started_us = sample->started_us,
-        .switch_us = sample->total_us,
-    };
+    if (!g_profile.pending_open.valid ||
+        g_profile.pending_open.started_us != sample->started_us) {
+        perf_profile_begin_page_open(sample->to_id, sample->to_name,
+                                     sample->started_us);
+    }
+    if (g_profile.pending_open.valid) {
+        g_profile.pending_open.page_id = sample->to_id;
+        g_profile.pending_open.page_name = sample->to_name;
+        g_profile.pending_open.mode = sample->enter_action;
+        g_profile.pending_open.switch_us = sample->total_us;
+    }
 }
 
 void perf_profile_report_event_us(const char *page_name, const char *event,
@@ -567,6 +616,12 @@ void perf_profile_report_image_decode(const char *src, uint32_t elapsed_us,
 
     name = strrchr(src, '/');
     name = name != NULL ? name + 1 : src;
+    if (g_profile.pending_open.valid &&
+        !g_profile.pending_open.first_frame_ready) {
+        g_profile.pending_open.decode_count++;
+        g_profile.pending_open.decode_us += elapsed_us;
+        g_profile.pending_open.decode_bytes += decoded_bytes;
+    }
     g_profile.image_decode_count++;
     g_profile.image_decode_total_us += elapsed_us;
     g_profile.image_decode_bytes += decoded_bytes;
@@ -687,6 +742,19 @@ static void perf_profile_emit_pending_events(void)
             sample->mode != NULL ? sample->mode : "UNKNOWN",
             sample->switch_us, sample->first_frame_us, sample->total_us,
             sample->total_us / 1000U, sample->total_us % 1000U);
+        uart_debug_printf(
+            "PERF_OPEN_STAGE page=%s(%u) decode=%u/%llu/%llu "
+            "label=%u/%llu ge=%u/%llu flush=%u/%u/%u/%u "
+            "inv=%u/%llu\n",
+            sample->page_name != NULL ? sample->page_name : "INVALID",
+            sample->page_id, sample->decode_count,
+            (unsigned long long)sample->decode_us,
+            (unsigned long long)sample->decode_bytes,
+            sample->label_calls, (unsigned long long)sample->label_us,
+            sample->ge_commands, (unsigned long long)sample->ge_us,
+            sample->flush_us, sample->pan_us, sample->vsync_us,
+            sample->mirror_us, sample->invalid_area_count,
+            (unsigned long long)sample->invalid_pixels);
         g_profile.pending_open = (perf_profile_page_open_sample_t){0};
     }
 
@@ -713,6 +781,7 @@ void perf_profile_poll(uint32_t now_ms)
     uint64_t ge_emit_us;
     uint64_t ge_sync_us;
     uint32_t ge_sync_max_us;
+    lv_dma_snapshot_cache_stats_t snapshot_stats;
 
     if (!g_profile.enabled) {
         return;
@@ -885,6 +954,18 @@ void perf_profile_poll(uint32_t now_ms)
                 watch->duplicates);
         }
     }
+    lv_dma_snapshot_cache_take_stats(&snapshot_stats);
+    uart_debug_printf(
+        "PERF_CACHE page=%s snap=%u/%u/%u/%u/%u "
+        "capture=%u/%llu/%u items=%u bytes=%u/%u\n",
+        g_profile.page_name,
+        snapshot_stats.hits, snapshot_stats.misses,
+        snapshot_stats.creates, snapshot_stats.no_space,
+        snapshot_stats.errors, snapshot_stats.capture_count,
+        (unsigned long long)snapshot_stats.capture_total_us,
+        snapshot_stats.capture_max_us, snapshot_stats.item_count,
+        snapshot_stats.total_bytes,
+        snapshot_stats.max_bytes);
 
     perf_profile_reset_window(now_ms);
 }
