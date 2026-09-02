@@ -1,0 +1,47 @@
+From: Codex <codex@openai.com>
+Date: Tue, 1 Sep 2026 10:00:00 +0800
+Subject: [PATCH] lvgl: compact pending invalid areas covered by newer regions
+
+The invalid-area queue contains only 32 entries.  LVGL already drops a new
+area when an older pending area covers it, but it keeps older child areas when
+a newer parent area covers them.  A burst of child updates can therefore fill
+the queue and fall back to a full-screen redraw before refresh-time joining.
+
+Compact fully covered older entries when the newer area is collected.  This
+does not change the visible dirty union; it only represents that union with
+fewer queue entries earlier in the refresh pipeline.
+
+---
+ src/core/lv_refr.c | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/src/core/lv_refr.c b/src/core/lv_refr.c
+--- a/src/core/lv_refr.c
++++ b/src/core/lv_refr.c
+@@ -247,6 +247,24 @@ void _lv_inv_area(lv_disp_t * disp, const lv_area_t * area_p)
+         if(_lv_area_is_in(&com_area, &disp->inv_areas[i], 0) != false) return;
+     }
+ 
++    /*If the new area covers older pending areas, remove the older entries
++     *immediately.  Keeping both until lv_refr_join_area() wastes slots in the
++     *small invalid-area queue and can make a burst of child invalidations
++     *overflow to a full-screen redraw before their parent is invalidated.*/
++    uint16_t kept = 0;
++    for(i = 0; i < disp->inv_p; i++) {
++        if(_lv_area_is_in(&disp->inv_areas[i], &com_area, 0) != false) {
++            continue;
++        }
++
++        if(kept != i) {
++            lv_area_copy(&disp->inv_areas[kept], &disp->inv_areas[i]);
++        }
++        disp->inv_area_joined[kept] = 0;
++        kept++;
++    }
++    disp->inv_p = kept;
++
+     /*Save the area*/
+     if(disp->inv_p < LV_INV_BUF_SIZE) {
+         lv_area_copy(&disp->inv_areas[disp->inv_p], &com_area);
+-- 
+2.34.1

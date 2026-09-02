@@ -1,0 +1,87 @@
+diff --git a/src/core/lv_refr.h b/src/core/lv_refr.h
+index 72e8d6c..56ba3f7 100644
+--- a/src/core/lv_refr.h
++++ b/src/core/lv_refr.h
+@@ -26,6 +26,11 @@ extern "C" {
+  *      TYPEDEFS
+  **********************/
+ 
++typedef void (*lv_inv_queue_monitor_cb_t)(uint16_t queue_size,
++                                          uint16_t compacted,
++                                          bool contained,
++                                          bool overflow);
++
+ /**********************
+  *  STATIC PROTOTYPES
+  **********************/
+@@ -71,6 +76,12 @@ void lv_obj_redraw(lv_draw_ctx_t * draw_ctx, lv_obj_t * obj);
+  */
+ void _lv_inv_area(lv_disp_t * disp, const lv_area_t * area_p);
+ 
++/**
++ * Set an optional invalid-area queue monitor callback.
++ * Intended for diagnostics; pass NULL to disable it.
++ */
++void lv_refr_set_inv_queue_monitor_cb(lv_inv_queue_monitor_cb_t cb);
++
+ /**
+  * Get the display which is being refreshed
+  * @return the display being refreshed
+diff --git a/src/core/lv_refr.c b/src/core/lv_refr.c
+index 23ef4af..c44a08d 100644
+--- a/src/core/lv_refr.c
++++ b/src/core/lv_refr.c
+@@ -74,6 +74,7 @@ static void call_flush_cb(lv_disp_drv_t * drv, const lv_area_t * area, lv_color_
+  **********************/
+ static uint32_t px_num;
+ static lv_disp_t * disp_refr; /*Display being refreshed*/
++static lv_inv_queue_monitor_cb_t inv_queue_monitor_cb;
+ 
+ #if LV_USE_PERF_MONITOR
+     static perf_monitor_t   perf_monitor;
+@@ -244,13 +245,17 @@ void _lv_inv_area(lv_disp_t * disp, const lv_area_t * area_p)
+     /*Save only if this area is not in one of the saved areas*/
+     uint16_t i;
+     for(i = 0; i < disp->inv_p; i++) {
+-        if(_lv_area_is_in(&com_area, &disp->inv_areas[i], 0) != false) return;
++        if(_lv_area_is_in(&com_area, &disp->inv_areas[i], 0) != false) {
++            if(inv_queue_monitor_cb) inv_queue_monitor_cb(disp->inv_p, 0, true, false);
++            return;
++        }
+     }
+ 
+     /*If the new area covers older pending areas, remove the older entries
+      *immediately.  Keeping both until lv_refr_join_area() wastes slots in the
+      *small invalid-area queue and can make a burst of child invalidations
+      *overflow to a full-screen redraw before their parent is invalidated.*/
++    uint16_t previous = disp->inv_p;
+     uint16_t kept = 0;
+     for(i = 0; i < disp->inv_p; i++) {
+         if(_lv_area_is_in(&disp->inv_areas[i], &com_area, 0) != false) {
+@@ -265,6 +270,8 @@ void _lv_inv_area(lv_disp_t * disp, const lv_area_t * area_p)
+     }
+     disp->inv_p = kept;
+ 
++    bool overflow = disp->inv_p >= LV_INV_BUF_SIZE;
++
+     /*Save the area*/
+     if(disp->inv_p < LV_INV_BUF_SIZE) {
+         lv_area_copy(&disp->inv_areas[disp->inv_p], &com_area);
+@@ -274,9 +281,17 @@ void _lv_inv_area(lv_disp_t * disp, const lv_area_t * area_p)
+         lv_area_copy(&disp->inv_areas[disp->inv_p], &scr_area);
+     }
+     disp->inv_p++;
++    if(inv_queue_monitor_cb) {
++        inv_queue_monitor_cb(disp->inv_p, previous - kept, false, overflow);
++    }
+     if(disp->refr_timer) lv_timer_resume(disp->refr_timer);
+ }
+ 
++void lv_refr_set_inv_queue_monitor_cb(lv_inv_queue_monitor_cb_t cb)
++{
++    inv_queue_monitor_cb = cb;
++}
++
+ /**
+  * Get the display which is being refreshed
+  * @return the display being refreshed

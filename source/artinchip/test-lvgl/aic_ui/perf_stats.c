@@ -202,6 +202,33 @@ static perf_profile_inv_watch_t
 static uint32_t g_inv_requests;
 static uint32_t g_inv_duplicates;
 static uint64_t g_inv_pixels;
+static uint32_t g_inv_queue_requests;
+static uint32_t g_inv_queue_contained;
+static uint32_t g_inv_queue_compacted;
+static uint32_t g_inv_queue_overflows;
+static uint16_t g_inv_queue_peak;
+
+static void perf_profile_inv_queue_cb(uint16_t queue_size,
+                                      uint16_t compacted,
+                                      bool contained,
+                                      bool overflow)
+{
+    if (!g_profile.enabled) {
+        return;
+    }
+
+    g_inv_queue_requests++;
+    if (contained) {
+        g_inv_queue_contained++;
+    }
+    g_inv_queue_compacted += compacted;
+    if (overflow) {
+        g_inv_queue_overflows++;
+    }
+    if (queue_size > g_inv_queue_peak) {
+        g_inv_queue_peak = queue_size;
+    }
+}
 
 static uint64_t perf_profile_label_clock_us(void)
 {
@@ -333,6 +360,11 @@ static void perf_profile_reset_window(uint32_t now_ms)
     g_inv_requests = 0;
     g_inv_duplicates = 0;
     g_inv_pixels = 0;
+    g_inv_queue_requests = 0;
+    g_inv_queue_contained = 0;
+    g_inv_queue_compacted = 0;
+    g_inv_queue_overflows = 0;
+    g_inv_queue_peak = 0;
     for (i = 0; i < PERF_PROFILE_INV_WATCH_CAPACITY; i++) {
         g_inv_watch[i].calls = 0;
         g_inv_watch[i].duplicates = 0;
@@ -348,6 +380,8 @@ void perf_profile_set_enabled(bool enabled)
     }
 
     g_profile.enabled = enabled;
+    lv_refr_set_inv_queue_monitor_cb(enabled ?
+        perf_profile_inv_queue_cb : NULL);
     lv_obj_set_invalidation_monitor_cb(enabled ?
         perf_profile_invalidation_cb : NULL);
     lv_draw_label_set_profile_cb(enabled ? perf_profile_label_clock_us : NULL,
@@ -858,6 +892,13 @@ void perf_profile_poll(uint32_t now_ms)
         g_inv_requests, (unsigned long long)g_inv_pixels,
         g_inv_duplicates);
     uart_debug_printf(
+        "PERF_INV_QUEUE page=%s(%u) req=%u contained=%u compacted=%u "
+        "overflow=%u peak=%u\n",
+        g_profile.page_name, g_profile.page_id,
+        g_inv_queue_requests, g_inv_queue_contained,
+        g_inv_queue_compacted, g_inv_queue_overflows,
+        (unsigned int)g_inv_queue_peak);
+    uart_debug_printf(
         "PERF_DRAW page=%s(%u) label=%u/%llu/%llu/%llu/%u avg_us=%llu\n",
         g_profile.page_name, g_profile.page_id,
         g_profile.label_calls,
@@ -989,6 +1030,7 @@ void perf_stats_init(void)
     g_main_refresh_time = (perf_time_accumulator_t){0};
     memset(&g_profile, 0, sizeof(g_profile));
     memset(g_inv_watch, 0, sizeof(g_inv_watch));
+    lv_refr_set_inv_queue_monitor_cb(NULL);
     lv_obj_set_invalidation_monitor_cb(NULL);
     lv_draw_label_set_profile_cb(NULL, NULL);
     g_cpu_prev_valid = (cpu_occupy_get(&g_cpu_prev) == 0);
