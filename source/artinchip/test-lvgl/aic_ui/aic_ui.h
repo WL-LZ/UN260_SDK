@@ -12,9 +12,9 @@ extern "C" {
 
 #include <stdint.h>
 
-/* Keep the active page's background, card skins, flags and controls resident.
- * Currency alone can use more than ten distinct decoded images in one frame. */
-#define IMG_CACHE_NUM 16
+/* Large images are bounded separately by LVGL's retained lane.  The remaining
+ * slots keep reusable UI icons from being decoded on every page switch. */
+#define IMG_CACHE_NUM 48
 #define CONN(x, y) x#y
 
 //#define USE_TMPFS

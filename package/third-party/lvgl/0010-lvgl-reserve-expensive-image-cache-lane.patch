@@ -6,8 +6,10 @@ The fixed-size image cache lets frequent icon traffic age and evict large
 page backgrounds even though decoding them costs tens of milliseconds.
 Retaining every large image would move the problem to DMA memory pressure.
 
-Reserve a bounded lane of at most three entries and 6 MiB for images that are
-both large and expensive to decode. Normal misses evict only normal entries.
+Reserve a bounded lane of at most four entries and 8 MiB for images that are
+both large and expensive to decode. This covers the four core page backgrounds
+seen in profiling while keeping the memory cost explicit. Normal misses evict
+only normal entries.
 When the retained budget is exceeded, the weakest retained entry is demoted
 back into the normal eviction pool.
 
@@ -39,8 +41,8 @@ diff --git a/src/draw/lv_img_cache.c b/src/draw/lv_img_cache.c
 
 +/* Reserve only a small, bounded lane for expensive page-sized images.  The
 + * normal cache remains available to icons and state images. */
-+#define LV_IMG_CACHE_RETAINED_SLOTS 3
-+#define LV_IMG_CACHE_RETAINED_MAX_BYTES (6U * 1024U * 1024U)
++#define LV_IMG_CACHE_RETAINED_SLOTS 4
++#define LV_IMG_CACHE_RETAINED_MAX_BYTES (8U * 1024U * 1024U)
 +#define LV_IMG_CACHE_RETAINED_MIN_PIXELS 200000U
 +#define LV_IMG_CACHE_RETAINED_MIN_OPEN_MS 8U
 +

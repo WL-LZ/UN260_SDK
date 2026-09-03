@@ -1,0 +1,83 @@
+From: Codex <codex@openai.com>
+Date: Thu, 3 Sep 2026 16:50:00 +0800
+Subject: [PATCH] lvgl: retain the currently active large image
+
+The bounded retained lane limits protected page backgrounds, but a large
+image demoted from that lane still carries a high decode-cost life score. It
+can therefore occupy a normal cache slot while cheap reusable icons churn.
+
+Prefer demoting an older retained image when a newly decoded page-sized image
+enters the lane. Mark the demoted image as the weakest normal entry so it
+becomes the victim of the next cache miss. This keeps the active page
+background resident, preserves the normal lane for reusable icons, and does
+not allow large DMA buffers to accumulate.
+
+---
+ src/draw/lv_img_cache.c | 22 +++++++++++++++++-----
+ 1 file changed, 17 insertions(+), 5 deletions(-)
+
+diff --git a/src/draw/lv_img_cache.c b/src/draw/lv_img_cache.c
+--- a/src/draw/lv_img_cache.c
++++ b/src/draw/lv_img_cache.c
+@@ -48,7 +48,8 @@
+     static bool lv_img_cache_should_retain(
+         const _lv_img_cache_entry_t * entry);
+     static void lv_img_cache_rebalance_retained(
+-        _lv_img_cache_entry_t * cache);
++        _lv_img_cache_entry_t * cache,
++        _lv_img_cache_entry_t * newest);
+ #endif
+
+ /**********************
+@@ -154,7 +155,7 @@ _lv_img_cache_entry_t * _lv_img_cache_open(const void * src, lv_color_t color,
+     }
+ #if LV_IMG_CACHE_DEF_SIZE
+     cached_src->retained = lv_img_cache_should_retain(cached_src);
+-    lv_img_cache_rebalance_retained(cache);
++    lv_img_cache_rebalance_retained(cache, cached_src);
+ #endif
+
+     return cached_src;
+@@ -281,7 +282,8 @@ static bool lv_img_cache_should_retain(
+            pixels >= LV_IMG_CACHE_RETAINED_MIN_PIXELS;
+ }
+
+-static void lv_img_cache_rebalance_retained(_lv_img_cache_entry_t * cache)
++static void lv_img_cache_rebalance_retained(_lv_img_cache_entry_t * cache,
++                                            _lv_img_cache_entry_t * newest)
+ {
+     while(true) {
+         _lv_img_cache_entry_t * weakest = NULL;
+@@ -294,14 +296,24 @@ static void lv_img_cache_rebalance_retained(_lv_img_cache_entry_t * cache)
+             if(!cache[i].retained) continue;
+             retained_count++;
+             retained_bytes += lv_img_cache_estimated_bytes(&cache[i]);
+-            if(weakest == NULL || cache[i].life < weakest->life) {
++            /* A newly opened page-sized image belongs to the page currently
++             * being drawn. Prefer demoting an older retained page so the
++             * active background cannot be evicted by the next icon miss. */
++            if(&cache[i] != newest &&
++               (weakest == NULL || cache[i].life < weakest->life)) {
+                 weakest = &cache[i];
+             }
+         }
+
+         if(retained_count <= LV_IMG_CACHE_RETAINED_SLOTS &&
+            retained_bytes <= LV_IMG_CACHE_RETAINED_MAX_BYTES) {
+             break;
+         }
+-        if(weakest == NULL) break;
++        /* Only possible with a one-entry cache or a retained-byte limit below
++         * the newest image size. In that case the new entry cannot be kept. */
++        if(weakest == NULL) weakest = newest;
++        if(weakest == NULL || !weakest->retained) break;
+         weakest->retained = false;
++        /* A demoted page-sized image is only kept for the current draw.  Make
++         * it the next normal victim so large transient images cannot occupy
++         * the slots reserved for reusable icons. */
++        weakest->life = INT32_MIN;
+     }
+ }
+ #endif
+--
+2.34.1
