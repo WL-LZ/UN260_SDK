@@ -1,0 +1,178 @@
+From: Codex <codex@openai.com>
+Date: Thu, 3 Sep 2026 16:30:00 +0800
+Subject: [PATCH] lvgl: reserve bounded cache lane for expensive images
+
+The fixed-size image cache lets frequent icon traffic age and evict large
+page backgrounds even though decoding them costs tens of milliseconds.
+Retaining every large image would move the problem to DMA memory pressure.
+
+Reserve a bounded lane of at most three entries and 6 MiB for images that are
+both large and expensive to decode. Normal misses evict only normal entries.
+When the retained budget is exceeded, the weakest retained entry is demoted
+back into the normal eviction pool.
+
+---
+ src/draw/lv_img_cache.c | 96 +++++++++++++++++++++++++++++++++++++++---
+ src/draw/lv_img_cache.h |  4 ++
+ 2 files changed, 95 insertions(+), 5 deletions(-)
+
+diff --git a/src/draw/lv_img_cache.h b/src/draw/lv_img_cache.h
+--- a/src/draw/lv_img_cache.h
++++ b/src/draw/lv_img_cache.h
+@@ -34,6 +34,10 @@ typedef struct {
+      * Decrement all lifes by one every in every ::lv_img_cache_open.
+      * If life == 0 the entry can be reused*/
+     int32_t life;
++
++    /** Expensive, large images are retained in a small bounded cache lane so
++     * cheap icon traffic cannot evict every page background. */
++    bool retained;
+ } _lv_img_cache_entry_t;
+
+ /**********************
+diff --git a/src/draw/lv_img_cache.c b/src/draw/lv_img_cache.c
+--- a/src/draw/lv_img_cache.c
++++ b/src/draw/lv_img_cache.c
+@@ -20,6 +20,13 @@
+  * "die" from very high values*/
+ #define LV_IMG_CACHE_LIFE_LIMIT 1000
+
++/* Reserve only a small, bounded lane for expensive page-sized images.  The
++ * normal cache remains available to icons and state images. */
++#define LV_IMG_CACHE_RETAINED_SLOTS 3
++#define LV_IMG_CACHE_RETAINED_MAX_BYTES (6U * 1024U * 1024U)
++#define LV_IMG_CACHE_RETAINED_MIN_PIXELS 200000U
++#define LV_IMG_CACHE_RETAINED_MIN_OPEN_MS 8U
++
+ /**********************
+  *      TYPEDEFS
+  **********************/
+@@ -30,6 +37,14 @@
+  **********************/
+ #if LV_IMG_CACHE_DEF_SIZE
+     static bool lv_img_cache_match(const void * src1, const void * src2);
++    static _lv_img_cache_entry_t * lv_img_cache_find_victim(
++        _lv_img_cache_entry_t * cache);
++    static uint32_t lv_img_cache_estimated_bytes(
++        const _lv_img_cache_entry_t * entry);
++    static bool lv_img_cache_should_retain(
++        const _lv_img_cache_entry_t * entry);
++    static void lv_img_cache_rebalance_retained(
++        _lv_img_cache_entry_t * cache);
+ #endif
+
+ /**********************
+@@ -93,13 +108,9 @@ _lv_img_cache_entry_t * _lv_img_cache_open(const void * src, lv_color_t color,
+     /*The image is not cached then cache it now*/
+     if(cached_src) return cached_src;
+
+-    /*Find an entry to reuse. Select the entry with the least life*/
+-    cached_src = &cache[0];
+-    for(i = 1; i < entry_cnt; i++) {
+-        if(cache[i].life < cached_src->life) {
+-            cached_src = &cache[i];
+-        }
+-    }
++    /* Select the weakest normal entry.  Regular icon traffic must not evict
++     * the bounded retained lane used by expensive page backgrounds. */
++    cached_src = lv_img_cache_find_victim(cache);
+
+     /*Close the decoder to reuse if it was opened (has a valid source)*/
+     if(cached_src->dec_dsc.src) {
+@@ -112,6 +123,7 @@ _lv_img_cache_entry_t * _lv_img_cache_open(const void * src, lv_color_t color,
+ #else
+     cached_src = &LV_GC_ROOT(_lv_img_cache_single);
+ #endif
++    cached_src->retained = false;
+     /*Open the image and measure the time to open*/
+     uint32_t t_start  = lv_tick_get();
+     lv_res_t open_res = lv_img_decoder_open(&cached_src->dec_dsc, src, color, frame_id);
+@@ -136,6 +148,10 @@ _lv_img_cache_entry_t * _lv_img_cache_open(const void * src, lv_color_t color,
+     if(cached_src->life > LV_IMG_CACHE_LIFE_LIMIT) {
+         cached_src->life = LV_IMG_CACHE_LIFE_LIMIT;
+     }
++#if LV_IMG_CACHE_DEF_SIZE
++    cached_src->retained = lv_img_cache_should_retain(cached_src);
++    lv_img_cache_rebalance_retained(cache);
++#endif
+
+     return cached_src;
+ }
+@@ -216,4 +232,75 @@ static bool lv_img_cache_match(const void * src1, const void * src2)
+         return false;
+     return strcmp(src1, src2) == 0;
+ }
++
++static _lv_img_cache_entry_t * lv_img_cache_find_victim(
++    _lv_img_cache_entry_t * cache)
++{
++    _lv_img_cache_entry_t * weakest = NULL;
++    uint16_t i;
++
++    for(i = 0; i < entry_cnt; i++) {
++        if(cache[i].dec_dsc.src == NULL) return &cache[i];
++        if(cache[i].retained) continue;
++        if(weakest == NULL || cache[i].life < weakest->life) {
++            weakest = &cache[i];
++        }
++    }
++
++    /* Defensive fallback for cache sizes smaller than the retained limit. */
++    if(weakest == NULL) {
++        weakest = &cache[0];
++        for(i = 1; i < entry_cnt; i++) {
++            if(cache[i].life < weakest->life) weakest = &cache[i];
++        }
++    }
++
++    return weakest;
++}
++
++static uint32_t lv_img_cache_estimated_bytes(
++    const _lv_img_cache_entry_t * entry)
++{
++    uint64_t pixels = (uint64_t)entry->dec_dsc.header.w *
++                      (uint64_t)entry->dec_dsc.header.h;
++    uint64_t bytes = pixels * 4U;
++
++    return bytes > UINT32_MAX ? UINT32_MAX : (uint32_t)bytes;
++}
++
++static bool lv_img_cache_should_retain(
++    const _lv_img_cache_entry_t * entry)
++{
++    uint64_t pixels = (uint64_t)entry->dec_dsc.header.w *
++                      (uint64_t)entry->dec_dsc.header.h;
++
++    return entry->dec_dsc.time_to_open >= LV_IMG_CACHE_RETAINED_MIN_OPEN_MS &&
++           pixels >= LV_IMG_CACHE_RETAINED_MIN_PIXELS;
++}
++
++static void lv_img_cache_rebalance_retained(_lv_img_cache_entry_t * cache)
++{
++    while(true) {
++        _lv_img_cache_entry_t * weakest = NULL;
++        uint64_t retained_bytes = 0;
++        uint16_t retained_count = 0;
++        uint16_t i;
++
++        for(i = 0; i < entry_cnt; i++) {
++            if(!cache[i].retained) continue;
++            retained_count++;
++            retained_bytes += lv_img_cache_estimated_bytes(&cache[i]);
++            if(weakest == NULL || cache[i].life < weakest->life) {
++                weakest = &cache[i];
++            }
++        }
++
++        if(retained_count <= LV_IMG_CACHE_RETAINED_SLOTS &&
++           retained_bytes <= LV_IMG_CACHE_RETAINED_MAX_BYTES) {
++            break;
++        }
++        if(weakest == NULL) break;
++        weakest->retained = false;
++    }
++}
+ #endif
+--
+2.34.1
