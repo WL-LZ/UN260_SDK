@@ -28,6 +28,8 @@ USB_DEV=""
 BUNDLE_FNV=""
 TRANSACTION_STARTED=0
 ROLLBACK_RUNNING=0
+LAST_PROGRESS=0
+LAST_STAGE=prepare
 
 detect_usb_dev()
 {
@@ -55,7 +57,8 @@ write_status()
         [ -n "$message" ] && echo "message=$message"
     } > "$STATUS_TEMP"
     mv -f "$STATUS_TEMP" "$STATUS_FILE"
-    sync
+    LAST_PROGRESS="$progress"
+    LAST_STAGE="$stage"
 }
 
 write_result()
@@ -197,7 +200,7 @@ fail_update()
     cleanup_install_artifacts
     rollback_bundle
     cleanup_install_artifacts
-    write_status 12 fail "Upgrade package verification failed" 0 "$msg"
+    write_status "$LAST_PROGRESS" fail "fail" 0 "$msg"
     write_result fail "$msg" ""
     exit 1
 }
@@ -455,14 +458,17 @@ record_installed_bundle()
 
 install_bundle()
 {
+    write_status 5 verify "verify_archive" "" ""
     validate_archive_paths
     rm -rf "$STAGE_DIR" "$BACKUP_DIR"
     mkdir -p "$STAGE_DIR" "$BACKUP_DIR/rootfs"
     : > "$BACKUP_STATE"
 
+    write_status 10 extract "extract" "" ""
     tar -xzf "$BUNDLE_PATH" -C "$STAGE_DIR" >> "$LOG" 2>&1 ||
         fail_update "Failed to extract upgrade archive"
 
+    write_status 18 verify "verify_manifest" "" ""
     [ -f "$STAGE_DIR/manifest.ini" ] || fail_update "Package manifest is missing"
     [ -f "$STAGE_DIR/checksums.sha256" ] || fail_update "Package checksums are missing"
     [ -f "$STAGE_DIR/install.tsv" ] || fail_update "Install manifest is missing"
@@ -491,11 +497,13 @@ install_bundle()
     [ "$actual_package_id" = "$package_id" ] ||
         fail_update "Package identifier does not match its payload"
 
+    write_status 24 verify "verify_checksum" "" ""
     validate_payload_checksums
 
+    write_status 34 preflight "preflight" "" ""
     validate_install_manifest
     validate_storage_space
-    write_status 24 verify "Upgrade package verified" "" ""
+    write_status 40 install "install" "" ""
 
     TRANSACTION_STARTED=1
     trap interrupt_update HUP INT TERM
@@ -512,19 +520,20 @@ install_bundle()
         fi
 
         install_index=$((install_index + 1))
-        progress=$((24 + (install_index * 64 / INSTALL_ENTRY_COUNT)))
-        write_status "$progress" write "Writing system files" "" ""
+        progress=$((40 + (install_index * 50 / INSTALL_ENTRY_COUNT)))
+        write_status "$progress" install "install" "" ""
     done < "$STAGE_DIR/install.tsv"
 
+    write_status 92 sync "sync" "" ""
     record_installed_bundle
     sync
     TRANSACTION_STARTED=0
     trap - HUP INT TERM
 
-    write_status 96 finish "Finalizing upgrade" "" ""
-    rm -rf "$STAGE_DIR" "$ARCHIVE_LIST" "$ARCHIVE_TYPES" \
+    write_status 96 finish "finish" "" ""
+    rm -rf "$STAGE_DIR" "$BACKUP_DIR" "$ARCHIVE_LIST" "$ARCHIVE_TYPES" \
         "$SEEN_TARGETS" "$CHECKSUM_TARGETS" "$PAYLOAD_FILES"
-    write_status 100 success "Upgrade complete" 1 "The system has been updated successfully. Restarting the device is recommended."
+    write_status 100 success "success" 1 "The system has been updated successfully. Restarting the device is recommended."
     write_result success "Upgrade completed successfully; reboot is required" "$package_version"
     echo "Bundle update OK: version=$package_version id=$package_id" >> "$LOG"
 }
@@ -546,11 +555,11 @@ install_legacy_file()
 install_legacy_package()
 {
     [ -f "$LEGACY_APP_PATH" ] || fail_update "Upgrade binary not found on USB drive"
-    write_status 18 verify "Upgrade package verified" "" ""
+    write_status 10 verify "verify_manifest" "" ""
 
     [ ! -f "$LEGACY_LIB_PATH" ] ||
         install_legacy_file "$LEGACY_LIB_PATH" /usr/local/lib/liblvgl.so 0755
-    write_status 48 write "Writing system files" "" ""
+    write_status 35 install "install" "" ""
 
     if [ -d "$LEGACY_DATA_PATH" ]; then
         rm -rf /usr/local/share/lvgl_data.un260-new.$$
@@ -560,11 +569,12 @@ install_legacy_package()
         mv /usr/local/share/lvgl_data.un260-new.$$ /usr/local/share/lvgl_data ||
             fail_update "Failed to replace UI image resources"
     fi
-    write_status 72 write "Writing system files" "" ""
+    write_status 65 install "install" "" ""
 
     install_legacy_file "$LEGACY_APP_PATH" /usr/local/bin/test_lvgl 0755
+    write_status 92 sync "sync" "" ""
     sync
-    write_status 100 success "Upgrade complete" 1 "The system has been updated successfully. Restarting the device is recommended."
+    write_status 100 success "success" 1 "The system has been updated successfully. Restarting the device is recommended."
     write_result success "Legacy UI upgrade completed; reboot is required" legacy
     echo "Legacy update OK" >> "$LOG"
 }
@@ -595,7 +605,7 @@ RESULT_FILE=$USB_MNT/UN260_UPDATE_RESULT.txt
 : > "$LOG"
 rm -f "$RESULT_FILE"
 echo "ui_update start: $(date)" >> "$LOG"
-write_status 5 verify "Verifying upgrade package" "" ""
+write_status 2 prepare "prepare" "" ""
 
 if [ -f "$BUNDLE_PATH" ]; then
     install_bundle

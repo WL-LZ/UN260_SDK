@@ -27,7 +27,7 @@
 
 #define UPGRADE_POPUP_CARD_RADIUS         28
 #define UPGRADE_POPUP_BTN_RADIUS          10
-#define UPGRADE_POPUP_STATUS_TIMER_MS     200
+#define UPGRADE_POPUP_STATUS_TIMER_MS     100
 #define UPGRADE_POPUP_RESULT_DELAY_MS     400
 #define UPGRADE_POPUP_REBOOT_DELAY_MS     1000
 #define UPGRADE_POPUP_SHOW_TIME_MS        400
@@ -73,6 +73,10 @@ typedef struct {
     lv_obj_t* progress_bar;
     lv_obj_t* progress_percent;
     lv_obj_t* progress_step;
+    lv_obj_t* progress_spinner;
+    lv_obj_t* progress_phase_label;
+    int displayed_progress;
+    ui_upgrade_stage_t progress_stage;
 
     lv_obj_t* success_icon_wrap;
     lv_obj_t* success_icon;
@@ -124,6 +128,84 @@ static void upgrade_popup_prepare_result_popup(void);
 static void upgrade_popup_prompt_hide_ready_cb(lv_anim_t* a);
 static void upgrade_popup_result_hide_ready_cb(lv_anim_t* a);
 static void upgrade_popup_refresh_text_internal(void);
+
+static const char* upgrade_popup_stage_text(ui_upgrade_stage_t stage)
+{
+    switch (stage) {
+    case UI_UPGRADE_STAGE_PREPARE:
+        return ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_PROGRESS_STEP_PREPARE);
+    case UI_UPGRADE_STAGE_VERIFY:
+        return ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_PROGRESS_STEP_VERIFY);
+    case UI_UPGRADE_STAGE_EXTRACT:
+        return ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_PROGRESS_STEP_EXTRACT);
+    case UI_UPGRADE_STAGE_PREFLIGHT:
+        return ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_PROGRESS_STEP_PREFLIGHT);
+    case UI_UPGRADE_STAGE_INSTALL:
+        return ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_PROGRESS_STEP_INSTALL);
+    case UI_UPGRADE_STAGE_SYNC:
+        return ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_PROGRESS_STEP_SYNC);
+    case UI_UPGRADE_STAGE_FINISH:
+        return ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_PROGRESS_STEP_FINISH);
+    case UI_UPGRADE_STAGE_SUCCESS:
+        return ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_SUCCESS_TITLE);
+    case UI_UPGRADE_STAGE_FAIL:
+        return ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_PROGRESS_STEP_VERIFY_FAIL);
+    default:
+        return ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_PROGRESS_STEP_PREPARE);
+    }
+}
+
+static unsigned int upgrade_popup_stage_rank(ui_upgrade_stage_t stage)
+{
+    switch (stage) {
+    case UI_UPGRADE_STAGE_PREPARE: return 0;
+    case UI_UPGRADE_STAGE_VERIFY: return 1;
+    case UI_UPGRADE_STAGE_EXTRACT:
+    case UI_UPGRADE_STAGE_PREFLIGHT: return 2;
+    case UI_UPGRADE_STAGE_INSTALL: return 3;
+    case UI_UPGRADE_STAGE_SYNC: return 4;
+    case UI_UPGRADE_STAGE_FINISH:
+    case UI_UPGRADE_STAGE_SUCCESS:
+    case UI_UPGRADE_STAGE_FAIL: return 5;
+    default: return 0;
+    }
+}
+
+static void upgrade_popup_update_phase_label(ui_upgrade_stage_t stage)
+{
+    unsigned int current = upgrade_popup_stage_rank(stage);
+
+    if (g_upgrade_popup.progress_phase_label) {
+        lv_label_set_text_fmt(g_upgrade_popup.progress_phase_label,
+                              "%02u / 06", current + 1U);
+    }
+}
+
+static void upgrade_popup_progress_anim_cb(void* var, int32_t value)
+{
+    (void)var;
+    g_upgrade_popup.displayed_progress = (int)value;
+    lv_bar_set_value(g_upgrade_popup.progress_bar, (int)value, LV_ANIM_OFF);
+    lv_label_set_text_fmt(g_upgrade_popup.progress_percent, "%d%%", (int)value);
+}
+
+static void upgrade_popup_set_real_progress(int target)
+{
+    lv_anim_t anim;
+
+    if (target < 0) target = 0;
+    if (target > 100) target = 100;
+    if (target == g_upgrade_popup.displayed_progress) return;
+
+    lv_anim_del(&g_upgrade_popup, upgrade_popup_progress_anim_cb);
+    lv_anim_init(&anim);
+    lv_anim_set_var(&anim, &g_upgrade_popup);
+    lv_anim_set_exec_cb(&anim, upgrade_popup_progress_anim_cb);
+    lv_anim_set_values(&anim, g_upgrade_popup.displayed_progress, target);
+    lv_anim_set_time(&anim, 320);
+    lv_anim_set_path_cb(&anim, lv_anim_path_ease_out);
+    lv_anim_start(&anim);
+}
 
 static void upgrade_popup_anim_opa_cb(void* var, int32_t v)
 {
@@ -531,9 +613,7 @@ static void upgrade_popup_create_prompt_card(void)
 
 static void upgrade_popup_create_progress_card(void)
 {
-    lv_obj_t* icon_label;
-
-    g_upgrade_popup.progress_card = upgrade_popup_create_card(g_upgrade_popup.root, 480, 248);
+    g_upgrade_popup.progress_card = upgrade_popup_create_card(g_upgrade_popup.root, 540, 260);
 
     g_upgrade_popup.progress_icon = lv_obj_create(g_upgrade_popup.progress_card);
     lv_obj_remove_style_all(g_upgrade_popup.progress_icon);
@@ -543,16 +623,20 @@ static void upgrade_popup_create_progress_card(void)
     lv_obj_set_style_bg_opa(g_upgrade_popup.progress_icon, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(g_upgrade_popup.progress_icon, 18, 0);
 
-    icon_label = lv_label_create(g_upgrade_popup.progress_icon);
-    lv_label_set_text(icon_label, LV_SYMBOL_UPLOAD);
-    upgrade_popup_apply_text_style(icon_label,
-                                   lv_color_hex(UPGRADE_POPUP_TEXT_MAIN_COLOR),
-                                   &lv_font_montserrat_24);
-    lv_obj_center(icon_label);
+    g_upgrade_popup.progress_spinner = lv_spinner_create(g_upgrade_popup.progress_icon, 900, 72);
+    lv_obj_set_size(g_upgrade_popup.progress_spinner, 34, 34);
+    lv_obj_set_style_arc_width(g_upgrade_popup.progress_spinner, 4, LV_PART_MAIN);
+    lv_obj_set_style_arc_color(g_upgrade_popup.progress_spinner,
+                               lv_color_hex(0xD9D9DC), LV_PART_MAIN);
+    lv_obj_set_style_arc_width(g_upgrade_popup.progress_spinner, 4, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(g_upgrade_popup.progress_spinner,
+                               lv_color_hex(UPGRADE_POPUP_TEXT_MAIN_COLOR), LV_PART_INDICATOR);
+    lv_obj_clear_flag(g_upgrade_popup.progress_spinner, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_center(g_upgrade_popup.progress_spinner);
 
     g_upgrade_popup.progress_title_group = lv_obj_create(g_upgrade_popup.progress_card);
     lv_obj_remove_style_all(g_upgrade_popup.progress_title_group);
-    lv_obj_set_size(g_upgrade_popup.progress_title_group, 300, 56);
+    lv_obj_set_size(g_upgrade_popup.progress_title_group, 340, 56);
     lv_obj_set_pos(g_upgrade_popup.progress_title_group, 102, 38);
 
     g_upgrade_popup.progress_tag = lv_label_create(g_upgrade_popup.progress_title_group);
@@ -561,7 +645,7 @@ static void upgrade_popup_create_progress_card(void)
                                    lv_color_hex(UPGRADE_POPUP_TAG_COLOR),
                                    &lv_font_instrument_sans_medium_10);
     lv_obj_set_style_text_align(g_upgrade_popup.progress_tag, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_set_width(g_upgrade_popup.progress_tag, 300);
+    lv_obj_set_width(g_upgrade_popup.progress_tag, 340);
     lv_obj_set_pos(g_upgrade_popup.progress_tag, 0, 0);
 
     g_upgrade_popup.progress_title = lv_label_create(g_upgrade_popup.progress_title_group);
@@ -570,8 +654,17 @@ static void upgrade_popup_create_progress_card(void)
                                    lv_color_hex(UPGRADE_POPUP_TEXT_MAIN_COLOR),
                                    &lv_font_instrument_sans_semibold_16);
     lv_obj_set_style_text_align(g_upgrade_popup.progress_title, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_set_width(g_upgrade_popup.progress_title, 300);
+    lv_obj_set_width(g_upgrade_popup.progress_title, 340);
     lv_obj_set_pos(g_upgrade_popup.progress_title, 0, 18);
+
+    g_upgrade_popup.progress_phase_label = lv_label_create(g_upgrade_popup.progress_card);
+    lv_label_set_text(g_upgrade_popup.progress_phase_label, "01 / 06");
+    upgrade_popup_apply_text_style(g_upgrade_popup.progress_phase_label,
+                                   lv_color_hex(UPGRADE_POPUP_TEXT_LIGHT_COLOR),
+                                   &lv_font_instrument_sans_medium_12);
+    lv_obj_set_width(g_upgrade_popup.progress_phase_label, 84);
+    lv_obj_set_style_text_align(g_upgrade_popup.progress_phase_label, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_pos(g_upgrade_popup.progress_phase_label, 424, 44);
 
     g_upgrade_popup.progress_subtitle = lv_label_create(g_upgrade_popup.progress_card);
     lv_label_set_text(g_upgrade_popup.progress_subtitle, ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_PROGRESS_DESC));
@@ -579,17 +672,17 @@ static void upgrade_popup_create_progress_card(void)
                                    lv_color_hex(UPGRADE_POPUP_TEXT_DESC_COLOR),
                                    &lv_font_instrument_sans_medium_12);
     lv_obj_set_style_text_align(g_upgrade_popup.progress_subtitle, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(g_upgrade_popup.progress_subtitle, 320);
+    lv_obj_set_width(g_upgrade_popup.progress_subtitle, 460);
     lv_label_set_long_mode(g_upgrade_popup.progress_subtitle, LV_LABEL_LONG_WRAP);
-    lv_obj_align(g_upgrade_popup.progress_subtitle, LV_ALIGN_TOP_MID, 0, 114);
+    lv_obj_align(g_upgrade_popup.progress_subtitle, LV_ALIGN_TOP_MID, 0, 108);
 
     g_upgrade_popup.progress_content_group = lv_obj_create(g_upgrade_popup.progress_card);
     lv_obj_remove_style_all(g_upgrade_popup.progress_content_group);
-    lv_obj_set_size(g_upgrade_popup.progress_content_group, 400, 96);
-    lv_obj_set_pos(g_upgrade_popup.progress_content_group, 40, 170);
+    lv_obj_set_size(g_upgrade_popup.progress_content_group, 460, 76);
+    lv_obj_set_pos(g_upgrade_popup.progress_content_group, 40, 158);
 
     g_upgrade_popup.progress_bar = lv_bar_create(g_upgrade_popup.progress_content_group);
-    lv_obj_set_size(g_upgrade_popup.progress_bar, 400, 5);
+    lv_obj_set_size(g_upgrade_popup.progress_bar, 460, 6);
     lv_obj_set_pos(g_upgrade_popup.progress_bar, 0, 0);
     lv_bar_set_range(g_upgrade_popup.progress_bar, 0, 100);
     lv_bar_set_value(g_upgrade_popup.progress_bar, 0, LV_ANIM_OFF);
@@ -608,14 +701,14 @@ static void upgrade_popup_create_progress_card(void)
     lv_obj_set_pos(g_upgrade_popup.progress_percent, 0, 22);
 
     g_upgrade_popup.progress_step = lv_label_create(g_upgrade_popup.progress_content_group);
-    lv_obj_set_width(g_upgrade_popup.progress_step, 220);
+    lv_obj_set_width(g_upgrade_popup.progress_step, 330);
     lv_obj_set_style_text_align(g_upgrade_popup.progress_step, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_text(g_upgrade_popup.progress_step,
                       ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_PROGRESS_STEP_VERIFY));
     upgrade_popup_apply_text_style(g_upgrade_popup.progress_step,
                                    lv_color_hex(UPGRADE_POPUP_TEXT_DESC_COLOR),
                                    &lv_font_instrument_sans_medium_12);
-    lv_obj_align(g_upgrade_popup.progress_step, LV_ALIGN_TOP_RIGHT, 0, 36);
+    lv_obj_align(g_upgrade_popup.progress_step, LV_ALIGN_TOP_RIGHT, 0, 34);
     lv_label_set_long_mode(g_upgrade_popup.progress_step, LV_LABEL_LONG_WRAP);
 }
 
@@ -812,10 +905,14 @@ static void upgrade_popup_set_state(upgrade_popup_state_t state)
         lv_obj_set_style_bg_color(g_upgrade_popup.progress_bar,
                                   lv_color_hex(UPGRADE_POPUP_TEXT_MAIN_COLOR),
                                   LV_PART_INDICATOR);
+        lv_anim_del(&g_upgrade_popup, upgrade_popup_progress_anim_cb);
+        g_upgrade_popup.displayed_progress = 0;
+        g_upgrade_popup.progress_stage = UI_UPGRADE_STAGE_PREPARE;
         lv_bar_set_value(g_upgrade_popup.progress_bar, 0, LV_ANIM_OFF);
         lv_label_set_text(g_upgrade_popup.progress_percent, "0%");
         lv_label_set_text(g_upgrade_popup.progress_step,
-                          ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_PROGRESS_STEP_VERIFY));
+                          upgrade_popup_stage_text(UI_UPGRADE_STAGE_PREPARE));
+        upgrade_popup_update_phase_label(UI_UPGRADE_STAGE_PREPARE);
         upgrade_popup_reset_card_pos(g_upgrade_popup.progress_card);
         lv_obj_clear_flag(g_upgrade_popup.progress_card, LV_OBJ_FLAG_HIDDEN);
         upgrade_popup_run_state_anim(state);
@@ -1012,6 +1109,10 @@ static void upgrade_popup_refresh_text_internal(void) //刷新升级弹窗当前
     }
     if (g_upgrade_popup.progress_subtitle) {
         lv_label_set_text(g_upgrade_popup.progress_subtitle, ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_PROGRESS_DESC));
+    }
+    if (g_upgrade_popup.progress_step) {
+        lv_label_set_text(g_upgrade_popup.progress_step,
+                          upgrade_popup_stage_text(g_upgrade_popup.progress_stage));
     }
 
     if (g_upgrade_popup.success_tag) {
@@ -1249,10 +1350,12 @@ static void upgrade_popup_status_timer_cb(lv_timer_t* timer)
     }
 
     lv_obj_set_style_bg_color(g_upgrade_popup.progress_bar, bar_color, LV_PART_INDICATOR);
-    lv_bar_set_value(g_upgrade_popup.progress_bar, status.progress, LV_ANIM_ON);
-    lv_label_set_text_fmt(g_upgrade_popup.progress_percent, "%d%%", status.progress);
-    if (status.step_text[0] != '\0') {
-        lv_label_set_text(g_upgrade_popup.progress_step, status.step_text);
+    upgrade_popup_set_real_progress(status.progress);
+    if (status.stage != g_upgrade_popup.progress_stage) {
+        g_upgrade_popup.progress_stage = status.stage;
+        lv_label_set_text(g_upgrade_popup.progress_step,
+                          upgrade_popup_stage_text(status.stage));
+        upgrade_popup_update_phase_label(status.stage);
     }
 
     if (status.finished && g_upgrade_popup.result_timer == NULL) {
@@ -1281,7 +1384,10 @@ static void upgrade_popup_show_success(void)
     lv_obj_set_style_bg_color(g_upgrade_popup.progress_bar,
                               lv_color_hex(UPGRADE_POPUP_OK_COLOR),
                               LV_PART_INDICATOR);
-    lv_bar_set_value(g_upgrade_popup.progress_bar, 100, LV_ANIM_ON);
+    lv_anim_del(&g_upgrade_popup, upgrade_popup_progress_anim_cb);
+    upgrade_popup_progress_anim_cb(&g_upgrade_popup, 100);
+    g_upgrade_popup.progress_stage = UI_UPGRADE_STAGE_SUCCESS;
+    upgrade_popup_update_phase_label(UI_UPGRADE_STAGE_SUCCESS);
     upgrade_popup_set_state(UPGRADE_POPUP_STATE_SUCCESS);
 }
 
@@ -1299,10 +1405,11 @@ static void upgrade_popup_show_fail(const char* desc_text)
         lv_obj_set_style_bg_color(g_upgrade_popup.progress_bar,
                                   lv_color_hex(UPGRADE_POPUP_FAIL_COLOR),
                                   LV_PART_INDICATOR);
-        lv_bar_set_value(g_upgrade_popup.progress_bar, 12, LV_ANIM_ON);
+        lv_anim_del(&g_upgrade_popup, upgrade_popup_progress_anim_cb);
         lv_label_set_text(g_upgrade_popup.progress_step,
                           ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_PROGRESS_STEP_VERIFY_FAIL));
-        lv_label_set_text(g_upgrade_popup.progress_percent, "12%");
+        g_upgrade_popup.progress_stage = UI_UPGRADE_STAGE_FAIL;
+        upgrade_popup_update_phase_label(UI_UPGRADE_STAGE_FAIL);
     }
 
     if (g_upgrade_popup.fail_desc) {

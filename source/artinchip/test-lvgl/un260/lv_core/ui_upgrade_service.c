@@ -13,7 +13,6 @@
 #include <unistd.h>
 #include <stdint.h>
 
-#include "un260/lv_system/app_clock.h"
 #include "un260/storage/usb_storage.h"
 
 #define UI_UPGRADE_BUNDLE_FILE_PATH    USB_STORAGE_MOUNT_POINT "/update/UN260_UPDATE.upk"
@@ -39,7 +38,6 @@ typedef struct {
     bool finished;
     bool success;
     pid_t child_pid;
-    unsigned long start_ms;
     char status_content[UI_UPGRADE_STATUS_MAX_SIZE];
     size_t status_content_len;
     ui_upgrade_service_status_t status;
@@ -50,11 +48,6 @@ static bool g_ui_upgrade_running_hash_ready = false;
 static uint64_t g_ui_upgrade_running_hash = 0;
 static ui_upgrade_hash_cache_t g_ui_upgrade_pkg_hash_cache;
 static bool g_ui_upgrade_bundle_selected = false;
-
-static unsigned long ui_upgrade_service_now_ms(void)
-{
-    return (unsigned long)app_clock_monotonic_ms();
-}
 
 static bool ui_upgrade_service_file_exists(const char* path)
 {
@@ -233,8 +226,13 @@ static void ui_upgrade_service_set_status(bool running,
 static ui_upgrade_stage_t ui_upgrade_service_stage_from_name(const char* stage_name)
 {
     if (stage_name == NULL) return UI_UPGRADE_STAGE_NONE;
+    if (strcmp(stage_name, "prepare") == 0) return UI_UPGRADE_STAGE_PREPARE;
     if (strcmp(stage_name, "verify") == 0) return UI_UPGRADE_STAGE_VERIFY;
-    if (strcmp(stage_name, "write") == 0) return UI_UPGRADE_STAGE_WRITE;
+    if (strcmp(stage_name, "extract") == 0) return UI_UPGRADE_STAGE_EXTRACT;
+    if (strcmp(stage_name, "preflight") == 0) return UI_UPGRADE_STAGE_PREFLIGHT;
+    if (strcmp(stage_name, "install") == 0 ||
+        strcmp(stage_name, "write") == 0) return UI_UPGRADE_STAGE_INSTALL;
+    if (strcmp(stage_name, "sync") == 0) return UI_UPGRADE_STAGE_SYNC;
     if (strcmp(stage_name, "finish") == 0) return UI_UPGRADE_STAGE_FINISH;
     if (strcmp(stage_name, "success") == 0) return UI_UPGRADE_STAGE_SUCCESS;
     if (strcmp(stage_name, "fail") == 0) return UI_UPGRADE_STAGE_FAIL;
@@ -267,36 +265,6 @@ static bool ui_upgrade_service_parse_int(const char* text,
 
     *value_out = (int)value;
     return true;
-}
-
-static void ui_upgrade_service_set_progress_by_time(void)
-{
-    unsigned long elapsed_ms = ui_upgrade_service_now_ms() - g_ui_upgrade_service.start_ms;
-    int progress = 0;
-    ui_upgrade_stage_t stage = UI_UPGRADE_STAGE_VERIFY;
-    const char* step_text = "Verifying upgrade package";
-
-    if (elapsed_ms < 1200UL) {
-        progress = (int)((elapsed_ms * 16UL) / 1200UL);
-        stage = UI_UPGRADE_STAGE_VERIFY;
-        step_text = "Verifying upgrade package";
-    } else if (elapsed_ms < 5200UL) {
-        progress = 24 + (int)(((elapsed_ms - 1200UL) * 50UL) / 4000UL);
-        stage = UI_UPGRADE_STAGE_WRITE;
-        step_text = "Writing system files";
-    } else if (elapsed_ms < 7000UL) {
-        progress = 82 + (int)(((elapsed_ms - 5200UL) * 13UL) / 1800UL);
-        stage = UI_UPGRADE_STAGE_FINISH;
-        step_text = "Finalizing upgrade";
-    } else {
-        progress = 95;
-        stage = UI_UPGRADE_STAGE_FINISH;
-        step_text = "Finalizing upgrade";
-    }
-
-    if (progress > g_ui_upgrade_service.status.progress) {
-        ui_upgrade_service_set_status(true, false, false, progress, stage, step_text, "");
-    }
 }
 
 static void ui_upgrade_service_load_status_file(void)
@@ -377,7 +345,10 @@ static void ui_upgrade_service_load_status_file(void)
     memcpy(g_ui_upgrade_service.status_content, content, content_len + 1U);
     g_ui_upgrade_service.status_content_len = content_len;
 
-    g_ui_upgrade_service.status.progress = progress;
+    if (stage == UI_UPGRADE_STAGE_FAIL ||
+        progress >= g_ui_upgrade_service.status.progress) {
+        g_ui_upgrade_service.status.progress = progress;
+    }
     g_ui_upgrade_service.status.stage = stage;
     snprintf(g_ui_upgrade_service.status.step_text,
              sizeof(g_ui_upgrade_service.status.step_text), "%s", step_text);
@@ -395,9 +366,9 @@ static void ui_upgrade_service_load_status_file(void)
         g_ui_upgrade_service.finished = true;
         g_ui_upgrade_service.success = true;
     } else if (success == 0) {
-        ui_upgrade_service_set_status(false, true, false, 12,
+        ui_upgrade_service_set_status(false, true, false, progress,
                                       UI_UPGRADE_STAGE_FAIL,
-                                      "Upgrade package verification failed",
+                                      step_text,
                                       result_text[0] ? result_text : "The upgrade package is invalid. Please check the file and try again.");
         g_ui_upgrade_service.running = false;
         g_ui_upgrade_service.finished = true;
@@ -555,20 +526,18 @@ ui_upgrade_start_result_t ui_upgrade_service_start(void)
     g_ui_upgrade_service.finished = false;
     g_ui_upgrade_service.success = false;
     g_ui_upgrade_service.child_pid = pid;
-    g_ui_upgrade_service.start_ms = ui_upgrade_service_now_ms();
     g_ui_upgrade_service.status_content[0] = '\0';
     g_ui_upgrade_service.status_content_len = 0;
 
     ui_upgrade_service_set_status(true, false, false, 0,
-                                  UI_UPGRADE_STAGE_VERIFY,
-                                  "Verifying upgrade package", "");
+                                  UI_UPGRADE_STAGE_PREPARE,
+                                  "prepare", "");
     return UI_UPGRADE_START_OK;
 }
 
 void ui_upgrade_service_poll(ui_upgrade_service_status_t* status)
 {
     if (g_ui_upgrade_service.running) {
-        ui_upgrade_service_set_progress_by_time();
         ui_upgrade_service_load_status_file();
     }
     ui_upgrade_service_update_child_state();
