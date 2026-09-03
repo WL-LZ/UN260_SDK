@@ -9,6 +9,7 @@
 #include "un260/lv_system/ui_object_utils.h"
 #include "un260/lv_system/app_clock.h"
 #include "un260/lv_system/ui_update_batch.h"
+#include "un260/lv_components/lv_dma_snapshot_cache.h"
 #include "aic_ui/perf_stats.h"
 #include <stdio.h>
 #include <string.h>
@@ -26,6 +27,7 @@ static lv_obj_t* list_page = NULL;
 
 static uint32_t g_page_02_dirty = PAGE_02_DIRTY_ALL;
 static char g_page_02_currency_code[4];
+static lv_dma_static_skin_t g_page_02_action_skins[3];
 
 typedef struct {
     uint8_t curent_page;
@@ -312,6 +314,35 @@ ui_element_t page_02_list_obj[] = {
           UI_BTN_STYLE_NONE },
 
 };
+
+static void page_02_action_skins_attach(void)
+{
+    static const char *const object_names[] = {
+        "02_home_btn", "02_print", "02_history_btn",
+    };
+    static const char *const cache_keys[] = {
+        "LIST_HOME_BTN_SKIN",
+        "LIST_PRINT_BTN_SKIN",
+        "LIST_HISTORY_BTN_SKIN",
+    };
+
+    for (uint32_t i = 0; i < 3; i++) {
+        lv_obj_t *button = find_obj_by_name(object_names[i],
+                                            page_02_list_obj,
+                                            page_02_list_len);
+        if (button != NULL && lv_obj_is_valid(button)) {
+            (void)lv_dma_static_skin_attach(&g_page_02_action_skins[i],
+                                             button, cache_keys[i]);
+        }
+    }
+}
+
+static void page_02_action_skins_release(void)
+{
+    for (uint32_t i = 0; i < 3; i++) {
+        lv_dma_static_skin_release(&g_page_02_action_skins[i]);
+    }
+}
 
 static int page_02_a_valid_count_get(void) // 获取A区有效面额条数
 {
@@ -1123,6 +1154,7 @@ void ui_page_02_list_create(lv_obj_t* parent)
     
     //创建图片
     lv_ui_obj_init(list_page, page_02_list_obj, page_02_list_len);
+    page_02_action_skins_attach();
     page_02_scroll_section_init_config();
     for (int i = 0; i < PAGE_02_SECTION_COUNT; i++) {
         page_02_scroll_section_create(&s_page_02_scroll_sections[i]);
@@ -1217,6 +1249,7 @@ void ui_page_02_list_destroy(void)
             s_page_02_scroll_sections[i].container);
     }
     memset(s_page_02_scroll_sections, 0, sizeof(s_page_02_scroll_sections));
+    page_02_action_skins_release();
     if (list_page) {
         lv_obj_del(list_page);
         list_page = NULL;

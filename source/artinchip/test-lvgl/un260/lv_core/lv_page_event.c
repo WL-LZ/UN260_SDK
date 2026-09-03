@@ -712,6 +712,7 @@ void page_03_update_menu_button_states_refresh(void)
 
     #undef PAGE_03_APPLY_FUNCTION_BTN
 
+    page_03_menu_sync_button_skins();
     page_03_menu_preview_refresh();
 }
 

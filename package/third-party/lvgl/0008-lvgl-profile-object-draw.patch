@@ -1,0 +1,107 @@
+From: Codex <codex@openai.com>
+Date: Wed, 2 Sep 2026 16:00:00 +0800
+Subject: [PATCH] lvgl: expose optional per-object draw profiler
+
+Page-open profiling shows that decoded images, GE submission and display
+flush do not account for all of the first-frame handler time.  Expose a
+disabled-by-default callback around each object's own DRAW_MAIN events so the
+application can attribute the missing cost by widget class.  Children remain
+profiled independently and no clock callback is made in production when the
+profiler is disabled.
+
+---
+ src/core/lv_refr.c | 29 +++++++++++++++++++++++++++++
+ src/core/lv_refr.h |  9 +++++++++
+ 2 files changed, 38 insertions(+)
+
+diff --git a/src/core/lv_refr.h b/src/core/lv_refr.h
+--- a/src/core/lv_refr.h
++++ b/src/core/lv_refr.h
+@@ -31,6 +31,11 @@ typedef void (*lv_inv_queue_monitor_cb_t)(uint16_t queue_size,
+                                           bool contained,
+                                           bool overflow);
+
++typedef uint64_t (*lv_obj_draw_profile_clock_cb_t)(void);
++typedef void (*lv_obj_draw_profile_report_cb_t)(const lv_obj_t *obj,
++                                                uint32_t elapsed_us,
++                                                uint32_t visible_pixels);
++
+ /**********************
+  *  STATIC PROTOTYPES
+  **********************/
+@@ -82,6 +86,10 @@ void _lv_inv_area(lv_disp_t * disp, const lv_area_t * area_p);
+  */
+ void lv_refr_set_inv_queue_monitor_cb(lv_inv_queue_monitor_cb_t cb);
+
++void lv_refr_set_obj_draw_profile_cb(
++    lv_obj_draw_profile_clock_cb_t clock_cb,
++    lv_obj_draw_profile_report_cb_t report_cb);
++
+ /**
+  * Get the display which is being refreshed
+  * @return the display being refreshed
+diff --git a/src/core/lv_refr.c b/src/core/lv_refr.c
+--- a/src/core/lv_refr.c
++++ b/src/core/lv_refr.c
+@@ -75,6 +75,8 @@ static void call_flush_cb(lv_disp_drv_t * drv, const lv_area_t * area, lv_color_
+ static uint32_t px_num;
+ static lv_disp_t * disp_refr; /*Display being refreshed*/
+ static lv_inv_queue_monitor_cb_t inv_queue_monitor_cb;
++static lv_obj_draw_profile_clock_cb_t obj_draw_profile_clock_cb;
++static lv_obj_draw_profile_report_cb_t obj_draw_profile_report_cb;
+
+ #if LV_USE_PERF_MONITOR
+     static perf_monitor_t   perf_monitor;
+@@ -132,6 +134,8 @@ void lv_obj_redraw(lv_draw_ctx_t * draw_ctx, lv_obj_t * obj)
+ {
+     const lv_area_t * clip_area_ori = draw_ctx->clip_area;
+     lv_area_t clip_coords_for_obj;
++    uint64_t profile_started_us = 0;
++    uint32_t visible_pixels = 0;
+
+     /*Truncate the clip area to `obj size + ext size` area*/
+     lv_area_t obj_coords_ext;
+@@ -145,9 +149,26 @@ void lv_obj_redraw(lv_draw_ctx_t * draw_ctx, lv_obj_t * obj)
+     if(should_draw) {
+         draw_ctx->clip_area = &clip_coords_for_obj;
+
++        if(com_clip_res && obj_draw_profile_clock_cb != NULL &&
++           obj_draw_profile_report_cb != NULL) {
++            visible_pixels = (uint32_t)lv_area_get_width(&clip_coords_for_obj) *
++                             (uint32_t)lv_area_get_height(&clip_coords_for_obj);
++            profile_started_us = obj_draw_profile_clock_cb();
++        }
++
+         lv_event_send(obj, LV_EVENT_DRAW_MAIN_BEGIN, draw_ctx);
+         lv_event_send(obj, LV_EVENT_DRAW_MAIN, draw_ctx);
+         lv_event_send(obj, LV_EVENT_DRAW_MAIN_END, draw_ctx);
++
++        if(profile_started_us != 0 && obj_draw_profile_clock_cb != NULL &&
++           obj_draw_profile_report_cb != NULL) {
++            uint64_t ended_us = obj_draw_profile_clock_cb();
++            uint64_t elapsed_us = ended_us >= profile_started_us ?
++                                  ended_us - profile_started_us : 0;
++            if(elapsed_us > UINT32_MAX) elapsed_us = UINT32_MAX;
++            obj_draw_profile_report_cb(obj, (uint32_t)elapsed_us,
++                                       visible_pixels);
++        }
+ #if LV_USE_REFR_DEBUG
+         lv_color_t debug_color = lv_color_make(lv_rand(0, 0xFF), lv_rand(0, 0xFF), lv_rand(0, 0xFF));
+         lv_draw_rect_dsc_t draw_dsc;
+@@ -294,6 +315,14 @@ void lv_refr_set_inv_queue_monitor_cb(lv_inv_queue_monitor_cb_t cb)
+     inv_queue_monitor_cb = cb;
+ }
+
++void lv_refr_set_obj_draw_profile_cb(
++    lv_obj_draw_profile_clock_cb_t clock_cb,
++    lv_obj_draw_profile_report_cb_t report_cb)
++{
++    obj_draw_profile_clock_cb = clock_cb;
++    obj_draw_profile_report_cb = report_cb;
++}
++
+ /**
+  * Get the display which is being refreshed
+  * @return the display being refreshed
+--
+2.34.1

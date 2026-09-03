@@ -1,0 +1,44 @@
+From: Codex <codex@openai.com>
+Date: Thu, 3 Sep 2026 15:20:00 +0800
+Subject: [PATCH] lvgl: retain expensive images after first decode
+
+LVGL gives a newly decoded image a cache life of zero and only rewards its
+decode cost on a later cache hit.  A large page background drawn once before
+leaving the page is therefore selected for eviction ahead of cheap icons,
+even when decoding the background took tens of milliseconds.
+
+Seed a new entry with its measured open time immediately.  This keeps the
+existing fixed-size cache and eviction policy while making the first eviction
+decision cost-aware.
+
+---
+ src/draw/lv_img_cache.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/src/draw/lv_img_cache.c b/src/draw/lv_img_cache.c
+--- a/src/draw/lv_img_cache.c
++++ b/src/draw/lv_img_cache.c
+@@ -128,14 +128,18 @@ _lv_img_cache_entry_t * _lv_img_cache_open(const void * src, lv_color_t color,
+         return NULL;
+     }
+
+-    cached_src->life = 0;
+-
+     /*If `time_to_open` was not set in the open function set it here*/
+     if(cached_src->dec_dsc.time_to_open == 0) {
+         cached_src->dec_dsc.time_to_open = lv_tick_elaps(t_start);
+     }
+
+-    if(cached_src->dec_dsc.time_to_open == 0) cached_src->dec_dsc.time_to_open = 1;
++    if(cached_src->dec_dsc.time_to_open == 0) {
++        cached_src->dec_dsc.time_to_open = 1;
++    }
++    cached_src->life = cached_src->dec_dsc.time_to_open * LV_IMG_CACHE_LIFE_GAIN;
++    if(cached_src->life > LV_IMG_CACHE_LIFE_LIMIT) {
++        cached_src->life = LV_IMG_CACHE_LIFE_LIMIT;
++    }
+
+     return cached_src;
+ }
+--
+2.25.1

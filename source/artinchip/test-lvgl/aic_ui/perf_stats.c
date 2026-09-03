@@ -81,12 +81,50 @@ typedef struct {
 #define PERF_PROFILE_GE_SIZE_BUCKETS 4
 #define PERF_PROFILE_GE_BLIT_PATHS 4
 
+typedef enum {
+    PERF_PROFILE_OBJ_BASE = 0,
+    PERF_PROFILE_OBJ_BUTTON,
+    PERF_PROFILE_OBJ_IMAGE,
+    PERF_PROFILE_OBJ_LABEL,
+    PERF_PROFILE_OBJ_ARC,
+    PERF_PROFILE_OBJ_OTHER,
+    PERF_PROFILE_OBJ_COUNT,
+} perf_profile_obj_type_t;
+
 typedef struct {
     uint64_t total_us;
     uint64_t pixels;
     uint32_t max_us;
     uint32_t count;
 } perf_profile_ge_size_accumulator_t;
+
+typedef struct {
+    uint64_t total_us;
+    uint64_t pixels;
+    uint32_t max_us;
+    uint32_t count;
+} perf_profile_obj_draw_accumulator_t;
+
+#define PERF_PROFILE_OBJ_HOT_CAPACITY 192
+#define PERF_PROFILE_OBJ_HOT_REPORT_COUNT 8
+
+typedef struct {
+    const lv_obj_t *obj;
+    perf_profile_obj_type_t type;
+    lv_coord_t x;
+    lv_coord_t y;
+    lv_coord_t width;
+    lv_coord_t height;
+    lv_coord_t radius;
+    lv_coord_t shadow_width;
+    lv_coord_t border_width;
+    lv_opa_t shadow_opa;
+    lv_opa_t bg_opa;
+    uint32_t count;
+    uint64_t total_us;
+    uint64_t pixels;
+    uint32_t max_us;
+} perf_profile_obj_hot_entry_t;
 
 #define PERF_PROFILE_EVENT_CAPACITY 8
 #define PERF_PROFILE_IMAGE_CAPACITY 8
@@ -122,6 +160,8 @@ typedef struct {
     uint32_t mirror_us;
     uint32_t invalid_area_count;
     uint64_t invalid_pixels;
+    perf_profile_obj_draw_accumulator_t obj_draw[PERF_PROFILE_OBJ_COUNT];
+    perf_profile_obj_hot_entry_t obj_hot[PERF_PROFILE_OBJ_HOT_CAPACITY];
 } perf_profile_page_open_sample_t;
 
 typedef struct {
@@ -177,6 +217,7 @@ typedef struct {
         image_decode[PERF_PROFILE_IMAGE_CAPACITY];
     perf_profile_ge_image_accumulator_t
         ge_image[PERF_PROFILE_GE_IMAGE_CAPACITY];
+    perf_profile_obj_draw_accumulator_t obj_draw[PERF_PROFILE_OBJ_COUNT];
     bool pending_switch_valid;
     perf_profile_page_switch_sample_t pending_switch;
     perf_profile_page_open_sample_t pending_open;
@@ -207,6 +248,96 @@ static uint32_t g_inv_queue_contained;
 static uint32_t g_inv_queue_compacted;
 static uint32_t g_inv_queue_overflows;
 static uint16_t g_inv_queue_peak;
+
+static perf_profile_obj_type_t perf_profile_obj_type(const lv_obj_t *obj)
+{
+    if (obj == NULL) return PERF_PROFILE_OBJ_OTHER;
+    if (lv_obj_check_type(obj, &lv_btn_class)) return PERF_PROFILE_OBJ_BUTTON;
+    if (lv_obj_check_type(obj, &lv_img_class)) return PERF_PROFILE_OBJ_IMAGE;
+    if (lv_obj_check_type(obj, &lv_label_class)) return PERF_PROFILE_OBJ_LABEL;
+    if (lv_obj_check_type(obj, &lv_arc_class)) return PERF_PROFILE_OBJ_ARC;
+    if (lv_obj_check_type(obj, &lv_obj_class)) return PERF_PROFILE_OBJ_BASE;
+    return PERF_PROFILE_OBJ_OTHER;
+}
+
+static const char *perf_profile_obj_type_name(perf_profile_obj_type_t type)
+{
+    static const char *const names[PERF_PROFILE_OBJ_COUNT] = {
+        "base", "btn", "img", "label", "arc", "other",
+    };
+
+    return type < PERF_PROFILE_OBJ_COUNT ? names[type] : "other";
+}
+
+static void perf_profile_obj_hot_record(perf_profile_obj_hot_entry_t *entries,
+                                        const lv_obj_t *obj,
+                                        perf_profile_obj_type_t type,
+                                        uint32_t elapsed_us,
+                                        uint32_t visible_pixels)
+{
+    perf_profile_obj_hot_entry_t *entry = NULL;
+    lv_area_t coords;
+    uint32_t i;
+
+    for (i = 0; i < PERF_PROFILE_OBJ_HOT_CAPACITY; i++) {
+        if (entries[i].obj == obj) {
+            entry = &entries[i];
+            break;
+        }
+        if (entry == NULL && entries[i].obj == NULL) {
+            entry = &entries[i];
+        }
+    }
+    if (entry == NULL) return;
+
+    if (entry->obj == NULL) {
+        lv_obj_get_coords(obj, &coords);
+        entry->obj = obj;
+        entry->type = type;
+        entry->x = coords.x1;
+        entry->y = coords.y1;
+        entry->width = lv_area_get_width(&coords);
+        entry->height = lv_area_get_height(&coords);
+        entry->radius = lv_obj_get_style_radius(obj, LV_PART_MAIN);
+        entry->shadow_width = lv_obj_get_style_shadow_width(obj, LV_PART_MAIN);
+        entry->shadow_opa = lv_obj_get_style_shadow_opa(obj, LV_PART_MAIN);
+        entry->bg_opa = lv_obj_get_style_bg_opa(obj, LV_PART_MAIN);
+        entry->border_width = lv_obj_get_style_border_width(obj, LV_PART_MAIN);
+    }
+
+    entry->count++;
+    entry->total_us += elapsed_us;
+    entry->pixels += visible_pixels;
+    if (elapsed_us > entry->max_us) entry->max_us = elapsed_us;
+}
+
+static void perf_profile_obj_draw_cb(const lv_obj_t *obj,
+                                     uint32_t elapsed_us,
+                                     uint32_t visible_pixels)
+{
+    perf_profile_obj_type_t type;
+    perf_profile_obj_draw_accumulator_t *acc;
+
+    if (!g_profile.enabled) return;
+
+    type = perf_profile_obj_type(obj);
+    acc = &g_profile.obj_draw[type];
+    acc->count++;
+    acc->total_us += elapsed_us;
+    acc->pixels += visible_pixels;
+    if (elapsed_us > acc->max_us) acc->max_us = elapsed_us;
+
+    if (g_profile.pending_open.valid &&
+        !g_profile.pending_open.first_frame_ready) {
+        acc = &g_profile.pending_open.obj_draw[type];
+        acc->count++;
+        acc->total_us += elapsed_us;
+        acc->pixels += visible_pixels;
+        if (elapsed_us > acc->max_us) acc->max_us = elapsed_us;
+        perf_profile_obj_hot_record(g_profile.pending_open.obj_hot, obj,
+                                    type, elapsed_us, visible_pixels);
+    }
+}
 
 static void perf_profile_inv_queue_cb(uint16_t queue_size,
                                       uint16_t compacted,
@@ -357,6 +488,7 @@ static void perf_profile_reset_window(uint32_t now_ms)
     g_profile.image_decode_bytes = 0;
     memset(g_profile.image_decode, 0, sizeof(g_profile.image_decode));
     memset(g_profile.ge_image, 0, sizeof(g_profile.ge_image));
+    memset(g_profile.obj_draw, 0, sizeof(g_profile.obj_draw));
     g_inv_requests = 0;
     g_inv_duplicates = 0;
     g_inv_pixels = 0;
@@ -382,6 +514,9 @@ void perf_profile_set_enabled(bool enabled)
     g_profile.enabled = enabled;
     lv_refr_set_inv_queue_monitor_cb(enabled ?
         perf_profile_inv_queue_cb : NULL);
+    lv_refr_set_obj_draw_profile_cb(
+        enabled ? perf_profile_label_clock_us : NULL,
+        enabled ? perf_profile_obj_draw_cb : NULL);
     lv_obj_set_invalidation_monitor_cb(enabled ?
         perf_profile_invalidation_cb : NULL);
     lv_draw_label_set_profile_cb(enabled ? perf_profile_label_clock_us : NULL,
@@ -736,6 +871,44 @@ void perf_profile_report_ge_image_source(const char *src, bool alpha,
     acc->total_us += elapsed_us;
 }
 
+static void perf_profile_emit_open_hot_objects(
+    const perf_profile_page_open_sample_t *sample)
+{
+    bool reported[PERF_PROFILE_OBJ_HOT_CAPACITY] = {false};
+    uint32_t rank;
+
+    for (rank = 0; rank < PERF_PROFILE_OBJ_HOT_REPORT_COUNT; rank++) {
+        const perf_profile_obj_hot_entry_t *entry = NULL;
+        uint32_t selected = PERF_PROFILE_OBJ_HOT_CAPACITY;
+        uint32_t i;
+
+        for (i = 0; i < PERF_PROFILE_OBJ_HOT_CAPACITY; i++) {
+            if (reported[i] || sample->obj_hot[i].obj == NULL) continue;
+            if (entry == NULL ||
+                sample->obj_hot[i].total_us > entry->total_us) {
+                entry = &sample->obj_hot[i];
+                selected = i;
+            }
+        }
+        if (entry == NULL) break;
+        reported[selected] = true;
+
+        uart_debug_printf(
+            "PERF_OPEN_HOT page=%s(%u) rank=%u type=%s obj=%p "
+            "xywh=%d/%d/%d/%d style=%d/%d/%u/%u/%d "
+            "draw=%u/%llu/%u px=%llu\n",
+            sample->page_name != NULL ? sample->page_name : "INVALID",
+            sample->page_id, rank + 1,
+            perf_profile_obj_type_name(entry->type), (void *)entry->obj,
+            entry->x, entry->y, entry->width, entry->height,
+            entry->radius, entry->shadow_width,
+            (unsigned int)entry->shadow_opa,
+            (unsigned int)entry->bg_opa, entry->border_width,
+            entry->count, (unsigned long long)entry->total_us,
+            entry->max_us, (unsigned long long)entry->pixels);
+    }
+}
+
 static void perf_profile_emit_pending_events(void)
 {
     uint8_t i;
@@ -789,6 +962,31 @@ static void perf_profile_emit_pending_events(void)
             sample->flush_us, sample->pan_us, sample->vsync_us,
             sample->mirror_us, sample->invalid_area_count,
             (unsigned long long)sample->invalid_pixels);
+        uart_debug_printf(
+            "PERF_OPEN_OBJ page=%s(%u) "
+            "base=%u/%llu/%u btn=%u/%llu/%u img=%u/%llu/%u "
+            "label=%u/%llu/%u arc=%u/%llu/%u other=%u/%llu/%u\n",
+            sample->page_name != NULL ? sample->page_name : "INVALID",
+            sample->page_id,
+            sample->obj_draw[PERF_PROFILE_OBJ_BASE].count,
+            (unsigned long long)sample->obj_draw[PERF_PROFILE_OBJ_BASE].total_us,
+            sample->obj_draw[PERF_PROFILE_OBJ_BASE].max_us,
+            sample->obj_draw[PERF_PROFILE_OBJ_BUTTON].count,
+            (unsigned long long)sample->obj_draw[PERF_PROFILE_OBJ_BUTTON].total_us,
+            sample->obj_draw[PERF_PROFILE_OBJ_BUTTON].max_us,
+            sample->obj_draw[PERF_PROFILE_OBJ_IMAGE].count,
+            (unsigned long long)sample->obj_draw[PERF_PROFILE_OBJ_IMAGE].total_us,
+            sample->obj_draw[PERF_PROFILE_OBJ_IMAGE].max_us,
+            sample->obj_draw[PERF_PROFILE_OBJ_LABEL].count,
+            (unsigned long long)sample->obj_draw[PERF_PROFILE_OBJ_LABEL].total_us,
+            sample->obj_draw[PERF_PROFILE_OBJ_LABEL].max_us,
+            sample->obj_draw[PERF_PROFILE_OBJ_ARC].count,
+            (unsigned long long)sample->obj_draw[PERF_PROFILE_OBJ_ARC].total_us,
+            sample->obj_draw[PERF_PROFILE_OBJ_ARC].max_us,
+            sample->obj_draw[PERF_PROFILE_OBJ_OTHER].count,
+            (unsigned long long)sample->obj_draw[PERF_PROFILE_OBJ_OTHER].total_us,
+            sample->obj_draw[PERF_PROFILE_OBJ_OTHER].max_us);
+        perf_profile_emit_open_hot_objects(sample);
         g_profile.pending_open = (perf_profile_page_open_sample_t){0};
     }
 
@@ -908,6 +1106,29 @@ void perf_profile_poll(uint32_t now_ms)
         g_profile.label_max_us,
         (unsigned long long)(g_profile.label_calls > 0 ?
             g_profile.label_total_us / g_profile.label_calls : 0));
+    uart_debug_printf(
+        "PERF_OBJ_DRAW page=%s(%u) "
+        "base=%u/%llu/%u btn=%u/%llu/%u img=%u/%llu/%u "
+        "label=%u/%llu/%u arc=%u/%llu/%u other=%u/%llu/%u\n",
+        g_profile.page_name, g_profile.page_id,
+        g_profile.obj_draw[PERF_PROFILE_OBJ_BASE].count,
+        (unsigned long long)g_profile.obj_draw[PERF_PROFILE_OBJ_BASE].total_us,
+        g_profile.obj_draw[PERF_PROFILE_OBJ_BASE].max_us,
+        g_profile.obj_draw[PERF_PROFILE_OBJ_BUTTON].count,
+        (unsigned long long)g_profile.obj_draw[PERF_PROFILE_OBJ_BUTTON].total_us,
+        g_profile.obj_draw[PERF_PROFILE_OBJ_BUTTON].max_us,
+        g_profile.obj_draw[PERF_PROFILE_OBJ_IMAGE].count,
+        (unsigned long long)g_profile.obj_draw[PERF_PROFILE_OBJ_IMAGE].total_us,
+        g_profile.obj_draw[PERF_PROFILE_OBJ_IMAGE].max_us,
+        g_profile.obj_draw[PERF_PROFILE_OBJ_LABEL].count,
+        (unsigned long long)g_profile.obj_draw[PERF_PROFILE_OBJ_LABEL].total_us,
+        g_profile.obj_draw[PERF_PROFILE_OBJ_LABEL].max_us,
+        g_profile.obj_draw[PERF_PROFILE_OBJ_ARC].count,
+        (unsigned long long)g_profile.obj_draw[PERF_PROFILE_OBJ_ARC].total_us,
+        g_profile.obj_draw[PERF_PROFILE_OBJ_ARC].max_us,
+        g_profile.obj_draw[PERF_PROFILE_OBJ_OTHER].count,
+        (unsigned long long)g_profile.obj_draw[PERF_PROFILE_OBJ_OTHER].total_us,
+        g_profile.obj_draw[PERF_PROFILE_OBJ_OTHER].max_us);
     uart_debug_printf(
         "PERF_IMG page=%s(%u) decode=%u/%llu/%u bytes=%llu avg_us=%llu\n",
         g_profile.page_name, g_profile.page_id,
@@ -1031,6 +1252,7 @@ void perf_stats_init(void)
     memset(&g_profile, 0, sizeof(g_profile));
     memset(g_inv_watch, 0, sizeof(g_inv_watch));
     lv_refr_set_inv_queue_monitor_cb(NULL);
+    lv_refr_set_obj_draw_profile_cb(NULL, NULL);
     lv_obj_set_invalidation_monitor_cb(NULL);
     lv_draw_label_set_profile_cb(NULL, NULL);
     g_cpu_prev_valid = (cpu_occupy_get(&g_cpu_prev) == 0);

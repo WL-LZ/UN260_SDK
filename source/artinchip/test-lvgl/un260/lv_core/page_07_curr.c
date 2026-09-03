@@ -1925,16 +1925,17 @@ static void curr_snapshot_prewarm_timer_cb(lv_timer_t *timer)
 
     if (timer == NULL || curr_page == NULL ||
         !lv_obj_is_valid(curr_page) ||
-        !lv_obj_has_flag(curr_page, LV_OBJ_FLAG_HIDDEN)) {
+        lv_obj_has_flag(curr_page, LV_OBJ_FLAG_HIDDEN) ||
+        ui_manager_get_current_page() != UI_PAGE_CURR) {
         return;
     }
 
-    /* Snapshot capture is intentionally confined to a quiet UI window.  Do
-     * not gate it on lv_anim_count_running(): cached/hidden pages and shared
-     * loaders own infinite animations, so that global count may never reach
-     * zero even when the operator-visible page is idle.  Currency is hidden
-     * here and its gesture timer/flags are stopped by suspend; input idle is
-     * therefore the relevant foreground-safety condition. */
+    /* Snapshot capture is intentionally confined to a quiet window on the
+     * active Currency page.  A retained page must be completely dormant
+     * after suspend: rendering its hidden object tree steals frame time from
+     * the newly visible page and can evict that page's decoded resources.
+     * Do not gate this on lv_anim_count_running(); shared components can own
+     * infinite animations even while Currency itself is idle. */
     if (lv_disp_get_inactive_time(NULL) < 1200U ||
         g_page07_curr.gesture.active ||
         g_page07_curr.gesture.dragging ||
@@ -2051,6 +2052,11 @@ bool ui_page_07_curr_resume(void)
     }
     lv_obj_clear_flag(curr_page, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(curr_page);
+    if (g_curr_snapshot_prewarm_timer != NULL) {
+        lv_timer_set_period(g_curr_snapshot_prewarm_timer, 120);
+        lv_timer_resume(g_curr_snapshot_prewarm_timer);
+        lv_timer_ready(g_curr_snapshot_prewarm_timer);
+    }
     if (profile_enabled) {
         perf_profile_report_event_us(
             "CURRENCY", profile_event,
@@ -2070,6 +2076,11 @@ void ui_page_07_curr_suspend(void)
         lv_timer_del(g_page07_curr.gesture.snap_timer);
         g_page07_curr.gesture.snap_timer = NULL;
     }
+    if (g_page07_curr.objects.list != NULL &&
+        lv_obj_is_valid(g_page07_curr.objects.list)) {
+        lv_anim_del(g_page07_curr.objects.list,
+                    curr_overscroll_anim_x_cb);
+    }
     g_page07_curr.gesture.active = false;
     g_page07_curr.gesture.dragging = false;
     /*
@@ -2081,7 +2092,6 @@ void ui_page_07_curr_suspend(void)
     */
     lv_obj_add_flag(curr_page, LV_OBJ_FLAG_HIDDEN);
     if (g_curr_snapshot_prewarm_timer != NULL) {
-        lv_timer_set_period(g_curr_snapshot_prewarm_timer, 120);
-        lv_timer_ready(g_curr_snapshot_prewarm_timer);
+        lv_timer_pause(g_curr_snapshot_prewarm_timer);
     }
 }

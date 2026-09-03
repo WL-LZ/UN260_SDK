@@ -17,6 +17,7 @@
 #include "un260/counting/counting_data_store.h"
 #include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_components/lv_components.h"
+#include "un260/lv_components/lv_dma_snapshot_cache.h"
 #include "un260/protocol/protocol_send.h"
 #include "un260/lv_system/machine_time.h"
 #include "un260/lv_system/ui_text.h"
@@ -85,6 +86,8 @@ static lv_obj_t *s_curr_img = NULL;
 static lv_obj_t *s_curr_label = NULL;
 static char s_curr_rendered_code[4];
 static bool s_curr_rendered_valid = false;
+static lv_dma_static_skin_t s_main_action_skins[3];
+static lv_dma_static_skin_t s_main_detail_tab_skins[3];
 
 static void page_01_detail_section_btn_style_apply(void);
 static void page_01_detail_section_btn_event_cb(lv_event_t* e);
@@ -95,6 +98,35 @@ static bool page_01_main_visible(void)
 {
     return page_01_main_is_created() &&
            !lv_obj_has_flag(main_page, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void page_01_main_action_skins_attach(void)
+{
+    static const char *const object_names[] = {
+        "menu_btn", "start_btn", "esc_btn",
+    };
+    static const char *const cache_keys[] = {
+        "MAIN_MENU_BTN_SKIN",
+        "MAIN_START_BTN_SKIN",
+        "MAIN_ESC_BTN_SKIN",
+    };
+
+    for (uint32_t i = 0; i < 3; i++) {
+        lv_obj_t *button = find_obj_by_name(object_names[i],
+                                            page_01_main_obj,
+                                            page_01_main_len);
+        if (button != NULL && lv_obj_is_valid(button)) {
+            (void)lv_dma_static_skin_attach(&s_main_action_skins[i],
+                                             button, cache_keys[i]);
+        }
+    }
+}
+
+static void page_01_main_action_skins_release(void)
+{
+    for (uint32_t i = 0; i < 3; i++) {
+        lv_dma_static_skin_release(&s_main_action_skins[i]);
+    }
 }
 
 void page_01_main_mark_dirty(uint32_t flags)
@@ -745,11 +777,34 @@ static void page_01_detail_section_btn_update_one(lv_obj_t* btn, bool selected)
     }
 }
 
+static void page_01_detail_section_btn_skins_sync(void)
+{
+    lv_obj_t *const buttons[] = {
+        s_detail_btn_a, s_detail_btn_b, s_detail_btn_c,
+    };
+
+    for (uint32_t i = 0; i < 3; i++) {
+        const bool selected = s_detail_section == (page_01_detail_section_t)i;
+
+        /* All three tabs share the same geometry and visual states.  Cache
+         * only the selected/unselected parent decoration; live dot, text,
+         * hit testing and pressed-state feedback remain on the LVGL object. */
+        lv_dma_static_skin_release(&s_main_detail_tab_skins[i]);
+        if (buttons[i] != NULL && lv_obj_is_valid(buttons[i])) {
+            (void)lv_dma_static_skin_attach(
+                &s_main_detail_tab_skins[i], buttons[i],
+                selected ? "MAIN_DETAIL_TAB_SELECTED" :
+                           "MAIN_DETAIL_TAB_UNSELECTED");
+        }
+    }
+}
+
 static void page_01_detail_section_btn_style_apply(void)
 {
     page_01_detail_section_btn_update_one(s_detail_btn_a, s_detail_section == PAGE_01_DETAIL_SECTION_A);
     page_01_detail_section_btn_update_one(s_detail_btn_b, s_detail_section == PAGE_01_DETAIL_SECTION_B);
     page_01_detail_section_btn_update_one(s_detail_btn_c, s_detail_section == PAGE_01_DETAIL_SECTION_C);
+    page_01_detail_section_btn_skins_sync();
 }
 
 static void page_01_detail_section_btn_text_refresh(void)
@@ -827,6 +882,9 @@ static void page_01_detail_section_btn_create_all(void)
 
 static void page_01_detail_section_btn_destroy_all(void)
 {
+    for (uint32_t i = 0; i < 3; i++) {
+        lv_dma_static_skin_release(&s_main_detail_tab_skins[i]);
+    }
     if (s_detail_btn_a) lv_obj_del(s_detail_btn_a);
     if (s_detail_btn_b) lv_obj_del(s_detail_btn_b);
     if (s_detail_btn_c) lv_obj_del(s_detail_btn_c);
@@ -1470,6 +1528,7 @@ void ui_main_create(lv_obj_t* parent)
     
     //创建图片和其他UI元素
     lv_ui_obj_init(main_page, page_01_main_obj, page_01_main_len);
+    page_01_main_action_skins_attach();
     
 
     if (frist_creat)
@@ -1533,6 +1592,7 @@ void ui_main_destroy(void)
 
     if (page_01_main_is_created()) {
         // 安全清理所有资源和定时器
+        page_01_main_action_skins_release();
         cleanup_counting_sim();
         page_01_bottom_a_destroy();
         page_01_bottom_c_destroy();

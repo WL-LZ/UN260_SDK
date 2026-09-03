@@ -13,6 +13,8 @@
 #include "un260/lv_system/ui_history_data.h"
 #include "un260/lv_system/ui_history_export_data.h"
 #include "un260/lv_system/ui_text.h"
+#include "un260/lv_system/app_clock.h"
+#include "aic_ui/perf_stats.h"
 
 LV_FONT_DECLARE(lv_font_instrument_sans_medium_14);
 LV_FONT_DECLARE(lv_font_instrument_sans_medium_16);
@@ -66,6 +68,7 @@ typedef struct {
     lv_obj_t *clean_dialog_cancel;
     lv_obj_t *clean_dialog_confirm;
     bool detail_mode;
+    bool detail_sections_created;
     uint8_t detail_index;
     uint8_t visible_map[UI_HISTORY_MAX_RECORDS];
 } history_page_ctx_t;
@@ -111,6 +114,7 @@ static void history_detail_section_reset(history_detail_section_ui_t *section);
 static void history_detail_section_apply_layout(history_detail_section_ui_t *section, int section_id);
 static void history_detail_section_set_header(history_detail_section_ui_t *section, int section_id);
 static void history_detail_section_set_row(history_detail_section_ui_t *section, int row, const char *c1, const char *c2, const char *c3, bool visible);
+static void history_detail_sections_ensure_created(void);
 static int history_detail_split_lines(const char *src, char out[][96], int max_lines);
 static int history_detail_parse_denom_rows(const ui_history_record_t *rec, char out[][3][96], int max_rows);
 static int history_detail_parse_sn_rows(const ui_history_record_t *rec, char out[][3][96], int max_rows);
@@ -354,6 +358,48 @@ static void history_detail_section_create(history_detail_section_ui_t *section, 
                                                           &lv_font_instrument_sans_medium_14, lv_color_hex(0x18495A), LV_TEXT_ALIGN_LEFT);
     }
     history_detail_section_set_header(section, section_id);
+}
+
+static void history_detail_sections_ensure_created(void)
+{
+    bool profile_enabled;
+    uint64_t started_us = 0;
+
+    if (g_history_page.detail_sections_created ||
+        g_history_page.detail_panel == NULL ||
+        !lv_obj_is_valid(g_history_page.detail_panel)) {
+        return;
+    }
+
+    profile_enabled = perf_profile_is_enabled();
+    if (profile_enabled) {
+        started_us = app_clock_monotonic_us();
+    }
+
+    /* The three detail tables contain 360 row labels.  Building them while
+     * opening the list view blocks the page switch even though the complete
+     * detail subtree is hidden.  Create the reusable subtree only when the
+     * operator first asks for record details. */
+    history_detail_section_create(&g_history_detail_sections[0],
+                                  g_history_page.detail_panel, 0);
+    history_detail_section_create(&g_history_detail_sections[1],
+                                  g_history_page.detail_panel, 1);
+    history_detail_section_create(&g_history_detail_sections[2],
+                                  g_history_page.detail_panel, 2);
+    for (int i = 0; i < 3; i++) {
+        if (g_history_detail_sections[i].panel != NULL) {
+            lv_obj_add_flag(g_history_detail_sections[i].panel,
+                            LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    g_history_page.detail_sections_created = true;
+
+    if (profile_enabled) {
+        perf_profile_report_event_us(
+            "HISTORY", "DETAIL_CREATE",
+            app_clock_elapsed_us32(started_us,
+                                   app_clock_monotonic_us()));
+    }
 }
 
 static int history_detail_split_lines(const char *src, char out[][96], int max_lines)
@@ -846,9 +892,19 @@ static void history_page_update_detail_panel(const ui_history_record_t *rec)
     if (rec == NULL || !rec->valid) {
         history_set_text(g_history_page.detail_empty_label, "Select a record to view details");
         lv_obj_clear_flag(g_history_page.detail_empty_label, LV_OBJ_FLAG_HIDDEN);
-        for (int s = 0; s < 3; s++) {
-            lv_obj_add_flag(g_history_detail_sections[s].panel, LV_OBJ_FLAG_HIDDEN);
+        if (g_history_page.detail_sections_created) {
+            for (int s = 0; s < 3; s++) {
+                if (g_history_detail_sections[s].panel != NULL) {
+                    lv_obj_add_flag(g_history_detail_sections[s].panel,
+                                    LV_OBJ_FLAG_HIDDEN);
+                }
+            }
         }
+        return;
+    }
+
+    history_detail_sections_ensure_created();
+    if (!g_history_page.detail_sections_created) {
         return;
     }
 
@@ -1491,13 +1547,6 @@ void ui_page_19_history_create(lv_obj_t *parent)
                                                                   "Select a record to view details",
                                                                   &lv_font_instrument_sans_medium_16, lv_color_hex(0x78A2B3),
                                                                   LV_TEXT_ALIGN_LEFT);
-    history_detail_section_create(&g_history_detail_sections[0], g_history_page.detail_panel, 0);
-    history_detail_section_create(&g_history_detail_sections[1], g_history_page.detail_panel, 1);
-    history_detail_section_create(&g_history_detail_sections[2], g_history_page.detail_panel, 2);
-    lv_obj_add_flag(g_history_detail_sections[0].panel, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(g_history_detail_sections[1].panel, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(g_history_detail_sections[2].panel, LV_OBJ_FLAG_HIDDEN);
-
     g_history_page.list_spacer = lv_obj_create(g_history_page.list_area);
     lv_obj_remove_style_all(g_history_page.list_spacer);
     lv_obj_set_pos(g_history_page.list_spacer, 0, 0);
@@ -1545,4 +1594,6 @@ void ui_page_19_history_destroy(void)
 
     memset(&g_history_page, 0, sizeof(g_history_page));
     memset(g_history_cards, 0, sizeof(g_history_cards));
+    memset(g_history_detail_sections, 0,
+           sizeof(g_history_detail_sections));
 }

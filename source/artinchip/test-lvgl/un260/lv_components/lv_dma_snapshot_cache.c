@@ -404,6 +404,240 @@ void lv_dma_snapshot_cache_take_stats(lv_dma_snapshot_cache_stats_t *out)
     g_dma_snapshot_stats = (lv_dma_snapshot_cache_stats_t){0};
 }
 
+bool lv_dma_static_surface_attach(lv_dma_static_surface_t *surface,
+                                  lv_obj_t *source,
+                                  const char *cache_key)
+{
+    lv_dma_snapshot_t *snapshot;
+    const lv_img_dsc_t *image_dsc;
+    lv_obj_t *parent;
+    lv_obj_t *image;
+    lv_coord_t ext_size;
+    lv_coord_t x;
+    lv_coord_t y;
+    uint32_t source_index;
+
+    if (surface == NULL || source == NULL ||
+        !lv_obj_is_valid(source) || cache_key == NULL ||
+        cache_key[0] == '\0') {
+        return false;
+    }
+    if (surface->snapshot != NULL && surface->image != NULL &&
+        lv_obj_is_valid(surface->image)) {
+        return true;
+    }
+
+    parent = lv_obj_get_parent(source);
+    if (parent == NULL || !lv_obj_is_valid(parent)) return false;
+
+    /* Snapshot geometry includes the external shadow area.  Position the
+     * replacement image by that same expansion so its pixels land exactly
+     * where the original object was rendered. */
+    lv_obj_update_layout(source);
+    ext_size = _lv_obj_get_ext_draw_size(source);
+    x = lv_obj_get_x(source) - ext_size;
+    y = lv_obj_get_y(source) - ext_size;
+    source_index = lv_obj_get_index(source);
+
+    snapshot = lv_dma_snapshot_cache_acquire_or_create(source, cache_key);
+    if (snapshot == NULL) return false;
+    image_dsc = lv_dma_snapshot_image(snapshot);
+    if (image_dsc == NULL) {
+        lv_dma_snapshot_cache_release(snapshot);
+        return false;
+    }
+
+    image = lv_img_create(parent);
+    if (image == NULL) {
+        lv_dma_snapshot_cache_release(snapshot);
+        return false;
+    }
+    lv_img_set_src(image, image_dsc);
+    lv_img_set_zoom(image, LV_IMG_ZOOM_NONE);
+    lv_obj_set_pos(image, x, y);
+    lv_obj_clear_flag(image, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_move_to_index(image, (int32_t)source_index);
+
+    surface->snapshot = snapshot;
+    surface->source = source;
+    surface->image = image;
+    lv_obj_add_flag(source, LV_OBJ_FLAG_HIDDEN);
+    return true;
+}
+
+void lv_dma_static_surface_release(lv_dma_static_surface_t *surface)
+{
+    if (surface == NULL) return;
+
+    if (surface->source != NULL && lv_obj_is_valid(surface->source)) {
+        lv_obj_clear_flag(surface->source, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (surface->image != NULL && lv_obj_is_valid(surface->image)) {
+        lv_obj_del(surface->image);
+    }
+    lv_dma_snapshot_cache_release(surface->snapshot);
+    *surface = (lv_dma_static_surface_t){0};
+}
+
+static void static_skin_set_live_visual(lv_dma_static_skin_t *skin,
+                                        bool live)
+{
+    if (skin == NULL || skin->source == NULL ||
+        !lv_obj_is_valid(skin->source)) {
+        return;
+    }
+
+    if (live) {
+        lv_obj_set_style_bg_opa(skin->source, skin->bg_opa,
+                                LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_opa(skin->source, skin->border_opa,
+                                    LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_outline_opa(skin->source, skin->outline_opa,
+                                     LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_shadow_opa(skin->source, skin->shadow_opa,
+                                    LV_PART_MAIN | LV_STATE_DEFAULT);
+        if (skin->image != NULL && lv_obj_is_valid(skin->image)) {
+            lv_obj_add_flag(skin->image, LV_OBJ_FLAG_HIDDEN);
+        }
+    } else {
+        lv_obj_set_style_bg_opa(skin->source, LV_OPA_TRANSP,
+                                LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_opa(skin->source, LV_OPA_TRANSP,
+                                    LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_outline_opa(skin->source, LV_OPA_TRANSP,
+                                     LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_shadow_opa(skin->source, LV_OPA_TRANSP,
+                                    LV_PART_MAIN | LV_STATE_DEFAULT);
+        if (skin->image != NULL && lv_obj_is_valid(skin->image)) {
+            lv_obj_clear_flag(skin->image, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+}
+
+static void static_skin_event_cb(lv_event_t *event)
+{
+    lv_dma_static_skin_t *skin = lv_event_get_user_data(event);
+    lv_event_code_t code = lv_event_get_code(event);
+
+    if (code == LV_EVENT_PRESSED) {
+        /* Draw the original live object only while it is pressed.  This keeps
+         * every existing pressed-state style and transition intact. */
+        static_skin_set_live_visual(skin, true);
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        static_skin_set_live_visual(skin, false);
+    }
+}
+
+bool lv_dma_static_skin_attach(lv_dma_static_skin_t *skin,
+                               lv_obj_t *source,
+                               const char *cache_key)
+{
+    lv_dma_snapshot_t *snapshot;
+    const lv_img_dsc_t *image_dsc;
+    lv_obj_t *parent;
+    lv_obj_t *image;
+    lv_coord_t ext_size;
+    uint32_t source_index;
+    uint32_t child_count;
+    uint8_t *child_was_visible = NULL;
+
+    if (skin == NULL || source == NULL || !lv_obj_is_valid(source) ||
+        cache_key == NULL || cache_key[0] == '\0') {
+        return false;
+    }
+    if (skin->snapshot != NULL && skin->image != NULL &&
+        lv_obj_is_valid(skin->image)) {
+        return true;
+    }
+
+    parent = lv_obj_get_parent(source);
+    if (parent == NULL || !lv_obj_is_valid(parent)) return false;
+
+    lv_obj_update_layout(source);
+    ext_size = _lv_obj_get_ext_draw_size(source);
+    source_index = lv_obj_get_index(source);
+
+    /* A skin is only the object's own normal-state decoration.  Temporarily
+     * exclude children (for example a translated label) from a cache-miss
+     * capture so live child content is neither duplicated nor frozen. */
+    child_count = lv_obj_get_child_cnt(source);
+    if (child_count > 0) {
+        child_was_visible = lv_mem_alloc(child_count);
+        if (child_was_visible == NULL) return false;
+        memset(child_was_visible, 0, child_count);
+        for (uint32_t i = 0; i < child_count; i++) {
+            lv_obj_t *child = lv_obj_get_child(source, (int32_t)i);
+
+            if (child != NULL && !lv_obj_has_flag(child, LV_OBJ_FLAG_HIDDEN)) {
+                child_was_visible[i] = 1;
+                lv_obj_add_flag(child, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+    }
+    snapshot = lv_dma_snapshot_cache_acquire_or_create(source, cache_key);
+    if (child_was_visible != NULL) {
+        for (uint32_t i = 0; i < child_count; i++) {
+            lv_obj_t *child = lv_obj_get_child(source, (int32_t)i);
+
+            if (child != NULL && child_was_visible[i]) {
+                lv_obj_clear_flag(child, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+        lv_mem_free(child_was_visible);
+    }
+    if (snapshot == NULL) return false;
+    image_dsc = lv_dma_snapshot_image(snapshot);
+    if (image_dsc == NULL) {
+        lv_dma_snapshot_cache_release(snapshot);
+        return false;
+    }
+
+    image = lv_img_create(parent);
+    if (image == NULL) {
+        lv_dma_snapshot_cache_release(snapshot);
+        return false;
+    }
+    lv_img_set_src(image, image_dsc);
+    lv_img_set_zoom(image, LV_IMG_ZOOM_NONE);
+    lv_obj_set_pos(image, lv_obj_get_x(source) - ext_size,
+                   lv_obj_get_y(source) - ext_size);
+    lv_obj_clear_flag(image, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_move_to_index(image, (int32_t)source_index);
+
+    skin->snapshot = snapshot;
+    skin->source = source;
+    skin->image = image;
+    skin->bg_opa = lv_obj_get_style_bg_opa(source, LV_PART_MAIN);
+    skin->border_opa = lv_obj_get_style_border_opa(source, LV_PART_MAIN);
+    skin->outline_opa = lv_obj_get_style_outline_opa(source, LV_PART_MAIN);
+    skin->shadow_opa = lv_obj_get_style_shadow_opa(source, LV_PART_MAIN);
+    skin->style_mutated = true;
+
+    /* The object itself remains above the cached image, so hit-testing and
+     * child rendering are unchanged.  State-specific pressed styles retain
+     * their higher selector specificity and can still draw feedback. */
+    static_skin_set_live_visual(skin, false);
+    lv_obj_add_event_cb(source, static_skin_event_cb, LV_EVENT_ALL, skin);
+    return true;
+}
+
+void lv_dma_static_skin_release(lv_dma_static_skin_t *skin)
+{
+    if (skin == NULL) return;
+
+    if (skin->source != NULL && lv_obj_is_valid(skin->source) &&
+        skin->style_mutated) {
+        lv_obj_remove_event_cb_with_user_data(skin->source,
+                                              static_skin_event_cb, skin);
+        static_skin_set_live_visual(skin, true);
+    }
+    if (skin->image != NULL && lv_obj_is_valid(skin->image)) {
+        lv_obj_del(skin->image);
+    }
+    lv_dma_snapshot_cache_release(skin->snapshot);
+    *skin = (lv_dma_static_skin_t){0};
+}
+
 const lv_img_dsc_t *lv_dma_snapshot_image(const lv_dma_snapshot_t *snapshot)
 {
     return snapshot != NULL ? &snapshot->image : NULL;

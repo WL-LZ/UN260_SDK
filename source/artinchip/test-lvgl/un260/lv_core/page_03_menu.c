@@ -7,11 +7,13 @@
 #include "un260/lv_system/ui_object_utils.h"
 #include "un260/lv_system/user_cfg.h"
 #include "un260/lv_components/lv_components.h"
+#include "un260/lv_components/lv_dma_snapshot_cache.h"
 #include "un260/machine_state/machine_state.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/app_clock.h"
 #include "aic_ui/perf_stats.h"
 #include "../aic_ui/aic_ui.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -117,6 +119,30 @@ static uint32_t g_page_03_preview_started = 0;
 static uint32_t g_page_03_preview_feedback_started = 0;
 static machine_state_snapshot_t g_page_03_snapshot;
 static bool g_page_03_snapshot_valid = false;
+static lv_dma_static_surface_t g_page_03_batch_card_surface;
+static lv_dma_static_surface_t g_page_03_function_card_surface;
+static lv_dma_static_skin_t g_page_03_preview_card_skin;
+
+/* Shared normal-state skins remove repeated software rendering of rounded
+ * button backgrounds and shadows.  The live buttons stay above these images,
+ * so labels, hit testing and pressed feedback are not frozen.  Keys are based
+ * on geometry and visual state rather than object identity, allowing buttons
+ * with the same shape to reuse one DMA snapshot. */
+#define PAGE_03_BUTTON_SKIN_COUNT 26
+static lv_dma_static_skin_t g_page_03_button_skins[PAGE_03_BUTTON_SKIN_COUNT];
+static uint8_t g_page_03_button_skin_variants[PAGE_03_BUTTON_SKIN_COUNT];
+
+static const char* const g_page_03_button_skin_names[PAGE_03_BUTTON_SKIN_COUNT] = {
+    "03_home_btn",
+    "key_1", "key_2", "key_3", "key_4",
+    "key_5", "key_6", "key_7", "key_8",
+    "key_9", "key_0", "key_del", "key_enter",
+    "03_beep_off_btn", "03_beep_on_btn",
+    "03_speed_800_btn", "03_speed_1000_btn", "03_speed_1200_btn",
+    "03_add_off_btn", "03_add_on_btn",
+    "03_fo_OFF_btn", "03_fo_F_btn", "03_fo_O_btn", "03_fo_FO_btn",
+    "03_work_auto_btn", "03_work_manaul_btn",
+};
 
 static void page_03_create_decor(void);
 static void page_03_apply_modern_style(void);
@@ -621,6 +647,94 @@ static lv_obj_t* page_03_find(const char* name)
     return page_03_menu_find_obj(name);
 }
 
+static uint8_t page_03_button_skin_variant(uint32_t index)
+{
+    if (index == 0) return 6;               /* Home */
+    if (index >= 1 && index <= 10) return 3; /* Numeric key */
+    if (index == 11) return 4;              /* Delete key */
+    if (index == 12) return 5;              /* Confirm key */
+
+    switch (index) {
+    case 13: return machine_state_buzzer_enabled() ? 0 : 2;
+    case 14: return machine_state_buzzer_enabled() ? 1 : 0;
+    case 15: return machine_state_speed() == 0 ? 1 : 0;
+    case 16: return machine_state_speed() == 1 ? 1 : 0;
+    case 17: return machine_state_speed() == 2 ? 1 : 0;
+    case 18: return machine_state_add_enabled() ? 0 : 2;
+    case 19: return machine_state_add_enabled() ? 1 : 0;
+    case 20: return machine_state_fo_mode() == 0 ? 2 : 0;
+    case 21: return machine_state_fo_mode() == 1 ? 1 : 0;
+    case 22: return machine_state_fo_mode() == 2 ? 1 : 0;
+    case 23: return machine_state_fo_mode() == 3 ? 1 : 0;
+    case 24: return machine_state_work_mode() == 0 ? 1 : 0;
+    case 25: return machine_state_work_mode() == 1 ? 1 : 0;
+    default: return 0;
+    }
+}
+
+static void page_03_button_skin_key(char* key, size_t key_size,
+                                    lv_obj_t* button, uint8_t variant)
+{
+    static const char state_code[] = { 'U', 'S', 'O' };
+
+    if (variant == 6) {
+        snprintf(key, key_size, "MENU_BTN_HOME");
+    } else if (variant == 3) {
+        snprintf(key, key_size, "MENU_KEY_DIGIT");
+    } else if (variant == 4) {
+        snprintf(key, key_size, "MENU_KEY_DELETE");
+    } else if (variant == 5) {
+        snprintf(key, key_size, "MENU_KEY_CONFIRM");
+    } else {
+        uint8_t state = variant <= 2 ? variant : 0;
+        snprintf(key, key_size, "MENU_FN_%d_%c",
+                 (int)lv_obj_get_width(button), state_code[state]);
+    }
+}
+
+void page_03_menu_sync_button_skins(void)
+{
+    if (!page_03_menu_is_visible()) return;
+
+    for (uint32_t i = 0; i < PAGE_03_BUTTON_SKIN_COUNT; i++) {
+        lv_dma_static_skin_t* skin = &g_page_03_button_skins[i];
+        lv_obj_t* button = skin->source;
+        uint8_t variant;
+        char cache_key[32];
+
+        /* The page owns every source and releases all skins before deleting
+         * its object tree.  A non-NULL cached pointer is therefore valid for
+         * the whole cached-page lifetime.  Do not call lv_obj_is_valid() for
+         * 26 sources/images on every resume: LVGL 8 validates by walking the
+         * object tree and that warm-path scan measured about 30 ms. */
+        if (button == NULL) {
+            button = page_03_find(g_page_03_button_skin_names[i]);
+        }
+        if (button == NULL) continue;
+        variant = page_03_button_skin_variant(i);
+        if (skin->source == button && skin->image != NULL &&
+            g_page_03_button_skin_variants[i] == variant) {
+            continue;
+        }
+
+        lv_dma_static_skin_release(skin);
+        page_03_button_skin_key(cache_key, sizeof(cache_key), button, variant);
+        if (lv_dma_static_skin_attach(skin, button, cache_key)) {
+            g_page_03_button_skin_variants[i] = variant;
+        } else {
+            g_page_03_button_skin_variants[i] = UINT8_MAX;
+        }
+    }
+}
+
+static void page_03_menu_release_button_skins(void)
+{
+    for (uint32_t i = 0; i < PAGE_03_BUTTON_SKIN_COUNT; i++) {
+        lv_dma_static_skin_release(&g_page_03_button_skins[i]);
+        g_page_03_button_skin_variants[i] = UINT8_MAX;
+    }
+}
+
 static void page_03_bg_to_back(void)
 {
     lv_obj_t* bg = page_03_find("page_02_menu_bg.png");
@@ -746,6 +860,18 @@ static void page_03_create_decor(void)
     lv_obj_move_background(function_card);
     lv_obj_move_background(batch_accent);
     lv_obj_move_background(batch_card);
+    page_03_bg_to_back();
+
+    /* These two large cards never change and own no interactive children.
+     * Their rounded shadows used to rebuild and alpha-blend hundreds of rows
+     * on every page exposure.  Keep the original objects as a fail-safe, but
+     * replace their visual layer with one cached DMA image when available. */
+    (void)lv_dma_static_surface_attach(&g_page_03_batch_card_surface,
+                                       batch_card,
+                                       "MENU_BATCH_CARD_STATIC");
+    (void)lv_dma_static_surface_attach(&g_page_03_function_card_surface,
+                                       function_card,
+                                       "MENU_FUNCTION_CARD_STATIC");
     page_03_bg_to_back();
 }
 
@@ -999,6 +1125,7 @@ static uint32_t page_03_preview_mix_color(uint32_t a, uint32_t b, int32_t t)
 
 #define PAGE_03_PREVIEW_DOT_SIZE       17
 #define PAGE_03_PREVIEW_ARC_VALUE      38
+#define PAGE_03_PREVIEW_FRAME_MS       20
 #define PAGE_03_PREVIEW_FEEDBACK_MS    2200
 #define PAGE_03_PREVIEW_DOT_LIGHT      0x45D7E8
 #define PAGE_03_PREVIEW_DOT_DEEP       0x0651D8
@@ -1154,8 +1281,21 @@ static void page_03_create_preview(void)
     }
 
     g_page_03_preview_started = lv_tick_get();
-    g_page_03_preview_timer = lv_timer_create(page_03_preview_timer_cb, 30, NULL);
+    /* The cached parent skin keeps the measured frame cost below the 20 ms
+     * budget.  Target 50 FPS here instead of the old timer-limited 33 FPS;
+     * 16 ms would leave too little margin for input and UART work. */
+    g_page_03_preview_timer = lv_timer_create(page_03_preview_timer_cb,
+                                               PAGE_03_PREVIEW_FRAME_MS,
+                                               NULL);
     page_03_preview_idle();
+
+    /* The preview children are intentionally animated, but the card's large
+     * rounded background, border and shadow are completely static.  Cache
+     * only that parent skin so child invalidation no longer asks the software
+     * renderer to alpha-blend the full card decoration every 30 ms. */
+    (void)lv_dma_static_skin_attach(&g_page_03_preview_card_skin,
+                                    card,
+                                    "MENU_PREVIEW_CARD_SKIN");
 }
 
 void page_03_menu_function_feedback(uint8_t function, uint8_t value)
@@ -1388,6 +1528,10 @@ bool ui_page_03_menu_resume(void)
     if (function_dirty) {
         page_03_update_menu_button_states_refresh();
     }
+    /* Prewarm normally creates these skins while the page is visible.  Keep
+     * resume self-healing so a skipped/failed prewarm can fall back first and
+     * attach the same reusable skins once the page is actually shown. */
+    page_03_menu_sync_button_skins();
     if (g_page_03_preview_needs_idle_refresh) {
         page_03_menu_preview_refresh();
         g_page_03_preview_needs_idle_refresh = false;
@@ -1430,12 +1574,16 @@ void ui_page_03_menu_suspend(void)
 
 void ui_page_03_menu_destroy(void)
 {
+    page_03_menu_release_button_skins();
     page_03_function_button_cache_reset();
     if (g_page_03_preview_timer) {
         lv_timer_del(g_page_03_preview_timer);
         g_page_03_preview_timer = NULL;
     }
     page_03_menu_clear_batch_tip();
+    lv_dma_static_skin_release(&g_page_03_preview_card_skin);
+    lv_dma_static_surface_release(&g_page_03_batch_card_surface);
+    lv_dma_static_surface_release(&g_page_03_function_card_surface);
     if (menu_page && lv_obj_is_valid(menu_page)) {
         lv_obj_del(menu_page);
     }

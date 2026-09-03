@@ -229,6 +229,19 @@ static uint32_t ui_manager_profile_elapsed_us(uint64_t started_us)
     return app_clock_elapsed_us32(started_us, app_clock_monotonic_us());
 }
 
+/* Page roots share one LVGL screen and a page switch always invalidates the
+ * newly exposed frame.  Resume schedules the refresh timer, but does not make
+ * it due immediately.  Mark only page-switch frames ready here so ordinary
+ * incremental refresh keeps its configured cadence. */
+static void ui_manager_schedule_first_frame(void)
+{
+    lv_disp_t *disp = lv_disp_get_default();
+
+    if (disp != NULL && disp->refr_timer != NULL) {
+        lv_timer_ready(disp->refr_timer);
+    }
+}
+
 typedef struct {
     ui_page_t from;
     ui_page_t to;
@@ -301,6 +314,7 @@ void ui_manager_switch(ui_page_t page)
         phase_started_us = app_clock_monotonic_us();
     }
     g_page_manager.current = page;
+    ui_manager_schedule_first_frame();
     if (profile_enabled) {
         sample.commit_us = ui_manager_profile_elapsed_us(phase_started_us);
         sample.total_us = ui_manager_profile_elapsed_us(total_started_us);
@@ -398,6 +412,7 @@ bool ui_manager_adopt_precreated_page(ui_page_t page)
         phase_started_us = app_clock_monotonic_us();
     }
     g_page_manager.current = page;
+    ui_manager_schedule_first_frame();
     if (g_page_registry[page].cache_policy == UI_PAGE_RETAINED) {
         g_page_cache_ready[page] = true;
     }

@@ -21,6 +21,9 @@ void page_03_menu_clear_batch_tip(void);
 void page_03_menu_show_batch_saved_tip(void);
 void page_03_menu_refresh_batch_number(void);
 void page_03_menu_refresh_batch_mode(void);
+/* Rebind shared DMA skins after a button's logical selected state changes.
+ * Text, events and pressed feedback remain live LVGL objects. */
+void page_03_menu_sync_button_skins(void);
 void page_03_batch_num_edit_reset(void);
 void page_03_batch_num_edit_input(char input_num);
 bool page_03_batch_num_edit_value(int* value);
