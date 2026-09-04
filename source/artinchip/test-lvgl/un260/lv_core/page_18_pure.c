@@ -398,6 +398,51 @@ void ui_page_18_pure_request_exit(void)
     g_pure_page.exiting = false;
 }
 
+void ui_page_18_pure_suspend(void)
+{
+    if (g_pure_page.page == NULL || !lv_obj_is_valid(g_pure_page.page)) {
+        return;
+    }
+
+    /* PURE and MAIN share one retained smart-island instance.  Keep the
+     * component alive while this page is hidden so the next page only needs
+     * to reparent it instead of rebuilding its complete object tree. */
+    smart_island_set_suspended(true);
+    if (g_pure_page.refresh_timer != NULL) {
+        lv_timer_pause(g_pure_page.refresh_timer);
+    }
+    lv_obj_add_flag(g_pure_page.page, LV_OBJ_FLAG_HIDDEN);
+}
+
+bool ui_page_18_pure_resume(void)
+{
+    language_t language;
+
+    if (g_pure_page.page == NULL || !lv_obj_is_valid(g_pure_page.page)) {
+        return false;
+    }
+
+    lv_obj_clear_flag(g_pure_page.page, LV_OBJ_FLAG_HIDDEN);
+
+    /* Reparent first.  Unsuspending before the move can refresh a component
+     * whose old parent is still hidden and turns a clean switch into a large
+     * synchronous resume. */
+    smart_island_create(g_pure_page.page);
+    smart_island_set_suspended(false);
+
+    language = ui_lang_get();
+    if (g_pure_page.language != language) {
+        g_pure_page.language = language;
+        pure_refresh_language_texts();
+    }
+    pure_refresh_values();
+    if (g_pure_page.refresh_timer != NULL) {
+        lv_timer_resume(g_pure_page.refresh_timer);
+    }
+    g_pure_page.exiting = false;
+    return true;
+}
+
 void ui_page_18_pure_destroy(void)
 {
     if (g_pure_page.refresh_timer) {

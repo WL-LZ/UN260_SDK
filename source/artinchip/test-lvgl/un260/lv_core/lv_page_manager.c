@@ -84,6 +84,10 @@ static const ui_page_static_image_t g_page_currency_static_images[] = {
     { LVGL_PATH(page_07_bg.png) },
 };
 
+static const ui_page_static_image_t g_page_pure_static_images[] = {
+    { LVGL_PATH(page_pure.png) },
+};
+
 static void ui_manager_create_main(lv_obj_t *parent)
 {
     ui_main_create(parent);
@@ -190,7 +194,15 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
     [UI_PAGE_IMAGE_UPGRADE] = { ui_page_15_image_upgrade_create, ui_page_15_image_upgrade_destroy },
     [UI_PAGE_UI_UPGRADE] = { ui_page_16_ui_upgrade_create, ui_page_16_ui_upgrade_destroy },
     [UI_PAGE_MOTOR_TEST] = { ui_page_17_motor_test_create, ui_page_17_motor_test_destroy },
-    [UI_PAGE_PURE] = { ui_page_18_pure_create, ui_page_18_pure_destroy },
+    [UI_PAGE_PURE] = {
+        .create = ui_page_18_pure_create,
+        .destroy = ui_page_18_pure_destroy,
+        .resume = ui_page_18_pure_resume,
+        .suspend = ui_page_18_pure_suspend,
+        .cache_policy = UI_PAGE_RETAINED,
+        .static_images = g_page_pure_static_images,
+        .static_image_count = UI_ARRAY_SIZE(g_page_pure_static_images),
+    },
     [UI_PAGE_HISTORY] = {
         .create = ui_page_19_history_create,
         .destroy = ui_page_19_history_destroy,

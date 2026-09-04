@@ -31,6 +31,7 @@ static const ui_page_t g_boot_prewarm_pages[] = {
     UI_PAGE_LIST,
     UI_PAGE_HISTORY,
     UI_PAGE_SETTING,
+    UI_PAGE_PURE,
     UI_PAGE_INNOVATION_CENTER,
     /* Currency depends on the asynchronous 0x56 catalog response.  Keep it
      * last so waiting for that data never blocks independent page caches. */

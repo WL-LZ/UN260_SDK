@@ -1681,9 +1681,11 @@ bool page_01_main_resume(void)
     page_01_main_detect_snapshot_changes();
     dirty = s_main_dirty;
     lv_obj_clear_flag(main_page, LV_OBJ_FLAG_HIDDEN);
-    smart_island_set_suspended(false);
     resume_counting_sim();
+    /* PURE can retain the shared island under its hidden page.  Move it to
+     * the visible MAIN tree before applying deferred state. */
     smart_island_create(main_page);
+    smart_island_set_suspended(false);
     main_time_timer_cb(NULL);
     if (s_time_timer) {
         lv_timer_resume(s_time_timer);
