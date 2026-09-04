@@ -189,7 +189,16 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .data_topics = UI_DATA_TOPIC_DEVICE_VERSION,
         .refresh_data = ui_page_06_settings_refresh_data,
     },
-    [UI_PAGE_SET_PASSAGE] = { ui_page_05_set_password_create, ui_page_05_set_password_destroy },
+    [UI_PAGE_SET_PASSAGE] = {
+        .create = ui_page_05_set_password_create,
+        .destroy = ui_page_05_set_password_destroy,
+        .resume = ui_page_05_set_password_resume,
+        .suspend = ui_page_05_set_password_suspend,
+        /* Password is intentionally retained only after first use.  It is
+         * not in the boot prewarm queue, so low-frequency functionality does
+         * not increase startup latency; suspend clears all sensitive input. */
+        .cache_policy = UI_PAGE_RETAINED,
+    },
     [UI_PAGE_CURR] = {
         .create = ui_page_07_curr_create,
         .destroy = ui_page_07_curr_destroy,

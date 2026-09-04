@@ -273,3 +273,47 @@ void ui_page_05_set_password_destroy(void)
 
     memset(&g_password_page, 0, sizeof(g_password_page));
 }
+
+bool ui_page_05_set_password_resume(void)
+{
+    if (g_password_page.page == NULL ||
+        !lv_obj_is_valid(g_password_page.page)) {
+        return false;
+    }
+
+    if (g_password_page.error_timer) {
+        lv_timer_del(g_password_page.error_timer);
+        g_password_page.error_timer = NULL;
+    }
+    memset(g_password_page.input, 0, sizeof(g_password_page.input));
+    password_set_display_text("");
+    if (g_password_page.error_label &&
+        lv_obj_is_valid(g_password_page.error_label)) {
+        lv_obj_add_flag(g_password_page.error_label, LV_OBJ_FLAG_HIDDEN);
+    }
+    lv_obj_clear_flag(g_password_page.page, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(g_password_page.page);
+    password_open_keyboard();
+    return true;
+}
+
+void ui_page_05_set_password_suspend(void)
+{
+    if (g_password_page.page == NULL ||
+        !lv_obj_is_valid(g_password_page.page)) {
+        return;
+    }
+
+    settings_detail_keyboard_hide();
+    if (g_password_page.error_timer) {
+        lv_timer_del(g_password_page.error_timer);
+        g_password_page.error_timer = NULL;
+    }
+    memset(g_password_page.input, 0, sizeof(g_password_page.input));
+    password_set_display_text("");
+    if (g_password_page.error_label &&
+        lv_obj_is_valid(g_password_page.error_label)) {
+        lv_obj_add_flag(g_password_page.error_label, LV_OBJ_FLAG_HIDDEN);
+    }
+    lv_obj_add_flag(g_password_page.page, LV_OBJ_FLAG_HIDDEN);
+}
