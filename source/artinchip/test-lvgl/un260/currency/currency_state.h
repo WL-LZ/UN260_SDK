@@ -20,6 +20,7 @@ void currency_state_reset(void);
 void currency_state_begin_list_sync(void);
 bool currency_state_append_list_code(uint8_t protocol_index, const char code[4]);
 bool currency_state_finish_list_sync(void);
+bool currency_state_list_is_ready(void);
 bool currency_state_confirm_active_code(const char* code);
 bool currency_state_confirm_active_selection(uint8_t index, const char code[4]);
 void currency_state_confirm_active_currency(curr_item_t currency);

@@ -27,10 +27,12 @@ static size_t g_boot_prewarm_index = 0;
 
 static const ui_page_t g_boot_prewarm_pages[] = {
     UI_PAGE_MENU,
-    UI_PAGE_CURR,
     UI_PAGE_LIST,
     UI_PAGE_SETTING,
     UI_PAGE_INNOVATION_CENTER,
+    /* Currency depends on the asynchronous 0x56 catalog response.  Keep it
+     * last so waiting for that data never blocks independent page caches. */
+    UI_PAGE_CURR,
 };
 
 static void app_boot_runtime_cancel_prewarm(void)
@@ -51,8 +53,10 @@ static void app_boot_runtime_prewarm_timer_cb(lv_timer_t *timer)
 
     if (g_boot_prewarm_index <
         sizeof(g_boot_prewarm_pages) / sizeof(g_boot_prewarm_pages[0])) {
-        (void)ui_manager_prewarm_page(
-            g_boot_prewarm_pages[g_boot_prewarm_index++]);
+        if (ui_manager_prewarm_page(
+                g_boot_prewarm_pages[g_boot_prewarm_index])) {
+            g_boot_prewarm_index++;
+        }
     }
 
     if (g_boot_prewarm_index >=

@@ -32,6 +32,14 @@ typedef void (*ui_page_destroy_fn_t)(void);
 typedef bool (*ui_page_resume_fn_t)(void);
 typedef void (*ui_page_suspend_fn_t)(void);
 typedef void (*ui_page_refresh_fn_t)(ui_data_topic_t topics);
+typedef bool (*ui_page_prepare_static_fn_t)(void);
+typedef bool (*ui_page_prewarm_ready_fn_t)(void);
+
+/* Keep boot-time visual preparation bounded.  The callback performs one
+ * incremental unit of work, allowing the manager to enforce a common time
+ * and step budget for every retained page that opts in. */
+#define UI_PAGE_PREPARE_STATIC_MAX_STEPS 12U
+#define UI_PAGE_PREPARE_STATIC_BUDGET_US 230000U
 
 typedef enum {
     UI_PAGE_TRANSIENT = 0,
@@ -46,6 +54,8 @@ typedef struct {
     ui_page_cache_policy_t cache_policy;
     ui_data_topic_t data_topics;
     ui_page_refresh_fn_t refresh_data;
+    ui_page_prewarm_ready_fn_t prewarm_ready;
+    ui_page_prepare_static_fn_t prepare_static_step;
 } ui_page_registration_t;
 
 static void ui_manager_create_main(lv_obj_t *parent)
@@ -135,6 +145,8 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .resume = ui_page_07_curr_resume,
         .suspend = ui_page_07_curr_suspend,
         .cache_policy = UI_PAGE_RETAINED,
+        .prewarm_ready = ui_page_07_curr_prewarm_ready,
+        .prepare_static_step = ui_page_07_curr_prepare_static_step,
     },
     [UI_PAGE_BOOT] = { ui_page_08_curr_create, ui_page_08_curr_destroy },
     [UI_PAGE_CIS_CALIB] = { ui_page_cis_calib_create, ui_page_cis_calib_destroy },
@@ -483,17 +495,26 @@ bool ui_manager_prewarm_page(ui_page_t page)
     const ui_page_registration_t *registration;
     bool profile_enabled;
     uint64_t started_us = 0;
+    uint64_t static_started_us = 0;
+    uint32_t static_steps = 0;
 
     if (!ui_manager_page_is_registered(page) ||
-        page == g_page_manager.current ||
-        g_page_cache_ready[page]) {
+        page == g_page_manager.current) {
         return false;
+    }
+
+    if (g_page_cache_ready[page]) {
+        return true;
     }
 
     registration = &g_page_registry[page];
     if (registration->cache_policy != UI_PAGE_RETAINED ||
         registration->create == NULL ||
         registration->suspend == NULL) {
+        return false;
+    }
+    if (registration->prewarm_ready != NULL &&
+        !registration->prewarm_ready()) {
         return false;
     }
 
@@ -503,6 +524,24 @@ bool ui_manager_prewarm_page(ui_page_t page)
     }
 
     registration->create(lv_scr_act());
+
+    /* The new page is fully constructed and visible to LVGL here, but it has
+     * not reached the display yet.  This is the safe point to prepare a small
+     * amount of immutable visual content: snapshotting after suspend would
+     * traverse a hidden tree, while doing it on first interaction steals
+     * frame time from the user's gesture. */
+    if (registration->prepare_static_step != NULL) {
+        static_started_us = app_clock_monotonic_us();
+        while (static_steps < UI_PAGE_PREPARE_STATIC_MAX_STEPS &&
+               registration->prepare_static_step()) {
+            static_steps++;
+            if (app_clock_elapsed_us32(static_started_us,
+                                       app_clock_monotonic_us()) >=
+                UI_PAGE_PREPARE_STATIC_BUDGET_US) {
+                break;
+            }
+        }
+    }
     registration->suspend();
     g_page_cache_ready[page] = true;
     g_page_data_dirty[page] = UI_DATA_TOPIC_NONE;
@@ -511,6 +550,12 @@ bool ui_manager_prewarm_page(ui_page_t page)
         perf_profile_report_event_us(
             ui_manager_page_name(page), "PREWARM",
             app_clock_elapsed_us32(started_us, app_clock_monotonic_us()));
+        if (static_steps > 0U) {
+            perf_profile_report_event_us(
+                ui_manager_page_name(page), "PREWARM_STATIC",
+                app_clock_elapsed_us32(static_started_us,
+                                       app_clock_monotonic_us()));
+        }
     }
     return true;
 }

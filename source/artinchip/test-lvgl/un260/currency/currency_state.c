@@ -25,6 +25,7 @@ static char g_currency_sync_codes[CONTROLLER_MAX_CURRENCIES][4];
 static bool g_currency_sync_seen[CONTROLLER_MAX_CURRENCIES];
 static uint8_t g_currency_sync_count;
 static bool g_currency_sync_active;
+static bool g_currency_list_ready;
 static char g_detected_code[4];
 static bool g_auto_selected;
 
@@ -73,6 +74,7 @@ void currency_state_reset(void)
     memset(g_currency_sync_seen, 0, sizeof(g_currency_sync_seen));
     g_currency_sync_count = 0;
     g_currency_sync_active = false;
+    g_currency_list_ready = false;
 }
 
 void currency_state_begin_list_sync(void)
@@ -145,6 +147,7 @@ bool currency_state_finish_list_sync(void)
             g_currency_state.active_currency =
                 currency_state_code_to_item(g_currency_state.codes[1]);
         }
+        g_currency_list_ready = true;
     }
 
     memset(g_currency_sync_codes, 0, sizeof(g_currency_sync_codes));
@@ -152,6 +155,11 @@ bool currency_state_finish_list_sync(void)
     g_currency_sync_count = 0;
     g_currency_sync_active = false;
     return valid;
+}
+
+bool currency_state_list_is_ready(void)
+{
+    return g_currency_list_ready && !g_currency_sync_active;
 }
 
 curr_item_t currency_state_code_to_item(const char *code)

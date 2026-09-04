@@ -1050,6 +1050,27 @@ static bool curr_build_one_missing_card_snapshot(void)
     return false;
 }
 
+bool ui_page_07_curr_prepare_static_step(void)
+{
+    if (curr_page == NULL || !lv_obj_is_valid(curr_page) ||
+        lv_obj_has_flag(curr_page, LV_OBJ_FLAG_HIDDEN) ||
+        g_page07_curr.model.view_mode != PAGE07_CURR_VIEW_CARD ||
+        g_page07_curr.objects.card_layer == NULL ||
+        !lv_obj_is_valid(g_page07_curr.objects.card_layer) ||
+        lv_obj_has_flag(g_page07_curr.objects.card_layer,
+                        LV_OBJ_FLAG_HIDDEN) ||
+        currency_state_count() <= 0) {
+        return false;
+    }
+
+    return curr_build_one_missing_card_snapshot();
+}
+
+bool ui_page_07_curr_prewarm_ready(void)
+{
+    return currency_state_list_is_ready();
+}
+
 static void curr_release_card_snapshots(void)
 {
     for (int i = 0; i < PAGE07_CURR_MAX_ITEMS; i++) {

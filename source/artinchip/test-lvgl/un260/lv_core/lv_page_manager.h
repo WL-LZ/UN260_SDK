@@ -70,7 +70,11 @@ bool ui_manager_pop_page(void); // 页面堆栈：返回上一页
 void ui_manager_clear_stack(void); // 清空页面堆栈
 bool ui_manager_invalidate_page_cache(ui_page_t page); // 主动释放非活动缓存页
 void ui_manager_invalidate_all_page_caches(void); // 释放所有非活动缓存页
-bool ui_manager_prewarm_page(ui_page_t page); // 在不切换当前页面的前提下创建并暂停缓存页
+/* Returns true when the retained page is ready (already cached or created and
+ * suspended by this call).  Returns false while an optional data dependency
+ * is not ready, allowing the boot scheduler to retry without creating stale
+ * visual state. */
+bool ui_manager_prewarm_page(ui_page_t page);
 ui_page_t ui_manager_get_current_page(void); // 获取当前页
 const char *ui_manager_page_name(ui_page_t page); // 获取页面诊断名称
 void ui_manager_publish_data_changed(ui_data_topic_t topics); // 发布异步数据更新
