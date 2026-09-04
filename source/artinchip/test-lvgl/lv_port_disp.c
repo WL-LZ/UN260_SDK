@@ -31,6 +31,10 @@ static lv_disp_drv_t disp_drv;
 static int g_fb = -1;
 char *buf_next = NULL;
 static int g_triple_fb = 0;
+static enum ge_mode g_ge_mode = GE_MODE_NORMAL;
+static struct fb_var_screeninfo g_pan_var;
+static int g_pan_var_valid = 0;
+static int g_live_vscreeninfo = 0;
 
 #ifdef USE_DRAW_BUF
 static int g_fb_num = 1;
@@ -148,16 +152,24 @@ void sync_disp_buf(lv_disp_drv_t * drv, lv_color_t * color_p, const lv_area_t * 
         return;
     }
 
-    ret = mpp_ge_emit(g_ge);
-    if (ret < 0) {
-        LV_LOG_ERROR("emit fail");
-        return;
-    }
+    /*
+     * GE normal mode executes and waits inside IOC_GE_BITBLT.  Calling
+     * emit/sync afterwards only takes two extra mutex round-trips because
+     * both operations are no-ops in normal_ops.c.  Keep them for CMDQ mode,
+     * where they are required to submit and complete the queued command.
+     */
+    if (g_ge_mode == GE_MODE_CMDQ) {
+        ret = mpp_ge_emit(g_ge);
+        if (ret < 0) {
+            LV_LOG_ERROR("emit fail");
+            return;
+        }
 
-    ret = mpp_ge_sync(g_ge);
-    if (ret < 0) {
-        LV_LOG_ERROR("sync fail");
-        return;
+        ret = mpp_ge_sync(g_ge);
+        if (ret < 0) {
+            LV_LOG_ERROR("sync fail");
+            return;
+        }
     }
 
     return;
@@ -265,9 +277,13 @@ static void fbdev_flush(lv_disp_drv_t * drv, const lv_area_t * area,
         int pan_result;
         uint64_t stage_started_us = 0;
 
-        if (ioctl(g_fb, FBIOGET_VSCREENINFO, &var) < 0) {
-            LV_LOG_WARN("ioctl FBIOGET_VSCREENINFO");
-            return;
+        if (!g_live_vscreeninfo && g_pan_var_valid) {
+            var = g_pan_var;
+        } else {
+            if (ioctl(g_fb, FBIOGET_VSCREENINFO, &var) < 0) {
+                LV_LOG_WARN("ioctl FBIOGET_VSCREENINFO");
+                return;
+            }
         }
 
 #ifdef USE_DRAW_BUF
@@ -399,6 +415,25 @@ void lv_port_disp_init(void)
         LV_LOG_ERROR("ge open fail");
         return;
     }
+    g_ge_mode = mpp_ge_get_mode(g_ge);
+
+    /*
+     * Resolution, pixel format and virtual framebuffer layout are fixed for
+     * the lifetime of this application.  Cache the pan template instead of
+     * issuing FBIOGET_VSCREENINFO for every rendered frame.  The old live
+     * query path remains available for A/B testing and emergency fallback.
+     */
+    g_live_vscreeninfo = getenv("UN260_FB_LIVE_VINFO") != NULL;
+    if (ioctl(g_fb, FBIOGET_VSCREENINFO, &g_pan_var) == 0) {
+        g_pan_var_valid = 1;
+    } else {
+        g_pan_var_valid = 0;
+        g_live_vscreeninfo = 1;
+        LV_LOG_WARN("initial FBIOGET_VSCREENINFO failed; use live query");
+    }
+    printf("DISP_PIPE ge=%s vscreeninfo=%s direct=1\n",
+           g_ge_mode == GE_MODE_CMDQ ? "CMDQ" : "NORMAL",
+           g_live_vscreeninfo ? "LIVE" : "CACHED");
 
 #ifdef USE_DRAW_BUF
     buf1 = (void *)g_draw_buf[0];
