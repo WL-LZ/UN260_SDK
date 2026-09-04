@@ -4,6 +4,8 @@
 #include "lvgl/lvgl.h"
 
 void ui_page_19_history_create(lv_obj_t *parent);
+bool ui_page_19_history_resume(void);
+void ui_page_19_history_suspend(void);
 void ui_page_19_history_destroy(void);
 void ui_page_19_history_refresh(void);
 

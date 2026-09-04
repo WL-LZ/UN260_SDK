@@ -1586,6 +1586,80 @@ void ui_page_19_history_create(lv_obj_t *parent)
     history_page_refresh();
 }
 
+bool ui_page_19_history_resume(void)
+{
+    bool profile_enabled;
+    uint64_t profile_started_us = 0;
+    int i;
+
+    if (g_history_page.root == NULL ||
+        !lv_obj_is_valid(g_history_page.root)) {
+        return false;
+    }
+
+    profile_enabled = perf_profile_is_enabled();
+    if (profile_enabled) {
+        profile_started_us = app_clock_monotonic_us();
+    }
+
+    /* A newly-created History page always opens in list mode at the top.
+     * Restore the same public behaviour while reusing its expensive object
+     * tree, and close transient UI that must never survive navigation. */
+    history_page_hide_clean_dialog();
+    g_history_page.detail_mode = false;
+    g_history_page.detail_index = 0;
+    lv_obj_scroll_to_y(g_history_page.list_area, 0, LV_ANIM_OFF);
+    if (g_history_page.detail_sections_created) {
+        for (i = 0; i < 3; i++) {
+            if (g_history_detail_sections[i].body != NULL &&
+                lv_obj_is_valid(g_history_detail_sections[i].body)) {
+                lv_obj_scroll_to_y(g_history_detail_sections[i].body,
+                                   0, LV_ANIM_OFF);
+            }
+        }
+    }
+
+    /* Refresh from the model before exposing the cached root.  Counting and
+     * deletion can change History while it is hidden, so retaining objects
+     * must not retain stale data. */
+    history_page_refresh();
+    lv_obj_clear_flag(g_history_page.root, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(g_history_page.root);
+
+    if (profile_enabled) {
+        perf_profile_report_event_us(
+            "HISTORY", "RESUME_REFRESH",
+            app_clock_elapsed_us32(profile_started_us,
+                                   app_clock_monotonic_us()));
+    }
+    return true;
+}
+
+void ui_page_19_history_suspend(void)
+{
+    int i;
+
+    if (g_history_page.root == NULL ||
+        !lv_obj_is_valid(g_history_page.root)) {
+        return;
+    }
+
+    history_page_hide_clean_dialog();
+    if (g_history_page.list_area != NULL &&
+        lv_obj_is_valid(g_history_page.list_area)) {
+        lv_anim_del(g_history_page.list_area, NULL);
+    }
+    if (g_history_page.detail_sections_created) {
+        for (i = 0; i < 3; i++) {
+            if (g_history_detail_sections[i].body != NULL &&
+                lv_obj_is_valid(g_history_detail_sections[i].body)) {
+                lv_anim_del(g_history_detail_sections[i].body, NULL);
+            }
+        }
+    }
+    lv_obj_add_flag(g_history_page.root, LV_OBJ_FLAG_HIDDEN);
+}
+
 void ui_page_19_history_destroy(void)
 {
     if (g_history_page.root != NULL && lv_obj_is_valid(g_history_page.root)) {
