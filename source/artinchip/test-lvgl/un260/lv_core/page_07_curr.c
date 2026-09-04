@@ -2099,8 +2099,13 @@ void ui_page_07_curr_suspend(void)
     }
     if (g_page07_curr.objects.list != NULL &&
         lv_obj_is_valid(g_page07_curr.objects.list)) {
-        lv_anim_del(g_page07_curr.objects.list,
-                    curr_overscroll_anim_x_cb);
+        /* lv_obj_scroll_to_x(..., LV_ANIM_ON) installs LVGL's internal
+         * scroll animation callback, not curr_overscroll_anim_x_cb.  Deleting
+         * only our overscroll callback left that animation alive after the
+         * retained Currency page was hidden.  It continued invalidating the
+         * card strip and drawing page_07_bg.png while MAIN was visible. */
+        lv_anim_del(g_page07_curr.objects.list, NULL);
+        curr_reset_overscroll_visual();
     }
     g_page07_curr.gesture.active = false;
     g_page07_curr.gesture.dragging = false;

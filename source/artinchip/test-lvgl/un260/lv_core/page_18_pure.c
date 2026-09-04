@@ -225,6 +225,11 @@ static void pure_refresh_timer_cb(lv_timer_t* t)
     language_t language;
 
     (void)t;
+    if (g_pure_page.page == NULL || !lv_obj_is_valid(g_pure_page.page) ||
+        lv_obj_has_flag(g_pure_page.page, LV_OBJ_FLAG_HIDDEN) ||
+        ui_manager_get_current_page() != UI_PAGE_PURE) {
+        return;
+    }
     language = ui_lang_get();
     if (g_pure_page.language != language) {
         g_pure_page.language = language;

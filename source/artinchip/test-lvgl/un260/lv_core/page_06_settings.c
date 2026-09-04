@@ -552,6 +552,7 @@ static void update_footer_time(void)
 static void footer_time_timer_cb(lv_timer_t* timer)
 {
     (void)timer;
+    if (!settings_page_is_visible()) return;
     update_footer_time();
 }
 

@@ -14,6 +14,7 @@ typedef enum {
 void ui_main_create(lv_obj_t* parent);
 void ui_main_destroy(void);
 bool page_01_main_is_created(void);
+bool page_01_main_is_visible(void);
 lv_obj_t *page_01_main_find_obj(const char *name);
 lv_obj_t *page_01_main_scroll_obj(void);
 void page_01_main_scroll_reset(void);

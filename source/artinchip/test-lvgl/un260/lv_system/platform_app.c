@@ -22,8 +22,6 @@
 // 全局变量定义
 
 static lv_timer_t *s_sim_timer = NULL;
-static lv_obj_t* page_01_main_page_pcs_label = NULL;
-static lv_obj_t* page_01_main_page_amount_label = NULL;
 static lv_timer_t *s_safe_reset_timer = NULL;
 static bool g_count_end_anim_pending = false;
 static bool g_count_end_anim_armed = false;
@@ -369,6 +367,7 @@ static bool sim_reject_detail_update(counting_sim_t *sim_data)
 static void sim_timer_cb(lv_timer_t* timer)
 {
     (void)timer;
+    if (!page_01_main_is_visible()) return;
     counting_sim_t* sim_data = counting_data_mutable();
     
     if (sim_data->denom_number <= 0)
@@ -869,7 +868,6 @@ void ui_refresh_main_page(void) {
     lv_obj_t *scroll_container = page_01_main_scroll_obj();
     page_01_detail_section_t section = page_01_detail_section_get();
     int first_row = page_01_detail_scroll_first_row_get(section);
-    char buf[32];
     char amount_buf[32];
     int right_total_pcs = 0;
     float right_total_amount = 0.0f;
@@ -890,24 +888,8 @@ void ui_refresh_main_page(void) {
     }
     apply_chrome = page_01_main_detail_chrome_changed(section);
 
-    if (page_01_main_page_pcs_label == NULL || !lv_obj_is_valid(page_01_main_page_pcs_label))
-    {
-        page_01_main_page_pcs_label = page_01_main_find_obj("01_pcs_label");
-    }
-    if (page_01_main_page_pcs_label && lv_obj_is_valid(page_01_main_page_pcs_label))
-    {
-        snprintf(buf, sizeof(buf), "%d", sim_data->total_pcs);
-        label_set_text_if_changed(page_01_main_page_pcs_label, buf);
-    }
-    if (page_01_main_page_amount_label == NULL || !lv_obj_is_valid(page_01_main_page_amount_label))
-    {
-        page_01_main_page_amount_label = page_01_main_find_obj("01_amount_label");
-    }
-    if (page_01_main_page_amount_label && lv_obj_is_valid(page_01_main_page_amount_label))
-    {
-        format_amount_with_comma(amount_buf, sizeof(amount_buf), sim_data->total_amount);
-        label_set_text_if_changed(page_01_main_page_amount_label, amount_buf);
-    }
+    format_amount_with_comma(amount_buf, sizeof(amount_buf), sim_data->total_amount);
+    page_01_main_refresh_totals(sim_data->total_pcs, amount_buf);
 
     //main_right_list
     //清空
@@ -1007,8 +989,6 @@ void cleanup_counting_sim(void)
 
     ui_count_end_anim_cancel();
 
-    page_01_main_page_amount_label = NULL;
-    page_01_main_page_pcs_label = NULL;
     g_main_detail_row_layout_valid = false;
     g_main_detail_chrome_valid = false;
     memset(&g_main_cache, 0, sizeof(g_main_cache));

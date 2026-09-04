@@ -1186,6 +1186,7 @@ static void page_03_preview_idle(void)
 static void page_03_preview_timer_cb(lv_timer_t* timer)
 {
     LV_UNUSED(timer);
+    if (!page_03_menu_is_visible()) return;
     if (!g_page_03_preview_orb || !lv_obj_is_valid(g_page_03_preview_orb)) return;
 
     uint32_t elapsed = lv_tick_elaps(g_page_03_preview_started);

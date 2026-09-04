@@ -877,6 +877,11 @@ static void innovation_gesture_toggle_cb(lv_event_t *event)
 static void innovation_page_refresh_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
+    if (g_page.root == NULL || !lv_obj_is_valid(g_page.root) ||
+        lv_obj_has_flag(g_page.root, LV_OBJ_FLAG_HIDDEN) ||
+        ui_manager_get_current_page() != UI_PAGE_INNOVATION_CENTER) {
+        return;
+    }
     if (g_page.pending_start_after_add_off &&
         !machine_state_add_enabled()) {
         innovation_begin_task();
