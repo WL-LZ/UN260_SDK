@@ -1,6 +1,7 @@
 #include "app_boot_runtime.h"
 
 #include <stddef.h>
+#include <string.h>
 
 #include "lvgl/lvgl.h"
 
@@ -23,7 +24,7 @@
 
 static lv_timer_t *g_boot_finish_timer = NULL;
 static bool g_boot_prewarm_active = false;
-static size_t g_boot_prewarm_index = 0;
+static size_t g_boot_prewarm_cursor = 0;
 static uint32_t g_boot_prewarm_due_ms = 0;
 
 static const ui_page_t g_boot_prewarm_pages[] = {
@@ -33,10 +34,18 @@ static const ui_page_t g_boot_prewarm_pages[] = {
     UI_PAGE_SETTING,
     UI_PAGE_PURE,
     UI_PAGE_INNOVATION_CENTER,
-    /* Currency depends on the asynchronous 0x56 catalog response.  Keep it
-     * last so waiting for that data never blocks independent page caches. */
+    /* Currency should precede MAIN when its controller-provided catalog is
+     * ready.  The scheduler below skips a temporarily unavailable page and
+     * retries it later, so this dependency can never block MAIN prewarm. */
     UI_PAGE_CURR,
+    /* MAIN has the largest remaining cold-create peak.  Build its retained
+     * object tree and decode the full-screen background while SELF_TEST is
+     * still visible, then activate it through the normal resume path. */
+    UI_PAGE_MAIN,
 };
+
+static bool g_boot_prewarm_done[
+    sizeof(g_boot_prewarm_pages) / sizeof(g_boot_prewarm_pages[0])];
 
 static void app_boot_runtime_cancel_prewarm(void)
 {
@@ -52,7 +61,8 @@ static bool app_boot_runtime_time_reached(uint32_t now_ms,
 static void app_boot_runtime_start_prewarm(void)
 {
     app_boot_runtime_cancel_prewarm();
-    g_boot_prewarm_index = 0;
+    memset(g_boot_prewarm_done, 0, sizeof(g_boot_prewarm_done));
+    g_boot_prewarm_cursor = 0;
     g_boot_prewarm_due_ms = lv_tick_get() + APP_BOOT_PREWARM_PERIOD_MS;
     g_boot_prewarm_active = true;
 }
@@ -61,22 +71,37 @@ static void app_boot_runtime_poll_prewarm(uint32_t now_ms)
 {
     const size_t page_count =
         sizeof(g_boot_prewarm_pages) / sizeof(g_boot_prewarm_pages[0]);
+    size_t checked = 0;
+    size_t completed = 0;
 
     if (!g_boot_prewarm_active ||
         !app_boot_runtime_time_reached(now_ms, g_boot_prewarm_due_ms)) {
         return;
     }
 
-    /* This function is called once from the application loop, after
-     * lv_timer_handler() has returned.  Processing at most one page here
-     * prevents LVGL timer-list restarts from turning overdue prewarm work into
-     * a multi-page burst inside a single render cycle. */
-    if (g_boot_prewarm_index < page_count &&
-        ui_manager_prewarm_page(g_boot_prewarm_pages[g_boot_prewarm_index])) {
-        g_boot_prewarm_index++;
+    /* A controller-backed page can be temporarily unavailable.  Scan past it
+     * instead of blocking every independent page behind it, but still perform
+     * at most one expensive page construction per application loop. */
+    while (checked < page_count) {
+        size_t index = g_boot_prewarm_cursor;
+
+        g_boot_prewarm_cursor = (g_boot_prewarm_cursor + 1U) % page_count;
+        checked++;
+        if (g_boot_prewarm_done[index]) {
+            continue;
+        }
+        if (ui_manager_prewarm_page(g_boot_prewarm_pages[index])) {
+            g_boot_prewarm_done[index] = true;
+            break;
+        }
     }
 
-    if (g_boot_prewarm_index >= page_count) {
+    for (size_t i = 0; i < page_count; i++) {
+        if (g_boot_prewarm_done[i]) {
+            completed++;
+        }
+    }
+    if (completed >= page_count) {
         app_boot_runtime_cancel_prewarm();
         return;
     }

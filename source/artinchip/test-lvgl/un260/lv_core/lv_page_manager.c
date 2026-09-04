@@ -28,6 +28,7 @@ static ui_page_manager_context_t g_page_manager = {
 
 static bool g_page_cache_ready[UI_PAGE_COUNT];
 static ui_data_topic_t g_page_data_dirty[UI_PAGE_COUNT];
+static ui_page_t g_page_prewarming = UI_PAGE_INVALID;
 
 typedef void (*ui_page_create_fn_t)(lv_obj_t *parent);
 typedef void (*ui_page_destroy_fn_t)(void);
@@ -47,6 +48,14 @@ typedef struct {
 #define UI_PAGE_PREPARE_STATIC_MAX_STEPS 12U
 #define UI_PAGE_PREPARE_STATIC_BUDGET_US 230000U
 
+/* Large page backgrounds stay explicitly registered because decoding them is
+ * an intentional memory decision.  Small visible file-backed images are safe
+ * to discover from the newly-created page tree and remove a common first-frame
+ * decode spike without coupling the manager to page-specific icon names. */
+#define UI_PAGE_PREDECODE_SMALL_MAX_IMAGES 12U
+#define UI_PAGE_PREDECODE_SMALL_MAX_PIXELS 20000U
+#define UI_PAGE_PREDECODE_SMALL_BUDGET_US  30000U
+
 typedef enum {
     UI_PAGE_TRANSIENT = 0,
     UI_PAGE_RETAINED,
@@ -64,6 +73,7 @@ typedef struct {
     ui_page_prepare_static_fn_t prepare_static_step;
     const ui_page_static_image_t *static_images;
     uint8_t static_image_count;
+    bool predecode_small_visible_images;
 } ui_page_registration_t;
 
 #define UI_ARRAY_SIZE(array) ((uint8_t)(sizeof(array) / sizeof((array)[0])))
@@ -74,6 +84,10 @@ typedef struct {
  * cache instead of leaving an 80+ ms decode on the user's first click. */
 static const ui_page_static_image_t g_page_list_static_images[] = {
     { LVGL_PATH(page_02_list_img.png) },
+};
+
+static const ui_page_static_image_t g_page_main_static_images[] = {
+    { LVGL_PATH(page_01_back.png) },
 };
 
 static const ui_page_static_image_t g_page_menu_static_images[] = {
@@ -144,6 +158,9 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .resume = page_01_main_resume,
         .suspend = page_01_main_suspend,
         .cache_policy = UI_PAGE_RETAINED,
+        .static_images = g_page_main_static_images,
+        .static_image_count = UI_ARRAY_SIZE(g_page_main_static_images),
+        .predecode_small_visible_images = true,
     },
     [UI_PAGE_LIST] = {
         .create = ui_page_02_list_create,
@@ -486,6 +503,11 @@ bool ui_manager_adopt_precreated_page(ui_page_t page)
     return true;
 }
 
+bool ui_manager_is_prewarming_page(ui_page_t page)
+{
+    return g_page_prewarming == page;
+}
+
 bool ui_manager_pop_page(void)
 {
     ui_page_t previous_page;
@@ -561,6 +583,74 @@ static uint8_t ui_manager_predecode_static_images(
     return prepared;
 }
 
+typedef struct {
+    const char *sources[UI_PAGE_PREDECODE_SMALL_MAX_IMAGES];
+    uint8_t count;
+    uint64_t started_us;
+} ui_page_small_image_prewarm_t;
+
+static bool ui_manager_small_image_seen(
+    const ui_page_small_image_prewarm_t *prewarm, const char *src)
+{
+    uint8_t i;
+
+    for (i = 0; i < prewarm->count; i++) {
+        if (strcmp(prewarm->sources[i], src) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void ui_manager_predecode_small_images_walk(
+    lv_obj_t *obj, ui_page_small_image_prewarm_t *prewarm)
+{
+    uint32_t child_count;
+    uint32_t i;
+
+    if (obj == NULL || prewarm == NULL ||
+        prewarm->count >= UI_PAGE_PREDECODE_SMALL_MAX_IMAGES ||
+        lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN) ||
+        app_clock_elapsed_us32(prewarm->started_us,
+                               app_clock_monotonic_us()) >=
+            UI_PAGE_PREDECODE_SMALL_BUDGET_US) {
+        return;
+    }
+
+    if (lv_obj_check_type(obj, &lv_img_class)) {
+        const void *src = lv_img_get_src(obj);
+        lv_coord_t width = lv_obj_get_width(obj);
+        lv_coord_t height = lv_obj_get_height(obj);
+        uint32_t pixels = width > 0 && height > 0 ?
+            (uint32_t)width * (uint32_t)height : 0U;
+
+        if (src != NULL && lv_img_src_get_type(src) == LV_IMG_SRC_FILE &&
+            pixels > 0U && pixels <= UI_PAGE_PREDECODE_SMALL_MAX_PIXELS &&
+            !ui_manager_small_image_seen(prewarm, (const char *)src) &&
+            _lv_img_cache_open(src, lv_color_black(), 0) != NULL) {
+            prewarm->sources[prewarm->count++] = (const char *)src;
+        }
+    }
+
+    child_count = lv_obj_get_child_cnt(obj);
+    for (i = 0; i < child_count &&
+                prewarm->count < UI_PAGE_PREDECODE_SMALL_MAX_IMAGES; i++) {
+        ui_manager_predecode_small_images_walk(
+            lv_obj_get_child(obj, (int32_t)i), prewarm);
+    }
+}
+
+static uint8_t ui_manager_predecode_small_visible_images(lv_obj_t *root)
+{
+    ui_page_small_image_prewarm_t prewarm = {
+        .count = 0,
+        .started_us = app_clock_monotonic_us(),
+    };
+
+    ui_manager_predecode_small_images_walk(root, &prewarm);
+    return prewarm.count;
+}
+
 bool ui_manager_prewarm_page(ui_page_t page)
 {
     const ui_page_registration_t *registration;
@@ -568,10 +658,14 @@ bool ui_manager_prewarm_page(ui_page_t page)
     uint64_t started_us = 0;
     uint64_t image_started_us = 0;
     uint64_t static_started_us = 0;
+    uint64_t small_image_started_us = 0;
     uint32_t image_elapsed_us = 0;
+    uint32_t small_image_elapsed_us = 0;
     uint32_t static_elapsed_us = 0;
     uint8_t predecoded_images = 0;
+    uint8_t predecoded_small_images = 0;
     uint32_t static_steps = 0;
+    lv_obj_t *prewarm_root = NULL;
 
     if (!ui_manager_page_is_registered(page) ||
         page == g_page_manager.current) {
@@ -598,13 +692,33 @@ bool ui_manager_prewarm_page(ui_page_t page)
         started_us = app_clock_monotonic_us();
     }
 
+    g_page_prewarming = page;
     registration->create(lv_scr_act());
+    g_page_prewarming = UI_PAGE_INVALID;
+
+    {
+        uint32_t child_count = lv_obj_get_child_cnt(lv_scr_act());
+
+        if (child_count > 0U) {
+            prewarm_root = lv_obj_get_child(
+                lv_scr_act(), (int32_t)(child_count - 1U));
+        }
+    }
 
     if (registration->static_image_count > 0U) {
         image_started_us = app_clock_monotonic_us();
         predecoded_images = ui_manager_predecode_static_images(registration);
         image_elapsed_us = app_clock_elapsed_us32(
             image_started_us, app_clock_monotonic_us());
+    }
+
+    if (registration->predecode_small_visible_images &&
+        prewarm_root != NULL && lv_obj_is_valid(prewarm_root)) {
+        small_image_started_us = app_clock_monotonic_us();
+        predecoded_small_images =
+            ui_manager_predecode_small_visible_images(prewarm_root);
+        small_image_elapsed_us = app_clock_elapsed_us32(
+            small_image_started_us, app_clock_monotonic_us());
     }
 
     /* The new page is fully constructed and visible to LVGL here, but it has
@@ -640,6 +754,11 @@ bool ui_manager_prewarm_page(ui_page_t page)
                 predecoded_images == registration->static_image_count ?
                     "PREWARM_IMAGE" : "PREWARM_IMAGE_PARTIAL",
                 image_elapsed_us);
+        }
+        if (predecoded_small_images > 0U) {
+            perf_profile_report_event_us(
+                ui_manager_page_name(page), "PREWARM_SMALL_IMAGE",
+                small_image_elapsed_us);
         }
         if (static_steps > 0U) {
             perf_profile_report_event_us(

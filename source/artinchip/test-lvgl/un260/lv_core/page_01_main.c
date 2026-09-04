@@ -1572,7 +1572,11 @@ void ui_main_create(lv_obj_t* parent)
     }
     lv_print_toast_create();
     ui_state_apply_common_runtime();
-    page_01_main_send_init_protocol();
+    /* Object construction is also used by boot prewarm.  Keep hardware
+     * protocol effects tied to actual page activation, not cache creation. */
+    if (!ui_manager_is_prewarming_page(UI_PAGE_MAIN)) {
+        page_01_main_send_init_protocol();
+    }
     smart_island_create(main_page); //创建主界面B区灵动岛
     smart_island_register_action_cb(page_01_smart_island_action_cb);
     smart_island_refresh_time(); //初始化时间显示
@@ -1686,6 +1690,7 @@ bool page_01_main_resume(void)
      * the visible MAIN tree before applying deferred state. */
     smart_island_create(main_page);
     smart_island_set_suspended(false);
+    page_01_main_send_init_protocol();
     main_time_timer_cb(NULL);
     if (s_time_timer) {
         lv_timer_resume(s_time_timer);

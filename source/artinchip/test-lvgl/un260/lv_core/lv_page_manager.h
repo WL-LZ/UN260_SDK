@@ -75,6 +75,10 @@ void ui_manager_invalidate_all_page_caches(void); // 释放所有非活动缓存
  * is not ready, allowing the boot scheduler to retry without creating stale
  * visual state. */
 bool ui_manager_prewarm_page(ui_page_t page);
+/* True only while the manager is constructing this page off-screen during
+ * boot prewarm.  Page create functions use it to defer external side effects
+ * (protocol traffic, hardware actions) until the real activation. */
+bool ui_manager_is_prewarming_page(ui_page_t page);
 ui_page_t ui_manager_get_current_page(void); // 获取当前页
 const char *ui_manager_page_name(ui_page_t page); // 获取页面诊断名称
 void ui_manager_publish_data_changed(ui_data_topic_t topics); // 发布异步数据更新
