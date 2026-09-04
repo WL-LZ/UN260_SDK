@@ -41,8 +41,8 @@ diff --git a/src/draw/lv_img_cache.c b/src/draw/lv_img_cache.c
 
 +/* Reserve only a small, bounded lane for expensive page-sized images.  The
 + * normal cache remains available to icons and state images. */
-+#define LV_IMG_CACHE_RETAINED_SLOTS 4
-+#define LV_IMG_CACHE_RETAINED_MAX_BYTES (8U * 1024U * 1024U)
++#define LV_IMG_CACHE_RETAINED_SLOTS 6
++#define LV_IMG_CACHE_RETAINED_MAX_BYTES (12U * 1024U * 1024U)
 +#define LV_IMG_CACHE_RETAINED_MIN_PIXELS 200000U
 +#define LV_IMG_CACHE_RETAINED_MIN_OPEN_MS 8U
 +

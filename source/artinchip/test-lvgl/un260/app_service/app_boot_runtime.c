@@ -22,8 +22,9 @@
 #define APP_BOOT_CURRENCY_LIST_REQUEST 0x01
 
 static lv_timer_t *g_boot_finish_timer = NULL;
-static lv_timer_t *g_boot_prewarm_timer = NULL;
+static bool g_boot_prewarm_active = false;
 static size_t g_boot_prewarm_index = 0;
+static uint32_t g_boot_prewarm_due_ms = 0;
 
 static const ui_page_t g_boot_prewarm_pages[] = {
     UI_PAGE_MENU,
@@ -37,41 +38,50 @@ static const ui_page_t g_boot_prewarm_pages[] = {
 
 static void app_boot_runtime_cancel_prewarm(void)
 {
-    if (g_boot_prewarm_timer == NULL) {
-        return;
-    }
-    lv_timer_del(g_boot_prewarm_timer);
-    g_boot_prewarm_timer = NULL;
+    g_boot_prewarm_active = false;
 }
 
-static void app_boot_runtime_prewarm_timer_cb(lv_timer_t *timer)
+static bool app_boot_runtime_time_reached(uint32_t now_ms,
+                                          uint32_t deadline_ms)
 {
-    if (timer == NULL || ui_manager_get_current_page() != UI_PAGE_BOOT) {
-        app_boot_runtime_cancel_prewarm();
-        return;
-    }
-
-    if (g_boot_prewarm_index <
-        sizeof(g_boot_prewarm_pages) / sizeof(g_boot_prewarm_pages[0])) {
-        if (ui_manager_prewarm_page(
-                g_boot_prewarm_pages[g_boot_prewarm_index])) {
-            g_boot_prewarm_index++;
-        }
-    }
-
-    if (g_boot_prewarm_index >=
-        sizeof(g_boot_prewarm_pages) / sizeof(g_boot_prewarm_pages[0])) {
-        app_boot_runtime_cancel_prewarm();
-    }
+    return (int32_t)(now_ms - deadline_ms) >= 0;
 }
 
 static void app_boot_runtime_start_prewarm(void)
 {
     app_boot_runtime_cancel_prewarm();
     g_boot_prewarm_index = 0;
-    g_boot_prewarm_timer = lv_timer_create(app_boot_runtime_prewarm_timer_cb,
-                                            APP_BOOT_PREWARM_PERIOD_MS,
-                                            NULL);
+    g_boot_prewarm_due_ms = lv_tick_get() + APP_BOOT_PREWARM_PERIOD_MS;
+    g_boot_prewarm_active = true;
+}
+
+static void app_boot_runtime_poll_prewarm(uint32_t now_ms)
+{
+    const size_t page_count =
+        sizeof(g_boot_prewarm_pages) / sizeof(g_boot_prewarm_pages[0]);
+
+    if (!g_boot_prewarm_active ||
+        !app_boot_runtime_time_reached(now_ms, g_boot_prewarm_due_ms)) {
+        return;
+    }
+
+    /* This function is called once from the application loop, after
+     * lv_timer_handler() has returned.  Processing at most one page here
+     * prevents LVGL timer-list restarts from turning overdue prewarm work into
+     * a multi-page burst inside a single render cycle. */
+    if (g_boot_prewarm_index < page_count &&
+        ui_manager_prewarm_page(g_boot_prewarm_pages[g_boot_prewarm_index])) {
+        g_boot_prewarm_index++;
+    }
+
+    if (g_boot_prewarm_index >= page_count) {
+        app_boot_runtime_cancel_prewarm();
+        return;
+    }
+
+    /* Rebase after the work itself, not from the timestamp captured before
+     * it, so an expensive page can never make the next page immediately due. */
+    g_boot_prewarm_due_ms = lv_tick_get() + APP_BOOT_PREWARM_PERIOD_MS;
 }
 
 static void app_boot_runtime_cancel_finish(void)
@@ -175,7 +185,8 @@ void app_boot_runtime_poll(uint32_t now_ms, bool boot_page_active)
 {
     boot_service_action_t action;
 
-    if (!boot_page_active) {
+    if (!boot_page_active ||
+        ui_manager_get_current_page() != UI_PAGE_BOOT) {
         app_boot_runtime_cancel_finish();
         app_boot_runtime_cancel_prewarm();
         return;
@@ -191,4 +202,6 @@ void app_boot_runtime_poll(uint32_t now_ms, bool boot_page_active)
         show_boot_selftest_error_popup(
             "Self-test timeout.\nPress CONFIRM to enter sensor page.");
     }
+
+    app_boot_runtime_poll_prewarm(now_ms);
 }

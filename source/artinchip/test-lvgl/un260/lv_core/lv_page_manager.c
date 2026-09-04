@@ -1,6 +1,8 @@
 
 #include "lvgl/lvgl.h"
+#include "lvgl/src/draw/lv_img_cache.h"
 #include <string.h>
+#include "aic_ui/aic_ui.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_system/counting_ui_runtime.h"
 #include "un260/counting/counting_data_store_internal.h"
@@ -35,6 +37,10 @@ typedef void (*ui_page_refresh_fn_t)(ui_data_topic_t topics);
 typedef bool (*ui_page_prepare_static_fn_t)(void);
 typedef bool (*ui_page_prewarm_ready_fn_t)(void);
 
+typedef struct {
+    const void *src;
+} ui_page_static_image_t;
+
 /* Keep boot-time visual preparation bounded.  The callback performs one
  * incremental unit of work, allowing the manager to enforce a common time
  * and step budget for every retained page that opts in. */
@@ -56,7 +62,27 @@ typedef struct {
     ui_page_refresh_fn_t refresh_data;
     ui_page_prewarm_ready_fn_t prewarm_ready;
     ui_page_prepare_static_fn_t prepare_static_step;
+    const ui_page_static_image_t *static_images;
+    uint8_t static_image_count;
 } ui_page_registration_t;
+
+#define UI_ARRAY_SIZE(array) ((uint8_t)(sizeof(array) / sizeof((array)[0])))
+
+/* Page creation only builds the LVGL object tree; file-backed images are not
+ * decoded until the first draw.  Declare expensive, immutable page images in
+ * the registry so boot-time prewarm can also populate LVGL's bounded image
+ * cache instead of leaving an 80+ ms decode on the user's first click. */
+static const ui_page_static_image_t g_page_list_static_images[] = {
+    { LVGL_PATH(page_02_list_img.png) },
+};
+
+static const ui_page_static_image_t g_page_menu_static_images[] = {
+    { LVGL_PATH(page_02_menu_bg.png) },
+};
+
+static const ui_page_static_image_t g_page_currency_static_images[] = {
+    { LVGL_PATH(page_07_bg.png) },
+};
 
 static void ui_manager_create_main(lv_obj_t *parent)
 {
@@ -121,6 +147,8 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .resume = ui_page_02_list_resume,
         .suspend = ui_page_02_list_suspend,
         .cache_policy = UI_PAGE_RETAINED,
+        .static_images = g_page_list_static_images,
+        .static_image_count = UI_ARRAY_SIZE(g_page_list_static_images),
     },
     [UI_PAGE_MENU] = {
         .create = ui_page_03_menu_create,
@@ -128,6 +156,8 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .resume = ui_page_03_menu_resume,
         .suspend = ui_page_03_menu_suspend,
         .cache_policy = UI_PAGE_RETAINED,
+        .static_images = g_page_menu_static_images,
+        .static_image_count = UI_ARRAY_SIZE(g_page_menu_static_images),
     },
     [UI_PAGE_SETTING] = {
         .create = ui_page_06_settings_create,
@@ -147,6 +177,8 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .cache_policy = UI_PAGE_RETAINED,
         .prewarm_ready = ui_page_07_curr_prewarm_ready,
         .prepare_static_step = ui_page_07_curr_prepare_static_step,
+        .static_images = g_page_currency_static_images,
+        .static_image_count = UI_ARRAY_SIZE(g_page_currency_static_images),
     },
     [UI_PAGE_BOOT] = { ui_page_08_curr_create, ui_page_08_curr_destroy },
     [UI_PAGE_CIS_CALIB] = { ui_page_cis_calib_create, ui_page_cis_calib_destroy },
@@ -490,12 +522,37 @@ void ui_manager_invalidate_all_page_caches(void)
     }
 }
 
+static uint8_t ui_manager_predecode_static_images(
+    const ui_page_registration_t *registration)
+{
+    uint8_t prepared = 0;
+    uint8_t i;
+
+    if (registration == NULL || registration->static_images == NULL) {
+        return 0;
+    }
+
+    for (i = 0; i < registration->static_image_count; i++) {
+        const void *src = registration->static_images[i].src;
+
+        if (src != NULL &&
+            _lv_img_cache_open(src, lv_color_black(), 0) != NULL) {
+            prepared++;
+        }
+    }
+    return prepared;
+}
+
 bool ui_manager_prewarm_page(ui_page_t page)
 {
     const ui_page_registration_t *registration;
     bool profile_enabled;
     uint64_t started_us = 0;
+    uint64_t image_started_us = 0;
     uint64_t static_started_us = 0;
+    uint32_t image_elapsed_us = 0;
+    uint32_t static_elapsed_us = 0;
+    uint8_t predecoded_images = 0;
     uint32_t static_steps = 0;
 
     if (!ui_manager_page_is_registered(page) ||
@@ -525,6 +582,13 @@ bool ui_manager_prewarm_page(ui_page_t page)
 
     registration->create(lv_scr_act());
 
+    if (registration->static_image_count > 0U) {
+        image_started_us = app_clock_monotonic_us();
+        predecoded_images = ui_manager_predecode_static_images(registration);
+        image_elapsed_us = app_clock_elapsed_us32(
+            image_started_us, app_clock_monotonic_us());
+    }
+
     /* The new page is fully constructed and visible to LVGL here, but it has
      * not reached the display yet.  This is the safe point to prepare a small
      * amount of immutable visual content: snapshotting after suspend would
@@ -541,6 +605,8 @@ bool ui_manager_prewarm_page(ui_page_t page)
                 break;
             }
         }
+        static_elapsed_us = app_clock_elapsed_us32(
+            static_started_us, app_clock_monotonic_us());
     }
     registration->suspend();
     g_page_cache_ready[page] = true;
@@ -550,11 +616,17 @@ bool ui_manager_prewarm_page(ui_page_t page)
         perf_profile_report_event_us(
             ui_manager_page_name(page), "PREWARM",
             app_clock_elapsed_us32(started_us, app_clock_monotonic_us()));
+        if (registration->static_image_count > 0U) {
+            perf_profile_report_event_us(
+                ui_manager_page_name(page),
+                predecoded_images == registration->static_image_count ?
+                    "PREWARM_IMAGE" : "PREWARM_IMAGE_PARTIAL",
+                image_elapsed_us);
+        }
         if (static_steps > 0U) {
             perf_profile_report_event_us(
                 ui_manager_page_name(page), "PREWARM_STATIC",
-                app_clock_elapsed_us32(static_started_us,
-                                       app_clock_monotonic_us()));
+                static_elapsed_us);
         }
     }
     return true;
