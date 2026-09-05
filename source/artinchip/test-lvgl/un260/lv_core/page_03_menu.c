@@ -7,6 +7,7 @@
 #include "un260/lv_system/ui_object_utils.h"
 #include "un260/lv_system/user_cfg.h"
 #include "un260/lv_components/lv_components.h"
+#include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_components/lv_dma_snapshot_cache.h"
 #include "un260/machine_state/machine_state.h"
 #include "un260/lv_system/ui_text.h"
@@ -887,10 +888,13 @@ static void page_03_style_button(lv_obj_t* btn, lv_coord_t x, lv_coord_t y,
     lv_obj_set_style_shadow_width(btn, 0, 0);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_STATE_PRESSED);
-    lv_obj_set_style_bg_color(btn, lv_color_hex(0xEEF2F7), 0);
-    lv_obj_set_style_bg_color(btn, lv_color_hex(0xD7E6FF), LV_STATE_PRESSED);
+    lv_damped_button_set_palette(btn, lv_color_hex(0xEEF2F7),
+                                 lv_color_darken(lv_color_hex(0xEEF2F7),
+                                                 LV_OPA_20));
     lv_obj_set_style_transform_zoom(btn, 256, LV_STATE_PRESSED);
-    lv_obj_set_style_translate_y(btn, 1, LV_STATE_PRESSED);
+    /* The shared damped-button component moves only the content.  Keep the
+     * outer skin fixed so a press cannot expose a light strip above it. */
+    lv_obj_set_style_translate_y(btn, 0, LV_STATE_PRESSED);
     lv_obj_set_style_opa(btn, LV_OPA_COVER, LV_STATE_PRESSED);
 
     lv_obj_t* label = lv_obj_get_child(btn, 0);
@@ -915,8 +919,6 @@ static void page_03_style_function_button(lv_obj_t* btn, lv_coord_t x, lv_coord_
     lv_obj_set_style_shadow_ofs_y(btn, 2, 0);
     lv_obj_set_style_shadow_opa(btn, LV_OPA_10, LV_STATE_PRESSED);
     lv_obj_set_style_shadow_width(btn, 2, LV_STATE_PRESSED);
-    lv_obj_set_style_bg_color(btn, lv_color_hex(0xDFEAFA), LV_STATE_PRESSED);
-
     lv_obj_t* label = lv_obj_get_child(btn, 0);
     if (label) {
         lv_obj_set_style_text_font(label, &lv_font_instrument_sans_bold_14, 0);
@@ -979,16 +981,17 @@ static void page_03_apply_modern_style(void)
         lv_obj_set_pos(home, 1169, 16);
         lv_obj_set_size(home, 97, 59);
         lv_obj_set_style_radius(home, 18, 0);
-        lv_obj_set_style_bg_color(home, lv_color_hex(0xFFFFFF), 0);
+        lv_damped_button_set_palette(home, lv_color_hex(0xFFFFFF),
+                                     lv_color_darken(lv_color_hex(0xFFFFFF),
+                                                     LV_OPA_20));
         lv_obj_set_style_bg_opa(home, LV_OPA_COVER, 0);
         lv_obj_set_style_shadow_color(home, lv_color_hex(0xAEB5BE), 0);
         lv_obj_set_style_shadow_opa(home, LV_OPA_20, 0);
         lv_obj_set_style_shadow_width(home, 10, 0);
         lv_obj_set_style_shadow_ofs_y(home, 3, 0);
-        lv_obj_set_style_bg_color(home, lv_color_hex(0xEEF3FA), LV_STATE_PRESSED);
         lv_obj_set_style_bg_opa(home, LV_OPA_COVER, LV_STATE_PRESSED);
         lv_obj_set_style_transform_zoom(home, 256, LV_STATE_PRESSED);
-        lv_obj_set_style_translate_y(home, 1, LV_STATE_PRESSED);
+        lv_obj_set_style_translate_y(home, 0, LV_STATE_PRESSED);
     }
 
     lv_obj_t* home_icon = page_03_find("page_02_home_icon.png");
@@ -1037,6 +1040,9 @@ static void page_03_apply_modern_style(void)
         page_03_style_button(key, 90 + col * 102, 206 + row * 52, 92, 32);
         if (key) {
             bool action = i >= 10;
+            lv_color_t key_color =
+                i == 11 ? lv_color_hex(0x0B69FF) :
+                action ? lv_color_hex(0x263246) : lv_color_hex(0x202A3B);
             lv_obj_set_style_radius(key, 8, 0);
             lv_obj_set_style_border_width(key, 0, 0);
             lv_obj_set_style_shadow_color(key, lv_color_hex(0x8A95A5), 0);
@@ -1044,13 +1050,8 @@ static void page_03_apply_modern_style(void)
             lv_obj_set_style_shadow_width(key, 5, 0);
             lv_obj_set_style_shadow_ofs_y(key, 2, 0);
             lv_obj_set_style_shadow_width(key, 1, LV_STATE_PRESSED);
-            lv_obj_set_style_bg_color(key,
-                                     i == 11 ? lv_color_hex(0x0B69FF) :
-                                     action ? lv_color_hex(0x263246) :
-                                              lv_color_hex(0x202A3B), 0);
-            lv_obj_set_style_bg_color(key,
-                                     i == 11 ? lv_color_hex(0x0755D5) :
-                                              lv_color_hex(0x111827), LV_STATE_PRESSED);
+            lv_damped_button_set_palette(key, key_color,
+                                         lv_color_darken(key_color, LV_OPA_20));
             lv_obj_t* label = lv_obj_get_child(key, 0);
             if (label) {
                 if (i == 10) {

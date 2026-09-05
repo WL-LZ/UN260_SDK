@@ -9,6 +9,7 @@
 #include "un260/lv_core/lv_page_event.h"
 #include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_components/lv_upgrade_popup.h"
+#include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_drivers/lv_drivers.h"
 #include "un260/lv_system/ui_history_data.h"
 #include "un260/lv_system/ui_history_export_data.h"
@@ -188,27 +189,6 @@ static lv_obj_t *history_create_text_label(lv_obj_t *parent, lv_coord_t x, lv_co
     return label;
 }
 
-static void history_btn_feedback_cb(lv_event_t *e)
-{
-    lv_event_code_t code = lv_event_get_code(e);
-    lv_obj_t *btn = lv_event_get_target(e);
-    lv_opa_t opa = LV_OPA_COVER;
-
-    if (btn == NULL || !lv_obj_is_valid(btn)) {
-        return;
-    }
-
-    if (code == LV_EVENT_PRESSED) {
-        opa = LV_OPA_70;
-    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
-        opa = LV_OPA_COVER;
-    } else {
-        return;
-    }
-
-    lv_obj_set_style_bg_opa(btn, opa, 0);
-}
-
 static void history_checkbox_update(history_card_ui_t *ui, bool selected)
 {
     if (ui == NULL || ui->card == NULL) {
@@ -285,9 +265,7 @@ static lv_obj_t *history_create_button(lv_obj_t *parent, lv_coord_t x, lv_coord_
     lv_obj_set_style_shadow_width(btn, 10, 0);
     lv_obj_set_style_shadow_opa(btn, LV_OPA_10, 0);
     lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(btn, history_btn_feedback_cb, LV_EVENT_PRESSED, NULL);
-    lv_obj_add_event_cb(btn, history_btn_feedback_cb, LV_EVENT_RELEASED, NULL);
-    lv_obj_add_event_cb(btn, history_btn_feedback_cb, LV_EVENT_PRESS_LOST, NULL);
+    lv_damped_button_register(btn, bg, lv_color_darken(bg, LV_OPA_20));
 
     if (text != NULL) {
         lv_obj_t *label = lv_label_create(btn);
@@ -1289,9 +1267,8 @@ static void history_page_create_clean_dialog(lv_obj_t *parent)
     lv_obj_set_style_bg_opa(cancel_btn, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(cancel_btn, 12, 0);
     lv_obj_add_event_cb(cancel_btn, history_page_clean_cancel_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(cancel_btn, history_btn_feedback_cb, LV_EVENT_PRESSED, NULL);
-    lv_obj_add_event_cb(cancel_btn, history_btn_feedback_cb, LV_EVENT_RELEASED, NULL);
-    lv_obj_add_event_cb(cancel_btn, history_btn_feedback_cb, LV_EVENT_PRESS_LOST, NULL);
+    lv_damped_button_register(cancel_btn, lv_color_hex(0xF3F4F6),
+                              lv_color_hex(0xDDE3EA));
 
     lv_label_create(cancel_btn);
     lv_obj_t *cancel_label = lv_obj_get_child(cancel_btn, 0);
@@ -1306,9 +1283,8 @@ static void history_page_create_clean_dialog(lv_obj_t *parent)
     lv_obj_set_style_bg_opa(confirm_btn, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(confirm_btn, 12, 0);
     lv_obj_add_event_cb(confirm_btn, history_page_clean_confirm_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(confirm_btn, history_btn_feedback_cb, LV_EVENT_PRESSED, NULL);
-    lv_obj_add_event_cb(confirm_btn, history_btn_feedback_cb, LV_EVENT_RELEASED, NULL);
-    lv_obj_add_event_cb(confirm_btn, history_btn_feedback_cb, LV_EVENT_PRESS_LOST, NULL);
+    lv_damped_button_register(confirm_btn, lv_color_hex(0xFDECEC),
+                              lv_color_hex(0xEFCFD0));
 
     lv_label_create(confirm_btn);
     lv_obj_t *confirm_label = lv_obj_get_child(confirm_btn, 0);

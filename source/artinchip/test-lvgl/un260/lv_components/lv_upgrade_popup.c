@@ -2,6 +2,7 @@
 #include "un260/lv_core/settings_detail_ui.h"
 #include "un260/lv_core/ui_upgrade_service.h"
 #include "un260/lv_components/lv_print_toast.h"
+#include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_system/ui_text.h"
 
 #include "lvgl/lvgl.h"
@@ -396,6 +397,8 @@ static lv_obj_t* upgrade_popup_create_btn(lv_obj_t* parent,
                                           lv_event_cb_t event_cb)
 {
     lv_obj_t* btn = lv_btn_create(parent);
+    lv_color_t normal_color;
+    lv_color_t pressed_color;
     lv_obj_remove_style_all(btn);
     lv_obj_set_size(btn, w, h);
     lv_obj_set_pos(btn, x, y);
@@ -404,13 +407,20 @@ static lv_obj_t* upgrade_popup_create_btn(lv_obj_t* parent,
     if (btn_style == UPGRADE_POPUP_BTN_GHOST) {
         lv_obj_add_style(btn, &style_upgrade_popup_btn_ghost, LV_STATE_DEFAULT);
         lv_obj_add_style(btn, &style_upgrade_popup_btn_ghost_pressed, LV_STATE_PRESSED);
+        normal_color = lv_color_hex(UPGRADE_POPUP_BTN_GHOST_COLOR);
+        pressed_color = lv_color_hex(UPGRADE_POPUP_BTN_GHOST_PRS_COLOR);
     } else if (btn_style == UPGRADE_POPUP_BTN_SUCCESS) {
         lv_obj_add_style(btn, &style_upgrade_popup_btn_success, LV_STATE_DEFAULT);
         lv_obj_add_style(btn, &style_upgrade_popup_btn_success_pressed, LV_STATE_PRESSED);
+        normal_color = lv_color_hex(UPGRADE_POPUP_OK_COLOR);
+        pressed_color = lv_color_hex(0x257A43);
     } else {
         lv_obj_add_style(btn, &style_upgrade_popup_btn_main, LV_STATE_DEFAULT);
         lv_obj_add_style(btn, &style_upgrade_popup_btn_main_pressed, LV_STATE_PRESSED);
+        normal_color = lv_color_hex(UPGRADE_POPUP_BTN_MAIN_COLOR);
+        pressed_color = lv_color_hex(0x080808);
     }
+    lv_damped_button_register(btn, normal_color, pressed_color);
 
     if (event_cb) {
         lv_obj_add_event_cb(btn, event_cb, LV_EVENT_CLICKED, NULL);

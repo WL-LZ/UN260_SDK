@@ -9,6 +9,9 @@
 #include "un260/protocol/protocol_send.h"
 #include "un260/app_service/setting_service.h"
 #include "un260/machine_state/machine_state.h"
+#include "un260/lv_components/lv_modal_dialog.h"
+
+#include <string.h>
 
 typedef struct {
     lv_obj_t* switch_container;
@@ -27,306 +30,162 @@ static uint8_t g_batch_last_on_num = 100;
 
 void set_batch_switch_state(bool enable);
 
-static lv_obj_t* g_boot_err_mask = NULL;
-static lv_obj_t* g_boot_err_popup = NULL;
-static lv_obj_t* g_boot_err_info_label = NULL;
-static lv_obj_t* g_batch_set_fail_mask = NULL;
-static lv_obj_t* g_batch_set_fail_popup = NULL;
-static lv_obj_t* g_curr_set_fail_mask = NULL;
-static lv_obj_t* g_curr_set_fail_popup = NULL;
-static lv_obj_t* g_comm_err_mask = NULL;
-static lv_obj_t* g_comm_err_popup = NULL;
+typedef enum {
+    SIMPLE_DIALOG_NONE = 0,
+    SIMPLE_DIALOG_BOOT_SELFTEST,
+    SIMPLE_DIALOG_COMMUNICATION,
+    SIMPLE_DIALOG_BATCH_SET,
+    SIMPLE_DIALOG_CURRENCY_SET,
+    SIMPLE_DIALOG_SYSTEM,
+    SIMPLE_DIALOG_COUNTING,
+} simple_dialog_kind_t;
+
+static lv_modal_dialog_t g_simple_dialog;
+static simple_dialog_kind_t g_simple_dialog_kind;
+
+static bool simple_dialog_matches(simple_dialog_kind_t kind,
+                                  const char *title,
+                                  const char *body)
+{
+    const char *current_title;
+    const char *current_body;
+
+    if (g_simple_dialog_kind != kind ||
+        !lv_modal_dialog_is_visible(&g_simple_dialog) ||
+        g_simple_dialog.title == NULL || g_simple_dialog.body == NULL) {
+        return false;
+    }
+    current_title = lv_label_get_text(g_simple_dialog.title);
+    current_body = lv_label_get_text(g_simple_dialog.body);
+    return current_title != NULL && current_body != NULL &&
+           strcmp(current_title, title != NULL ? title : "") == 0 &&
+           strcmp(current_body, body != NULL ? body : "") == 0;
+}
+
+static void simple_dialog_hide(simple_dialog_kind_t kind)
+{
+    if (g_simple_dialog_kind != kind) return;
+    lv_modal_dialog_hide(&g_simple_dialog);
+    g_simple_dialog_kind = SIMPLE_DIALOG_NONE;
+}
+
+static void simple_dialog_show(simple_dialog_kind_t kind,
+                               const char *title,
+                               const char *body,
+                               lv_coord_t panel_width,
+                               lv_coord_t panel_height,
+                               uint32_t accent_color,
+                               lv_modal_dialog_action_cb_t action)
+{
+    lv_modal_dialog_config_t config = {
+        .title = title,
+        .body = body,
+        .primary_text = ui_text_get(UI_TEXT_SETTINGS_DIALOG_CONFIRM),
+        .title_font = &lv_font_instrument_sans_semibold_28,
+        .body_font = &lv_font_instrument_sans_medium_20,
+        .button_font = &lv_font_instrument_sans_bold_22,
+        .panel_width = panel_width,
+        .panel_height = panel_height,
+        .primary_width = 180,
+        .accent_color = accent_color,
+        .primary_color = 0x1B86FF,
+        .secondary_color = 0x72808B,
+        .primary_action = action,
+        .center_single_button = true,
+    };
+
+    g_simple_dialog_kind = kind;
+    lv_modal_dialog_show(&g_simple_dialog, lv_scr_act(), &config);
+}
 
 void hide_boot_selftest_error_popup(void)
 {
-    if (g_boot_err_popup && lv_obj_is_valid(g_boot_err_popup)) {
-        lv_obj_del(g_boot_err_popup);
-    }
-    g_boot_err_popup = NULL;
-    g_boot_err_info_label = NULL;
-
-    if (g_boot_err_mask && lv_obj_is_valid(g_boot_err_mask)) {
-        lv_obj_del(g_boot_err_mask);
-    }
-    g_boot_err_mask = NULL;
+    simple_dialog_hide(SIMPLE_DIALOG_BOOT_SELFTEST);
 }
 
-static void boot_selftest_error_confirm_cb(lv_event_t* e)
+static void boot_selftest_error_confirm_action(void *user_data)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-
+    (void)user_data;
     hide_boot_selftest_error_popup();
     ui_manager_switch(UI_PAGE_SENSOR);
 }
 
 void show_boot_selftest_error_popup(const char* msg)
 {
-    if (g_boot_err_popup && lv_obj_is_valid(g_boot_err_popup)) {
-        if (g_boot_err_info_label && lv_obj_is_valid(g_boot_err_info_label)) {
-            lv_label_set_text(g_boot_err_info_label, msg);
-        }
-        return;
-    }
-
-    lv_obj_t* scr = lv_scr_act();
-
-    g_boot_err_mask = lv_obj_create(scr);
-    lv_obj_remove_style_all(g_boot_err_mask);
-    lv_obj_set_size(g_boot_err_mask, 1280, 400);
-    lv_obj_set_style_bg_opa(g_boot_err_mask, LV_OPA_40, 0);
-    lv_obj_set_style_bg_color(g_boot_err_mask, lv_color_hex(0x000000), 0);
-
-    g_boot_err_popup = lv_obj_create(scr);
-    lv_obj_set_size(g_boot_err_popup, 700, 260);
-    lv_obj_center(g_boot_err_popup);
-    lv_obj_clear_flag(g_boot_err_popup, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(g_boot_err_popup, 24, 0);
-    lv_obj_set_style_bg_color(g_boot_err_popup, lv_color_hex(0xF4F7FB), 0);
-    lv_obj_set_style_border_width(g_boot_err_popup, 2, 0);
-    lv_obj_set_style_border_color(g_boot_err_popup, lv_color_hex(0xD7DEE8), 0);
-
-    lv_obj_t* title = lv_label_create(g_boot_err_popup);
-    lv_label_set_text(title, "SELF-TEST ERROR");
-    lv_obj_set_style_text_font(title, &lv_font_instrument_sans_semibold_28, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0x2D3A4A), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 22);
-
-    g_boot_err_info_label = lv_label_create(g_boot_err_popup);
-    lv_label_set_text(g_boot_err_info_label, msg);
-    lv_obj_set_width(g_boot_err_info_label, 620);
-    lv_label_set_long_mode(g_boot_err_info_label, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_align(g_boot_err_info_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(g_boot_err_info_label, &lv_font_instrument_sans_medium_20, 0);
-    lv_obj_set_style_text_color(g_boot_err_info_label, lv_color_hex(0x3C4D61), 0);
-    lv_obj_align(g_boot_err_info_label, LV_ALIGN_TOP_MID, 0, 84);
-
-    lv_obj_t* ok_btn = lv_btn_create(g_boot_err_popup);
-    lv_obj_set_size(ok_btn, 180, 58);
-    lv_obj_align(ok_btn, LV_ALIGN_BOTTOM_MID, 0, -20);
-    lv_obj_set_style_radius(ok_btn, 16, 0);
-    lv_obj_add_event_cb(ok_btn, boot_selftest_error_confirm_cb, LV_EVENT_CLICKED, NULL);
-
-    lv_obj_t* ok_label = lv_label_create(ok_btn);
-    lv_label_set_text(ok_label, "CONFIRM");
-    lv_obj_set_style_text_font(ok_label, &lv_font_instrument_sans_bold_22, 0);
-    lv_obj_center(ok_label);
+    if (simple_dialog_matches(SIMPLE_DIALOG_BOOT_SELFTEST,
+                              "SELF-TEST ERROR", msg)) return;
+    simple_dialog_show(SIMPLE_DIALOG_BOOT_SELFTEST,
+                       "SELF-TEST ERROR", msg, 700, 260,
+                       0xE45454, boot_selftest_error_confirm_action);
 }
 
 void hide_batch_set_fail_popup(void)
 {
-    if (g_batch_set_fail_popup && lv_obj_is_valid(g_batch_set_fail_popup)) {
-        lv_obj_del(g_batch_set_fail_popup);
-    }
-    g_batch_set_fail_popup = NULL;
-
-    if (g_batch_set_fail_mask && lv_obj_is_valid(g_batch_set_fail_mask)) {
-        lv_obj_del(g_batch_set_fail_mask);
-    }
-    g_batch_set_fail_mask = NULL;
+    simple_dialog_hide(SIMPLE_DIALOG_BATCH_SET);
 }
 
 void hide_currency_set_fail_popup(void)
 {
-    if (g_curr_set_fail_popup && lv_obj_is_valid(g_curr_set_fail_popup)) {
-        lv_obj_del(g_curr_set_fail_popup);
-    }
-    g_curr_set_fail_popup = NULL;
-
-    if (g_curr_set_fail_mask && lv_obj_is_valid(g_curr_set_fail_mask)) {
-        lv_obj_del(g_curr_set_fail_mask);
-    }
-    g_curr_set_fail_mask = NULL;
+    simple_dialog_hide(SIMPLE_DIALOG_CURRENCY_SET);
 }
 
 void hide_communication_error_popup(void)
 {
-    if (g_comm_err_popup && lv_obj_is_valid(g_comm_err_popup)) {
-        lv_obj_del(g_comm_err_popup);
-    }
-    g_comm_err_popup = NULL;
-
-    if (g_comm_err_mask && lv_obj_is_valid(g_comm_err_mask)) {
-        lv_obj_del(g_comm_err_mask);
-    }
-    g_comm_err_mask = NULL;
+    simple_dialog_hide(SIMPLE_DIALOG_COMMUNICATION);
 }
 
-static void currency_set_fail_confirm_cb(lv_event_t* e)
+static void currency_set_fail_confirm_action(void *user_data)
 {
-    if ((lv_event_code_t)lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    (void)user_data;
     hide_currency_set_fail_popup();
     ui_manager_switch(UI_PAGE_MAIN);
 }
 
-static void batch_set_fail_confirm_cb(lv_event_t* e)
+static void batch_set_fail_confirm_action(void *user_data)
 {
-    if ((lv_event_code_t)lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    (void)user_data;
     hide_batch_set_fail_popup();
 }
 
-static void communication_error_confirm_cb(lv_event_t* e)
+static void communication_error_confirm_action(void *user_data)
 {
-    if ((lv_event_code_t)lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    (void)user_data;
     hide_communication_error_popup();
 }
 
 void show_communication_error_popup(void)
 {
-    if (g_comm_err_popup && lv_obj_is_valid(g_comm_err_popup)) {
-        return;
-    }
-
-    lv_obj_t* scr = lv_scr_act();
-    g_comm_err_mask = lv_obj_create(scr);
-    lv_obj_remove_style_all(g_comm_err_mask);
-    lv_obj_set_size(g_comm_err_mask, 1280, 400);
-    lv_obj_set_style_bg_opa(g_comm_err_mask, LV_OPA_40, 0);
-    lv_obj_set_style_bg_color(g_comm_err_mask, lv_color_hex(0x000000), 0);
-
-    g_comm_err_popup = lv_obj_create(scr);
-    lv_obj_set_size(g_comm_err_popup, 740, 260);
-    lv_obj_center(g_comm_err_popup);
-    lv_obj_clear_flag(g_comm_err_popup, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(g_comm_err_popup, 24, 0);
-    lv_obj_set_style_bg_color(g_comm_err_popup, lv_color_hex(0xF4F7FB), 0);
-    lv_obj_set_style_border_width(g_comm_err_popup, 2, 0);
-    lv_obj_set_style_border_color(g_comm_err_popup, lv_color_hex(0xD7DEE8), 0);
-
-    lv_obj_t* title = lv_label_create(g_comm_err_popup);
-    lv_label_set_text(title, "COMMUNICATION ERROR");
-    lv_obj_set_style_text_font(title, &lv_font_instrument_sans_semibold_28, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0x2D3A4A), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 22);
-
-    lv_obj_t* info = lv_label_create(g_comm_err_popup);
-    lv_label_set_text(info, "Communication may be abnormal. Please check the UI and controller connection.");
-    lv_obj_set_width(info, 660);
-    lv_label_set_long_mode(info, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_align(info, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(info, &lv_font_instrument_sans_medium_20, 0);
-    lv_obj_set_style_text_color(info, lv_color_hex(0x3C4D61), 0);
-    lv_obj_align(info, LV_ALIGN_TOP_MID, 0, 84);
-
-    lv_obj_t* ok_btn = lv_btn_create(g_comm_err_popup);
-    lv_obj_set_size(ok_btn, 180, 58);
-    lv_obj_align(ok_btn, LV_ALIGN_BOTTOM_MID, 0, -20);
-    lv_obj_set_style_radius(ok_btn, 16, 0);
-    lv_obj_set_style_bg_color(ok_btn, lv_color_hex(0x1B86FF), 0);
-    lv_obj_set_style_bg_opa(ok_btn, LV_OPA_COVER, 0);
-    lv_obj_add_event_cb(ok_btn, communication_error_confirm_cb, LV_EVENT_CLICKED, NULL);
-
-    lv_obj_t* ok_label = lv_label_create(ok_btn);
-    lv_label_set_text(ok_label, "CONFIRM");
-    lv_obj_set_style_text_font(ok_label, &lv_font_instrument_sans_bold_22, 0);
-    lv_obj_set_style_text_color(ok_label, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_center(ok_label);
+    if (simple_dialog_matches(SIMPLE_DIALOG_COMMUNICATION,
+        "COMMUNICATION ERROR",
+        "Communication may be abnormal. Please check the UI and controller connection.")) return;
+    simple_dialog_show(SIMPLE_DIALOG_COMMUNICATION,
+        "COMMUNICATION ERROR",
+        "Communication may be abnormal. Please check the UI and controller connection.",
+        740, 260, 0xE45454, communication_error_confirm_action);
 }
 
 void show_batch_set_fail_popup(void)
 {
-    if (g_batch_set_fail_popup && lv_obj_is_valid(g_batch_set_fail_popup)) {
-        return;
-    }
-
-    lv_obj_t* scr = lv_scr_act();
-    g_batch_set_fail_mask = lv_obj_create(scr);
-    lv_obj_remove_style_all(g_batch_set_fail_mask);
-    lv_obj_set_size(g_batch_set_fail_mask, 1280, 400);
-    lv_obj_set_style_bg_opa(g_batch_set_fail_mask, LV_OPA_40, 0);
-    lv_obj_set_style_bg_color(g_batch_set_fail_mask, lv_color_hex(0x000000), 0);
-
-    g_batch_set_fail_popup = lv_obj_create(scr);
-    lv_obj_set_size(g_batch_set_fail_popup, 700, 260);
-    lv_obj_center(g_batch_set_fail_popup);
-    lv_obj_clear_flag(g_batch_set_fail_popup, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(g_batch_set_fail_popup, 24, 0);
-    lv_obj_set_style_bg_color(g_batch_set_fail_popup, lv_color_hex(0xF4F7FB), 0);
-    lv_obj_set_style_border_width(g_batch_set_fail_popup, 2, 0);
-    lv_obj_set_style_border_color(g_batch_set_fail_popup, lv_color_hex(0xD7DEE8), 0);
-
-    lv_obj_t* title = lv_label_create(g_batch_set_fail_popup);
-    lv_label_set_text(title, "BATCH SET FAILED");
-    lv_obj_set_style_text_font(title, &lv_font_instrument_sans_semibold_28, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0x2D3A4A), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 22);
-
-    lv_obj_t* info = lv_label_create(g_batch_set_fail_popup);
-    lv_label_set_text(info, "Please remove banknotes from the feeder or reject pocket first.");
-    lv_obj_set_width(info, 620);
-    lv_label_set_long_mode(info, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_align(info, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(info, &lv_font_instrument_sans_medium_20, 0);
-    lv_obj_set_style_text_color(info, lv_color_hex(0x3C4D61), 0);
-    lv_obj_align(info, LV_ALIGN_TOP_MID, 0, 84);
-
-    lv_obj_t* ok_btn = lv_btn_create(g_batch_set_fail_popup);
-    lv_obj_set_size(ok_btn, 180, 58);
-    lv_obj_align(ok_btn, LV_ALIGN_BOTTOM_MID, 0, -20);
-    lv_obj_set_style_radius(ok_btn, 16, 0);
-    lv_obj_set_style_bg_color(ok_btn, lv_color_hex(0x1B86FF), 0);
-    lv_obj_set_style_bg_opa(ok_btn, LV_OPA_COVER, 0);
-    lv_obj_add_event_cb(ok_btn, batch_set_fail_confirm_cb, LV_EVENT_CLICKED, NULL);
-
-    lv_obj_t* ok_label = lv_label_create(ok_btn);
-    lv_label_set_text(ok_label, "CONFIRM");
-    lv_obj_set_style_text_font(ok_label, &lv_font_instrument_sans_bold_22, 0);
-    lv_obj_set_style_text_color(ok_label, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_center(ok_label);
+    if (simple_dialog_matches(SIMPLE_DIALOG_BATCH_SET,
+        "BATCH SET FAILED",
+        "Please remove banknotes from the feeder or reject pocket first.")) return;
+    simple_dialog_show(SIMPLE_DIALOG_BATCH_SET,
+        "BATCH SET FAILED",
+        "Please remove banknotes from the feeder or reject pocket first.",
+        700, 260, 0xE45454, batch_set_fail_confirm_action);
 }
 
 void show_currency_set_fail_popup(void)
 {
-    if (g_curr_set_fail_popup && lv_obj_is_valid(g_curr_set_fail_popup)) {
-        return;
-    }
-
-    lv_obj_t* scr = lv_scr_act();
-    g_curr_set_fail_mask = lv_obj_create(scr);
-    lv_obj_remove_style_all(g_curr_set_fail_mask);
-    lv_obj_set_size(g_curr_set_fail_mask, 1280, 400);
-    lv_obj_set_style_bg_opa(g_curr_set_fail_mask, LV_OPA_40, 0);
-    lv_obj_set_style_bg_color(g_curr_set_fail_mask, lv_color_hex(0x000000), 0);
-
-    g_curr_set_fail_popup = lv_obj_create(scr);
-    lv_obj_set_size(g_curr_set_fail_popup, 760, 280);
-    lv_obj_center(g_curr_set_fail_popup);
-    lv_obj_clear_flag(g_curr_set_fail_popup, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(g_curr_set_fail_popup, 24, 0);
-    lv_obj_set_style_bg_color(g_curr_set_fail_popup, lv_color_hex(0xF4F7FB), 0);
-    lv_obj_set_style_border_width(g_curr_set_fail_popup, 2, 0);
-    lv_obj_set_style_border_color(g_curr_set_fail_popup, lv_color_hex(0xD7DEE8), 0);
-
-    lv_obj_t* title = lv_label_create(g_curr_set_fail_popup);
-    lv_label_set_text(title, "CURRENCY SET FAILED");
-    lv_obj_set_style_text_font(title, &lv_font_instrument_sans_semibold_28, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0x2D3A4A), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 22);
-
-    lv_obj_t* info = lv_label_create(g_curr_set_fail_popup);
-    lv_label_set_text(info,
+    if (simple_dialog_matches(SIMPLE_DIALOG_CURRENCY_SET,
+        "CURRENCY SET FAILED",
         "There are banknotes still inside the machine or the sensor is abnormal.\n"
-        "Currency change was rejected.");
-    lv_obj_set_width(info, 680);
-    lv_label_set_long_mode(info, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_align(info, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(info, &lv_font_instrument_sans_medium_20, 0);
-    lv_obj_set_style_text_color(info, lv_color_hex(0x3C4D61), 0);
-    lv_obj_align(info, LV_ALIGN_TOP_MID, 0, 82);
-
-    lv_obj_t* ok_btn = lv_btn_create(g_curr_set_fail_popup);
-    lv_obj_set_size(ok_btn, 180, 58);
-    lv_obj_align(ok_btn, LV_ALIGN_BOTTOM_MID, 0, -20);
-    lv_obj_set_style_radius(ok_btn, 16, 0);
-    lv_obj_set_style_bg_color(ok_btn, lv_color_hex(0x1B86FF), 0);
-    lv_obj_set_style_bg_opa(ok_btn, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(ok_btn, 0, 0);
-    lv_obj_add_event_cb(ok_btn, currency_set_fail_confirm_cb, LV_EVENT_CLICKED, NULL);
-
-    lv_obj_t* ok_label = lv_label_create(ok_btn);
-    lv_label_set_text(ok_label, "CONFIRM");
-    lv_obj_set_style_text_font(ok_label, &lv_font_instrument_sans_bold_22, 0);
-    lv_obj_set_style_text_color(ok_label, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_center(ok_label);
+        "Currency change was rejected.")) return;
+    simple_dialog_show(SIMPLE_DIALOG_CURRENCY_SET,
+        "CURRENCY SET FAILED",
+        "There are banknotes still inside the machine or the sensor is abnormal.\n"
+        "Currency change was rejected.",
+        760, 280, 0xE45454, currency_set_fail_confirm_action);
 }
 
 static void batch_switch_center_knob_y(void)
@@ -583,9 +442,6 @@ const char* get_system_error_desc(uint8_t code)
     }
 }
 
-static lv_obj_t* g_sys_err_mask = NULL;
-static lv_obj_t* g_sys_err_popup = NULL;
-static lv_obj_t* g_sys_err_info_label = NULL;
 static uint8_t g_sys_err_last_code = 0x00;
 
 void system_error_state_reset(void)
@@ -595,89 +451,34 @@ void system_error_state_reset(void)
 
 void hide_system_error_popup(void)
 {
-    if (g_sys_err_popup && lv_obj_is_valid(g_sys_err_popup)) {
-        lv_obj_del(g_sys_err_popup);
-    }
-    g_sys_err_popup = NULL;
-    g_sys_err_info_label = NULL;
-
-    if (g_sys_err_mask && lv_obj_is_valid(g_sys_err_mask)) {
-        lv_obj_del(g_sys_err_mask);
-    }
-    g_sys_err_mask = NULL;
+    simple_dialog_hide(SIMPLE_DIALOG_SYSTEM);
 }
 
-void system_error_confirm_cb(lv_event_t* e)
+static void system_error_confirm_action(void *user_data)
 {
-    if ((lv_event_code_t)lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-
+    (void)user_data;
     uint8_t clear_cmd = 0x01;
     protocol_send(0x3D, &clear_cmd, 1); /* FD DF 06 3D 01 0A */
     hide_system_error_popup();
     system_error_state_reset();
 }
 
+void system_error_confirm_cb(lv_event_t* e)
+{
+    if ((lv_event_code_t)lv_event_get_code(e) == LV_EVENT_CLICKED) {
+        system_error_confirm_action(NULL);
+    }
+}
+
 void show_system_error_popup(uint8_t code)
 {
     if (code == 0x00) return;
-    if (g_sys_err_popup && lv_obj_is_valid(g_sys_err_popup)) {
-        if (g_sys_err_last_code == code) {
-            return;
-        }
-        if (g_sys_err_info_label && lv_obj_is_valid(g_sys_err_info_label)) {
-            lv_label_set_text_fmt(g_sys_err_info_label, "%s", get_system_error_desc(code));
-        }
-        g_sys_err_last_code = code;
-        return;
-    }
-
-    lv_obj_t* scr = lv_scr_act();
-    g_sys_err_mask = lv_obj_create(scr);
-    lv_obj_remove_style_all(g_sys_err_mask);
-    lv_obj_set_size(g_sys_err_mask, 1280, 400);
-    lv_obj_set_style_bg_opa(g_sys_err_mask, LV_OPA_40, 0);
-    lv_obj_set_style_bg_color(g_sys_err_mask, lv_color_hex(0x000000), 0);
-
-    g_sys_err_popup = lv_obj_create(scr);
-    lv_obj_set_size(g_sys_err_popup, 620, 250);
-    lv_obj_center(g_sys_err_popup);
-    lv_obj_clear_flag(g_sys_err_popup, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(g_sys_err_popup, 26, 0);
-    lv_obj_set_style_bg_color(g_sys_err_popup, lv_color_hex(0xF4F7FB), 0);
-    lv_obj_set_style_border_width(g_sys_err_popup, 2, 0);
-    lv_obj_set_style_border_color(g_sys_err_popup, lv_color_hex(0xD7DEE8), 0);
-    lv_obj_set_style_shadow_width(g_sys_err_popup, 18, 0);
-    lv_obj_set_style_shadow_opa(g_sys_err_popup, LV_OPA_40, 0);
-
-    lv_obj_t* title = lv_label_create(g_sys_err_popup);
-    lv_label_set_text(title, "SYSTEM ERROR");
-    lv_obj_set_style_text_font(title, &lv_font_instrument_sans_semibold_28, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0x2D3A4A), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 22);
-
-    g_sys_err_info_label = lv_label_create(g_sys_err_popup);
-    lv_label_set_text_fmt(g_sys_err_info_label, "%s", get_system_error_desc(code));
-    lv_obj_set_width(g_sys_err_info_label, 560);
-    lv_label_set_long_mode(g_sys_err_info_label, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_align(g_sys_err_info_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(g_sys_err_info_label, &lv_font_instrument_sans_medium_22, 0);
-    lv_obj_set_style_text_color(g_sys_err_info_label, lv_color_hex(0x3C4D61), 0);
-    lv_obj_align(g_sys_err_info_label, LV_ALIGN_TOP_MID, 0, 88);
-
-    lv_obj_t* ok_btn = lv_btn_create(g_sys_err_popup);
-    lv_obj_set_size(ok_btn, 180, 58);
-    lv_obj_align(ok_btn, LV_ALIGN_BOTTOM_MID, 0, -20);
-    lv_obj_set_style_radius(ok_btn, 16, 0);
-    lv_obj_set_style_bg_color(ok_btn, lv_color_hex(0x1B86FF), 0);
-    lv_obj_set_style_bg_opa(ok_btn, LV_OPA_COVER, 0);
-    lv_obj_add_event_cb(ok_btn, system_error_confirm_cb, LV_EVENT_CLICKED, NULL);
-
-    lv_obj_t* ok_label = lv_label_create(ok_btn);
-    lv_label_set_text(ok_label, "CONFIRM");
-    lv_obj_set_style_text_font(ok_label, &lv_font_instrument_sans_bold_22, 0);
-    lv_obj_set_style_text_color(ok_label, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_center(ok_label);
-
+    if (g_simple_dialog_kind == SIMPLE_DIALOG_SYSTEM &&
+        g_sys_err_last_code == code &&
+        lv_modal_dialog_is_visible(&g_simple_dialog)) return;
+    simple_dialog_show(SIMPLE_DIALOG_SYSTEM, "SYSTEM ERROR",
+                       get_system_error_desc(code), 620, 250,
+                       0xE45454, system_error_confirm_action);
     g_sys_err_last_code = code;
 }
 
@@ -738,30 +539,17 @@ static const char* get_counting_ui_error_desc(uint8_t type, uint8_t code)
     return ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_COUNT_ERROR);
 }
 
-static lv_obj_t* g_count_err_mask = NULL;
-static lv_obj_t* g_count_err_popup = NULL;
-static lv_obj_t* g_count_err_info_label = NULL;
 static uint8_t g_count_err_last_code = 0x00;
 static uint8_t g_count_err_last_type = 0x00;
 
 void hide_counting_error_popup(void)
 {
-    if (g_count_err_popup && lv_obj_is_valid(g_count_err_popup)) {
-        lv_obj_del(g_count_err_popup);
-    }
-    g_count_err_popup = NULL;
-    g_count_err_info_label = NULL;
-
-    if (g_count_err_mask && lv_obj_is_valid(g_count_err_mask)) {
-        lv_obj_del(g_count_err_mask);
-    }
-    g_count_err_mask = NULL;
+    simple_dialog_hide(SIMPLE_DIALOG_COUNTING);
 }
 
-void counting_error_confirm_cb(lv_event_t* e)
+static void counting_error_confirm_action(void *user_data)
 {
-    if ((lv_event_code_t)lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-
+    (void)user_data;
     /* 与系统报错确认一致：发送清除命令 */
     uint8_t clear_cmd = 0x01;
     protocol_send(0x3D, &clear_cmd, 1); /* FD DF 06 3D 01 0A */
@@ -770,68 +558,22 @@ void counting_error_confirm_cb(lv_event_t* e)
     g_count_err_last_type = 0x00;
 }
 
+void counting_error_confirm_cb(lv_event_t* e)
+{
+    if ((lv_event_code_t)lv_event_get_code(e) == LV_EVENT_CLICKED) {
+        counting_error_confirm_action(NULL);
+    }
+}
+
 void show_counting_error_popup(uint8_t type, uint8_t code)
 {
     if (code == 0x00) return;
-    if (g_count_err_popup && lv_obj_is_valid(g_count_err_popup)) {
-        if (g_count_err_last_type == type && g_count_err_last_code == code) {
-            return;
-        }
-        if (g_count_err_info_label && lv_obj_is_valid(g_count_err_info_label)) {
-            lv_label_set_text_fmt(g_count_err_info_label, "%s", get_counting_ui_error_desc(type, code));
-        }
-        g_count_err_last_type = type;
-        g_count_err_last_code = code;
-        return;
-    }
-
-    lv_obj_t* scr = lv_scr_act();
-    g_count_err_mask = lv_obj_create(scr);
-    lv_obj_remove_style_all(g_count_err_mask);
-    lv_obj_set_size(g_count_err_mask, 1280, 400);
-    lv_obj_set_style_bg_opa(g_count_err_mask, LV_OPA_40, 0);
-    lv_obj_set_style_bg_color(g_count_err_mask, lv_color_hex(0x000000), 0);
-
-    g_count_err_popup = lv_obj_create(scr);
-    lv_obj_set_size(g_count_err_popup, 620, 250);
-    lv_obj_center(g_count_err_popup);
-    lv_obj_clear_flag(g_count_err_popup, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_radius(g_count_err_popup, 26, 0);
-    lv_obj_set_style_bg_color(g_count_err_popup, lv_color_hex(0xF4F7FB), 0);
-    lv_obj_set_style_border_width(g_count_err_popup, 2, 0);
-    lv_obj_set_style_border_color(g_count_err_popup, lv_color_hex(0xD7DEE8), 0);
-    lv_obj_set_style_shadow_width(g_count_err_popup, 18, 0);
-    lv_obj_set_style_shadow_opa(g_count_err_popup, LV_OPA_40, 0);
-
-    lv_obj_t* title = lv_label_create(g_count_err_popup);
-    lv_label_set_text(title, "COUNTING ERROR");
-    lv_obj_set_style_text_font(title, &lv_font_instrument_sans_semibold_28, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0x2D3A4A), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 22);
-
-    g_count_err_info_label = lv_label_create(g_count_err_popup);
-    lv_label_set_text_fmt(g_count_err_info_label, "%s", get_counting_ui_error_desc(type, code));
-    lv_obj_set_width(g_count_err_info_label, 560);
-    lv_label_set_long_mode(g_count_err_info_label, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_align(g_count_err_info_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(g_count_err_info_label, &lv_font_instrument_sans_medium_22, 0);
-    lv_obj_set_style_text_color(g_count_err_info_label, lv_color_hex(0x3C4D61), 0);
-    lv_obj_align(g_count_err_info_label, LV_ALIGN_TOP_MID, 0, 88);
-
-    lv_obj_t* ok_btn = lv_btn_create(g_count_err_popup);
-    lv_obj_set_size(ok_btn, 180, 58);
-    lv_obj_align(ok_btn, LV_ALIGN_BOTTOM_MID, 0, -20);
-    lv_obj_set_style_radius(ok_btn, 16, 0);
-    lv_obj_set_style_bg_color(ok_btn, lv_color_hex(0x1B86FF), 0);
-    lv_obj_set_style_bg_opa(ok_btn, LV_OPA_COVER, 0);
-    lv_obj_add_event_cb(ok_btn, counting_error_confirm_cb, LV_EVENT_CLICKED, NULL);
-
-    lv_obj_t* ok_label = lv_label_create(ok_btn);
-    lv_label_set_text(ok_label, "CONFIRM");
-    lv_obj_set_style_text_font(ok_label, &lv_font_instrument_sans_bold_22, 0);
-    lv_obj_set_style_text_color(ok_label, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_center(ok_label);
-
+    if (g_simple_dialog_kind == SIMPLE_DIALOG_COUNTING &&
+        g_count_err_last_type == type && g_count_err_last_code == code &&
+        lv_modal_dialog_is_visible(&g_simple_dialog)) return;
+    simple_dialog_show(SIMPLE_DIALOG_COUNTING, "COUNTING ERROR",
+                       get_counting_ui_error_desc(type, code), 620, 250,
+                       0xE45454, counting_error_confirm_action);
     g_count_err_last_type = type;
     g_count_err_last_code = code;
 }

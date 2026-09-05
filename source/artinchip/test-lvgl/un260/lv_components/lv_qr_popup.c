@@ -1,6 +1,7 @@
 #include "lv_qr_popup.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_components/qrcodegen.h"
+#include "un260/lv_components/lv_damped_button.h"
 #include <stddef.h>
 #include <string.h>
 
@@ -89,18 +90,23 @@ static void qr_popup_create(void) //创建二维码弹窗对象
     g_qr_popup_canvas = lv_canvas_create(g_qr_popup_card);
     lv_obj_align(g_qr_popup_canvas, LV_ALIGN_CENTER, 0, 12);
 
-    g_qr_popup_close_btn = lv_btn_create(g_qr_popup_card);
+    {
+        lv_damped_button_style_t close_style = {
+            .normal_color = 0x111111,
+            .pressed_color = 0x303030,
+            .disabled_color = 0x8A8A8A,
+            .text_color = 0xFFFFFF,
+            .disabled_text_color = 0xD0D0D0,
+            .radius = 12,
+        };
+        g_qr_popup_close_btn = lv_damped_button_create(g_qr_popup_card,
+            &close_style, "", &lv_font_instrument_sans_bold_16);
+    }
     lv_obj_set_size(g_qr_popup_close_btn, 116, 38);
     lv_obj_align(g_qr_popup_close_btn, LV_ALIGN_BOTTOM_MID, 0, -12);
-    lv_obj_set_style_radius(g_qr_popup_close_btn, 12, 0);
-    lv_obj_set_style_bg_color(g_qr_popup_close_btn, lv_color_hex(0x111111), 0);
-    lv_obj_set_style_text_color(g_qr_popup_close_btn, lv_color_hex(0xFFFFFF), 0);
     lv_obj_add_event_cb(g_qr_popup_close_btn, qr_popup_close_event_cb, LV_EVENT_CLICKED, NULL);
 
-    g_qr_popup_close_label = lv_label_create(g_qr_popup_close_btn);
-    lv_obj_center(g_qr_popup_close_label);
-    lv_obj_set_style_text_font(g_qr_popup_close_label, &lv_font_instrument_sans_bold_16, 0);
-    lv_obj_set_style_text_color(g_qr_popup_close_label, lv_color_hex(0xFFFFFF), 0);
+    g_qr_popup_close_label = lv_damped_button_get_label(g_qr_popup_close_btn);
 
     lv_obj_align_to(g_qr_popup_desc, g_qr_popup_close_btn, LV_ALIGN_OUT_BOTTOM_MID, 0, 5);
 
@@ -179,7 +185,8 @@ static void qr_popup_refresh_text(void) //刷新二维码弹窗文本
     }
 
     if (g_qr_popup_close_label != NULL) {
-        lv_label_set_text(g_qr_popup_close_label, ui_text_get(UI_TEXT_WIDGET_QR_POPUP_BTN_CLOSE));
+        lv_damped_button_set_text(g_qr_popup_close_btn,
+                                  ui_text_get(UI_TEXT_WIDGET_QR_POPUP_BTN_CLOSE));
     }
 }
 

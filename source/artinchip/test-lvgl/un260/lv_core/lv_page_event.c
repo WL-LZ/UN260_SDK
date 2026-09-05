@@ -13,6 +13,7 @@
 #include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_components/lv_qr_popup.h"
 #include "un260/lv_components/lv_components.h"
+#include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/ui_qr_data.h"
 #include "un260/lv_core/page_01_main.h"
@@ -647,9 +648,6 @@ void page_03_update_menu_button_states_refresh(void)
     lv_color_t unselected_color = lv_color_hex(0xEEF2F7);
     lv_color_t selected_text_color = lv_color_make(255, 255, 255);
     lv_color_t unselected_text_color = lv_color_hex(0x747B84);
-    lv_color_t pressed_blue_color = lv_color_hex(0x0857D9);
-    lv_color_t pressed_off_color = lv_color_hex(0x7F8B98);
-    lv_color_t pressed_unselected_color = lv_color_hex(0xDCE8F8);
 
     #define PAGE_03_APPLY_FUNCTION_BTN(_obj, _sel, _off_selected) do {                  \
         bool _selected = (_sel);                                                        \
@@ -657,11 +655,9 @@ void page_03_update_menu_button_states_refresh(void)
         lv_obj_t* _btn = (_obj);                                                        \
         lv_color_t _bg = _selected ? (_off ? selected_off_color : selected_blue_color)   \
                                    : unselected_color;                                  \
-        lv_color_t _pressed = _selected ? (_off ? pressed_off_color : pressed_blue_color)\
-                                        : pressed_unselected_color;                     \
         if (_btn) {                                                                     \
-            lv_obj_set_style_bg_color(_btn, _bg, 0);                                    \
-            lv_obj_set_style_bg_color(_btn, _pressed, LV_STATE_PRESSED);                \
+            lv_damped_button_set_palette(_btn, _bg,                                     \
+                                         lv_color_darken(_bg, LV_OPA_20));               \
             lv_obj_t* _label = lv_obj_get_child(_btn, 0);                               \
             if (_label) {                                                               \
                 lv_obj_set_style_text_color(_label,                                    \

@@ -13,6 +13,20 @@ typedef struct {
     lv_coord_t radius;
 } lv_damped_button_style_t;
 
+/*
+ * Register an existing LVGL button (or any clickable object) with the shared
+ * UN260 tactile interaction.  Visual roles keep their own normal color while
+ * the shared engine derives the pressed shade as approximately 8% darker. The
+ * pressed_color argument is kept for source compatibility and is normalized
+ * by the implementation.
+ */
+void lv_damped_button_register(lv_obj_t *button,
+                               lv_color_t normal_color,
+                               lv_color_t pressed_color);
+void lv_damped_button_set_palette(lv_obj_t *button,
+                                  lv_color_t normal_color,
+                                  lv_color_t pressed_color);
+
 lv_obj_t *lv_damped_button_create(lv_obj_t *parent,
                                   const lv_damped_button_style_t *style,
                                   const char *text,

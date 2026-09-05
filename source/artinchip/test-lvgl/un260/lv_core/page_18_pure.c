@@ -2,6 +2,7 @@
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/lv_page_event.h"
 #include "un260/lv_components/smart_island.h"
+#include "un260/lv_components/lv_damped_button.h"
 #include "un260/counting/counting_data_store.h"
 #include "un260/lv_system/ui_lang.h"
 #include "un260/lv_system/ui_text.h"
@@ -45,37 +46,6 @@ static void pure_page_context_reset(void)
 {
     memset(&g_pure_page, 0, sizeof(g_pure_page));
     g_pure_page.language = LANGUAGE_EN;
-}
-
-static void pure_btn_touch_feedback_cb(lv_event_t* e)
-{
-    lv_event_code_t code = lv_event_get_code(e);
-    lv_obj_t* btn = lv_event_get_target(e);
-    uint32_t i;
-    uint32_t child_cnt;
-    lv_opa_t text_opa;
-
-    if (btn == NULL || !lv_obj_is_valid(btn)) {
-        return;
-    }
-
-    if (code == LV_EVENT_PRESSED) {
-        lv_obj_set_style_bg_opa(btn, LV_OPA_70, 0);
-        text_opa = LV_OPA_70;
-    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
-        lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
-        text_opa = LV_OPA_COVER;
-    } else {
-        return;
-    }
-
-    child_cnt = lv_obj_get_child_cnt(btn);
-    for (i = 0; i < child_cnt; i++) {
-        lv_obj_t* child = lv_obj_get_child(btn, i);
-        if (child && lv_obj_is_valid(child)) {
-            lv_obj_set_style_text_opa(child, text_opa, 0);
-        }
-    }
 }
 
 static void pure_format_amount(char* buf, size_t size, float amount)
@@ -344,9 +314,8 @@ void ui_page_18_pure_create(lv_obj_t* parent)
     lv_obj_set_style_border_color(btn_start, lv_color_hex(0x818181), 0);
     lv_obj_set_style_shadow_width(btn_start, 0, 0);
     lv_obj_add_event_cb(btn_start, page_01_start_btn_event_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(btn_start, pure_btn_touch_feedback_cb, LV_EVENT_PRESSED, NULL);
-    lv_obj_add_event_cb(btn_start, pure_btn_touch_feedback_cb, LV_EVENT_RELEASED, NULL);
-    lv_obj_add_event_cb(btn_start, pure_btn_touch_feedback_cb, LV_EVENT_PRESS_LOST, NULL);
+    lv_damped_button_register(btn_start, lv_color_hex(0xFFFFFF),
+                              lv_color_hex(0xDDE3EA));
 
     g_pure_page.start_btn_label = lv_label_create(btn_start);
     lv_label_set_text(g_pure_page.start_btn_label, ui_text_get(UI_TEXT_WIDGET_PURE_START));
@@ -364,9 +333,8 @@ void ui_page_18_pure_create(lv_obj_t* parent)
     lv_obj_set_style_border_width(btn_clear, 0, 0);
     lv_obj_set_style_shadow_width(btn_clear, 0, 0);
     lv_obj_add_event_cb(btn_clear, page_01_esc_btn_event_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(btn_clear, pure_btn_touch_feedback_cb, LV_EVENT_PRESSED, NULL);
-    lv_obj_add_event_cb(btn_clear, pure_btn_touch_feedback_cb, LV_EVENT_RELEASED, NULL);
-    lv_obj_add_event_cb(btn_clear, pure_btn_touch_feedback_cb, LV_EVENT_PRESS_LOST, NULL);
+    lv_damped_button_register(btn_clear, lv_color_hex(0xFFFFFF),
+                              lv_color_hex(0xDDE3EA));
 
     g_pure_page.clear_btn_label = lv_label_create(btn_clear);
     lv_label_set_text(g_pure_page.clear_btn_label, ui_text_get(UI_TEXT_WIDGET_PURE_CLEAR));

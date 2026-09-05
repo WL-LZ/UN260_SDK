@@ -488,16 +488,25 @@ static void static_skin_set_live_visual(lv_dma_static_skin_t *skin,
     }
 
     if (live) {
+        /* Keep the cached normal skin visible below the live button.  The
+         * former implementation hid it before LVGL had rendered the first
+         * live pressed frame.  On a light page that one-frame hand-off made
+         * dark buttons flash white.  The live background now fades above an
+         * uninterrupted cached base instead, so translation can expose the
+         * normal button skin but never the page background. */
         lv_obj_set_style_bg_opa(skin->source, skin->bg_opa,
                                 LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_opa(skin->source, skin->border_opa,
+        /* Border, outline and shadow already exist in the cached skin.  Do
+         * not draw a second copy while pressed; duplicated shadows were the
+         * source of the overly dark press edge. */
+        lv_obj_set_style_border_opa(skin->source, LV_OPA_TRANSP,
                                     LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_outline_opa(skin->source, skin->outline_opa,
+        lv_obj_set_style_outline_opa(skin->source, LV_OPA_TRANSP,
                                      LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_shadow_opa(skin->source, skin->shadow_opa,
+        lv_obj_set_style_shadow_opa(skin->source, LV_OPA_TRANSP,
                                     LV_PART_MAIN | LV_STATE_DEFAULT);
         if (skin->image != NULL && lv_obj_is_valid(skin->image)) {
-            lv_obj_add_flag(skin->image, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(skin->image, LV_OBJ_FLAG_HIDDEN);
         }
     } else {
         lv_obj_set_style_bg_opa(skin->source, LV_OPA_TRANSP,
@@ -514,6 +523,55 @@ static void static_skin_set_live_visual(lv_dma_static_skin_t *skin,
     }
 }
 
+static void static_skin_restore_source_visual(lv_dma_static_skin_t *skin)
+{
+    if (skin == NULL || skin->source == NULL ||
+        !lv_obj_is_valid(skin->source)) {
+        return;
+    }
+
+    lv_obj_set_style_bg_opa(skin->source, skin->bg_opa,
+                            LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(skin->source, skin->border_opa,
+                                LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_outline_opa(skin->source, skin->outline_opa,
+                                 LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_opa(skin->source, skin->shadow_opa,
+                                LV_PART_MAIN | LV_STATE_DEFAULT);
+}
+
+/* Keep the live button above its permanently visible cached normal-state skin
+ * until the shared press/release color transition has completed. */
+#define STATIC_SKIN_RELEASE_HOLD_MS 214U
+
+static void static_skin_release_hold_anim_cb(void *var, int32_t value)
+{
+    LV_UNUSED(var);
+    LV_UNUSED(value);
+}
+
+static void static_skin_release_hold_ready_cb(lv_anim_t *animation)
+{
+    lv_dma_static_skin_t *skin = (lv_dma_static_skin_t *)animation->var;
+
+    static_skin_set_live_visual(skin, false);
+}
+
+static void static_skin_release_hold_start(lv_dma_static_skin_t *skin)
+{
+    lv_anim_t animation;
+
+    if (skin == NULL) return;
+    lv_anim_del(skin, static_skin_release_hold_anim_cb);
+    lv_anim_init(&animation);
+    lv_anim_set_var(&animation, skin);
+    lv_anim_set_exec_cb(&animation, static_skin_release_hold_anim_cb);
+    lv_anim_set_values(&animation, 0, 1);
+    lv_anim_set_time(&animation, STATIC_SKIN_RELEASE_HOLD_MS);
+    lv_anim_set_ready_cb(&animation, static_skin_release_hold_ready_cb);
+    lv_anim_start(&animation);
+}
+
 static void static_skin_event_cb(lv_event_t *event)
 {
     lv_dma_static_skin_t *skin = lv_event_get_user_data(event);
@@ -522,9 +580,12 @@ static void static_skin_event_cb(lv_event_t *event)
     if (code == LV_EVENT_PRESSED) {
         /* Draw the original live object only while it is pressed.  This keeps
          * every existing pressed-state style and transition intact. */
+        lv_anim_del(skin, static_skin_release_hold_anim_cb);
         static_skin_set_live_visual(skin, true);
     } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
-        static_skin_set_live_visual(skin, false);
+        static_skin_release_hold_start(skin);
+    } else if (code == LV_EVENT_DELETE) {
+        lv_anim_del(skin, static_skin_release_hold_anim_cb);
     }
 }
 
@@ -625,11 +686,13 @@ void lv_dma_static_skin_release(lv_dma_static_skin_t *skin)
 {
     if (skin == NULL) return;
 
+    lv_anim_del(skin, static_skin_release_hold_anim_cb);
+
     if (skin->source != NULL && lv_obj_is_valid(skin->source) &&
         skin->style_mutated) {
         lv_obj_remove_event_cb_with_user_data(skin->source,
                                               static_skin_event_cb, skin);
-        static_skin_set_live_visual(skin, true);
+        static_skin_restore_source_visual(skin);
     }
     if (skin->image != NULL && lv_obj_is_valid(skin->image)) {
         lv_obj_del(skin->image);

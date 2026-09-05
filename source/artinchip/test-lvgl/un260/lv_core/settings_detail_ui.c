@@ -3,6 +3,7 @@
 #include "un260/lv_core/page_06_settings.h"
 #include "un260/protocol/protocol_send.h"
 #include "un260/lv_system/ui_text.h"
+#include "un260/lv_components/lv_damped_button.h"
 
 #include <string.h>
 
@@ -127,8 +128,8 @@ static void detail_style_plain(lv_obj_t* obj)
 
 static void detail_add_press_style(lv_obj_t* obj, lv_color_t pressed_bg)
 {
-    lv_obj_set_style_bg_color(obj, pressed_bg, LV_STATE_PRESSED);
-    lv_obj_set_style_translate_y(obj, 1, LV_STATE_PRESSED);
+    lv_color_t normal_bg = lv_obj_get_style_bg_color(obj, LV_PART_MAIN);
+    lv_damped_button_register(obj, normal_bg, pressed_bg);
 }
 
 lv_obj_t* settings_detail_create_label(lv_obj_t* parent, const char* text,

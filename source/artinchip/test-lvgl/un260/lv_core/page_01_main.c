@@ -17,6 +17,7 @@
 #include "un260/counting/counting_data_store.h"
 #include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_components/lv_components.h"
+#include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_components/lv_dma_snapshot_cache.h"
 #include "un260/protocol/protocol_send.h"
 #include "un260/lv_system/machine_time.h"
@@ -621,6 +622,8 @@ static lv_obj_t* page_01_bottom_btn_create(lv_coord_t x, lv_coord_t y, lv_coord_
     lv_obj_set_style_pad_all(btn, 0, 0);
     lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
+    lv_damped_button_register(btn, lv_color_hex(0xF8F5F5),
+                              lv_color_hex(0xCECECE));
 
     if (event_cb) {
         lv_obj_add_event_cb(btn, event_cb, LV_EVENT_CLICKED, NULL);
@@ -687,8 +690,7 @@ static lv_obj_t* page_01_bottom_c_btn_create(lv_coord_t x, lv_coord_t y, lv_coor
     lv_obj_t* btn = page_01_bottom_box_create(x, y, w, h, bg_color);
 
     if (clickable) {
-        lv_obj_set_style_bg_color(btn, lv_color_hex(0xCECECE), LV_STATE_PRESSED);
-        lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
+        lv_damped_button_register(btn, bg_color, lv_color_hex(0xCECECE));
         if (event_cb) {
             lv_obj_add_event_cb(btn, event_cb, LV_EVENT_CLICKED, NULL);
         }
@@ -774,8 +776,7 @@ static void page_01_detail_section_btn_update_one(lv_obj_t* btn, bool selected)
     if (btn == NULL || !lv_obj_is_valid(btn)) return;
 
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(btn, base_color, 0);
-    lv_obj_set_style_bg_color(btn, pressed_color, LV_STATE_PRESSED);
+    lv_damped_button_set_palette(btn, base_color, pressed_color);
     lv_obj_set_style_radius(btn, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_border_width(btn, 1, 0);
     lv_obj_set_style_border_color(btn, border_color, 0);
@@ -888,6 +889,8 @@ static lv_obj_t* page_01_detail_section_btn_create(lv_coord_t x, lv_coord_t y,
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_line_space(label, -1, 0);
     lv_obj_set_width(label, 16);
+    lv_damped_button_register(btn, lv_color_hex(0xECEFF3),
+                              lv_color_hex(0xDDE3EA));
     lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 28);
 
     return btn;

@@ -44,6 +44,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_components/qrcodegen.c
     un260/lv_components/lv_capsule_pagination.c
     un260/lv_components/lv_damped_button.c
+    un260/lv_components/lv_modal_dialog.c
     un260/lv_components/lv_content_pager.c
     un260/lv_components/lv_dma_snapshot_cache.c
     un260/app_service/setting_service.c

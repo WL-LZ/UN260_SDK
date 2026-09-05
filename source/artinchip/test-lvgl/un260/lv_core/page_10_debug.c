@@ -25,6 +25,7 @@
 #include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_system/ui_export_data.h"
 #include "un260/lv_system/ui_text.h"
+#include "un260/lv_components/lv_damped_button.h"
 #include "un260/recording/screen_recording_service.h"
 #include "aic_ui/perf_stats.h"
 #include <stdio.h>
@@ -481,6 +482,8 @@ void ui_page_10_debug_create(void) {
     lv_obj_set_size(btn_send, 110, 90);
     lv_obj_set_pos(btn_send, 405, 75);
     lv_obj_set_style_bg_color(btn_send, lv_color_hex(0x00AA00), 0);
+    lv_damped_button_register(btn_send, lv_color_hex(0x00AA00),
+                              lv_color_hex(0x008700));
     lv_obj_add_event_cb(btn_send, btn_send_event_cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t* btn_send_label = lv_label_create(btn_send);
@@ -492,6 +495,8 @@ void ui_page_10_debug_create(void) {
     lv_obj_set_pos(btn_sec, 120, 4);
     lv_obj_set_size(btn_sec, 78, 30);
     lv_obj_set_style_bg_color(btn_sec, lv_color_hex(0x00AA00), 0);
+    lv_damped_button_register(btn_sec, lv_color_hex(0x00AA00),
+                              lv_color_hex(0x008700));
     lv_obj_add_event_cb(btn_sec, page_06_back_btn_event_cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t* btn_esc_label = lv_label_create(btn_sec);
@@ -523,6 +528,8 @@ void ui_page_10_debug_create(void) {
     lv_obj_set_size(btn_clear_input, 100, 35);
     lv_obj_set_pos(btn_clear_input, 15, 130);
     lv_obj_set_style_bg_color(btn_clear_input, lv_color_hex(0x555555), 0);
+    lv_damped_button_register(btn_clear_input, lv_color_hex(0x555555),
+                              lv_color_hex(0x3F3F3F));
     lv_obj_add_event_cb(btn_clear_input, btn_clear_input_event_cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t* lbl_clr = lv_label_create(btn_clear_input);
@@ -534,6 +541,8 @@ void ui_page_10_debug_create(void) {
     lv_obj_set_size(btn_quick1, 100, 35);
     lv_obj_set_pos(btn_quick1, 125, 130);
     lv_obj_set_style_bg_color(btn_quick1, lv_color_hex(0x4A9EFF), 0);
+    lv_damped_button_register(btn_quick1, lv_color_hex(0x4A9EFF),
+                              lv_color_hex(0x2E7ED8));
     lv_obj_add_event_cb(btn_quick1, btn_quick_cmd_event_cb, LV_EVENT_CLICKED, "FD DF");
 
     lv_obj_t* lbl_q1 = lv_label_create(btn_quick1);
@@ -601,6 +610,8 @@ void ui_page_10_debug_create(void) {
     lv_obj_set_size(btn_download_log, 100, 30);
     lv_obj_set_pos(btn_download_log, 310, 5);
     lv_obj_set_style_bg_color(btn_download_log, lv_color_hex(0x0066CC), 0);
+    lv_damped_button_register(btn_download_log, lv_color_hex(0x0066CC),
+                              lv_color_hex(0x004E9F));
     lv_obj_add_event_cb(btn_download_log, btn_download_log_event_cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t* lbl_download_log = lv_label_create(btn_download_log);
@@ -612,6 +623,8 @@ void ui_page_10_debug_create(void) {
     lv_obj_set_size(btn_clear_log, 80, 30);
     lv_obj_set_pos(btn_clear_log, 420, 5);
     lv_obj_set_style_bg_color(btn_clear_log, lv_color_hex(0xAA0000), 0);
+    lv_damped_button_register(btn_clear_log, lv_color_hex(0xAA0000),
+                              lv_color_hex(0x820000));
     lv_obj_add_event_cb(btn_clear_log, btn_clear_log_event_cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t* lbl_clr_log = lv_label_create(btn_clear_log);

@@ -2,6 +2,7 @@
 #include "un260/lv_resources/lv_image_declear.h"
 #include "un260/currency/currency_state.h"
 #include"un260/lv_system/lv_str.h"
+#include "un260/lv_components/lv_damped_button.h"
 #include "../aic_ui/aic_ui.h"
 
 
@@ -216,6 +217,17 @@ void lv_ui_obj_init(lv_obj_t* parent, ui_element_t* element, int count)
                 lv_obj_add_event_cb(obj, info->event_cb, event_code, info->user_data);
                 lv_obj_add_flag(obj, LV_OBJ_FLAG_CLICKABLE);
             }
+            /* One interaction engine for every real generated button.  The
+               large NO_FEEDBACK objects are scroll/touch hit regions, not
+               visual buttons, and intentionally remain motionless. */
+            if (info->obj_type == LV_OBJ_TYPE_BUTTON &&
+                info->btn_style != UI_BTN_STYLE_NO_FEEDBACK) {
+                lv_color_t normal = lv_color_make(info->obj_item.color_r,
+                                                  info->obj_item.color_g,
+                                                  info->obj_item.color_b);
+                lv_damped_button_register(obj, normal,
+                                          lv_color_darken(normal, LV_OPA_20));
+            }
             }
             info->obj_ref = obj;
         }
@@ -369,4 +381,3 @@ const char* get_currency_img(const char* code)
 
     return NULL;
 }
-

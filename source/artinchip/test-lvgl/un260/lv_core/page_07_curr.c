@@ -7,6 +7,7 @@
 
 #include "un260/lv_components/lv_components.h"
 #include "un260/lv_components/lv_dma_snapshot_cache.h"
+#include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_components/smart_island.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/page_01_main.h"
@@ -502,7 +503,8 @@ static void curr_style_view_button(void)
 
     lv_obj_set_style_radius(g_page07_curr.objects.btn_view, 10, 0);
     lv_obj_set_style_bg_opa(g_page07_curr.objects.btn_view, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(g_page07_curr.objects.btn_view, lv_color_hex(0x0073FF), 0);
+    lv_damped_button_set_palette(g_page07_curr.objects.btn_view,
+                                 lv_color_hex(0x0073FF), lv_color_hex(0x005DDB));
     lv_obj_set_style_border_width(g_page07_curr.objects.btn_view, 0, 0);
     lv_obj_set_style_shadow_width(g_page07_curr.objects.btn_view, 12, 0);
     lv_obj_set_style_shadow_opa(g_page07_curr.objects.btn_view, LV_OPA_10, 0);
@@ -514,12 +516,15 @@ static void curr_style_view_button(void)
 
 static void curr_style_fav_button(void)
 {
+    lv_color_t bg;
+
     if (g_page07_curr.objects.btn_favorite == NULL || g_page07_curr.objects.btn_favorite_label == NULL) return;
 
+    bg = g_page07_curr.model.favorite_only ? lv_color_hex(0xE9DEBD) : lv_color_hex(0x8F8F8F);
     lv_obj_set_style_radius(g_page07_curr.objects.btn_favorite, 10, 0);
     lv_obj_set_style_bg_opa(g_page07_curr.objects.btn_favorite, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(g_page07_curr.objects.btn_favorite,
-                              g_page07_curr.model.favorite_only ? lv_color_hex(0xE9DEBD) : lv_color_hex(0x8F8F8F), 0);
+    lv_damped_button_set_palette(g_page07_curr.objects.btn_favorite, bg,
+                                 lv_color_darken(bg, LV_OPA_20));
     lv_obj_set_style_border_width(g_page07_curr.objects.btn_favorite, 0, 0);
     lv_obj_set_style_shadow_width(g_page07_curr.objects.btn_favorite, 0, 0);
     lv_obj_set_style_shadow_opa(g_page07_curr.objects.btn_favorite, LV_OPA_0, 0);
@@ -535,7 +540,8 @@ static void curr_style_back_button(void)
 
     lv_obj_set_style_radius(g_page07_curr.objects.btn_back, 10, 0);
     lv_obj_set_style_bg_opa(g_page07_curr.objects.btn_back, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(g_page07_curr.objects.btn_back, lv_color_hex(0xD9D9D9), 0);
+    lv_damped_button_set_palette(g_page07_curr.objects.btn_back,
+                                 lv_color_hex(0xD9D9D9), lv_color_hex(0xBFC3C8));
     lv_obj_set_style_border_width(g_page07_curr.objects.btn_back, 0, 0);
     lv_obj_set_style_shadow_width(g_page07_curr.objects.btn_back, 0, 0);
     lv_obj_set_style_shadow_opa(g_page07_curr.objects.btn_back, LV_OPA_0, 0);
@@ -1896,6 +1902,8 @@ void page_07_curr_img_refre(void)
     g_page07_curr.objects.btn_view_label = lv_label_create(g_page07_curr.objects.btn_view);
     lv_label_set_text(g_page07_curr.objects.btn_view_label, "CARD");
     lv_obj_center(g_page07_curr.objects.btn_view_label);
+    lv_damped_button_register(g_page07_curr.objects.btn_view,
+                              lv_color_hex(0x0073FF), lv_color_hex(0x005DDB));
 
     g_page07_curr.objects.btn_favorite = lv_btn_create(g_page07_curr.objects.left_panel);
     lv_obj_set_size(g_page07_curr.objects.btn_favorite, CURR_BTN_W, CURR_BTN_H);
@@ -1904,6 +1912,8 @@ void page_07_curr_img_refre(void)
     g_page07_curr.objects.btn_favorite_label = lv_label_create(g_page07_curr.objects.btn_favorite);
     lv_label_set_text(g_page07_curr.objects.btn_favorite_label, "FAV");
     lv_obj_center(g_page07_curr.objects.btn_favorite_label);
+    lv_damped_button_register(g_page07_curr.objects.btn_favorite,
+                              lv_color_hex(0x8F8F8F), lv_color_hex(0x737373));
 
     g_page07_curr.objects.btn_back = lv_btn_create(g_page07_curr.objects.left_panel);
     lv_obj_set_size(g_page07_curr.objects.btn_back, CURR_BTN_W, CURR_BTN_H);
@@ -1912,6 +1922,8 @@ void page_07_curr_img_refre(void)
     g_page07_curr.objects.btn_back_label = lv_label_create(g_page07_curr.objects.btn_back);
     lv_label_set_text(g_page07_curr.objects.btn_back_label, "BACK");
     lv_obj_center(g_page07_curr.objects.btn_back_label);
+    lv_damped_button_register(g_page07_curr.objects.btn_back,
+                              lv_color_hex(0xD9D9D9), lv_color_hex(0xBFC3C8));
 
     g_page07_curr.objects.right_area = lv_obj_create(g_page07_curr.objects.root);
     lv_obj_remove_style_all(g_page07_curr.objects.right_area);
