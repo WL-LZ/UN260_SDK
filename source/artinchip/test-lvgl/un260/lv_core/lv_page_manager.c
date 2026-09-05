@@ -14,6 +14,7 @@
 
 #define UI_PAGE_STACK_CAPACITY 10
 #define UI_PAGE_INVALID ((ui_page_t)-1)
+#define UI_PAGE_INPUT_GUARD_MS 40U
 
 typedef struct {
     ui_page_t current;
@@ -29,6 +30,8 @@ static ui_page_manager_context_t g_page_manager = {
 static bool g_page_cache_ready[UI_PAGE_COUNT];
 static ui_data_topic_t g_page_data_dirty[UI_PAGE_COUNT];
 static ui_page_t g_page_prewarming = UI_PAGE_INVALID;
+static bool g_page_switch_committing;
+static lv_timer_t *g_page_input_unlock_timer;
 
 typedef void (*ui_page_create_fn_t)(lv_obj_t *parent);
 typedef void (*ui_page_destroy_fn_t)(void);
@@ -75,6 +78,9 @@ typedef struct {
     uint8_t static_image_count;
     bool predecode_small_visible_images;
 } ui_page_registration_t;
+
+static uint8_t ui_manager_predecode_static_images(
+    const ui_page_registration_t *registration);
 
 #define UI_ARRAY_SIZE(array) ((uint8_t)(sizeof(array) / sizeof((array)[0])))
 
@@ -317,6 +323,51 @@ static uint32_t ui_manager_profile_elapsed_us(uint64_t started_us)
     return app_clock_elapsed_us32(started_us, app_clock_monotonic_us());
 }
 
+static void ui_manager_set_input_enabled(bool enabled)
+{
+    lv_indev_t *indev = NULL;
+
+    while ((indev = lv_indev_get_next(indev)) != NULL) {
+        lv_indev_enable(indev, enabled);
+    }
+}
+
+static void ui_manager_input_unlock_cb(lv_timer_t *timer)
+{
+    LV_UNUSED(timer);
+
+    g_page_input_unlock_timer = NULL;
+    ui_manager_set_input_enabled(true);
+    lv_timer_del(timer);
+}
+
+/* A switch remains synchronous, but input stays guarded until the scheduled
+ * first frame has had enough time to reach the display.  This prevents a
+ * second click from entering a half-committed page without adding a visible
+ * overlay or an artificial page animation. */
+static bool ui_manager_transition_begin(void)
+{
+    if (g_page_switch_committing) return false;
+
+    g_page_switch_committing = true;
+    if (g_page_input_unlock_timer != NULL) {
+        lv_timer_del(g_page_input_unlock_timer);
+        g_page_input_unlock_timer = NULL;
+    }
+    ui_manager_set_input_enabled(false);
+    return true;
+}
+
+static void ui_manager_transition_finish(void)
+{
+    g_page_switch_committing = false;
+    g_page_input_unlock_timer = lv_timer_create(
+        ui_manager_input_unlock_cb, UI_PAGE_INPUT_GUARD_MS, NULL);
+    if (g_page_input_unlock_timer == NULL) {
+        ui_manager_set_input_enabled(true);
+    }
+}
+
 /* Page roots share one LVGL screen and a page switch always invalidates the
  * newly exposed frame.  Resume schedules the refresh timer, but does not make
  * it due immediately.  Mark only page-switch frames ready here so ordinary
@@ -376,6 +427,7 @@ void ui_manager_switch(ui_page_t page)
 
     if (page == g_page_manager.current) return;
     if (!ui_manager_page_is_registered(page)) return;
+    if (!ui_manager_transition_begin()) return;
 
     profile_enabled = perf_profile_is_enabled();
     if (profile_enabled) {
@@ -391,18 +443,34 @@ void ui_manager_switch(ui_page_t page)
         sample.notify_us = ui_manager_profile_elapsed_us(phase_started_us);
         phase_started_us = app_clock_monotonic_us();
     }
+    /* Decode registry-declared immutable backgrounds while the old page is
+     * still the displayed framebuffer.  A cold target therefore cannot turn
+     * its first visible frame into a file-I/O/decode stall. */
+    if (!g_page_cache_ready[page] &&
+        g_page_registry[page].static_image_count > 0U) {
+        (void)ui_manager_predecode_static_images(&g_page_registry[page]);
+    }
+    if (profile_enabled) {
+        sample.prepare_us = ui_manager_profile_elapsed_us(phase_started_us);
+        phase_started_us = app_clock_monotonic_us();
+    }
     sample.leave_action = destroy_current_page();
     if (profile_enabled) {
         sample.leave_us = ui_manager_profile_elapsed_us(phase_started_us);
         phase_started_us = app_clock_monotonic_us();
     }
     sample.enter_action = create_new_page(page);
+    /* Resolve every pending percentage/alignment coordinate before exposing
+     * the target.  LVGL still merges the old-page hide and new-page show into
+     * one refresh, so no intermediate object tree is presented. */
+    lv_obj_update_layout(lv_scr_act());
     if (profile_enabled) {
         sample.enter_us = ui_manager_profile_elapsed_us(phase_started_us);
         phase_started_us = app_clock_monotonic_us();
     }
     g_page_manager.current = page;
     ui_manager_schedule_first_frame();
+    ui_manager_transition_finish();
     if (profile_enabled) {
         sample.commit_us = ui_manager_profile_elapsed_us(phase_started_us);
         sample.total_us = ui_manager_profile_elapsed_us(total_started_us);
@@ -415,6 +483,12 @@ void ui_manager_init(void) {
     g_page_manager.stack_top = -1;
     memset(g_page_cache_ready, 0, sizeof(g_page_cache_ready));
     memset(g_page_data_dirty, 0, sizeof(g_page_data_dirty));
+    g_page_switch_committing = false;
+    if (g_page_input_unlock_timer != NULL) {
+        lv_timer_del(g_page_input_unlock_timer);
+        g_page_input_unlock_timer = NULL;
+    }
+    ui_manager_set_input_enabled(true);
 
     // 显示主页面
 
@@ -428,7 +502,7 @@ void ui_manager_push_page(ui_page_t page)
 {
     int i;
 
-    if (page == g_page_manager.current ||
+    if (g_page_switch_committing || page == g_page_manager.current ||
         !ui_manager_page_is_registered(page)) return;
 
     //当前页入栈
@@ -465,7 +539,8 @@ bool ui_manager_adopt_precreated_page(ui_page_t page)
     uint64_t total_started_us = 0;
     uint64_t phase_started_us = 0;
 
-    if (page == from || !ui_manager_page_is_registered(page)) return false;
+    if (page == from || !ui_manager_page_is_registered(page) ||
+        !ui_manager_transition_begin()) return false;
     profile_enabled = perf_profile_is_enabled();
     if (profile_enabled) {
         total_started_us = app_clock_monotonic_us();
@@ -500,6 +575,7 @@ bool ui_manager_adopt_precreated_page(ui_page_t page)
         phase_started_us = app_clock_monotonic_us();
     }
     g_page_manager.current = page;
+    lv_obj_update_layout(lv_scr_act());
     ui_manager_schedule_first_frame();
     if (g_page_registry[page].cache_policy == UI_PAGE_RETAINED) {
         g_page_cache_ready[page] = true;
@@ -509,6 +585,7 @@ bool ui_manager_adopt_precreated_page(ui_page_t page)
         sample.total_us = ui_manager_profile_elapsed_us(total_started_us);
         perf_profile_report_page_switch(&sample);
     }
+    ui_manager_transition_finish();
     return true;
 }
 
@@ -520,6 +597,8 @@ bool ui_manager_is_prewarming_page(ui_page_t page)
 bool ui_manager_pop_page(void)
 {
     ui_page_t previous_page;
+
+    if (g_page_switch_committing) return false;
 
     if (g_page_manager.stack_top < 0)
     {
@@ -791,6 +870,11 @@ const char *ui_manager_page_name(ui_page_t page)
 // 读取当前页
 ui_page_t ui_manager_get_current_page(void) {
     return g_page_manager.current;
+}
+
+bool ui_manager_is_transitioning(void)
+{
+    return g_page_switch_committing || g_page_input_unlock_timer != NULL;
 }
 
 void ui_manager_publish_data_changed(ui_data_topic_t topics)
