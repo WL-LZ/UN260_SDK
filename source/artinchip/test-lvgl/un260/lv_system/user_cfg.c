@@ -35,7 +35,7 @@ static bool user_cfg_password_is_valid(const char* password)
     if (!password) return false;
 
     len = strlen(password);
-    if (len == 0 || len > USER_PASSWORD_MAX_LEN) return false;
+    if (len != USER_PASSWORD_MAX_LEN) return false;
 
     for (size_t i = 0; i < len; i++) {
         if (password[i] < '0' || password[i] > '9') {

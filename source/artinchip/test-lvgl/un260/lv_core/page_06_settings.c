@@ -1,4 +1,5 @@
 #include "un260/lv_core/page_06_settings.h"
+#include "un260/lv_components/lv_nav_button.h"
 #include "un260/app_service/app_command_runtime.h"
 #include "un260/lv_system/app_clock.h"
 #include "un260/lv_core/lv_page_manager.h"
@@ -1343,33 +1344,6 @@ static void back_event_cb(lv_event_t* e)
     ui_manager_switch(UI_PAGE_MAIN);
 }
 
-static void create_footer_button(lv_obj_t* parent, lv_coord_t x, lv_coord_t w,
-                                 const char* icon, const char* text,
-                                 lv_color_t bg, lv_color_t fg,
-                                 lv_event_cb_t cb)
-{
-    lv_obj_t* btn = lv_obj_create(parent);
-    style_plain(btn);
-    lv_obj_set_pos(btn, x, 9);
-    lv_obj_set_size(btn, w, 34);
-    lv_obj_set_style_bg_color(btn, bg, 0);
-    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(btn, 2, 0);
-    lv_obj_set_style_border_width(btn, 0, 0);
-    lv_obj_set_style_shadow_width(btn, 8, 0);
-    lv_obj_set_style_shadow_opa(btn, LV_OPA_10, 0);
-    lv_obj_set_style_shadow_ofs_y(btn, 3, 0);
-    lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
-
-    lv_obj_t* icon_label = create_label(btn, icon, &lv_font_montserrat_14, fg);
-    lv_obj_set_pos(icon_label, 17, 10);
-
-    lv_obj_t* txt = create_label(btn, text, &lv_font_instrument_sans_bold_12, fg);
-    lv_obj_set_style_text_letter_space(txt, 1, 0);
-    lv_obj_set_pos(txt, 37, 11);
-}
-
 static void create_footer(lv_obj_t* parent)
 {
     footer = lv_obj_create(parent);
@@ -1387,8 +1361,7 @@ static void create_footer(lv_obj_t* parent)
     lv_obj_set_style_bg_color(top_line, color_line(), 0);
     lv_obj_set_style_bg_opa(top_line, LV_OPA_COVER, 0);
 
-    create_footer_button(footer, 32, 92, LV_SYMBOL_LEFT, "BACK",
-                         lv_color_hex(0xFFF0F0), lv_color_hex(0xF04444), back_event_cb);
+    lv_nav_button_create(footer, 32, 10, 92, 35, back_event_cb, NULL);
 
     footer_time_label = create_label(footer, "00:00:00", &lv_font_instrument_sans_medium_20, color_muted());
     lv_obj_set_pos(footer_time_label, 1158, 16);

@@ -4,6 +4,7 @@
 #include "un260/protocol/protocol_send.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_components/lv_damped_button.h"
+#include "un260/lv_components/lv_nav_button.h"
 
 #include <string.h>
 
@@ -234,10 +235,7 @@ lv_obj_t* settings_detail_create_page_ex(lv_obj_t* parent, const char* title,
     lv_obj_set_style_bg_color(bottom_line, detail_line(), 0);
     lv_obj_set_style_bg_opa(bottom_line, LV_OPA_COVER, 0);
 
-    lv_obj_t* esc = settings_detail_create_button(header, 1156, 10, 92, 35,
-                                                  ui_text_get(UI_TEXT_SETTINGS_ESC),
-                                                  lv_color_hex(0xF04444),
-                                                  back_cb, NULL);
+    lv_obj_t* esc = lv_nav_button_create(header, 1156, 10, 92, 35, back_cb, NULL);
     lv_obj_set_style_shadow_width(esc, 0, 0);
     if (out_back_btn) {
         *out_back_btn = esc;

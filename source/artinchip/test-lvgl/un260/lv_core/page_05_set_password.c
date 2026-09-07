@@ -1,319 +1,166 @@
 #include "page_05_set_password.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/settings_detail_ui.h"
+#include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/user_cfg.h"
-
-#include <stdbool.h>
-#include <stdint.h>
 #include <string.h>
 
-#define PASSWORD_DOT_COUNT 4
-
+#define PIN_DIGITS 4
 typedef struct {
-    lv_obj_t *page;
-    lv_obj_t *display;
-    lv_obj_t *field;
-    lv_obj_t *dots[PASSWORD_DOT_COUNT];
-    lv_obj_t *error_label;
-    lv_timer_t *error_timer;
-    char input[USER_PASSWORD_MAX_LEN + 1];
+    lv_obj_t *page, *dots[PIN_DIGITS], *cursor, *status;
+    lv_timer_t *blink;
+    char input[PIN_DIGITS + 1];
+    bool cursor_on;
 } password_page_context_t;
-
 static password_page_context_t g_password_page;
 
-static void password_open_keyboard(void);
-
-static void password_error_timer_cb(lv_timer_t* timer)
+static void pin_refresh(void)
 {
-    (void)timer;
-
-    if (g_password_page.error_label &&
-        lv_obj_is_valid(g_password_page.error_label)) {
-        lv_obj_add_flag(g_password_page.error_label, LV_OBJ_FLAG_HIDDEN);
-    }
-    if (g_password_page.error_timer) {
-        lv_timer_del(g_password_page.error_timer);
-        g_password_page.error_timer = NULL;
-    }
-}
-
-static void password_show_error(void)
-{
-    if (!g_password_page.error_label ||
-        !lv_obj_is_valid(g_password_page.error_label)) return;
-
-    lv_label_set_text(g_password_page.error_label,
-                      ui_text_get(UI_TEXT_PASSWORD_ERROR));
-    lv_obj_clear_flag(g_password_page.error_label, LV_OBJ_FLAG_HIDDEN);
-
-    if (g_password_page.error_timer) {
-        lv_timer_del(g_password_page.error_timer);
-    }
-    g_password_page.error_timer = lv_timer_create(password_error_timer_cb,
-                                                  1600, NULL);
-}
-
-static void password_set_display_text(const char* value)
-{
-    size_t len;
-
-    len = value ? strlen(value) : 0;
-    if (len > USER_PASSWORD_MAX_LEN) len = USER_PASSWORD_MAX_LEN;
-
-    for (uint8_t i = 0; i < PASSWORD_DOT_COUNT; i++) {
-        bool filled = (i < len);
-
-        if (!g_password_page.dots[i] ||
-            !lv_obj_is_valid(g_password_page.dots[i])) continue;
+    size_t n = strlen(g_password_page.input);
+    for(unsigned i = 0; i < PIN_DIGITS; ++i)
         lv_obj_set_style_bg_color(g_password_page.dots[i],
-                                  filled ? lv_color_hex(0x0878C8) : lv_color_hex(0xECF4FA),
-                                  0);
-        lv_obj_set_style_border_color(g_password_page.dots[i],
-                                      filled ? lv_color_hex(0x0466AD) : lv_color_hex(0xCFE0EE),
-                                      0);
-        lv_obj_set_style_shadow_opa(g_password_page.dots[i],
-                                    filled ? LV_OPA_30 : LV_OPA_TRANSP, 0);
-    }
-
-    if (g_password_page.display && lv_obj_is_valid(g_password_page.display)) {
-        lv_label_set_text(g_password_page.display,
-                          len > 0 ? "" : ui_text_get(UI_TEXT_PASSWORD_PLACEHOLDER));
-        lv_obj_align(g_password_page.display, LV_ALIGN_BOTTOM_MID, 0, -6);
+            lv_color_hex(i < n ? 0x000000 : 0xD9E0E3), 0);
+    g_password_page.cursor_on = true;
+    if(n == PIN_DIGITS) {
+        lv_obj_add_flag(g_password_page.cursor, LV_OBJ_FLAG_HIDDEN);
+        if(g_password_page.blink) lv_timer_pause(g_password_page.blink);
+    } else {
+        lv_obj_set_x(g_password_page.cursor, 44 + (lv_coord_t)n * 64);
+        lv_obj_clear_flag(g_password_page.cursor, LV_OBJ_FLAG_HIDDEN);
+        if(g_password_page.blink) {
+            lv_timer_reset(g_password_page.blink);
+            lv_timer_resume(g_password_page.blink);
+        }
     }
 }
-
-static void password_confirm_cb(const char* value, void* user_data)
+static void pin_blink(lv_timer_t *timer)
 {
-    (void)user_data;
-
-    if (!value || value[0] == '\0') return;
-
-    lv_snprintf(g_password_page.input, sizeof(g_password_page.input), "%s", value);
-    password_set_display_text(g_password_page.input);
-
-    if (strcmp(user_cfg_password_get(), g_password_page.input) == 0) {
+    LV_UNUSED(timer);
+    if(!g_password_page.page || lv_obj_has_flag(g_password_page.page, LV_OBJ_FLAG_HIDDEN) ||
+       strlen(g_password_page.input) == PIN_DIGITS) return;
+    g_password_page.cursor_on = !g_password_page.cursor_on;
+    lv_obj_set_style_bg_opa(g_password_page.cursor,
+        g_password_page.cursor_on ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+}
+static void pin_key(lv_event_t *event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    unsigned key = (unsigned)(uintptr_t)lv_event_get_user_data(event);
+    size_t n = strlen(g_password_page.input);
+    if(key == 11) {
+        if(n != PIN_DIGITS) {
+            lv_label_set_text(g_password_page.status, "Enter exactly 4 digits.");
+            return;
+        }
+        if(strcmp(user_cfg_password_get(), g_password_page.input) == 0) {
+            memset(g_password_page.input, 0, sizeof(g_password_page.input));
+            ui_manager_switch(UI_PAGE_SETTING);
+            return;
+        }
         memset(g_password_page.input, 0, sizeof(g_password_page.input));
-        ui_manager_switch(UI_PAGE_SETTING);
-        return;
+        lv_label_set_text(g_password_page.status, "Incorrect PIN. Please try again.");
+    } else {
+        if(key == 10) { if(n) g_password_page.input[n - 1] = 0; }
+        else if(key < 10 && n < PIN_DIGITS) {
+            g_password_page.input[n] = (char)('0' + key);
+            g_password_page.input[n + 1] = 0;
+        }
+        lv_label_set_text(g_password_page.status, "When finished, press CONFIRM.");
     }
-
-    memset(g_password_page.input, 0, sizeof(g_password_page.input));
-    password_set_display_text("");
-    password_show_error();
+    lv_obj_set_style_bg_opa(g_password_page.cursor, LV_OPA_COVER, 0);
+    pin_refresh();
 }
-
-static void password_field_cb(lv_event_t* e)
+static void password_back_cb(lv_event_t *event)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    password_open_keyboard();
+    if(lv_event_get_code(event) == LV_EVENT_CLICKED) ui_manager_switch(UI_PAGE_MAIN);
 }
-
-static void password_open_keyboard(void)
+static lv_obj_t *pin_shape(lv_obj_t *parent, int x, int y, int w, int h,
+                           uint32_t color, int radius)
 {
-    settings_detail_keyboard_show(ui_text_get(UI_TEXT_PASSWORD_TITLE),
-                                  "",
-                                  USER_PASSWORD_MAX_LEN,
-                                  SETTINGS_DETAIL_KEYBOARD_NUM,
-                                  password_confirm_cb,
-                                  NULL);
+    lv_obj_t *obj = lv_obj_create(parent);
+    lv_obj_remove_style_all(obj);
+    lv_obj_set_pos(obj, x, y); lv_obj_set_size(obj, w, h);
+    lv_obj_set_style_bg_color(obj, lv_color_hex(color), 0);
+    lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(obj, radius, 0);
+    lv_obj_clear_flag(obj, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    return obj;
 }
-
-static void password_back_cb(lv_event_t* e)
+void ui_page_05_set_password_create(lv_obj_t *parent)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    settings_detail_keyboard_hide();
-    ui_manager_switch(UI_PAGE_MAIN);
-}
-
-static void password_create_login_card(lv_obj_t* parent)
-{
-    lv_obj_t* card = settings_detail_create_card(parent, 330, 34, 620, 278);
-    lv_obj_t* accent;
-    lv_obj_t* halo;
-    lv_obj_t* lock_body;
-    lv_obj_t* lock_hook;
-    lv_obj_t* pin_box;
-    lv_obj_t* password_hit_area;
-
-    lv_obj_set_style_shadow_width(card, 22, 0);
-    lv_obj_set_style_shadow_opa(card, LV_OPA_20, 0);
-
-    accent = lv_obj_create(card);
-    lv_obj_remove_style_all(accent);
-    lv_obj_set_pos(accent, 220, 22);
-    lv_obj_set_size(accent, 180, 6);
-    lv_obj_set_style_bg_color(accent, lv_color_hex(0x08C5D6), 0);
-    lv_obj_set_style_bg_opa(accent, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(accent, 3, 0);
-    lv_obj_clear_flag(accent, LV_OBJ_FLAG_SCROLLABLE);
-
-    halo = lv_obj_create(card);
-    lv_obj_remove_style_all(halo);
-    lv_obj_set_pos(halo, 270, 48);
-    lv_obj_set_size(halo, 80, 80);
-    lv_obj_set_style_radius(halo, 40, 0);
-    lv_obj_set_style_bg_color(halo, lv_color_hex(0xEAF8FF), 0);
-    lv_obj_set_style_bg_opa(halo, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(halo, 2, 0);
-    lv_obj_set_style_border_color(halo, lv_color_hex(0xBCE9F7), 0);
-    lv_obj_clear_flag(halo, LV_OBJ_FLAG_SCROLLABLE);
-
-    lock_hook = lv_obj_create(halo);
-    lv_obj_remove_style_all(lock_hook);
-    lv_obj_set_pos(lock_hook, 24, 16);
-    lv_obj_set_size(lock_hook, 32, 34);
-    lv_obj_set_style_bg_opa(lock_hook, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(lock_hook, 4, 0);
-    lv_obj_set_style_border_color(lock_hook, lv_color_hex(0x0878C8), 0);
-    lv_obj_set_style_radius(lock_hook, 16, 0);
-    lv_obj_clear_flag(lock_hook, LV_OBJ_FLAG_SCROLLABLE);
-
-    lock_body = lv_obj_create(halo);
-    lv_obj_remove_style_all(lock_body);
-    lv_obj_set_pos(lock_body, 20, 38);
-    lv_obj_set_size(lock_body, 40, 28);
-    lv_obj_set_style_radius(lock_body, 7, 0);
-    lv_obj_set_style_bg_color(lock_body, lv_color_hex(0x0878C8), 0);
-    lv_obj_set_style_bg_opa(lock_body, LV_OPA_COVER, 0);
-    lv_obj_clear_flag(lock_body, LV_OBJ_FLAG_SCROLLABLE);
-
-    settings_detail_create_label(card, ui_text_get(UI_TEXT_PASSWORD_LOGIN_TITLE),
-                                 &lv_font_instrument_sans_medium_24, lv_color_hex(0x0D3440), 206, 134);
-
-    g_password_page.field = lv_obj_create(card);
-    lv_obj_remove_style_all(g_password_page.field);
-    lv_obj_set_pos(g_password_page.field, 88, 168);
-    lv_obj_set_size(g_password_page.field, 444, 80);
-    lv_obj_set_style_bg_color(g_password_page.field, lv_color_hex(0xF6FBFF), 0);
-    lv_obj_set_style_bg_opa(g_password_page.field, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(g_password_page.field, 2, 0);
-    lv_obj_set_style_border_color(g_password_page.field, lv_color_hex(0x0878C8), 0);
-    lv_obj_set_style_radius(g_password_page.field, 8, 0);
-    lv_obj_add_flag(g_password_page.field, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(g_password_page.field, password_field_cb,
-                        LV_EVENT_CLICKED, NULL);
-
-    pin_box = lv_obj_create(g_password_page.field);
-    lv_obj_remove_style_all(pin_box);
-    lv_obj_set_pos(pin_box, 86, 12);
-    lv_obj_set_size(pin_box, 272, 34);
-    lv_obj_clear_flag(pin_box, LV_OBJ_FLAG_SCROLLABLE);
-
-    for (uint8_t i = 0; i < PASSWORD_DOT_COUNT; i++) {
-        g_password_page.dots[i] = lv_obj_create(pin_box);
-        lv_obj_remove_style_all(g_password_page.dots[i]);
-        lv_obj_set_pos(g_password_page.dots[i], (lv_coord_t)(i * 72), 0);
-        lv_obj_set_size(g_password_page.dots[i], 34, 34);
-        lv_obj_set_style_radius(g_password_page.dots[i], 17, 0);
-        lv_obj_set_style_bg_color(g_password_page.dots[i], lv_color_hex(0xECF4FA), 0);
-        lv_obj_set_style_bg_opa(g_password_page.dots[i], LV_OPA_COVER, 0);
-        lv_obj_set_style_border_width(g_password_page.dots[i], 2, 0);
-        lv_obj_set_style_border_color(g_password_page.dots[i], lv_color_hex(0xCFE0EE), 0);
-        lv_obj_set_style_shadow_width(g_password_page.dots[i], 10, 0);
-        lv_obj_set_style_shadow_color(g_password_page.dots[i], lv_color_hex(0x0878C8), 0);
-        lv_obj_set_style_shadow_opa(g_password_page.dots[i], LV_OPA_TRANSP, 0);
-        lv_obj_clear_flag(g_password_page.dots[i], LV_OBJ_FLAG_SCROLLABLE);
+    if(g_password_page.page && lv_obj_is_valid(g_password_page.page)) return;
+    lv_obj_t *content = NULL;
+    g_password_page.page = settings_detail_create_page(parent,
+        ui_text_get(UI_TEXT_PASSWORD_LOGIN_TITLE), password_back_cb, &content);
+    /* 1120 x 320, centred inside the 1280 x 345 content below the existing header. */
+    lv_obj_t *card = settings_detail_create_card(content, 80, 12, 1120, 320);
+    lv_obj_set_style_radius(card, 5, 0);
+    lv_obj_set_style_shadow_width(card, 0, 0);
+    lv_obj_set_style_border_color(card, lv_color_hex(0xE4E8EA), 0);
+    lv_obj_t *label = settings_detail_create_label(card, "SECURE ACCESS",
+        &lv_font_instrument_sans_medium_12, lv_color_hex(0x87969C), 32, 30);
+    lv_obj_set_style_text_letter_space(label, 2, 0);
+    settings_detail_create_label(card, "Enter access PIN",
+        &lv_font_instrument_sans_bold_24, lv_color_hex(0x30464F), 32, 67);
+    settings_detail_create_label(card, "Please enter your 4-digit PIN",
+        &lv_font_instrument_sans_medium_14, lv_color_hex(0x87969C), 32, 110);
+    for(unsigned i=0; i<PIN_DIGITS; ++i)
+        g_password_page.dots[i] = pin_shape(card, 48 + i*64, 176, 12, 12, 0xD9E0E3, LV_RADIUS_CIRCLE);
+    g_password_page.cursor = pin_shape(card, 44, 205, 20, 2, 0xA9B8BF, 0);
+    g_password_page.status = settings_detail_create_label(card,
+        "When finished, press CONFIRM.", &lv_font_instrument_sans_medium_14,
+        lv_color_hex(0x87969C), 32, 235);
+    lv_obj_set_width(g_password_page.status, 360);
+    pin_shape(card, 32, 273, 328, 1, 0xE6EAEC, 0);
+    settings_detail_create_label(card, "PIN VERIFICATION",
+        &lv_font_instrument_sans_medium_12, lv_color_hex(0x87969C), 32, 288);
+    settings_detail_create_label(card, "ESC Cancel",
+        &lv_font_instrument_sans_medium_12, lv_color_hex(0x87969C), 292, 288);
+    static const unsigned keys[12] = {1,2,3,4,5,6,7,8,9,10,0,11};
+    for(unsigned i=0; i<12; ++i) {
+        unsigned key = keys[i]; char digit[2] = {(char)('0'+key),0};
+        lv_damped_button_style_t style = {
+            .normal_color=key == 11 ? 0x088DA7 : 0xF7F8F8,
+            .text_color=key == 11 ? 0xFFFFFF : 0x30464F,
+            .disabled_color=0xE6EAEC, .disabled_text_color=0x87969C, .radius=0
+        };
+        lv_obj_t *btn = lv_damped_button_create(card, &style,
+            key == 10 ? LV_SYMBOL_BACKSPACE : key == 11 ? "CONFIRM" : digit,
+            key == 10 ? &lv_font_montserrat_20 :
+            key == 11 ? &lv_font_instrument_sans_medium_16 : &lv_font_instrument_sans_medium_24);
+        lv_obj_set_pos(btn, 416 + (i%3)*226, 24 + (i/3)*68);
+        lv_obj_set_size(btn, 226, 68);
+        lv_obj_set_style_border_width(btn, 1, 0);
+        lv_obj_set_style_border_color(btn, lv_color_hex(0xE8ECEE), 0);
+        lv_obj_set_style_shadow_width(btn, 0, 0);
+        lv_obj_add_event_cb(btn, pin_key, LV_EVENT_CLICKED, (void *)(uintptr_t)key);
     }
-
-    g_password_page.display = settings_detail_create_label(
-        g_password_page.field, ui_text_get(UI_TEXT_PASSWORD_PLACEHOLDER),
-        &lv_font_instrument_sans_medium_16, lv_color_hex(0x5686A5), 0, 0);
-    lv_obj_align(g_password_page.display, LV_ALIGN_BOTTOM_MID, 0, -6);
-
-    password_hit_area = lv_obj_create(g_password_page.field);
-    lv_obj_remove_style_all(password_hit_area);
-    lv_obj_set_pos(password_hit_area, 0, 0);
-    lv_obj_set_size(password_hit_area, lv_pct(100), lv_pct(100));
-    lv_obj_set_style_bg_opa(password_hit_area, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(password_hit_area, 0, 0);
-    lv_obj_add_flag(password_hit_area, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_clear_flag(password_hit_area, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_event_cb(password_hit_area, password_field_cb, LV_EVENT_CLICKED, NULL);
-
-    g_password_page.error_label = settings_detail_create_label(
-        card, "", &lv_font_instrument_sans_medium_16,
-        lv_color_hex(0xC03A2B), 258, 252);
-    lv_obj_add_flag(g_password_page.error_label, LV_OBJ_FLAG_HIDDEN);
-
-    password_set_display_text("");
+    g_password_page.blink = lv_timer_create(pin_blink, 500, NULL);
+    pin_refresh();
 }
-
-void ui_page_05_set_password_create(lv_obj_t* parent)
-{
-    lv_obj_t* content = NULL;
-
-    if (g_password_page.page && lv_obj_is_valid(g_password_page.page)) return;
-
-    ui_page_05_set_password_destroy();
-
-    if (parent == NULL) {
-        parent = lv_scr_act();
-    }
-
-    g_password_page.page = settings_detail_create_page(
-        parent, ui_text_get(UI_TEXT_PASSWORD_LOGIN_TITLE),
-        password_back_cb, &content);
-    password_create_login_card(content);
-    password_open_keyboard();
-}
-
 void ui_page_05_set_password_destroy(void)
 {
-    settings_detail_keyboard_hide();
-
-    if (g_password_page.error_timer) {
-        lv_timer_del(g_password_page.error_timer);
-        g_password_page.error_timer = NULL;
-    }
-
-    if (g_password_page.page && lv_obj_is_valid(g_password_page.page)) {
+    if(g_password_page.blink) lv_timer_del(g_password_page.blink);
+    if(g_password_page.page && lv_obj_is_valid(g_password_page.page))
         lv_obj_del(g_password_page.page);
-    }
-
     memset(&g_password_page, 0, sizeof(g_password_page));
 }
-
 bool ui_page_05_set_password_resume(void)
 {
-    if (g_password_page.page == NULL ||
-        !lv_obj_is_valid(g_password_page.page)) {
-        return false;
-    }
-
-    if (g_password_page.error_timer) {
-        lv_timer_del(g_password_page.error_timer);
-        g_password_page.error_timer = NULL;
-    }
+    if(!g_password_page.page || !lv_obj_is_valid(g_password_page.page)) return false;
     memset(g_password_page.input, 0, sizeof(g_password_page.input));
-    password_set_display_text("");
-    if (g_password_page.error_label &&
-        lv_obj_is_valid(g_password_page.error_label)) {
-        lv_obj_add_flag(g_password_page.error_label, LV_OBJ_FLAG_HIDDEN);
-    }
+    lv_label_set_text(g_password_page.status, "When finished, press CONFIRM.");
     lv_obj_clear_flag(g_password_page.page, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(g_password_page.page);
-    password_open_keyboard();
+    lv_obj_set_style_bg_opa(g_password_page.cursor, LV_OPA_COVER, 0);
+    pin_refresh();
     return true;
 }
-
 void ui_page_05_set_password_suspend(void)
 {
-    if (g_password_page.page == NULL ||
-        !lv_obj_is_valid(g_password_page.page)) {
-        return;
-    }
-
-    settings_detail_keyboard_hide();
-    if (g_password_page.error_timer) {
-        lv_timer_del(g_password_page.error_timer);
-        g_password_page.error_timer = NULL;
-    }
+    if(!g_password_page.page || !lv_obj_is_valid(g_password_page.page)) return;
+    if(g_password_page.blink) lv_timer_pause(g_password_page.blink);
     memset(g_password_page.input, 0, sizeof(g_password_page.input));
-    password_set_display_text("");
-    if (g_password_page.error_label &&
-        lv_obj_is_valid(g_password_page.error_label)) {
-        lv_obj_add_flag(g_password_page.error_label, LV_OBJ_FLAG_HIDDEN);
-    }
     lv_obj_add_flag(g_password_page.page, LV_OBJ_FLAG_HIDDEN);
 }

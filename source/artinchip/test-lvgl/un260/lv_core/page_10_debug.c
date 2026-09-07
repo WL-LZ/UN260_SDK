@@ -1,3 +1,4 @@
+#include "un260/lv_components/lv_nav_button.h"
 /* ================= page_10_debug.h ================= */
 #ifndef PAGE_10_DEBUG_H
 #define PAGE_10_DEBUG_H
@@ -491,18 +492,7 @@ void ui_page_10_debug_create(void) {
     lv_obj_set_style_text_font(btn_send_label, &lv_font_instrument_sans_bold_20, 0);
     lv_obj_center(btn_send_label);
     // 发送按钮
-    lv_obj_t* btn_sec = lv_btn_create(left_panel);
-    lv_obj_set_pos(btn_sec, 120, 4);
-    lv_obj_set_size(btn_sec, 78, 30);
-    lv_obj_set_style_bg_color(btn_sec, lv_color_hex(0x00AA00), 0);
-    lv_damped_button_register(btn_sec, lv_color_hex(0x00AA00),
-                              lv_color_hex(0x008700));
-    lv_obj_add_event_cb(btn_sec, page_06_back_btn_event_cb, LV_EVENT_CLICKED, NULL);
-
-    lv_obj_t* btn_esc_label = lv_label_create(btn_sec);
-    lv_label_set_text(btn_esc_label, "ESC");
-    lv_obj_set_style_text_font(btn_esc_label, &lv_font_instrument_sans_bold_20, 0);
-    lv_obj_center(btn_esc_label);
+    lv_nav_button_create(left_panel, 120, 4, 78, 30, page_06_back_btn_event_cb, NULL);
 
     debug_create_setting_switch(
         left_panel, 207, ui_text_get(UI_TEXT_WIDGET_SCREENSHOT_LABEL),

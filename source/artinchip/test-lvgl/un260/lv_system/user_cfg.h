@@ -63,7 +63,7 @@ typedef enum {
 #define CFD_ITEM_COUNT 4
 #define CFD_LEVEL_MIN 1
 #define CFD_LEVEL_MAX 5
-#define USER_PASSWORD_MAX_LEN 31
+#define USER_PASSWORD_MAX_LEN 4
 
 bool user_cfg_password_load(void);
 bool user_cfg_password_save(const char* password);
