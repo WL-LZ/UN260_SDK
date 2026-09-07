@@ -268,3 +268,15 @@ bool user_cfg_gesture_enabled(void)
 {
     return g_gesture_enabled;
 }
+
+static bool g_touch_feedback_enabled;
+bool user_cfg_touch_feedback_load(void)
+{
+    return user_cfg_bool_load("/etc/ui_state/touch_feedback.cfg", false, &g_touch_feedback_enabled);
+}
+bool user_cfg_touch_feedback_save(bool enabled)
+{
+    return user_cfg_bool_save("/etc/ui_state/touch_feedback.cfg", "/etc/ui_state/touch_feedback.cfg.tmp",
+                              enabled, &g_touch_feedback_enabled);
+}
+bool user_cfg_touch_feedback_enabled(void) { return g_touch_feedback_enabled; }

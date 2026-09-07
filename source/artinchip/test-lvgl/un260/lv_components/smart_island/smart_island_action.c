@@ -1,4 +1,5 @@
 #include "un260/lv_components/smart_island/smart_island_internal.h"
+#include "un260/gesture/touch_feedback.h"
 #include "un260/lv_components/lv_fault_popup.h"
 #include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_components/lv_qr_popup.h"
@@ -389,6 +390,12 @@ static void smart_island_action_btn_cb(lv_event_t *e)
         return;
     }
 
+    if (action_id == SMART_ISLAND_ACTION_TOUCH_GUIDE) {
+        if (touch_feedback_set_enabled(!touch_feedback_enabled()))
+            smart_island_action_item_apply(page_index);
+        return;
+    }
+
     if (action_id == SMART_ISLAND_ACTION_QR) {
         smart_island_show_qr_popup();
         return;
@@ -615,7 +622,8 @@ static void smart_island_action_btn_style_apply(uint8_t index)
     }
 
     is_switch = (g_si_ctx.action.ids[index] == SMART_ISLAND_ACTION_FUNC3 ||
-        g_si_ctx.action.ids[index] == SMART_ISLAND_ACTION_FUNC4);
+        g_si_ctx.action.ids[index] == SMART_ISLAND_ACTION_FUNC4 ||
+        g_si_ctx.action.ids[index] == SMART_ISLAND_ACTION_TOUCH_GUIDE);
 
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(btn, 1, 0);
@@ -641,6 +649,8 @@ static void smart_island_action_btn_style_apply(uint8_t index)
 
     if (g_si_ctx.action.ids[index] == SMART_ISLAND_ACTION_FUNC4) {
         enabled = smart_island_pure_count_is_enabled();
+    } else if (g_si_ctx.action.ids[index] == SMART_ISLAND_ACTION_TOUCH_GUIDE) {
+        enabled = touch_feedback_enabled();
     } else {
         enabled = fault_popup_get_auto_enabled();
     }
@@ -683,6 +693,8 @@ static void smart_island_action_item_apply(uint8_t index)
             lv_label_set_text(label, ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_ACTION_FUNC3));
         } else if (g_si_ctx.action.ids[index] == SMART_ISLAND_ACTION_FUNC4) {
             lv_label_set_text(label, ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_ACTION_FUNC4));
+        } else if (g_si_ctx.action.ids[index] == SMART_ISLAND_ACTION_TOUCH_GUIDE) {
+            lv_label_set_text(label, "TOUCH GUIDE");
         } else if (g_si_ctx.action.text_ids[index] < UI_TEXT_MAX) {
             lv_label_set_text(label, ui_text_get(g_si_ctx.action.text_ids[index]));
         } else if (g_si_ctx.action.texts[index][0] != '\0') {
@@ -812,11 +824,11 @@ void smart_island_action_btn_create(void)
 {
     static const uint8_t default_ids[SMART_ISLAND_ACTION_PAGE_COUNT] = {
         SMART_ISLAND_ACTION_FUNC4, SMART_ISLAND_ACTION_FUNC3,
-        SMART_ISLAND_ACTION_TIME_SETTING, SMART_ISLAND_ACTION_QR
+        SMART_ISLAND_ACTION_TIME_SETTING, SMART_ISLAND_ACTION_TOUCH_GUIDE, SMART_ISLAND_ACTION_QR
     };
     static const ui_text_id_t default_text_ids[SMART_ISLAND_ACTION_PAGE_COUNT] = {
         UI_TEXT_WIDGET_SMART_ISLAND_ACTION_FUNC4, UI_TEXT_WIDGET_SMART_ISLAND_ACTION_FUNC3,
-        UI_TEXT_WIDGET_SMART_ISLAND_ACTION_TIME, UI_TEXT_WIDGET_SMART_ISLAND_ACTION_QR
+        UI_TEXT_WIDGET_SMART_ISLAND_ACTION_TIME, UI_TEXT_MAX, UI_TEXT_WIDGET_SMART_ISLAND_ACTION_QR
     };
     lv_obj_t *btn = NULL, *label = NULL, *arrow = NULL;
 

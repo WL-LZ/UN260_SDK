@@ -355,8 +355,8 @@ const ui_text_item_t g_ui_text_page_group[UI_TEXT_PAGE_MAX] = {
     [UI_TEXT_GESTURE_TOGGLE_OFF] = {"GESTURES OFF", "手势已关闭", "제스처 꺼짐"},
     [UI_TEXT_GESTURE_GUIDE_TITLE] = {"SYSTEM GESTURES", "系统手势", "시스템 제스처"},
     [UI_TEXT_GESTURE_HOME_TITLE] = {"RETURN TO MAIN", "返回主界面", "메인 화면으로"},
-    [UI_TEXT_GESTURE_HOME_BODY] = {"Swipe up with one finger from the bottom edge on any normal page.", "在任意普通页面，从屏幕底边单指向上滑动。", "일반 화면에서 아래쪽 가장자리부터 한 손가락으로 위로 밉니다."},
+    [UI_TEXT_GESTURE_HOME_BODY] = {"Swipe up with two fingers anywhere to return to Main.", "在任意位置双指向上滑动，返回主界面。", "어디서든 두 손가락으로 위로 밀어 메인 화면으로 돌아갑니다."},
     [UI_TEXT_GESTURE_EXIT_TITLE] = {"EXIT CURRENT PAGE", "退出当前页面", "현재 화면 나가기"},
-    [UI_TEXT_GESTURE_EXIT_BODY] = {"Swipe upward with three fingers from anywhere to return to the previous page.", "在任意位置三指向上滑动，返回上一个页面。", "어디서든 세 손가락으로 위로 밀어 이전 화면으로 돌아갑니다."},
+    [UI_TEXT_GESTURE_EXIT_BODY] = {"Swipe down with two fingers anywhere to return to the previous page.", "在任意位置双指向下滑动，返回上一个页面。", "어디서든 두 손가락으로 아래로 밀어 이전 화면으로 돌아갑니다."},
     [UI_TEXT_GESTURE_GOT_IT] = {"GOT IT", "知道了", "확인"}
 };

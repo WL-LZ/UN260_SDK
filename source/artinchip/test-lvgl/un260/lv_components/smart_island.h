@@ -45,6 +45,7 @@ typedef struct {
 #define SMART_ISLAND_ACTION_TIME_SETTING  2
 #define SMART_ISLAND_ACTION_FUNC3         3
 #define SMART_ISLAND_ACTION_FUNC4         4
+#define SMART_ISLAND_ACTION_TOUCH_GUIDE   5
 
 void smart_island_create(lv_obj_t *parent); //创建灵动岛
 void smart_island_destroy(void); //销毁灵动岛

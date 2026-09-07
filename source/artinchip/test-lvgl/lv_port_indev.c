@@ -18,6 +18,7 @@
 #include <dev/evdev/input.h>
 #else
 #include <linux/input.h>
+#include "un260/gesture/touch_frame.h"
 #endif
 
 #if USE_XKB
@@ -48,17 +49,25 @@ static lv_port_pointer_observer_t g_pointer_observer;
 static void *g_pointer_observer_data;
 static uint8_t g_touch_count;
 
-#define EVDEV_MT_SLOT_COUNT 10
-typedef struct {
-    int x;
-    int y;
-    bool active;
-    bool has_x;
-    bool has_y;
-} evdev_mt_slot_t;
+static touch_frame_t g_mt_frame;
+static lv_indev_t *g_pointer_indev;
+static bool g_raw_down, g_contact_captured;
 
-static evdev_mt_slot_t g_mt_slots[EVDEV_MT_SLOT_COUNT];
-static int g_mt_slot;
+static void evdev_seed_slot_positions(void)
+{
+    if(!g_mt_frame.type_b) return;
+    struct input_absinfo slot;
+    if(ioctl(evdev_fd, EVIOCGABS(ABS_MT_SLOT), &slot) == 0)
+        g_mt_frame.slot = slot.value >= 0 && slot.value < TOUCH_SLOTS ? slot.value : -1;
+    int x[TOUCH_SLOTS + 1] = {ABS_MT_POSITION_X};
+    int y[TOUCH_SLOTS + 1] = {ABS_MT_POSITION_Y};
+    bool have_x = ioctl(evdev_fd, EVIOCGMTSLOTS(sizeof(x)), x) == 0;
+    bool have_y = ioctl(evdev_fd, EVIOCGMTSLOTS(sizeof(y)), y) == 0;
+    for(int i = 0; i < TOUCH_SLOTS; ++i) {
+        if(have_x) { g_mt_frame.slots[i].x = x[i + 1]; g_mt_frame.slots[i].has_x = true; }
+        if(have_y) { g_mt_frame.slots[i].y = y[i + 1]; g_mt_frame.slots[i].has_y = true; }
+    }
+}
 
 static bool evdev_is_touch_device(const char *dev_name)
 {
@@ -150,12 +159,8 @@ static void evdev_feedback(lv_indev_drv_t *drv, uint8_t event_code)
         evdev_pressed_obj = NULL;
     }
 
-    if(g_pointer_observer != NULL) {
-        lv_point_t point;
-        lv_indev_get_point(indev, &point);
-        g_pointer_observer(indev, (lv_event_code_t)event_code, &point,
-                           g_touch_count, g_pointer_observer_data);
-    }
+    /* Navigation observes SYN_REPORT frames in evdev_read, not widget events.
+     * PRESS_LOST on an ordinary button must not end a multi-finger gesture. */
 }
 
 void lv_port_indev_set_pointer_observer(lv_port_pointer_observer_t observer,
@@ -168,6 +173,29 @@ void lv_port_indev_set_pointer_observer(lv_port_pointer_observer_t observer,
 uint8_t lv_port_indev_touch_count(void)
 {
     return g_touch_count;
+}
+
+uint8_t lv_port_indev_touch_points(lv_point_t *points, int32_t *ids, uint8_t capacity)
+{
+    if(!points || !ids || !g_pointer_indev || !g_pointer_indev->driver->disp) return 0;
+    int width = g_pointer_indev->driver->disp->driver->hor_res;
+    int height = g_pointer_indev->driver->disp->driver->ver_res;
+    uint8_t count = g_mt_frame.count < capacity ? g_mt_frame.count : capacity;
+    for(uint8_t i = 0; i < count; ++i) {
+#if EVDEV_SWAP_AXES
+        int x = g_mt_frame.contacts[i].y, y = g_mt_frame.contacts[i].x;
+#else
+        int x = g_mt_frame.contacts[i].x, y = g_mt_frame.contacts[i].y;
+#endif
+#if EVDEV_CALIBRATE
+        x = map(x, EVDEV_HOR_MIN, EVDEV_HOR_MAX, 0, width);
+        y = map(y, EVDEV_VER_MIN, EVDEV_VER_MAX, 0, height);
+#endif
+        points[i].x = x < 0 ? 0 : x >= width ? width - 1 : x;
+        points[i].y = y < 0 ? 0 : y >= height ? height - 1 : y;
+        ids[i] = g_mt_frame.contacts[i].id;
+    }
+    return count;
 }
 
 void lv_port_indev_set_drag_obj(lv_obj_t *obj, bool enable)
@@ -236,8 +264,12 @@ bool evdev_set_file(const char* dev_name)
      evdev_press_cancelled = false;
      evdev_pressed_obj = NULL;
      g_touch_count = 0;
-     g_mt_slot = 0;
-     memset(g_mt_slots, 0, sizeof(g_mt_slots));
+     struct input_absinfo slot_info;
+     touch_frame_init(&g_mt_frame, ioctl(evdev_fd, EVIOCGABS(ABS_MT_SLOT), &slot_info) == 0);
+     evdev_seed_slot_positions();
+     fprintf(stderr, "TOUCH_INPUT protocol=%s slots=%d observer=raw-frame\n",
+             g_mt_frame.type_b ? "B" : "A/single", TOUCH_SLOTS);
+     g_raw_down = g_contact_captured = false;
 
      return true;
 }
@@ -249,9 +281,17 @@ void evdev_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
 {
 #if USE_TSLIB == 0
     struct input_event in;
-    bool mt_seen = false;
+    bool frame_ready = false;
 
-    while(read(evdev_fd, &in, sizeof(struct input_event)) > 0) {
+    while(read(evdev_fd, &in, sizeof(struct input_event)) == sizeof(struct input_event)) {
+        bool recovering = g_mt_frame.recovery;
+        frame_ready = touch_frame_feed(&g_mt_frame, &in);
+        if(recovering && !g_mt_frame.recovery) evdev_seed_slot_positions();
+        if(in.type == EV_SYN) {
+            if(frame_ready) break;
+            continue;
+        }
+        if(g_mt_frame.dropped || g_mt_frame.recovery) continue;
         if(in.type == EV_REL) {
             if(in.code == REL_X)
 				#if EVDEV_SWAP_AXES
@@ -278,29 +318,6 @@ void evdev_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
 				#else
 					evdev_root_y = in.value;
 				#endif
-            else if(in.code == ABS_MT_SLOT) {
-                if(in.value >= 0 && in.value < EVDEV_MT_SLOT_COUNT)
-                    g_mt_slot = in.value;
-                mt_seen = true;
-            }
-            else if(in.code == ABS_MT_POSITION_X) {
-                g_mt_slots[g_mt_slot].x = in.value;
-                g_mt_slots[g_mt_slot].has_x = true;
-                mt_seen = true;
-            }
-            else if(in.code == ABS_MT_POSITION_Y) {
-                g_mt_slots[g_mt_slot].y = in.value;
-                g_mt_slots[g_mt_slot].has_y = true;
-                mt_seen = true;
-            }
-            else if(in.code == ABS_MT_TRACKING_ID) {
-                g_mt_slots[g_mt_slot].active = in.value >= 0;
-                if(in.value < 0) {
-                    g_mt_slots[g_mt_slot].has_x = false;
-                    g_mt_slots[g_mt_slot].has_y = false;
-                }
-                mt_seen = true;
-            }
         } else if(in.type == EV_KEY) {
             if(in.code == BTN_MOUSE || in.code == BTN_TOUCH) {
                 if(in.value == 0) {
@@ -360,28 +377,15 @@ void evdev_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
         }
     }
 
-    if(mt_seen) {
-        int x_sum = 0;
-        int y_sum = 0;
-        uint8_t active = 0;
-        int i;
-
-        for(i = 0; i < EVDEV_MT_SLOT_COUNT; i++) {
-            if(g_mt_slots[i].active && g_mt_slots[i].has_x &&
-               g_mt_slots[i].has_y) {
-                x_sum += g_mt_slots[i].x;
-                y_sum += g_mt_slots[i].y;
-                active++;
-            }
-        }
-        g_touch_count = active;
-        if(active > 0) {
+    if(frame_ready && (g_mt_frame.mt || g_mt_frame.recovery)) {
+        g_touch_count = g_mt_frame.count;
+        if(g_touch_count > 0) {
 #if EVDEV_SWAP_AXES
-            evdev_root_x = y_sum / active;
-            evdev_root_y = x_sum / active;
+            evdev_root_x = g_mt_frame.y;
+            evdev_root_y = g_mt_frame.x;
 #else
-            evdev_root_x = x_sum / active;
-            evdev_root_y = y_sum / active;
+            evdev_root_x = g_mt_frame.x;
+            evdev_root_y = g_mt_frame.y;
 #endif
             evdev_button = LV_INDEV_STATE_PR;
         } else {
@@ -449,6 +453,42 @@ void evdev_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
     if(data->point.y >= drv->disp->driver->ver_res)
       data->point.y = drv->disp->driver->ver_res - 1;
 
+    /* A complete frame is delivered even on empty space or while LVGL waits
+     * for release. Capture once, cancel the previous target, and do not let
+     * a remaining finger click after a multi-finger action. */
+#if USE_TSLIB == 0
+    if(frame_ready) {
+#else
+    {
+#endif
+        bool down = evdev_button == LV_INDEV_STATE_PR;
+        lv_event_code_t event = down ? (g_raw_down ? LV_EVENT_PRESSING : LV_EVENT_PRESSED)
+                                    : LV_EVENT_RELEASED;
+        bool capture = false;
+        if(g_pointer_observer)
+            capture = g_pointer_observer(g_pointer_indev, event, &data->point,
+                                         g_touch_count, g_pointer_observer_data);
+        if(capture && !g_contact_captured) {
+            g_contact_captured = true;
+            lv_obj_t *cancelled = evdev_pressed_obj;
+            evdev_pressed_obj = NULL;
+            if(cancelled && lv_obj_is_valid(cancelled)) {
+                lv_event_send(cancelled, LV_EVENT_PRESS_LOST, g_pointer_indev);
+                if(lv_obj_is_valid(cancelled)) lv_obj_clear_state(cancelled, LV_STATE_PRESSED);
+            }
+            lv_indev_reset(g_pointer_indev, NULL);
+            lv_indev_wait_release(g_pointer_indev);
+        }
+        g_raw_down = down;
+        if(!down) g_contact_captured = false;
+    }
+    if(g_contact_captured) data->state = LV_INDEV_STATE_REL;
+#if USE_TSLIB == 0
+    /* Let LVGL consume subsequent complete reports, including the final
+     * release, instead of merging an entire swipe into one centroid. */
+    data->continue_reading = frame_ready;
+#endif
+
     return ;
 }
 
@@ -473,7 +513,7 @@ void lv_port_indev_init(void)
     indev_drv.feedback_cb = evdev_feedback;
 
     /* Register the driver in LVGL and save the created input device object */
-    lv_indev_drv_register(&indev_drv);
+    g_pointer_indev = lv_indev_drv_register(&indev_drv);
 }
 
 #endif

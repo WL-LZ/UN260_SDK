@@ -22,6 +22,10 @@ static lv_obj_t *guide_label(lv_obj_t *parent, const char *text,
     return label;
 }
 
+static void guide_puck_x(void *object, int32_t value)
+{
+    lv_obj_set_x((lv_obj_t *)object, (lv_coord_t)value);
+}
 static void guide_puck_y(void *object, int32_t value)
 {
     lv_obj_set_y((lv_obj_t *)object, (lv_coord_t)value);
@@ -53,13 +57,19 @@ static void guide_add_motion(lv_obj_t *page, const gesture_definition_t *definit
         lv_obj_set_style_shadow_opa(puck, LV_OPA_20, 0);
         lv_anim_init(&anim);
         lv_anim_set_var(&anim, puck);
-        lv_anim_set_values(&anim, 92, 22);
+        lv_anim_set_values(&anim,
+            definition->action == GESTURE_ACTION_HOME ? 22 : 92,
+            definition->action == GESTURE_ACTION_HOME ? 92 : 22);
         lv_anim_set_time(&anim, 760);
         lv_anim_set_playback_time(&anim, 180);
         lv_anim_set_repeat_delay(&anim, 360);
         lv_anim_set_repeat_count(&anim, LV_ANIM_REPEAT_INFINITE);
         lv_anim_set_path_cb(&anim, lv_anim_path_ease_out);
-        lv_anim_set_exec_cb(&anim, guide_puck_y);
+        if(definition->action == GESTURE_ACTION_EXIT_PAGE) {
+            lv_obj_set_y(puck, 54);
+            lv_anim_set_values(&anim, 8, 140);
+            lv_anim_set_exec_cb(&anim, guide_puck_x);
+        } else lv_anim_set_exec_cb(&anim, guide_puck_y);
         lv_anim_start(&anim);
     }
 }
@@ -152,12 +162,16 @@ void gesture_guide_show(void)
         lv_obj_t *page = lv_content_pager_get_page(pager, (uint8_t)i);
         lv_obj_t *label;
         guide_add_motion(page, definition);
-        label = guide_label(page, ui_text_get(definition->title_text),
+        label = guide_label(page, definition->action == GESTURE_ACTION_EXIT_PAGE ? "EDGE BACK" : definition->action == GESTURE_ACTION_EXPORT ? "EXPORT DATA" : "HOME",
                             &lv_font_instrument_sans_bold_18, 0x24313D);
         lv_obj_set_pos(label, 310, 28);
         lv_obj_set_width(label, 400);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
-        label = guide_label(page, ui_text_get(definition->body_text),
+        label = guide_label(page, definition->action == GESTURE_ACTION_EXIT_PAGE ?
+                            "Swipe inward from either side edge, then release to go back." :
+                            definition->action == GESTURE_ACTION_EXPORT ?
+                            "Swipe up with two fingers to export current counting data to USB." :
+                            "Swipe down with two fingers to return to Main.",
                             &lv_font_instrument_sans_medium_14, 0x66737E);
         lv_obj_set_pos(label, 310, 70);
         lv_obj_set_size(label, 400, 70);
