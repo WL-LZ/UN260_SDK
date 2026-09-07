@@ -22,7 +22,6 @@
 #define FAULT_AUTO_RETRY_INTERVAL_MS 2000
 #define FAULT_AUTO_RETRY_MAX         3
 
-#define FAULT_POPUP_BG_PATH   "L:/usr/local/share/lvgl_data/fault_popup_bg.png"
 #define FAULT_MACHINE_IMG_FMT "L:/usr/local/share/lvgl_data/%02Xmachine.png"
 #define FAULT_ERR_IMG_FMT     "L:/usr/local/share/lvgl_data/%02X_err.png"
 
@@ -718,6 +717,59 @@ void fault_popup_reset_auto_retry(void)
     g_fault_auto_retry_last_tick = 0;
 }
 
+/* Native primitives replace the 1230x369 RGBA PNG (1,818,432 DMA bytes).
+ * This remains the independent machine-fault popup, not a generic modal. */
+static void fault_bg_rect(lv_draw_ctx_t *ctx, const lv_area_t *origin,
+                          int x, int y, int w, int h, int radius, uint32_t color)
+{
+    lv_draw_rect_dsc_t d;
+    lv_draw_rect_dsc_init(&d);
+    d.bg_color = lv_color_hex(color);
+    d.radius = radius;
+    lv_area_t area = {origin->x1+x, origin->y1+y, origin->x1+x+w-1, origin->y1+y+h-1};
+    lv_draw_rect(ctx, &d, &area);
+}
+
+static void fault_bg_symbol(lv_draw_ctx_t *ctx, const lv_area_t *origin,
+                            int x, int y, int w, int h, const char *text, uint32_t color)
+{
+    lv_draw_label_dsc_t d;
+    lv_draw_label_dsc_init(&d);
+    d.color = lv_color_hex(color);
+    d.font = &lv_font_montserrat_20;
+    d.align = LV_TEXT_ALIGN_CENTER;
+    lv_area_t area = {origin->x1+x, origin->y1+y, origin->x1+x+w-1, origin->y1+y+h-1};
+    lv_draw_label(ctx, &d, &area, text, NULL);
+}
+
+static void fault_background_draw(lv_event_t *event)
+{
+    lv_draw_ctx_t *ctx = lv_event_get_draw_ctx(event);
+    lv_area_t a;
+    lv_obj_get_coords(lv_event_get_target(event), &a);
+    fault_bg_rect(ctx,&a,0,0,570,368,24,0xF0F1F6);
+    fault_bg_rect(ctx,&a,546,0,24,368,0,0xF0F1F6);
+    for(int x=16; x<=284; x+=268) {
+        int w = x == 16 ? 244 : 274;
+        fault_bg_rect(ctx,&a,x+2,44,w,320,24,0xE4E5E9);
+        fault_bg_rect(ctx,&a,x,41,w,320,24,0xFFFFFF);
+    }
+    fault_bg_symbol(ctx,&a,262,188,20,24,LV_SYMBOL_RIGHT,0xA7A9AF);
+    fault_bg_rect(ctx,&a,600,19,39,39,7,0xFF3B30);
+    fault_bg_rect(ctx,&a,608,27,23,23,12,0xFFFFFF);
+    fault_bg_rect(ctx,&a,609,28,21,21,11,0xFF3B30);
+    fault_bg_symbol(ctx,&a,601,26,37,24,"!",0xFFFFFF);
+    fault_bg_rect(ctx,&a,600,101,604,60,14,0xFFBDBD);
+    fault_bg_rect(ctx,&a,601,102,602,58,13,0xFDEFEF);
+    fault_bg_rect(ctx,&a,608,106,14,14,7,0xFF3B30);
+    fault_bg_symbol(ctx,&a,606,101,18,24,"x",0xFFFFFF);
+    fault_bg_rect(ctx,&a,600,187,604,2,0,0xF1F2F3);
+    fault_bg_rect(ctx,&a,600,214,604,85,14,0xF7F7F8);
+    fault_bg_rect(ctx,&a,608,221,10,10,5,0x007AFF);
+    fault_bg_rect(ctx,&a,610,230,6,2,1,0x007AFF);
+    fault_bg_rect(ctx,&a,611,233,4,1,0,0x007AFF);
+}
+
 void show_fault_popup_ex(const fault_popup_data_t* data)
 {
     char time_buf[64];
@@ -733,11 +785,10 @@ void show_fault_popup_ex(const fault_popup_data_t* data)
     lv_obj_set_size(g_fault_popup, 1230, 368);
     lv_obj_center(g_fault_popup);
     lv_obj_clear_flag(g_fault_popup, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_t* bg = lv_img_create(g_fault_popup);
-    lv_img_set_src(bg, FAULT_POPUP_BG_PATH);
-    lv_obj_set_size(bg, 1230, 368);
-    lv_obj_center(bg);
+    lv_obj_set_style_bg_color(g_fault_popup, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(g_fault_popup, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(g_fault_popup, 24, 0);
+    lv_obj_add_event_cb(g_fault_popup, fault_background_draw, LV_EVENT_DRAW_MAIN, NULL);
 
     /* 左侧图片区 */
     g_fault_machine_img = lv_img_create(g_fault_popup);
@@ -828,7 +879,7 @@ void show_fault_popup_ex(const fault_popup_data_t* data)
 
     g_fault_reason_label = lv_label_create(g_fault_popup);
     lv_label_set_text_fmt(g_fault_reason_label, "%s", data->reason_text);
-    lv_obj_set_width(g_fault_reason_label, 680);
+    lv_obj_set_width(g_fault_reason_label, 563);
     lv_label_set_long_mode(g_fault_reason_label, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_color(g_fault_reason_label, lv_color_hex(0x555555), 0);
     lv_obj_set_style_text_font(g_fault_reason_label, &lv_font_instrument_sans_medium_16, 0);
