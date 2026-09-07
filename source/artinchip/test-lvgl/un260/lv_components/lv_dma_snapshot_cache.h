@@ -82,6 +82,13 @@ bool lv_dma_static_surface_attach(lv_dma_static_surface_t *surface,
                                   const char *cache_key);
 void lv_dma_static_surface_release(lv_dma_static_surface_t *surface);
 
+/* Private, mutable page snapshot. Call only on the UI thread with the live
+ * source laid out and visible, and the replacement image hidden. Reuses the
+ * backing allocation on recapture; never shares a name-keyed static image.
+ * The caller controls which layer is visible. Release with the function above. */
+bool lv_dma_transition_surface_capture(lv_dma_static_surface_t *surface,
+                                       lv_obj_t *source, const char *name);
+
 /* Cache only the normal-state visual skin while retaining the live source
  * object for hit-testing, children and pressed-state feedback. */
 bool lv_dma_static_skin_attach(lv_dma_static_skin_t *skin,

@@ -8,6 +8,7 @@
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/protocol/protocol_send.h"
 #include "un260/lv_core/page_01_main.h"
+#include "un260/innovation/page_32_innovation.h"
 #include "un260/lv_system/app_clock.h"
 #include "aic_ui/perf_stats.h"
 #include"lv_page_declear.h"
@@ -472,6 +473,9 @@ void ui_manager_switch(ui_page_t page)
         phase_started_us = app_clock_monotonic_us();
     }
     g_page_manager.current = page;
+    if (page == UI_PAGE_MAIN) {
+        page_32_innovation_schedule_preload();
+    }
     ui_manager_schedule_first_frame();
     ui_manager_transition_finish();
     if (profile_enabled) {
@@ -578,6 +582,9 @@ bool ui_manager_adopt_precreated_page(ui_page_t page)
         phase_started_us = app_clock_monotonic_us();
     }
     g_page_manager.current = page;
+    if (page == UI_PAGE_MAIN) {
+        page_32_innovation_schedule_preload();
+    }
     lv_obj_update_layout(lv_scr_act());
     ui_manager_schedule_first_frame();
     if (g_page_registry[page].cache_policy == UI_PAGE_RETAINED) {

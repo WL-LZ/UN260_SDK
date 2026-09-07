@@ -1,4 +1,5 @@
 #include "page_32_innovation.h"
+#include "lv_port_indev.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -9,6 +10,9 @@
 #include "un260/font/manrope_fonts.h"
 #include "un260/lv_components/lv_content_pager.h"
 #include "un260/lv_components/lv_damped_button.h"
+#include "un260/lv_components/lv_nav_button.h"
+#include "un260/lv_components/lv_modal_dialog.h"
+#include "un260/lv_components/lv_dma_snapshot_cache.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/page_01_main.h"
 #include "un260/lv_system/ui_text.h"
@@ -17,6 +21,7 @@
 #include "un260/machine_state/machine_state.h"
 #include "un260/lv_system/app_clock.h"
 #include "aic_ui/perf_stats.h"
+#include "un260/lv_drivers/uart_io.h"
 
 #define INNOVATION_BG             0xE8EFF3
 #define INNOVATION_CARD           0xFFFFFF
@@ -76,12 +81,20 @@ static innovation_page_context_t g_page = {
     .target_passes = MULTI_PASS_VERIFY_MIN_PASSES,
 };
 static lv_obj_t *g_handle_touch;
-static lv_obj_t *g_prompt;
-static lv_obj_t *g_transition_surface;
-static lv_obj_t *g_transition_title;
+static lv_modal_dialog_t g_prompt;
 static innovation_handle_gesture_t g_handle_gesture;
+static lv_dma_static_surface_t g_transition_snapshot;
+static bool g_transition_snapshot_valid;
+static bool g_transition_snapshot_dirty = true;
+static bool g_transition_prepare_failed;
+static uint32_t g_transition_failure_tick;
+static lv_timer_t *g_preview_preload_timer;
 static bool g_page_transitioning;
+static lv_timer_t *g_back_first_frame_timer;
+static uint32_t g_back_tick, g_back_frames;
+static void innovation_back_stop(void);
 static void innovation_preview_preload_async(void *user_data);
+static void innovation_preview_preload_timer_cb(lv_timer_t *timer);
 static lv_obj_t *innovation_label(lv_obj_t *parent, const char *text,
                                   const lv_font_t *font, uint32_t color);
 static void innovation_label_set_if_changed(lv_obj_t *label, const char *text);
@@ -89,66 +102,37 @@ static lv_obj_t *innovation_box(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
                                 lv_coord_t width, lv_coord_t height,
                                 uint32_t color, lv_coord_t radius);
 
-static void innovation_transition_surface_delete(void)
+static void innovation_set_hidden(lv_obj_t *object, bool hidden)
 {
-    if (g_transition_surface != NULL && lv_obj_is_valid(g_transition_surface)) {
-        lv_obj_del(g_transition_surface);
-    }
-    g_transition_surface = NULL;
-    g_transition_title = NULL;
+    if (object == NULL || !lv_obj_is_valid(object)) return;
+    if (lv_obj_has_flag(object, LV_OBJ_FLAG_HIDDEN) == hidden) return;
+    if (hidden) lv_obj_add_flag(object, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_clear_flag(object, LV_OBJ_FLAG_HIDDEN);
 }
 
-static void innovation_transition_surface_park(void)
+static void innovation_set_y_if_changed(lv_obj_t *object, lv_coord_t y)
 {
-    if (g_transition_surface == NULL || !lv_obj_is_valid(g_transition_surface)) {
-        g_transition_surface = NULL;
-        g_transition_title = NULL;
-        return;
+    if (object != NULL && lv_obj_is_valid(object) &&
+        lv_obj_get_y(object) != y) {
+        lv_obj_set_y(object, y);
     }
-    lv_anim_del(g_transition_surface, NULL);
-    lv_obj_set_y(g_transition_surface, -400);
 }
 
-static lv_obj_t *innovation_transition_surface_create(lv_coord_t y)
+static void innovation_set_bg_if_changed(lv_obj_t *object, uint32_t color)
 {
-    lv_obj_t *header;
-    lv_obj_t *label;
-    uint64_t started_us = perf_profile_is_enabled() ?
-        app_clock_monotonic_us() : 0;
+    if (object == NULL || !lv_obj_is_valid(object)) return;
+    if (lv_color_to32(lv_obj_get_style_bg_color(object, 0)) ==
+        lv_color_to32(lv_color_hex(color))) return;
+    lv_obj_set_style_bg_color(object, lv_color_hex(color), 0);
+}
 
-    if (g_transition_surface != NULL && lv_obj_is_valid(g_transition_surface)) {
-        if (g_transition_title != NULL && lv_obj_is_valid(g_transition_title)) {
-            innovation_label_set_if_changed(
-                g_transition_title,
-                ui_text_get(UI_TEXT_INNOVATION_CENTER_TITLE));
-        }
-        lv_obj_set_y(g_transition_surface, y);
-        lv_obj_move_foreground(g_transition_surface);
-        return g_transition_surface;
-    }
-    g_transition_surface = NULL;
-    g_transition_title = NULL;
-    g_transition_surface = innovation_box(lv_scr_act(), 0, y, 1280, 400,
-                                           INNOVATION_BG, 0);
-    header = innovation_box(g_transition_surface, 16, 12, 1248, 50,
-                            INNOVATION_CARD, 18);
-    label = innovation_label(header, ui_text_get(UI_TEXT_INNOVATION_CENTER_TITLE),
-                             &lv_font_instrument_sans_bold_20,
-                             INNOVATION_TEXT);
-    g_transition_title = label;
-    lv_obj_set_pos(label, 22, 13);
-    innovation_box(g_transition_surface, 16, 72, 238, 314,
-                   INNOVATION_CARD, 22);
-    innovation_box(g_transition_surface, 266, 72, 998, 314,
-                   INNOVATION_CARD, 22);
-    lv_obj_clear_flag(g_transition_surface, LV_OBJ_FLAG_CLICKABLE |
-                                            LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_move_foreground(g_transition_surface);
-    if (started_us != 0) {
-        perf_profile_report_event_us("INNOVATION", "SURFACE_CREATE",
-            app_clock_elapsed_us32(started_us, app_clock_monotonic_us()));
-    }
-    return g_transition_surface;
+static void innovation_set_text_color_if_changed(lv_obj_t *object,
+                                                 uint32_t color)
+{
+    if (object == NULL || !lv_obj_is_valid(object)) return;
+    if (lv_color_to32(lv_obj_get_style_text_color(object, 0)) ==
+        lv_color_to32(lv_color_hex(color))) return;
+    lv_obj_set_style_text_color(object, lv_color_hex(color), 0);
 }
 
 static void innovation_refresh_pause(void)
@@ -228,16 +212,13 @@ static lv_obj_t *innovation_button(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
 
 static void innovation_prompt_close(void)
 {
-    if (g_prompt != NULL && lv_obj_is_valid(g_prompt)) {
-        lv_obj_del(g_prompt);
-    }
-    g_prompt = NULL;
+    lv_modal_dialog_hide(&g_prompt);
 }
 
 static bool innovation_page_refresh(void);
 static void innovation_prompt_single(const char *title, const char *body,
                                      const char *button_text, uint32_t accent,
-                                     lv_event_cb_t callback);
+                                     lv_modal_dialog_action_cb_t callback);
 
 static void innovation_feature_hint_refresh(void)
 {
@@ -247,12 +228,10 @@ static void innovation_feature_hint_refresh(void)
     top = lv_obj_get_scroll_y(g_page.feature_scroll);
     bottom = lv_obj_get_scroll_bottom(g_page.feature_scroll);
     if (g_page.feature_hint_top != NULL) {
-        if (top > 2) lv_obj_clear_flag(g_page.feature_hint_top, LV_OBJ_FLAG_HIDDEN);
-        else lv_obj_add_flag(g_page.feature_hint_top, LV_OBJ_FLAG_HIDDEN);
+        innovation_set_hidden(g_page.feature_hint_top, top <= 2);
     }
     if (g_page.feature_hint_bottom != NULL) {
-        if (bottom > 2) lv_obj_clear_flag(g_page.feature_hint_bottom, LV_OBJ_FLAG_HIDDEN);
-        else lv_obj_add_flag(g_page.feature_hint_bottom, LV_OBJ_FLAG_HIDDEN);
+        innovation_set_hidden(g_page.feature_hint_bottom, bottom <= 2);
     }
 }
 
@@ -286,15 +265,15 @@ static lv_obj_t *innovation_feature_card(lv_obj_t *parent, int number,
     return card;
 }
 
-static void innovation_prompt_dismiss_cb(lv_event_t *event)
+static void innovation_prompt_dismiss_cb(void *user_data)
 {
-    (void)event;
+    (void)user_data;
     innovation_prompt_close();
 }
 
-static void innovation_prompt_view_cb(lv_event_t *event)
+static void innovation_prompt_view_cb(void *user_data)
 {
-    (void)event;
+    (void)user_data;
     innovation_prompt_close();
     if (ui_manager_get_current_page() != UI_PAGE_INNOVATION_CENTER) {
         ui_manager_push_page(UI_PAGE_INNOVATION_CENTER);
@@ -303,11 +282,11 @@ static void innovation_prompt_view_cb(lv_event_t *event)
     }
 }
 
-static void innovation_prompt_same_bundle_cb(lv_event_t *event)
+static void innovation_prompt_same_bundle_cb(void *user_data)
 {
     multi_pass_capture_kind_t result;
 
-    (void)event;
+    (void)user_data;
     innovation_prompt_close();
     result = multi_pass_verification_confirm_same_bundle();
     if (result == MULTI_PASS_CAPTURE_COMPLETE) {
@@ -324,9 +303,9 @@ static void innovation_prompt_same_bundle_cb(lv_event_t *event)
     }
 }
 
-static void innovation_prompt_new_bundle_cb(lv_event_t *event)
+static void innovation_prompt_new_bundle_cb(void *user_data)
 {
-    (void)event;
+    (void)user_data;
     innovation_prompt_close();
     if (multi_pass_verification_restart_from_latest()) {
         innovation_prompt_single(ui_text_get(UI_TEXT_INNOVATION_NEW_BASELINE_TITLE),
@@ -335,52 +314,33 @@ static void innovation_prompt_new_bundle_cb(lv_event_t *event)
     }
 }
 
-static lv_obj_t *innovation_prompt_create(const char *title, const char *body,
-                                          uint32_t accent)
-{
-    lv_obj_t *panel;
-    lv_obj_t *label;
-    lv_obj_t *bar;
-
-    innovation_prompt_close();
-    g_prompt = innovation_box(lv_scr_act(), 0, 0, 1280, 400, 0x101820, 0);
-    lv_obj_set_style_bg_opa(g_prompt, LV_OPA_50, 0);
-    lv_obj_move_foreground(g_prompt);
-
-    panel = innovation_box(g_prompt, 330, 62, 620, 276,
-                           INNOVATION_CARD, 24);
-    lv_obj_set_style_shadow_width(panel, 35, 0);
-    lv_obj_set_style_shadow_opa(panel, LV_OPA_20, 0);
-    bar = innovation_box(panel, 28, 24, 8, 54, accent, 4);
-    (void)bar;
-
-    label = innovation_label(panel, title,
-                             &lv_font_instrument_sans_bold_24,
-                             INNOVATION_TEXT);
-    lv_obj_set_pos(label, 54, 24);
-    label = innovation_label(panel, body,
-                             &lv_font_instrument_sans_medium_16,
-                             INNOVATION_MUTED);
-    lv_obj_set_pos(label, 54, 67);
-    lv_obj_set_size(label, 525, 104);
-    lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
-    return panel;
-}
-
 static void innovation_prompt_single(const char *title, const char *body,
                                      const char *button_text, uint32_t accent,
-                                     lv_event_cb_t callback)
+                                     lv_modal_dialog_action_cb_t callback)
 {
-    lv_obj_t *panel = innovation_prompt_create(title, body, accent);
+    lv_modal_dialog_config_t config = {
+        .title = title,
+        .body = body,
+        .primary_text = button_text,
+        .title_font = &lv_font_instrument_sans_bold_24,
+        .body_font = &lv_font_instrument_sans_medium_16,
+        .button_font = &lv_font_instrument_sans_bold_16,
+        .panel_width = 620,
+        .panel_height = 276,
+        .primary_width = 190,
+        .accent_color = accent,
+        .primary_color = accent,
+        .secondary_color = 0x72808B,
+        .primary_action = callback != NULL ? callback : innovation_prompt_dismiss_cb,
+    };
 
-    innovation_button(panel, 390, 208, 190, 48, accent, button_text,
-                      callback != NULL ? callback : innovation_prompt_dismiss_cb);
+    lv_modal_dialog_show(&g_prompt, lv_scr_act(), &config);
 }
 
 static void innovation_prompt_review(const multi_pass_capture_event_t *event)
 {
     char body[256];
-    lv_obj_t *panel;
+    lv_modal_dialog_config_t config;
 
     lv_snprintf(body, sizeof(body),
                 ui_text_get(UI_TEXT_INNOVATION_REVIEW_BODY_FMT),
@@ -389,12 +349,24 @@ static void innovation_prompt_review(const multi_pass_capture_event_t *event)
                 event->comparison.accepted_delta,
                 event->comparison.reject_delta,
                 (double)event->comparison.amount_delta);
-    panel = innovation_prompt_create(ui_text_get(UI_TEXT_INNOVATION_REVIEW_TITLE), body,
-                                     INNOVATION_RED);
-    innovation_button(panel, 54, 208, 245, 48, 0x72808B,
-                      ui_text_get(UI_TEXT_INNOVATION_RESTART), innovation_prompt_new_bundle_cb);
-    innovation_button(panel, 321, 208, 259, 48, INNOVATION_BLUE,
-                      ui_text_get(UI_TEXT_INNOVATION_KEEP_COMPARING), innovation_prompt_same_bundle_cb);
+    memset(&config, 0, sizeof(config));
+    config.title = ui_text_get(UI_TEXT_INNOVATION_REVIEW_TITLE);
+    config.body = body;
+    config.primary_text = ui_text_get(UI_TEXT_INNOVATION_KEEP_COMPARING);
+    config.secondary_text = ui_text_get(UI_TEXT_INNOVATION_RESTART);
+    config.title_font = &lv_font_instrument_sans_bold_24;
+    config.body_font = &lv_font_instrument_sans_medium_16;
+    config.button_font = &lv_font_instrument_sans_bold_16;
+    config.panel_width = 620;
+    config.panel_height = 276;
+    config.primary_width = 259;
+    config.secondary_width = 245;
+    config.accent_color = INNOVATION_RED;
+    config.primary_color = INNOVATION_BLUE;
+    config.secondary_color = 0x72808B;
+    config.primary_action = innovation_prompt_same_bundle_cb;
+    config.secondary_action = innovation_prompt_new_bundle_cb;
+    lv_modal_dialog_show(&g_prompt, lv_scr_act(), &config);
 }
 
 void page_32_innovation_notify_verification_event(
@@ -455,6 +427,62 @@ static void innovation_transition_set_y(void *object, int32_t value)
     }
 }
 
+static lv_obj_t *innovation_transition_target(void)
+{
+    if (g_transition_snapshot_valid && g_transition_snapshot.image != NULL &&
+        lv_obj_is_valid(g_transition_snapshot.image)) {
+        return g_transition_snapshot.image;
+    }
+    /* A missing image must never silently select the live object tree. */
+    return NULL;
+}
+
+static void innovation_transition_snapshot_release(void)
+{
+    g_transition_snapshot_valid = false;
+    g_transition_snapshot_dirty = true;
+    if (g_transition_snapshot.snapshot != NULL ||
+        g_transition_snapshot.image != NULL) {
+        lv_dma_static_surface_release(&g_transition_snapshot);
+    }
+}
+
+/* Build/refresh one private surface before exposing any moving pixels.
+ * No image decoding or object creation occurs in drag_update/animation. */
+static bool innovation_transition_prepare(bool force_refresh)
+{
+    bool ok;
+    uint64_t started = app_clock_monotonic_us();
+
+    if (g_page.root == NULL || !lv_obj_is_valid(g_page.root)) return false;
+    if (g_transition_snapshot_valid && g_transition_snapshot.image != NULL &&
+        lv_obj_is_valid(g_transition_snapshot.image) &&
+        !g_transition_snapshot_dirty &&
+        !force_refresh) return true;
+    if (g_transition_prepare_failed &&
+        lv_tick_elaps(g_transition_failure_tick) < 5000U) return false;
+
+    innovation_set_hidden(g_transition_snapshot.image, true);
+    innovation_set_y_if_changed(g_page.root, 0);
+    innovation_set_hidden(g_page.root, false);
+    ok = lv_dma_transition_surface_capture(&g_transition_snapshot, g_page.root,
+                                           "INNOVATION_TRANSITION");
+    g_transition_snapshot_valid = ok;
+    g_transition_snapshot_dirty = !ok;
+    g_transition_prepare_failed = !ok;
+    if (!ok) g_transition_failure_tick = lv_tick_get();
+    innovation_set_hidden(g_page.root, true);
+    innovation_set_y_if_changed(g_page.root, -400);
+    innovation_set_hidden(g_transition_snapshot.image, true);
+    innovation_set_y_if_changed(g_transition_snapshot.image, -400);
+    if (perf_profile_is_enabled())
+        uart_debug_printf("INNOVATION_SURFACE result=%s bytes=%u prepare_us=%u\n",
+                          ok ? "ready" : "direct_fallback",
+                          lv_dma_snapshot_size(g_transition_snapshot.snapshot),
+                          app_clock_elapsed_us32(started, app_clock_monotonic_us()));
+    return ok;
+}
+
 static void innovation_transition_commit_async(void *user_data)
 {
     uint64_t started_us = perf_profile_is_enabled() ?
@@ -464,14 +492,16 @@ static void innovation_transition_commit_async(void *user_data)
     g_page_transitioning = false;
     g_handle_gesture.preview_active = false;
     if (g_page.root != NULL && lv_obj_is_valid(g_page.root)) {
-        lv_obj_set_y(g_page.root, 0);
-        lv_obj_clear_flag(g_page.root, LV_OBJ_FLAG_HIDDEN);
+        innovation_set_y_if_changed(g_page.root, 0);
+    }
+    innovation_set_hidden(g_transition_snapshot.image, true);
+    if (g_page.root != NULL && lv_obj_is_valid(g_page.root)) {
+        innovation_set_hidden(g_page.root, false);
         lv_obj_move_foreground(g_page.root);
     }
     if (!ui_manager_adopt_precreated_page(UI_PAGE_INNOVATION_CENTER)) {
         ui_manager_push_page(UI_PAGE_INNOVATION_CENTER);
     }
-    innovation_transition_surface_park();
     innovation_refresh_resume();
     if (started_us != 0) {
         perf_profile_report_event_us("INNOVATION", "OPEN_COMMIT",
@@ -484,7 +514,14 @@ static void innovation_transition_cancel_async(void *user_data)
     (void)user_data;
     g_page_transitioning = false;
     g_handle_gesture.preview_active = false;
-    innovation_transition_surface_park();
+    if (g_page.root != NULL && lv_obj_is_valid(g_page.root)) {
+        innovation_set_y_if_changed(g_page.root, -400);
+        innovation_set_hidden(g_page.root, true);
+    }
+    /* Keep the completed surface for the next small pull. release() would
+     * unhide its source as a side effect and discard our private allocation. */
+    innovation_set_hidden(g_transition_snapshot.image, true);
+    innovation_set_y_if_changed(g_transition_snapshot.image, -400);
 }
 
 static void innovation_transition_back_async(void *user_data)
@@ -493,9 +530,14 @@ static void innovation_transition_back_async(void *user_data)
         app_clock_monotonic_us() : 0;
 
     (void)user_data;
+    if (ui_manager_get_current_page() != UI_PAGE_INNOVATION_CENTER) return;
+    innovation_back_stop();
+    innovation_set_hidden(g_transition_snapshot.image, true);
+    innovation_set_hidden(g_page.root, true);
     g_page_transitioning = false;
     if (!ui_manager_pop_page()) ui_manager_switch(UI_PAGE_MAIN);
-    innovation_transition_surface_park();
+    /* The outgoing surface and incoming page are invalidated in one handoff. */
+    lv_obj_invalidate(lv_scr_act());
     if (started_us != 0) {
         perf_profile_report_event_us("INNOVATION", "BACK_COMMIT",
             app_clock_elapsed_us32(started_us, app_clock_monotonic_us()));
@@ -517,24 +559,79 @@ static void innovation_transition_cancel_ready(lv_anim_t *animation)
 static void innovation_transition_back_ready(lv_anim_t *animation)
 {
     (void)animation;
-    lv_async_call(innovation_transition_back_async, NULL);
+    innovation_set_hidden(g_transition_snapshot.image, true);
+    if (perf_profile_is_enabled())
+        uart_debug_printf("INNOVATION_BACK event=end elapsed_ms=%u draw_passes=%u\n",
+                          lv_tick_elaps(g_back_tick), g_back_frames);
+    if(lv_async_call(innovation_transition_back_async, NULL) != LV_RES_OK)
+        innovation_transition_back_async(NULL);
 }
 
 static void innovation_transition_animate(lv_coord_t destination,
                                           uint32_t duration,
                                           lv_anim_ready_cb_t ready_cb)
 {
+    lv_obj_t *target = innovation_transition_target();
     lv_anim_t animation;
 
-    if (g_transition_surface == NULL || !lv_obj_is_valid(g_transition_surface)) return;
-    lv_anim_del(g_transition_surface, innovation_transition_set_y);
+    if (target == NULL) return;
+    lv_anim_del(target, innovation_transition_set_y);
     lv_anim_init(&animation);
-    lv_anim_set_var(&animation, g_transition_surface);
-    lv_anim_set_values(&animation, lv_obj_get_y(g_transition_surface), destination);
+    lv_anim_set_var(&animation, target);
+    lv_anim_set_values(&animation, lv_obj_get_y(target), destination);
     lv_anim_set_time(&animation, duration);
     lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
     lv_anim_set_exec_cb(&animation, innovation_transition_set_y);
     lv_anim_set_ready_cb(&animation, ready_cb);
+    lv_anim_start(&animation);
+}
+
+/* A 210 ms timer must not run before the replacement has drawn even once.
+ * DRAW_POST_END records CPU draw completion, not panel scanout completion. */
+static void innovation_back_draw(lv_event_t *event)
+{
+    if(g_page_transitioning && lv_event_get_code(event) == LV_EVENT_DRAW_POST_END)
+        ++g_back_frames;
+}
+static void innovation_back_stop(void)
+{
+    if(g_back_first_frame_timer) lv_timer_del(g_back_first_frame_timer);
+    g_back_first_frame_timer = NULL;
+    if(g_transition_snapshot.image && lv_obj_is_valid(g_transition_snapshot.image)) {
+        lv_anim_del(g_transition_snapshot.image, innovation_transition_set_y);
+        lv_obj_remove_event_cb(g_transition_snapshot.image, innovation_back_draw);
+    }
+}
+static void innovation_back_first_frame(lv_timer_t *timer)
+{
+    LV_UNUSED(timer);
+    if(ui_manager_get_current_page() != UI_PAGE_INNOVATION_CENTER) {
+        innovation_back_stop();
+        return;
+    }
+    if(!g_back_frames && lv_tick_elaps(g_back_tick) < 700) return;
+    lv_timer_del(g_back_first_frame_timer);
+    g_back_first_frame_timer = NULL;
+    if(!g_back_frames) {
+        if(perf_profile_is_enabled())
+            uart_debug_printf("INNOVATION_BACK event=no_first_draw fallback=atomic\n");
+        innovation_transition_back_async(NULL);
+        return;
+    }
+    if(perf_profile_is_enabled())
+        uart_debug_printf("INNOVATION_BACK event=first_draw wait_ms=%u duration_ms=210\n",
+                          lv_tick_elaps(g_back_tick));
+    lv_obj_t *target = innovation_transition_target();
+    if(!target) { innovation_transition_back_async(NULL); return; }
+    lv_anim_t animation;
+    lv_anim_init(&animation);
+    lv_anim_set_var(&animation, target);
+    lv_anim_set_values(&animation, lv_obj_get_y(target),
+                       -lv_obj_get_height(target) - _lv_obj_get_ext_draw_size(target) - 2);
+    lv_anim_set_time(&animation, 210);
+    lv_anim_set_path_cb(&animation, lv_anim_path_ease_in_out);
+    lv_anim_set_exec_cb(&animation, innovation_transition_set_y);
+    lv_anim_set_ready_cb(&animation, innovation_transition_back_ready);
     lv_anim_start(&animation);
 }
 
@@ -550,10 +647,29 @@ static bool innovation_handle_preview_begin(void)
     }
     if (g_page.root == NULL || !lv_obj_is_valid(g_page.root)) return false;
     innovation_refresh_pause();
-    innovation_page_refresh();
-    lv_obj_add_flag(g_page.root, LV_OBJ_FLAG_HIDDEN);
-    if (innovation_transition_surface_create(-400) == NULL) return false;
+    if (innovation_page_refresh()) g_transition_snapshot_dirty = true;
+    (void)innovation_transition_prepare(false);
+    /* Keep the live tree parked.  When the preloaded snapshot exists, the
+     * gesture moves only that one opaque image, so child draw order cannot
+     * leak through the transition. */
+    innovation_set_y_if_changed(g_page.root, -400);
+    if (g_transition_snapshot_valid && g_transition_snapshot.image != NULL &&
+        lv_obj_is_valid(g_transition_snapshot.image)) {
+        innovation_set_hidden(g_page.root, true);
+        innovation_set_y_if_changed(g_transition_snapshot.image, -400);
+        innovation_set_hidden(g_transition_snapshot.image, false);
+        lv_obj_move_foreground(g_transition_snapshot.image);
+    } else {
+        /* Resource failure must not revive the known broken multi-object
+         * slide. Keep Main intact; release commits a stationary full page. */
+        innovation_set_hidden(g_page.root, true);
+    }
+    if (g_handle_touch != NULL && lv_obj_is_valid(g_handle_touch))
+        lv_obj_move_foreground(g_handle_touch);
     g_handle_gesture.preview_active = true;
+    if (perf_profile_is_enabled())
+        uart_debug_printf("INNOVATION_TRANSITION route=%s event=drag_begin\n",
+                          g_transition_snapshot_valid ? "single_surface" : "direct_fallback");
     if (started_us != 0) {
         perf_profile_report_event_us("INNOVATION", "PREVIEW_PREPARE",
             app_clock_elapsed_us32(started_us, app_clock_monotonic_us()));
@@ -576,15 +692,13 @@ static int innovation_handle_drag_update(lv_indev_t *indev)
     if (dy < 0) dy = 0;
     if (dy > 400) dy = 400;
     g_handle_gesture.drag_y = dy;
-    if (dy == 0 || dy == 400 ||
-        (lv_tick_elaps(g_handle_gesture.last_render_tick) >= 24U &&
-         (dy - g_handle_gesture.last_render_y >= 2 ||
-          g_handle_gesture.last_render_y - dy >= 2))) {
-        g_handle_gesture.last_render_tick = lv_tick_get();
-        g_handle_gesture.last_render_y = dy;
-        if (g_transition_surface != NULL && lv_obj_is_valid(g_transition_surface))
-            lv_obj_set_y(g_transition_surface, (lv_coord_t)(-400 + dy));
-    }
+    /* Apply every touch sample.  The old 24 ms / 2 px throttle visibly lagged
+     * behind the finger on the normal touch stream. */
+    g_handle_gesture.last_render_tick = lv_tick_get();
+    g_handle_gesture.last_render_y = dy;
+    if (g_transition_snapshot_valid)
+        innovation_set_y_if_changed(g_transition_snapshot.image,
+                                    (lv_coord_t)(-400 + dy));
     return dy;
 }
 
@@ -608,12 +722,18 @@ static void innovation_handle_drag_finish(lv_indev_t *indev)
 
     if (dy >= 90 || fast_flick) {
         g_handle_gesture.opened = true;
-        innovation_transition_animate(0, 180,
-                                      innovation_transition_open_ready);
+        if (g_transition_snapshot_valid)
+            innovation_transition_animate(0, 180,
+                                          innovation_transition_open_ready);
+        else
+            lv_async_call(innovation_transition_commit_async, NULL);
     } else {
         g_handle_gesture.opened = false;
-        innovation_transition_animate(-400, 150,
-                                      innovation_transition_cancel_ready);
+        if (g_transition_snapshot_valid)
+            innovation_transition_animate(-400, 150,
+                                          innovation_transition_cancel_ready);
+        else
+            lv_async_call(innovation_transition_cancel_async, NULL);
     }
 }
 
@@ -651,6 +771,16 @@ static void innovation_handle_event_cb(lv_event_t *event)
         return;
     }
     if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        if(code == LV_EVENT_PRESS_LOST && gesture_service_enabled() && lv_port_indev_touch_count() >= 2) {
+            /* A global multi-finger capture cancels this local preview; it is
+             * not a single-finger release that should commit a page switch. */
+            g_handle_gesture.pressed = false;
+            if(g_handle_gesture.preview_active && !g_page_transitioning) {
+                g_page_transitioning = true;
+                innovation_transition_cancel_async(NULL);
+            }
+            return;
+        }
         innovation_handle_drag_finish(indev);
     }
 }
@@ -679,14 +809,53 @@ void page_32_innovation_handle_attach(lv_obj_t *main_page)
     lv_obj_add_event_cb(g_handle_touch, innovation_handle_event_cb,
                         LV_EVENT_PRESS_LOST, NULL);
 
-    handle = innovation_box(g_handle_touch, 50, 4, 112, 7,
-                            INNOVATION_CARD, 999);
-    lv_obj_set_style_shadow_color(handle, lv_color_hex(0x87939C), 0);
-    lv_obj_set_style_shadow_width(handle, 7, 0);
-    lv_obj_set_style_shadow_opa(handle, LV_OPA_30, 0);
+    handle = innovation_box(g_handle_touch, 24, 1, 164, 16, 0xFFFFFF, 8);
+    lv_obj_set_style_border_width(handle, 1, 0);
+    lv_obj_set_style_border_color(handle, lv_color_hex(0xB8CADA), 0);
     lv_obj_clear_flag(handle, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *hint = innovation_label(handle, "PULL DOWN",
+        &lv_font_instrument_sans_bold_10, INNOVATION_BLUE);
+    lv_obj_set_pos(hint, 27, 2);
+    lv_obj_t *chevron = innovation_label(handle, LV_SYMBOL_DOWN,
+        &lv_font_montserrat_12, INNOVATION_BLUE);
+    lv_obj_set_pos(chevron, 128, 2);
     lv_obj_move_foreground(g_handle_touch);
-    lv_async_call(innovation_preview_preload_async, NULL);
+    /* Main can be constructed while another page is still current (for
+     * example during boot/self-test prewarm).  Capturing at that point is
+     * rejected by the page guard, and the first user drag would then pay the
+     * 120 ms synchronous capture cost.  Retry after Main is active so the
+     * snapshot is ready before the gesture starts. */
+    if (g_preview_preload_timer == NULL) {
+        g_preview_preload_timer = lv_timer_create(
+            innovation_preview_preload_timer_cb, 120, NULL);
+    }
+}
+
+void page_32_innovation_schedule_preload(void)
+{
+    if (g_preview_preload_timer == NULL) {
+        g_preview_preload_timer = lv_timer_create(
+            innovation_preview_preload_timer_cb, 120, NULL);
+    }
+    if (g_preview_preload_timer != NULL) {
+        /* The manager calls this immediately after current=MAIN.  Make the
+         * existing retry timer due on the next LVGL cycle instead of waiting
+         * for its original attach-time period. */
+        lv_timer_ready(g_preview_preload_timer);
+    }
+}
+
+static void innovation_preview_preload_timer_cb(lv_timer_t *timer)
+{
+    if (timer == NULL || timer != g_preview_preload_timer) return;
+    if (ui_manager_get_current_page() != UI_PAGE_MAIN ||
+        g_handle_touch == NULL || !lv_obj_is_valid(g_handle_touch) ||
+        g_handle_gesture.pressed || g_page_transitioning) {
+        return;
+    }
+    lv_timer_del(timer);
+    g_preview_preload_timer = NULL;
+    innovation_preview_preload_async(NULL);
 }
 
 static void innovation_preview_preload_async(void *user_data)
@@ -695,25 +864,31 @@ static void innovation_preview_preload_async(void *user_data)
 
     (void)user_data;
     if (ui_manager_get_current_page() != UI_PAGE_MAIN ||
-        g_handle_touch == NULL || !lv_obj_is_valid(g_handle_touch) ||
-          (g_page.root != NULL && lv_obj_is_valid(g_page.root))) {
+        g_handle_touch == NULL || !lv_obj_is_valid(g_handle_touch)) {
         return;
     }
+    /* The page object may already be cached from an earlier visit.  That
+     * must not skip creation of the single-image transition surface. */
     started_us = perf_profile_is_enabled() ? app_clock_monotonic_us() : 0;
-    ui_page_32_innovation_create(lv_scr_act());
+    if (g_page.root == NULL || !lv_obj_is_valid(g_page.root)) {
+        ui_page_32_innovation_create(lv_scr_act());
+    }
     if (started_us != 0) {
         perf_profile_report_event_us("INNOVATION", "PRELOAD_CREATE",
             app_clock_elapsed_us32(started_us, app_clock_monotonic_us()));
     }
     if (g_page.root == NULL || !lv_obj_is_valid(g_page.root)) return;
     innovation_refresh_pause();
-    lv_obj_set_y(g_page.root, -400);
-    lv_obj_add_flag(g_page.root, LV_OBJ_FLAG_HIDDEN);
-    innovation_transition_surface_create(-400);
+    if (innovation_page_refresh()) g_transition_snapshot_dirty = true;
+    (void)innovation_transition_prepare(false);
 }
 
 void page_32_innovation_handle_detach(void)
 {
+    if (g_preview_preload_timer != NULL) {
+        lv_timer_del(g_preview_preload_timer);
+        g_preview_preload_timer = NULL;
+    }
     if (g_handle_touch != NULL && lv_obj_is_valid(g_handle_touch)) {
         lv_obj_del(g_handle_touch);
     }
@@ -735,16 +910,30 @@ static void innovation_back_cb(lv_event_t *event)
     g_page_transitioning = true;
     innovation_refresh_pause();
     innovation_prompt_close();
-    if (innovation_transition_surface_create(0) == NULL) {
+    if (g_page.root == NULL || !lv_obj_is_valid(g_page.root)) {
         g_page_transitioning = false;
         innovation_refresh_resume();
         return;
     }
-    lv_obj_add_flag(g_page.root, LV_OBJ_FLAG_HIDDEN);
+    /* Tabs, button states and pass results may have changed while active.
+     * Re-capture into the retained allocation, not a stale name-keyed cache. */
+    bool have_surface = innovation_transition_prepare(true);
     page_01_main_reveal_for_transition();
-    lv_obj_move_foreground(g_transition_surface);
-    innovation_transition_animate(-400, 210,
-                                  innovation_transition_back_ready);
+    if (have_surface) {
+        innovation_set_y_if_changed(g_transition_snapshot.image, 0);
+        innovation_set_hidden(g_transition_snapshot.image, false);
+        lv_obj_move_foreground(g_transition_snapshot.image);
+        innovation_back_stop();
+        g_back_frames = 0;
+        g_back_tick = lv_tick_get();
+        lv_obj_add_event_cb(g_transition_snapshot.image, innovation_back_draw,
+                            LV_EVENT_DRAW_POST_END, NULL);
+        lv_obj_invalidate(g_transition_snapshot.image);
+        g_back_first_frame_timer = lv_timer_create(innovation_back_first_frame, 16, NULL);
+        if(!g_back_first_frame_timer) innovation_transition_back_async(NULL);
+    } else {
+        lv_async_call(innovation_transition_back_async, NULL);
+    }
     if (started_us != 0) {
         perf_profile_report_event_us("INNOVATION", "BACK_PREPARE",
             app_clock_elapsed_us32(started_us, app_clock_monotonic_us()));
@@ -857,9 +1046,8 @@ static void innovation_gesture_button_refresh(void)
                                   UI_TEXT_GESTURE_TOGGLE_OFF));
     }
     if (g_page.gesture_button != NULL && lv_obj_is_valid(g_page.gesture_button)) {
-        lv_obj_set_style_bg_color(g_page.gesture_button,
-            lv_color_hex(enabled ? INNOVATION_GREEN : 0x8D99A3),
-            LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_color_t color = lv_color_hex(enabled ? INNOVATION_GREEN : 0x8D99A3);
+        lv_damped_button_set_palette(g_page.gesture_button, color, color);
     }
 }
 
@@ -871,6 +1059,7 @@ static void innovation_gesture_toggle_cb(lv_event_t *event)
     enable = !gesture_service_enabled();
     if (!gesture_service_set_enabled(enable)) return;
     innovation_gesture_button_refresh();
+    g_transition_snapshot_dirty = true;
     if (enable) gesture_guide_show();
 }
 
@@ -933,18 +1122,18 @@ static bool innovation_page_refresh(void)
 
     if (view.state == MULTI_PASS_VERIFY_IDLE) {
         innovation_label_set_if_changed(g_page.status_label, ui_text_get(UI_TEXT_INNOVATION_READY));
-        lv_obj_set_style_text_color(g_page.status_label,
-                                    lv_color_hex(INNOVATION_BLUE), 0);
+        innovation_set_text_color_if_changed(g_page.status_label,
+                                             INNOVATION_BLUE);
         innovation_label_set_if_changed(g_page.instruction_label,
             ui_text_get(UI_TEXT_INNOVATION_IDLE_INSTRUCTION));
         innovation_label_set_if_changed(g_page.primary_label, ui_text_get(UI_TEXT_INNOVATION_START_VERIFY));
-        lv_obj_add_flag(g_page.secondary_button, LV_OBJ_FLAG_HIDDEN);
+        innovation_set_hidden(g_page.secondary_button, true);
     } else if (view.state == MULTI_PASS_VERIFY_RUNNING) {
         lv_snprintf(text, sizeof(text), ui_text_get(UI_TEXT_INNOVATION_ACTIVE_FMT),
                     (unsigned)(view.captured_passes + 1), view.target_passes);
         innovation_label_set_if_changed(g_page.status_label, text);
-        lv_obj_set_style_text_color(g_page.status_label,
-                                    lv_color_hex(INNOVATION_GREEN), 0);
+        innovation_set_text_color_if_changed(g_page.status_label,
+                                             INNOVATION_GREEN);
         if (view.awaiting_bundle_confirmation) {
             innovation_label_set_if_changed(g_page.instruction_label,
                 ui_text_get(UI_TEXT_INNOVATION_CONFIRM_INSTRUCTION));
@@ -956,22 +1145,21 @@ static bool innovation_page_refresh(void)
                 ui_text_get(UI_TEXT_INNOVATION_NEXT_INSTRUCTION));
         }
         innovation_label_set_if_changed(g_page.primary_label, ui_text_get(UI_TEXT_INNOVATION_GO_COUNT));
-        lv_obj_clear_flag(g_page.secondary_button, LV_OBJ_FLAG_HIDDEN);
+        innovation_set_hidden(g_page.secondary_button, false);
         innovation_label_set_if_changed(g_page.secondary_label, ui_text_get(UI_TEXT_INNOVATION_CANCEL_TASK));
     } else {
         innovation_label_set_if_changed(g_page.status_label,
                           view.all_passes_match
                               ? ui_text_get(UI_TEXT_INNOVATION_COMPLETE_MATCH)
                               : ui_text_get(UI_TEXT_INNOVATION_COMPLETE_DIFFER));
-        lv_obj_set_style_text_color(g_page.status_label,
-            lv_color_hex(view.all_passes_match
-                             ? INNOVATION_GREEN : INNOVATION_RED), 0);
+        innovation_set_text_color_if_changed(g_page.status_label,
+            view.all_passes_match ? INNOVATION_GREEN : INNOVATION_RED);
         innovation_label_set_if_changed(g_page.instruction_label,
             view.all_passes_match
                 ? ui_text_get(UI_TEXT_INNOVATION_MATCH_INSTRUCTION)
                 : ui_text_get(UI_TEXT_INNOVATION_DIFFER_INSTRUCTION));
         innovation_label_set_if_changed(g_page.primary_label, ui_text_get(UI_TEXT_INNOVATION_NEW_VERIFY));
-        lv_obj_clear_flag(g_page.secondary_button, LV_OBJ_FLAG_HIDDEN);
+        innovation_set_hidden(g_page.secondary_button, false);
         innovation_label_set_if_changed(g_page.secondary_label, ui_text_get(UI_TEXT_INNOVATION_CLEAR_RESULT));
     }
 
@@ -980,10 +1168,10 @@ static bool innovation_page_refresh(void)
         uint32_t card_color = INNOVATION_CARD;
 
         if (i >= g_page.target_passes) {
-            lv_obj_add_flag(g_page.pass_cards[i], LV_OBJ_FLAG_HIDDEN);
+            innovation_set_hidden(g_page.pass_cards[i], true);
             continue;
         }
-        lv_obj_clear_flag(g_page.pass_cards[i], LV_OBJ_FLAG_HIDDEN);
+        innovation_set_hidden(g_page.pass_cards[i], false);
         lv_snprintf(text, sizeof(text), ui_text_get(UI_TEXT_INNOVATION_PASS_FMT), i + 1);
         innovation_label_set_if_changed(g_page.pass_titles[i], text);
         if (snapshot != NULL && snapshot->valid) {
@@ -1003,8 +1191,7 @@ static bool innovation_page_refresh(void)
         if (snapshot != NULL && snapshot->valid) {
             innovation_label_set_if_changed(g_page.pass_values[i], text);
         }
-        lv_obj_set_style_bg_color(g_page.pass_cards[i],
-                                  lv_color_hex(card_color), 0);
+        innovation_set_bg_if_changed(g_page.pass_cards[i], card_color);
     }
 
     if (!view.latest_comparison.available) {
@@ -1051,6 +1238,7 @@ static bool innovation_page_refresh(void)
 
 void ui_page_32_innovation_create(lv_obj_t *parent)
 {
+    lv_obj_t *backdrop;
     lv_obj_t *header;
     lv_obj_t *rail;
     lv_obj_t *content;
@@ -1063,8 +1251,8 @@ void ui_page_32_innovation_create(lv_obj_t *parent)
         app_clock_monotonic_us() : 0;
 
     if (g_page.root != NULL && lv_obj_is_valid(g_page.root)) {
-        lv_obj_set_y(g_page.root, 0);
-        lv_obj_clear_flag(g_page.root, LV_OBJ_FLAG_HIDDEN);
+        innovation_set_y_if_changed(g_page.root, 0);
+        innovation_set_hidden(g_page.root, false);
         lv_obj_move_foreground(g_page.root);
         innovation_page_refresh();
         innovation_refresh_resume();
@@ -1081,6 +1269,16 @@ void ui_page_32_innovation_create(lv_obj_t *parent)
     g_page.root = innovation_box(parent != NULL ? parent : lv_scr_act(),
                                  0, 0, 1280, 400,
                                  INNOVATION_BG, 0);
+    /* Keep the transition background as an explicit first child.  Relying on
+     * the root style background allowed the GE/partial-refresh path to flush
+     * child panels before the cyan background, exposing the old page through
+     * the gaps during a slow pull-down. */
+    lv_obj_set_style_bg_opa(g_page.root, LV_OPA_TRANSP, 0);
+    backdrop = innovation_box(g_page.root, 0, 0, 1280, 400,
+                              INNOVATION_BG, 0);
+    lv_obj_clear_flag(backdrop, LV_OBJ_FLAG_CLICKABLE |
+                               LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_move_background(backdrop);
     header = innovation_box(g_page.root, 16, 12, 1248, 50,
                             INNOVATION_CARD, 18);
     label = innovation_label(header, ui_text_get(UI_TEXT_INNOVATION_CENTER_TITLE),
@@ -1099,8 +1297,7 @@ void ui_page_32_innovation_create(lv_obj_t *parent)
                                                UI_TEXT_GESTURE_TOGGLE_OFF),
         innovation_gesture_toggle_cb);
     g_page.gesture_label = lv_damped_button_get_label(g_page.gesture_button);
-    innovation_button(header, 1122, 7, 108, 36, INNOVATION_BLUE,
-                      ui_text_get(UI_TEXT_INNOVATION_BACK), innovation_back_cb);
+    lv_nav_button_create(header, 1122, 7, 108, 36, innovation_back_cb, NULL);
 
     rail = innovation_box(g_page.root, 16, 72, 238, 314,
                           INNOVATION_CARD, 22);
@@ -1233,7 +1430,8 @@ bool ui_page_32_innovation_resume(void)
     }
 
     started_us = perf_profile_is_enabled() ? app_clock_monotonic_us() : 0;
-    lv_obj_clear_flag(g_page.root, LV_OBJ_FLAG_HIDDEN);
+    innovation_set_y_if_changed(g_page.root, 0);
+    innovation_set_hidden(g_page.root, false);
     lv_obj_move_foreground(g_page.root);
     refreshed = innovation_page_refresh();
     innovation_refresh_resume();
@@ -1247,21 +1445,27 @@ bool ui_page_32_innovation_resume(void)
 
 void ui_page_32_innovation_suspend(void)
 {
+    innovation_back_stop();
     innovation_refresh_pause();
     innovation_prompt_close();
     gesture_guide_close(false);
+    innovation_set_hidden(g_transition_snapshot.image, true);
+    g_transition_snapshot_dirty = true;
     g_page_transitioning = false;
     g_handle_gesture.pressed = false;
     g_handle_gesture.preview_active = false;
     if (g_page.root != NULL && lv_obj_is_valid(g_page.root)) {
-        lv_obj_add_flag(g_page.root, LV_OBJ_FLAG_HIDDEN);
+        innovation_set_hidden(g_page.root, true);
     }
 }
 
 void ui_page_32_innovation_destroy(void)
 {
-    innovation_prompt_close();
+    innovation_back_stop();
+    lv_modal_dialog_destroy(&g_prompt);
     gesture_guide_close(false);
+    innovation_transition_snapshot_release();
+    g_transition_prepare_failed = false;
     if (g_page.refresh_timer != NULL) {
         lv_timer_del(g_page.refresh_timer);
         g_page.refresh_timer = NULL;
@@ -1269,7 +1473,6 @@ void ui_page_32_innovation_destroy(void)
     if (g_page.root != NULL && lv_obj_is_valid(g_page.root)) {
         lv_obj_del(g_page.root);
     }
-    innovation_transition_surface_delete();
     memset(&g_page, 0, sizeof(g_page));
     g_page.target_passes = MULTI_PASS_VERIFY_MIN_PASSES;
 }

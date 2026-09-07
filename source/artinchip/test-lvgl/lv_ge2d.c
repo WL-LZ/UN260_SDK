@@ -20,6 +20,7 @@
 #include "dma_allocator.h"
 #include "lv_fbdev.h"
 #include "aic_ui/perf_stats.h"
+#include "un260/lv_drivers/uart_io.h"
 #include "un260/lv_system/app_clock.h"
 
 #define PI 3.141592653589
@@ -79,6 +80,15 @@ typedef struct {
 static ge_dma_image_entry_t g_dma_image_registry[GE_DMA_IMAGE_REGISTRY_CAPACITY];
 static bool g_offscreen_capture_active;
 static bool g_offscreen_capture_failed;
+
+static void ge_offscreen_fail(const char *stage)
+{
+    if (!g_offscreen_capture_active) return;
+    g_offscreen_capture_failed = true;
+    if (perf_profile_is_enabled()) {
+        uart_debug_printf("GE_OFFSCREEN_FAIL stage=%s\n", stage != NULL ? stage : "?");
+    }
+}
 
 void lv_draw_aic_blend(lv_draw_ctx_t * draw_ctx, const lv_draw_sw_blend_dsc_t * dsc);
 lv_res_t lv_draw_aic_draw_img(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t * draw_dsc,
@@ -190,20 +200,20 @@ static bool draw_dma_frame_software(lv_draw_ctx_t *draw_ctx,
         frame->buf.fd[0] < 0 || frame->buf.size.width <= 0 ||
         frame->buf.size.height <= 0 ||
         frame->buf.format != MPP_FMT_ARGB_8888) {
-        if (g_offscreen_capture_active) g_offscreen_capture_failed = true;
+        ge_offscreen_fail("invalid_dma_frame");
         return false;
     }
 
     row_bytes = (uint32_t)frame->buf.size.width * 4U;
     stride = frame->buf.stride[0];
     if (stride < row_bytes) {
-        if (g_offscreen_capture_active) g_offscreen_capture_failed = true;
+        ge_offscreen_fail("stride");
         return false;
     }
     bytes = stride * (uint32_t)frame->buf.size.height;
     mapped = dmabuf_mmap(frame->buf.fd[0], (int)bytes);
     if (mapped == NULL) {
-        if (g_offscreen_capture_active) g_offscreen_capture_failed = true;
+        ge_offscreen_fail("dmabuf_mmap");
         return false;
     }
     dmabuf_sync(frame->buf.fd[0], CACHE_INVALID);
@@ -213,7 +223,7 @@ static bool draw_dma_frame_software(lv_draw_ctx_t *draw_ctx,
         tight = lv_mem_alloc(row_bytes * (uint32_t)frame->buf.size.height);
         if (tight == NULL) {
             dmabuf_munmap(mapped, (int)bytes);
-            if (g_offscreen_capture_active) g_offscreen_capture_failed = true;
+            ge_offscreen_fail("tight_alloc");
             return false;
         }
         for (int y = 0; y < frame->buf.size.height; y++) {

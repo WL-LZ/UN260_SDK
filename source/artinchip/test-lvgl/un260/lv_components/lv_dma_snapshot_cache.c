@@ -3,9 +3,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <fcntl.h>
 
 #include "dma_allocator.h"
 #include "aic_ui/perf_stats.h"
+#include "un260/lv_drivers/uart_io.h"
 #include "lv_ge2d.h"
 #include "un260/lv_system/app_clock.h"
 #include "lvgl/src/extra/others/snapshot/lv_snapshot.h"
@@ -32,11 +35,22 @@ struct lv_dma_snapshot {
 };
 
 static int g_dma_snapshot_device = -1;
+static int g_dma_snapshot_reserved_device = -1;
 static uint32_t g_dma_snapshot_total_bytes;
 static lv_dma_snapshot_t *g_dma_snapshot_cache[DMA_SNAPSHOT_CACHE_CAPACITY];
 static lv_dma_snapshot_cache_stats_t g_dma_snapshot_stats;
 
 static void snapshot_destroy_storage(lv_dma_snapshot_t *snapshot);
+
+static void snapshot_create_error(const char *debug_name, const char *stage)
+{
+    g_dma_snapshot_stats.errors++;
+    if (perf_profile_is_enabled()) {
+        uart_debug_printf("DMA_SNAPSHOT create_failed name=%s stage=%s\n",
+               debug_name != NULL ? debug_name : "?",
+               stage != NULL ? stage : "?");
+    }
+}
 
 static int snapshot_cache_find_key(const char *cache_key)
 {
@@ -117,25 +131,118 @@ static void snapshot_release_frame(lv_dma_snapshot_t *snapshot)
     snapshot->frame.buf.fd[0] = -1;
 }
 
+/* The SDK's mpp heap is a fixed 16 MiB gen_pool, not all of CMA.  A full
+ * screen can fail there even with several MiB of free CMA.  Only large
+ * surfaces may fall back to the existing contiguous reserved heap; the
+ * global snapshot budget still applies.  Both heaps export the same DMA-BUF
+ * interface consumed by GE.  Never change the allocator for existing cards. */
+static bool snapshot_allocate_frame(lv_dma_snapshot_t *snapshot,
+                                    uint32_t bytes, const char *name)
+{
+    int primary_error;
+    const char *heap = "mpp";
+
+    if (g_dma_snapshot_device < 0)
+        g_dma_snapshot_device = dmabuf_device_open();
+    if (g_dma_snapshot_device >= 0 &&
+        mpp_buf_alloc(g_dma_snapshot_device, &snapshot->frame.buf) == 0)
+        return true;
+    primary_error = errno;
+    if (bytes >= 1024U * 1024U) {
+        if (g_dma_snapshot_reserved_device < 0)
+            g_dma_snapshot_reserved_device = open("/dev/dma_heap/reserved",
+                                                   O_RDWR | O_CLOEXEC);
+        heap = "reserved";
+        if (g_dma_snapshot_reserved_device >= 0 &&
+            mpp_buf_alloc(g_dma_snapshot_reserved_device,
+                          &snapshot->frame.buf) == 0) {
+            if (perf_profile_is_enabled())
+                uart_debug_printf("DMA_SNAPSHOT heap_fallback name=%s bytes=%u mpp_errno=%d heap=reserved\n",
+                                  name ? name : "?", bytes, primary_error);
+            return true;
+        }
+    }
+    if (perf_profile_is_enabled())
+        uart_debug_printf("DMA_SNAPSHOT alloc_failed name=%s bytes=%u mpp_errno=%d last_heap=%s errno=%d\n",
+                          name ? name : "?", bytes, primary_error, heap, errno);
+    return false;
+}
+
+/* Used by both initial creation and a privately owned transition surface.
+ * All storage is secured before rendering.  Refresh reuses the DMA allocation
+ * instead of repeatedly acquiring full-screen contiguous blocks. */
+static bool snapshot_render(lv_dma_snapshot_t *snapshot, lv_obj_t *obj,
+                             const char *name)
+{
+    lv_img_dsc_t cpu_image;
+    uint32_t cpu_bytes = lv_snapshot_buf_size_needed(obj, LV_IMG_CF_TRUE_COLOR_ALPHA);
+    uint32_t row_bytes = snapshot->frame.buf.size.width * 4U;
+    uint32_t stride = snapshot->frame.buf.stride[0];
+    uint32_t bytes = stride * snapshot->frame.buf.size.height;
+    uint8_t *cpu_pixels;
+    uint8_t *dma_pixels;
+    uint64_t started;
+    uint32_t elapsed;
+    bool ok;
+
+    if (cpu_bytes != row_bytes * snapshot->frame.buf.size.height) {
+        snapshot_create_error(name, "refresh_geometry");
+        return false;
+    }
+    dma_pixels = dmabuf_mmap(snapshot->frame.buf.fd[0], (int)bytes);
+    if (dma_pixels == NULL) {
+        snapshot_create_error(name, "dma_map");
+        return false;
+    }
+    cpu_pixels = lv_mem_alloc(cpu_bytes);
+    if (cpu_pixels == NULL) {
+        dmabuf_munmap(dma_pixels, (int)bytes);
+        snapshot_create_error(name, "cpu_alloc");
+        return false;
+    }
+    started = app_clock_monotonic_us();
+    lv_ge2d_offscreen_capture_begin();
+    ok = lv_snapshot_take_to_buf(obj, LV_IMG_CF_TRUE_COLOR_ALPHA,
+                                 &cpu_image, cpu_pixels, cpu_bytes) == LV_RES_OK;
+    ok = lv_ge2d_offscreen_capture_end() && ok;
+    elapsed = app_clock_elapsed_us32(started, app_clock_monotonic_us());
+    g_dma_snapshot_stats.capture_count++;
+    g_dma_snapshot_stats.capture_total_us += elapsed;
+    if (elapsed > g_dma_snapshot_stats.capture_max_us)
+        g_dma_snapshot_stats.capture_max_us = elapsed;
+    if (ok && cpu_image.header.w == snapshot->frame.buf.size.width &&
+        cpu_image.header.h == snapshot->frame.buf.size.height) {
+        for (int y = 0; y < cpu_image.header.h; y++) {
+            memcpy(dma_pixels + (uint32_t)y * stride,
+                   cpu_pixels + (uint32_t)y * row_bytes, row_bytes);
+            if (stride > row_bytes)
+                memset(dma_pixels + (uint32_t)y * stride + row_bytes, 0,
+                       stride - row_bytes);
+        }
+        if (dmabuf_sync(snapshot->frame.buf.fd[0], CACHE_CLEAN) < 0) {
+            snapshot_create_error(name, "cache_clean");
+            ok = false;
+        }
+    } else {
+        snapshot_create_error(name, "offscreen_capture");
+        ok = false;
+    }
+    dmabuf_munmap(dma_pixels, (int)bytes);
+    lv_mem_free(cpu_pixels);
+    return ok;
+}
+
 lv_dma_snapshot_t *lv_dma_snapshot_create(lv_obj_t *obj,
                                           const char *debug_name)
 {
     lv_dma_snapshot_t *snapshot = NULL;
-    lv_img_dsc_t cpu_image;
-    unsigned char *cpu_pixels = NULL;
-    unsigned char *dma_pixels = NULL;
     uint32_t cpu_bytes;
     uint32_t row_bytes;
     uint32_t stride;
     uint32_t dma_bytes;
-    uint32_t captured_stride;
-    uint32_t captured_dma_bytes;
-    bool capture_ok;
     lv_coord_t snapshot_w;
     lv_coord_t snapshot_h;
     lv_coord_t ext_size;
-    uint64_t capture_started_us;
-    uint32_t capture_us;
 
     if (obj == NULL || !lv_obj_is_valid(obj)) return NULL;
 
@@ -151,12 +258,12 @@ lv_dma_snapshot_t *lv_dma_snapshot_create(lv_obj_t *obj,
     snapshot_w = lv_obj_get_width(obj) + ext_size * 2;
     snapshot_h = lv_obj_get_height(obj) + ext_size * 2;
     if (snapshot_w <= 0 || snapshot_h <= 0) {
-        g_dma_snapshot_stats.errors++;
+        snapshot_create_error(debug_name, "invalid_geometry");
         return NULL;
     }
     row_bytes = (uint32_t)snapshot_w * 4U;
     if (row_bytes * (uint32_t)snapshot_h != cpu_bytes) {
-        g_dma_snapshot_stats.errors++;
+        snapshot_create_error(debug_name, "size_mismatch_before_capture");
         return NULL;
     }
     stride = (row_bytes + 15U) & ~15U;
@@ -166,95 +273,27 @@ lv_dma_snapshot_t *lv_dma_snapshot_create(lv_obj_t *obj,
         return NULL;
     }
 
-    cpu_pixels = lv_mem_alloc(cpu_bytes);
-    if (cpu_pixels == NULL) {
-        g_dma_snapshot_stats.errors++;
-        return NULL;
-    }
-
-    capture_started_us = app_clock_monotonic_us();
-    lv_ge2d_offscreen_capture_begin();
-    if (lv_snapshot_take_to_buf(obj, LV_IMG_CF_TRUE_COLOR_ALPHA,
-                                &cpu_image, cpu_pixels,
-                                cpu_bytes) != LV_RES_OK) {
-        (void)lv_ge2d_offscreen_capture_end();
-        g_dma_snapshot_stats.errors++;
-        lv_mem_free(cpu_pixels);
-        return NULL;
-    }
-    capture_ok = lv_ge2d_offscreen_capture_end();
-    capture_us = app_clock_elapsed_us32(capture_started_us,
-                                        app_clock_monotonic_us());
-    g_dma_snapshot_stats.capture_count++;
-    g_dma_snapshot_stats.capture_total_us += capture_us;
-    if (capture_us > g_dma_snapshot_stats.capture_max_us) {
-        g_dma_snapshot_stats.capture_max_us = capture_us;
-    }
-    if (!capture_ok || cpu_image.header.w <= 0 || cpu_image.header.h <= 0) {
-        g_dma_snapshot_stats.errors++;
-        lv_mem_free(cpu_pixels);
-        return NULL;
-    }
-
-    row_bytes = (uint32_t)cpu_image.header.w * 4U;
-    captured_stride = (row_bytes + 15U) & ~15U;
-    captured_dma_bytes = captured_stride * (uint32_t)cpu_image.header.h;
-    if (cpu_image.header.w != snapshot_w ||
-        cpu_image.header.h != snapshot_h ||
-        captured_stride != stride || captured_dma_bytes != dma_bytes) {
-        g_dma_snapshot_stats.errors++;
-        lv_mem_free(cpu_pixels);
-        return NULL;
-    }
-
-    if (g_dma_snapshot_device < 0) {
-        g_dma_snapshot_device = dmabuf_device_open();
-        if (g_dma_snapshot_device < 0) {
-            g_dma_snapshot_stats.errors++;
-            lv_mem_free(cpu_pixels);
-            return NULL;
-        }
-    }
-
     snapshot = calloc(1, sizeof(*snapshot));
     if (snapshot == NULL) {
-        g_dma_snapshot_stats.errors++;
-        lv_mem_free(cpu_pixels);
+        snapshot_create_error(debug_name, "snapshot_struct_alloc");
         return NULL;
     }
     snapshot->frame.buf.fd[0] = -1;
     snapshot->cache_slot = -1;
-    snapshot->frame.buf.size.width = cpu_image.header.w;
-    snapshot->frame.buf.size.height = cpu_image.header.h;
+    snapshot->frame.buf.size.width = snapshot_w;
+    snapshot->frame.buf.size.height = snapshot_h;
     snapshot->frame.buf.stride[0] = stride;
     snapshot->frame.buf.format = MPP_FMT_ARGB_8888;
-    if (mpp_buf_alloc(g_dma_snapshot_device, &snapshot->frame.buf) < 0) {
-        g_dma_snapshot_stats.errors++;
+    if (!snapshot_allocate_frame(snapshot, dma_bytes, debug_name)) {
+        snapshot_create_error(debug_name, "dma_alloc");
         free(snapshot);
-        lv_mem_free(cpu_pixels);
         return NULL;
     }
-
-    dma_pixels = dmabuf_mmap(snapshot->frame.buf.fd[0], (int)dma_bytes);
-    if (dma_pixels == NULL) {
-        g_dma_snapshot_stats.errors++;
+    if (!snapshot_render(snapshot, obj, debug_name)) {
         snapshot_release_frame(snapshot);
         free(snapshot);
-        lv_mem_free(cpu_pixels);
         return NULL;
     }
-
-    for (int y = 0; y < cpu_image.header.h; y++) {
-        memcpy(dma_pixels + (uint32_t)y * stride,
-               cpu_pixels + (uint32_t)y * row_bytes, row_bytes);
-        if (stride > row_bytes) {
-            memset(dma_pixels + (uint32_t)y * stride + row_bytes, 0,
-                   stride - row_bytes);
-        }
-    }
-    dmabuf_sync(snapshot->frame.buf.fd[0], CACHE_CLEAN);
-    dmabuf_munmap(dma_pixels, (int)dma_bytes);
-    lv_mem_free(cpu_pixels);
 
     snapshot->bytes = dma_bytes;
     snapshot->last_used_tick = lv_tick_get();
@@ -265,8 +304,8 @@ lv_dma_snapshot_t *lv_dma_snapshot_create(lv_obj_t *obj,
     }
 
     snapshot->image.header.always_zero = 0;
-    snapshot->image.header.w = cpu_image.header.w;
-    snapshot->image.header.h = cpu_image.header.h;
+    snapshot->image.header.w = snapshot_w;
+    snapshot->image.header.h = snapshot_h;
     snapshot->image.header.cf = LV_IMG_CF_TRUE_COLOR_ALPHA;
     snapshot->image.data_size = dma_bytes;
     snapshot->image.data = (const uint8_t *)snapshot;
@@ -274,7 +313,7 @@ lv_dma_snapshot_t *lv_dma_snapshot_create(lv_obj_t *obj,
     if (!lv_ge2d_register_dma_image(snapshot->image.data,
                                     &snapshot->frame,
                                     snapshot->name)) {
-        g_dma_snapshot_stats.errors++;
+        snapshot_create_error(debug_name, "registry_full");
         snapshot_release_frame(snapshot);
         free(snapshot);
         return NULL;
@@ -404,9 +443,9 @@ void lv_dma_snapshot_cache_take_stats(lv_dma_snapshot_cache_stats_t *out)
     g_dma_snapshot_stats = (lv_dma_snapshot_cache_stats_t){0};
 }
 
-bool lv_dma_static_surface_attach(lv_dma_static_surface_t *surface,
+static bool snapshot_surface_attach(lv_dma_static_surface_t *surface,
                                   lv_obj_t *source,
-                                  const char *cache_key)
+                                  const char *cache_key, bool shared)
 {
     lv_dma_snapshot_t *snapshot;
     const lv_img_dsc_t *image_dsc;
@@ -439,7 +478,8 @@ bool lv_dma_static_surface_attach(lv_dma_static_surface_t *surface,
     y = lv_obj_get_y(source) - ext_size;
     source_index = lv_obj_get_index(source);
 
-    snapshot = lv_dma_snapshot_cache_acquire_or_create(source, cache_key);
+    snapshot = shared ? lv_dma_snapshot_cache_acquire_or_create(source, cache_key) :
+                        lv_dma_snapshot_create(source, cache_key);
     if (snapshot == NULL) return false;
     image_dsc = lv_dma_snapshot_image(snapshot);
     if (image_dsc == NULL) {
@@ -462,6 +502,36 @@ bool lv_dma_static_surface_attach(lv_dma_static_surface_t *surface,
     surface->source = source;
     surface->image = image;
     lv_obj_add_flag(source, LV_OBJ_FLAG_HIDDEN);
+    return true;
+}
+
+bool lv_dma_static_surface_attach(lv_dma_static_surface_t *surface,
+                                  lv_obj_t *source, const char *cache_key)
+{
+    return snapshot_surface_attach(surface, source, cache_key, true);
+}
+
+bool lv_dma_transition_surface_capture(lv_dma_static_surface_t *surface,
+                                       lv_obj_t *source, const char *name)
+{
+    if (surface == NULL || source == NULL || !lv_obj_is_valid(source))
+        return false;
+    if (surface->snapshot == NULL || surface->image == NULL ||
+        !lv_obj_is_valid(surface->image))
+        return snapshot_surface_attach(surface, source, name, false);
+
+    /* A transition belongs to its live page, never to a name-only static
+     * cache: changing a label/tab must not resurrect an old captured page. */
+    if (surface->source != source || surface->snapshot->cache_slot >= 0)
+        return false;
+    lv_obj_update_layout(source);
+    lv_coord_t ext = _lv_obj_get_ext_draw_size(source);
+    if (lv_obj_get_width(source) + 2 * ext != surface->snapshot->image.header.w ||
+        lv_obj_get_height(source) + 2 * ext != surface->snapshot->image.header.h)
+        return false;
+    if (!snapshot_render(surface->snapshot, source, name)) return false;
+    lv_img_cache_invalidate_src(&surface->snapshot->image);
+    lv_obj_invalidate(surface->image);
     return true;
 }
 
