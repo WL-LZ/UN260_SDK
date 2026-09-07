@@ -13,6 +13,7 @@
 #include "aic_ui/perf_stats.h"
 #include"lv_page_declear.h"
 #include "page_33_set_brightness.h"
+#include "un260/lv_drivers/uart_io.h"
 
 #define UI_PAGE_STACK_CAPACITY 10
 #define UI_PAGE_INVALID ((ui_page_t)-1)
@@ -34,6 +35,17 @@ static ui_data_topic_t g_page_data_dirty[UI_PAGE_COUNT];
 static ui_page_t g_page_prewarming = UI_PAGE_INVALID;
 static bool g_page_switch_committing;
 static lv_timer_t *g_page_input_unlock_timer;
+
+/* Main is the navigation root, never an intermediate history entry that can
+ * later resurrect List/Debug behind an unrelated Settings navigation. */
+static void ui_manager_history_on_commit(ui_page_t page)
+{
+    if(page != UI_PAGE_MAIN) return;
+    int depth = g_page_manager.stack_top + 1;
+    g_page_manager.stack_top = -1;
+    if(depth > 0) uart_debug_printf("NAV_ROOT from=%u dropped=%d\n",
+                                    (unsigned)g_page_manager.current, depth);
+}
 
 typedef void (*ui_page_create_fn_t)(lv_obj_t *parent);
 typedef void (*ui_page_destroy_fn_t)(void);
@@ -429,7 +441,10 @@ void ui_manager_switch(ui_page_t page)
     uint64_t total_started_us = 0;
     uint64_t phase_started_us = 0;
 
-    if (page == g_page_manager.current) return;
+    if (page == g_page_manager.current) {
+        if(!g_page_switch_committing) ui_manager_history_on_commit(page);
+        return;
+    }
     if (!ui_manager_page_is_registered(page)) return;
     if (!ui_manager_transition_begin()) return;
 
@@ -472,6 +487,7 @@ void ui_manager_switch(ui_page_t page)
         sample.enter_us = ui_manager_profile_elapsed_us(phase_started_us);
         phase_started_us = app_clock_monotonic_us();
     }
+    ui_manager_history_on_commit(page);
     g_page_manager.current = page;
     if (page == UI_PAGE_MAIN) {
         page_32_innovation_schedule_preload();
@@ -511,6 +527,11 @@ void ui_manager_push_page(ui_page_t page)
 
     if (g_page_switch_committing || page == g_page_manager.current ||
         !ui_manager_page_is_registered(page)) return;
+
+    if(page == UI_PAGE_MAIN) {
+        ui_manager_switch(page);
+        return;
+    }
 
     //当前页入栈
     if (g_page_manager.current != UI_PAGE_INVALID) {
@@ -581,6 +602,7 @@ bool ui_manager_adopt_precreated_page(ui_page_t page)
         sample.leave_us = ui_manager_profile_elapsed_us(phase_started_us);
         phase_started_us = app_clock_monotonic_us();
     }
+    ui_manager_history_on_commit(page);
     g_page_manager.current = page;
     if (page == UI_PAGE_MAIN) {
         page_32_innovation_schedule_preload();
@@ -610,6 +632,11 @@ bool ui_manager_pop_page(void)
 
     if (g_page_switch_committing) return false;
 
+    if(g_page_manager.current == UI_PAGE_MAIN) {
+        ui_manager_history_on_commit(UI_PAGE_MAIN);
+        return false;
+    }
+
     if (g_page_manager.stack_top < 0)
     {
         // 栈为空时，判断是否需要返回主页面
@@ -624,6 +651,8 @@ bool ui_manager_pop_page(void)
     // 出栈
     previous_page = g_page_manager.stack[g_page_manager.stack_top--];
     ui_manager_switch(previous_page);
+    uart_debug_printf("NAV_BACK to=%u depth=%d\n",
+                     (unsigned)g_page_manager.current, g_page_manager.stack_top + 1);
     return true;
 }
 

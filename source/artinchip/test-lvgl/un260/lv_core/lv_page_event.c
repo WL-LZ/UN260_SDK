@@ -232,14 +232,14 @@ void page_01_menu_btn_event_cb(lv_event_t* e) {
  void page_01_back_btn_event_cb(lv_event_t* e) {
 
      if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-        ui_manager_push_page(UI_PAGE_MAIN);
+        ui_manager_switch(UI_PAGE_MAIN);
      }
  }
 
  void page_06_back_btn_event_cb(lv_event_t* e) {
 
      if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-        ui_manager_push_page(UI_PAGE_SETTING);
+        ui_manager_pop_page();
      }
  }
 
