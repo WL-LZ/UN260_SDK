@@ -45,6 +45,10 @@ static counting_info_reply_result_t counting_info_handle_live(counting_session_s
                                                               uint16_t qty,
                                                               uint8_t issue)
 {
+    if (!session->start_confirmed) {
+        return counting_info_reply_result(COUNTING_INFO_REPLY_IGNORED);
+    }
+
     if (session->phase == COUNTING_SESSION_FINISHED_WAIT_START) {
         return counting_info_reply_result(COUNTING_INFO_REPLY_IGNORED);
     }
@@ -75,11 +79,16 @@ static counting_info_reply_result_t counting_info_handle_finished(counting_sessi
 {
     counting_info_reply_result_t result = counting_info_reply_result(COUNTING_INFO_REPLY_FINISHED);
 
+    if (!session->start_confirmed) {
+        return counting_info_reply_result(COUNTING_INFO_REPLY_IGNORED);
+    }
+
     if (session->phase == COUNTING_SESSION_FINISHED_WAIT_START) {
         return counting_info_reply_result(COUNTING_INFO_REPLY_IGNORED);
     }
 
     session->phase = COUNTING_SESSION_FINISHED_WAIT_START;
+    session->start_confirmed = false;
     session->end_anim_wait_detail = true;
     session->last_result.valid = true;
 

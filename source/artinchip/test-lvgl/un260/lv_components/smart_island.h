@@ -53,6 +53,7 @@ void smart_island_refresh_time(void); //刷新默认时间显示
 void smart_island_set_visual(smart_island_visual_t visual, bool anim_en); //设置视觉形态
 void smart_island_set_scene(smart_island_scene_t scene, const char *title, const char *subtitle); //设置场景与文本
 void smart_island_notify_count_start(void); //通知：开始点钞
+void smart_island_update_counting(int pcs, float amount); //更新跑钞态实时数量/金额
 void smart_island_notify_count_end(const char *result_text); //通知：点钞结束
 void smart_island_notify_serial_number(int denomination, const char *serial_number); //通知：本把冠字号更新
 void smart_island_set_count_analysis(int valid_pcs, int suspect_pcs, int damaged_pcs); //更新本轮点钞分析

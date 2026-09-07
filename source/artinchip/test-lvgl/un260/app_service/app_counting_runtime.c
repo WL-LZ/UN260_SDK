@@ -79,6 +79,8 @@ static void app_counting_runtime_refresh_compact(const counting_sim_t *sim_data)
                                        sizeof(amount_buf),
                                        sim_data->total_amount);
     page_01_main_refresh_totals(sim_data->total_pcs, amount_buf);
+    smart_island_update_counting(sim_data->total_pcs,
+                                 sim_data->total_amount);
 }
 
 static bool app_counting_runtime_main_page_active(void)
@@ -442,10 +444,6 @@ void app_counting_runtime_handle_info(counting_session_state_t *session,
     if (result.kind == COUNTING_INFO_REPLY_LIVE) {
         app_counting_runtime_refresh_compact(sim_data);
         counting_history_append_frame("0x0E", buf, len);
-        if (fault_popup_get_auto_enabled() ||
-            !fault_popup_has_pending_start_issue()) {
-            smart_island_notify_count_start();
-        }
     } else if (result.kind == COUNTING_INFO_REPLY_FINISHED) {
         int current_pcs = result.final_pcs;
 
@@ -461,6 +459,12 @@ void app_counting_runtime_handle_info(counting_session_state_t *session,
         smart_island_set_count_analysis(session->analysis_valid_pcs,
                                         result.final_issue,
                                         0);
+        /* The transport status, not the optional detail stream, owns the
+         * island lifecycle.  Enter COMPLETE as soon as 0x0E says finished;
+         * serial/reject details may continue to settle in the background. */
+        smart_island_update_counting(current_pcs, result.final_amount);
+        smart_island_notify_count_end(NULL);
+        session->end_anim_wait_detail = false;
         app_counting_runtime_try_history_commit(session, sim_data,
                                                 lv_tick_get());
         if (app_counting_runtime_main_page_active()) {

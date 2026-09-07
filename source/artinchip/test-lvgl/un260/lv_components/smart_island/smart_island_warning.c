@@ -5,13 +5,15 @@
 #include "lvgl/src/misc/lv_txt.h"
 #include <string.h>
 
-#define SMART_ISLAND_WARNING_MARQUEE_TIME   1680U
-#define SMART_ISLAND_WARNING_MARQUEE_CYCLES 2U
+#define SMART_ISLAND_WARNING_MARQUEE_TIME   900U
+#define SMART_ISLAND_WARNING_MARQUEE_CYCLES 1U
 #define SMART_ISLAND_WARNING_FLASH_TIME     1000U
 
 static void smart_island_warning_apply_static_layout(void);
 static void smart_island_warning_marquee_start(void);
 static void smart_island_warning_marquee_run_step(void);
+static void smart_island_warning_finish_notice(void);
+static void smart_island_warning_finish_commit(void);
 
 static void smart_island_warning_anim_x_cb(void *var, int32_t value)
 {
@@ -88,6 +90,7 @@ static bool smart_island_warning_pocket_confirm(void)
 
 void smart_island_warning_stop(void)
 {
+    smart_island_view_notice_reset();
     if (g_si_ctx.objects.title && lv_obj_is_valid(g_si_ctx.objects.title)) {
         lv_anim_del(g_si_ctx.objects.title, smart_island_warning_anim_x_cb);
         lv_anim_del(g_si_ctx.objects.title, smart_island_warning_anim_text_opa_cb);
@@ -100,6 +103,7 @@ void smart_island_warning_stop(void)
     }
 
     g_si_ctx.warning.marquee_running = false;
+    g_si_ctx.warning.collapse_running = false;
     g_si_ctx.warning.marquee_step = 0;
     g_si_ctx.warning.text_width_compact = 0;
     g_si_ctx.warning.text_width_expand = 0;
@@ -144,16 +148,52 @@ static void smart_island_warning_marquee_finish_cb(lv_anim_t *animation)
 
 static void smart_island_warning_flash_finish_cb(lv_anim_t *animation)
 {
-    bool pocket_confirmed;
-
     LV_UNUSED(animation);
+    smart_island_warning_finish_notice();
+}
+
+static void smart_island_warning_collapse_finish_cb(lv_anim_t *animation)
+{
+    LV_UNUSED(animation);
+    g_si_ctx.warning.collapse_running = false;
+    smart_island_warning_finish_commit();
+}
+
+static void smart_island_warning_finish_notice(void)
+{
+    if (g_si_ctx.warning.collapse_running) {
+        return;
+    }
+
+    g_si_ctx.warning.marquee_running = false;
+    g_si_ctx.warning.collapse_running = true;
+    smart_island_view_notice_collapse(
+        smart_island_warning_collapse_finish_cb);
+}
+
+static void smart_island_warning_finish_commit(void)
+{
+    bool pocket_confirmed;
+    bool resume_counting = g_si_ctx.warning.resume_counting;
+
     smart_island_warning_stop();
     pocket_confirmed = smart_island_warning_pocket_confirm();
-    if (!fault_popup_is_showing()) {
+    if (fault_popup_is_showing()) {
+        return;
+    }
+
+    if (resume_counting && g_si_ctx.lifecycle.count_session_active) {
+        g_si_ctx.warning.text[0] = '\0';
+        g_si_ctx.warning.resume_counting = false;
+        smart_island_warning_fault_clear();
+        smart_island_set_scene(SMART_ISLAND_SCENE_COUNTING, NULL, NULL);
+        smart_island_set_visual(SMART_ISLAND_VISUAL_COMPACT, true);
+        smart_island_view_update_counting();
+    } else {
         smart_island_restore_idle();
-        if (!pocket_confirmed) {
-            fault_popup_schedule_auto_confirm();
-        }
+    }
+    if (!pocket_confirmed) {
+        fault_popup_schedule_auto_confirm();
     }
 }
 
@@ -213,10 +253,11 @@ static void smart_island_warning_marquee_start(void)
         lv_anim_init(&animation);
         lv_anim_set_var(&animation, g_si_ctx.objects.title);
         lv_anim_set_exec_cb(&animation, smart_island_warning_anim_text_opa_cb);
-        lv_anim_set_values(&animation, LV_OPA_100, LV_OPA_40);
+        lv_anim_set_values(&animation, LV_OPA_COVER, LV_OPA_40);
         lv_anim_set_time(&animation, SMART_ISLAND_WARNING_FLASH_TIME);
         lv_anim_set_playback_time(&animation, SMART_ISLAND_WARNING_FLASH_TIME);
-        lv_anim_set_repeat_count(&animation, 3);
+        /* One initial cycle plus one repeat = two complete flashes. */
+        lv_anim_set_repeat_count(&animation, 1);
         lv_anim_set_path_cb(&animation, lv_anim_path_linear);
         lv_anim_set_ready_cb(&animation, smart_island_warning_flash_finish_cb);
         lv_anim_start(&animation);
@@ -234,10 +275,10 @@ static void smart_island_warning_marquee_start(void)
             lv_anim_init(&animation);
             lv_anim_set_var(&animation, g_si_ctx.objects.expand_title);
             lv_anim_set_exec_cb(&animation, smart_island_warning_anim_text_opa_cb);
-            lv_anim_set_values(&animation, LV_OPA_100, LV_OPA_40);
+            lv_anim_set_values(&animation, LV_OPA_COVER, LV_OPA_40);
             lv_anim_set_time(&animation, SMART_ISLAND_WARNING_FLASH_TIME);
             lv_anim_set_playback_time(&animation, SMART_ISLAND_WARNING_FLASH_TIME);
-            lv_anim_set_repeat_count(&animation, 3);
+            lv_anim_set_repeat_count(&animation, 1);
             lv_anim_set_path_cb(&animation, lv_anim_path_linear);
             lv_anim_start(&animation);
         }
@@ -278,16 +319,7 @@ static void smart_island_warning_marquee_run_step(void)
     }
 
     if (g_si_ctx.warning.marquee_step >= SMART_ISLAND_WARNING_MARQUEE_CYCLES * 2U) {
-        bool pocket_confirmed;
-
-        smart_island_warning_stop();
-        pocket_confirmed = smart_island_warning_pocket_confirm();
-        if (!fault_popup_is_showing()) {
-            smart_island_restore_idle();
-            if (!pocket_confirmed) {
-                fault_popup_schedule_auto_confirm();
-            }
-        }
+        smart_island_warning_finish_notice();
         return;
     }
 
@@ -351,19 +383,52 @@ void smart_island_notify_warning_level(const char *warn_text,
         return;
     }
 
-    g_si_ctx.warning.level = level;
     smart_island_warning_fault_capture();
+
+    /* Transient page-local failures (for example a rejected currency switch)
+     * already own their popup.  Do not cache their short island message while
+     * the island host page is suspended, otherwise it appears stale on MAIN. */
+    if (g_si_ctx.lifecycle.suspended && !g_si_ctx.warning.fault.valid) {
+        return;
+    }
+
+    g_si_ctx.warning.resume_counting =
+        g_si_ctx.lifecycle.count_session_active &&
+        g_si_ctx.view.scene == SMART_ISLAND_SCENE_COUNTING;
+    g_si_ctx.warning.level = level;
     lv_snprintf(g_si_ctx.warning.text, sizeof(g_si_ctx.warning.text), "%s",
                 next_warning_text);
 
     smart_island_set_scene(SMART_ISLAND_SCENE_WARNING, g_si_ctx.warning.text, NULL);
-    if (g_si_ctx.lifecycle.suspended) return;
+    if (g_si_ctx.lifecycle.suspended) {
+        g_si_ctx.warning.resume_animation_pending = true;
+        return;
+    }
     g_si_ctx.view.page = SMART_ISLAND_PAGE_INFO;
     smart_island_set_visual(SMART_ISLAND_VISUAL_COMPACT, true);
     smart_island_reset_page_positions();
     smart_island_reset_compact_header_position();
     smart_island_reset_time_position();
     smart_island_warning_marquee_start();
+    smart_island_view_notice_expand();
+}
+
+void smart_island_warning_resume_if_pending(void)
+{
+    if (!g_si_ctx.warning.resume_animation_pending ||
+        g_si_ctx.lifecycle.suspended ||
+        g_si_ctx.view.scene != SMART_ISLAND_SCENE_WARNING) {
+        return;
+    }
+
+    g_si_ctx.warning.resume_animation_pending = false;
+    g_si_ctx.view.page = SMART_ISLAND_PAGE_INFO;
+    smart_island_set_visual(SMART_ISLAND_VISUAL_COMPACT, false);
+    smart_island_reset_page_positions();
+    smart_island_reset_compact_header_position();
+    smart_island_reset_time_position();
+    smart_island_warning_marquee_start();
+    smart_island_view_notice_expand();
 }
 
 void smart_island_notify_warning(const char *warn_text)

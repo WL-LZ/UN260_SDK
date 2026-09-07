@@ -72,6 +72,7 @@ static void counting_control_handle_start(const uint8_t *buf,
             uart_debug_printf("pending history discarded by new counting session\n");
         }
         session->phase = COUNTING_SESSION_IDLE;
+        session->start_confirmed = true;
         session->end_anim_wait_detail = false;
         session->expected_issue = 0;
         if (hooks != NULL && hooks->on_start_success != NULL) {

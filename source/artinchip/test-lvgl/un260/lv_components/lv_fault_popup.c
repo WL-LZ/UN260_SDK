@@ -3,7 +3,6 @@
 #include "un260/protocol/protocol_send.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_components/smart_island.h"
-#include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/user_cfg.h"
 #include "un260/lv_system/machine_time.h"
@@ -859,20 +858,19 @@ void show_fault_popup_ex(const fault_popup_data_t* data)
     lv_obj_set_pos(g_fault_version_label, 595, 342);
 
     /* confirm */
-    lv_damped_button_style_t confirm_style = {
-        .normal_color = 0x1677FF,
-        .pressed_color = 0x0E5FCE,
-        .disabled_color = 0xA7B0B8,
-        .text_color = 0xFFFFFF,
-        .disabled_text_color = 0xE0E4E8,
-        .radius = 14,
-    };
-    lv_obj_t* confirm_btn = lv_damped_button_create(g_fault_popup,
-        &confirm_style, ui_text_get(UI_TEXT_WIDGET_FAULT_CONFIRM),
-        &lv_font_instrument_sans_bold_20);
+    lv_obj_t* confirm_btn = lv_btn_create(g_fault_popup);
     lv_obj_set_size(confirm_btn, 180, 45);
     lv_obj_set_pos(confirm_btn, 1023, 311);
+    lv_obj_set_style_radius(confirm_btn, 14, 0);
+    lv_obj_set_style_bg_color(confirm_btn, lv_color_hex(0x1677FF), 0);
+    lv_obj_set_style_border_width(confirm_btn, 0, 0);
     lv_obj_add_event_cb(confirm_btn, fault_popup_confirm_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t* confirm_label = lv_label_create(confirm_btn);
+    lv_label_set_text(confirm_label, ui_text_get(UI_TEXT_WIDGET_FAULT_CONFIRM));
+    lv_obj_set_style_text_color(confirm_label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(confirm_label, &lv_font_instrument_sans_bold_20, 0);
+    lv_obj_center(confirm_label);
 }
 
 /* =========================

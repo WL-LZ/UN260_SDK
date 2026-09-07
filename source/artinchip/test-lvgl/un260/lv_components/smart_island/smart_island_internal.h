@@ -12,6 +12,9 @@
 #define SMART_ISLAND_ACTION_EXPAND_H      112
 #define SMART_ISLAND_PAGE_INDICATOR_Y     -6
 #define SMART_ISLAND_BG_IDLE              0x111111U
+#define SMART_ISLAND_COUNT_W               310
+#define SMART_ISLAND_COUNT_CNT_W           SMART_ISLAND_COUNT_W
+#define SMART_ISLAND_COUNT_H               44
 
 typedef struct {
     lv_obj_t *root;
@@ -22,6 +25,23 @@ typedef struct {
     lv_obj_t *time;
     lv_obj_t *badge;
     lv_obj_t *progress;
+    lv_obj_t *counting_root;
+    lv_obj_t *counting_gate;
+    lv_obj_t *counting_gate_left;
+    lv_obj_t *counting_gate_right;
+    lv_obj_t *counting_sensor;
+    lv_obj_t *counting_bill;
+    lv_obj_t *counting_bill_mid;
+    lv_obj_t *counting_bill_low;
+    lv_obj_t *counting_value;
+    lv_obj_t *counting_value_next;
+    lv_obj_t *counting_value_track;
+    lv_obj_t *counting_value_scan;
+    lv_obj_t *counting_unit;
+    lv_obj_t *counting_divider;
+    lv_obj_t *counting_serial;
+    lv_obj_t *counting_serial_track;
+    lv_obj_t *counting_serial_scan;
     lv_obj_t *page_root;
     lv_obj_t *page_info;
     lv_obj_t *page_action;
@@ -69,6 +89,7 @@ typedef struct {
     uint32_t bg_from;
     uint32_t bg_to;
     bool bg_anim_running;
+    bool message_pulse_running;
     smart_island_swipe_state_t swipe;
 } smart_island_view_state_t;
 
@@ -82,12 +103,29 @@ typedef struct {
 typedef struct {
     smart_island_warning_level_t level;
     bool marquee_running;
+    bool collapse_running;
     uint8_t marquee_step;
     lv_coord_t text_width_compact;
     lv_coord_t text_width_expand;
+    bool resume_animation_pending;
+    bool resume_counting;
     smart_island_warning_fault_t fault;
     char text[64];
 } smart_island_warning_state_t;
+
+typedef struct {
+    int pcs;
+    int amount;
+    int denomination;
+    uint8_t mode;
+    uint8_t gate_phase;
+    uint32_t last_roll_tick;
+    bool gate_anim_running;
+    bool serial_anim_running;
+    bool value_initialized;
+    char display_value[16];
+    char serial[16];
+} smart_island_counting_state_t;
 
 typedef struct {
     char result[64];
@@ -115,6 +153,7 @@ typedef struct {
     bool created;
     bool pure_count_enabled;
     bool count_session_active;
+    bool result_transition_pending;
     bool suspended;
     bool dirty;
 } smart_island_lifecycle_state_t;
@@ -124,6 +163,7 @@ typedef struct {
     smart_island_action_state_t action;
     smart_island_view_state_t view;
     smart_island_warning_state_t warning;
+    smart_island_counting_state_t counting;
     smart_island_text_state_t text;
     smart_island_lifecycle_state_t lifecycle;
 } smart_island_context_t;
@@ -133,6 +173,7 @@ extern smart_island_context_t g_si_ctx;
 /* 子模块之间共享的内部接口，不对 smart_island.h 使用者公开。 */
 void smart_island_result_stop_timer(void);
 void smart_island_warning_stop(void);
+void smart_island_warning_resume_if_pending(void);
 bool smart_island_warning_fault_show(void);
 void smart_island_warning_fault_clear(void);
 void smart_island_reset_page_positions(void);
@@ -154,7 +195,14 @@ void smart_island_page_indicator_sync(bool anim_en);
 void smart_island_view_destroy_objects(void);
 void smart_island_view_apply_visual(smart_island_visual_t visual, bool anim_en);
 void smart_island_view_refresh_scene(void);
-void smart_island_view_update_serial_ticker(void);
+void smart_island_view_update_counting(void);
+void smart_island_view_message_pulse(void);
+void smart_island_view_notice_expand(void);
+void smart_island_view_notice_collapse(lv_anim_ready_cb_t ready_cb);
+void smart_island_view_notice_reset(void);
+void smart_island_view_result_enter(void);
+void smart_island_view_result_collapse(void);
+void smart_island_view_idle_enter(void);
 void smart_island_view_set_idle_line(char *dst,
                                      size_t dst_size,
                                      const char *text);

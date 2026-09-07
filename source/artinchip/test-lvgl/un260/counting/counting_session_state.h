@@ -33,6 +33,9 @@ typedef enum {
 
 typedef struct {
     counting_session_phase_t phase;
+    /* Only a successful 0x0A start acknowledgement may arm live 0x0E data.
+     * This prevents boot-sync and late frames from creating a phantom count. */
+    bool start_confirmed;
     bool end_anim_wait_detail;
     bool auto_wave_pending;
     counting_pending_result_t last_result;
