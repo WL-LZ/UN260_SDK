@@ -21,6 +21,16 @@
 #include "lv_ge2d.h"
 #include "aic_ui/perf_stats.h"
 #include "un260/lv_system/app_clock.h"
+#include "aic_ui/compiled_asset.h"
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <errno.h>
+#include <limits.h>
+/* This SDK's init may return success with pm == NULL. Inspect its matching
+ * source definition before calling get_packet, which otherwise dereferences it. */
+#include "../../aic-mpp/ve/include/mpp_codec.h"
+#define AIC_IMAGE_CACHE_BUDGET (8U * 1024U * 1024U)
+static lv_img_decoder_t *g_aic_decoder;
 
 #define PNG_HEADER_SIZE (8 + 12 + 13) //png signature + IHDR chuck
 #define PNGSIG 0x89504e470d0a1a0aull
@@ -55,6 +65,7 @@ static int get_jpeg_format(uint8_t *buf, enum mpp_pixel_format *pix_fmt)
     uint8_t h_count[3] = { 0 };
     uint8_t v_count[3]= { 0 };
     uint8_t nb_components = *buf++;
+    if(nb_components != 1 && nb_components != 3) return -1;
 
     for (i = 0; i < nb_components; i++) {
         uint8_t h_v_cnt;
@@ -104,18 +115,18 @@ static lv_fs_res_t jpeg_get_img_size(lv_fs_file_t *fp, int *w, int *h, enum mpp_
 {
     uint32_t read_num;
     uint8_t buf[128];
-    lv_fs_res_t res = LV_RES_OK;
+    lv_fs_res_t res = LV_FS_RES_OK;
 
     // read JPEG SOI
     res = lv_fs_read(fp, buf, 2, &read_num);
     if (res != LV_FS_RES_OK || read_num != 2) {
-        res = LV_RES_INV;
+        res = LV_FS_RES_INV_PARAM;
         goto read_err;
     }
 
     /* check SOI */
     if (stream_to_u16(buf) != JPEG_SOI) {
-        res = LV_RES_INV;
+        res = LV_FS_RES_INV_PARAM;
         goto read_err;
     }
 
@@ -124,27 +135,28 @@ static lv_fs_res_t jpeg_get_img_size(lv_fs_file_t *fp, int *w, int *h, enum mpp_
         int size;
         res = lv_fs_read(fp, buf, 4, &read_num);
         if (res != LV_FS_RES_OK || read_num != 4) {
-            res = LV_RES_INV;
+            res = LV_FS_RES_INV_PARAM;
             goto read_err;
         }
 
         if (stream_to_u16(buf) == JPEG_SOF) {
             res = lv_fs_read(fp, buf, 15, &read_num);
-            if (res != LV_FS_RES_OK) {
-                res = LV_RES_INV;
+            if (res != LV_FS_RES_OK || read_num != 15) {
+                res = LV_FS_RES_INV_PARAM;
                 goto read_err;
             }
 
             *h = stream_to_u16(buf + 1);
             *w = stream_to_u16(buf + 3);
 
-            get_jpeg_format(buf + 5, pix_fmt);
+            if(get_jpeg_format(buf + 5, pix_fmt) < 0) res = LV_FS_RES_INV_PARAM;
             break;
         } else {
             size = stream_to_u16(buf + 2);
-            lv_fs_seek(fp, size - 2, SEEK_CUR);
+            if(size < 2) return LV_FS_RES_INV_PARAM;
+            res = lv_fs_seek(fp, size - 2, SEEK_CUR);
             if (res != LV_FS_RES_OK ) {
-                res = LV_RES_INV;
+                res = LV_FS_RES_INV_PARAM;
                 goto read_err;
             }
         }
@@ -167,8 +179,10 @@ static lv_res_t jpeg_decoder_info(lv_img_decoder_t *decoder, const void *src, lv
         return LV_RES_INV;
 
     res = jpeg_get_img_size(&f, &width, &height, &fomat);
-    if (res != LV_FS_RES_OK )
+    if (res != LV_FS_RES_OK || width <= 0 || height <= 0) {
+        lv_fs_close(&f);
         return LV_RES_INV;
+    }
 
     header->w = width;
     header->h = height;
@@ -184,10 +198,14 @@ static lv_fs_res_t png_get_img_size(lv_fs_file_t *fp, int *w, int *h, enum mpp_p
     unsigned char buf[64];
     int color_type;
 
-    lv_fs_read(fp, buf, PNG_HEADER_SIZE, &read_num);
+    if(lv_fs_read(fp, buf, PNG_HEADER_SIZE, &read_num) != LV_FS_RES_OK ||
+       read_num != PNG_HEADER_SIZE || stream_to_u64(buf) != PNGSIG ||
+       stream_to_u32(buf + 8) != 13 || memcmp(buf + 12, "IHDR", 4))
+        return LV_FS_RES_INV_PARAM;
 
     *w = stream_to_u32(buf + 8 + 8);
     *h = stream_to_u32(buf + 8 + 8 + 4);
+    if(*w <= 0 || *h <= 0 || *w > 4096 || *h > 4096) return LV_FS_RES_INV_PARAM;
 
     color_type = buf[8 + 8 + 8 + 1];
     if (color_type == 2)
@@ -195,14 +213,15 @@ static lv_fs_res_t png_get_img_size(lv_fs_file_t *fp, int *w, int *h, enum mpp_p
     else
         *fomat = MPP_FMT_ARGB_8888;
 
-    return LV_RES_OK;
+    /* File helpers use FS status (OK=0), not draw status (OK=1). */
+    return LV_FS_RES_OK;
 }
 
 static lv_fs_res_t get_file_size(lv_fs_file_t *fp, unsigned int *file_size)
 {
-    lv_fs_seek(fp, 0, SEEK_END);
-    lv_fs_tell(fp, file_size);
-    lv_fs_seek(fp, 0, SEEK_SET);
+    if(lv_fs_seek(fp, 0, SEEK_END) != LV_FS_RES_OK ||
+       lv_fs_tell(fp, file_size) != LV_FS_RES_OK ||
+       lv_fs_seek(fp, 0, SEEK_SET) != LV_FS_RES_OK) return LV_FS_RES_FS_ERR;
 
     return LV_RES_OK;
 }
@@ -266,7 +285,17 @@ static lv_res_t aic_decoder_info(lv_img_decoder_t *decoder, const void *src, lv_
         return LV_RES_INV;
     }
 
+    const un260_compiled_asset_t *asset = un260_compiled_asset_find(src);
+    if (asset) {
+        header->always_zero = 0;
+        header->w = asset->width;
+        header->h = asset->height;
+        header->cf = asset->has_alpha ? LV_IMG_CF_TRUE_COLOR_ALPHA : LV_IMG_CF_TRUE_COLOR;
+        return LV_RES_OK;
+    }
+
     ptr = strrchr(src, '.');
+    if (!ptr) return LV_RES_INV;
     if (!strcmp(ptr, ".png")) {
         return png_decoder_info(decoder, src, header);
     } else if ((!strcmp(ptr, ".jpg")) || (!strcmp(ptr, ".jpeg"))) {
@@ -301,10 +330,8 @@ static int free_frame_buffer(struct frame_allocator *p, struct mpp_frame *frame)
 
 static int close_allocator(struct frame_allocator *p)
 {
-    struct ext_frame_allocator* impl = (struct ext_frame_allocator*)p;
-
-    free(impl);
-
+    /* Owned by the decode attempt, including failures before fm_create. */
+    (void)p;
     return 0;
 }
 
@@ -329,160 +356,237 @@ static struct frame_allocator* open_allocator(struct mpp_frame* frame)
     return &impl->base;
 }
 
-static lv_res_t aic_decoder_open(lv_img_decoder_t *decoder, lv_img_decoder_dsc_t *dsc)
+static uint32_t frame_dma_bytes(const struct mpp_frame *frame)
 {
-    int ret;
-    lv_fs_file_t image_file;
-    struct mpp_packet packet;
-    struct mpp_frame frame;
-    int width, height;
-    int dma_fd;
-    struct mpp_frame *alloc_frame;
-    struct mpp_decoder *dec;
-    struct frame_allocator *allocator;
-    uint32_t file_len = 0;
-    uint32_t read_size = 0;
+    uint64_t plane = (uint64_t)frame->buf.stride[0] * frame->buf.size.height;
+    uint64_t total = (plane + 4095U) & ~4095ULL;
+    if(frame->buf.format == MPP_FMT_YUV420P) total += 2 * ((plane / 4 + 4095) & ~4095ULL);
+    else if(frame->buf.format == MPP_FMT_YUV422P) total += 2 * ((plane / 2 + 4095) & ~4095ULL);
+    else if(frame->buf.format == MPP_FMT_YUV444P) total *= 3;
+    return total > UINT32_MAX ? UINT32_MAX : (uint32_t)total;
+}
+
+static uint32_t aic_cache_bytes(const lv_img_decoder_dsc_t *dsc)
+{
+    if(!dsc->img_data || dsc->decoder != g_aic_decoder) return 0;
+    return frame_dma_bytes((const struct mpp_frame *)dsc->img_data);
+}
+
+static lv_res_t compiled_asset_open(lv_img_decoder_dsc_t *dsc,
+                                    const un260_compiled_asset_t *asset)
+{
+    struct mpp_frame *frame = calloc(1, sizeof(*frame));
+    unsigned char *pixels;
+    int heap = dmabuf_device_open();
+    uint64_t started = app_clock_monotonic_us();
+    if (!frame) { if (heap >= 0) close(heap); return LV_RES_INV; }
+    frame->buf.size.width = asset->width;
+    frame->buf.size.height = asset->height;
+    frame->buf.stride[0] = (asset->stride + 15U) & ~15U;
+    /* Both formats are supported by this SDK's DMA allocator and GE. */
+    frame->buf.format = asset->has_alpha ? MPP_FMT_ARGB_8888 : MPP_FMT_RGB_888;
+    if(!lv_img_cache_reserve_bytes(frame_dma_bytes(frame), AIC_IMAGE_CACHE_BUDGET)) {
+        if(heap >= 0) close(heap);
+        free(frame); return LV_RES_INV;
+    }
+    int allocated = heap >= 0 ? mpp_buf_alloc(heap, &frame->buf) : -1;
+    if (heap >= 0) close(heap);
+    if (allocated < 0) {
+        heap = open("/dev/dma_heap/reserved", O_RDWR | O_CLOEXEC);
+        allocated = heap >= 0 ? mpp_buf_alloc(heap, &frame->buf) : -1;
+        if (heap >= 0) close(heap);
+    }
+    if (allocated < 0) { free(frame); return LV_RES_INV; }
+    uint32_t bytes = frame->buf.stride[0] * asset->height;
+    pixels = dmabuf_mmap(frame->buf.fd[0], bytes);
+    if (!pixels) { mpp_buf_free(&frame->buf); free(frame); return LV_RES_INV; }
+    struct dma_buf_sync cpu_access = {.flags = DMA_BUF_SYNC_START | DMA_BUF_SYNC_WRITE};
+    if (ioctl(frame->buf.fd[0], DMA_BUF_IOCTL_SYNC, &cpu_access) < 0) {
+        dmabuf_munmap(pixels, bytes); mpp_buf_free(&frame->buf); free(frame); return LV_RES_INV;
+    }
+    for (uint32_t y = 0; y < asset->height; y++) {
+        memcpy(pixels + y * frame->buf.stride[0], asset->pixels + y * asset->stride, asset->stride);
+        memset(pixels + y * frame->buf.stride[0] + asset->stride, 0,
+               frame->buf.stride[0] - asset->stride);
+    }
+    int clean = dmabuf_sync(frame->buf.fd[0], CACHE_CLEAN);
+    dmabuf_munmap(pixels, bytes);
+    if (clean < 0) { mpp_buf_free(&frame->buf); free(frame); return LV_RES_INV; }
+    dsc->header.cf = asset->has_alpha ? LV_IMG_CF_TRUE_COLOR_ALPHA : LV_IMG_CF_TRUE_COLOR;
+    dsc->img_data = (const unsigned char *)frame;
+    if (perf_profile_is_enabled())
+        perf_profile_report_image_decode(dsc->src,
+            app_clock_elapsed_us32(started, app_clock_monotonic_us()), bytes);
+    return LV_RES_OK;
+}
+
+static lv_res_t aic_decoder_attempt(lv_img_decoder_dsc_t *dsc,
+                                    const char **stage, int *error, uint32_t *bytes)
+{
+    lv_fs_file_t file;
+    bool file_open = false, allocated = false, success = false;
+    int width = 0, height = 0, heap = -1, ret = -1;
+    struct mpp_decoder *dec = NULL;
+    struct frame_allocator *allocator = NULL;
+    struct mpp_frame *output = NULL, frame = {0};
+    struct mpp_packet packet = {0};
+    struct decode_config config = {0};
+    uint32_t len = 0, read_size = 0;
     enum mpp_codec_type type = MPP_CODEC_VIDEO_DECODER_PNG;
-    char *ptr = NULL;
-    struct decode_config config = { 0 };
-    uint64_t profile_started_us = 0;
+    const char *ext = strrchr(dsc->src, '.');
+    uint64_t started = app_clock_monotonic_us();
+    dsc->img_data = NULL;
+    *bytes = 0;
+    *stage = "extension"; *error = EINVAL;
+    if(!ext) return LV_RES_INV;
+    if(!strcmp(ext, ".jpg") || !strcmp(ext, ".jpeg")) type = MPP_CODEC_VIDEO_DECODER_MJPEG;
+    else if(strcmp(ext, ".png")) return LV_RES_INV;
 
-    if (perf_profile_is_enabled()) {
-        profile_started_us = app_clock_monotonic_us();
+    *stage = "file-open";
+    ret = lv_fs_open(&file, dsc->src, LV_FS_MODE_RD);
+    if(ret != LV_FS_RES_OK) goto cleanup;
+    file_open = true;
+    *stage = "header";
+    ret = type == MPP_CODEC_VIDEO_DECODER_PNG ?
+          png_get_img_size(&file, &width, &height, &config.pix_fmt) :
+          jpeg_get_img_size(&file, &width, &height, &config.pix_fmt);
+    if(ret != LV_FS_RES_OK || width <= 0 || height <= 0 || width > 4096 || height > 4096) {
+        if(!ret) ret = -EINVAL;
+        goto cleanup;
     }
-
-    ptr = strrchr(dsc->src, '.');
-    if ((!strcmp(ptr, ".jpg")) || (!strcmp(ptr, ".jpeg")))
-       type = MPP_CODEC_VIDEO_DECODER_MJPEG;
-
-    lv_fs_res_t res = lv_fs_open(&image_file, dsc->src, LV_FS_MODE_RD);
-    if(res != LV_FS_RES_OK)
-        goto err_fs_open;
-
-    if (type == MPP_CODEC_VIDEO_DECODER_PNG) {
-        png_get_img_size(&image_file, &width, &height, &config.pix_fmt);
-        if (config.pix_fmt == MPP_FMT_ARGB_8888)
-            dsc->header.cf = LV_IMG_CF_TRUE_COLOR_ALPHA;
-        else
-            dsc->header.cf = LV_IMG_CF_TRUE_COLOR;
-
+    *stage = "file-size";
+    ret = get_file_size(&file, &len);
+    if(ret != LV_FS_RES_OK || len == 0 || len > 16U*1024U*1024U) {
+        if(!ret) ret = -EINVAL;
+        goto cleanup;
+    }
+    *stage = "frame-metadata";
+    output = calloc(1, sizeof(*output));
+    if(!output) { ret = -ENOMEM; goto cleanup; }
+    output->buf.size.width = width;
+    output->buf.size.height = type == MPP_CODEC_VIDEO_DECODER_PNG ? height : (height + 15) & ~15;
+    output->buf.format = config.pix_fmt;
+    if(type == MPP_CODEC_VIDEO_DECODER_PNG) {
+        output->buf.stride[0] = (width * (config.pix_fmt == MPP_FMT_ARGB_8888 ? 4 : 3) + 15) & ~15;
     } else {
-        dsc->header.cf = LV_IMG_CF_TRUE_COLOR;
-        jpeg_get_img_size(&image_file, &width, &height, &config.pix_fmt);
-        printf("jpeg w: %d, h:%d format:%d\n", width, height, config.pix_fmt);
+        output->buf.stride[0] = (width + 15) & ~15;
+        if(config.pix_fmt == MPP_FMT_YUV420P || config.pix_fmt == MPP_FMT_YUV422P)
+            output->buf.stride[1] = output->buf.stride[2] = output->buf.stride[0] / 2;
+        else if(config.pix_fmt == MPP_FMT_YUV444P)
+            output->buf.stride[1] = output->buf.stride[2] = output->buf.stride[0];
+        else if(config.pix_fmt != MPP_FMT_YUV400) { ret = -EINVAL; goto cleanup; }
     }
-    get_file_size(&image_file, &file_len);
+    *bytes = frame_dma_bytes(output);
+    *stage = "cache-budget";
+    if(!lv_img_cache_reserve_bytes(*bytes, AIC_IMAGE_CACHE_BUDGET)) { ret = -ENOMEM; goto cleanup; }
+    *stage = "heap-open";
+    heap = dmabuf_device_open();
+    if(heap < 0) { ret = -errno; goto cleanup; }
+    *stage = "output-dma";
+    errno = 0;
+    ret = mpp_buf_alloc(heap, &output->buf);
+    if(ret < 0) { ret = errno ? -errno : -ENOMEM; goto cleanup; }
+    allocated = true;
+    *stage = "decoder-create";
     dec = mpp_decoder_create(type);
-    if (!dec) {
-        LV_LOG_ERROR("mpp_decoder_create failed\n");
-        goto err_dec_create;
-    }
-
-    config.bitstream_buffer_size = (file_len + 1023) & (~1023);
+    if(!dec) { ret = -ENOMEM; goto cleanup; }
+    *stage = "allocator";
+    allocator = open_allocator(output);
+    if(!allocator) { ret = -ENOMEM; goto cleanup; }
+    *stage = "decoder-control";
+    ret = mpp_decoder_control(dec, MPP_DEC_INIT_CMD_SET_EXT_FRAME_ALLOCATOR, allocator);
+    if(ret != 0) goto cleanup;
+    config.bitstream_buffer_size = (len + 1023) & ~1023;
     config.extra_frame_num = 0;
     config.packet_count = 1;
-    dma_fd = dmabuf_device_open();
-    if (dma_fd < 0) {
-        LV_LOG_ERROR("dmabuf_device_open failed:%d\n", dma_fd);
-        goto err_dev_open;
+    *stage = "decoder-init";
+    ret = mpp_decoder_init(dec, &config);
+    if(ret != 0 || !dec->pm) { if(!ret) ret = -ENOMEM; goto cleanup; }
+    *stage = "packet";
+    ret = mpp_decoder_get_packet(dec, &packet, len);
+    if(ret != 0 || !packet.data) { if(!ret) ret = -ENOMEM; goto cleanup; }
+    *stage = "file-read";
+    ret = lv_fs_read(&file, packet.data, len, &read_size);
+    if(ret != LV_FS_RES_OK || read_size != len) { if(!ret) ret = -EIO; goto cleanup; }
+    packet.size = len;
+    packet.flag = PACKET_FLAG_EOS;
+    *stage = "put-packet";
+    ret = mpp_decoder_put_packet(dec, &packet);
+    if(ret != 0) goto cleanup;
+    *stage = "decode";
+    ret = mpp_decoder_decode(dec);
+    if(ret != 0) goto cleanup;
+    *stage = "get-frame";
+    ret = mpp_decoder_get_frame(dec, &frame);
+    if(ret != 0) goto cleanup;
+    *stage = "put-frame";
+    ret = mpp_decoder_put_frame(dec, &frame);
+    if(ret != 0) goto cleanup;
+    success = true;
+cleanup:
+    *error = ret;
+    /* Decoder/frame manager must release its references before the external
+     * frame is freed. We own allocator even if fm_create never happened. */
+    if(dec) mpp_decoder_destory(dec);
+    free(allocator);
+    if(heap >= 0) dmabuf_device_close(heap);
+    if(file_open) lv_fs_close(&file);
+    if(!success) {
+        if(allocated) mpp_buf_free(&output->buf);
+        free(output);
+        return LV_RES_INV;
     }
+    dsc->header.cf = type == MPP_CODEC_VIDEO_DECODER_PNG && config.pix_fmt == MPP_FMT_ARGB_8888 ?
+                     LV_IMG_CF_TRUE_COLOR_ALPHA : LV_IMG_CF_TRUE_COLOR;
+    dsc->img_data = (const unsigned char *)output;
+    if(perf_profile_is_enabled())
+        perf_profile_report_image_decode(dsc->src, app_clock_elapsed_us32(started, app_clock_monotonic_us()), *bytes);
+    return LV_RES_OK;
+}
 
-    alloc_frame = (struct mpp_frame *)malloc(sizeof(struct mpp_frame));
-    if (!alloc_frame) {
-        LV_LOG_ERROR("malloc frame failed\n");
-        goto err_alloc_frame;
-    }
-
-    alloc_frame->id = 0;
-    alloc_frame->buf.size.width = width;
-    alloc_frame->buf.size.height = height;
-    alloc_frame->buf.format = config.pix_fmt;
-    if (type == MPP_CODEC_VIDEO_DECODER_PNG) {
-        if (config.pix_fmt == MPP_FMT_ARGB_8888)
-            alloc_frame->buf.stride[0] = (width * 4 + 15) & (~15);
-        else
-            alloc_frame->buf.stride[0] = (width * 3 + 15) & (~15);
-    } else {
-        alloc_frame->buf.size.height = (height + 15) & (~15);
-        if (config.pix_fmt == MPP_FMT_YUV420P || config.pix_fmt == MPP_FMT_YUV422P) {
-            alloc_frame->buf.stride[0] =  (width + 15) & (~15);
-            alloc_frame->buf.stride[1] =  alloc_frame->buf.stride[0] >> 1;
-            alloc_frame->buf.stride[2] =  alloc_frame->buf.stride[0] >> 1;
-        } else if (config.pix_fmt == MPP_FMT_YUV444P) {
-            alloc_frame->buf.stride[0] =  (width + 15) & (~15);
-            alloc_frame->buf.stride[1] =  alloc_frame->buf.stride[0];
-            alloc_frame->buf.stride[2] =  alloc_frame->buf.stride[0];
+/* Small failure backoff prevents every redraw from hammering a depleted heap.
+ * No successful image is hidden: failed sources get a fresh attempt after 1s. */
+typedef struct { uint64_t hash; uint32_t tick; bool valid; } image_failure_t;
+static image_failure_t image_failures[8];
+static unsigned failure_next;
+static uint64_t image_source_hash(const char *path)
+{
+    uint64_t h = 14695981039346656037ULL;
+    while(*path) { h ^= (unsigned char)*path++; h *= 1099511628211ULL; }
+    return h;
+}
+static lv_res_t aic_decoder_open(lv_img_decoder_t *decoder, lv_img_decoder_dsc_t *dsc)
+{
+    (void)decoder;
+    uint64_t hash = image_source_hash(dsc->src);
+    for(unsigned i = 0; i < 8; ++i) {
+        if(image_failures[i].valid && image_failures[i].hash == hash) {
+            if(lv_tick_elaps(image_failures[i].tick) < 1000) return LV_RES_INV;
+            image_failures[i].valid = false;
         }
     }
-
-    if (mpp_buf_alloc(dma_fd, &alloc_frame->buf) < 0) {
-        LV_LOG_ERROR("mpp_buf_alloc failed\n");
-        goto err_buf_alloc;
+    const un260_compiled_asset_t *asset = un260_compiled_asset_find(dsc->src);
+    const char *stage = "compiled-asset";
+    int error = 0;
+    uint32_t bytes = asset ? ((asset->stride + 15U) & ~15U) * asset->height : 0;
+    for(unsigned attempt = 0; attempt < 2; ++attempt) {
+        lv_res_t result = asset ? compiled_asset_open(dsc, asset) :
+                                 aic_decoder_attempt(dsc, &stage, &error, &bytes);
+        if(result == LV_RES_OK) {
+            if(attempt) fprintf(stderr, "IMG_RECOVER src=%s bytes=%u cache=%u\n",
+                               (const char *)dsc->src, bytes, lv_img_cache_memory_used());
+            return result;
+        }
+        bool memory_candidate = asset || error == -ENOMEM || !strcmp(stage, "decode") ||
+                                !strcmp(stage, "packet") || !strcmp(stage, "decoder-init");
+        uint32_t freed = 0;
+        if(!attempt && memory_candidate)
+            freed = lv_img_cache_reclaim_bytes(bytes > UINT32_MAX-2097152U ? UINT32_MAX : bytes+2097152U);
+        fprintf(stderr, "IMG_FAIL src=%s stage=%s ret=%d bytes=%u cache=%u reclaimed=%u attempt=%u\n",
+                (const char *)dsc->src, stage, error, bytes, lv_img_cache_memory_used(), freed, attempt+1);
+        if(!freed) break;
     }
-
-    /* allocator will be free inside decoder */
-    allocator = open_allocator(alloc_frame);
-    if (!allocator) {
-        LV_LOG_ERROR("open_allocator failed\n");
-        goto err_allocator;
-    }
-
-    mpp_decoder_control(dec, MPP_DEC_INIT_CMD_SET_EXT_FRAME_ALLOCATOR, (void*)allocator);
-    mpp_decoder_init(dec, &config);
-    memset(&packet, 0, sizeof(struct mpp_packet));
-    mpp_decoder_get_packet(dec, &packet, file_len);
-
-    lv_fs_read(&image_file, packet.data, file_len, &read_size);
-    packet.size = file_len;
-    packet.flag = PACKET_FLAG_EOS;
-
-    mpp_decoder_put_packet(dec, &packet);
-    ret = mpp_decoder_decode(dec);
-    if(ret < 0) {
-        LV_LOG_ERROR("mpp dec failed\n");
-        goto err_dec;
-    }
-
-    memset(&frame, 0, sizeof(struct mpp_frame));
-    mpp_decoder_get_frame(dec, &frame);
-    mpp_decoder_put_frame(dec, &frame);
-    mpp_decoder_destory(dec);
-    dmabuf_device_close(dma_fd);
-    lv_fs_close(&image_file);
-
-    if (type == MPP_CODEC_VIDEO_DECODER_PNG)
-        dsc->header.cf = (config.pix_fmt == MPP_FMT_ARGB_8888) ? LV_IMG_CF_TRUE_COLOR_ALPHA : LV_IMG_CF_TRUE_COLOR;
-    else
-        dsc->header.cf = LV_IMG_CF_TRUE_COLOR;
-
-    dsc->img_data = (unsigned char *)alloc_frame;
-
-    if (profile_started_us != 0) {
-        uint64_t decoded_bytes =
-            (uint64_t)alloc_frame->buf.stride[0] *
-            (uint64_t)alloc_frame->buf.size.height;
-        perf_profile_report_image_decode(
-            dsc->src,
-            app_clock_elapsed_us32(profile_started_us,
-                                   app_clock_monotonic_us()),
-            decoded_bytes);
-    }
-
-    return LV_RES_OK;
-
-err_dec:
-err_allocator:
-    mpp_buf_free(&alloc_frame->buf);
-err_buf_alloc:
-    free(alloc_frame);
-err_alloc_frame:
-    dmabuf_device_close(dma_fd);
-err_dev_open:
-    mpp_decoder_destory(dec);
-err_dec_create:
-    lv_fs_close(&image_file);
-err_fs_open:
-    dsc->img_data = NULL;
+    image_failures[failure_next++ % 8] = (image_failure_t){hash, lv_tick_get(), true};
     return LV_RES_INV;
 }
 
@@ -501,7 +605,13 @@ static void aic_decoder_close(lv_img_decoder_t * decoder, lv_img_decoder_dsc_t *
 
 void aic_dec_create()
 {
+    fprintf(stderr, "ASSET_C count=%u raw_bytes=%u format=ARGB8888 lazy_dma=1\n",
+            un260_compiled_asset_count(), un260_compiled_asset_bytes());
     lv_img_decoder_t *aic_dec = lv_img_decoder_create();
+    if(!aic_dec) return;
+    g_aic_decoder = aic_dec;
+    lv_img_cache_set_memory_cb(aic_cache_bytes);
+    fprintf(stderr, "IMG_CACHE budget=%u mpp_pool_mib=16 reclaim=unpinned retry=1\n", AIC_IMAGE_CACHE_BUDGET);
 
     lv_img_decoder_set_info_cb(aic_dec, aic_decoder_info);
     lv_img_decoder_set_open_cb(aic_dec, aic_decoder_open);

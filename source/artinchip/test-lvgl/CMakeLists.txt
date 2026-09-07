@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.12)
 
 project(test_lvgl)
 
@@ -15,7 +15,23 @@ set(CMAKE_C_FLAGS "-O2 -g0")
 
 include_directories(. ./aic_ui)
 include_directories(. ./guider_lvgl_demo)
+# Host-side deterministic resource generation. CMAKE_CONFIGURE_DEPENDS lets
+# an ordinary make notice added/changed input images and regenerate the list.
+find_program(UN260_ASSET_PYTHON NAMES python3 PATHS /usr/bin /usr/local/bin NO_DEFAULT_PATH)
+if(NOT UN260_ASSET_PYTHON)
+    message(FATAL_ERROR "python3 + Pillow required for UN260 image conversion")
+endif()
+execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/convert_lvgl_assets.py
+                RESULT_VARIABLE UN260_ASSET_RESULT)
+if(NOT UN260_ASSET_RESULT EQUAL 0)
+    message(FATAL_ERROR "UN260 asset generation failed; install python3-pil on build host")
+endif()
+file(GLOB_RECURSE UN260_ASSET_INPUTS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/aic_ui/lvgl_data/*")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${UN260_ASSET_INPUTS}
+             "${CMAKE_CURRENT_SOURCE_DIR}/tools/convert_lvgl_assets.py")
+include(${CMAKE_CURRENT_SOURCE_DIR}/aic_ui/generated_assets/assets.cmake)
 add_executable(${PROJECT_NAME} main.c
+    ${UN260_ASSET_SOURCES}
 	aic_ui/aic_dec.c
 	aic_ui/aic_ui.c
 	aic_ui/cpu_mem.c
