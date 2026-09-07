@@ -88,6 +88,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/innovation/multi_pass_verification.c
     un260/innovation/page_32_innovation.c
     un260/gesture/gesture_service.c
+    un260/lv_system/backlight_service.c
     un260/gesture/gesture_guide.c
     un260/device_info/device_info.c
     un260/data_collection/data_collection.c
@@ -139,6 +140,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_core/page_17_motor_test.c
     un260/lv_core/page_18_pure.c
     un260/lv_core/page_19_history.c
+    un260/lv_core/page_33_set_brightness.c
     un260/lv_core/page_20_set_print.c
     un260/lv_core/page_21_set_language.c
     un260/lv_core/page_22_set_double_note.c

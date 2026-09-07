@@ -11,6 +11,7 @@
 #include "un260/lv_system/app_clock.h"
 #include "aic_ui/perf_stats.h"
 #include"lv_page_declear.h"
+#include "page_33_set_brightness.h"
 
 #define UI_PAGE_STACK_CAPACITY 10
 #define UI_PAGE_INVALID ((ui_page_t)-1)
@@ -142,6 +143,7 @@ static const char *const g_page_names[UI_PAGE_COUNT] = {
     [UI_PAGE_PURE] = "PURE",
     [UI_PAGE_HISTORY] = "HISTORY",
     [UI_PAGE_PRINT_SETTING] = "PRINT_SETTINGS",
+    [UI_PAGE_BRIGHTNESS_SETTING] = "BRIGHTNESS",
     [UI_PAGE_LANGUAGE_SETTING] = "LANGUAGE",
     [UI_PAGE_DOUBLE_NOTE_SETTING] = "DOUBLE_NOTE",
     [UI_PAGE_FLAP_SETTING] = "FLAP",
@@ -243,6 +245,7 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .cache_policy = UI_PAGE_RETAINED,
     },
     [UI_PAGE_PRINT_SETTING] = { ui_page_20_set_print_create, ui_page_20_set_print_destroy },
+    [UI_PAGE_BRIGHTNESS_SETTING] = { ui_page_33_set_brightness_create, ui_page_33_set_brightness_destroy },
     [UI_PAGE_LANGUAGE_SETTING] = { ui_page_21_set_language_create, ui_page_21_set_language_destroy },
     [UI_PAGE_DOUBLE_NOTE_SETTING] = { ui_page_22_set_double_note_create, ui_page_22_set_double_note_destroy },
     [UI_PAGE_FLAP_SETTING] = { ui_page_23_set_flap_create, ui_page_23_set_flap_destroy },

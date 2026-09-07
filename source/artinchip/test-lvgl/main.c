@@ -16,6 +16,7 @@
 #include "un260/lv_system/user_cfg.h"
 #include "un260/lv_system/ui_history_data.h"
 #include "un260/gesture/gesture_service.h"
+#include "un260/lv_system/backlight_service.h"
 #include "aic_ui/perf_stats.h"
 
 //-------------------- 主函数 --------------------
@@ -26,6 +27,7 @@ int main(void) {
 
     lv_port_disp_init();
     lv_port_indev_init();
+    backlight_service_init();
     user_cfg_password_load();
     user_cfg_screenshot_load();
     user_cfg_screen_recording_load();

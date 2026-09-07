@@ -952,6 +952,8 @@ static void create_system_page_content(lv_obj_t* parent)
                 enter_page_event_cb, (void*)(uintptr_t)UI_PAGE_AGING_SETTING);
     create_tile(parent, 0, 3, ui_text_get(UI_TEXT_SETTINGS_FACTORY_SETTING), ">", false,
                 enter_page_event_cb, (void*)(uintptr_t)UI_PAGE_FACTORY_SETTING);
+    create_tile(parent, 1, 3, "BRIGHTNESS", ">", false,
+                enter_page_event_cb, (void*)(uintptr_t)UI_PAGE_BRIGHTNESS_SETTING);
 
     if (upgrade_page) {
         page_06_settings_create_option(upgrade_page, 0, 0,
