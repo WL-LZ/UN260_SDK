@@ -148,6 +148,14 @@ done
 [[ -f "$UPDATER_PATH" ]] || die "ui_update.sh not found: $UPDATER_PATH"
 [[ -f "$STARTUP_PATH" ]] || die "S00lvgl source not found: $STARTUP_PATH"
 
+# Shipping budget, deliberately based on uncompressed bytes. Compression of the
+# UPK is not a promise that a board can stage its replacement executable.
+APP_BUDGET_BYTES=$((16 * 1024 * 1024))
+PAYLOAD_BUDGET_BYTES=$((24 * 1024 * 1024))
+app_bytes=$(stat -c %s "$APP_PATH")
+[[ "$app_bytes" -le "$APP_BUDGET_BYTES" ]] ||
+    die "test_lvgl exceeds 16 MiB update budget ($app_bytes bytes); review embedded images, do not bypass device preflight"
+
 if [[ -n "$EXTRA_ROOT" ]]; then
     [[ -d "$EXTRA_ROOT" ]] || die "Extra root directory not found: $EXTRA_ROOT"
 fi
@@ -218,6 +226,9 @@ printf 'file|0755|usr/local/bin/test_lvgl\n' >> "$INSTALL_MANIFEST"
 ) > "$PKG_ROOT/checksums.sha256"
 
 PACKAGE_ID=$(sha256sum "$PKG_ROOT/checksums.sha256" | awk '{print $1}')
+payload_bytes=$(find "$PKG_ROOT/payload" -type f -printf '%s\n' | awk '{s += $1} END {printf "%.0f", s}')
+[[ "$payload_bytes" -le "$PAYLOAD_BUDGET_BYTES" ]] ||
+    die "Uncompressed payload exceeds 24 MiB update budget ($payload_bytes bytes); split optional resources or review firmware layout"
 CREATED_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 cat > "$PKG_ROOT/manifest.ini" <<EOF
 format=UN260_UPGRADE
@@ -247,5 +258,7 @@ echo "  package_id: $PACKAGE_ID"
 echo "  output:     $OUTPUT_PATH"
 echo "  size:       $(du -h "$OUTPUT_PATH" | awk '{print $1}')"
 echo "  entries:    $(wc -l < "$INSTALL_MANIFEST" | tr -d ' ')"
+echo "  app bytes:  $app_bytes / $APP_BUDGET_BYTES"
+echo "  raw bytes:  $payload_bytes / $PAYLOAD_BUDGET_BYTES"
 echo
 cat "$OUTPUT_PATH.sha256"

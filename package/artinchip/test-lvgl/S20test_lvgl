@@ -135,6 +135,15 @@ start() {
           rm -f "$PIDFILE"
       fi
 
+      # Complete/undo an interrupted file transaction before mapping UI binaries.
+      # No USB required: original inode links and the journal live on rootfs.
+      if [ -d /var/lib/un260-updater/transaction ]; then
+          if ! /usr/bin/ui_update.sh --recover >> "$STARTUP_LOG" 2>&1; then
+              echo "Starting test_lvgl: Fail (upgrade recovery required)"
+              return 1
+          fi
+      fi
+
       printf "Load touch driver: "
       if load_touch_driver; then
           echo "OK"

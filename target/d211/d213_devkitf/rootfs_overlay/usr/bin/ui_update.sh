@@ -30,6 +30,11 @@ TRANSACTION_STARTED=0
 ROLLBACK_RUNNING=0
 LAST_PROGRESS=0
 LAST_STAGE=prepare
+ROOT_PREFIX=""
+PLAN_FILE=$UPDATE_DIR/.un260_plan
+JOURNAL=$INSTALLED_STATE_DIR/transaction
+LOCK_DIR=/tmp/un260-updater.lock
+WORK_OWNED=0
 
 detect_usb_dev()
 {
@@ -113,83 +118,82 @@ manifest_value()
     ' "$STAGE_DIR/manifest.ini"
 }
 
-apply_tree_permissions()
+safe_destination()
 {
-    perm_root="$1"
-    perm_dir_list=/tmp/ui_update_perm_dirs.$$
-    perm_file_list=/tmp/ui_update_perm_files.$$
-    perm_failed=0
-
-    rm -f "$perm_dir_list" "$perm_file_list"
-    find "$perm_root" -type d -print > "$perm_dir_list" 2>> "$LOG" || perm_failed=1
-    find "$perm_root" -type f -print > "$perm_file_list" 2>> "$LOG" || perm_failed=1
-
-    if [ "$perm_failed" -eq 0 ]; then
-        while IFS= read -r perm_path; do
-            chmod 0755 "$perm_path" >> "$LOG" 2>&1 || {
-                perm_failed=1
-                break
-            }
-        done < "$perm_dir_list"
-    fi
-
-    if [ "$perm_failed" -eq 0 ]; then
-        while IFS= read -r perm_path; do
-            chmod 0644 "$perm_path" >> "$LOG" 2>&1 || {
-                perm_failed=1
-                break
-            }
-        done < "$perm_file_list"
-    fi
-
-    rm -f "$perm_dir_list" "$perm_file_list"
-    [ "$perm_failed" -eq 0 ]
+    is_safe_relative_path "$1" && is_allowed_target "$1" || return 1
+    case "$1" in *".un260-"*) return 1 ;; esac
+    check_path=$ROOT_PREFIX/$1
+    [ ! -L "$check_path" ] || return 1
+    [ ! -e "$check_path" ] || [ -f "$check_path" ] || return 1
+    check_path=$(dirname "$check_path")
+    while [ "$check_path" != "${ROOT_PREFIX:-/}" ]; do
+        [ ! -L "$check_path" ] || return 1
+        [ ! -e "$check_path" ] || [ -d "$check_path" ] || return 1
+        [ "$check_path" != / ] || return 1
+        check_path=$(dirname "$check_path")
+    done
 }
 
-cleanup_install_artifacts()
+cleanup_usb_work()
 {
-    [ -f "$STAGE_DIR/install.tsv" ] || return 0
+    [ "$WORK_OWNED" -eq 1 ] || return 0
+    # Only this invocation's staging files, never the user's package or logs.
+    rm -rf "$STAGE_DIR" "$BACKUP_DIR"
+    rm -f "$ARCHIVE_LIST" "$ARCHIVE_TYPES" "$SEEN_TARGETS" \
+        "$CHECKSUM_TARGETS" "$PAYLOAD_FILES" "$PLAN_FILE" "$PLAN_FILE.tree"
+}
 
-    while IFS='|' read -r cleanup_kind cleanup_mode cleanup_rel cleanup_extra; do
-        [ -n "$cleanup_rel" ] || continue
-        is_safe_relative_path "$cleanup_rel" || continue
-        is_allowed_target "$cleanup_rel" || continue
-        cleanup_dest=/$cleanup_rel
-        rm -rf "${cleanup_dest}.un260-new.$$" "${cleanup_dest}.un260-old.$$"
-    done < "$STAGE_DIR/install.tsv"
+# Recover original inode links without copying a large executable into a full
+# rootfs. The local journal permits recovery without the USB drive. This is a
+# recoverable file transaction, not a partition-level A/B firmware design.
+recover_transaction()
+{
+    [ -d "$JOURNAL" ] || return 0
+    [ ! -L "$JOURNAL" ] && [ -f "$JOURNAL/state" ] || return 1
+    if [ ! -f "$JOURNAL/committed" ] && [ ! -f "$JOURNAL/rolled-back" ]; then
+        echo "Rollback started (local original inodes)" >> "$LOG"
+        while IFS='|' read -r present rpath extra; do
+            [ -z "$extra" ] || return 1
+            case "$present" in 0|1) ;; *) return 1 ;; esac
+            safe_destination "$rpath" || return 1
+            for suffix in old new restore; do
+                [ ! -L "$ROOT_PREFIX/$rpath.un260-$suffix" ] || return 1
+            done
+        done < "$JOURNAL/state"
+        while IFS='|' read -r present rpath; do
+            rdest=$ROOT_PREFIX/$rpath
+            if [ "$present" = 1 ]; then
+                if [ -f "$rdest.un260-old" ]; then
+                    rm -f "$rdest.un260-restore" || return 1
+                    ln "$rdest.un260-old" "$rdest.un260-restore" || return 1
+                    mv -f "$rdest.un260-restore" "$rdest" || return 1
+                fi
+                # No old link means interruption before ln; original untouched.
+                [ -f "$rdest" ] || return 1
+            else
+                rm -f "$rdest" || return 1
+            fi
+        done < "$JOURNAL/state"
+        sync
+        : > "$JOURNAL/rolled-back" || return 1
+        sync
+        echo "Rollback finished" >> "$LOG"
+    fi
+    while IFS='|' read -r present rpath extra; do
+        [ -z "$extra" ] && safe_destination "$rpath" || return 1
+        rm -f "$ROOT_PREFIX/$rpath.un260-old" "$ROOT_PREFIX/$rpath.un260-new" \
+            "$ROOT_PREFIX/$rpath.un260-restore" || return 1
+    done < "$JOURNAL/state"
+    sync
+    rm -f "$JOURNAL/state" "$JOURNAL/committed" "$JOURNAL/rolled-back"
+    rmdir "$JOURNAL" || return 1
+    sync
 }
 
 rollback_bundle()
 {
     [ "$TRANSACTION_STARTED" -eq 1 ] || return 0
-    [ "$ROLLBACK_RUNNING" -eq 0 ] || return 0
-    [ -f "$BACKUP_STATE" ] || return 0
-
-    ROLLBACK_RUNNING=1
-    echo "Rollback started" >> "$LOG"
-
-    while IFS='|' read -r present kind mode rel; do
-        [ -n "$rel" ] || continue
-        is_safe_relative_path "$rel" || continue
-        is_allowed_target "$rel" || continue
-
-        dest=/$rel
-        backup=$BACKUP_DIR/rootfs/$rel
-        rm -rf "$dest"
-
-        if [ "$present" = "1" ] && [ -e "$backup" ]; then
-            mkdir -p "$(dirname "$dest")"
-            cp -R "$backup" "$dest" >> "$LOG" 2>&1 || true
-            if [ "$kind" = "tree" ]; then
-                apply_tree_permissions "$dest" || true
-            else
-                chmod "$mode" "$dest" 2>/dev/null || true
-            fi
-        fi
-    done < "$BACKUP_STATE"
-
-    sync
-    echo "Rollback finished" >> "$LOG"
+    recover_transaction
 }
 
 fail_update()
@@ -197,9 +201,12 @@ fail_update()
     msg="$1"
     trap - HUP INT TERM
     echo "ERR: $msg" >> "$LOG"
-    cleanup_install_artifacts
-    rollback_bundle
-    cleanup_install_artifacts
+    if rollback_bundle; then
+        cleanup_usb_work
+    else
+        msg="$msg; recovery incomplete, keep USB backup and do not start UI"
+        echo "ERR: Recovery incomplete; journal=$JOURNAL backup=$BACKUP_DIR" >> "$LOG"
+    fi
     write_status "$LAST_PROGRESS" fail "fail" 0 "$msg"
     write_result fail "$msg" ""
     exit 1
@@ -282,87 +289,86 @@ validate_payload_checksums()
         fail_update "Upgrade payload checksum verification failed"
 }
 
+plan_file()
+{
+    plan_rel=$1
+    plan_mode=$2
+    safe_destination "$plan_rel" || fail_update "Unsafe install destination: $plan_rel"
+    if grep -Fx "$plan_rel" "$SEEN_TARGETS" >/dev/null 2>&1; then
+        fail_update "Duplicate or overlapping install target: $plan_rel"
+    fi
+    echo "$plan_rel" >> "$SEEN_TARGETS"
+    plan_src=$STAGE_DIR/payload/$plan_rel
+    plan_dest=$ROOT_PREFIX/$plan_rel
+    for suffix in old new restore; do
+        [ ! -e "$plan_dest.un260-$suffix" ] && [ ! -L "$plan_dest.un260-$suffix" ] ||
+            fail_update "Unrecovered install artifact: $plan_rel"
+    done
+    plan_hash=$(sha256sum "$plan_src" | awk '{print $1}')
+    case "$plan_hash" in ''|*[!0-9a-f]*) fail_update "Cannot hash payload" ;; esac
+    plan_size=$(wc -c < "$plan_src" | tr -d ' ')
+    case "$plan_size" in ''|*[!0-9]*) fail_update "Cannot measure payload" ;; esac
+    if [ -f "$plan_dest" ]; then
+        dest_hash=$(sha256sum "$plan_dest" | awk '{print $1}')
+        # This board's minimal BusyBox does not ship stat/cmp applets.
+        dest_mode=$(LC_ALL=C ls -ld "$plan_dest" | awk '{print $1}')
+        case "$plan_mode" in 0755) expected_mode=-rwxr-xr-x ;; *) expected_mode=-rw-r--r-- ;; esac
+        if [ "$plan_hash" = "$dest_hash" ] && [ "$expected_mode" = "$dest_mode" ]; then
+            SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+            return 0
+        fi
+        old_bytes=$(wc -c < "$plan_dest" | tr -d ' ')
+        BACKUP_REQUIRED_KB=$((BACKUP_REQUIRED_KB + (old_bytes + 1023) / 1024 + 4))
+    fi
+    # All originals remain linked until commit, even when UI maps old binaries.
+    # No optimistic assumption about UBIFS compression in the space check.
+    ROOT_PEAK_REQUIRED_KB=$((ROOT_PEAK_REQUIRED_KB + (plan_size + 1023) / 1024 + 4))
+    printf 'file|%s|%s|%s\n' "$plan_mode" "$plan_rel" "$plan_hash" >> "$PLAN_FILE"
+    INSTALL_ENTRY_COUNT=$((INSTALL_ENTRY_COUNT + 1))
+    [ "$INSTALL_ENTRY_COUNT" -le 8192 ] || fail_update "Too many changed files"
+}
+
 validate_install_manifest()
 {
-    entry_count=0
-    backup_required_kb=0
-    root_consumed_kb=0
-    root_peak_kb=0
+    INSTALL_ENTRY_COUNT=0
+    SKIPPED_COUNT=0
+    BACKUP_REQUIRED_KB=0
+    ROOT_PEAK_REQUIRED_KB=0
+    manifest_count=0
     : > "$SEEN_TARGETS"
-
+    : > "$PLAN_FILE"
     while IFS='|' read -r kind mode rel extra; do
         [ -n "$kind" ] || continue
         [ -z "$extra" ] || fail_update "Invalid install manifest column count"
+        case "$mode" in 0644|0755) ;; *) fail_update "Unsupported install permissions" ;; esac
+        is_safe_relative_path "$rel" && is_allowed_target "$rel" ||
+            fail_update "Unsafe install manifest target"
         case "$kind" in
-            file|tree) ;;
+            file)
+                [ -f "$STAGE_DIR/payload/$rel" ] || fail_update "Missing payload file"
+                plan_file "$rel" "$mode"
+                ;;
+            tree)
+                [ -d "$STAGE_DIR/payload/$rel" ] || fail_update "Missing payload tree"
+                find "$STAGE_DIR/payload/$rel" -type f | sort > "$PLAN_FILE.tree" ||
+                    fail_update "Cannot enumerate payload tree"
+                while IFS= read -r tree_file; do
+                    tree_rel=${tree_file#"$STAGE_DIR/payload/"}
+                    plan_file "$tree_rel" 0644
+                done < "$PLAN_FILE.tree"
+                ;;
             *) fail_update "Invalid install manifest entry type" ;;
         esac
-        case "$mode" in
-            [0-7][0-7][0-7][0-7]) ;;
-            *) fail_update "Invalid install manifest file mode" ;;
-        esac
-        is_safe_relative_path "$rel" ||
-            fail_update "Install manifest contains an unsafe path"
-        is_allowed_target "$rel" ||
-            fail_update "Install manifest target is not allowed"
-
-        if grep -Fx "$rel" "$SEEN_TARGETS" >/dev/null 2>&1; then
-            fail_update "Install manifest contains duplicate targets"
-        fi
-        echo "$rel" >> "$SEEN_TARGETS"
-
-        if [ "$kind" = "file" ]; then
-            [ -f "$STAGE_DIR/payload/$rel" ] ||
-                fail_update "Install manifest payload file is missing"
-        else
-            [ -d "$STAGE_DIR/payload/$rel" ] ||
-                fail_update "Install manifest payload directory is missing"
-        fi
-
-        source_kb=$(du -sk "$STAGE_DIR/payload/$rel" 2>/dev/null | awk '{print $1}')
-        case "$source_kb" in
-            ''|*[!0-9]*) fail_update "Unable to measure upgrade payload size" ;;
-        esac
-
-        target_kb=0
-        if [ -e "/$rel" ]; then
-            target_kb=$(du -sk "/$rel" 2>/dev/null | awk '{print $1}')
-            case "$target_kb" in
-                ''|*[!0-9]*) fail_update "Unable to measure installed target size" ;;
-            esac
-            backup_required_kb=$((backup_required_kb + target_kb))
-        fi
-
-        entry_peak_kb=$((root_consumed_kb + source_kb))
-        [ "$entry_peak_kb" -le "$root_peak_kb" ] || root_peak_kb=$entry_peak_kb
-
-        case "$rel" in
-            usr/local/bin/test_lvgl|usr/local/lib/liblvgl.so)
-                # The running UI keeps the replaced executable and shared library
-                # inodes alive until reboot, so their new sizes remain consumed.
-                root_consumed_kb=$((root_consumed_kb + source_kb))
-                ;;
-            *)
-                if [ "$source_kb" -gt "$target_kb" ]; then
-                    root_consumed_kb=$((root_consumed_kb + source_kb - target_kb))
-                fi
-                ;;
-        esac
-
-        entry_count=$((entry_count + 1))
-        [ "$entry_count" -le 256 ] ||
-            fail_update "Install manifest contains too many entries"
+        manifest_count=$((manifest_count + 1))
+        [ "$manifest_count" -le 256 ] || fail_update "Too many manifest entries"
     done < "$STAGE_DIR/install.tsv"
-
-    [ "$entry_count" -gt 0 ] || fail_update "Install manifest is empty"
-    INSTALL_ENTRY_COUNT=$entry_count
-    BACKUP_REQUIRED_KB=$backup_required_kb
-    ROOT_PEAK_REQUIRED_KB=$root_peak_kb
+    [ "$manifest_count" -gt 0 ] || fail_update "Empty install manifest"
+    echo "Install plan: changed=$INSTALL_ENTRY_COUNT unchanged=$SKIPPED_COUNT root_staged=${ROOT_PEAK_REQUIRED_KB}KB" >> "$LOG"
 }
 
 validate_storage_space()
 {
-    root_free_kb=$(df -Pk / 2>/dev/null | awk 'NR == 2 {print $4}')
+    root_free_kb=$(df -Pk "${ROOT_PREFIX:-/}" 2>/dev/null | awk 'NR == 2 {print $4}')
     usb_free_kb=$(df -Pk "$USB_MNT" 2>/dev/null | awk 'NR == 2 {print $4}')
 
     [ -n "$root_free_kb" ] && [ -n "$usb_free_kb" ] &&
@@ -372,78 +378,98 @@ validate_storage_space()
         *[!0-9:]*) fail_update "Unable to determine upgrade storage capacity" ;;
     esac
 
-    root_required_kb=$((ROOT_PEAK_REQUIRED_KB + 1024))
+    root_required_kb=$((ROOT_PEAK_REQUIRED_KB + 2048))
     usb_required_kb=$((BACKUP_REQUIRED_KB + 4096))
     echo "Storage preflight: root_free=${root_free_kb}KB root_peak=${ROOT_PEAK_REQUIRED_KB}KB root_required=${root_required_kb}KB usb_free=${usb_free_kb}KB backup_required=${BACKUP_REQUIRED_KB}KB" >> "$LOG"
     [ "$root_free_kb" -ge "$root_required_kb" ] ||
-        fail_update "Insufficient root filesystem space for atomic upgrade"
+        fail_update "Insufficient root space: need ${root_required_kb}KB, free ${root_free_kb}KB; use matching full firmware"
     [ "$usb_free_kb" -ge "$usb_required_kb" ] ||
         fail_update "Insufficient USB space for upgrade rollback backup"
 }
 
-backup_target()
-{
-    kind="$1"
-    mode="$2"
-    rel="$3"
-    dest=/$rel
-    backup=$BACKUP_DIR/rootfs/$rel
-
-    mkdir -p "$(dirname "$backup")"
-    if [ -e "$dest" ]; then
-        cp -R "$dest" "$backup" >> "$LOG" 2>&1 ||
-            fail_update "Failed to back up an installed file"
-        echo "1|$kind|$mode|$rel" >> "$BACKUP_STATE"
-    else
-        echo "0|$kind|$mode|$rel" >> "$BACKUP_STATE"
-    fi
-}
-
 install_file_entry()
 {
-    mode="$1"
-    rel="$2"
-    src=$STAGE_DIR/payload/$rel
-    dest=/$rel
-    new=${dest}.un260-new.$$
-
-    mkdir -p "$(dirname "$dest")"
-    rm -f "$new"
-    cp "$src" "$new" >> "$LOG" 2>&1 ||
-        fail_update "Failed to stage an upgrade file"
-    chmod "$mode" "$new" || fail_update "Failed to set upgrade file permissions"
+    install_mode=$1
+    install_rel=$2
+    install_hash=$3
+    install_src=$STAGE_DIR/payload/$install_rel
+    install_dest=$ROOT_PREFIX/$install_rel
+    safe_destination "$install_rel" || fail_update "Destination changed during upgrade"
+    mkdir -p "$(dirname "$install_dest")" "$BACKUP_DIR/rootfs/$(dirname "$install_rel")" ||
+        fail_update "Cannot prepare install directories"
+    present=0
+    if [ -f "$install_dest" ]; then
+        cp "$install_dest" "$BACKUP_DIR/rootfs/$install_rel" >> "$LOG" 2>&1 ||
+            fail_update "Cannot back up installed file"
+        original_hash=$(sha256sum "$install_dest" | awk '{print $1}')
+        backup_hash=$(sha256sum "$BACKUP_DIR/rootfs/$install_rel" | awk '{print $1}')
+        [ -n "$original_hash" ] && [ "$original_hash" = "$backup_hash" ] ||
+            fail_update "USB backup verification failed"
+        present=1
+    fi
+    printf '%s|%s\n' "$present" "$install_rel" >> "$JOURNAL/state" ||
+        fail_update "Cannot persist recovery journal"
     sync
-    mv -f "$new" "$dest" >> "$LOG" 2>&1 ||
-        fail_update "Failed to replace an installed file"
+    if [ "$present" = 1 ]; then
+        ln "$install_dest" "$install_dest.un260-old" >> "$LOG" 2>&1 ||
+            fail_update "Cannot preserve original inode"
+        sync
+    fi
+    cp "$install_src" "$install_dest.un260-new" >> "$LOG" 2>&1 ||
+        fail_update "Cannot stage replacement file"
+    chmod "$install_mode" "$install_dest.un260-new" ||
+        fail_update "Cannot set replacement permissions"
+    copied_hash=$(sha256sum "$install_dest.un260-new" | awk '{print $1}')
+    [ "$copied_hash" = "$install_hash" ] || fail_update "Replacement verification failed"
+    sync
+    mv -f "$install_dest.un260-new" "$install_dest" >> "$LOG" 2>&1 ||
+        fail_update "Cannot replace installed file"
+    sync
 }
 
-install_tree_entry()
+execute_plan()
 {
-    mode="$1"
-    rel="$2"
-    src=$STAGE_DIR/payload/$rel
-    dest=/$rel
-    new=${dest}.un260-new.$$
-    old=${dest}.un260-old.$$
-
-    mkdir -p "$(dirname "$dest")"
-    rm -rf "$new" "$old"
-    cp -R "$src" "$new" >> "$LOG" 2>&1 ||
-        fail_update "Failed to stage an upgrade directory"
-    chmod "$mode" "$new" || fail_update "Failed to set directory permissions"
-    apply_tree_permissions "$new" ||
-        fail_update "Failed to set resource directory permissions"
+    validate_install_manifest
+    validate_storage_space
+    mkdir -p "$INSTALLED_STATE_DIR" || fail_update "Cannot create updater state directory"
+    mkdir -m 0700 "$JOURNAL" || fail_update "Pending recovery must finish first"
+    : > "$JOURNAL/state" || fail_update "Cannot create recovery journal"
     sync
+    TRANSACTION_STARTED=1
+    trap interrupt_update HUP INT TERM
+    install_index=0
+    while IFS='|' read -r kind mode rel expected_hash; do
+        install_file_entry "$mode" "$rel" "$expected_hash"
+        install_index=$((install_index + 1))
+        progress=$((40 + (install_index * 50 / INSTALL_ENTRY_COUNT)))
+        write_status "$progress" install "install" "" ""
+    done < "$PLAN_FILE"
+    write_status 92 sync "sync" "" ""
+    sync
+    : > "$JOURNAL/committed" || fail_update "Cannot persist transaction commit"
+    sync
+    recover_transaction || fail_update "Committed; cleanup requires recovery"
+    TRANSACTION_STARTED=0
+    trap - HUP INT TERM
+    record_installed_bundle
+    sync
+    write_status 96 finish "finish" "" ""
+    cleanup_usb_work
+    write_status 100 success "success" 1 "The system has been updated successfully. Restarting the device is recommended."
+    write_result success "Upgrade completed successfully; reboot is required" "$package_version"
+    echo "Update OK: version=$package_version changed=$INSTALL_ENTRY_COUNT unchanged=$SKIPPED_COUNT" >> "$LOG"
+}
 
-    if [ -e "$dest" ]; then
-        mv "$dest" "$old" >> "$LOG" 2>&1 ||
-            fail_update "Failed to prepare directory replacement"
+prepare_usb_work()
+{
+    # Older installer backups with actual entries need review, never discard.
+    if [ -s "$BACKUP_STATE" ] && [ ! -f "$BACKUP_DIR/managed-v2" ]; then
+        fail_update "Previous rollback backup exists; preserve and inspect it first"
     fi
-    if ! mv "$new" "$dest" >> "$LOG" 2>&1; then
-        [ -e "$old" ] && mv "$old" "$dest" >> "$LOG" 2>&1
-        fail_update "Failed to replace an installed directory"
-    fi
-    rm -rf "$old"
+    WORK_OWNED=1
+    cleanup_usb_work
+    mkdir -p "$STAGE_DIR" "$BACKUP_DIR/rootfs" || fail_update "Cannot create USB staging"
+    : > "$BACKUP_DIR/managed-v2"
 }
 
 record_installed_bundle()
@@ -459,10 +485,8 @@ record_installed_bundle()
 install_bundle()
 {
     write_status 5 verify "verify_archive" "" ""
+    prepare_usb_work
     validate_archive_paths
-    rm -rf "$STAGE_DIR" "$BACKUP_DIR"
-    mkdir -p "$STAGE_DIR" "$BACKUP_DIR/rootfs"
-    : > "$BACKUP_STATE"
 
     write_status 10 extract "extract" "" ""
     tar -xzf "$BUNDLE_PATH" -C "$STAGE_DIR" >> "$LOG" 2>&1 ||
@@ -501,83 +525,47 @@ install_bundle()
     validate_payload_checksums
 
     write_status 34 preflight "preflight" "" ""
-    validate_install_manifest
-    validate_storage_space
-    write_status 40 install "install" "" ""
-
-    TRANSACTION_STARTED=1
-    trap interrupt_update HUP INT TERM
-    install_index=0
-
-    while IFS='|' read -r kind mode rel extra; do
-        [ -n "$kind" ] || continue
-        backup_target "$kind" "$mode" "$rel"
-
-        if [ "$kind" = "file" ]; then
-            install_file_entry "$mode" "$rel"
-        else
-            install_tree_entry "$mode" "$rel"
-        fi
-
-        install_index=$((install_index + 1))
-        progress=$((40 + (install_index * 50 / INSTALL_ENTRY_COUNT)))
-        write_status "$progress" install "install" "" ""
-    done < "$STAGE_DIR/install.tsv"
-
-    write_status 92 sync "sync" "" ""
-    record_installed_bundle
-    sync
-    TRANSACTION_STARTED=0
-    trap - HUP INT TERM
-
-    write_status 96 finish "finish" "" ""
-    rm -rf "$STAGE_DIR" "$BACKUP_DIR" "$ARCHIVE_LIST" "$ARCHIVE_TYPES" \
-        "$SEEN_TARGETS" "$CHECKSUM_TARGETS" "$PAYLOAD_FILES"
-    write_status 100 success "success" 1 "The system has been updated successfully. Restarting the device is recommended."
-    write_result success "Upgrade completed successfully; reboot is required" "$package_version"
-    echo "Bundle update OK: version=$package_version id=$package_id" >> "$LOG"
-}
-
-install_legacy_file()
-{
-    src="$1"
-    dest="$2"
-    mode="$3"
-    new=${dest}.un260-new.$$
-
-    mkdir -p "$(dirname "$dest")"
-    cp "$src" "$new" >> "$LOG" 2>&1 || fail_update "Failed to copy legacy file"
-    chmod "$mode" "$new" || fail_update "Failed to set legacy file permissions"
-    sync
-    mv -f "$new" "$dest" >> "$LOG" 2>&1 || fail_update "Failed to replace legacy file"
+    execute_plan
 }
 
 install_legacy_package()
 {
     [ -f "$LEGACY_APP_PATH" ] || fail_update "Upgrade binary not found on USB drive"
-    write_status 10 verify "verify_manifest" "" ""
-
-    [ ! -f "$LEGACY_LIB_PATH" ] ||
-        install_legacy_file "$LEGACY_LIB_PATH" /usr/local/lib/liblvgl.so 0755
-    write_status 35 install "install" "" ""
-
-    if [ -d "$LEGACY_DATA_PATH" ]; then
-        rm -rf /usr/local/share/lvgl_data.un260-new.$$
-        cp -R "$LEGACY_DATA_PATH" /usr/local/share/lvgl_data.un260-new.$$ >> "$LOG" 2>&1 ||
-            fail_update "Failed to copy UI image resources"
-        rm -rf /usr/local/share/lvgl_data
-        mv /usr/local/share/lvgl_data.un260-new.$$ /usr/local/share/lvgl_data ||
-            fail_update "Failed to replace UI image resources"
+    prepare_usb_work
+    mkdir -p "$STAGE_DIR/payload/usr/local/bin" "$STAGE_DIR/payload/usr/local/lib" \
+        "$STAGE_DIR/payload/usr/local/share"
+    cp "$LEGACY_APP_PATH" "$STAGE_DIR/payload/usr/local/bin/test_lvgl" ||
+        fail_update "Cannot stage legacy app"
+    printf 'file|0755|usr/local/bin/test_lvgl\n' > "$STAGE_DIR/install.tsv"
+    if [ -f "$LEGACY_LIB_PATH" ]; then
+        cp "$LEGACY_LIB_PATH" "$STAGE_DIR/payload/usr/local/lib/liblvgl.so" ||
+            fail_update "Cannot stage legacy library"
+        printf 'file|0755|usr/local/lib/liblvgl.so\n' >> "$STAGE_DIR/install.tsv"
     fi
-    write_status 65 install "install" "" ""
-
-    install_legacy_file "$LEGACY_APP_PATH" /usr/local/bin/test_lvgl 0755
-    write_status 92 sync "sync" "" ""
-    sync
-    write_status 100 success "success" 1 "The system has been updated successfully. Restarting the device is recommended."
-    write_result success "Legacy UI upgrade completed; reboot is required" legacy
-    echo "Legacy update OK" >> "$LOG"
+    if [ -d "$LEGACY_DATA_PATH" ]; then
+        cp -R "$LEGACY_DATA_PATH" "$STAGE_DIR/payload/usr/local/share/lvgl_data" ||
+            fail_update "Cannot stage legacy resources"
+        printf 'tree|0755|usr/local/share/lvgl_data\n' >> "$STAGE_DIR/install.tsv"
+    fi
+    if find "$STAGE_DIR/payload" ! -type f ! -type d | grep -q .; then
+        fail_update "Unsupported legacy payload types"
+    fi
+    package_version=legacy
+    execute_plan
 }
+
+# Host tests load definitions, then redirect paths into a temporary fixture.
+if [ "${UN260_UPDATER_LIBRARY_ONLY:-0}" = 1 ]; then return 0; fi
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo "Updater already running or stale lock: $LOCK_DIR" >&2
+    exit 1
+fi
+trap 'rmdir "$LOCK_DIR" 2>/dev/null' EXIT
+if ! recover_transaction; then
+    echo "Recovery failed; keep $JOURNAL and USB backup" >&2
+    exit 1
+fi
+if [ "${1:-}" = "--recover" ]; then exit 0; fi
 
 if [ "${1:-}" = "--bundle-fnv" ]; then
     BUNDLE_FNV="${2:-}"
