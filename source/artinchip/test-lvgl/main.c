@@ -37,7 +37,7 @@ int main(void) {
     gesture_service_init();
     device_info_init(UI_VERSION);
     ui_history_data_init();
-    ui_manager_switch(UI_PAGE_MAIN);
+    ui_manager_switch(UI_PAGE_BOOT );
     perf_stats_init();
     perf_profile_set_enabled(user_cfg_performance_profile_enabled());
     app_ui_runtime_init();
