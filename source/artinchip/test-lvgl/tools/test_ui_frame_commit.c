@@ -46,5 +46,34 @@ int main(void)
     ui_frame_commit_stats_t stats;
     ui_frame_commit_take_stats(&stats);
     assert(stats.merged == 999 && stats.full == 1 && stats.callbacks == calls);
-    puts("UI frame commit: merge, nested batches, hidden retention, capacity/cancel PASS");
+
+    /* Initial projection must not enter the surrounding runtime batch or
+     * flush/drop existing work belonging to any page. */
+    visible = true;
+    unsigned prior_calls = calls;
+    ui_frame_commit_begin_batch();
+    assert(ui_frame_commit_defer(project, 0, 32));
+    ui_frame_commit_begin_sync();
+    assert(!ui_frame_commit_is_batching());
+    assert(!ui_frame_commit_defer(project, (void*)1, 64));
+    ui_frame_commit_begin_sync();
+    ui_frame_commit_begin_batch();
+    assert(!ui_frame_commit_defer(project, (void*)2, 128));
+    ui_frame_commit_end_sync();
+    assert(!ui_frame_commit_is_batching());
+    ui_frame_commit_end_batch();
+    assert(ui_frame_commit_pending() && calls == prior_calls);
+    ui_frame_commit_end_sync();
+    assert(ui_frame_commit_is_batching());
+    assert(ui_frame_commit_pending() && calls == prior_calls);
+    assert(ui_frame_commit_defer(project, 0, 64));
+    ui_frame_commit_end_batch();
+    received = 0;
+    ui_frame_commit_flush();
+    assert(calls == prior_calls + 1 && received == (32U | 64U));
+    ui_frame_commit_end_sync(); /* unmatched end must not underflow */
+    ui_frame_commit_begin_batch();
+    assert(ui_frame_commit_is_batching());
+    ui_frame_commit_end_batch();
+    puts("UI frame commit: merge, nesting, hidden retention, capacity/cancel and synchronous lifecycle PASS");
 }

@@ -40,12 +40,14 @@ intent = source[intent_start:intent_end] + "static uint32_t s_main_commit_animat
 functions = ["page_01_main_commit", "page_01_main_mark_dirty", "page_01_main_defer_refresh",
              "page_01_main_defer_bottom_refresh", "page_01_mode_switch_refre", "page_01_add_refre",
              "page_01_work_refre", "page_01_face_refre", "page_01_speed_refre",
+             "page_01_batch_refre", "page_01_cfd_refre",
              "page_01_bottom_text_anim_opa_cb", "page_01_bottom_text_anim_x_cb",
              "page_01_bottom_text_anim_zoom_cb", "page_01_bottom_label_anim_stop",
              "page_01_bottom_animations_stop", "page_01_bottom_label_anim_run",
              "page_01_bottom_a_refresh_mode", "page_01_bottom_a_refresh_add",
              "page_01_bottom_a_refresh_work", "page_01_bottom_a_refresh_fo",
-             "page_01_bottom_c_refresh_speed"]
+             "page_01_bottom_c_refresh_speed", "page_01_bottom_c_refresh_batch",
+             "page_01_bottom_c_refresh_cfd"]
 assert "page_01_bottom_animations_stop();" in function(source, "page_01_main_suspend")
 assert "page_01_bottom_animations_stop();" in function(source, "ui_main_destroy")
 with tempfile.TemporaryDirectory(prefix="un260-main-animation-") as directory:

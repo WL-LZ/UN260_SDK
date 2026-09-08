@@ -67,6 +67,17 @@ static int machine_state_add_enabled(void) { return model[1]; }
 static int machine_state_work_mode(void) { return model[2]; }
 static int machine_state_fo_mode(void) { return model[3]; }
 static int machine_state_speed(void) { return model[4]; }
+static int machine_state_batch_num(void) { return 100; }
+static int machine_state_batch_mode(void) { return 0; }
+static int machine_state_batch_enabled(void) { return 0; }
+static int machine_state_cfd_mode(void) { return 0; }
+#define lv_snprintf snprintf
+enum { UI_TEXT_PAGE01_BOTTOM_BATCH_VALUE_FMT, UI_TEXT_PAGE01_BOTTOM_BATCH_OFF,
+       UI_TEXT_PAGE01_BOTTOM_CFD_FMT };
+static const char *ui_text_get(int id) {
+    static const char *texts[] = {"BATCH:%d", "BATCH:OFF", "CFD:%s"};
+    return texts[id];
+}
 static const char *value_text(int value) { return value ? "NEW" : "OLD"; }
 static const char *page_01_bottom_mode_text_get(uint8_t mode) { return value_text(mode); }
 static const char *page_01_bottom_add_text_get(void) { return value_text(model[1]); }
@@ -86,9 +97,11 @@ void page_01_bottom_a_refresh_add(bool);
 void page_01_bottom_a_refresh_work(bool);
 void page_01_bottom_a_refresh_fo(bool);
 void page_01_bottom_c_refresh_speed(bool);
+void page_01_bottom_c_refresh_batch(bool);
+void page_01_bottom_c_refresh_cfd(void);
 bool page_01_main_defer_refresh(uint32_t);
-static void page_01_batch_refre(void) {}
-static void page_01_cfd_refre(void) {}
+void page_01_batch_refre(void);
+void page_01_cfd_refre(void);
 static void page_01_err_num_refre(void) {}
 static void page_01_curr_img_refre(void) {}
 static void page_01_update_language_texts(void) {}
@@ -166,6 +179,33 @@ int main(void)
     for (unsigned i = 0; i < 5; i++) { model[i] = 1; bottom[i](true); refresh[i](); }
     ui_frame_commit_end_batch(); ui_frame_commit_flush();
     for (unsigned i = 0; i < 5; i++) assert(labels[i].slides == 1 && labels[i].cancelled == 0);
+
+    /* Boot prewarm is inside an ordinary data batch, not a transition. The
+     * production create writes all seven labels, snapshots/clears dirty, then
+     * suspend cancels this owner's queued animations/projections. Resuming an
+     * unchanged model must therefore already have real text without a click. */
+    reset();
+    for (unsigned i = 0; i < 7; i++) strcpy(labels[i].text, "Text");
+    ui_frame_commit_begin_batch();
+    ui_frame_commit_begin_sync();
+    for (unsigned i = 0; i < 5; i++) bottom[i](false);
+    page_01_bottom_c_refresh_batch(false);
+    page_01_bottom_c_refresh_cfd();
+    ui_frame_commit_end_sync();
+    s_main_dirty = 0; /* Actual create's completed projection snapshot. */
+    page_01_bottom_animations_stop();
+    visible = false;
+    ui_frame_commit_end_batch();
+    ui_frame_commit_flush();
+    visible = true;
+    assert(s_main_dirty == 0 && !ui_frame_commit_pending());
+    for (unsigned i = 0; i < 7; i++) {
+        assert(strcmp(labels[i].text, "Text") != 0);
+        assert(labels[i].writes == 1 && labels[i].animations == 0);
+    }
+    assert(strcmp(labels[5].text, "BATCH:OFF") == 0);
+    assert(strcmp(labels[6].text, "CFD:L") == 0);
     puts("PASS: Main MODE/ADD/WORK/FO/SPEED slide intent survives coalescing; hidden/navigation reset, one-shot consumption, same-text preservation");
+    puts("PASS: all seven real Main bottom projections survive batch prewarm, suspend cancellation and clean resume without a click");
     return 0;
 }

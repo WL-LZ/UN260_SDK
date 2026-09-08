@@ -324,6 +324,11 @@ static const char *destroy_current_page(void)
 static const char *create_new_page(ui_page_t page)
 {
     const ui_page_registration_t *registration = &g_page_registry[page];
+    const char *action = "CREATE";
+
+    /* A protocol batch may activate a page. Its first frame must contain
+     * current values, not a projection waiting behind the next LVGL tick. */
+    ui_frame_commit_begin_sync();
 
     if (registration->cache_policy == UI_PAGE_RETAINED &&
         g_page_cache_ready[page]) {
@@ -336,14 +341,16 @@ static const char *create_new_page(ui_page_t page)
     if (registration->cache_policy == UI_PAGE_RETAINED &&
         registration->resume != NULL && registration->resume()) {
         g_page_cache_ready[page] = true;
-        return "RESUME";
+        action = "RESUME";
+    } else {
+        registration->create(lv_scr_act());
+        if (registration->cache_policy == UI_PAGE_RETAINED) {
+            g_page_cache_ready[page] = true;
+            g_page_data_dirty[page] = UI_DATA_TOPIC_NONE;
+        }
     }
-    registration->create(lv_scr_act());
-    if (registration->cache_policy == UI_PAGE_RETAINED) {
-        g_page_cache_ready[page] = true;
-        g_page_data_dirty[page] = UI_DATA_TOPIC_NONE;
-    }
-    return "CREATE";
+    ui_frame_commit_end_sync();
+    return action;
 }
 
 static uint32_t ui_manager_profile_elapsed_us(uint64_t started_us)
@@ -852,7 +859,11 @@ bool ui_manager_prewarm_page(ui_page_t page)
     }
 
     g_page_prewarming = page;
+    /* Prewarm also runs inside the main-loop batch. Finish initialization
+     * before static capture and suspend can cancel the page's pending work. */
+    ui_frame_commit_begin_sync();
     registration->create(lv_scr_act());
+    ui_frame_commit_end_sync();
     g_page_prewarming = UI_PAGE_INVALID;
 
     {

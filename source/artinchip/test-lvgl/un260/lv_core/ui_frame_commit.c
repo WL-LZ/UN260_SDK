@@ -5,11 +5,15 @@
 typedef struct { ui_frame_commit_fn fn; void *context; uint32_t flags; } entry_t;
 static entry_t pending[UI_FRAME_COMMIT_CAPACITY];
 static unsigned batch_depth;
+static unsigned sync_depth;
 static bool flushing;
 static ui_frame_commit_stats_t stats;
 void ui_frame_commit_begin_batch(void) { ++batch_depth; }
 void ui_frame_commit_end_batch(void) { if (batch_depth) --batch_depth; }
-bool ui_frame_commit_is_batching(void) { return batch_depth != 0 && !flushing; }
+void ui_frame_commit_begin_sync(void) { ++sync_depth; }
+void ui_frame_commit_end_sync(void) { if (sync_depth) --sync_depth; }
+bool ui_frame_commit_is_batching(void)
+{ return batch_depth != 0 && sync_depth == 0 && !flushing; }
 bool ui_frame_commit_defer(ui_frame_commit_fn fn, void *context, uint32_t flags)
 {
     entry_t *empty = NULL;
