@@ -78,3 +78,27 @@ c=work/'services.c';c.write_text(manager+mock+recovery+tests)
 subprocess.run(['cc','-std=c11','-O2','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',str(c),'-o',str(work/'services')],check=True)
 subprocess.run([str(work/'services')],check=True)
 print('Artifacts:',work)
+
+# Execute the actual registry release function: derived pixels must be dropped
+# before the source fd can be reused. Repeated/unmatched release is harmless.
+ge=(root/'lv_ge2d.c').read_text()
+fn=ge[ge.index('void lv_ge2d_unregister_dma_image('):ge.index('void lv_ge2d_offscreen_capture_begin(')]
+registry=r'''
+#include <assert.h>
+#include <stdint.h>
+#include <string.h>
+#define GE_DMA_IMAGE_REGISTRY_CAPACITY 2
+static struct {const void *data_key;void *frame;} g_dma_image_registry[2];
+static int frame, key, drops;
+static void lv_ge2d_scaled_cache_drop_source(const void *p){assert(p==&frame);assert(g_dma_image_registry[0].data_key==&key);drops++;}
+'''+fn+r'''
+int main(void){g_dma_image_registry[0].data_key=&key;g_dma_image_registry[0].frame=&frame;
+lv_ge2d_unregister_dma_image(NULL);assert(!drops);
+lv_ge2d_unregister_dma_image(&key);assert(drops==1 && !g_dma_image_registry[0].data_key);
+lv_ge2d_unregister_dma_image(&key);assert(drops==1);}
+'''
+p=work/'registry.c';p.write_text(registry)
+subprocess.run(['cc','-O2','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',str(p),'-o',str(work/'registry')],check=True)
+subprocess.run([str(work/'registry')],check=True)
+assert 'if(ok) lv_ge2d_scaled_cache_drop_source(&snapshot->frame);' in (root/'un260/lv_components/lv_dma_snapshot_cache.c').read_text()
+print('PASS DMA registry destroys derivatives before fd reuse; refreshed snapshots invalidate old scaled pixels')

@@ -151,6 +151,9 @@ void lv_ge2d_unregister_dma_image(const void *data_key)
 
     for (uint32_t i = 0; i < GE_DMA_IMAGE_REGISTRY_CAPACITY; i++) {
         if (g_dma_image_registry[i].data_key == data_key) {
+            /* Derivatives are keyed by DMA fd. Drop before that fd can be
+             * closed/reused for another snapshot, or stale pixels can match. */
+            lv_ge2d_scaled_cache_drop_source(g_dma_image_registry[i].frame);
             memset(&g_dma_image_registry[i], 0,
                    sizeof(g_dma_image_registry[i]));
             return;

@@ -245,6 +245,7 @@ static bool snapshot_render(lv_dma_snapshot_t *snapshot, lv_obj_t *obj,
     dmabuf_munmap(dma_pixels, (int)bytes);
     lv_mem_free(cpu_pixels);
     image_mem_release(IMAGE_MEM_CPU, cpu_bytes);
+    if(ok) lv_ge2d_scaled_cache_drop_source(&snapshot->frame);
     return ok;
 }
 
