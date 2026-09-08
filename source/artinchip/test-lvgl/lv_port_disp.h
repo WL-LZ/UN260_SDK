@@ -7,6 +7,8 @@
 
 #ifndef LV_PORT_DISP_H
 #define LV_PORT_DISP_H
+#include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -17,6 +19,9 @@ extern "C" {
 void lv_port_disp_init(void);
 
 void lv_port_disp_exit(void);
+/* UI-thread only; retry a failed submit without spinning in LVGL's flush wait. */
+bool lv_port_disp_poll(void);
+uint32_t fbdev_present_sequence(void);
 
 int fbdev_draw_fps(void);
 

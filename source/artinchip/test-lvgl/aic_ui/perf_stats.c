@@ -16,8 +16,19 @@
 static perf_stats_snapshot_t g_perf_stats = {0};
 static struct cpu_occupy g_cpu_prev = {0};
 static bool g_cpu_prev_valid = false;
+static uint64_t g_present_copied, g_present_saved;
+static uint32_t g_present_copy_fallbacks, g_present_submit_errors;
 
 
+void perf_profile_report_present_reuse(uint64_t copied_pixels, uint64_t saved_pixels,
+                                       uint32_t copy_fallbacks, uint32_t submit_errors)
+{
+    if (!perf_profile_is_enabled()) return;
+    g_present_copied += copied_pixels;
+    g_present_saved += saved_pixels;
+    g_present_copy_fallbacks += copy_fallbacks;
+    g_present_submit_errors += submit_errors;
+}
 
 typedef struct {
     uint64_t total_us;
@@ -464,6 +475,8 @@ static uint32_t perf_time_p95_us(const perf_time_accumulator_t *time)
 static void perf_profile_reset_window(uint32_t now_ms)
 {
     uint32_t i;
+    g_present_copied = g_present_saved = 0;
+    g_present_copy_fallbacks = g_present_submit_errors = 0;
 
     g_profile.window_started_ms = now_ms;
     g_profile.frames = 0;
@@ -1225,6 +1238,9 @@ void perf_profile_poll(uint32_t now_ms)
     ui_frame_commit_take_stats(&commit_stats);
     uart_debug_printf("PERF_COMMIT requests=%u merged=%u callbacks=%u full=%u\n",
         commit_stats.requests, commit_stats.merged, commit_stats.callbacks, commit_stats.full);
+    uart_debug_printf("PERF_PRESENT copied_px=%llu saved_px=%llu copy_fallback=%u submit_error=%u\n",
+        (unsigned long long)g_present_copied, (unsigned long long)g_present_saved,
+        g_present_copy_fallbacks, g_present_submit_errors);
     image_mem_report(); /* Only in the existing opt-in PERF reporting window. */
     uart_debug_printf(
         "PERF_CACHE page=%s snap=%u/%u/%u/%u/%u "

@@ -9,6 +9,8 @@
 #include <unistd.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
@@ -22,6 +24,7 @@
 #include "mpp_ge.h"
 #include "lv_fbdev.h"
 #include "aic_ui/perf_stats.h"
+#include "aic_ui/present_damage.h"
 #include "un260/lv_system/app_clock.h"
 
 static int draw_fps = 0;
@@ -35,6 +38,20 @@ static enum ge_mode g_ge_mode = GE_MODE_NORMAL;
 static struct fb_var_screeninfo g_pan_var;
 static int g_pan_var_valid = 0;
 static int g_live_vscreeninfo = 0;
+static uint32_t g_present_sequence;
+static bool g_damage_reuse;
+static lv_color_t *g_previous_buffer;
+static present_rect_t g_previous_damage[LV_INV_BUF_SIZE];
+static size_t g_previous_count;
+static uint32_t g_prepare_us;
+static uint64_t g_prepare_pixels, g_saved_pixels;
+static lv_disp_drv_t *g_retry_driver;
+static lv_color_t *g_retry_buffer;
+static uint32_t g_retry_tick;
+static uint32_t g_present_errors, g_copy_fallbacks;
+static perf_profile_flush_sample_t g_retry_sample;
+static bool g_retry_profile;
+static uint64_t g_retry_started_us;
 
 #ifdef USE_DRAW_BUF
 static int g_fb_num = 1;
@@ -87,7 +104,7 @@ static void cal_frame_rate()
     return;
 }
 
-void sync_disp_buf(lv_disp_drv_t * drv, lv_color_t * color_p, const lv_area_t * area_p)
+static bool sync_disp_buf(lv_disp_drv_t * drv, lv_color_t * color_p, const lv_area_t * area_p)
 {
     int32_t ret;
     struct ge_bitblt blt = { 0 };
@@ -100,13 +117,13 @@ void sync_disp_buf(lv_disp_drv_t * drv, lv_color_t * color_p, const lv_area_t * 
 
 #ifdef USE_DRAW_BUF
     blt.src_buf.buf_type = MPP_DMA_BUF_FD;
-    if (drv->draw_buf->buf_act == g_draw_buf[0])
+    if (color_p == (lv_color_t *)g_draw_buf[0])
         blt.src_buf.fd[0] = g_draw_buf_fd[0];
     else
         blt.src_buf.fd[0] = g_draw_buf_fd[1];
 #else
     blt.src_buf.buf_type = MPP_PHY_ADDR;
-    if (drv->draw_buf->buf_act == g_frame_buf[0])
+    if (color_p == (lv_color_t *)g_frame_buf[0])
         blt.src_buf.phy_addr[0] = g_frame_phy[0];
     else
         blt.src_buf.phy_addr[0] = g_frame_phy[1];
@@ -124,13 +141,13 @@ void sync_disp_buf(lv_disp_drv_t * drv, lv_color_t * color_p, const lv_area_t * 
 
 #ifdef USE_DRAW_BUF
     blt.dst_buf.buf_type = MPP_DMA_BUF_FD;
-    if (drv->draw_buf->buf_act == g_draw_buf[0])
+    if (color_p == (lv_color_t *)g_draw_buf[0])
         blt.dst_buf.fd[0] = g_draw_buf_fd[1];
     else
         blt.dst_buf.fd[0] = g_draw_buf_fd[0];
 #else
     blt.dst_buf.buf_type = MPP_PHY_ADDR;
-    if (drv->draw_buf->buf_act == g_frame_buf[0])
+    if (color_p == (lv_color_t *)g_frame_buf[0])
         blt.dst_buf.phy_addr[0] = g_frame_phy[1];
     else
         blt.dst_buf.phy_addr[0] = g_frame_phy[0];
@@ -149,7 +166,7 @@ void sync_disp_buf(lv_disp_drv_t * drv, lv_color_t * color_p, const lv_area_t * 
     ret = mpp_ge_bitblt(g_ge, &blt);
     if (ret < 0) {
         LV_LOG_ERROR("bitblt fail");
-        return;
+        return false;
     }
 
     /*
@@ -162,17 +179,17 @@ void sync_disp_buf(lv_disp_drv_t * drv, lv_color_t * color_p, const lv_area_t * 
         ret = mpp_ge_emit(g_ge);
         if (ret < 0) {
             LV_LOG_ERROR("emit fail");
-            return;
+            return false;
         }
 
         ret = mpp_ge_sync(g_ge);
         if (ret < 0) {
             LV_LOG_ERROR("sync fail");
-            return;
+            return false;
         }
     }
 
-    return;
+    return true;
 }
 
 #ifdef USE_DRAW_BUF
@@ -257,6 +274,145 @@ void disp_draw_buf(lv_disp_drv_t * drv, lv_color_t * color_p)
 }
 #endif
 
+static size_t collect_damage(lv_disp_t *disp, present_rect_t *rects)
+{
+    size_t count = 0;
+    for (unsigned i = 0; i < disp->inv_p; ++i) {
+        if (disp->inv_area_joined[i]) continue;
+        const lv_area_t *a = &disp->inv_areas[i];
+        rects[count++] = (present_rect_t){a->x1, a->y1, a->x2, a->y2};
+    }
+    return count;
+}
+
+static void force_full_damage(lv_disp_t *disp)
+{
+    /* Called before LVGL chooses clip rectangles. A copy error
+     * therefore falls back to a complete redraw, never a partly stale buffer. */
+    /* LVGL has already calculated last_i before render_start_cb. Preserve
+     * that index, otherwise no final flush/buffer swap would be issued. */
+    unsigned last = disp->inv_p - 1;
+    while (last && disp->inv_area_joined[last]) --last;
+    memset(disp->inv_area_joined, 1, sizeof(disp->inv_area_joined));
+    disp->inv_area_joined[last] = 0;
+    disp->inv_areas[last] = (lv_area_t){0, 0, disp->driver->hor_res-1,
+                                        disp->driver->ver_res-1};
+}
+
+static void fbdev_render_start(lv_disp_drv_t *drv)
+{
+    lv_disp_t *disp = _lv_refr_get_disp_refreshing();
+    present_rect_t redraw[LV_INV_BUF_SIZE], copy[PRESENT_DAMAGE_CAPACITY];
+    size_t count = 0, redraw_count;
+    const present_rect_t *copy_regions = copy;
+    uint64_t started;
+    if (!g_damage_reuse) return;
+    if (g_retry_driver) {
+        /* Also covers a second refresh in the SAME lv_timer_handler and
+         * explicit lv_refr_now(): do not enter LVGL's flushing wait loop.
+         * All suppressed invalidations are restored by a full redraw after
+         * recovery, so no model update can disappear permanently. */
+        memset(disp->inv_areas, 0, sizeof(disp->inv_areas));
+        memset(disp->inv_area_joined, 0, sizeof(disp->inv_area_joined));
+        disp->inv_p = 0;
+        lv_timer_pause(disp->refr_timer);
+        return;
+    }
+    if (!g_previous_count) return;
+    started = app_clock_monotonic_us();
+    redraw_count = collect_damage(disp, redraw);
+    uint64_t previous_pixels = present_damage_pixels(g_previous_damage, g_previous_count);
+    bool planned = present_damage_plan(g_previous_damage, g_previous_count,
+                                       redraw, redraw_count, copy,
+                                       PRESENT_DAMAGE_CAPACITY, &count);
+    /* A fragmented difference can cost more GE submissions than the saved
+     * pixels justify. Copy the original damage if planning becomes complex. */
+    if (!planned || count > g_previous_count + 4U) {
+        count = g_previous_count;
+        copy_regions = g_previous_damage;
+    }
+    uint64_t copied = 0;
+    bool copy_failed = false;
+    for (size_t i = 0; i < count; ++i) {
+        lv_area_t area = {copy_regions[i].x1, copy_regions[i].y1,
+                          copy_regions[i].x2, copy_regions[i].y2};
+        if (!sync_disp_buf(drv, g_previous_buffer, &area)) {
+            ++g_copy_fallbacks;
+            copy_failed = true;
+            force_full_damage(disp);
+            break;
+        }
+        copied += present_damage_pixels(&copy_regions[i], 1);
+    }
+    g_previous_count = 0;
+    g_prepare_us = app_clock_elapsed_us32(started, app_clock_monotonic_us());
+    g_prepare_pixels = copied;
+    g_saved_pixels = !copy_failed && previous_pixels >= copied ? previous_pixels - copied : 0;
+}
+
+/* Same-buffer pan/wait retries cannot change ownership until VSYNC succeeds.
+ * On failure leave flush pending, return to the application service loop and
+ * retry there. Never let LVGL draw into an unconfirmed scanout buffer. */
+static bool present_submit(lv_disp_drv_t *drv, lv_color_t *buffer,
+                           perf_profile_flush_sample_t *sample)
+{
+    struct fb_var_screeninfo var;
+    uint64_t started;
+    int result, zero = 0;
+    if (!g_live_vscreeninfo && g_pan_var_valid) var = g_pan_var;
+    else if (ioctl(g_fb, FBIOGET_VSCREENINFO, &var) < 0) return false;
+    var.xoffset = 0;
+    var.yoffset = buffer == (lv_color_t *)g_frame_buf[0] ? 0 : drv->ver_res;
+    started = app_clock_monotonic_us();
+    do { result = ioctl(g_fb, FBIOPAN_DISPLAY, &var); } while (result < 0 && errno == EINTR);
+    sample->pan_us += app_clock_elapsed_us32(started, app_clock_monotonic_us());
+    if (result < 0) return false;
+    started = app_clock_monotonic_us();
+    do { result = ioctl(g_fb, AICFB_WAIT_FOR_VSYNC, &zero); } while (result < 0 && errno == EINTR);
+    sample->vsync_us += app_clock_elapsed_us32(started, app_clock_monotonic_us());
+    return result >= 0;
+}
+
+static void present_complete(lv_disp_drv_t *drv, lv_color_t *buffer,
+                             perf_profile_flush_sample_t *sample,
+                             bool profile, uint64_t started)
+{
+    g_previous_buffer = buffer;
+    ++g_present_sequence;
+    sample->mirror_us = g_prepare_us;
+    sample->mirror_pixels = g_prepare_pixels;
+    /* Deferred mirror is still charged to output time. Moving it out of
+     * flush_cb must not manufacture an apparent performance improvement. */
+    sample->total_us = app_clock_elapsed_us32(started, app_clock_monotonic_us()) + g_prepare_us;
+    if (profile) {
+        perf_profile_report_flush(sample);
+        perf_profile_report_present_reuse(g_prepare_pixels, g_saved_pixels,
+                                           g_copy_fallbacks, g_present_errors);
+    }
+    g_prepare_us = 0;
+    g_prepare_pixels = g_saved_pixels = 0;
+    g_copy_fallbacks = g_present_errors = 0;
+    cal_frame_rate();
+    lv_disp_flush_ready(drv);
+}
+
+bool lv_port_disp_poll(void)
+{
+    if (!g_retry_driver) return true;
+    uint32_t now = app_clock_uptime_ms();
+    if ((uint32_t)(now - g_retry_tick) < 50U) return false;
+    g_retry_tick = now;
+    if (!present_submit(g_retry_driver, g_retry_buffer, &g_retry_sample)) return false;
+    present_complete(g_retry_driver, g_retry_buffer, &g_retry_sample,
+                     g_retry_profile, g_retry_started_us);
+    g_retry_driver = NULL;
+    lv_obj_invalidate(lv_scr_act());
+    fprintf(stderr, "DISP_RECOVER submit=ok buffers=released\n");
+    return true;
+}
+
+uint32_t fbdev_present_sequence(void) { return g_present_sequence; }
+
 static void fbdev_flush(lv_disp_drv_t * drv, const lv_area_t * area,
                         lv_color_t *color_p)
 {
@@ -272,6 +428,29 @@ static void fbdev_flush(lv_disp_drv_t * drv, const lv_area_t * area,
         profile_started_us = app_clock_monotonic_us();
     }
 
+    if (g_damage_reuse) {
+        if (!draw_buf->flushing_last) { lv_disp_flush_ready(drv); return; }
+        profile_sample = (perf_profile_flush_sample_t){0};
+        profile_started_us = app_clock_monotonic_us();
+        g_previous_count = collect_damage(disp, g_previous_damage);
+        profile_sample.invalid_area_count = g_previous_count;
+        profile_sample.invalid_pixels = present_damage_pixels(g_previous_damage, g_previous_count);
+        profile_sample.full_screen = profile_sample.invalid_pixels >= (uint64_t)drv->hor_res * drv->ver_res;
+        if (!present_submit(drv, color_p, &profile_sample)) {
+            ++g_present_errors;
+            g_retry_driver = drv;
+            g_retry_buffer = color_p;
+            g_retry_tick = app_clock_uptime_ms();
+            g_retry_sample = profile_sample;
+            g_retry_profile = profile_enabled;
+            g_retry_started_us = profile_started_us;
+            fprintf(stderr, "DISP_RECOVER submit=retry errno=%d buffers=held\n", errno);
+            return;
+        }
+        present_complete(drv, color_p, &profile_sample, profile_enabled, profile_started_us);
+        return;
+    }
+
     if (!disp->driver->direct_mode || draw_buf->flushing_last) {
         struct fb_var_screeninfo var = {0};
         int pan_result;
@@ -282,6 +461,7 @@ static void fbdev_flush(lv_disp_drv_t * drv, const lv_area_t * area,
         } else {
             if (ioctl(g_fb, FBIOGET_VSCREENINFO, &var) < 0) {
                 LV_LOG_WARN("ioctl FBIOGET_VSCREENINFO");
+                lv_disp_flush_ready(drv);
                 return;
             }
         }
@@ -388,6 +568,7 @@ static void fbdev_flush(lv_disp_drv_t * drv, const lv_area_t * area,
         }
 
         cal_frame_rate();
+        if (pan_result == 0) ++g_present_sequence;
         lv_disp_flush_ready(drv);
     }
     else {
@@ -491,6 +672,18 @@ void lv_port_disp_init(void)
 #endif
 
     /*Finally register the driver*/
+    /* Only the sealed opaque, synchronous GE-normal dual framebuffer path
+     * has the ownership contract needed for deferred mirror subtraction. */
+#if !defined(USE_DRAW_BUF) && LV_COLOR_DEPTH == 32 && LV_COLOR_SCREEN_TRANSP == 0
+    g_damage_reuse = buf2 && !g_triple_fb && disp_drv.direct_mode &&
+                     disp_drv.rotated == LV_DISP_ROT_NONE && !disp_drv.sw_rotate &&
+                     disp_drv.offset_x == 0 && disp_drv.offset_y == 0 &&
+                     g_ge_mode == GE_MODE_NORMAL &&
+                     getenv("UN260_PRESENT_LEGACY") == NULL;
+#endif
+    if (g_damage_reuse) disp_drv.render_start_cb = fbdev_render_start;
+    printf("DISP_REUSE enabled=%d policy=previous-minus-redraw capacity=%u\n",
+           g_damage_reuse, PRESENT_DAMAGE_CAPACITY);
     lv_disp_drv_register(&disp_drv);
 }
 

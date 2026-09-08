@@ -38,6 +38,7 @@ add_executable(${PROJECT_NAME} main.c
 	aic_ui/aic_dec.c
     aic_ui/image_memory.c
     aic_ui/image_recovery.c
+    aic_ui/present_damage.c
     un260/lv_core/ui_frame_commit.c
 	aic_ui/aic_ui.c
 	aic_ui/cpu_mem.c

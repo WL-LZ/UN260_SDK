@@ -59,11 +59,14 @@ int main(void) {
 
         profile_frame_seq = perf_profile_frame_sequence();
         lvgl_start_us = app_clock_monotonic_us();
-        if ((uint32_t)(now - visual_commit_tick) >= LV_DISP_DEF_REFR_PERIOD) {
-            ui_frame_commit_flush();
-            visual_commit_tick = now;
+        bool display_ready = lv_port_disp_poll();
+        if (display_ready) {
+            if ((uint32_t)(now - visual_commit_tick) >= LV_DISP_DEF_REFR_PERIOD) {
+                ui_frame_commit_flush();
+                visual_commit_tick = now;
+            }
+            lv_timer_handler();
         }
-        lv_timer_handler();
         lvgl_end_us = app_clock_monotonic_us();
         perf_stats_report_lvgl_time_us(
             app_clock_elapsed_us32(lvgl_start_us, lvgl_end_us));
