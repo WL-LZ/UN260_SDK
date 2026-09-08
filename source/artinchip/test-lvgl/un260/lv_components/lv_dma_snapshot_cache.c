@@ -9,6 +9,7 @@
 #include "dma_allocator.h"
 #include "aic_ui/image_memory.h"
 #include "aic_ui/image_recovery.h"
+#include "aic_ui/render_scratch.h"
 #include "aic_ui/perf_stats.h"
 #include "un260/lv_drivers/uart_io.h"
 #include "lv_ge2d.h"
@@ -188,6 +189,7 @@ static bool snapshot_render(lv_dma_snapshot_t *snapshot, lv_obj_t *obj,
     uint32_t row_bytes = snapshot->frame.buf.size.width * 4U;
     uint32_t stride = snapshot->frame.buf.stride[0];
     uint32_t bytes = stride * snapshot->frame.buf.size.height;
+    render_scratch_lease_t scratch = {0};
     uint8_t *cpu_pixels;
     uint8_t *dma_pixels;
     uint64_t started;
@@ -203,16 +205,12 @@ static bool snapshot_render(lv_dma_snapshot_t *snapshot, lv_obj_t *obj,
         snapshot_create_error(name, "dma_map");
         return false;
     }
-    if(!image_mem_acquire(IMAGE_MEM_CPU, cpu_bytes)) {
-        dmabuf_munmap(dma_pixels, (int)bytes); return false;
-    }
-    cpu_pixels = lv_mem_alloc(cpu_bytes);
-    if (cpu_pixels == NULL) {
-        image_mem_release(IMAGE_MEM_CPU, cpu_bytes);
+    if (!render_scratch_acquire(&scratch, cpu_bytes, lv_tick_get())) {
         dmabuf_munmap(dma_pixels, (int)bytes);
-        snapshot_create_error(name, "cpu_alloc");
+        snapshot_create_error(name, "cpu_scratch");
         return false;
     }
+    cpu_pixels = scratch.data;
     started = app_clock_monotonic_us();
     uint32_t failures_before = image_recovery_failure_serial();
     lv_ge2d_offscreen_capture_begin();
@@ -243,8 +241,7 @@ static bool snapshot_render(lv_dma_snapshot_t *snapshot, lv_obj_t *obj,
         ok = false;
     }
     dmabuf_munmap(dma_pixels, (int)bytes);
-    lv_mem_free(cpu_pixels);
-    image_mem_release(IMAGE_MEM_CPU, cpu_bytes);
+    render_scratch_release(&scratch, lv_tick_get());
     if(ok) lv_ge2d_scaled_cache_drop_source(&snapshot->frame);
     return ok;
 }
@@ -455,12 +452,21 @@ uint32_t lv_dma_snapshot_cache_item_count(void)
 
 void lv_dma_snapshot_cache_take_stats(lv_dma_snapshot_cache_stats_t *out)
 {
+    render_scratch_stats_t scratch;
     if (out == NULL) return;
 
     *out = g_dma_snapshot_stats;
     out->item_count = lv_dma_snapshot_cache_item_count();
     out->total_bytes = g_dma_snapshot_total_bytes;
     out->max_bytes = DMA_SNAPSHOT_MAX_TOTAL_BYTES;
+    render_scratch_take_stats(&scratch);
+    out->scratch_hits = scratch.hits;
+    out->scratch_misses = scratch.misses;
+    out->scratch_temporary_allocations = scratch.temporary_allocations;
+    out->scratch_failures = scratch.failures;
+    out->scratch_retained_bytes = scratch.retained_bytes;
+    out->scratch_in_use_bytes = scratch.in_use_bytes;
+    out->scratch_peak_bytes = scratch.peak_bytes;
     g_dma_snapshot_stats = (lv_dma_snapshot_cache_stats_t){0};
 }
 

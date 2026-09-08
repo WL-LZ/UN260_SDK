@@ -1,5 +1,6 @@
 #include "perf_stats.h"
 #include "image_memory.h"
+#include "render_scratch.h"
 #include "un260/lv_core/ui_frame_commit.h"
 
 #include <stddef.h>
@@ -1234,6 +1235,11 @@ void perf_profile_poll(uint32_t now_ms)
         }
     }
     lv_dma_snapshot_cache_take_stats(&snapshot_stats);
+    uart_debug_printf("PERF_SCRATCH hits=%u misses=%u temporary=%u failures=%u retained=%u in_use=%u peak=%u\n",
+        snapshot_stats.scratch_hits, snapshot_stats.scratch_misses,
+        snapshot_stats.scratch_temporary_allocations, snapshot_stats.scratch_failures,
+        snapshot_stats.scratch_retained_bytes, snapshot_stats.scratch_in_use_bytes,
+        snapshot_stats.scratch_peak_bytes);
     ui_frame_commit_stats_t commit_stats;
     ui_frame_commit_take_stats(&commit_stats);
     uart_debug_printf("PERF_COMMIT requests=%u merged=%u callbacks=%u full=%u\n",

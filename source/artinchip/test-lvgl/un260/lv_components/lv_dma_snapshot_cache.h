@@ -47,6 +47,13 @@ typedef struct {
     uint32_t item_count;
     uint32_t total_bytes;
     uint32_t max_bytes;
+    uint32_t scratch_hits;
+    uint32_t scratch_misses;
+    uint32_t scratch_temporary_allocations;
+    uint32_t scratch_failures;
+    uint32_t scratch_retained_bytes;
+    uint32_t scratch_in_use_bytes;
+    uint32_t scratch_peak_bytes;
 } lv_dma_snapshot_cache_stats_t;
 
 /* Capture one LVGL object subtree into an application-owned ARGB DMA image.

@@ -19,6 +19,7 @@
 #include "un260/lv_system/backlight_service.h"
 #include "aic_ui/perf_stats.h"
 #include "un260/lv_core/ui_frame_commit.h"
+#include "aic_ui/render_scratch.h"
 
 //-------------------- 主函数 --------------------
 int main(void) {
@@ -89,6 +90,7 @@ int main(void) {
             now, current_page == UI_PAGE_BOOT &&
                  !ui_page_00_boot_anim_is_active());
         ui_frame_commit_end_batch();
+        render_scratch_poll(app_clock_uptime_ms());
 
         current_page = ui_manager_get_current_page();
         perf_profile_set_page_context(

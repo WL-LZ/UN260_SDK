@@ -26,6 +26,12 @@ bool image_mem_acquire(image_mem_kind_t kind, uint32_t bytes)
     uint32_t limit=kind==IMAGE_MEM_CPU ? CPU_LIMIT : DMA_LIMIT;
     uint32_t total=kind==IMAGE_MEM_CPU ? used[kind] : image_mem_used();
     if(bytes>limit) { denied++; return false; }
+    if (kind == IMAGE_MEM_CPU && total > limit-bytes && !reclaiming && reclaim[IMAGE_MEM_CPU]) {
+        reclaiming = true;
+        reclaim[IMAGE_MEM_CPU](total - (limit-bytes));
+        reclaiming = false;
+        total = used[IMAGE_MEM_CPU];
+    }
     if(total>limit-bytes && !reclaiming && kind!=IMAGE_MEM_CPU) {
         reclaiming=true;
         /* Cheap derivatives first, then unreferenced snapshots, finally decoded
