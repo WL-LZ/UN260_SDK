@@ -31,6 +31,8 @@ code=r'''
 #define UI_PAGE_INVALID ((ui_page_t)-1)
 static struct { ui_page_t current,stack[10];int stack_top; } g_page_manager={.current=UI_PAGE_MAIN,.stack_top=-1};
 static bool g_page_switch_committing;
+static unsigned session_resets;
+static void ui_manager_reset_navigation_sessions(void){session_resets++;}
 #define uart_debug_printf(...) ((void)0)
 static bool ui_manager_page_is_registered(ui_page_t p){return p>=0 && p<UI_PAGE_COUNT;}
 '''
@@ -52,9 +54,12 @@ int main(void){
     ui_manager_push_page(UI_PAGE_MAIN); /* protect even old callers */
     assert(g_page_manager.current==UI_PAGE_MAIN && g_page_manager.stack_top==-1);
     ui_manager_switch(UI_PAGE_SET_PASSAGE);ui_manager_switch(UI_PAGE_SETTING);
+    unsigned before_back=session_resets;
     ui_manager_push_page(UI_PAGE_PRINT_SETTING);
     assert(ui_manager_pop_page() && g_page_manager.current==UI_PAGE_SETTING);
+    assert(session_resets==before_back); /* Back retains Settings context. */
     assert(ui_manager_pop_page() && g_page_manager.current==UI_PAGE_MAIN);
+    assert(session_resets==before_back+1); /* Home ends that session. */
     assert(!ui_manager_pop_page());
     /* Nested detail pages keep LIFO order until the root is reached. */
     ui_manager_push_page(UI_PAGE_SETTING);ui_manager_push_page(UI_PAGE_PRINT_SETTING);

@@ -1341,7 +1341,6 @@ static void back_event_cb(lv_event_t* e)
         return;
     }
 
-    page_06_reset_saved_navigation();
     ui_manager_clear_stack();
     ui_manager_switch(UI_PAGE_MAIN);
 }
@@ -1494,6 +1493,18 @@ void ui_page_06_settings_create(lv_obj_t* parent)
         page_06_switch_sub_page(saved_menu_index);
     }
     settings_set_status("READY", lv_color_hex(0x24D6A1));
+}
+
+void ui_page_06_settings_reset_navigation(void)
+{
+    /* Reset both the model and retained view. Resetting only saved_* does not
+     * affect resume(), which reuses the already-created sidebar and tiles. */
+    page_06_reset_saved_navigation();
+    nav_stack_depth = 0;
+    if (settings_page == NULL || !lv_obj_is_valid(settings_page)) return;
+    page_06_refresh_option_state();
+    page_06_update_menu_state(SETTINGS_MENU_SYSTEM);
+    page_06_switch_sub_page(SETTINGS_MENU_SYSTEM);
 }
 
 bool ui_page_06_settings_resume(void)

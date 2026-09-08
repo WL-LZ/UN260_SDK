@@ -36,12 +36,14 @@ static ui_data_topic_t g_page_data_dirty[UI_PAGE_COUNT];
 static ui_page_t g_page_prewarming = UI_PAGE_INVALID;
 static bool g_page_switch_committing;
 static lv_timer_t *g_page_input_unlock_timer;
+static void ui_manager_reset_navigation_sessions(void);
 
 /* Main is the navigation root, never an intermediate history entry that can
  * later resurrect List/Debug behind an unrelated Settings navigation. */
 static void ui_manager_history_on_commit(ui_page_t page)
 {
     if(page != UI_PAGE_MAIN) return;
+    ui_manager_reset_navigation_sessions();
     int depth = g_page_manager.stack_top + 1;
     g_page_manager.stack_top = -1;
     if(depth > 0) uart_debug_printf("NAV_ROOT from=%u dropped=%d\n",
@@ -92,6 +94,10 @@ typedef struct {
     const ui_page_static_image_t *static_images;
     uint8_t static_image_count;
     bool predecode_small_visible_images;
+    /* End page-local navigation state when the application returns Home.
+     * Cached objects/data remain allocated; Back within a session preserves
+     * context. Pages opt in without coupling the manager to their widgets. */
+    void (*reset_navigation)(void);
 } ui_page_registration_t;
 
 static uint8_t ui_manager_predecode_static_images(
@@ -210,6 +216,7 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .cache_policy = UI_PAGE_RETAINED,
         .data_topics = UI_DATA_TOPIC_DEVICE_VERSION,
         .refresh_data = ui_page_06_settings_refresh_data,
+        .reset_navigation = ui_page_06_settings_reset_navigation,
     },
     [UI_PAGE_SET_PASSAGE] = {
         .create = ui_page_05_set_password_create,
@@ -279,6 +286,14 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .cache_policy = UI_PAGE_RETAINED,
     },
 };
+
+static void ui_manager_reset_navigation_sessions(void)
+{
+    for (ui_page_t page = UI_PAGE_BOOT_ANIM; page < UI_PAGE_COUNT; ++page) {
+        if (g_page_registry[page].reset_navigation != NULL)
+            g_page_registry[page].reset_navigation();
+    }
+}
 
 static bool ui_manager_page_is_registered(ui_page_t page)
 {
