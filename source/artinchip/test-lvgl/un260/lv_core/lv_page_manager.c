@@ -3,6 +3,7 @@
 #include "lvgl/src/draw/lv_img_cache.h"
 #include <string.h>
 #include "aic_ui/aic_ui.h"
+#include "aic_ui/image_memory.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_system/counting_ui_runtime.h"
 #include "un260/counting/counting_data_store_internal.h"
@@ -802,6 +803,8 @@ bool ui_manager_prewarm_page(ui_page_t page)
     if (g_page_cache_ready[page]) {
         return true;
     }
+
+    if (!image_mem_prewarm_allowed()) return false;
 
     registration = &g_page_registry[page];
     if (registration->cache_policy != UI_PAGE_RETAINED ||

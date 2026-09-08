@@ -193,9 +193,12 @@ static void upgrade_popup_progress_anim_cb(void* var, int32_t value)
 static void upgrade_popup_set_real_progress(int target)
 {
     lv_anim_t anim;
+    static int previous_target = -1;
 
     if (target < 0) target = 0;
     if (target > 100) target = 100;
+    if (target == previous_target && lv_anim_get(&g_upgrade_popup, upgrade_popup_progress_anim_cb)) return;
+    previous_target = target;
     if (target == g_upgrade_popup.displayed_progress) return;
 
     lv_anim_del(&g_upgrade_popup, upgrade_popup_progress_anim_cb);

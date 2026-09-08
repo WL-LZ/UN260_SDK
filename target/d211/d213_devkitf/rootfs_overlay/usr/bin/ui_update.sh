@@ -35,6 +35,11 @@ PLAN_FILE=$UPDATE_DIR/.un260_plan
 JOURNAL=$INSTALLED_STATE_DIR/transaction
 LOCK_DIR=/tmp/un260-updater.lock
 WORK_OWNED=0
+PAYLOAD_VERIFIED=0
+package_schema=1
+DELTA_ALREADY_APPLIED=0
+PHASE_TIME=$(date +%s)
+START_TIME=$PHASE_TIME
 
 detect_usb_dev()
 {
@@ -53,6 +58,11 @@ write_status()
     step="$3"
     success="$4"
     message="$5"
+    if [ "$stage" != "$LAST_STAGE" ]; then
+        now=$(date +%s)
+        echo "UPGRADE_TIME stage=$LAST_STAGE seconds=$((now-PHASE_TIME)) elapsed=$((now-START_TIME))" >> "$LOG"
+        PHASE_TIME=$now
+    fi
 
     {
         echo "progress=$progress"
@@ -225,7 +235,7 @@ validate_archive_paths()
 
     while IFS= read -r entry; do
         case "$entry" in
-            manifest.ini|checksums.sha256|install.tsv|payload|payload/*) ;;
+            manifest.ini|checksums.sha256|install.tsv|baseline.tsv|target.tsv|payload|payload/*) ;;
             *) fail_update "Upgrade archive contains an invalid path" ;;
         esac
         case "$entry" in
@@ -269,7 +279,7 @@ validate_payload_checksums()
         checksum_count=$((checksum_count + 1))
     done < "$STAGE_DIR/checksums.sha256"
 
-    [ "$checksum_count" -gt 0 ] || fail_update "Checksum manifest is empty"
+    [ "$checksum_count" -gt 0 ] || [ "$package_schema" = 2 ] || fail_update "Checksum manifest is empty"
 
     (cd "$STAGE_DIR" && find payload -type f | sort) > "$PAYLOAD_FILES" ||
         fail_update "Unable to enumerate upgrade payload"
@@ -285,8 +295,9 @@ validate_payload_checksums()
     [ "$payload_count" = "$checksum_count" ] ||
         fail_update "Upgrade checksum manifest does not match payload"
 
-    (cd "$STAGE_DIR" && sha256sum -c checksums.sha256) >> "$LOG" 2>&1 ||
+    [ "$checksum_count" = 0 ] || (cd "$STAGE_DIR" && sha256sum -c checksums.sha256) >> "$LOG" 2>&1 ||
         fail_update "Upgrade payload checksum verification failed"
+    PAYLOAD_VERIFIED=1
 }
 
 plan_file()
@@ -304,10 +315,15 @@ plan_file()
         [ ! -e "$plan_dest.un260-$suffix" ] && [ ! -L "$plan_dest.un260-$suffix" ] ||
             fail_update "Unrecovered install artifact: $plan_rel"
     done
-    plan_hash=$(sha256sum "$plan_src" | awk '{print $1}')
+    if [ "$PAYLOAD_VERIFIED" = 1 ]; then
+        plan_hash=$(awk -v p="payload/$plan_rel" '$2 == p {print $1}' "$STAGE_DIR/checksums.sha256")
+    else
+        plan_hash=$(sha256sum "$plan_src" | awk '{print $1}')
+    fi
     case "$plan_hash" in ''|*[!0-9a-f]*) fail_update "Cannot hash payload" ;; esac
     plan_size=$(wc -c < "$plan_src" | tr -d ' ')
     case "$plan_size" in ''|*[!0-9]*) fail_update "Cannot measure payload" ;; esac
+    dest_hash=-
     if [ -f "$plan_dest" ]; then
         dest_hash=$(sha256sum "$plan_dest" | awk '{print $1}')
         # This board's minimal BusyBox does not ship stat/cmp applets.
@@ -323,7 +339,8 @@ plan_file()
     # All originals remain linked until commit, even when UI maps old binaries.
     # No optimistic assumption about UBIFS compression in the space check.
     ROOT_PEAK_REQUIRED_KB=$((ROOT_PEAK_REQUIRED_KB + (plan_size + 1023) / 1024 + 4))
-    printf 'file|%s|%s|%s\n' "$plan_mode" "$plan_rel" "$plan_hash" >> "$PLAN_FILE"
+    printf 'file|%s|%s|%s|%s|%s\n' "$plan_mode" "$plan_rel" "$plan_hash" "$dest_hash" "$plan_size" >> "$PLAN_FILE"
+    INSTALL_TOTAL_BYTES=$((INSTALL_TOTAL_BYTES+plan_size))
     INSTALL_ENTRY_COUNT=$((INSTALL_ENTRY_COUNT + 1))
     [ "$INSTALL_ENTRY_COUNT" -le 8192 ] || fail_update "Too many changed files"
 }
@@ -334,6 +351,7 @@ validate_install_manifest()
     SKIPPED_COUNT=0
     BACKUP_REQUIRED_KB=0
     ROOT_PEAK_REQUIRED_KB=0
+    INSTALL_TOTAL_BYTES=0
     manifest_count=0
     : > "$SEEN_TARGETS"
     : > "$PLAN_FILE"
@@ -357,13 +375,32 @@ validate_install_manifest()
                     plan_file "$tree_rel" 0644
                 done < "$PLAN_FILE.tree"
                 ;;
+            delete)
+                case "$rel" in usr/local/bin/test_lvgl|usr/local/lib/liblvgl.so|usr/local/bin/un260_unpack|usr/bin/ui_update.sh|etc/init.d/S00lvgl) fail_update "Cannot delete a core upgrade component" ;; esac
+                [ "$package_schema" = 2 ] || fail_update "Deletes require an incremental package"
+                [ ! -e "$STAGE_DIR/payload/$rel" ] || fail_update "Delete has a payload"
+                awk -F '|' -v p="$rel" '$4==p {found=1} END {exit !found}' "$STAGE_DIR/baseline.tsv" || fail_update "Delete is absent from baseline"
+                if awk -F '|' -v p="$rel" '$4==p {found=1} END {exit !found}' "$STAGE_DIR/target.tsv"; then fail_update "Delete is in target"; fi
+                safe_destination "$rel" || fail_update "Unsafe deletion target"
+                for suffix in old new restore; do
+                    [ ! -e "$ROOT_PREFIX/$rel.un260-$suffix" ] && [ ! -L "$ROOT_PREFIX/$rel.un260-$suffix" ] || fail_update "Unrecovered deletion artifact"
+                done
+                grep -Fx "$rel" "$SEEN_TARGETS" >/dev/null && fail_update "Duplicate deletion target"
+                echo "$rel" >> "$SEEN_TARGETS"
+                delete_hash=$(sha256sum "$ROOT_PREFIX/$rel" | awk '{print $1}')
+                delete_bytes=$(wc -c < "$ROOT_PREFIX/$rel")
+                BACKUP_REQUIRED_KB=$((BACKUP_REQUIRED_KB + (delete_bytes+1023)/1024+4))
+                printf 'delete|%s|%s|-|%s|0\n' "$mode" "$rel" "$delete_hash" >> "$PLAN_FILE"
+                INSTALL_ENTRY_COUNT=$((INSTALL_ENTRY_COUNT+1))
+                ;;
             *) fail_update "Invalid install manifest entry type" ;;
         esac
         manifest_count=$((manifest_count + 1))
-        [ "$manifest_count" -le 256 ] || fail_update "Too many manifest entries"
+        if [ "$package_schema" = 2 ]; then manifest_limit=8192; else manifest_limit=256; fi
+        [ "$manifest_count" -le "$manifest_limit" ] || fail_update "Too many manifest entries"
     done < "$STAGE_DIR/install.tsv"
-    [ "$manifest_count" -gt 0 ] || fail_update "Empty install manifest"
-    echo "Install plan: changed=$INSTALL_ENTRY_COUNT unchanged=$SKIPPED_COUNT root_staged=${ROOT_PEAK_REQUIRED_KB}KB" >> "$LOG"
+    [ "$manifest_count" -gt 0 ] || [ "$package_schema" = 2 ] || fail_update "Empty install manifest"
+    echo "Install plan: changed=$INSTALL_ENTRY_COUNT unchanged=$SKIPPED_COUNT bytes=$INSTALL_TOTAL_BYTES root_staged=${ROOT_PEAK_REQUIRED_KB}KB" >> "$LOG"
 }
 
 validate_storage_space()
@@ -392,6 +429,8 @@ install_file_entry()
     install_mode=$1
     install_rel=$2
     install_hash=$3
+    old_hash=$4
+    install_kind=$5
     install_src=$STAGE_DIR/payload/$install_rel
     install_dest=$ROOT_PREFIX/$install_rel
     safe_destination "$install_rel" || fail_update "Destination changed during upgrade"
@@ -401,9 +440,8 @@ install_file_entry()
     if [ -f "$install_dest" ]; then
         cp "$install_dest" "$BACKUP_DIR/rootfs/$install_rel" >> "$LOG" 2>&1 ||
             fail_update "Cannot back up installed file"
-        original_hash=$(sha256sum "$install_dest" | awk '{print $1}')
         backup_hash=$(sha256sum "$BACKUP_DIR/rootfs/$install_rel" | awk '{print $1}')
-        [ -n "$original_hash" ] && [ "$original_hash" = "$backup_hash" ] ||
+        [ -n "$old_hash" ] && [ "$old_hash" = "$backup_hash" ] ||
             fail_update "USB backup verification failed"
         present=1
     fi
@@ -414,6 +452,11 @@ install_file_entry()
         ln "$install_dest" "$install_dest.un260-old" >> "$LOG" 2>&1 ||
             fail_update "Cannot preserve original inode"
         sync
+    fi
+    if [ "$install_kind" = delete ]; then
+        rm -f "$install_dest" || fail_update "Cannot remove retired file"
+        sync
+        return 0
     fi
     cp "$install_src" "$install_dest.un260-new" >> "$LOG" 2>&1 ||
         fail_update "Cannot stage replacement file"
@@ -430,6 +473,13 @@ install_file_entry()
 execute_plan()
 {
     validate_install_manifest
+    if [ "$INSTALL_ENTRY_COUNT" = 0 ]; then
+        record_installed_bundle
+        cleanup_usb_work
+        write_status 100 success "success" 1 "All files already match; no replacements required"
+        write_result success "Already up to date" "$package_version"
+        return 0
+    fi
     validate_storage_space
     mkdir -p "$INSTALLED_STATE_DIR" || fail_update "Cannot create updater state directory"
     mkdir -m 0700 "$JOURNAL" || fail_update "Pending recovery must finish first"
@@ -438,10 +488,17 @@ execute_plan()
     TRANSACTION_STARTED=1
     trap interrupt_update HUP INT TERM
     install_index=0
-    while IFS='|' read -r kind mode rel expected_hash; do
-        install_file_entry "$mode" "$rel" "$expected_hash"
+    installed_bytes=0
+    while IFS='|' read -r kind mode rel expected_hash old_hash planned_bytes; do
+        echo "Installing: kind=$kind path=$rel bytes=$planned_bytes" >> "$LOG"
+        install_file_entry "$mode" "$rel" "$expected_hash" "$old_hash" "$kind"
         install_index=$((install_index + 1))
-        progress=$((40 + (install_index * 50 / INSTALL_ENTRY_COUNT)))
+        installed_bytes=$((installed_bytes+planned_bytes))
+        if [ "$INSTALL_TOTAL_BYTES" -gt 0 ]; then
+            progress=$((40 + (installed_bytes * 50 / INSTALL_TOTAL_BYTES)))
+        else
+            progress=$((40 + (install_index * 50 / INSTALL_ENTRY_COUNT)))
+        fi
         write_status "$progress" install "install" "" ""
     done < "$PLAN_FILE"
     write_status 92 sync "sync" "" ""
@@ -472,6 +529,83 @@ prepare_usb_work()
     : > "$BACKUP_DIR/managed-v2"
 }
 
+validate_delta_table()
+{
+    table=$1
+    : > "$SEEN_TARGETS"
+    while IFS='|' read -r dh dm ds dp extra; do
+        [ -n "$dh" ] && [ -z "$extra" ] || fail_update "Malformed delta table"
+        echo "$dh" | grep -Eq '^[0-9a-f]{64}$' || fail_update "Bad delta digest"
+        case "$dm" in 0644|0755) ;; *) fail_update "Bad delta mode" ;; esac
+        case "$ds" in ''|*[!0-9]*) fail_update "Bad delta size" ;; esac
+        is_safe_relative_path "$dp" && is_allowed_target "$dp" && safe_destination "$dp" || fail_update "Unsafe delta target"
+        grep -Fx "$dp" "$SEEN_TARGETS" >/dev/null && fail_update "Duplicate delta target"
+        echo "$dp" >> "$SEEN_TARGETS"
+    done < "$table"
+}
+
+delta_target_matches()
+{
+    while IFS='|' read -r mh mm ms mp; do
+        [ -f "$ROOT_PREFIX/$mp" ] || return 1
+        [ "$(sha256sum "$ROOT_PREFIX/$mp" | awk '{print $1}')" = "$mh" ] || return 1
+        [ "$(wc -c < "$ROOT_PREFIX/$mp" | tr -d ' ')" = "$ms" ] || return 1
+        case "$mm" in 0755) match_mode=-rwxr-xr-x ;; *) match_mode=-rw-r--r-- ;; esac
+        [ "$(LC_ALL=C ls -ld "$ROOT_PREFIX/$mp" | awk '{print $1}')" = "$match_mode" ] || return 1
+    done < "$STAGE_DIR/target.tsv"
+    while IFS='|' read -r mh mm ms mp; do
+        if ! awk -F '|' -v p="$mp" '$4==p {found=1} END {exit !found}' "$STAGE_DIR/target.tsv"; then
+            [ ! -e "$ROOT_PREFIX/$mp" ] || return 1
+        fi
+    done < "$STAGE_DIR/baseline.tsv"
+}
+
+validate_delta_baseline()
+{
+    [ "$(manifest_value package_type)" = ui-delta ] || fail_update "Wrong incremental type"
+    [ -f "$STAGE_DIR/baseline.tsv" ] && [ -f "$STAGE_DIR/target.tsv" ] || fail_update "Missing delta tables"
+    for name in baseline target; do
+        expected=$(manifest_value "${name}_id")
+        actual=$(sha256sum "$STAGE_DIR/$name.tsv" | awk '{print $1}')
+        [ -n "$expected" ] && [ "$expected" = "$actual" ] || fail_update "Delta table checksum mismatch"
+        validate_delta_table "$STAGE_DIR/$name.tsv"
+    done
+    if delta_target_matches; then
+        DELTA_ALREADY_APPLIED=1
+        echo "Delta target already verified on disk; no replacements required" >> "$LOG"
+        return 0
+    fi
+    # Every immutable packaged dependency is checked on disk, not merely a
+    # stored version marker. Local settings outside this inventory are untouched.
+    while IFS='|' read -r bh bm bs bp; do
+        [ -f "$ROOT_PREFIX/$bp" ] || fail_update "Incremental baseline missing: use full package"
+        current=$(sha256sum "$ROOT_PREFIX/$bp" | awk '{print $1}')
+        current_size=$(wc -c < "$ROOT_PREFIX/$bp" | tr -d ' ')
+        current_mode=$(LC_ALL=C ls -ld "$ROOT_PREFIX/$bp" | awk '{print $1}')
+        case "$bm" in 0755) mode_text=-rwxr-xr-x ;; *) mode_text=-rw-r--r-- ;; esac
+        [ "$current" = "$bh" ] && [ "$current_size" = "$bs" ] && [ "$current_mode" = "$mode_text" ] ||
+            fail_update "Incremental baseline differs: use matching full package"
+        if ! awk -F '|' -v p="$bp" '$4==p {found=1} END {exit !found}' "$STAGE_DIR/target.tsv"; then
+            grep -Fx "delete|$bm|$bp" "$STAGE_DIR/install.tsv" >/dev/null || fail_update "Missing explicit deletion"
+        fi
+    done < "$STAGE_DIR/baseline.tsv"
+    while IFS='|' read -r th tm ts tp; do
+        if [ -f "$STAGE_DIR/payload/$tp" ]; then
+            payload_digest=$(awk -v p="payload/$tp" '$2==p {print $1}' "$STAGE_DIR/checksums.sha256")
+            [ "$payload_digest" = "$th" ] && [ "$(wc -c < "$STAGE_DIR/payload/$tp" | tr -d ' ')" = "$ts" ] || fail_update "Delta payload differs from target"
+            grep -Fx "file|$tm|$tp" "$STAGE_DIR/install.tsv" >/dev/null || fail_update "Missing target install entry"
+        else
+            grep -Fx "$th|$tm|$ts|$tp" "$STAGE_DIR/baseline.tsv" >/dev/null || fail_update "Delta omits a changed dependency"
+        fi
+    done < "$STAGE_DIR/target.tsv"
+    while read -r ph pp; do
+        [ -n "$ph" ] || continue
+        pr=${pp#payload/}
+        awk -F '|' -v p="$pr" '$4==p {found=1} END {exit !found}' "$STAGE_DIR/target.tsv" || fail_update "Unexpected delta payload"
+    done < "$STAGE_DIR/checksums.sha256"
+    echo "Delta baseline verified: all dependency hashes and modes match" >> "$LOG"
+}
+
 record_installed_bundle()
 {
     [ -n "$BUNDLE_FNV" ] || return 0
@@ -486,11 +620,15 @@ install_bundle()
 {
     write_status 5 verify "verify_archive" "" ""
     prepare_usb_work
-    validate_archive_paths
-
-    write_status 10 extract "extract" "" ""
-    tar -xzf "$BUNDLE_PATH" -C "$STAGE_DIR" >> "$LOG" 2>&1 ||
-        fail_update "Failed to extract upgrade archive"
+    unpacker=$ROOT_PREFIX/usr/local/bin/un260_unpack
+    if [ -x "$unpacker" ] && [ "$("$unpacker" --probe 2>/dev/null)" = UN260_UNPACK_1 ]; then
+        write_status 10 extract "extract" "" ""
+        "$unpacker" "$BUNDLE_PATH" "$STAGE_DIR" >> "$LOG" 2>&1 || fail_update "Unsafe or damaged archive"
+    else
+        validate_archive_paths
+        write_status 10 extract "extract" "" ""
+        tar -xzf "$BUNDLE_PATH" -C "$STAGE_DIR" >> "$LOG" 2>&1 || fail_update "Failed to extract upgrade archive"
+    fi
 
     write_status 18 verify "verify_manifest" "" ""
     [ -f "$STAGE_DIR/manifest.ini" ] || fail_update "Package manifest is missing"
@@ -509,7 +647,7 @@ install_bundle()
     package_id=$(manifest_value package_id)
 
     [ "$package_format" = "UN260_UPGRADE" ] || fail_update "Unsupported package format"
-    [ "$package_schema" = "1" ] || fail_update "Unsupported package schema"
+    case "$package_schema" in 1|2) ;; *) fail_update "Unsupported package schema" ;; esac
     [ "$package_product" = "UN260" ] || fail_update "Package is for another product"
     [ -n "$package_version" ] || fail_update "Package version is missing"
     echo "$package_version" | grep -Eq '^[A-Za-z0-9._-]{1,48}$' ||
@@ -523,6 +661,14 @@ install_bundle()
 
     write_status 24 verify "verify_checksum" "" ""
     validate_payload_checksums
+    if [ "$package_schema" = 2 ]; then validate_delta_baseline; fi
+    if [ "$DELTA_ALREADY_APPLIED" = 1 ]; then
+        record_installed_bundle
+        cleanup_usb_work
+        write_status 100 success "success" 1 "Target files already match"
+        write_result success "Already up to date" "$package_version"
+        return 0
+    fi
 
     write_status 34 preflight "preflight" "" ""
     execute_plan
@@ -594,6 +740,13 @@ RESULT_FILE=$USB_MNT/UN260_UPDATE_RESULT.txt
 rm -f "$RESULT_FILE"
 echo "ui_update start: $(date)" >> "$LOG"
 write_status 2 prepare "prepare" "" ""
+
+# Full package wins if both exist, matching UI detection. Never accidentally
+# apply a stale delta while a full repair package is present.
+if [ ! -f "$BUNDLE_PATH" ] && [ -f "$UPDATE_DIR/UN260_UPDATE_DELTA.upk" ]; then
+    BUNDLE_PATH=$UPDATE_DIR/UN260_UPDATE_DELTA.upk
+fi
+echo "Selected package: $BUNDLE_PATH" >> "$LOG"
 
 if [ -f "$BUNDLE_PATH" ]; then
     install_bundle

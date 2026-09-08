@@ -109,7 +109,7 @@ struct mpp_frame {struct {struct {int width,height;}size;int format,stride[3];}b
 struct frame_allocator {int dummy;};
 struct mpp_packet {void *data;unsigned size,flag;};
 struct decode_config {int pix_fmt,bitstream_buffer_size,extra_frame_num,packet_count;};
-struct mpp_decoder {void *pm;};
+struct mpp_decoder {void *pm;unsigned char *packet;unsigned capacity;};
 static const char *inject;
 static unsigned files,heaps,dma,decs,allocation_attempts;
 static struct mpp_frame *live_output;
@@ -132,14 +132,14 @@ static void mpp_buf_free(void*b){(void)b;assert(!decs && dma==1);dma--;}
 static struct mpp_decoder *mpp_decoder_create(enum mpp_codec_type t){(void)t;if(match("decoder-create"))return NULL;decs++;return calloc(1,sizeof(struct mpp_decoder));}
 static struct frame_allocator *open_allocator(struct mpp_frame*f){live_output=f;if(match("allocator"))return NULL;return calloc(1,sizeof(struct frame_allocator));}
 static int mpp_decoder_control(struct mpp_decoder*d,int c,void*a){(void)d;(void)c;(void)a;return match("decoder-control")?-1:0;}
-static int mpp_decoder_init(struct mpp_decoder*d,struct decode_config*c){(void)c;d->pm=match("pm-null")?NULL:d;return match("decoder-init")?-1:0;}
-static int mpp_decoder_get_packet(struct mpp_decoder*d,struct mpp_packet*p,unsigned n){assert(d->pm);(void)n;p->data=match("packet-null")?NULL:p;return match("packet")?1:0;}
+static int mpp_decoder_init(struct mpp_decoder*d,struct decode_config*c){d->capacity=c->bitstream_buffer_size;d->pm=match("pm-null")?NULL:d;return match("decoder-init")?-1:0;}
+static int mpp_decoder_get_packet(struct mpp_decoder*d,struct mpp_packet*p,unsigned n){assert(d->pm && d->capacity>=n+8);d->packet=malloc(d->capacity);assert(d->packet);memset(d->packet,0xA5,d->capacity);p->data=match("packet-null")?NULL:d->packet;return match("packet")?1:0;}
 static int lv_fs_read(lv_fs_file_t*f,void*d,unsigned n,unsigned*r){(void)f;(void)d;*r=match("short-read")?n-1:n;return match("file-read")?1:0;}
-static int mpp_decoder_put_packet(struct mpp_decoder*d,struct mpp_packet*p){(void)d;(void)p;return match("put-packet")?1:0;}
+static int mpp_decoder_put_packet(struct mpp_decoder*d,struct mpp_packet*p){assert(p->data==d->packet);for(unsigned i=0;i<8;i++)assert(d->packet[p->size+i]==0);return match("put-packet")?1:0;}
 static int mpp_decoder_decode(struct mpp_decoder*d){(void)d;return match("decode")?-1:0;}
 static int mpp_decoder_get_frame(struct mpp_decoder*d,struct mpp_frame*f){(void)d;(void)f;return match("get-frame")?1:0;}
 static int mpp_decoder_put_frame(struct mpp_decoder*d,struct mpp_frame*f){(void)d;(void)f;return match("put-frame")?1:0;}
-static void mpp_decoder_destory(struct mpp_decoder*d){assert(decs==1 && dma==1 && live_output);decs--;free(d);}
+static void mpp_decoder_destory(struct mpp_decoder*d){assert(decs==1 && dma==1 && live_output);decs--;free(d->packet);free(d);}
 typedef int lv_img_decoder_t;
 typedef struct {unsigned stride,height;}un260_compiled_asset_t;
 static const un260_compiled_asset_t *un260_compiled_asset_find(const void*s){(void)s;return NULL;}
@@ -183,5 +183,8 @@ int main(void){
     puts("retry PASS: recovery, one retry maximum, 1s backoff, resumed success, no eviction for file errors");
 }
 '''
+decoder_stub = '#include "' + str(root / 'aic_ui/image_memory.c') + '"\n' + decoder_stub
+decoder_test = decoder_test.replace('mpp_buf_free(&((struct mpp_frame*)d.img_data)->buf);',
+    'image_mem_release(IMAGE_MEM_IMAGE, frame_dma_bytes((struct mpp_frame*)d.img_data)); mpp_buf_free(&((struct mpp_frame*)d.img_data)->buf);')
 run('decoder',decoder_stub+attempt+wrapper+decoder_test)
 print('Test artifacts:',work)

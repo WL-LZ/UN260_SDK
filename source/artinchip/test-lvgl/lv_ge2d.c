@@ -18,6 +18,7 @@
 #include "mpp_ge.h"
 #include "mpp_decoder.h"
 #include "dma_allocator.h"
+#include "aic_ui/image_memory.h"
 #include "lv_fbdev.h"
 #include "aic_ui/perf_stats.h"
 #include "un260/lv_drivers/uart_io.h"
@@ -220,8 +221,12 @@ static bool draw_dma_frame_software(lv_draw_ctx_t *draw_ctx,
 
     pixels = mapped;
     if (stride != row_bytes) {
+        if(!image_mem_acquire(IMAGE_MEM_CPU, row_bytes * (uint32_t)frame->buf.size.height)) {
+            dmabuf_munmap(mapped,(int)bytes);ge_offscreen_fail("tight_budget");return false;
+        }
         tight = lv_mem_alloc(row_bytes * (uint32_t)frame->buf.size.height);
         if (tight == NULL) {
+            image_mem_release(IMAGE_MEM_CPU, row_bytes * (uint32_t)frame->buf.size.height);
             dmabuf_munmap(mapped, (int)bytes);
             ge_offscreen_fail("tight_alloc");
             return false;
@@ -234,7 +239,10 @@ static bool draw_dma_frame_software(lv_draw_ctx_t *draw_ctx,
     }
 
     lv_draw_sw_img_decoded(draw_ctx, draw_dsc, coords, pixels, cf);
-    if (tight != NULL) lv_mem_free(tight);
+    if (tight != NULL) {
+        lv_mem_free(tight);
+        image_mem_release(IMAGE_MEM_CPU, row_bytes * (uint32_t)frame->buf.size.height);
+    }
     dmabuf_munmap(mapped, (int)bytes);
     return true;
 }
@@ -386,6 +394,7 @@ static void ge_scale_cache_release(ge_scale_cache_entry_t *entry)
     }
 
     mpp_buf_free(&entry->frame.buf);
+    image_mem_release(IMAGE_MEM_SCALE, entry->bytes);
     if (g_scale_cache_bytes >= entry->bytes) {
         g_scale_cache_bytes -= entry->bytes;
     } else {
@@ -414,6 +423,16 @@ void lv_ge2d_scaled_cache_drop_source(const void *source_frame)
     }
 }
 
+static void ge_scale_cache_reclaim(uint32_t bytes)
+{
+    /* Normal GE is synchronized before cached frame pointers escape a draw.
+     * Never enable this reclamation for asynchronous/CMDQ operation. */
+    if(!g_ge || mpp_ge_get_mode(g_ge) != GE_MODE_NORMAL) return;
+    uint32_t freed=0;
+    for(unsigned i=0;i<GE_SCALE_CACHE_CAPACITY && freed<bytes;i++) {
+        if(g_scale_cache[i].used) { freed+=g_scale_cache[i].bytes; ge_scale_cache_release(&g_scale_cache[i]); }
+    }
+}
 static ge_scale_cache_entry_t *ge_scale_cache_find_slot(uint32_t bytes)
 {
     ge_scale_cache_entry_t *slot = NULL;
@@ -470,7 +489,7 @@ static struct mpp_frame *ge_scale_cache_get(struct mpp_frame *source,
     }
 
     stride = ((uint32_t)target_width * (uint32_t)bytes_per_pixel + 15U) & ~15U;
-    bytes = stride * (uint32_t)target_height;
+    bytes = (stride * (uint32_t)target_height + 4095U) & ~4095U;
     if (bytes == 0 || bytes > GE_SCALE_CACHE_MAX_ENTRY_BYTES) {
         return NULL;
     }
@@ -496,8 +515,11 @@ static struct mpp_frame *ge_scale_cache_get(struct mpp_frame *source,
         }
     }
 
+    image_mem_register(IMAGE_MEM_SCALE, ge_scale_cache_reclaim);
+    if(!image_mem_acquire(IMAGE_MEM_SCALE, bytes)) return NULL;
     slot = ge_scale_cache_find_slot(bytes);
     if (slot == NULL) {
+        image_mem_release(IMAGE_MEM_SCALE, bytes);
         return NULL;
     }
 
@@ -507,6 +529,7 @@ static struct mpp_frame *ge_scale_cache_get(struct mpp_frame *source,
     slot->frame.buf.format = source->buf.format;
     slot->frame.buf.stride[0] = (int)stride;
     if (mpp_buf_alloc(g_scale_cache_dma_device, &slot->frame.buf) < 0) {
+        image_mem_release(IMAGE_MEM_SCALE, bytes);
         memset(slot, 0, sizeof(*slot));
         return NULL;
     }
@@ -531,6 +554,7 @@ static struct mpp_frame *ge_scale_cache_get(struct mpp_frame *source,
     if (mpp_ge_bitblt(g_ge, &blt) < 0 ||
         mpp_ge_emit(g_ge) < 0 || mpp_ge_sync(g_ge) < 0) {
         mpp_buf_free(&slot->frame.buf);
+        image_mem_release(IMAGE_MEM_SCALE, bytes);
         memset(slot, 0, sizeof(*slot));
         return NULL;
     }

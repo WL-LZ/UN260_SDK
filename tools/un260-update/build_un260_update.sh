@@ -77,7 +77,7 @@ is_fixed_target()
 
     case "$rel" in
         usr/local/bin/test_lvgl|usr/local/lib/liblvgl.so|usr/local/share/lvgl_data/*|\
-        usr/bin/ui_update.sh|etc/init.d/S00lvgl|etc/un260/package-version)
+        usr/bin/ui_update.sh|etc/init.d/S00lvgl|etc/un260/package-version|usr/local/bin/un260_unpack)
             return 0
             ;;
     esac
@@ -190,6 +190,10 @@ copy_payload_file "$LVGL_LIB_PATH" "usr/local/lib/liblvgl.so" 0755
 copy_payload_file "$UPDATER_PATH" "usr/bin/ui_update.sh" 0755
 copy_payload_file "$STARTUP_PATH" "etc/init.d/S00lvgl" 0755
 copy_payload_file "$APP_PATH" "usr/local/bin/test_lvgl" 0755
+UNPACKER_PATH="$TARGET_ROOT/usr/local/bin/un260_unpack"
+if [[ -f "$UNPACKER_PATH" ]]; then
+    copy_payload_file "$UNPACKER_PATH" "usr/local/bin/un260_unpack" 0755
+fi
 
 mkdir -p "$PKG_ROOT/payload/etc/un260"
 printf '%s\n' "$VERSION" > "$PKG_ROOT/payload/etc/un260/package-version"
@@ -217,6 +221,9 @@ printf 'file|0755|usr/bin/ui_update.sh\n' >> "$INSTALL_MANIFEST"
 printf 'file|0755|etc/init.d/S00lvgl\n' >> "$INSTALL_MANIFEST"
 printf 'file|0644|etc/un260/package-version\n' >> "$INSTALL_MANIFEST"
 printf 'file|0755|usr/local/bin/test_lvgl\n' >> "$INSTALL_MANIFEST"
+if [[ -f "$PKG_ROOT/payload/usr/local/bin/un260_unpack" ]]; then
+    printf 'file|0755|usr/local/bin/un260_unpack\n' >> "$INSTALL_MANIFEST"
+fi
 
 (
     cd "$PKG_ROOT"
@@ -245,7 +252,7 @@ mkdir -p "$(dirname "$OUTPUT_PATH")"
 OUTPUT_PATH=$(cd "$(dirname "$OUTPUT_PATH")" && pwd)/$(basename "$OUTPUT_PATH")
 rm -f "$OUTPUT_PATH" "$OUTPUT_PATH.sha256"
 
-tar -czf "$OUTPUT_PATH" -C "$PKG_ROOT" \
+tar --format=ustar -czf "$OUTPUT_PATH" -C "$PKG_ROOT" \
     manifest.ini checksums.sha256 install.tsv payload
 (
     cd "$(dirname "$OUTPUT_PATH")"

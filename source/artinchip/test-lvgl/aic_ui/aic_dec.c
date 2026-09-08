@@ -17,6 +17,8 @@
 #include "frame_allocator.h"
 #include "dma_allocator.h"
 #include "aic_dec.h"
+#include "image_memory.h"
+#include "image_recovery.h"
 #include "aic_ui.h"
 #include "lv_ge2d.h"
 #include "aic_ui/perf_stats.h"
@@ -223,7 +225,7 @@ static lv_fs_res_t get_file_size(lv_fs_file_t *fp, unsigned int *file_size)
        lv_fs_tell(fp, file_size) != LV_FS_RES_OK ||
        lv_fs_seek(fp, 0, SEEK_SET) != LV_FS_RES_OK) return LV_FS_RES_FS_ERR;
 
-    return LV_RES_OK;
+    return LV_FS_RES_OK;
 }
 
 static lv_res_t fake_decoder_info(lv_img_decoder_t *decoder, const void *src, lv_img_header_t *header)
@@ -385,7 +387,9 @@ static lv_res_t compiled_asset_open(lv_img_decoder_dsc_t *dsc,
     frame->buf.stride[0] = (asset->stride + 15U) & ~15U;
     /* Both formats are supported by this SDK's DMA allocator and GE. */
     frame->buf.format = asset->has_alpha ? MPP_FMT_ARGB_8888 : MPP_FMT_RGB_888;
-    if(!lv_img_cache_reserve_bytes(frame_dma_bytes(frame), AIC_IMAGE_CACHE_BUDGET)) {
+    uint32_t managed_bytes = frame_dma_bytes(frame);
+    if(!lv_img_cache_reserve_bytes(managed_bytes, AIC_IMAGE_CACHE_BUDGET) ||
+       !image_mem_acquire(IMAGE_MEM_IMAGE, managed_bytes)) {
         if(heap >= 0) close(heap);
         free(frame); return LV_RES_INV;
     }
@@ -396,13 +400,13 @@ static lv_res_t compiled_asset_open(lv_img_decoder_dsc_t *dsc,
         allocated = heap >= 0 ? mpp_buf_alloc(heap, &frame->buf) : -1;
         if (heap >= 0) close(heap);
     }
-    if (allocated < 0) { free(frame); return LV_RES_INV; }
+    if (allocated < 0) { image_mem_release(IMAGE_MEM_IMAGE, managed_bytes); free(frame); return LV_RES_INV; }
     uint32_t bytes = frame->buf.stride[0] * asset->height;
     pixels = dmabuf_mmap(frame->buf.fd[0], bytes);
-    if (!pixels) { mpp_buf_free(&frame->buf); free(frame); return LV_RES_INV; }
+    if (!pixels) { mpp_buf_free(&frame->buf); image_mem_release(IMAGE_MEM_IMAGE, managed_bytes); free(frame); return LV_RES_INV; }
     struct dma_buf_sync cpu_access = {.flags = DMA_BUF_SYNC_START | DMA_BUF_SYNC_WRITE};
     if (ioctl(frame->buf.fd[0], DMA_BUF_IOCTL_SYNC, &cpu_access) < 0) {
-        dmabuf_munmap(pixels, bytes); mpp_buf_free(&frame->buf); free(frame); return LV_RES_INV;
+        dmabuf_munmap(pixels, bytes); mpp_buf_free(&frame->buf); image_mem_release(IMAGE_MEM_IMAGE, managed_bytes); free(frame); return LV_RES_INV;
     }
     for (uint32_t y = 0; y < asset->height; y++) {
         memcpy(pixels + y * frame->buf.stride[0], asset->pixels + y * asset->stride, asset->stride);
@@ -411,7 +415,7 @@ static lv_res_t compiled_asset_open(lv_img_decoder_dsc_t *dsc,
     }
     int clean = dmabuf_sync(frame->buf.fd[0], CACHE_CLEAN);
     dmabuf_munmap(pixels, bytes);
-    if (clean < 0) { mpp_buf_free(&frame->buf); free(frame); return LV_RES_INV; }
+    if (clean < 0) { mpp_buf_free(&frame->buf); image_mem_release(IMAGE_MEM_IMAGE, managed_bytes); free(frame); return LV_RES_INV; }
     dsc->header.cf = asset->has_alpha ? LV_IMG_CF_TRUE_COLOR_ALPHA : LV_IMG_CF_TRUE_COLOR;
     dsc->img_data = (const unsigned char *)frame;
     if (perf_profile_is_enabled())
@@ -424,7 +428,8 @@ static lv_res_t aic_decoder_attempt(lv_img_decoder_dsc_t *dsc,
                                     const char **stage, int *error, uint32_t *bytes)
 {
     lv_fs_file_t file;
-    bool file_open = false, allocated = false, success = false;
+    bool file_open = false, allocated = false, success = false, claimed = false;
+    uint32_t decode_claim = 0;
     int width = 0, height = 0, heap = -1, ret = -1;
     struct mpp_decoder *dec = NULL;
     struct frame_allocator *allocator = NULL;
@@ -479,6 +484,13 @@ static lv_res_t aic_decoder_attempt(lv_img_decoder_dsc_t *dsc,
     *bytes = frame_dma_bytes(output);
     *stage = "cache-budget";
     if(!lv_img_cache_reserve_bytes(*bytes, AIC_IMAGE_CACHE_BUDGET)) { ret = -ENOMEM; goto cleanup; }
+    if(!image_mem_acquire(IMAGE_MEM_IMAGE, *bytes)) { ret = -ENOMEM; goto cleanup; }
+    claimed = true;
+    /* Bitstream plus conservative PNG/JPEG decoder scratch reservation.
+     * The global unclaimed headroom additionally covers SDK-private buffers. */
+    uint32_t need_decode = ((len + 8U + 1023U) & ~1023U) + 1024U*1024U;
+    if(!image_mem_acquire(IMAGE_MEM_DECODE, need_decode)) { ret = -ENOMEM; goto cleanup; }
+    decode_claim = need_decode;
     *stage = "heap-open";
     heap = dmabuf_device_open();
     if(heap < 0) { ret = -errno; goto cleanup; }
@@ -496,7 +508,9 @@ static lv_res_t aic_decoder_attempt(lv_img_decoder_dsc_t *dsc,
     *stage = "decoder-control";
     ret = mpp_decoder_control(dec, MPP_DEC_INIT_CMD_SET_EXT_FRAME_ALLOCATOR, allocator);
     if(ret != 0) goto cleanup;
-    config.bitstream_buffer_size = (len + 1023) & ~1023;
+    /* packet_manager reserves 8 readable bytes after each packet. Aligning
+     * len alone rejects valid files at/near a 1KiB boundary. */
+    config.bitstream_buffer_size = (len + 8U + 1023U) & ~1023U;
     config.extra_frame_num = 0;
     config.packet_count = 1;
     *stage = "decoder-init";
@@ -508,6 +522,9 @@ static lv_res_t aic_decoder_attempt(lv_img_decoder_dsc_t *dsc,
     *stage = "file-read";
     ret = lv_fs_read(&file, packet.data, len, &read_size);
     if(ret != LV_FS_RES_OK || read_size != len) { if(!ret) ret = -EIO; goto cleanup; }
+    /* First and only packet in this fresh decoder: the reserved tail belongs
+     * to this bitstream allocation, but is not part of packet.size. */
+    memset((unsigned char *)packet.data + len, 0, 8);
     packet.size = len;
     packet.flag = PACKET_FLAG_EOS;
     *stage = "put-packet";
@@ -531,8 +548,10 @@ cleanup:
     free(allocator);
     if(heap >= 0) dmabuf_device_close(heap);
     if(file_open) lv_fs_close(&file);
+    image_mem_release(IMAGE_MEM_DECODE, decode_claim);
     if(!success) {
         if(allocated) mpp_buf_free(&output->buf);
+        if(claimed) image_mem_release(IMAGE_MEM_IMAGE, *bytes);
         free(output);
         return LV_RES_INV;
     }
@@ -596,6 +615,7 @@ static void aic_decoder_close(lv_img_decoder_t * decoder, lv_img_decoder_dsc_t *
         struct mpp_frame *alloc_frame = (struct mpp_frame *)dsc->img_data;
         lv_ge2d_scaled_cache_drop_source(alloc_frame);
         mpp_buf_free(&alloc_frame->buf);
+        image_mem_release(IMAGE_MEM_IMAGE, frame_dma_bytes(alloc_frame));
         free(alloc_frame);
         dsc->img_data = NULL;
     }
@@ -603,15 +623,18 @@ static void aic_decoder_close(lv_img_decoder_t * decoder, lv_img_decoder_dsc_t *
     return;
 }
 
+static void reclaim_images(uint32_t bytes) { (void)lv_img_cache_reclaim_bytes(bytes); }
 void aic_dec_create()
 {
+    image_mem_register(IMAGE_MEM_IMAGE, reclaim_images);
+    image_recovery_init();
     fprintf(stderr, "ASSET_C count=%u raw_bytes=%u format=ARGB8888 lazy_dma=1\n",
             un260_compiled_asset_count(), un260_compiled_asset_bytes());
     lv_img_decoder_t *aic_dec = lv_img_decoder_create();
     if(!aic_dec) return;
     g_aic_decoder = aic_dec;
     lv_img_cache_set_memory_cb(aic_cache_bytes);
-    fprintf(stderr, "IMG_CACHE budget=%u mpp_pool_mib=16 reclaim=unpinned retry=1\n", AIC_IMAGE_CACHE_BUDGET);
+    fprintf(stderr, "IMG_CACHE build=RESILIENCE_R1 budget=%u managed_dma_mib=12 mpp_pool_mib=16 reclaim=unpinned retry=1 packet_tail=8\n", AIC_IMAGE_CACHE_BUDGET);
 
     lv_img_decoder_set_info_cb(aic_dec, aic_decoder_info);
     lv_img_decoder_set_open_cb(aic_dec, aic_decoder_open);

@@ -16,6 +16,7 @@
 #include "un260/storage/usb_storage.h"
 
 #define UI_UPGRADE_BUNDLE_FILE_PATH    USB_STORAGE_MOUNT_POINT "/update/UN260_UPDATE.upk"
+#define UI_UPGRADE_DELTA_FILE_PATH     USB_STORAGE_MOUNT_POINT "/update/UN260_UPDATE_DELTA.upk"
 #define UI_UPGRADE_LEGACY_FILE_PATH    USB_STORAGE_MOUNT_POINT "/update/test_lvgl"
 #define UI_UPGRADE_RUNNING_FILE_PATH   "/proc/self/exe"
 #define UI_UPGRADE_SCRIPT_PATH         "/usr/bin/ui_update.sh"  
@@ -455,8 +456,10 @@ void ui_upgrade_service_detect(ui_upgrade_detect_info_t* info)
     usb_storage_refresh(&storage_status);
     info->usb_present = storage_status.device_present;
     info->usb_mounted = storage_status.mounted;
+    const char *bundle_path = ui_upgrade_service_file_exists(UI_UPGRADE_BUNDLE_FILE_PATH) ?
+                              UI_UPGRADE_BUNDLE_FILE_PATH : UI_UPGRADE_DELTA_FILE_PATH;
     bundle_found = info->usb_present && info->usb_mounted &&
-                   ui_upgrade_service_file_exists(UI_UPGRADE_BUNDLE_FILE_PATH);
+                   ui_upgrade_service_file_exists(bundle_path);
     legacy_found = info->usb_present && info->usb_mounted &&
                    ui_upgrade_service_file_exists(UI_UPGRADE_LEGACY_FILE_PATH);
     info->package_found = bundle_found || legacy_found;
@@ -464,7 +467,7 @@ void ui_upgrade_service_detect(ui_upgrade_detect_info_t* info)
     g_ui_upgrade_bundle_selected = bundle_found;
 
     if (info->package_found) {
-        package_path = bundle_found ? UI_UPGRADE_BUNDLE_FILE_PATH :
+        package_path = bundle_found ? bundle_path :
                                      UI_UPGRADE_LEGACY_FILE_PATH;
         info->package_hash_status =
             ui_upgrade_service_get_package_hash_status(package_path,

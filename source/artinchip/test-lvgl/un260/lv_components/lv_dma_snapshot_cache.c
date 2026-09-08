@@ -7,6 +7,8 @@
 #include <fcntl.h>
 
 #include "dma_allocator.h"
+#include "aic_ui/image_memory.h"
+#include "aic_ui/image_recovery.h"
 #include "aic_ui/perf_stats.h"
 #include "un260/lv_drivers/uart_io.h"
 #include "lv_ge2d.h"
@@ -123,11 +125,18 @@ static bool snapshot_cache_reserve(uint32_t bytes)
     return true;
 }
 
+static void snapshot_reclaim(uint32_t bytes)
+{
+    uint32_t before=g_dma_snapshot_total_bytes;
+    while(before-g_dma_snapshot_total_bytes<bytes && snapshot_cache_evict_one()) {}
+}
+
 static void snapshot_release_frame(lv_dma_snapshot_t *snapshot)
 {
     if (snapshot == NULL || snapshot->frame.buf.fd[0] < 0) return;
 
     mpp_buf_free(&snapshot->frame.buf);
+    image_mem_release(IMAGE_MEM_SNAPSHOT, snapshot->bytes);
     snapshot->frame.buf.fd[0] = -1;
 }
 
@@ -194,17 +203,23 @@ static bool snapshot_render(lv_dma_snapshot_t *snapshot, lv_obj_t *obj,
         snapshot_create_error(name, "dma_map");
         return false;
     }
+    if(!image_mem_acquire(IMAGE_MEM_CPU, cpu_bytes)) {
+        dmabuf_munmap(dma_pixels, (int)bytes); return false;
+    }
     cpu_pixels = lv_mem_alloc(cpu_bytes);
     if (cpu_pixels == NULL) {
+        image_mem_release(IMAGE_MEM_CPU, cpu_bytes);
         dmabuf_munmap(dma_pixels, (int)bytes);
         snapshot_create_error(name, "cpu_alloc");
         return false;
     }
     started = app_clock_monotonic_us();
+    uint32_t failures_before = image_recovery_failure_serial();
     lv_ge2d_offscreen_capture_begin();
     ok = lv_snapshot_take_to_buf(obj, LV_IMG_CF_TRUE_COLOR_ALPHA,
                                  &cpu_image, cpu_pixels, cpu_bytes) == LV_RES_OK;
     ok = lv_ge2d_offscreen_capture_end() && ok;
+    ok = ok && failures_before == image_recovery_failure_serial();
     elapsed = app_clock_elapsed_us32(started, app_clock_monotonic_us());
     g_dma_snapshot_stats.capture_count++;
     g_dma_snapshot_stats.capture_total_us += elapsed;
@@ -229,6 +244,7 @@ static bool snapshot_render(lv_dma_snapshot_t *snapshot, lv_obj_t *obj,
     }
     dmabuf_munmap(dma_pixels, (int)bytes);
     lv_mem_free(cpu_pixels);
+    image_mem_release(IMAGE_MEM_CPU, cpu_bytes);
     return ok;
 }
 
@@ -267,7 +283,7 @@ lv_dma_snapshot_t *lv_dma_snapshot_create(lv_obj_t *obj,
         return NULL;
     }
     stride = (row_bytes + 15U) & ~15U;
-    dma_bytes = stride * (uint32_t)snapshot_h;
+    dma_bytes = (stride * (uint32_t)snapshot_h + 4095U) & ~4095U;
     if (dma_bytes == 0 || !snapshot_cache_reserve(dma_bytes)) {
         g_dma_snapshot_stats.no_space++;
         return NULL;
@@ -284,7 +300,11 @@ lv_dma_snapshot_t *lv_dma_snapshot_create(lv_obj_t *obj,
     snapshot->frame.buf.size.height = snapshot_h;
     snapshot->frame.buf.stride[0] = stride;
     snapshot->frame.buf.format = MPP_FMT_ARGB_8888;
+    image_mem_register(IMAGE_MEM_SNAPSHOT, snapshot_reclaim);
+    if(!image_mem_acquire(IMAGE_MEM_SNAPSHOT, dma_bytes)) { free(snapshot); return NULL; }
+    snapshot->bytes = dma_bytes;
     if (!snapshot_allocate_frame(snapshot, dma_bytes, debug_name)) {
+        image_mem_release(IMAGE_MEM_SNAPSHOT, dma_bytes);
         snapshot_create_error(debug_name, "dma_alloc");
         free(snapshot);
         return NULL;

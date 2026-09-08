@@ -1,4 +1,5 @@
 #include "perf_stats.h"
+#include "image_memory.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -1217,6 +1218,7 @@ void perf_profile_poll(uint32_t now_ms)
         }
     }
     lv_dma_snapshot_cache_take_stats(&snapshot_stats);
+    image_mem_report(); /* Only in the existing opt-in PERF reporting window. */
     uart_debug_printf(
         "PERF_CACHE page=%s snap=%u/%u/%u/%u/%u "
         "capture=%u/%llu/%u items=%u bytes=%u/%u\n",

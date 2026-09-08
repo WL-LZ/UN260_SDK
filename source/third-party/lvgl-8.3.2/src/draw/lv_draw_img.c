@@ -61,13 +61,18 @@ void lv_draw_img_dsc_init(lv_draw_img_dsc_t * dsc)
  */
 void lv_draw_img(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t * dsc, const lv_area_t * coords, const void * src)
 {
+    (void)lv_draw_img_checked(draw_ctx, dsc, coords, src);
+}
+
+lv_res_t lv_draw_img_checked(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t * dsc, const lv_area_t * coords, const void * src)
+{
     if(src == NULL) {
         LV_LOG_WARN("Image draw: src is NULL");
         show_error(draw_ctx, coords, "No\ndata");
-        return;
+        return LV_RES_INV;
     }
 
-    if(dsc->opa <= LV_OPA_MIN) return;
+    if(dsc->opa <= LV_OPA_MIN) return LV_RES_OK;
 
     lv_res_t res;
     if(draw_ctx->draw_img) {
@@ -82,8 +87,9 @@ void lv_draw_img(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t * dsc, const 
     if(res == LV_RES_INV) {
         LV_LOG_WARN("Image draw error");
         show_error(draw_ctx, coords, "No\ndata");
-        return;
+        return LV_RES_INV;
     }
+    return LV_RES_OK;
 }
 
 /**
@@ -348,12 +354,21 @@ static void show_error(lv_draw_ctx_t * draw_ctx, const lv_area_t * coords, const
 {
     lv_draw_rect_dsc_t rect_dsc;
     lv_draw_rect_dsc_init(&rect_dsc);
-    rect_dsc.bg_color = lv_color_white();
+    /* Native fallback: no file, image decoder, temporary bitmap or stale
+     * fault picture. Labels/buttons are drawn independently after this plate. */
+    LV_UNUSED(msg);
+    rect_dsc.bg_color = lv_color_hex(0xe9edf0);
+    rect_dsc.border_width = 1;
+    rect_dsc.border_color = lv_color_hex(0xbcccda);
     lv_draw_rect(draw_ctx, &rect_dsc, coords);
-
-    lv_draw_label_dsc_t label_dsc;
-    lv_draw_label_dsc_init(&label_dsc);
-    lv_draw_label(draw_ctx, &label_dsc, coords, msg, NULL);
+    if(lv_area_get_width(coords) >= 24 && lv_area_get_height(coords) >= 24) {
+        lv_area_t icon;
+        lv_coord_t x=(coords->x1+coords->x2)/2, y=(coords->y1+coords->y2)/2;
+        icon=(lv_area_t){x-8,y-6,x+8,y+6};
+        rect_dsc.bg_opa=LV_OPA_TRANSP;
+        rect_dsc.border_color=lv_color_hex(0x98a5af);
+        lv_draw_rect(draw_ctx,&rect_dsc,&icon);
+    }
 }
 
 static void draw_cleanup(_lv_img_cache_entry_t * cache)

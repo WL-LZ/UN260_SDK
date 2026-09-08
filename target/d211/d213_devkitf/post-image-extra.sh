@@ -40,6 +40,21 @@ if [ -d "$EXTRA_ROOT" ]; then
 	BUILD_ARGS+=(--extra-root "$EXTRA_ROOT")
 fi
 
+BASELINE=${UN260_UPDATE_BASELINE:-"${BINARIES_DIR}/UN260_UPDATE_BASE.upk"}
+if [ "$(readlink -m "$BASELINE")" = "$(readlink -m "$OUTPUT_PACKAGE")" ]; then
+    echo "Baseline must be a separate pinned file, not the build output" >&2
+    exit 1
+fi
 "$BUILDER" "${BUILD_ARGS[@]}"
+
+# Pin the first full package made by this upgraded builder. Do not silently
+# move this baseline on later development builds. First deployment uses FULL.
+if [ ! -f "$BASELINE" ]; then
+    if [ -n "${UN260_UPDATE_BASELINE:-}" ]; then echo "Specified baseline missing: $BASELINE" >&2; exit 1; fi
+    cp "$OUTPUT_PACKAGE" "$BASELINE"
+    echo "Pinned initial baseline; install full UN260_UPDATE.upk before future deltas."
+fi
+python3 "$SDK_ROOT/tools/un260-update/build_delta.py" --base "$BASELINE" --full "$OUTPUT_PACKAGE" \
+    --output "${BINARIES_DIR}/UN260_UPDATE_DELTA.upk"
 
 echo "UN260 U-disk package is ready: $OUTPUT_PACKAGE"

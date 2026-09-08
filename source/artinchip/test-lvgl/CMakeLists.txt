@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.12)
 
 project(test_lvgl)
+add_executable(un260_unpack tools/un260_unpack.c)
+target_link_libraries(un260_unpack z)
+install(TARGETS un260_unpack RUNTIME DESTINATION bin)
 
 # Suppress cmake unused warning
 set(ignore ${BUILD_DOC} ${BUILD_DOCS} ${BUILD_EXAMPLE} ${BUILD_EXAMPLES}
@@ -33,6 +36,8 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/aic_ui/generated_assets/assets.cmake)
 add_executable(${PROJECT_NAME} main.c
     ${UN260_ASSET_SOURCES}
 	aic_ui/aic_dec.c
+    aic_ui/image_memory.c
+    aic_ui/image_recovery.c
 	aic_ui/aic_ui.c
 	aic_ui/cpu_mem.c
 	aic_ui/perf_stats.c
