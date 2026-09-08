@@ -18,6 +18,7 @@
 #include "un260/gesture/gesture_service.h"
 #include "un260/lv_system/backlight_service.h"
 #include "aic_ui/perf_stats.h"
+#include "un260/lv_core/ui_frame_commit.h"
 
 //-------------------- 主函数 --------------------
 int main(void) {
@@ -46,6 +47,7 @@ int main(void) {
     if (!app_serial_runtime_start()) {
         return -1;
     }
+    uint32_t visual_commit_tick = app_clock_uptime_ms() - LV_DISP_DEF_REFR_PERIOD;
     while (1) {
         uint64_t loop_start_us = app_clock_monotonic_us();
         uint32_t now = app_clock_uptime_ms();
@@ -57,6 +59,10 @@ int main(void) {
 
         profile_frame_seq = perf_profile_frame_sequence();
         lvgl_start_us = app_clock_monotonic_us();
+        if ((uint32_t)(now - visual_commit_tick) >= LV_DISP_DEF_REFR_PERIOD) {
+            ui_frame_commit_flush();
+            visual_commit_tick = now;
+        }
         lv_timer_handler();
         lvgl_end_us = app_clock_monotonic_us();
         perf_stats_report_lvgl_time_us(
@@ -65,6 +71,7 @@ int main(void) {
             perf_profile_report_active_handler_us(
                 app_clock_elapsed_us32(lvgl_start_us, lvgl_end_us));
         }
+        ui_frame_commit_begin_batch();
         app_command_runtime_process_frames();
 
         /* Frame handlers may start protocol timeouts.  Refresh the loop time
@@ -78,6 +85,7 @@ int main(void) {
         app_boot_runtime_poll(
             now, current_page == UI_PAGE_BOOT &&
                  !ui_page_00_boot_anim_is_active());
+        ui_frame_commit_end_batch();
 
         current_page = ui_manager_get_current_page();
         perf_profile_set_page_context(

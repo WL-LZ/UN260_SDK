@@ -49,7 +49,8 @@ typedef enum {
 /*
  * Asynchronous model updates are independent from page lifetime.  Retained
  * pages subscribe to the topics they render; an update refreshes the active
- * page immediately and is remembered for hidden cached pages until resume.
+ * page at the next visual commit and is remembered for hidden cached pages
+ * until resume. Navigation still populates its first frame synchronously.
  */
 typedef uint32_t ui_data_topic_t;
 

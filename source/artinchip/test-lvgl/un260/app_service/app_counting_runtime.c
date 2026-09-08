@@ -21,6 +21,7 @@
 #include "un260/lv_components/lv_fault_popup.h"
 #include "un260/lv_components/smart_island.h"
 #include "un260/lv_core/lv_page_manager.h"
+#include "un260/lv_core/ui_frame_commit.h"
 #include "un260/lv_core/page_01_detail_scroll.h"
 #include "un260/lv_core/page_01_main.h"
 #include "un260/lv_core/page_02_list.h"
@@ -70,15 +71,31 @@ static void app_counting_runtime_format_amount(char *dest,
     dest[dest_index] = '\0';
 }
 
-/* 0x0E is high frequency, so only update the compact summary fields. */
-static void app_counting_runtime_refresh_compact(const counting_sim_t *sim_data)
+static void app_counting_visual_commit(void *context, uint32_t flags)
 {
     char amount_buf[32];
-
-    app_counting_runtime_format_amount(amount_buf,
+    const counting_sim_t *sim_data = counting_data_current();
+    (void)context;
+    if (!page_01_main_is_visible()) {
+        page_01_main_mark_dirty(PAGE_01_MAIN_DIRTY_COUNTING);
+        return;
+    }
+    if ((flags & 1U) && sim_data) {
+        app_counting_runtime_format_amount(amount_buf,
                                        sizeof(amount_buf),
                                        sim_data->total_amount);
-    page_01_main_refresh_totals(sim_data->total_pcs, amount_buf);
+        page_01_main_refresh_totals(sim_data->total_pcs, amount_buf);
+    }
+    if ((flags & 2U) && page_01_detail_section_get() == PAGE_01_DETAIL_SECTION_B)
+        page_01_main_detail_refresh_rows_only();
+}
+
+/* Protocol/model and island start/end messages remain ordered. Only the
+ * visible projection of totals/rows is last-state-wins within a UI frame. */
+static void app_counting_runtime_refresh_compact(const counting_sim_t *sim_data)
+{
+    if (!ui_frame_commit_defer(app_counting_visual_commit, NULL, 1U))
+        app_counting_visual_commit(NULL, 1U);
     smart_island_update_counting(sim_data->total_pcs,
                                  sim_data->total_amount);
 }
@@ -314,7 +331,8 @@ static void app_counting_runtime_on_serial_item_changed(void *context)
     (void)context;
     if (app_counting_runtime_main_page_active() &&
         page_01_detail_section_get() == PAGE_01_DETAIL_SECTION_B) {
-        page_01_main_detail_refresh_rows_only();
+        if (!ui_frame_commit_defer(app_counting_visual_commit, NULL, 2U))
+            app_counting_visual_commit(NULL, 2U);
     }
 }
 

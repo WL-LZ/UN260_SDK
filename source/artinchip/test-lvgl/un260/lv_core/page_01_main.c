@@ -1,6 +1,7 @@
 #include "un260/lv_core/page_01_main.h"
 #include "un260/lv_core/page_01_detail_scroll.h"
 #include "un260/lv_core/lv_page_manager.h"
+#include "ui_frame_commit.h"
 #include "un260/lv_resources/lv_image_declear.h" 
 #include "lv_page_event.h"
 #include <stdio.h>
@@ -69,6 +70,12 @@ static lv_obj_t* s_detail_btn_b = NULL;
 static lv_obj_t* s_detail_btn_c = NULL;
 static page_01_detail_section_t s_detail_section = PAGE_01_DETAIL_SECTION_A;
 static uint32_t s_main_dirty = PAGE_01_MAIN_DIRTY_ALL;
+/* High bits travel with a coalesced request, not with persistent page dirtiness.
+ * A later non-animated refresh must not erase an earlier interaction intent. */
+#define PAGE_01_MAIN_BOTTOM_ANIM_SHIFT 16U
+#define PAGE_01_MAIN_BOTTOM_ANIM_MASK (PAGE_01_MAIN_DIRTY_MODE | PAGE_01_MAIN_DIRTY_ADD | \
+    PAGE_01_MAIN_DIRTY_WORK | PAGE_01_MAIN_DIRTY_FO | PAGE_01_MAIN_DIRTY_SPEED)
+static uint32_t s_main_commit_animation_flags;
 static bool s_main_snapshot_valid = false;
 static machine_state_snapshot_t s_main_machine_snapshot;
 static char s_main_currency_snapshot[4];
@@ -134,9 +141,35 @@ static void page_01_main_action_skins_release(void)
     }
 }
 
+/* Only visual state is merged. Commands, warnings and counting state-machine
+ * transitions still execute in original receive order. No object pointers
+ * escape the page lifetime into this callback. */
+static void page_01_main_commit(void *context, uint32_t flags)
+{
+    (void)context;
+    if (!page_01_main_is_visible()) {
+        s_main_dirty |= flags & PAGE_01_MAIN_DIRTY_ALL;
+        return;
+    }
+    s_main_commit_animation_flags = ui_manager_is_transitioning() ? 0 :
+        ((flags >> PAGE_01_MAIN_BOTTOM_ANIM_SHIFT) & PAGE_01_MAIN_BOTTOM_ANIM_MASK);
+    if (flags & PAGE_01_MAIN_DIRTY_MODE) page_01_mode_switch_refre();
+    if (flags & PAGE_01_MAIN_DIRTY_ADD) page_01_add_refre();
+    if (flags & PAGE_01_MAIN_DIRTY_WORK) page_01_work_refre();
+    if (flags & PAGE_01_MAIN_DIRTY_BATCH) page_01_batch_refre();
+    if (flags & PAGE_01_MAIN_DIRTY_FO) page_01_face_refre();
+    if (flags & PAGE_01_MAIN_DIRTY_CFD) page_01_cfd_refre();
+    if (flags & PAGE_01_MAIN_DIRTY_SPEED) page_01_speed_refre();
+    if (flags & PAGE_01_MAIN_DIRTY_ERROR) page_01_err_num_refre();
+    if (flags & PAGE_01_MAIN_DIRTY_CURRENCY) page_01_curr_img_refre();
+    if (flags & PAGE_01_MAIN_DIRTY_LANGUAGE) page_01_update_language_texts();
+    else if (flags & PAGE_01_MAIN_DIRTY_COUNTING) ui_refresh_main_page();
+    s_main_commit_animation_flags = 0;
+}
+
 void page_01_main_mark_dirty(uint32_t flags)
 {
-    s_main_dirty |= flags;
+    s_main_dirty |= flags & PAGE_01_MAIN_DIRTY_ALL;
 }
 
 bool page_01_main_defer_refresh(uint32_t flags)
@@ -145,7 +178,23 @@ bool page_01_main_defer_refresh(uint32_t flags)
         page_01_main_mark_dirty(flags);
         return true;
     }
-    s_main_dirty &= ~flags;
+    /* Navigation/create/resume must populate the first frame synchronously. */
+    if (!ui_manager_is_transitioning() &&
+        ui_frame_commit_defer(page_01_main_commit, NULL, flags)) {
+        page_01_main_mark_dirty(flags);
+        return true;
+    }
+    s_main_dirty &= ~(flags & PAGE_01_MAIN_DIRTY_ALL);
+    return false;
+}
+
+static bool page_01_main_defer_bottom_refresh(uint32_t flag, bool *animate)
+{
+    uint32_t request = flag;
+    if (*animate) request |= (flag & PAGE_01_MAIN_BOTTOM_ANIM_MASK) << PAGE_01_MAIN_BOTTOM_ANIM_SHIFT;
+    if (page_01_main_defer_refresh(request)) return true;
+    *animate = !ui_manager_is_transitioning() &&
+        (*animate || (s_main_commit_animation_flags & flag) != 0);
     return false;
 }
 
@@ -479,6 +528,10 @@ static void page_01_bottom_label_anim_stop(lv_obj_t* label)
 
 static void page_01_bottom_animations_stop(void)
 {
+    /* Suspend/destroy discard interaction effects, while queued state remains
+     * dirty for the synchronous first frame on the next page activation. */
+    ui_frame_commit_cancel(page_01_main_commit, NULL);
+    s_main_commit_animation_flags = 0;
     page_01_bottom_label_anim_stop(s_bottom_a_label_mode);
     page_01_bottom_label_anim_stop(s_bottom_a_label_add);
     page_01_bottom_label_anim_stop(s_bottom_a_label_work);
@@ -996,7 +1049,7 @@ static void page_01_bottom_bg_destroy_all(void) //销毁主界面底部三个背
 
 void page_01_bottom_a_refresh_mode(bool anim_en) //刷新主界面底部A区模式文本
 {
-    if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_MODE)) return;
+    if (page_01_main_defer_bottom_refresh(PAGE_01_MAIN_DIRTY_MODE, &anim_en)) return;
     page_01_bottom_label_anim_run(s_bottom_a_label_mode, page_01_bottom_mode_text_get(machine_state_mode()),
         anim_en ? PAGE_01_BOTTOM_TEXT_ANIM_SLIDE : PAGE_01_BOTTOM_TEXT_ANIM_NONE);
 }
@@ -1010,21 +1063,21 @@ void page_01_bottom_a_refresh_mode_preview(uint8_t mode) //预刷新主界面底
 
 void page_01_bottom_a_refresh_add(bool anim_en) //刷新主界面底部A区ADD文本
 {
-    if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_ADD)) return;
+    if (page_01_main_defer_bottom_refresh(PAGE_01_MAIN_DIRTY_ADD, &anim_en)) return;
     page_01_bottom_label_anim_run(s_bottom_a_label_add, page_01_bottom_add_text_get(),
         anim_en ? PAGE_01_BOTTOM_TEXT_ANIM_SLIDE : PAGE_01_BOTTOM_TEXT_ANIM_NONE);
 }
 
 void page_01_bottom_a_refresh_work(bool anim_en) //刷新主界面底部A区工作模式文本
 {
-    if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_WORK)) return;
+    if (page_01_main_defer_bottom_refresh(PAGE_01_MAIN_DIRTY_WORK, &anim_en)) return;
     page_01_bottom_label_anim_run(s_bottom_a_label_work, page_01_bottom_work_text_get(),
         anim_en ? PAGE_01_BOTTOM_TEXT_ANIM_SLIDE : PAGE_01_BOTTOM_TEXT_ANIM_NONE);
 }
 
 void page_01_bottom_a_refresh_fo(bool anim_en) //刷新主界面底部A区F/O文本
 {
-    if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_FO)) return;
+    if (page_01_main_defer_bottom_refresh(PAGE_01_MAIN_DIRTY_FO, &anim_en)) return;
     page_01_bottom_label_anim_run(s_bottom_a_label_fo, page_01_bottom_fo_text_get(),
         anim_en ? PAGE_01_BOTTOM_TEXT_ANIM_SLIDE : PAGE_01_BOTTOM_TEXT_ANIM_NONE);
 }
@@ -1048,7 +1101,7 @@ void page_01_bottom_c_refresh_batch(bool anim_en) //刷新主界面底部C区Bat
 
 void page_01_bottom_c_refresh_speed(bool anim_en) //刷新主界面底部C区速度文本
 {
-    if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_SPEED)) return;
+    if (page_01_main_defer_bottom_refresh(PAGE_01_MAIN_DIRTY_SPEED, &anim_en)) return;
     page_01_bottom_label_anim_run(s_bottom_c_label_speed, page_01_bottom_speed_text_get(),
         anim_en ? PAGE_01_BOTTOM_TEXT_ANIM_SLIDE : PAGE_01_BOTTOM_TEXT_ANIM_NONE);
 }
@@ -1626,6 +1679,7 @@ void ui_main_create(lv_obj_t* parent)
 
 void ui_main_destroy(void)
 {
+    page_01_bottom_animations_stop();
     if (s_time_timer) {
         lv_timer_del(s_time_timer);
         s_time_timer = NULL;

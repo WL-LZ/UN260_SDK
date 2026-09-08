@@ -1,5 +1,6 @@
 #include "perf_stats.h"
 #include "image_memory.h"
+#include "un260/lv_core/ui_frame_commit.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -15,6 +16,8 @@
 static perf_stats_snapshot_t g_perf_stats = {0};
 static struct cpu_occupy g_cpu_prev = {0};
 static bool g_cpu_prev_valid = false;
+
+
 
 typedef struct {
     uint64_t total_us;
@@ -1218,6 +1221,10 @@ void perf_profile_poll(uint32_t now_ms)
         }
     }
     lv_dma_snapshot_cache_take_stats(&snapshot_stats);
+    ui_frame_commit_stats_t commit_stats;
+    ui_frame_commit_take_stats(&commit_stats);
+    uart_debug_printf("PERF_COMMIT requests=%u merged=%u callbacks=%u full=%u\n",
+        commit_stats.requests, commit_stats.merged, commit_stats.callbacks, commit_stats.full);
     image_mem_report(); /* Only in the existing opt-in PERF reporting window. */
     uart_debug_printf(
         "PERF_CACHE page=%s snap=%u/%u/%u/%u/%u "

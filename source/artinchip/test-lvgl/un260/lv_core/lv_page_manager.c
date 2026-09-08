@@ -5,6 +5,7 @@
 #include "aic_ui/aic_ui.h"
 #include "aic_ui/image_memory.h"
 #include "un260/lv_core/lv_page_manager.h"
+#include "ui_frame_commit.h"
 #include "un260/lv_system/counting_ui_runtime.h"
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/protocol/protocol_send.h"
@@ -934,6 +935,21 @@ bool ui_manager_is_transitioning(void)
     return g_page_switch_committing || g_page_input_unlock_timer != NULL;
 }
 
+static void ui_manager_commit_visible_data(void *context, uint32_t flags)
+{
+    (void)context;
+    (void)flags;
+    ui_page_t page = g_page_manager.current;
+    if (page < UI_PAGE_BOOT_ANIM || page >= UI_PAGE_COUNT) return;
+    const ui_page_registration_t *registration = &g_page_registry[page];
+    if (g_page_cache_ready[page] && registration->refresh_data &&
+        g_page_data_dirty[page] != UI_DATA_TOPIC_NONE) {
+        ui_data_topic_t topics = g_page_data_dirty[page];
+        g_page_data_dirty[page] = UI_DATA_TOPIC_NONE;
+        registration->refresh_data(topics);
+    }
+}
+
 void ui_manager_publish_data_changed(ui_data_topic_t topics)
 {
     ui_page_t page;
@@ -951,11 +967,7 @@ void ui_manager_publish_data_changed(ui_data_topic_t topics)
         }
 
         g_page_data_dirty[page] |= affected;
-        if (page == g_page_manager.current &&
-            g_page_cache_ready[page] &&
-            registration->refresh_data != NULL) {
-            registration->refresh_data(g_page_data_dirty[page]);
-            g_page_data_dirty[page] = UI_DATA_TOPIC_NONE;
-        }
     }
+    if (!ui_frame_commit_defer(ui_manager_commit_visible_data, NULL, topics))
+        ui_manager_commit_visible_data(NULL, topics);
 }
