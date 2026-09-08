@@ -1,5 +1,6 @@
 #include "page_32_innovation.h"
 #include "lv_port_indev.h"
+#include "lv_port_disp.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -15,6 +16,7 @@
 #include "un260/lv_components/lv_dma_snapshot_cache.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/page_01_main.h"
+#include "un260/lv_core/ui_deferred_action.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/gesture/gesture_guide.h"
 #include "un260/gesture/gesture_service.h"
@@ -33,6 +35,8 @@
 #define INNOVATION_RED            0xE45454
 #define INNOVATION_LINE           0xDDE5EA
 #define INNOVATION_PREVIEW_ARM_DY 1
+#define INNOVATION_TRANSITION_SETTLE_MS 180U
+#define INNOVATION_TRANSITION_CANCEL_MS 150U
 
 typedef struct {
     lv_obj_t *root;
@@ -90,9 +94,11 @@ static bool g_transition_prepare_failed;
 static uint32_t g_transition_failure_tick;
 static lv_timer_t *g_preview_preload_timer;
 static bool g_page_transitioning;
+static ui_deferred_action_t g_transition_action;
 static lv_timer_t *g_back_first_frame_timer;
-static uint32_t g_back_tick, g_back_frames;
+static uint32_t g_back_tick, g_back_present_sequence;
 static void innovation_back_stop(void);
+static void innovation_transition_stop(void);
 static void innovation_preview_preload_async(void *user_data);
 static void innovation_preview_preload_timer_cb(lv_timer_t *timer);
 static lv_obj_t *innovation_label(lv_obj_t *parent, const char *text,
@@ -439,6 +445,7 @@ static lv_obj_t *innovation_transition_target(void)
 
 static void innovation_transition_snapshot_release(void)
 {
+    innovation_transition_stop();
     g_transition_snapshot_valid = false;
     g_transition_snapshot_dirty = true;
     if (g_transition_snapshot.snapshot != NULL ||
@@ -489,6 +496,8 @@ static void innovation_transition_commit_async(void *user_data)
         app_clock_monotonic_us() : 0;
 
     (void)user_data;
+    if (!g_page_transitioning || !g_handle_gesture.preview_active ||
+        ui_manager_get_current_page() != UI_PAGE_MAIN) return;
     g_page_transitioning = false;
     g_handle_gesture.preview_active = false;
     if (g_page.root != NULL && lv_obj_is_valid(g_page.root)) {
@@ -533,9 +542,12 @@ static void innovation_transition_back_async(void *user_data)
     if (ui_manager_get_current_page() != UI_PAGE_INNOVATION_CENTER) return;
     innovation_back_stop();
     innovation_set_hidden(g_transition_snapshot.image, true);
+    innovation_set_y_if_changed(g_transition_snapshot.image, -400);
     innovation_set_hidden(g_page.root, true);
+    innovation_set_y_if_changed(g_page.root, -400);
     g_page_transitioning = false;
     if (!ui_manager_pop_page()) ui_manager_switch(UI_PAGE_MAIN);
+    ui_manager_hold_transition_input(UI_PAGE_INNOVATION_CENTER, false);
     /* The outgoing surface and incoming page are invalidated in one handoff. */
     lv_obj_invalidate(lv_scr_act());
     if (started_us != 0) {
@@ -547,13 +559,17 @@ static void innovation_transition_back_async(void *user_data)
 static void innovation_transition_open_ready(lv_anim_t *animation)
 {
     (void)animation;
-    lv_async_call(innovation_transition_commit_async, NULL);
+    if (!ui_deferred_action_schedule(&g_transition_action,
+                                    innovation_transition_commit_async, NULL))
+        innovation_transition_commit_async(NULL);
 }
 
 static void innovation_transition_cancel_ready(lv_anim_t *animation)
 {
     (void)animation;
-    lv_async_call(innovation_transition_cancel_async, NULL);
+    if (!ui_deferred_action_schedule(&g_transition_action,
+                                    innovation_transition_cancel_async, NULL))
+        innovation_transition_cancel_async(NULL);
 }
 
 static void innovation_transition_back_ready(lv_anim_t *animation)
@@ -561,20 +577,22 @@ static void innovation_transition_back_ready(lv_anim_t *animation)
     (void)animation;
     innovation_set_hidden(g_transition_snapshot.image, true);
     if (perf_profile_is_enabled())
-        uart_debug_printf("INNOVATION_BACK event=end elapsed_ms=%u draw_passes=%u\n",
-                          lv_tick_elaps(g_back_tick), g_back_frames);
-    if(lv_async_call(innovation_transition_back_async, NULL) != LV_RES_OK)
+        uart_debug_printf("INNOVATION_BACK event=end elapsed_ms=%u presented_frames=%u\n",
+                          lv_tick_elaps(g_back_tick),
+                          fbdev_present_sequence() - g_back_present_sequence);
+    if (!ui_deferred_action_schedule(&g_transition_action,
+                                    innovation_transition_back_async, NULL))
         innovation_transition_back_async(NULL);
 }
 
-static void innovation_transition_animate(lv_coord_t destination,
+static bool innovation_transition_animate(lv_coord_t destination,
                                           uint32_t duration,
                                           lv_anim_ready_cb_t ready_cb)
 {
     lv_obj_t *target = innovation_transition_target();
     lv_anim_t animation;
 
-    if (target == NULL) return;
+    if (target == NULL) return false;
     lv_anim_del(target, innovation_transition_set_y);
     lv_anim_init(&animation);
     lv_anim_set_var(&animation, target);
@@ -583,56 +601,54 @@ static void innovation_transition_animate(lv_coord_t destination,
     lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
     lv_anim_set_exec_cb(&animation, innovation_transition_set_y);
     lv_anim_set_ready_cb(&animation, ready_cb);
-    lv_anim_start(&animation);
+    return lv_anim_start(&animation) != NULL;
 }
 
-/* A 210 ms timer must not run before the replacement has drawn even once.
- * DRAW_POST_END records CPU draw completion, not panel scanout completion. */
-static void innovation_back_draw(lv_event_t *event)
-{
-    if(g_page_transitioning && lv_event_get_code(event) == LV_EVENT_DRAW_POST_END)
-        ++g_back_frames;
-}
 static void innovation_back_stop(void)
 {
     if(g_back_first_frame_timer) lv_timer_del(g_back_first_frame_timer);
     g_back_first_frame_timer = NULL;
     if(g_transition_snapshot.image && lv_obj_is_valid(g_transition_snapshot.image)) {
         lv_anim_del(g_transition_snapshot.image, innovation_transition_set_y);
-        lv_obj_remove_event_cb(g_transition_snapshot.image, innovation_back_draw);
     }
 }
+
+static void innovation_transition_stop(void)
+{
+    /* Queued ready callbacks otherwise outlive a suspended/destroyed page and
+     * can commit an old pull-down after a new page has taken ownership. */
+    ui_deferred_action_cancel(&g_transition_action);
+    innovation_back_stop();
+    ui_manager_hold_transition_input(UI_PAGE_INNOVATION_CENTER, false);
+}
+
 static void innovation_back_first_frame(lv_timer_t *timer)
 {
-    LV_UNUSED(timer);
+    if (timer == NULL || timer != g_back_first_frame_timer) return;
     if(ui_manager_get_current_page() != UI_PAGE_INNOVATION_CENTER) {
         innovation_back_stop();
         return;
     }
-    if(!g_back_frames && lv_tick_elaps(g_back_tick) < 700) return;
+    /* Count successful display commits, not object draw events: the GE image
+     * path can omit DRAW_POST_END, and profiling may be disabled entirely. */
+    bool presented = fbdev_present_sequence() != g_back_present_sequence;
+    if (!presented && lv_tick_elaps(g_back_tick) < 700U) return;
     lv_timer_del(g_back_first_frame_timer);
     g_back_first_frame_timer = NULL;
-    if(!g_back_frames) {
+    if (!presented) {
         if(perf_profile_is_enabled())
-            uart_debug_printf("INNOVATION_BACK event=no_first_draw fallback=atomic\n");
+            uart_debug_printf("INNOVATION_BACK event=no_first_present fallback=atomic\n");
         innovation_transition_back_async(NULL);
         return;
     }
     if(perf_profile_is_enabled())
-        uart_debug_printf("INNOVATION_BACK event=first_draw wait_ms=%u duration_ms=210\n",
-                          lv_tick_elaps(g_back_tick));
-    lv_obj_t *target = innovation_transition_target();
-    if(!target) { innovation_transition_back_async(NULL); return; }
-    lv_anim_t animation;
-    lv_anim_init(&animation);
-    lv_anim_set_var(&animation, target);
-    lv_anim_set_values(&animation, lv_obj_get_y(target),
-                       -lv_obj_get_height(target) - _lv_obj_get_ext_draw_size(target) - 2);
-    lv_anim_set_time(&animation, 210);
-    lv_anim_set_path_cb(&animation, lv_anim_path_ease_in_out);
-    lv_anim_set_exec_cb(&animation, innovation_transition_set_y);
-    lv_anim_set_ready_cb(&animation, innovation_transition_back_ready);
-    lv_anim_start(&animation);
+        uart_debug_printf("INNOVATION_BACK event=first_present wait_ms=%u duration_ms=%u\n",
+                          lv_tick_elaps(g_back_tick), INNOVATION_TRANSITION_SETTLE_MS);
+    /* Exact reverse displacement of the accepted -400 -> 0 entrance, with
+     * the same duration and easing. No opacity animation or live-tree slide. */
+    if (!innovation_transition_animate(-400, INNOVATION_TRANSITION_SETTLE_MS,
+                                        innovation_transition_back_ready))
+        innovation_transition_back_async(NULL);
 }
 
 static bool innovation_handle_preview_begin(void)
@@ -725,18 +741,14 @@ static void innovation_handle_drag_finish(lv_indev_t *indev)
 
     if (dy >= 90 || fast_flick) {
         g_handle_gesture.opened = true;
-        if (g_transition_snapshot_valid)
-            innovation_transition_animate(0, 180,
-                                          innovation_transition_open_ready);
-        else
-            lv_async_call(innovation_transition_commit_async, NULL);
+        if (!innovation_transition_animate(0, INNOVATION_TRANSITION_SETTLE_MS,
+                                           innovation_transition_open_ready))
+            innovation_transition_open_ready(NULL);
     } else {
         g_handle_gesture.opened = false;
-        if (g_transition_snapshot_valid)
-            innovation_transition_animate(-400, 150,
-                                          innovation_transition_cancel_ready);
-        else
-            lv_async_call(innovation_transition_cancel_async, NULL);
+        if (!innovation_transition_animate(-400, INNOVATION_TRANSITION_CANCEL_MS,
+                                           innovation_transition_cancel_ready))
+            innovation_transition_cancel_ready(NULL);
     }
 }
 
@@ -913,20 +925,29 @@ void page_32_innovation_handle_detach(void)
     }
 }
 
-static void innovation_back_cb(lv_event_t *event)
+bool page_32_innovation_request_back(void)
 {
+    ui_page_t current = ui_manager_get_current_page();
     uint64_t started_us = perf_profile_is_enabled() ?
         app_clock_monotonic_us() : 0;
 
-    (void)event;
-    if (g_page_transitioning) return;
+    if (current == UI_PAGE_MAIN &&
+        (g_handle_gesture.pressed || g_handle_gesture.preview_active)) {
+        innovation_transition_stop();
+        g_handle_gesture.pressed = false;
+        g_handle_gesture.opened = false;
+        innovation_transition_cancel_async(NULL);
+        return true;
+    }
+    if (current != UI_PAGE_INNOVATION_CENTER) return false;
+    if (g_page_transitioning) return true;
     g_page_transitioning = true;
+    ui_manager_hold_transition_input(UI_PAGE_INNOVATION_CENTER, true);
     innovation_refresh_pause();
     innovation_prompt_close();
     if (g_page.root == NULL || !lv_obj_is_valid(g_page.root)) {
-        g_page_transitioning = false;
-        innovation_refresh_resume();
-        return;
+        innovation_transition_back_async(NULL);
+        return true;
     }
     /* Tabs, button states and pass results may have changed while active.
      * Re-capture into the retained allocation, not a stale name-keyed cache. */
@@ -937,20 +958,27 @@ static void innovation_back_cb(lv_event_t *event)
         innovation_set_hidden(g_transition_snapshot.image, false);
         lv_obj_move_foreground(g_transition_snapshot.image);
         innovation_back_stop();
-        g_back_frames = 0;
+        g_back_present_sequence = fbdev_present_sequence();
         g_back_tick = lv_tick_get();
-        lv_obj_add_event_cb(g_transition_snapshot.image, innovation_back_draw,
-                            LV_EVENT_DRAW_POST_END, NULL);
         lv_obj_invalidate(g_transition_snapshot.image);
         g_back_first_frame_timer = lv_timer_create(innovation_back_first_frame, 16, NULL);
         if(!g_back_first_frame_timer) innovation_transition_back_async(NULL);
     } else {
-        lv_async_call(innovation_transition_back_async, NULL);
+        if (!ui_deferred_action_schedule(&g_transition_action,
+                                        innovation_transition_back_async, NULL))
+            innovation_transition_back_async(NULL);
     }
     if (started_us != 0) {
         perf_profile_report_event_us("INNOVATION", "BACK_PREPARE",
             app_clock_elapsed_us32(started_us, app_clock_monotonic_us()));
     }
+    return true;
+}
+
+static void innovation_back_cb(lv_event_t *event)
+{
+    (void)event;
+    (void)page_32_innovation_request_back();
 }
 
 static void innovation_target_minus_cb(lv_event_t *event)
@@ -1443,6 +1471,10 @@ bool ui_page_32_innovation_resume(void)
     }
 
     started_us = perf_profile_is_enabled() ? app_clock_monotonic_us() : 0;
+    innovation_transition_stop();
+    g_page_transitioning = false;
+    innovation_set_hidden(g_transition_snapshot.image, true);
+    innovation_set_y_if_changed(g_transition_snapshot.image, -400);
     innovation_set_y_if_changed(g_page.root, 0);
     innovation_set_hidden(g_page.root, false);
     lv_obj_move_foreground(g_page.root);
@@ -1458,11 +1490,12 @@ bool ui_page_32_innovation_resume(void)
 
 void ui_page_32_innovation_suspend(void)
 {
-    innovation_back_stop();
+    innovation_transition_stop();
     innovation_refresh_pause();
     innovation_prompt_close();
     gesture_guide_close(false);
     innovation_set_hidden(g_transition_snapshot.image, true);
+    innovation_set_y_if_changed(g_transition_snapshot.image, -400);
     g_transition_snapshot_dirty = true;
     g_page_transitioning = false;
     g_handle_gesture.pressed = false;
@@ -1474,7 +1507,12 @@ void ui_page_32_innovation_suspend(void)
 
 void ui_page_32_innovation_destroy(void)
 {
-    innovation_back_stop();
+    innovation_transition_stop();
+    g_page_transitioning = false;
+    /* Initial lazy create calls destroy before preview_begin owns a surface.
+     * Preserve that still-held initiating press, but cancel owned previews. */
+    if (g_handle_gesture.preview_active) g_handle_gesture.pressed = false;
+    g_handle_gesture.preview_active = false;
     lv_modal_dialog_destroy(&g_prompt);
     gesture_guide_close(false);
     innovation_transition_snapshot_release();

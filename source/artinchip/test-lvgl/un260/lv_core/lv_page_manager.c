@@ -37,6 +37,7 @@ static ui_data_topic_t g_page_data_dirty[UI_PAGE_COUNT];
 static ui_page_t g_page_prewarming = UI_PAGE_INVALID;
 static bool g_page_switch_committing;
 static lv_timer_t *g_page_input_unlock_timer;
+static uint64_t g_transition_input_owners;
 static void ui_manager_reset_navigation_sessions(void);
 
 /* Main is the navigation root, never an intermediate history entry that can
@@ -358,10 +359,27 @@ static uint32_t ui_manager_profile_elapsed_us(uint64_t started_us)
 
 static void ui_manager_set_input_enabled(bool enabled)
 {
+    if (enabled && g_transition_input_owners) return;
     lv_indev_t *indev = NULL;
 
     while ((indev = lv_indev_get_next(indev)) != NULL) {
         lv_indev_enable(indev, enabled);
+    }
+}
+
+void ui_manager_hold_transition_input(ui_page_t owner, bool hold)
+{
+    if (owner < UI_PAGE_BOOT_ANIM || owner >= UI_PAGE_COUNT || owner >= 64) return;
+    uint64_t bit = UINT64_C(1) << owner;
+    if (hold) {
+        if (!(g_transition_input_owners & bit)) {
+            g_transition_input_owners |= bit;
+            ui_manager_set_input_enabled(false);
+        }
+    } else {
+        g_transition_input_owners &= ~bit;
+        if (!g_transition_input_owners && !g_page_switch_committing && !g_page_input_unlock_timer)
+            ui_manager_set_input_enabled(true);
     }
 }
 
@@ -528,6 +546,7 @@ void ui_manager_init(void) {
         lv_timer_del(g_page_input_unlock_timer);
         g_page_input_unlock_timer = NULL;
     }
+    g_transition_input_owners = 0;
     ui_manager_set_input_enabled(true);
 
     // 显示主页面
@@ -932,7 +951,8 @@ ui_page_t ui_manager_get_current_page(void) {
 
 bool ui_manager_is_transitioning(void)
 {
-    return g_page_switch_committing || g_page_input_unlock_timer != NULL;
+    return g_page_switch_committing || g_page_input_unlock_timer != NULL ||
+           g_transition_input_owners != 0;
 }
 
 static void ui_manager_commit_visible_data(void *context, uint32_t flags)

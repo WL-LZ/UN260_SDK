@@ -68,6 +68,9 @@ stub = r'''
 #define LV_STATE_PRESSED 1U
 #define LV_INDEV_TYPE_POINTER 1
 #define INNOVATION_PREVIEW_ARM_DY 1
+#define INNOVATION_TRANSITION_SETTLE_MS 180U
+#define INNOVATION_TRANSITION_CANCEL_MS 150U
+#define LV_RES_OK 0
 typedef int lv_coord_t;
 typedef int lv_event_code_t;
 enum {LV_EVENT_PRESSED=1, LV_EVENT_PRESSING, LV_EVENT_RELEASED, LV_EVENT_PRESS_LOST};
@@ -99,6 +102,7 @@ static int animation_destination;
 static lv_obj_t *reset_object;
 static void (*queued)(void *);
 static void *queued_data;
+static int g_transition_action;
 static lv_anim_ready_cb_t animation_ready;
 static bool preview_available;
 static void innovation_handle_event_cb(lv_event_t *);
@@ -125,19 +129,24 @@ static bool perf_profile_is_enabled(void) {return false;}
 static void uart_debug_printf(const char *fmt,...) {LV_UNUSED(fmt);}
 static void innovation_set_y_if_changed(lv_obj_t *o,lv_coord_t y) {if(lv_obj_is_valid(o)) o->y=y;}
 static void innovation_set_hidden(lv_obj_t *o,bool hidden) {if(lv_obj_is_valid(o)) o->hidden=hidden;}
-static int lv_async_call(void(*callback)(void *),void *data) {
-    assert(!queued); queued=callback; queued_data=data; return 0;
+/* This test owns capture/input policy; actual deferred/timer lifetime is
+ * exercised by test_innovation_transition.py and test_deferred_action.py. */
+static bool ui_deferred_action_schedule(int *owner,void(*callback)(void *),void *data) {
+    assert(owner==&g_transition_action && !queued);
+    queued=callback; queued_data=data; return true;
 }
 static void innovation_transition_commit_async(void *data) {
     LV_UNUSED(data); commits++; g_page_transitioning=false;
     g_handle_gesture.preview_active=false; surface.hidden=true;
     live_root.y=0; live_root.hidden=false;
 }
-static void innovation_transition_animate(lv_coord_t destination,uint32_t duration,lv_anim_ready_cb_t ready) {
-    assert(g_transition_snapshot_valid && !animation_ready);
+static bool innovation_transition_animate(lv_coord_t destination,uint32_t duration,lv_anim_ready_cb_t ready) {
+    if (!g_transition_snapshot_valid) return false;
+    assert(!animation_ready);
     assert(live_root.hidden && live_root.y==-400);
     assert((destination==0 && duration==180) || (destination==-400 && duration==150));
     animations++; animation_destination=destination; animation_ready=ready;
+    return true;
 }
 static bool innovation_handle_preview_begin(void) {
     if(!preview_available || g_page_transitioning || g_handle_gesture.preview_active) return false;

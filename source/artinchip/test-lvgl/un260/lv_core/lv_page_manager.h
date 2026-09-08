@@ -84,6 +84,9 @@ bool ui_manager_is_prewarming_page(ui_page_t page);
 ui_page_t ui_manager_get_current_page(void); // 获取当前页
 const char *ui_manager_page_name(ui_page_t page); // 获取页面诊断名称
 bool ui_manager_is_transitioning(void); // 页面正在同步提交或等待首帧输入保护
+/* Idempotent per-page ownership for an asynchronous transition. Releasing
+ * one owner never removes the manager's first-frame input guard. */
+void ui_manager_hold_transition_input(ui_page_t owner, bool hold);
 void ui_manager_publish_data_changed(ui_data_topic_t topics); // 发布异步数据更新
 
 #ifdef __cplusplus

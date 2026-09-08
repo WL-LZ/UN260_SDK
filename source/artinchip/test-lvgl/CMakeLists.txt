@@ -41,6 +41,7 @@ add_executable(${PROJECT_NAME} main.c
     aic_ui/present_damage.c
     aic_ui/render_scratch.c
     un260/lv_core/ui_frame_commit.c
+    un260/lv_core/ui_deferred_action.c
     un260/app_service/app_runtime_wakeup.c
     un260/storage/storage_worker.c
 	aic_ui/aic_ui.c

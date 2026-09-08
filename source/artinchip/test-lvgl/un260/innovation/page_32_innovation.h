@@ -19,6 +19,11 @@ void page_32_innovation_handle_detach(void);
  * point. */
 void page_32_innovation_schedule_preload(void);
 
+/* UI-thread navigation gate shared by ESC/BACK and the edge-back gesture.
+ * Returns true when Innovation owns the request: start/retain its exit, or
+ * cancel its uncommitted Main-page pull-down. Other pages return false. */
+bool page_32_innovation_request_back(void);
+
 /* Called on the LVGL thread after a complete count-detail snapshot is ready. */
 void page_32_innovation_notify_verification_event(
     const multi_pass_capture_event_t *event);
