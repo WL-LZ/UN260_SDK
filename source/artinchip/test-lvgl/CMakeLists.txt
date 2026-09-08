@@ -68,6 +68,8 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_components/lv_modal_dialog.c
     un260/lv_components/lv_content_pager.c
     un260/lv_components/lv_dma_snapshot_cache.c
+    un260/lv_components/lv_card_surface.c
+    un260/lv_components/ui_scroll_physics.c
     un260/app_service/setting_service.c
     un260/lv_system/app_clock.c
     un260/app_service/app_boot_runtime.c
@@ -135,6 +137,9 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_core/settings_detail_ui.c
     un260/lv_core/page_07_curr.c
     un260/lv_core/page_07_curr/page_07_curr_model.c
+    un260/lv_core/page_07_curr/page_07_curr_carousel.c
+    un260/lv_core/page_07_curr/page_07_curr_card_render.c
+    un260/lv_core/page_07_curr/page_07_curr_view.c
     un260/lv_core/page_08_boot.c
     un260/lv_core/page_09_cis_cala.c 
     un260/lv_core/page_10_debug.c 
