@@ -717,6 +717,9 @@ static void innovation_handle_drag_finish(lv_indev_t *indev)
     dy = innovation_handle_drag_update(indev);
     elapsed = lv_tick_elaps(g_handle_gesture.start_tick);
     fast_flick = dy >= 45 && elapsed <= 350U;
+    if (perf_profile_is_enabled())
+        uart_debug_printf("PULLDOWN event=release dy=%d elapsed_ms=%u decision=%s\n",
+                          dy, elapsed, (dy >= 90 || fast_flick) ? "open" : "cancel");
     g_handle_gesture.pressed = false;
     g_page_transitioning = true;
 
@@ -737,14 +740,34 @@ static void innovation_handle_drag_finish(lv_indev_t *indev)
     }
 }
 
+static void innovation_handle_drag_cancel(void)
+{
+    /* A lost/captured press is not a physical release. In particular the raw
+     * edge and multi-finger recognizers may take ownership at any distance. */
+    if (g_handle_gesture.pressed && perf_profile_is_enabled())
+        uart_debug_printf("PULLDOWN event=cancel reason=press_lost dy=%d elapsed_ms=%u\n",
+                          g_handle_gesture.drag_y,
+                          lv_tick_elaps(g_handle_gesture.start_tick));
+    g_handle_gesture.pressed = false;
+    if (g_handle_gesture.preview_active && !g_page_transitioning) {
+        g_page_transitioning = true;
+        innovation_transition_cancel_async(NULL);
+    }
+}
+
 static void innovation_handle_event_cb(lv_event_t *event)
 {
     lv_event_code_t code = lv_event_get_code(event);
     lv_indev_t *indev = lv_indev_get_act();
     lv_point_t point;
 
+    if (code == LV_EVENT_PRESS_LOST) {
+        innovation_handle_drag_cancel();
+        return;
+    }
     if (indev == NULL) return;
     if (code == LV_EVENT_PRESSED) {
+        if (g_page_transitioning || g_handle_gesture.preview_active) return;
         lv_indev_get_point(indev, &g_handle_gesture.start);
         g_handle_gesture.pressed = true;
         g_handle_gesture.opened = false;
@@ -770,17 +793,7 @@ static void innovation_handle_event_cb(lv_event_t *event)
         innovation_handle_drag_update(indev);
         return;
     }
-    if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
-        if(code == LV_EVENT_PRESS_LOST && gesture_service_enabled() && lv_port_indev_touch_count() >= 2) {
-            /* A global multi-finger capture cancels this local preview; it is
-             * not a single-finger release that should commit a page switch. */
-            g_handle_gesture.pressed = false;
-            if(g_handle_gesture.preview_active && !g_page_transitioning) {
-                g_page_transitioning = true;
-                innovation_transition_cancel_async(NULL);
-            }
-            return;
-        }
+    if (code == LV_EVENT_RELEASED) {
         innovation_handle_drag_finish(indev);
     }
 }
@@ -797,8 +810,8 @@ void page_32_innovation_handle_attach(lv_obj_t *main_page)
     lv_obj_set_pos(g_handle_touch, 1058, 0);
     lv_obj_set_size(g_handle_touch, 212, 44);
     lv_obj_set_style_bg_opa(g_handle_touch, LV_OPA_TRANSP, 0);
-    lv_obj_add_flag(g_handle_touch, LV_OBJ_FLAG_CLICKABLE |
-                                    LV_OBJ_FLAG_PRESS_LOCK);
+    lv_obj_add_flag(g_handle_touch, LV_OBJ_FLAG_CLICKABLE);
+    lv_port_indev_set_drag_obj(g_handle_touch, true);
     lv_obj_clear_flag(g_handle_touch, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(g_handle_touch, innovation_handle_event_cb,
                         LV_EVENT_PRESSED, NULL);

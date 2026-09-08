@@ -203,10 +203,14 @@ void lv_port_indev_set_drag_obj(lv_obj_t *obj, bool enable)
     if(obj == NULL)
         return;
 
+    /* Persistent drags own both the driver exemption and LVGL's press lock.
+     * Keeping these flags together prevents small drag handles from losing
+     * their contact when the finger moves outside the original hit box.
+     * Ordinary buttons remain unregistered and retain slide-out cancellation. */
     if(enable)
-        lv_obj_add_flag(obj, LV_OBJ_FLAG_USER_4);
+        lv_obj_add_flag(obj, LV_OBJ_FLAG_USER_4 | LV_OBJ_FLAG_PRESS_LOCK);
     else
-        lv_obj_clear_flag(obj, LV_OBJ_FLAG_USER_4);
+        lv_obj_clear_flag(obj, LV_OBJ_FLAG_USER_4 | LV_OBJ_FLAG_PRESS_LOCK);
 }
 
 /**

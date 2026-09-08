@@ -14,6 +14,9 @@ extern "C" {
 #include "lvgl/lvgl.h"
 
 void lv_port_indev_init(void);
+/* Own a pointer sequence beyond this object's hit box until release/cancel.
+ * Registers both the driver drag exemption and LVGL press lock. This does not
+ * override raw edge/multifinger gesture capture, which may still cancel it. */
 void lv_port_indev_set_drag_obj(lv_obj_t *obj, bool enable);
 
 /* Complete raw input frames, independent of object hit testing. True captures
