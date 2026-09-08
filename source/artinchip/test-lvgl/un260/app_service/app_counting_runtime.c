@@ -258,22 +258,20 @@ static const counting_denom_reply_hooks_t g_counting_denom_hooks = {
     .on_main_data_changed = app_counting_runtime_on_main_data_changed,
 };
 
-void app_counting_runtime_reset_session(counting_session_state_t *session,
+bool app_counting_runtime_reset_session(counting_session_state_t *session,
                                         const char *reason)
 {
-    bool history_discarded;
-
     if (session == NULL) {
-        return;
+        return false;
     }
-
-    history_discarded = counting_history_discard_pending(session);
+    if (!counting_history_prepare_reset(session, counting_data_current(), lv_tick_get())) {
+        uart_debug_printf("session reset deferred: unsaved history retained reason=%s\n",
+                          reason != NULL ? reason : "unknown");
+        return false;
+    }
     memset(session, 0, sizeof(*session));
     ui_count_end_anim_cancel();
-    if (history_discarded) {
-        uart_debug_printf("pending history discarded by %s\n",
-                    reason != NULL ? reason : "session reset");
-    }
+    return true;
 }
 
 static void app_counting_runtime_on_detail_history(void *context,
@@ -384,8 +382,9 @@ static void app_counting_runtime_report_history_commit(
         uart_debug_printf("history save failed, retry scheduled attempt=%u\n",
                     session->history_record.save_attempts);
     } else if (result == COUNTING_HISTORY_COMMIT_FAILED) {
-        uart_debug_printf("history save failed after %u attempts\n",
-                    session->history_record.save_attempts);
+        uart_debug_printf("history storage failed or full; pending records retained, new starts blocked\n");
+        smart_island_notify_warning_level("History save pending: storage unavailable",
+                                           SMART_ISLAND_WARNING_LEVEL_ERROR);
     } else if (result == COUNTING_HISTORY_COMMIT_SAVED && previous_attempts > 0) {
         uart_debug_printf("history save recovered after %u retries\n",
                     previous_attempts);
@@ -599,6 +598,10 @@ void app_counting_runtime_poll_history(counting_session_state_t *session,
     counting_history_commit_result_t result;
     uint8_t previous_attempts;
 
+    /* Completion/rollback publication is on the UI thread; the storage worker
+     * never touches LVGL. Also handles history-page edits without an active count. */
+    if (ui_history_data_poll(now_ms) && ui_manager_get_current_page() == UI_PAGE_HISTORY)
+        ui_page_19_history_refresh();
     if (session == NULL || sim_data == NULL) {
         return;
     }

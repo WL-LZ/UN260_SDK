@@ -11,16 +11,39 @@
 #include "un260/lv_system/machine_time.h"
 #include "un260/currency/currency_state.h"
 
+#ifndef UI_HISTORY_STORE_DIR
 #define UI_HISTORY_STORE_DIR         "/etc/ui_state/count_history"
-#define UI_HISTORY_INDEX_PATH        "/etc/ui_state/count_history/index.cfg"
-#define UI_HISTORY_META_PATH         "/etc/ui_state/count_history/meta.cfg"
-#define UI_HISTORY_SLOT_PATH_FMT     "/etc/ui_state/count_history/%02u.rec"
+#endif
+#define UI_HISTORY_INDEX_PATH        UI_HISTORY_STORE_DIR "/index.cfg"
+#define UI_HISTORY_META_PATH         UI_HISTORY_STORE_DIR "/meta.cfg"
+#define UI_HISTORY_SLOT_PATH_FMT     UI_HISTORY_STORE_DIR "/%02u.rec"
 #define UI_HISTORY_MAGIC             0x48495354u
 #define UI_HISTORY_VERSION           2u
 #define UI_HISTORY_LINE_BUFFER_SIZE  8192u
 
 static ui_history_store_t g_history_store;
 static bool g_history_loaded = false;
+static bool g_history_load_attempted = false;
+static ui_history_store_t g_history_accepted;
+static ui_history_store_t g_history_durable;
+static bool g_history_failed_view;
+/* Worker-only mirror cache; the self-contained v2 index remains authoritative. */
+static ui_history_record_t g_mirror_records[UI_HISTORY_MAX_RECORDS];
+static bool g_mirror_valid[UI_HISTORY_MAX_RECORDS];
+static bool g_index_needs_directory_sync;
+static bool g_history_parent_synced;
+static bool g_meta_valid;
+static uint32_t g_meta_total;
+static uint32_t g_meta_next_record;
+static uint8_t g_meta_next_slot;
+static storage_job_id_t g_history_jobs[STORAGE_WORKER_CAPACITY];
+static unsigned g_history_job_count;
+static storage_job_id_t g_last_commit;
+static storage_job_id_t g_last_durable_commit;
+static uint32_t g_history_retry_tick;
+
+_Static_assert(sizeof(ui_history_store_t) <= STORAGE_WORKER_MAX_JOB_BYTES,
+               "history snapshot exceeds bounded storage job payload");
 
 static void history_ensure_loaded(void);
 
@@ -31,32 +54,39 @@ static void history_store_reset(void)
     g_history_store.next_slot_no = 1;
 }
 
-static int history_ensure_dir(void)
-{
-    int fd;
-
-    if (mkdir(UI_HISTORY_STORE_DIR, 0755) != 0 && errno != EEXIST) {
-        return -1;
-    }
-
-    fd = open(UI_HISTORY_STORE_DIR, O_RDONLY | O_DIRECTORY);
-    if (fd >= 0) {
-        fsync(fd);
-        close(fd);
-    }
-
-    return 0;
-}
-
-static void history_sync_store_dir(void)
+static int history_sync_store_dir(void)
 {
     int fd = open(UI_HISTORY_STORE_DIR, O_RDONLY | O_DIRECTORY);
+    int result;
+    if (fd < 0) return -1;
+    result = fsync(fd);
+    if (close(fd) != 0) result = -1;
+    return result;
+}
 
-    if (fd < 0) {
-        return;
+static int history_ensure_dir(void)
+{
+    char parent[512];
+    char *slash;
+    int fd;
+    int result;
+    bool created = mkdir(UI_HISTORY_STORE_DIR, 0755) == 0;
+    if (!created && errno != EEXIST) return -1;
+    if (created || !g_history_parent_synced) {
+        if (snprintf(parent, sizeof(parent), "%s", UI_HISTORY_STORE_DIR) >= (int)sizeof(parent))
+            return -1;
+        slash = strrchr(parent, '/');
+        if (slash == NULL) snprintf(parent, sizeof(parent), ".");
+        else if (slash == parent) slash[1] = '\0';
+        else *slash = '\0';
+        fd = open(parent, O_RDONLY | O_DIRECTORY);
+        if (fd < 0) return -1;
+        result = fsync(fd);
+        if (close(fd) != 0) result = -1;
+        if (result != 0) return -1;
+        g_history_parent_synced = true;
     }
-    (void)fsync(fd);
-    (void)close(fd);
+    return 0;
 }
 
 static int history_commit_atomic_file(FILE *fp, int fd,
@@ -88,10 +118,9 @@ static int history_commit_atomic_file(FILE *fp, int fd,
         return -1;
     }
 
-    /* rename 已经是权威提交点；目录同步失败不能触发业务重试和重复记录。 */
-    if (sync_directory) {
-        history_sync_store_dir();
-    }
+    /* -2 means rename happened but durability is unconfirmed. Retry directory
+     * sync on the SAME immutable job; never append a second business record. */
+    if (sync_directory && history_sync_store_dir() != 0) return -2;
     return 0;
 }
 
@@ -510,7 +539,7 @@ static int history_write_slot_file(const ui_history_record_t *rec)
     return history_commit_atomic_file(fp, fd, tmp, path, false);
 }
 
-static int history_write_meta_file(void)
+static int history_write_meta_file(const ui_history_store_t *store)
 {
     FILE *fp;
     int fd;
@@ -529,37 +558,51 @@ static int history_write_meta_file(void)
     }
 
     fprintf(fp, "magic=%u\nversion=%u\n", UI_HISTORY_MAGIC, UI_HISTORY_VERSION);
-    fprintf(fp, "total_notes_counted=%u\n", (unsigned)g_history_store.total_notes_counted);
-    fprintf(fp, "next_record_no=%u\n", (unsigned)g_history_store.next_record_no);
-    fprintf(fp, "next_slot_no=%u\n", (unsigned)g_history_store.next_slot_no);
+    fprintf(fp, "total_notes_counted=%u\n", (unsigned)store->total_notes_counted);
+    fprintf(fp, "next_record_no=%u\n", (unsigned)store->next_record_no);
+    fprintf(fp, "next_slot_no=%u\n", (unsigned)store->next_slot_no);
     return history_commit_atomic_file(fp, fd, tmp, UI_HISTORY_META_PATH, false);
 }
 
-static bool history_save_all(void)
+static bool history_save_snapshot(const void *snapshot, size_t size)
 {
+    const ui_history_store_t *store = snapshot;
     int i;
+    int result;
     bool slot_present[UI_HISTORY_MAX_RECORDS + 1] = { false };
 
-    if (history_ensure_dir() != 0) {
+    if (size != sizeof(*store) || history_ensure_dir() != 0) {
         return false;
     }
 
-    /* index.cfg 是唯一权威数据源；只有它提交成功，内存修改才算成功。 */
-    if (history_write_file(UI_HISTORY_INDEX_PATH, g_history_store.records,
-                           g_history_store.total_notes_counted,
-                           g_history_store.next_record_no,
-                           g_history_store.next_slot_no,
-                           g_history_store.record_count) != 0) {
-        return false;
+    if (g_index_needs_directory_sync) {
+        if (history_sync_store_dir() != 0) return false;
+        g_index_needs_directory_sync = false;
+    } else {
+        result = history_write_file(UI_HISTORY_INDEX_PATH, store->records,
+                                    store->total_notes_counted, store->next_record_no,
+                                    store->next_slot_no, store->record_count);
+        if (result != 0) {
+            g_index_needs_directory_sync = result == -2;
+            return false;
+        }
     }
 
-    for (i = 0; i < g_history_store.record_count; i++) {
-        uint8_t slot_no = g_history_store.records[i].slot_no;
+    /* Only dirty mirrors are rewritten. Mirrors are diagnostic exports, not a
+     * second authority: an interrupted mirror update cannot invalidate index. */
+    for (i = 0; i < store->record_count; i++) {
+        const ui_history_record_t *record = &store->records[i];
+        uint8_t slot_no = record->slot_no;
 
         if (slot_no > 0 && slot_no <= UI_HISTORY_MAX_RECORDS) {
             slot_present[slot_no] = true;
+            if ((!g_mirror_valid[slot_no - 1] ||
+                 memcmp(&g_mirror_records[slot_no - 1], record, sizeof(*record)) != 0) &&
+                history_write_slot_file(record) == 0) {
+                g_mirror_records[slot_no - 1] = *record;
+                g_mirror_valid[slot_no - 1] = true;
+            }
         }
-        (void)history_write_slot_file(&g_history_store.records[i]);
     }
 
     for (i = 1; i <= UI_HISTORY_MAX_RECORDS; i++) {
@@ -568,23 +611,37 @@ static bool history_save_all(void)
 
             snprintf(slot_path, sizeof(slot_path), UI_HISTORY_SLOT_PATH_FMT, (unsigned)i);
             (void)unlink(slot_path);
+            g_mirror_valid[i - 1] = false;
         }
     }
 
-    (void)history_write_meta_file();
-    history_sync_store_dir();
+    if ((!g_meta_valid || g_meta_total != store->total_notes_counted ||
+         g_meta_next_record != store->next_record_no ||
+         g_meta_next_slot != store->next_slot_no) && history_write_meta_file(store) == 0) {
+        g_meta_total = store->total_notes_counted;
+        g_meta_next_record = store->next_record_no;
+        g_meta_next_slot = store->next_slot_no;
+        g_meta_valid = true;
+    }
+    (void)history_sync_store_dir();
     return true;
 }
 
-static bool history_save_or_reload(void)
+static bool history_submit_or_restore(void)
 {
-    if (history_save_all()) {
+    storage_job_id_t id;
+    if (g_history_loaded && !g_history_failed_view && g_history_job_count < STORAGE_WORKER_CAPACITY &&
+        storage_worker_submit(history_save_snapshot, &g_history_store,
+                               sizeof(g_history_store), &id)) {
+        g_history_jobs[g_history_job_count++] = id;
+        g_last_commit = id;
+        g_history_accepted = g_history_store;
         return true;
     }
 
-    /* 丢弃未落盘的内存修改，避免 UI 与重启后状态不一致。 */
-    g_history_loaded = false;
-    history_ensure_loaded();
+    /* Rejected input was never accepted: restore the last accepted UI view.
+     * Accepted failures stay owned by the worker and are retried in order. */
+    g_history_store = g_history_failed_view ? g_history_durable : g_history_accepted;
     return false;
 }
 
@@ -833,16 +890,100 @@ static void history_load_from_file(void)
     g_history_loaded = true;
 }
 
+static bool history_load_job(const void *snapshot, size_t size)
+{
+    (void)snapshot;
+    (void)size;
+    history_load_from_file();
+    return true;
+}
+
 static void history_ensure_loaded(void)
 {
-    if (!g_history_loaded) {
-        history_load_from_file();
+    storage_job_id_t id;
+    const char load_request = 0;
+    if (g_history_load_attempted) return;
+    g_history_load_attempted = true;
+    /* main initializes history before constructing pages/entering the loop.
+     * Even boot reads use the storage lane; interactive getters are RAM-only. */
+    if (storage_worker_init() && storage_worker_submit(history_load_job,
+            &load_request, sizeof(load_request), &id)) {
+        if (storage_worker_wait(id) == STORAGE_JOB_SUCCEEDED) {
+            (void)storage_worker_release(id);
+            g_history_accepted = g_history_store;
+            g_history_durable = g_history_store;
+        }
     }
 }
 
 void ui_history_data_init(void)
 {
     history_ensure_loaded();
+}
+
+bool ui_history_data_poll(uint32_t now_ms)
+{
+    bool changed = false;
+    while (g_history_job_count > 0) {
+        storage_job_id_t id = g_history_jobs[0];
+        storage_job_status_t status = storage_worker_status(id);
+        if (status == STORAGE_JOB_SUCCEEDED) {
+            (void)storage_worker_copy_completed(id, &g_history_durable,
+                                                 sizeof(g_history_durable));
+            g_last_durable_commit = id;
+            (void)storage_worker_release(id);
+            memmove(g_history_jobs, g_history_jobs + 1,
+                    (--g_history_job_count) * sizeof(g_history_jobs[0]));
+            changed = true;
+            continue;
+        }
+        if (status == STORAGE_JOB_FAILED) {
+            if (!g_history_failed_view) {
+                g_history_failed_view = true;
+                g_history_store = g_history_durable;
+                changed = true;
+            }
+            if ((uint32_t)(now_ms - g_history_retry_tick) >= 1000U) {
+                g_history_retry_tick = now_ms;
+                (void)storage_worker_retry(id);
+            }
+        }
+        break;
+    }
+    if (g_history_failed_view && g_history_job_count == 0) {
+        g_history_failed_view = false;
+        g_history_store = g_history_accepted;
+        changed = true;
+    }
+    return changed;
+}
+
+storage_job_id_t ui_history_last_commit_id(void) { return g_last_commit; }
+
+storage_job_status_t ui_history_commit_status(storage_job_id_t id)
+{
+    if (id != 0 && id <= g_last_durable_commit) return STORAGE_JOB_SUCCEEDED;
+    return storage_worker_status(id);
+}
+
+storage_job_status_t ui_history_data_status(void)
+{
+    unsigned i;
+    bool pending = false;
+    if (g_history_failed_view) return STORAGE_JOB_FAILED;
+    for (i = 0; i < g_history_job_count; i++) {
+        storage_job_status_t status = storage_worker_status(g_history_jobs[i]);
+        if (status == STORAGE_JOB_FAILED || status == STORAGE_JOB_UNKNOWN) return STORAGE_JOB_FAILED;
+        if (status == STORAGE_JOB_PENDING) pending = true;
+    }
+    if (pending) return STORAGE_JOB_PENDING;
+    return g_history_loaded ? STORAGE_JOB_SUCCEEDED : STORAGE_JOB_FAILED;
+}
+
+bool ui_history_data_can_accept(void)
+{
+    return g_history_loaded && !g_history_failed_view &&
+           g_history_job_count < STORAGE_WORKER_CAPACITY && storage_worker_has_capacity();
 }
 
 const ui_history_store_t *ui_history_data_get(void)
@@ -860,8 +1001,9 @@ uint32_t ui_history_total_notes_counted_get(void)
 void ui_history_total_notes_counted_set(uint32_t total)
 {
     history_ensure_loaded();
+    if (g_history_store.total_notes_counted == total) return;
     g_history_store.total_notes_counted = total;
-    (void)history_save_or_reload();
+    (void)history_submit_or_restore();
 }
 
 void ui_history_total_notes_counted_clear(void)
@@ -869,34 +1011,25 @@ void ui_history_total_notes_counted_clear(void)
     ui_history_total_notes_counted_set(0);
 }
 
-bool ui_history_record_append_from_session(const counting_sim_t *sim_data, uint32_t pcs_total,
-                                           float amount_total, uint32_t total_notes_after,
+bool ui_history_record_build_from_session(const counting_sim_t *sim_data, uint32_t pcs_total,
+                                           float amount_total,
                                            const char *error_frame_text,
                                            const char *start_frame_text, const char *end_frame_text,
-                                           const char *session_log_text)
+                                           const char *session_log_text, ui_history_record_t *out)
 {
     ui_history_record_t rec;
-    uint8_t slot_no;
     machine_time_value_t now;
     char curr_code[4];
 
-    history_ensure_loaded();
-    if (sim_data == NULL || sim_data->sn_capacity < 0 ||
+    if (out == NULL || sim_data == NULL || sim_data->sn_capacity < 0 ||
         sim_data->sn_capacity > COUNTING_DATA_MAX_ITEMS ||
         (sim_data->sn_capacity > 0 && sim_data->sn_str == NULL)) {
         return false;
     }
 
     history_record_defaults(&rec);
-    slot_no = g_history_store.next_slot_no;
-    if (slot_no == 0 || slot_no > UI_HISTORY_MAX_RECORDS) {
-        slot_no = 1;
-    }
-
     rec.valid = true;
     rec.selected = false;
-    rec.slot_no = slot_no;
-    rec.record_no = g_history_store.next_record_no;
     rec.pcs = pcs_total;
     rec.amount = history_amount_to_u32(amount_total);
     currency_state_get_active_code(curr_code);
@@ -920,6 +1053,23 @@ bool ui_history_record_append_from_session(const counting_sim_t *sim_data, uint3
     snprintf(rec.session_log, sizeof(rec.session_log), "%s",
                 session_log_text ? session_log_text : "");
 
+    *out = rec;
+    return true;
+}
+
+bool ui_history_record_append_snapshot(const ui_history_record_t *record,
+                                       uint32_t total_notes_after)
+{
+    ui_history_record_t rec;
+    uint8_t slot_no;
+    history_ensure_loaded();
+    if (record == NULL || !record->valid || !ui_history_data_can_accept() ||
+        g_history_store.next_record_no == UINT32_MAX) return false;
+    rec = *record;
+    slot_no = g_history_store.next_slot_no;
+    if (slot_no == 0 || slot_no > UI_HISTORY_MAX_RECORDS) slot_no = 1;
+    rec.slot_no = slot_no;
+    rec.record_no = g_history_store.next_record_no;
     history_insert_front(&rec);
 
     g_history_store.total_notes_counted = total_notes_after;
@@ -929,7 +1079,19 @@ bool ui_history_record_append_from_session(const counting_sim_t *sim_data, uint3
         g_history_store.record_count = UI_HISTORY_MAX_RECORDS;
     }
 
-    return history_save_or_reload();
+    return history_submit_or_restore();
+}
+
+bool ui_history_record_append_from_session(const counting_sim_t *sim_data, uint32_t pcs_total,
+                                           float amount_total, uint32_t total_notes_after,
+                                           const char *error_frame_text,
+                                           const char *start_frame_text, const char *end_frame_text,
+                                           const char *session_log_text)
+{
+    ui_history_record_t rec;
+    return ui_history_record_build_from_session(sim_data, pcs_total, amount_total,
+        error_frame_text, start_frame_text, end_frame_text, session_log_text, &rec) &&
+        ui_history_record_append_snapshot(&rec, total_notes_after);
 }
 
 bool ui_history_record_toggle_selected(uint8_t index)
@@ -939,7 +1101,7 @@ bool ui_history_record_toggle_selected(uint8_t index)
         return false;
     }
     g_history_store.records[index].selected = !g_history_store.records[index].selected;
-    return history_save_or_reload();
+    return history_submit_or_restore();
 }
 
 bool ui_history_record_set_selected(uint8_t index, bool selected)
@@ -948,8 +1110,9 @@ bool ui_history_record_set_selected(uint8_t index, bool selected)
     if (index >= g_history_store.record_count) {
         return false;
     }
+    if (g_history_store.records[index].selected == selected) return true;
     g_history_store.records[index].selected = selected;
-    return history_save_or_reload();
+    return history_submit_or_restore();
 }
 
 int ui_history_record_selected_first_index_get(void)
@@ -982,23 +1145,27 @@ int ui_history_record_selected_count_get(void)
 void ui_history_record_clear_selected(void)
 {
     int i;
+    bool changed = false;
 
     history_ensure_loaded();
     for (i = 0; i < g_history_store.record_count; i++) {
+        changed |= g_history_store.records[i].selected;
         g_history_store.records[i].selected = false;
     }
-    (void)history_save_or_reload();
+    if (changed) (void)history_submit_or_restore();
 }
 
 void ui_history_record_set_all_selected(bool selected)
 {
     int i;
+    bool changed = false;
 
     history_ensure_loaded();
     for (i = 0; i < g_history_store.record_count; i++) {
+        changed |= g_history_store.records[i].selected != selected;
         g_history_store.records[i].selected = selected;
     }
-    (void)history_save_or_reload();
+    if (changed) (void)history_submit_or_restore();
 }
 
 bool ui_history_record_delete_selected(void)
@@ -1039,7 +1206,7 @@ bool ui_history_record_delete_selected(void)
     g_history_store.next_slot_no = (uint8_t)((kept_count >= UI_HISTORY_MAX_RECORDS) ? 1 : (kept_count + 1));
     g_history_store.next_record_no = next_record_no;
 
-    return history_save_or_reload();
+    return history_submit_or_restore();
 }
 
 bool ui_history_record_get(uint8_t index, ui_history_record_t *out)

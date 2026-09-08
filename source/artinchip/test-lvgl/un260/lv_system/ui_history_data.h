@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "un260/counting/counting_data_types.h"
+#include "un260/storage/storage_worker.h"
 
 #define UI_HISTORY_MAX_RECORDS 20
 
@@ -40,6 +41,20 @@ typedef struct {
 } ui_history_store_t;
 
 void ui_history_data_init(void);
+/* Mutators return queue acceptance, never a durability acknowledgement. The
+ * returned view includes accepted edits; consult the commit status for saving.
+ * These APIs and the view are owned by the UI thread. init waits only at boot. */
+bool ui_history_data_poll(uint32_t now_ms);
+storage_job_id_t ui_history_last_commit_id(void);
+storage_job_status_t ui_history_commit_status(storage_job_id_t id);
+storage_job_status_t ui_history_data_status(void);
+bool ui_history_data_can_accept(void);
+bool ui_history_record_build_from_session(const counting_sim_t *sim_data,
+    uint32_t pcs_total, float amount_total, const char *error_frame_text,
+    const char *start_frame_text, const char *end_frame_text,
+    const char *session_log_text, ui_history_record_t *out);
+bool ui_history_record_append_snapshot(const ui_history_record_t *record,
+                                       uint32_t total_notes_after);
 const ui_history_store_t *ui_history_data_get(void);
 uint32_t ui_history_total_notes_counted_get(void);
 void ui_history_total_notes_counted_set(uint32_t total);

@@ -69,6 +69,7 @@ void perf_profile_report_active_handler_us(uint32_t elapsed_us);
 void perf_profile_report_flush(const perf_profile_flush_sample_t *sample);
 void perf_profile_report_present_reuse(uint64_t copied_pixels, uint64_t saved_pixels,
                                        uint32_t copy_fallbacks, uint32_t submit_errors);
+void perf_profile_report_command_batch(uint32_t frames, uint32_t elapsed_us, bool backlog);
 void perf_profile_report_ge(perf_profile_ge_op_t op, uint64_t pixels,
                             uint32_t elapsed_us, uint32_t submit_us,
                             uint32_t emit_us, uint32_t sync_us);

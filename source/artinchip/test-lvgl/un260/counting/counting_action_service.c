@@ -1,4 +1,5 @@
 #include "counting_action_service.h"
+#include "counting_history_service.h"
 
 #include "un260/protocol/protocol_request.h"
 #include "un260/protocol/protocol_send.h"
@@ -31,6 +32,7 @@ static bool counting_action_send(protocol_request_t *request, uint8_t cmd)
 
 bool counting_action_request_start(void)
 {
+    if (!counting_history_can_start()) return false;
     if (protocol_request_is_pending(&g_clear_request)) {
         return false;
     }

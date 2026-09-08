@@ -14,7 +14,12 @@ typedef struct {
 } protocol_frame_t;
 
 bool protocol_frame_queue_push(const uint8_t *data, int len);
+/* Wait only for queue capacity; a false result leaves ownership with caller.
+ * RX retries its complete current frame, preserving order under backpressure. */
+bool protocol_frame_queue_push_wait(const uint8_t *data, int len,
+                                    uint32_t timeout_ms);
 bool protocol_frame_queue_pop(protocol_frame_t *frame);
+bool protocol_frame_queue_has_pending(void);
 void protocol_frame_queue_clear(void);
 
 #endif

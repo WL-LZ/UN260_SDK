@@ -18,10 +18,12 @@ static int g_uart_fd = -1;
 static int g_log_fd = -1;
 
 #define PROTOCOL_RX_LOG_PREVIEW_BYTES 32U
-#define PROTOCOL_RX_DROP_REPORT_STEP  100U
+#define PROTOCOL_RX_QUEUE_WAIT_REPORT_STEP 100U
 #define PROTOCOL_RX_INVALID_REPORT_STEP 100U
 #define PROTOCOL_RX_ERROR_REPORT_STEP 100U
 #define PROTOCOL_RX_ERROR_BACKOFF_US  10000U
+#define PROTOCOL_RX_READ_BUFFER_SIZE 256U
+#define PROTOCOL_RX_QUEUE_WAIT_MS    10U
 
 static bool protocol_rx_service_should_run(void)
 {
@@ -33,12 +35,34 @@ static bool protocol_rx_service_should_run(void)
     return running;
 }
 
+static bool protocol_rx_service_enqueue(const protocol_frame_view_t *frame)
+{
+    unsigned int waits = 0;
+
+    while (protocol_rx_service_should_run()) {
+        if (protocol_frame_queue_push_wait(frame->data, frame->len,
+                                            PROTOCOL_RX_QUEUE_WAIT_MS)) {
+            if (waits > 0U) {
+                uart_printf(g_log_fd, "UART4: queue recovered, waits=%u\n", waits);
+            }
+            return true;
+        }
+        waits++;
+        if (waits == 1U || (waits % PROTOCOL_RX_QUEUE_WAIT_REPORT_STEP) == 0U) {
+            uart_printf(g_log_fd, "UART4: queue full, waiting=%u\n", waits);
+        }
+        /* This is also a bounded fallback if condition-variable setup failed.
+         * The complete parser frame remains untouched until it is enqueued. */
+        usleep(1000);
+    }
+    return false;
+}
+
 static void *protocol_rx_service_thread(void *arg)
 {
     protocol_frame_parser_t parser;
     protocol_frame_view_t frame;
-    uint8_t byte;
-    unsigned int dropped_frames = 0;
+    uint8_t bytes[PROTOCOL_RX_READ_BUFFER_SIZE];
     unsigned int invalid_frames = 0;
     unsigned int receive_errors = 0;
 
@@ -46,7 +70,7 @@ static void *protocol_rx_service_thread(void *arg)
     protocol_frame_parser_init(&parser);
 
     while (protocol_rx_service_should_run()) {
-        int len = uart_recv(g_uart_fd, (char *)&byte, 1, 10);
+        int len = uart_recv(g_uart_fd, (char *)bytes, sizeof(bytes), 10);
 
         if (len < 0) {
             int error_code = errno;
@@ -69,33 +93,18 @@ static void *protocol_rx_service_thread(void *arg)
             receive_errors = 0;
         }
 
-        if (len > 0) {
+        for (int i = 0; i < len; i++) {
             protocol_frame_parse_result_t result;
 
-            result = protocol_frame_parser_feed(&parser, byte, &frame);
+            result = protocol_frame_parser_feed(&parser, bytes[i], &frame);
             if (result == PROTOCOL_FRAME_PARSE_READY) {
-                if (!protocol_frame_queue_push(frame.data, frame.len)) {
-                    dropped_frames++;
-                    if (dropped_frames == 1 ||
-                        (dropped_frames % PROTOCOL_RX_DROP_REPORT_STEP) == 0) {
-                        uart_printf(g_log_fd,
-                                    "UART4: queue full, dropped=%u\n",
-                                    dropped_frames);
-                    }
-                } else {
-                    char prefix[32];
+                char prefix[32];
 
-                    snprintf(prefix, sizeof(prefix), "RX[%u]: ",
-                             (unsigned int)frame.len);
-                    uart_log_hex(g_log_fd, prefix, frame.data, frame.len,
-                                 PROTOCOL_RX_LOG_PREVIEW_BYTES);
-                    if (dropped_frames > 0) {
-                        uart_printf(g_log_fd,
-                                    "UART4: queue recovered, dropped=%u\n",
-                                    dropped_frames);
-                        dropped_frames = 0;
-                    }
-                }
+                if (!protocol_rx_service_enqueue(&frame)) goto stopped;
+                snprintf(prefix, sizeof(prefix), "RX[%u]: ",
+                         (unsigned int)frame.len);
+                uart_log_hex(g_log_fd, prefix, frame.data, frame.len,
+                             PROTOCOL_RX_LOG_PREVIEW_BYTES);
             } else if (result != PROTOCOL_FRAME_PARSE_INCOMPLETE) {
                 invalid_frames++;
                 if (invalid_frames == 1 ||
@@ -107,12 +116,9 @@ static void *protocol_rx_service_thread(void *arg)
                 }
             }
         }
-        usleep(100);
     }
 
-    if (dropped_frames > 0) {
-        uart_printf(g_log_fd, "UART4: receive stopped, dropped=%u\n", dropped_frames);
-    }
+stopped:
     if (invalid_frames > 0) {
         uart_printf(g_log_fd, "UART4: receive stopped, invalid=%u\n", invalid_frames);
     }

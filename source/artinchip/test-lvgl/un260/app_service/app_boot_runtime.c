@@ -23,6 +23,7 @@
 #define APP_BOOT_CURRENCY_LIST_REQUEST 0x01
 
 static lv_timer_t *g_boot_finish_timer = NULL;
+static counting_session_state_t *g_deferred_boot_finish;
 static bool g_boot_prewarm_active = false;
 static size_t g_boot_prewarm_cursor = 0;
 static uint32_t g_boot_prewarm_due_ms = 0;
@@ -113,6 +114,7 @@ static void app_boot_runtime_poll_prewarm(uint32_t now_ms)
 
 static void app_boot_runtime_cancel_finish(void)
 {
+    g_deferred_boot_finish = NULL;
     if (g_boot_finish_timer == NULL) {
         return;
     }
@@ -146,13 +148,18 @@ static void app_boot_runtime_send_next_selftest(void)
     }
 }
 
-static void app_boot_runtime_finish(counting_session_state_t *counting_session)
+static bool app_boot_runtime_finish(counting_session_state_t *counting_session)
 {
+    if (!app_counting_runtime_reset_session(counting_session, "boot finish")) {
+        g_deferred_boot_finish = counting_session;
+        return false;
+    }
+    g_deferred_boot_finish = NULL;
     app_boot_runtime_cancel_prewarm();
     boot_selftest_list_finish();
     sim_data_init();
-    app_counting_runtime_reset_session(counting_session, "boot finish");
     ui_manager_switch(ui_state_pure_count_is_enabled() ? UI_PAGE_PURE : UI_PAGE_MAIN);
+    return true;
 }
 
 static void app_boot_runtime_finish_timer_cb(lv_timer_t *timer)
@@ -163,8 +170,8 @@ static void app_boot_runtime_finish_timer_cb(lv_timer_t *timer)
         return;
     }
     counting_session = (counting_session_state_t *)timer->user_data;
+    if (!app_boot_runtime_finish(counting_session)) return;
     g_boot_finish_timer = NULL;
-    app_boot_runtime_finish(counting_session);
     lv_timer_del(timer);
 }
 
@@ -218,6 +225,9 @@ void app_boot_runtime_poll(uint32_t now_ms, bool boot_page_active)
         app_boot_runtime_cancel_prewarm();
         return;
     }
+
+    if (g_deferred_boot_finish != NULL && g_boot_finish_timer == NULL)
+        (void)app_boot_runtime_finish(g_deferred_boot_finish);
 
     action = boot_service_poll(now_ms);
     if (action == BOOT_SERVICE_ACTION_SEND_HANDSHAKE) {

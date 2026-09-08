@@ -8,6 +8,7 @@
 #include "un260/boot/boot_service.h"
 #include "un260/counting/counting_denom_query_service.h"
 #include "un260/counting/counting_action_service.h"
+#include "un260/counting/counting_history_service.h"
 #include "un260/currency/currency_reply.h"
 #include "un260/currency/currency_state.h"
 #include "un260/lv_core/page_01_main.h"
@@ -44,10 +45,16 @@ void app_currency_runtime_handle_reply(counting_detail_state_t *detail_state,
         return;
     }
 
+    /* The command dispatcher retains this frame on backpressure. Preserve the
+     * old currency and details before currency_reply_handle can change them. */
+    if (buf != NULL && len >= 6 &&
+        (buf[4] == 0x01 || (buf[4] == 0x03 && len >= 9)) &&
+        !counting_history_prepare_reset(session, counting_data_mutable(),
+                                        app_clock_uptime_ms())) return;
     reply = currency_reply_handle(buf, len);
     if (reply.kind == CURRENCY_REPLY_SWITCH_SUCCESS) {
+        if (!app_counting_runtime_reset_session(session, "currency change")) return;
         sim_reset_for_currency(counting_data_mutable());
-        app_counting_runtime_reset_session(session, "currency change");
         counting_action_cancel_all();
         if (!counting_action_request_clear()) {
             uart_debug_printf("currency changed, controller data clear send failed\n");
@@ -66,8 +73,8 @@ void app_currency_runtime_handle_reply(counting_detail_state_t *detail_state,
             currency_state_confirm_auto_selection();
         }
         uart_debug_printf("Boot curr: %s\n", reply.active_code);
+        if (!app_counting_runtime_reset_session(session, "boot currency sync")) return;
         sim_reset_for_currency(counting_data_mutable());
-        app_counting_runtime_reset_session(session, "boot currency sync");
         detail_state->wait_sn_after_reject_end = false;
         counting_denom_query_invalidate(detail_state);
         app_currency_runtime_trigger_denom_query(detail_state);

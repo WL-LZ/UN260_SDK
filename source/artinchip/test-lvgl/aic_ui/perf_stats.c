@@ -19,7 +19,16 @@ static struct cpu_occupy g_cpu_prev = {0};
 static bool g_cpu_prev_valid = false;
 static uint64_t g_present_copied, g_present_saved;
 static uint32_t g_present_copy_fallbacks, g_present_submit_errors;
+static uint32_t g_command_frames, g_command_batches, g_command_max_us, g_command_yields;
 
+void perf_profile_report_command_batch(uint32_t frames, uint32_t elapsed_us, bool backlog)
+{
+    if (!perf_profile_is_enabled() || !frames) return;
+    g_command_frames += frames;
+    ++g_command_batches;
+    if (elapsed_us > g_command_max_us) g_command_max_us = elapsed_us;
+    if (backlog) ++g_command_yields;
+}
 
 void perf_profile_report_present_reuse(uint64_t copied_pixels, uint64_t saved_pixels,
                                        uint32_t copy_fallbacks, uint32_t submit_errors)
@@ -478,6 +487,7 @@ static void perf_profile_reset_window(uint32_t now_ms)
     uint32_t i;
     g_present_copied = g_present_saved = 0;
     g_present_copy_fallbacks = g_present_submit_errors = 0;
+    g_command_frames = g_command_batches = g_command_max_us = g_command_yields = 0;
 
     g_profile.window_started_ms = now_ms;
     g_profile.frames = 0;
@@ -1235,6 +1245,8 @@ void perf_profile_poll(uint32_t now_ms)
         }
     }
     lv_dma_snapshot_cache_take_stats(&snapshot_stats);
+    uart_debug_printf("PERF_SERVICE frames=%u batches=%u max_us=%u backlog_yields=%u\n",
+        g_command_frames, g_command_batches, g_command_max_us, g_command_yields);
     uart_debug_printf("PERF_SCRATCH hits=%u misses=%u temporary=%u failures=%u retained=%u in_use=%u peak=%u\n",
         snapshot_stats.scratch_hits, snapshot_stats.scratch_misses,
         snapshot_stats.scratch_temporary_allocations, snapshot_stats.scratch_failures,

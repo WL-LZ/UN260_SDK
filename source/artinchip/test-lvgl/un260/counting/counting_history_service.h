@@ -9,6 +9,7 @@
 
 typedef enum {
     COUNTING_HISTORY_COMMIT_NOT_READY = 0,
+    COUNTING_HISTORY_COMMIT_PENDING,
     COUNTING_HISTORY_COMMIT_SAVED,
     COUNTING_HISTORY_COMMIT_RETRY_PENDING,
     COUNTING_HISTORY_COMMIT_FAILED,
@@ -31,5 +32,13 @@ counting_history_commit_result_t counting_history_poll_commit(
     const counting_sim_t *sim_data,
     uint32_t now_ms);
 bool counting_history_discard_pending(counting_session_state_t *session);
+/* Backpressure for new starts: accepted records are never discarded to make room. */
+bool counting_history_can_start(void);
+/* Freeze pending count/details before any reset or controller-start transition.
+ * False is backpressure: retain the frame AND all mutable session/detail data. */
+bool counting_history_prepare_reset(counting_session_state_t *session,
+    const counting_sim_t *sim_data, uint32_t now_ms);
+bool counting_history_prepare_start(counting_session_state_t *session,
+    const counting_sim_t *sim_data, uint32_t now_ms);
 
 #endif
