@@ -1,5 +1,6 @@
 #include "page_29_set_password.h"
 #include "un260/lv_components/lv_print_toast.h"
+#include "un260/lv_components/lv_pin_keypad.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/settings_detail_ui.h"
 #include "un260/lv_system/ui_text.h"
@@ -17,15 +18,24 @@ typedef enum {
 } password_field_t;
 
 static lv_obj_t* password_setting_page = NULL;
+static lv_obj_t* password_setting_content = NULL;
+static lv_obj_t* password_setting_form = NULL;
+static lv_pin_keypad_t password_setting_keypad;
 static lv_obj_t* field_cards[PASSWORD_FIELD_COUNT] = { NULL };
 static lv_obj_t* field_values[PASSWORD_FIELD_COUNT] = { NULL };
 static char field_text[PASSWORD_FIELD_COUNT][USER_PASSWORD_MAX_LEN + 1] = { 0 };
 static password_field_t active_field = PASSWORD_FIELD_CURRENT;
 
-static const ui_text_id_t field_titles[PASSWORD_FIELD_COUNT] = {
-    UI_TEXT_PASSWORD_CURRENT,
-    UI_TEXT_PASSWORD_NEW,
-    UI_TEXT_PASSWORD_CONFIRM_NEW,
+static const char *const field_titles[PASSWORD_FIELD_COUNT] = {
+    "Current Password",
+    "New Password",
+    "Confirm Password",
+};
+
+static const char *const field_prompts[PASSWORD_FIELD_COUNT] = {
+    "Please enter your current 4-digit PIN",
+    "Please enter your new 4-digit PIN",
+    "Please re-enter your new 4-digit PIN",
 };
 
 static void password_setting_refresh_fields(void)
@@ -51,7 +61,7 @@ static void password_setting_refresh_fields(void)
         }
         if (field_values[i]) {
             lv_label_set_text(field_values[i],
-                              len > 0 ? masked : ui_text_get(UI_TEXT_PASSWORD_PLACEHOLDER));
+                              len > 0 ? masked : "Tap to enter PIN");
             lv_obj_set_style_text_color(field_values[i],
                                         len > 0 ? lv_color_hex(0x0D3440) : lv_color_hex(0x8AA8B8),
                                         0);
@@ -59,13 +69,13 @@ static void password_setting_refresh_fields(void)
     }
 }
 
-static void password_setting_show_toast(ui_text_id_t text_id, bool alarm)
+static void password_setting_show_toast(const char *text, bool alarm)
 {
     lv_print_toast_config_t cfg = lv_print_toast_get_default_config();
 
     cfg.w = 320;
     cfg.h = 92;
-    cfg.text = ui_text_get(text_id);
+    cfg.text = text;
     cfg.show_loader = false;
     cfg.align_center = true;
     cfg.text_font = &lv_font_instrument_sans_medium_18;
@@ -74,26 +84,44 @@ static void password_setting_show_toast(ui_text_id_t text_id, bool alarm)
     lv_print_toast_show_with_config(&cfg);
 }
 
+static void password_setting_close_keyboard(void *user_data)
+{
+    LV_UNUSED(user_data);
+    lv_pin_keypad_hide(&password_setting_keypad);
+    if (password_setting_form && lv_obj_is_valid(password_setting_form))
+        lv_obj_clear_flag(password_setting_form, LV_OBJ_FLAG_HIDDEN);
+}
+
 static void password_setting_keyboard_cb(const char* value, void* user_data)
 {
     password_field_t field = (password_field_t)(uintptr_t)user_data;
 
-    if (field >= PASSWORD_FIELD_COUNT || !value) return;
+    if (field >= PASSWORD_FIELD_COUNT || !lv_pin_input_is_complete(value)) return;
 
     lv_snprintf(field_text[field], sizeof(field_text[field]), "%s", value);
+    password_setting_close_keyboard(NULL);
     password_setting_refresh_fields();
 }
 
 static void password_setting_open_keyboard(password_field_t field)
 {
+    if (field >= PASSWORD_FIELD_COUNT) return;
+    const lv_pin_keypad_config_t config = {
+        .eyebrow = "CHANGE PASSWORD",
+        .title = field_titles[field],
+        .prompt = field_prompts[field],
+        .confirm_cb = password_setting_keyboard_cb,
+        .cancel_cb = password_setting_close_keyboard,
+        .user_data = (void *)(uintptr_t)field,
+        .digits_visible = user_cfg_password_visibility_enabled(),
+        .save_visibility = user_cfg_password_visibility_save,
+    };
     active_field = field;
     password_setting_refresh_fields();
-    settings_detail_keyboard_show(ui_text_get(field_titles[field]),
-                                  field_text[field],
-                                  USER_PASSWORD_MAX_LEN,
-                                  SETTINGS_DETAIL_KEYBOARD_NUM,
-                                  password_setting_keyboard_cb,
-                                  (void*)(uintptr_t)field);
+    if (!lv_pin_keypad_create(&password_setting_keypad, password_setting_content, 80, 12))
+        return;
+    if (lv_pin_keypad_show(&password_setting_keypad, &config, field_text[field]))
+        lv_obj_add_flag(password_setting_form, LV_OBJ_FLAG_HIDDEN);
 }
 
 static void password_setting_field_cb(lv_event_t* e)
@@ -112,36 +140,61 @@ static void password_setting_save_cb(lv_event_t* e)
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
 
     if (field_text[PASSWORD_FIELD_NEW][0] == '\0') {
-        password_setting_show_toast(UI_TEXT_PASSWORD_EMPTY, true);
+        password_setting_show_toast("Password cannot be empty", true);
         return;
     }
 
+    for (unsigned i = 0; i < PASSWORD_FIELD_COUNT; ++i) {
+        if (!lv_pin_input_is_complete(field_text[i])) {
+            password_setting_show_toast("Enter exactly 4 digits in each field.", true);
+            return;
+        }
+    }
+
     if (strcmp(field_text[PASSWORD_FIELD_CURRENT], user_cfg_password_get()) != 0) {
-        password_setting_show_toast(UI_TEXT_PASSWORD_ERROR, true);
+        password_setting_show_toast("Incorrect current PIN.", true);
         return;
     }
 
     if (strcmp(field_text[PASSWORD_FIELD_NEW], field_text[PASSWORD_FIELD_CONFIRM]) != 0) {
-        password_setting_show_toast(UI_TEXT_PASSWORD_MISMATCH, true);
+        password_setting_show_toast("Passwords do not match", true);
         return;
     }
 
     if (!user_cfg_password_save(field_text[PASSWORD_FIELD_NEW])) {
-        password_setting_show_toast(UI_TEXT_PASSWORD_SAVE_FAILED, true);
+        password_setting_show_toast("Save failed", true);
         return;
     }
 
     memset(field_text, 0, sizeof(field_text));
     active_field = PASSWORD_FIELD_CURRENT;
     password_setting_refresh_fields();
-    password_setting_show_toast(UI_TEXT_PASSWORD_SAVED, false);
+    password_setting_show_toast("Password saved", false);
 }
 
 static void password_setting_esc_cb(lv_event_t* e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    settings_detail_keyboard_hide();
+    if (lv_pin_keypad_is_visible(&password_setting_keypad)) {
+        password_setting_close_keyboard(NULL);
+        return;
+    }
     ui_manager_pop_page();
+}
+
+static void password_setting_deleted_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_DELETE ||
+        lv_event_get_target(event) != password_setting_page) return;
+    /* The component's own delete event releases its timer after this event. */
+    lv_pin_keypad_hide(&password_setting_keypad);
+    password_setting_page = NULL;
+    password_setting_content = NULL;
+    password_setting_form = NULL;
+    memset(field_cards, 0, sizeof(field_cards));
+    memset(field_values, 0, sizeof(field_values));
+    memset(field_text, 0, sizeof(field_text));
+    active_field = PASSWORD_FIELD_CURRENT;
 }
 
 static lv_obj_t* password_setting_create_card(lv_obj_t* parent, lv_coord_t x, lv_coord_t y,
@@ -171,10 +224,10 @@ static void password_setting_create_field(lv_obj_t* parent, password_field_t fie
     lv_obj_add_event_cb(item, password_setting_field_cb, LV_EVENT_CLICKED,
                         (void*)(uintptr_t)field);
 
-    settings_detail_create_label(item, ui_text_get(field_titles[field]),
+    settings_detail_create_label(item, field_titles[field],
                                  &lv_font_instrument_sans_medium_16, lv_color_hex(0x0D3440), 22, 22);
     field_values[field] = settings_detail_create_label(item,
-                                                       ui_text_get(UI_TEXT_PASSWORD_PLACEHOLDER),
+                                                       "Tap to enter PIN",
                                                        &lv_font_instrument_sans_medium_16,
                                                        lv_color_hex(0x8AA8B8), 430, 22);
 
@@ -187,15 +240,19 @@ void ui_page_29_set_password_create(lv_obj_t* parent)
     lv_obj_t* card;
     lv_obj_t* accent;
 
-    if (password_setting_page) return;
+    if (password_setting_page && lv_obj_is_valid(password_setting_page)) return;
 
     password_setting_page = settings_detail_create_page(parent,
                                                         ui_text_get(UI_TEXT_SETTINGS_PASSWORD),
                                                         password_setting_esc_cb,
                                                         &content);
+    password_setting_content = content;
+    lv_obj_add_event_cb(password_setting_page, password_setting_deleted_cb,
+                        LV_EVENT_DELETE, NULL);
 
     card = password_setting_create_card(content, 276, 18, 730, 306);
-    settings_detail_create_label(card, ui_text_get(UI_TEXT_SETTINGS_PASSWORD),
+    password_setting_form = card;
+    settings_detail_create_label(card, "Change Password",
                                  &lv_font_instrument_sans_medium_18, lv_color_hex(0x0D3440), 34, 20);
 
     accent = lv_obj_create(card);
@@ -212,7 +269,7 @@ void ui_page_29_set_password_create(lv_obj_t* parent)
     password_setting_create_field(card, PASSWORD_FIELD_CONFIRM, 208);
 
     settings_detail_create_button(card, 560, 20, 136, 34,
-                                  ui_text_get(UI_TEXT_PASSWORD_SAVE),
+                                  "Save",
                                   lv_color_hex(0x0878C8),
                                   password_setting_save_cb, NULL);
 
@@ -223,13 +280,15 @@ void ui_page_29_set_password_create(lv_obj_t* parent)
 
 void ui_page_29_set_password_destroy(void)
 {
-    settings_detail_keyboard_hide();
+    lv_pin_keypad_destroy(&password_setting_keypad);
 
     if (password_setting_page && lv_obj_is_valid(password_setting_page)) {
         lv_obj_del(password_setting_page);
     }
 
     password_setting_page = NULL;
+    password_setting_content = NULL;
+    password_setting_form = NULL;
     memset(field_cards, 0, sizeof(field_cards));
     memset(field_values, 0, sizeof(field_values));
     memset(field_text, 0, sizeof(field_text));

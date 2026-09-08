@@ -7,8 +7,12 @@
 #include <unistd.h>
 
 #define DEFAULT_CURRENCY_COUNT 14
+#ifndef UI_STATE_DIR
 #define UI_STATE_DIR "/etc/ui_state"
+#endif
 #define USER_PASSWORD_PATH UI_STATE_DIR "/password.cfg"
+#define PASSWORD_VISIBILITY_CFG_PATH UI_STATE_DIR "/password_visibility.cfg"
+#define PASSWORD_VISIBILITY_CFG_TMP_PATH UI_STATE_DIR "/password_visibility.cfg.tmp"
 #define SCREENSHOT_CFG_PATH UI_STATE_DIR "/screenshot.cfg"
 #define SCREENSHOT_CFG_TMP_PATH UI_STATE_DIR "/screenshot.cfg.tmp"
 #define SCREEN_RECORDING_CFG_PATH UI_STATE_DIR "/screen_recording.cfg"
@@ -25,6 +29,9 @@ static bool g_screen_recording_enabled = false;
 static bool g_performance_monitor_enabled = false;
 static bool g_performance_profile_enabled = false;
 static bool g_gesture_enabled = false;
+static bool g_password_visibility_enabled = false;
+static bool g_password_visibility_loaded = false;
+static bool g_password_visibility_valid = false;
 
 static char g_user_password[USER_PASSWORD_MAX_LEN + 1] = "1111";
 
@@ -180,6 +187,70 @@ static bool user_cfg_bool_save(const char *path, const char *temp_path,
 
     *value_out = enabled;
     return true;
+}
+
+bool user_cfg_password_visibility_load(void)
+{
+    FILE *fp;
+    int value;
+    int suffix;
+    bool valid;
+
+    g_password_visibility_loaded = true;
+    g_password_visibility_valid = false;
+    g_password_visibility_enabled = false;
+    fp = fopen(PASSWORD_VISIBILITY_CFG_PATH, "r");
+    if (fp == NULL) {
+        return false;
+    }
+
+    /* Require the whole file to be one boolean, not a valid numeric prefix. */
+    value = fgetc(fp);
+    valid = value == '0' || value == '1';
+    while ((suffix = fgetc(fp)) != EOF) {
+        if (suffix != '\r' && suffix != '\n') {
+            valid = false;
+        }
+    }
+    if (ferror(fp)) {
+        valid = false;
+    }
+    if (fclose(fp) != 0) {
+        valid = false;
+    }
+    if (!valid) {
+        return false;
+    }
+
+    g_password_visibility_enabled = value == '1';
+    g_password_visibility_valid = true;
+    return true;
+}
+
+bool user_cfg_password_visibility_save(bool enabled)
+{
+    if (!g_password_visibility_loaded) {
+        user_cfg_password_visibility_load();
+    }
+    if (g_password_visibility_valid && g_password_visibility_enabled == enabled) {
+        return true;
+    }
+    if (!user_cfg_bool_save(PASSWORD_VISIBILITY_CFG_PATH,
+                            PASSWORD_VISIBILITY_CFG_TMP_PATH,
+                            enabled, &g_password_visibility_enabled)) {
+        return false;
+    }
+
+    g_password_visibility_valid = true;
+    return true;
+}
+
+bool user_cfg_password_visibility_enabled(void)
+{
+    if (!g_password_visibility_loaded) {
+        user_cfg_password_visibility_load();
+    }
+    return g_password_visibility_enabled;
 }
 
 bool user_cfg_screenshot_load(void)

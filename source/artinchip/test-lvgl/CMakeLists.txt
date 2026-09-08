@@ -130,6 +130,8 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_core/page_05_set_password.c
     un260/lv_core/page_06_settings.c
     un260/lv_components/lv_nav_button.c
+    un260/lv_components/lv_pin_input.c
+    un260/lv_components/lv_pin_keypad.c
     un260/lv_core/settings_detail_ui.c
     un260/lv_core/page_07_curr.c
     un260/lv_core/page_07_curr/page_07_curr_model.c
