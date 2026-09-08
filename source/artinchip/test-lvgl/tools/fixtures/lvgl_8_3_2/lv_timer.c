@@ -339,4 +339,3 @@ static uint32_t lv_timer_time_remaining(lv_timer_t * timer)
         return 0;
     return timer->period - elp;
 }
-

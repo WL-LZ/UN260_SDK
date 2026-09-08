@@ -406,4 +406,3 @@ static void node_set_next(lv_ll_t * ll_p, lv_ll_node_t * act, lv_ll_node_t * nex
 
     *act_node_p = *next_node_p;
 }
-

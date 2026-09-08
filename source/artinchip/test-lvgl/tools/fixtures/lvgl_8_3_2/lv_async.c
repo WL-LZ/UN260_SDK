@@ -103,4 +103,3 @@ static void lv_async_timer_cb(lv_timer_t * timer)
     info->cb(info->user_data);
     lv_mem_free(info);
 }
-
