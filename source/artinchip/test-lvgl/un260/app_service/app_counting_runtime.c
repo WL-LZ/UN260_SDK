@@ -94,6 +94,8 @@ static void app_counting_visual_commit(void *context, uint32_t flags)
  * visible projection of totals/rows is last-state-wins within a UI frame. */
 static void app_counting_runtime_refresh_compact(const counting_sim_t *sim_data)
 {
+    page_02_list_section_mark_dirty(PAGE_02_SECTION_A);
+    page_02_list_section_mark_dirty(PAGE_02_SECTION_C);
     if (!ui_frame_commit_defer(app_counting_visual_commit, NULL, 1U))
         app_counting_visual_commit(NULL, 1U);
     smart_island_update_counting(sim_data->total_pcs,
@@ -128,6 +130,7 @@ static bool app_counting_runtime_cb_calibration_active(void)
 static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t len)
 {
     currency_state_begin_count_session();
+    page_02_list_report_reset();
     page_01_curr_img_refre();
     hide_counting_error_popup();
     fault_popup_clear_pending();
@@ -293,6 +296,8 @@ static void app_counting_runtime_on_summary_changed(void *context,
                                                     bool refresh_main)
 {
     (void)context;
+    page_02_list_section_mark_dirty(PAGE_02_SECTION_A);
+    page_02_list_section_mark_dirty(PAGE_02_SECTION_C);
     smart_island_refresh_summary();
     if (refresh_main && app_counting_runtime_main_page_active()) {
         ui_refresh_main_page();
@@ -302,13 +307,13 @@ static void app_counting_runtime_on_summary_changed(void *context,
 static void app_counting_runtime_on_serial_data_started(void *context)
 {
     (void)context;
+    page_02_list_section_mark_dirty(PAGE_02_SECTION_B);
     page_01_detail_scroll_reset_all();
 }
 
 static void app_counting_runtime_on_serial_report_ready(void *context)
 {
     (void)context;
-    page_02_list_report_reset();
     page_02_list_section_data_ready(PAGE_02_SECTION_B);
 }
 
@@ -327,6 +332,7 @@ static void app_counting_runtime_on_serial_ui_complete(void *context,
 static void app_counting_runtime_on_serial_item_changed(void *context)
 {
     (void)context;
+    page_02_list_section_mark_dirty(PAGE_02_SECTION_B);
     if (app_counting_runtime_main_page_active() &&
         page_01_detail_section_get() == PAGE_01_DETAIL_SECTION_B) {
         if (!ui_frame_commit_defer(app_counting_visual_commit, NULL, 2U))
@@ -464,6 +470,8 @@ void app_counting_runtime_handle_info(counting_session_state_t *session,
     } else if (result.kind == COUNTING_INFO_REPLY_FINISHED) {
         int current_pcs = result.final_pcs;
 
+        page_02_list_section_mark_dirty(PAGE_02_SECTION_A);
+        page_02_list_section_mark_dirty(PAGE_02_SECTION_C);
         uart_debug_printf("Count finished\n");
         counting_history_capture_end(buf, len);
         if (machine_state_add_enabled() &&
@@ -534,6 +542,7 @@ void app_counting_runtime_handle_detail(uint8_t cmd,
 {
     app_counting_detail_context_t context;
     counting_reject_sn_reply_hooks_t hooks = { 0 };
+    counting_detail_reply_result_t result;
 
     if (detail_state == NULL || session == NULL || sim_data == NULL) {
         return;
@@ -554,13 +563,16 @@ void app_counting_runtime_handle_detail(uint8_t cmd,
     hooks.on_history_record_ready = app_counting_runtime_on_history_record;
     hooks.on_detail_complete = app_counting_runtime_on_detail_complete;
 
-    counting_reject_sn_reply_dispatch(cmd,
-                                      detail_state,
-                                      session,
-                                      sim_data,
-                                      buf,
-                                      len,
-                                      &hooks);
+    result = counting_reject_sn_reply_dispatch(cmd,
+                                               detail_state,
+                                               session,
+                                               sim_data,
+                                               buf,
+                                               len,
+                                               &hooks);
+    if (cmd == 0x0C && result == COUNTING_DETAIL_REPLY_START) {
+        page_02_list_section_mark_dirty(PAGE_02_SECTION_C);
+    }
 }
 
 void app_counting_runtime_handle_detail_complete(counting_session_state_t *session)

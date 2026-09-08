@@ -9,6 +9,7 @@
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/page_01_main.h"
 #include "un260/lv_core/page_01_detail_scroll.h"
+#include "un260/lv_core/page_02_list.h"
 #include "un260/lv_drivers/lv_drivers.h"
 #include "un260/lv_components/smart_island.h"
 #include "un260/lv_system/ui_text.h"
@@ -1062,6 +1063,7 @@ static void sim_reset_counting_data(counting_sim_t *sim_data,
     sim_data->err_expected = 0;
     smart_island_clear_count_analysis();
     page_01_detail_scroll_reset_all();
+    page_02_list_report_reset();
     ui_refresh_main_page();
     smart_island_refresh_summary();
 }

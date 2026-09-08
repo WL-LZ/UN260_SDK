@@ -111,10 +111,6 @@ static uint8_t ui_manager_predecode_static_images(
  * decoded until the first draw.  Declare expensive, immutable page images in
  * the registry so boot-time prewarm can also populate LVGL's bounded image
  * cache instead of leaving an 80+ ms decode on the user's first click. */
-static const ui_page_static_image_t g_page_list_static_images[] = {
-    { LVGL_PATH(page_02_list_img.png) },
-};
-
 static const ui_page_static_image_t g_page_main_static_images[] = {
     { LVGL_PATH(page_01_back.png) },
 };
@@ -198,8 +194,6 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .resume = ui_page_02_list_resume,
         .suspend = ui_page_02_list_suspend,
         .cache_policy = UI_PAGE_RETAINED,
-        .static_images = g_page_list_static_images,
-        .static_image_count = UI_ARRAY_SIZE(g_page_list_static_images),
     },
     [UI_PAGE_MENU] = {
         .create = ui_page_03_menu_create,

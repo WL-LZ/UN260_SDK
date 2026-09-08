@@ -36,9 +36,6 @@ typedef enum {
 #define ADD_MODE 2
 #define WORK_MODE 2
 #define PAGE_01_REPORT_ITEM 8
-#define PAGE_02_A_ITEM 8
-#define PAGE_02_B_ITEM 9
-#define PAGE_02_C_ITEM 9
 #define PAGE_02_DEBUG 1
 #define PAGE_07_CURRENCIES 4
 #define CONTROLLER_MAX_CURRENCIES 32

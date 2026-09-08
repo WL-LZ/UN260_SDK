@@ -797,39 +797,4 @@ void page_03_work_mode_event_cb(lv_event_t* e)
 #if LV_DEBUG
     printf("工作模式请求切换为：%s\n", (word_code > 0) ? "MANUAL" : "AUTO");
 #endif // LV_DEBUG
-
-}
-
-
-void page_03_a_up_event_cb(lv_event_t* e) {
-    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-        page_02_list_section_page_step(PAGE_02_SECTION_A, -1, false);
-    }
-}
-void page_03_a_down_event_cb(lv_event_t* e) {
-    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-        page_02_list_section_page_step(PAGE_02_SECTION_A, 1, false);
-    }
-}
-
-void page_03_b_up_event_cb(lv_event_t* e) {
-    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-        page_02_list_section_page_step(PAGE_02_SECTION_B, -1, false);
-    }
-}
-void page_03_b_down_event_cb(lv_event_t* e) {
-    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-        page_02_list_section_page_step(PAGE_02_SECTION_B, 1, false);
-    }
-}
-
-void page_03_c_up_event_cb(lv_event_t* e) {
-    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-        page_02_list_section_page_step(PAGE_02_SECTION_C, -1, false);
-    }
-}
-void page_03_c_down_event_cb(lv_event_t* e) {
-    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-        page_02_list_section_page_step(PAGE_02_SECTION_C, 1, false);
-    }
 }

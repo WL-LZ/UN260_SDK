@@ -1,1259 +1,430 @@
-#include "un260/lv_core/page_02_list.h"
-#include "un260/lv_resources/lv_image_declear.h" 
-#include "un260/lv_resources/lv_img_init.h" 
-#include "un260/currency/currency_state.h"
-#include "un260/counting/counting_reject_reason.h"
-#include "un260/counting/counting_data_store.h"
+#include "page_02_list.h"
+#include "page_02_list_data.h"
 #include "lv_page_event.h"
-#include "aic_ui/aic_ui.h"
-#include "un260/lv_system/ui_object_utils.h"
-#include "un260/lv_system/app_clock.h"
-#include "un260/lv_system/ui_update_batch.h"
-#include "un260/lv_components/lv_dma_snapshot_cache.h"
+#include "ui_frame_commit.h"
+#include "lv_port_indev.h"
+#include "un260/counting/counting_data_store.h"
+#include "un260/lv_components/lv_recycled_list.h"
+#include "un260/lv_components/lv_card_surface.h"
+#include "un260/lv_components/lv_damped_button.h"
+#include "un260/lv_system/ui_lang.h"
+#include "un260/lv_system/ui_text.h"
 #include "aic_ui/perf_stats.h"
 #include <stdio.h>
 #include <string.h>
 
-static lv_obj_t* list_page = NULL;
-
-#define PAGE_02_DIRTY_SECTION_A (1U << PAGE_02_SECTION_A)
-#define PAGE_02_DIRTY_SECTION_B (1U << PAGE_02_SECTION_B)
-#define PAGE_02_DIRTY_SECTION_C (1U << PAGE_02_SECTION_C)
-#define PAGE_02_DIRTY_CURRENCY  (1U << PAGE_02_SECTION_COUNT)
-#define PAGE_02_DIRTY_ALL       (PAGE_02_DIRTY_SECTION_A | \
-                                 PAGE_02_DIRTY_SECTION_B | \
-                                 PAGE_02_DIRTY_SECTION_C | \
-                                 PAGE_02_DIRTY_CURRENCY)
-
-static uint32_t g_page_02_dirty = PAGE_02_DIRTY_ALL;
-static char g_page_02_currency_code[4];
-static lv_dma_static_skin_t g_page_02_action_skins[3];
-
-typedef struct {
-    uint8_t curent_page;
-    uint8_t total_page;
-} page_02_report_status_t;
-
-static page_02_report_status_t page_02_a_report_status;
-static page_02_report_status_t page_02_b_report_status;
-static page_02_report_status_t page_02_c_report_status;
-
-// 添加长度变量
-int page_02_list_len = 0;
-
-#define PAGE_02_SCROLL_ROW_GAP          31
-#define PAGE_02_SCROLL_ROW_Y_OFFSET     10
-#define PAGE_02_SCROLL_COL_MAX          3
-#define PAGE_02_SCROLL_POOL_MAX         (PAGE_02_C_ITEM + 1)
-#define PAGE_02_SCROLL_EDGE_BUFFER      32
+/* Page layout and semantic binding only. The common viewport owns bounded
+ * recycling/navigation. No bitmap background or invisible paging buttons. */
+#define ALL_SECTIONS ((1U << PAGE_02_SECTION_COUNT) - 1)
+#define ROWS 7
+#define ROW_HEIGHT 36
+#define PANEL_HEIGHT 376
+#define BODY_Y 76
+#define FOOTER_Y (BODY_Y + ROWS * ROW_HEIGHT)
+#define INK 0x17212A
+#define BODY 0x4C606E
+#define MUTED 0x7A8D9B
+#define LINE 0xE7ECEF
+#define AMBER 0xA67834
 
 typedef struct {
-    page_02_section_id_t section_id;
-    lv_obj_t *container;
-    lv_obj_t *spacer;
-    lv_obj_t *cell[PAGE_02_SCROLL_POOL_MAX][PAGE_02_SCROLL_COL_MAX];
-    lv_coord_t x;
-    lv_coord_t y;
-    lv_coord_t w;
-    lv_coord_t h;
-    lv_coord_t col_x[PAGE_02_SCROLL_COL_MAX];
-    lv_coord_t col_w[PAGE_02_SCROLL_COL_MAX];
-    uint8_t page_size;
-    uint8_t pool_row;
-    uint8_t col_count;
-    uint16_t total_row;
-    uint16_t first_row;
-    uint16_t bound_first_row;
-    lv_coord_t spacer_y;
-    bool pressing;
-    bool press_moved;
-    lv_point_t press_point;
-} page_02_scroll_section_t;
-
-static page_02_scroll_section_t s_page_02_scroll_sections[PAGE_02_SECTION_COUNT];
-static const char *s_page_02_inv_names[PAGE_02_SECTION_COUNT] = {
-    "LIST_DENOM_SCROLL",
-    "LIST_SERIAL_SCROLL",
-    "LIST_ERROR_SCROLL",
+    page_02_section_id_t id;
+    lv_coord_t x, width;
+    lv_coord_t col_x[3], col_w[3];
+    lv_text_align_t align[3];
+    ui_text_id_t title, columns[3];
+} section_layout_t;
+typedef struct {
+    const section_layout_t *layout;
+    lv_obj_t *panel, *title, *headers[3], *range, *mode, *previous, *next, *empty;
+    lv_recycled_list_t *list;
+} list_section_t;
+typedef struct {
+    lv_obj_t *page, *total_title, *pcs, *amount, *reject_count, *reject_title;
+    lv_obj_t *actions[3];
+    list_section_t section[PAGE_02_SECTION_COUNT];
+    page_02_list_data_t data;
+    language_t language;
+} list_view_t;
+static list_view_t *view;
+static uint32_t dirty = ALL_SECTIONS, reset_positions = ALL_SECTIONS;
+static const section_layout_t layouts[PAGE_02_SECTION_COUNT] = {
+    { PAGE_02_SECTION_A, 16, 360, {10,112,192}, {88,64,122},
+      {LV_TEXT_ALIGN_LEFT,LV_TEXT_ALIGN_RIGHT,LV_TEXT_ALIGN_RIGHT},
+      UI_TEXT_LIST_DENOMINATIONS, {UI_TEXT_PAGE01_DETAIL_COL_DENOM,
+      UI_TEXT_PAGE01_DETAIL_COL_PCS,UI_TEXT_PAGE01_DETAIL_COL_AMOUNT} },
+    { PAGE_02_SECTION_B, 388, 430, {10,58,308}, {42,242,76},
+      {LV_TEXT_ALIGN_LEFT,LV_TEXT_ALIGN_LEFT,LV_TEXT_ALIGN_RIGHT},
+      UI_TEXT_LIST_SERIAL_NUMBERS, {UI_TEXT_PAGE01_DETAIL_COL_NO,
+      UI_TEXT_LIST_COL_SERIAL_NUMBER,UI_TEXT_PAGE01_DETAIL_COL_DENOM} },
+    { PAGE_02_SECTION_C, 830, 326, {10,58,110}, {44,40,170},
+      {LV_TEXT_ALIGN_LEFT,LV_TEXT_ALIGN_RIGHT,LV_TEXT_ALIGN_LEFT},
+      UI_TEXT_LIST_REJECT_ANALYSIS, {UI_TEXT_PAGE01_DETAIL_COL_NO,
+      UI_TEXT_PAGE01_DETAIL_COL_PCS,UI_TEXT_LIST_COL_REASON} },
+};
+static const char *const inv_names[] = {
+    "LIST_DENOM_SCROLL", "LIST_SERIAL_SCROLL", "LIST_ERROR_SCROLL"
 };
 
-static int page_02_a_valid_count_get(void); // 获取A区有效面额条数
-static int page_02_b_valid_count_get(void); // 获取B区有效冠字号条数
-static int page_02_b_nth_valid_index_get(int nth); // 获取B区第nth条有效数据索引
-static page_02_scroll_section_t *page_02_scroll_section_get(page_02_section_id_t section_id); // 获取分区配置
-static void page_02_scroll_section_init_config(void); // 初始化A/B/C滚动容器配置
-static void page_02_scroll_section_style_init(lv_obj_t *obj); // 统一设置滚动容器样式
-static lv_obj_t *page_02_scroll_cell_create(lv_obj_t *parent, lv_coord_t width); // 创建滚动单元标签
-static void page_02_scroll_section_create(page_02_scroll_section_t *section); // 创建单个分区滚动容器
-static void page_02_scroll_section_event_cb(lv_event_t *e); // 处理滚动与点击翻页
-static void page_02_scroll_section_total_page_refresh(page_02_scroll_section_t *section); // 刷新分区总页数
-static void page_02_scroll_section_spacer_refresh(page_02_scroll_section_t *section); // 刷新滚动内容高度
-static void page_02_scroll_section_status_refresh(page_02_scroll_section_t *section); // 根据滚动位置刷新页码
-static void page_02_scroll_section_row_bind(page_02_scroll_section_t *section, uint16_t pool_row, int data_index); // 绑定滚动行内容
-static void page_02_scroll_section_rows_rotate(page_02_scroll_section_t *section, int delta); // 滚动跨行时仅回收边缘行
-static void page_02_scroll_section_visible_refresh(page_02_scroll_section_t *section, bool parent_already_invalidated); // 刷新可见行
-static void page_02_scroll_section_sync_to_status(page_02_scroll_section_t *section, bool anim_en); // 根据页码同步滚动位置
-static bool page_02_scroll_section_small_data(page_02_scroll_section_t *section); // 判断当前分区是否为小数据量
-static uint16_t page_02_scroll_section_last_page_first_row_get(page_02_scroll_section_t *section); // 获取最后一页的起始行
-static lv_coord_t page_02_scroll_section_real_bottom_scroll_y_get(page_02_scroll_section_t *section); // 获取真实内容底部的滚动位置
-static lv_coord_t page_02_scroll_section_max_scroll_y_get(page_02_scroll_section_t *section); // 获取分区允许的最大滚动距离
-static void page_02_a_page_refre(void);
-static void page_02_b_page_refre(void);
-static void page_02_c_page_refre(void);
-static void page_02_curr_refre(void);
-static void page_02_a_page_num_refre(void);
-static void page_02_b_page_num_refre(void);
-static void page_02_c_page_num_refre(void);
-
-ui_element_t page_02_list_obj[] = {
-
-    //////////////////////////////////////////////////////
-  //***************    BG_IMG_LIST  *******************//
-////////////////////////////////////////////////////////
-
-    { "page_02_list_img.png", LV_OBJ_TYPE_IMAGE, NULL,
-        { 0, 0, 1280, 400, 0, 0, 0 },
-        { NULL, 0, 0, 0, NULL },
-        { 255, 0, 0, false },
-        NULL, 0, NULL, NULL },
-
-  //////////////////////////////////////////////////////
- //***************    BTN_LIST   *********************/
-//////////////////////////////////////////////////////
-
-    { "02_home_btn", LV_OBJ_TYPE_BUTTON,NULL,
-        { 1154, 276, 101, 78, 255, 255, 255 },
-        { NULL, 0, 0, 0, NULL },
-        { 255, 18, 0, false },
-         page_01_back_btn_event_cb, 0, NULL, NULL ,
-         UI_BTN_STYLE_APPLE},
-
-    { "02_print", LV_OBJ_TYPE_BUTTON,NULL,
-        { 1154, 160, 101, 78, 255, 255, 255 },
-        { NULL, 0, 0, 0, NULL },
-        { 255, 18, 0, false },
-         page_01_print_btn_event_cb, 0, NULL, NULL ,
-         UI_BTN_STYLE_APPLE},
-    { "02_a_up", LV_OBJ_TYPE_BUTTON,NULL,
-        { 25, 79, 359, 141, 255, 255, 255 },
-        { NULL, 0, 0, 0, NULL },
-        { 255, 18, 0, false },
-         page_03_a_up_event_cb, 0, NULL, NULL ,
-         UI_BTN_STYLE_NO_FEEDBACK},
-    { "02_a_down", LV_OBJ_TYPE_BUTTON,NULL,
-        { 25, 220, 359, 141, 255, 255, 255 },
-        { NULL, 0, 0, 0, NULL },
-        { 255, 18, 0, false },
-         page_03_a_down_event_cb, 0, NULL, NULL ,
-         UI_BTN_STYLE_NO_FEEDBACK},
-    { "02_b_up", LV_OBJ_TYPE_BUTTON,NULL,
-        { 405, 79, 392, 141, 255, 255, 255 },
-        { NULL, 0, 0, 0, NULL },
-        { 255, 18, 0, false },
-         page_03_b_up_event_cb, 0, NULL, NULL ,
-         UI_BTN_STYLE_NO_FEEDBACK},
-    { "02_b_down", LV_OBJ_TYPE_BUTTON,NULL,
-        { 405, 220, 392, 141, 255, 255, 255 },
-        { NULL, 0, 0, 0, NULL },
-        { 255, 18, 0, false },
-         page_03_b_down_event_cb, 0, NULL, NULL ,
-         UI_BTN_STYLE_NO_FEEDBACK},
-    { "02_c_up", LV_OBJ_TYPE_BUTTON,NULL,
-        { 820, 79, 309, 141, 255, 255, 255 },
-        { NULL, 0, 0, 0, NULL },
-        { 255, 18, 0, false },
-         page_03_c_up_event_cb, 0, NULL, NULL ,
-         UI_BTN_STYLE_NO_FEEDBACK},
-    { "02_c_down", LV_OBJ_TYPE_BUTTON,NULL,
-        { 820, 220, 309, 141, 255, 255, 255 },
-        { NULL, 0, 0, 0, NULL },
-        { 255, 18, 0, false },
-         page_03_c_down_event_cb, 0, NULL, NULL ,
-         UI_BTN_STYLE_NO_FEEDBACK},
-
-  //////////////////////////////////////////////////////
- //***************  IMAGE_LIST **********************//
-//////////////////////////////////////////////////////
-
-    { "page_02_home_icon.png", LV_OBJ_TYPE_IMAGE, NULL,
-        { 1179, 289, 43, 43, 255, 255, 255 },
-        { NULL, 0, 0, 0, NULL },
-        { 255, 18, 0, false },
-         NULL, 0, NULL, NULL ,
-         UI_BTN_STYLE_NONE},
-
-    { "page_01_print_icon.png", LV_OBJ_TYPE_IMAGE, NULL,
-        { 1187, 180, 43, 43, 255, 255, 255 },
-        { NULL, 0, 0, 0, NULL },
-        { 255, 18, 0, false },
-         NULL, 0, NULL, NULL ,
-         UI_BTN_STYLE_NONE},
-
-  //////////////////////////////////////////////////////
- //***************  LABEL_LIST **********************//
-//////////////////////////////////////////////////////
-
-    { "02_list_title_label", LV_OBJ_TYPE_LABEL, NULL ,
-        { 610, 13, 70, 36, 112, 112, 112 },
-        { "LIST", 80, 80, 80, &lv_font_instrument_sans_semibold_24, LV_TEXT_ALIGN_CENTER },
-        { 255, 18, 0, false },
-         NULL, 0, NULL, NULL ,
-         UI_BTN_STYLE_NONE},
-
-    { "02_a_denom_title_label", LV_OBJ_TYPE_LABEL, NULL ,
-        { 58, 58, 70, 36, 255, 255, 255 },
-        { "DENOM", 255, 255, 255, &lv_font_instrument_sans_medium_16, LV_TEXT_ALIGN_LEFT },
-        { 255, 18, 0, false },
-         NULL, 0, NULL, NULL ,
-         UI_BTN_STYLE_NONE},
-
-    { "02_a_pcs_title_label", LV_OBJ_TYPE_LABEL, NULL ,
-        { 171, 58, 70, 36, 255, 255, 255 },
-        { "PCS", 255, 255, 255, &lv_font_instrument_sans_medium_16, LV_TEXT_ALIGN_LEFT },
-        { 255, 18, 0, false },
-         NULL, 0, NULL, NULL ,
-         UI_BTN_STYLE_NONE},
-
-    { "02_a_amount_title_label", LV_OBJ_TYPE_LABEL, NULL ,
-        { 267, 58, 80, 36, 255, 255, 255 },
-        { "AMOUNT", 255, 255, 255, &lv_font_instrument_sans_medium_16, LV_TEXT_ALIGN_LEFT },
-        { 255, 18, 0, false },
-         NULL, 0, NULL, NULL ,
-         UI_BTN_STYLE_NONE},
-
-    { "02_b_no_title_label", LV_OBJ_TYPE_LABEL, NULL ,
-        { 444, 58, 70, 36, 255, 255, 255 },
-        { "NO", 255, 255, 255, &lv_font_instrument_sans_medium_16, LV_TEXT_ALIGN_LEFT },
-        { 255, 18, 0, false },
-         NULL, 0, NULL, NULL ,
-         UI_BTN_STYLE_NONE},
-
-    { "02_b_sn_title_label", LV_OBJ_TYPE_LABEL, NULL ,
-        { 516, 58, 70, 36, 255, 255, 255 },
-        { "SN", 255, 255, 255, &lv_font_instrument_sans_medium_16, LV_TEXT_ALIGN_LEFT },
-        { 255, 18, 0, false },
-         NULL, 0, NULL, NULL ,
-         UI_BTN_STYLE_NONE},
-
-    { "02_b_denom_title_label", LV_OBJ_TYPE_LABEL, NULL ,
-        { 679, 58, 70, 36, 255, 255, 255 },
-        { "DENOM", 255, 255, 255, &lv_font_instrument_sans_medium_16, LV_TEXT_ALIGN_LEFT },
-        { 255, 18, 0, false },
-         NULL, 0, NULL, NULL ,
-         UI_BTN_STYLE_NONE},
-
-    { "02_c_no_title_label", LV_OBJ_TYPE_LABEL, NULL ,
-        { 834, 58, 70, 36, 255, 255, 255 },
-        { "NO", 255, 255, 255, &lv_font_instrument_sans_medium_16, LV_TEXT_ALIGN_LEFT },
-        { 255, 18, 0, false },
-         NULL, 0, NULL, NULL ,
-         UI_BTN_STYLE_NONE},
-
-    { "02_c_denom_title_label", LV_OBJ_TYPE_LABEL, NULL ,
-        { 887, 58, 70, 36, 255, 255, 255 },
-        { "PCS", 255, 255, 255, &lv_font_instrument_sans_medium_16, LV_TEXT_ALIGN_LEFT },
-        { 255, 18, 0, false },
-         NULL, 0, NULL, NULL ,
-         UI_BTN_STYLE_NONE},
-
-    { "02_c_reject_title_label", LV_OBJ_TYPE_LABEL, NULL ,
-        { 973, 58, 70, 36, 255, 255, 255 },
-        { "REJECT", 255, 255, 255, &lv_font_instrument_sans_medium_16, LV_TEXT_ALIGN_LEFT },
-        { 255, 18, 0, false },
-         NULL, 0, NULL, NULL ,
-         UI_BTN_STYLE_NONE},
-
-//************  a_TOTAL ****************//
-    { "02_a_denom_total", LV_OBJ_TYPE_LABEL, NULL,
-      { 58, 337, 80, 36, 255, 255, 255 },
-      { "TOTAL", 61, 61, 61, &lv_font_instrument_sans_medium_16, LV_TEXT_ALIGN_LEFT },
-      { 255, 18, 0, false },
-      NULL, 0, 0, NULL,
-      UI_BTN_STYLE_NONE },
-
-    { "02_a_pcs_amount", LV_OBJ_TYPE_LABEL, NULL,
-      { 171, 337, 70, 36, 255, 255, 255 },
-      { "0", 61, 61, 61, &lv_font_instrument_sans_medium_16, LV_TEXT_ALIGN_LEFT },
-      { 255, 18, 0, false },
-      NULL, 0, 0, NULL,
-      UI_BTN_STYLE_NONE },
-
-    { "02_a_amount_total", LV_OBJ_TYPE_LABEL, NULL,
-      { 267, 337, 80, 36, 255, 255, 255 },
-      { "0", 61, 61, 61, &lv_font_instrument_sans_medium_16, LV_TEXT_ALIGN_LEFT },
-      { 255, 18, 0, false },
-      NULL, 0, 0, NULL,
-      UI_BTN_STYLE_NONE },
-
-    { "02_history_btn", LV_OBJ_TYPE_BUTTON, NULL,
-      { 1149, 87, 110, 57, 255, 255, 255 },
-      { "HISTORY", 33, 43, 54, &lv_font_instrument_sans_bold_16, LV_TEXT_ALIGN_CENTER },
-      { 255, 18, 0, true },
-      page_02_history_btn_event_cb, LV_EVENT_CLICKED, NULL, NULL,
-      UI_BTN_STYLE_APPLE },
-
-        { "02_a_page_refre", LV_OBJ_TYPE_LABEL, NULL,
-          { 151, 371, 99, 27, 121, 150, 0 },
-          { "1/2", 255, 255, 255, &lv_font_instrument_sans_medium_20, LV_TEXT_ALIGN_CENTER },
-          { 255, 18, 0, false },
-          NULL, 0, 0, NULL,
-          UI_BTN_STYLE_NONE },
-                
-        { "02_b_page_refre", LV_OBJ_TYPE_LABEL, NULL,
-          { 545, 371, 99, 27, 121, 150, 0 },
-          { "1/2", 255, 255, 255, &lv_font_instrument_sans_medium_20, LV_TEXT_ALIGN_CENTER },
-          { 255, 18, 0, false },
-          NULL, 0, 0, NULL,
-          UI_BTN_STYLE_NONE },
-                
-        { "02_c_page_refre", LV_OBJ_TYPE_LABEL, NULL,
-          { 925, 371, 99, 27, 121, 150, 0 },
-          { "200/200", 255, 255, 255, &lv_font_instrument_sans_medium_20, LV_TEXT_ALIGN_CENTER },
-          { 255, 18, 0, false },
-          NULL, 0, 0, NULL,
-          UI_BTN_STYLE_NONE },
-
-};
-
-static void page_02_action_skins_attach(void)
+static void text_set(lv_obj_t *label, const char *text)
 {
-    static const char *const object_names[] = {
-        "02_home_btn", "02_print", "02_history_btn",
-    };
-    static const char *const cache_keys[] = {
-        "LIST_HOME_BTN_SKIN",
-        "LIST_PRINT_BTN_SKIN",
-        "LIST_HISTORY_BTN_SKIN",
-    };
-
-    for (uint32_t i = 0; i < 3; i++) {
-        lv_obj_t *button = find_obj_by_name(object_names[i],
-                                            page_02_list_obj,
-                                            page_02_list_len);
-        if (button != NULL && lv_obj_is_valid(button)) {
-            (void)lv_dma_static_skin_attach(&g_page_02_action_skins[i],
-                                             button, cache_keys[i]);
-        }
+    if (!text) text="";
+    if (label && strcmp(lv_label_get_text(label), text)) lv_label_set_text(label, text);
+}
+static void number_set(lv_obj_t *label, double value, const lv_font_t *preferred)
+{
+    if (!label || !preferred) return;
+    char text[40];
+    snprintf(text, sizeof(text), "%.0f", value);
+    const lv_font_t *font=preferred;
+    const lv_font_t *fallback[]={&lv_font_instrument_sans_medium_18,
+        &lv_font_instrument_sans_medium_16,&lv_font_instrument_sans_medium_14};
+    lv_point_t size;
+    lv_txt_get_size(&size,text,font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+    for (unsigned i=0;i<sizeof(fallback)/sizeof(fallback[0]) && size.x>lv_obj_get_width(label);++i) {
+        if (fallback[i]->line_height>=font->line_height) continue;
+        font=fallback[i];
+        lv_txt_get_size(&size,text,font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
     }
+    if (lv_obj_get_style_text_font(label,0)!=font) lv_obj_set_style_text_font(label,font,0);
+    text_set(label, text);
+}
+static lv_obj_t *label_create(lv_obj_t *parent, int x, int y, int w, int h,
+                              const lv_font_t *font, uint32_t color,
+                              lv_text_align_t align)
+{
+    if (!parent || !font) return NULL;
+    lv_obj_t *o = lv_label_create(parent);
+    if (!o) return NULL;
+    lv_obj_remove_style_all(o);
+    lv_obj_set_pos(o, x, y); lv_obj_set_size(o, w, h);
+    lv_obj_set_style_text_font(o, font, 0);
+    lv_obj_set_style_text_color(o, lv_color_hex(color), 0);
+    lv_obj_set_style_text_align(o, align, 0);
+    lv_label_set_long_mode(o, LV_LABEL_LONG_CLIP);
+    lv_label_set_text(o, "");
+    lv_obj_clear_flag(o, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    return o;
+}
+static lv_obj_t *surface(lv_obj_t *parent, int x, int y, int w, int h,
+                         int radius, uint32_t color)
+{
+    if (!parent) return NULL;
+    lv_obj_t *o = lv_obj_create(parent);
+    if (!o) return NULL;
+    lv_obj_remove_style_all(o); lv_obj_set_pos(o, x, y);
+    lv_card_surface_style_t skin = {w,h,radius,color,LINE,0};
+    lv_card_surface_apply(o, &skin);
+    lv_obj_clear_flag(o, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    return o;
 }
 
-static void page_02_action_skins_release(void)
+/* Small monochrome line icons need no image decoding or special font glyphs. */
+enum { ICON_HISTORY, ICON_PRINT, ICON_HOME, ICON_PREV, ICON_NEXT, ICON_TOGGLE };
+static void icon_line(lv_draw_ctx_t *ctx, lv_coord_t x, lv_coord_t y,
+                       int x1, int y1, int x2, int y2)
 {
-    for (uint32_t i = 0; i < 3; i++) {
-        lv_dma_static_skin_release(&g_page_02_action_skins[i]);
-    }
+    lv_draw_line_dsc_t d; lv_draw_line_dsc_init(&d);
+    d.color=lv_color_hex(0x657F90); d.width=2; d.round_start=d.round_end=1;
+    lv_point_t a={x+x1,y+y1}, b={x+x2,y+y2};
+    lv_draw_line(ctx,&d,&a,&b);
 }
-
-static int page_02_a_valid_count_get(void) // 获取A区有效面额条数
+static void icon_draw(lv_event_t *e)
 {
-    int valid_count = 0;
-    int denom_count = counting_data_current()->denom_number;
-
-    if (denom_count > (int)(sizeof(counting_data_current()->denom) / sizeof(counting_data_current()->denom[0]))) {
-        denom_count = (int)(sizeof(counting_data_current()->denom) / sizeof(counting_data_current()->denom[0]));
-    }
-
-    for (int i = 0; i < denom_count; i++) {
-        if (counting_data_current()->denom[i].value > 0) {
-            valid_count++;
-        }
-    }
-
-    return valid_count;
+    lv_obj_t *o=lv_event_get_target(e);
+    lv_area_t area; lv_obj_get_coords(o,&area);
+    lv_draw_ctx_t *ctx=lv_event_get_draw_ctx(e);
+    int kind=(int)(uintptr_t)lv_event_get_user_data(e), x=area.x1, y=area.y1;
+#define L(a,b,c,d) icon_line(ctx,x,y,a,b,c,d)
+    if (kind==ICON_HOME) {
+        L(2,12,13,2); L(13,2,24,12); L(4,10,4,24); L(4,24,22,24); L(22,24,22,10);
+    } else if (kind==ICON_PRINT) {
+        L(7,8,7,2); L(7,2,20,2); L(20,2,20,8); L(3,8,24,8);
+        L(3,8,3,19); L(24,8,24,19); L(3,19,7,19); L(20,19,24,19);
+        L(7,15,20,15); L(7,15,7,25); L(7,25,20,25); L(20,25,20,15); L(20,11,21,11);
+    } else if (kind==ICON_HISTORY) {
+        lv_draw_arc_dsc_t d; lv_draw_arc_dsc_init(&d); d.color=lv_color_hex(0x657F90); d.width=2;
+        lv_point_t p={x+13,y+13}; lv_draw_arc(ctx,&d,&p,11,210,180);
+        L(2,4,2,10); L(2,10,8,10); L(13,6,13,13); L(13,13,18,16);
+    } else if (kind==ICON_PREV) { L(15,7,9,13); L(9,13,15,19); }
+    else if (kind==ICON_TOGGLE) { L(8,10,13,15); L(13,15,18,10); }
+    else { L(10,7,16,13); L(16,13,10,19); }
+#undef L
 }
-
-static int page_02_b_valid_count_get(void) // 获取B区有效冠字号条数
+static bool icon_create(lv_obj_t *parent,int x,int y,int kind)
 {
-    return counting_data_serial_valid_count(counting_data_current());
-}
-
-static int page_02_b_nth_valid_index_get(int nth) // 获取B区第nth条有效数据索引
-{
-    return counting_data_serial_nth_valid_index(counting_data_current(), nth);
-}
-
-static page_02_scroll_section_t *page_02_scroll_section_get(page_02_section_id_t section_id) // 获取分区配置
-{
-    if (section_id >= PAGE_02_SECTION_COUNT) return NULL;
-    return &s_page_02_scroll_sections[section_id];
-}
-
-static void page_02_scroll_section_init_config(void) // 初始化A/B/C滚动容器配置
-{
-    memset(s_page_02_scroll_sections, 0, sizeof(s_page_02_scroll_sections));
-
-    s_page_02_scroll_sections[PAGE_02_SECTION_A].section_id = PAGE_02_SECTION_A;
-    s_page_02_scroll_sections[PAGE_02_SECTION_A].x = 25;
-    s_page_02_scroll_sections[PAGE_02_SECTION_A].y = 79;
-    s_page_02_scroll_sections[PAGE_02_SECTION_A].w = 359;
-    s_page_02_scroll_sections[PAGE_02_SECTION_A].h = 248;
-    s_page_02_scroll_sections[PAGE_02_SECTION_A].col_x[0] = 47;
-    s_page_02_scroll_sections[PAGE_02_SECTION_A].col_x[1] = 146;
-    s_page_02_scroll_sections[PAGE_02_SECTION_A].col_x[2] = 242;
-    s_page_02_scroll_sections[PAGE_02_SECTION_A].col_w[0] = 80;
-    s_page_02_scroll_sections[PAGE_02_SECTION_A].col_w[1] = 70;
-    s_page_02_scroll_sections[PAGE_02_SECTION_A].col_w[2] = 100;
-    s_page_02_scroll_sections[PAGE_02_SECTION_A].page_size = PAGE_02_A_ITEM;
-    s_page_02_scroll_sections[PAGE_02_SECTION_A].pool_row = PAGE_02_A_ITEM + 1;
-    s_page_02_scroll_sections[PAGE_02_SECTION_A].col_count = 3;
-
-    s_page_02_scroll_sections[PAGE_02_SECTION_B].section_id = PAGE_02_SECTION_B;
-    s_page_02_scroll_sections[PAGE_02_SECTION_B].x = 405;
-    s_page_02_scroll_sections[PAGE_02_SECTION_B].y = 79;
-    s_page_02_scroll_sections[PAGE_02_SECTION_B].w = 392;
-    s_page_02_scroll_sections[PAGE_02_SECTION_B].h = 279;
-    s_page_02_scroll_sections[PAGE_02_SECTION_B].col_x[0] = 39;
-    s_page_02_scroll_sections[PAGE_02_SECTION_B].col_x[1] = 111;
-    s_page_02_scroll_sections[PAGE_02_SECTION_B].col_x[2] = 274;
-    s_page_02_scroll_sections[PAGE_02_SECTION_B].col_w[0] = 60;
-    s_page_02_scroll_sections[PAGE_02_SECTION_B].col_w[1] = 150;
-    s_page_02_scroll_sections[PAGE_02_SECTION_B].col_w[2] = 80;
-    s_page_02_scroll_sections[PAGE_02_SECTION_B].page_size = PAGE_02_B_ITEM;
-    s_page_02_scroll_sections[PAGE_02_SECTION_B].pool_row = PAGE_02_B_ITEM + 1;
-    s_page_02_scroll_sections[PAGE_02_SECTION_B].col_count = 3;
-
-    s_page_02_scroll_sections[PAGE_02_SECTION_C].section_id = PAGE_02_SECTION_C;
-    s_page_02_scroll_sections[PAGE_02_SECTION_C].x = 820;
-    s_page_02_scroll_sections[PAGE_02_SECTION_C].y = 79;
-    s_page_02_scroll_sections[PAGE_02_SECTION_C].w = 333;
-    s_page_02_scroll_sections[PAGE_02_SECTION_C].h = 279;
-    s_page_02_scroll_sections[PAGE_02_SECTION_C].col_x[0] = 14;
-    s_page_02_scroll_sections[PAGE_02_SECTION_C].col_x[1] = 67;
-    s_page_02_scroll_sections[PAGE_02_SECTION_C].col_x[2] = 153;
-    s_page_02_scroll_sections[PAGE_02_SECTION_C].col_w[0] = 45;
-    s_page_02_scroll_sections[PAGE_02_SECTION_C].col_w[1] = 70;
-    s_page_02_scroll_sections[PAGE_02_SECTION_C].col_w[2] = 170;
-    s_page_02_scroll_sections[PAGE_02_SECTION_C].page_size = PAGE_02_C_ITEM;
-    s_page_02_scroll_sections[PAGE_02_SECTION_C].pool_row = PAGE_02_C_ITEM + 1;
-    s_page_02_scroll_sections[PAGE_02_SECTION_C].col_count = 3;
-
-    for (int i = 0; i < PAGE_02_SECTION_COUNT; i++) {
-        s_page_02_scroll_sections[i].bound_first_row = UINT16_MAX;
-        s_page_02_scroll_sections[i].spacer_y = (lv_coord_t)-32768;
-    }
-}
-
-static void page_02_scroll_section_style_init(lv_obj_t *obj) // 统一设置滚动容器样式
-{
-    lv_obj_set_style_bg_opa(obj, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_opa(obj, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_outline_opa(obj, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_shadow_opa(obj, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_radius(obj, 0, 0);
-    lv_obj_set_style_pad_all(obj, 0, 0);
-    lv_obj_set_style_pad_right(obj, 0, 0);
-    lv_obj_set_scrollbar_mode(obj, LV_SCROLLBAR_MODE_OFF);
-}
-
-static lv_obj_t *page_02_scroll_cell_create(lv_obj_t *parent, lv_coord_t width) // 创建滚动单元标签
-{
-    lv_obj_t *label = lv_label_create(parent);
-
-    lv_obj_set_size(label, width, 36);
-    lv_obj_set_style_text_color(label, lv_color_hex(0x5D5D5D), 0);
-    lv_obj_set_style_text_font(label, &lv_font_instrument_sans_medium_16, 0);
-    lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
-    lv_label_set_text(label, "");
-
-    return label;
-}
-
-static void page_02_scroll_section_create(page_02_scroll_section_t *section) // 创建单个分区滚动容器
-{
-    if (section == NULL || list_page == NULL) return;
-
-    section->container = lv_obj_create(list_page);
-    lv_obj_remove_style_all(section->container);
-    lv_obj_set_pos(section->container, section->x, section->y);
-    lv_obj_set_size(section->container, section->w, section->h);
-    lv_obj_set_scroll_dir(section->container, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(section->container, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_add_flag(section->container, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(section->container, LV_OBJ_FLAG_SCROLL_MOMENTUM);
-    lv_obj_add_flag(section->container, LV_OBJ_FLAG_SCROLL_ELASTIC);
-    lv_obj_add_flag(section->container, LV_OBJ_FLAG_CLICKABLE);
-    page_02_scroll_section_style_init(section->container);
-    lv_obj_add_event_cb(section->container, page_02_scroll_section_event_cb, LV_EVENT_PRESSED, section);
-    lv_obj_add_event_cb(section->container, page_02_scroll_section_event_cb, LV_EVENT_PRESSING, section);
-    lv_obj_add_event_cb(section->container, page_02_scroll_section_event_cb, LV_EVENT_RELEASED, section);
-    lv_obj_add_event_cb(section->container, page_02_scroll_section_event_cb, LV_EVENT_PRESS_LOST, section);
-    lv_obj_add_event_cb(section->container, page_02_scroll_section_event_cb, LV_EVENT_SCROLL, section);
-    lv_obj_add_event_cb(section->container, page_02_scroll_section_event_cb, LV_EVENT_SCROLL_END, section);
-    lv_obj_add_event_cb(section->container, page_02_scroll_section_event_cb, LV_EVENT_CLICKED, section);
-
-    for (int row = 0; row < section->pool_row; row++) {
-        for (int col = 0; col < section->col_count; col++) {
-            section->cell[row][col] = page_02_scroll_cell_create(section->container, section->col_w[col]);
-            lv_obj_set_pos(section->cell[row][col], section->col_x[col], PAGE_02_SCROLL_ROW_Y_OFFSET + row * PAGE_02_SCROLL_ROW_GAP);
-        }
-    }
-
-    section->spacer = lv_obj_create(section->container);
-    lv_obj_remove_style_all(section->spacer);
-    lv_obj_set_size(section->spacer, 1, section->h);
-    lv_obj_set_pos(section->spacer, 0, section->h - 1);
-    lv_obj_clear_flag(section->spacer, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_clear_flag(section->spacer, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_move_background(section->spacer);
-}
-
-static void page_02_scroll_section_total_page_refresh(page_02_scroll_section_t *section) // 刷新分区总页数
-{
-    if (section == NULL) return;
-
-    switch (section->section_id) {
-    case PAGE_02_SECTION_A:
-        section->total_row = page_02_a_valid_count_get();
-        page_02_a_report_status.total_page = (section->total_row == 0) ? 1 : ((section->total_row + PAGE_02_A_ITEM - 1) / PAGE_02_A_ITEM);
-        break;
-    case PAGE_02_SECTION_B:
-        section->total_row = page_02_b_valid_count_get();
-        page_02_b_report_status.total_page = (section->total_row == 0) ? 1 : ((section->total_row + PAGE_02_B_ITEM - 1) / PAGE_02_B_ITEM);
-        break;
-    case PAGE_02_SECTION_C:
-        section->total_row = counting_data_error_detail_count(counting_data_current());
-        page_02_c_report_status.total_page = (section->total_row == 0) ? 1 : ((section->total_row + PAGE_02_C_ITEM - 1) / PAGE_02_C_ITEM);
-        break;
-    default:
-        break;
-    }
-}
-
-static void page_02_scroll_section_spacer_refresh(page_02_scroll_section_t *section) // 刷新滚动内容高度
-{
-    lv_coord_t content_h;
-    lv_coord_t max_scroll_y;
-
-    if (section == NULL || section->spacer == NULL) return;
-
-    content_h = PAGE_02_SCROLL_ROW_Y_OFFSET + (lv_coord_t)section->total_row * PAGE_02_SCROLL_ROW_GAP;
-    content_h += PAGE_02_SCROLL_EDGE_BUFFER;
-    max_scroll_y = page_02_scroll_section_max_scroll_y_get(section);
-    if (content_h < section->h + max_scroll_y) {
-        content_h = section->h + max_scroll_y;
-    }
-    if (content_h < section->h) {
-        content_h = section->h;
-    }
-
-    if (section->spacer_y != content_h - 1) {
-        section->spacer_y = content_h - 1;
-        lv_obj_set_pos(section->spacer, 0, section->spacer_y);
-    }
-}
-
-static bool page_02_scroll_section_small_data(page_02_scroll_section_t *section) // 判断当前分区是否为小数据量
-{
-    if (section == NULL) return false;
-    return section->total_row <= section->page_size;
-}
-
-static uint16_t page_02_scroll_section_last_page_first_row_get(page_02_scroll_section_t *section) // 获取最后一页的起始行
-{
-    if (section == NULL) return 0;
-    if (section->total_row == 0) return 0;
-    if (section->total_row <= section->page_size) return 0;
-    return (uint16_t)(((section->total_row - 1) / section->page_size) * section->page_size);
-}
-
-static lv_coord_t page_02_scroll_section_real_bottom_scroll_y_get(page_02_scroll_section_t *section) // 获取真实内容底部的滚动位置
-{
-    lv_coord_t content_h;
-
-    if (section == NULL) return 0;
-
-    content_h = PAGE_02_SCROLL_ROW_Y_OFFSET + (lv_coord_t)section->total_row * PAGE_02_SCROLL_ROW_GAP;
-    content_h += PAGE_02_SCROLL_EDGE_BUFFER;
-    if (content_h <= section->h) {
-        return 0;
-    }
-
-    return content_h - section->h;
-}
-
-static lv_coord_t page_02_scroll_section_max_scroll_y_get(page_02_scroll_section_t *section) // 获取分区允许的最大滚动距离
-{
-    if (section == NULL) return 0;
-    if (page_02_scroll_section_small_data(section)) return 0;
-
-    return page_02_scroll_section_last_page_first_row_get(section) * PAGE_02_SCROLL_ROW_GAP
-        + PAGE_02_SCROLL_EDGE_BUFFER;
-}
-
-static void page_02_scroll_section_row_bind(page_02_scroll_section_t *section, uint16_t pool_row, int data_index) // 绑定滚动行内容
-{
-    int actual_index;
-
-    if (section == NULL || pool_row >= section->pool_row) return;
-
-    if (data_index < 0 || data_index >= section->total_row) {
-        for (int col = 0; col < section->col_count; col++) {
-            if (!lv_obj_has_flag(section->cell[pool_row][col], LV_OBJ_FLAG_HIDDEN)) {
-                lv_obj_add_flag(section->cell[pool_row][col], LV_OBJ_FLAG_HIDDEN);
-            }
-        }
-        return;
-    }
-
-    for (int col = 0; col < section->col_count; col++) {
-        if (lv_obj_has_flag(section->cell[pool_row][col], LV_OBJ_FLAG_HIDDEN)) {
-            lv_obj_clear_flag(section->cell[pool_row][col], LV_OBJ_FLAG_HIDDEN);
-        }
-        lv_obj_set_pos(section->cell[pool_row][col], section->col_x[col],
-            PAGE_02_SCROLL_ROW_Y_OFFSET + data_index * PAGE_02_SCROLL_ROW_GAP);
-    }
-
-    switch (section->section_id) {
-    case PAGE_02_SECTION_A:
-        lv_label_set_text_fmt(section->cell[pool_row][0], "%d", counting_data_current()->denom[data_index].value);
-        lv_label_set_text_fmt(section->cell[pool_row][1], "%d", counting_data_current()->denom[data_index].pcs);
-        lv_label_set_text_fmt(section->cell[pool_row][2], "%.0f", counting_data_current()->denom[data_index].amount);
-        break;
-    case PAGE_02_SECTION_B:
-        actual_index = page_02_b_nth_valid_index_get(data_index);
-        if (actual_index < 0) {
-            for (int col = 0; col < section->col_count; col++) {
-                if (!lv_obj_has_flag(section->cell[pool_row][col], LV_OBJ_FLAG_HIDDEN)) {
-                    lv_obj_add_flag(section->cell[pool_row][col], LV_OBJ_FLAG_HIDDEN);
-                }
-            }
-            return;
-        }
-        lv_label_set_text_fmt(section->cell[pool_row][0], "%d", data_index + 1);
-        lv_label_set_text(section->cell[pool_row][1], counting_data_current()->sn_str[actual_index]);
-        lv_label_set_text_fmt(section->cell[pool_row][2], "%d", counting_data_current()->denom_mix[actual_index]);
-        break;
-    case PAGE_02_SECTION_C:
-        lv_label_set_text_fmt(section->cell[pool_row][0], "%d", data_index + 1);
-        if (counting_data_current()->err_pcs != NULL) {
-            lv_label_set_text_fmt(section->cell[pool_row][1], "%d", counting_data_current()->err_pcs[data_index]);
-        } else {
-            lv_label_set_text(section->cell[pool_row][1], "-");
-        }
-        if (counting_data_current()->err_code != NULL) {
-            lv_label_set_text(section->cell[pool_row][2],
-                              counting_reject_reason_get(counting_data_current()->err_code[data_index]));
-        } else {
-            lv_label_set_text(section->cell[pool_row][2], "Unknown Error");
-        }
-        break;
-    default:
-        break;
-    }
-}
-
-static void page_02_scroll_section_rows_rotate(page_02_scroll_section_t *section, int delta)
-{
-    lv_obj_t *recycled[PAGE_02_SCROLL_COL_MAX];
-    int current_first;
-
-    if (section == NULL || delta == 0) return;
-
-    current_first = section->bound_first_row;
-    while (delta > 0) {
-        for (int col = 0; col < section->col_count; col++) {
-            recycled[col] = section->cell[0][col];
-        }
-        for (int row = 0; row < section->pool_row - 1; row++) {
-            for (int col = 0; col < section->col_count; col++) {
-                section->cell[row][col] = section->cell[row + 1][col];
-            }
-        }
-        for (int col = 0; col < section->col_count; col++) {
-            section->cell[section->pool_row - 1][col] = recycled[col];
-        }
-        current_first++;
-        page_02_scroll_section_row_bind(section, section->pool_row - 1,
-                                        current_first + section->pool_row - 1);
-        delta--;
-    }
-
-    while (delta < 0) {
-        for (int col = 0; col < section->col_count; col++) {
-            recycled[col] = section->cell[section->pool_row - 1][col];
-        }
-        for (int row = section->pool_row - 1; row > 0; row--) {
-            for (int col = 0; col < section->col_count; col++) {
-                section->cell[row][col] = section->cell[row - 1][col];
-            }
-        }
-        for (int col = 0; col < section->col_count; col++) {
-            section->cell[0][col] = recycled[col];
-        }
-        current_first--;
-        page_02_scroll_section_row_bind(section, 0, current_first);
-        delta++;
-    }
-}
-
-static void page_02_scroll_section_visible_refresh(page_02_scroll_section_t *section, bool parent_already_invalidated) // 刷新可见行
-{
-    lv_coord_t scroll_top;
-    int delta;
-    ui_update_batch_t batch;
-    uint16_t first_row;
-    uint16_t last_page_first_row;
-
-    if (section == NULL || section->container == NULL) return;
-
-    page_02_scroll_section_spacer_refresh(section);
-    scroll_top = lv_obj_get_scroll_top(section->container);
-    if (scroll_top < 0) {
-        scroll_top = 0;
-    }
-    first_row = (uint16_t)(scroll_top / PAGE_02_SCROLL_ROW_GAP);
-    last_page_first_row = page_02_scroll_section_last_page_first_row_get(section);
-    if (first_row > last_page_first_row) {
-        first_row = last_page_first_row;
-    }
-    section->first_row = first_row;
-    if (section->bound_first_row == first_row) {
-        return;
-    }
-
-    if (parent_already_invalidated) {
-        ui_update_batch_begin(&batch, section->container,
-                              UI_UPDATE_BATCH_COVERED_BY_PARENT);
-    } else {
-        memset(&batch, 0, sizeof(batch));
-    }
-
-    if (section->bound_first_row != UINT16_MAX) {
-        delta = (int)first_row - (int)section->bound_first_row;
-        if (delta > -(int)section->pool_row && delta < (int)section->pool_row) {
-            page_02_scroll_section_rows_rotate(section, delta);
-            section->bound_first_row = first_row;
-            ui_update_batch_end(&batch);
-            return;
-        }
-    }
-
-    for (uint16_t row = 0; row < section->pool_row; row++) {
-        page_02_scroll_section_row_bind(section, row, (int)first_row + row);
-    }
-    section->bound_first_row = first_row;
-    ui_update_batch_end(&batch);
-}
-
-static void page_02_scroll_section_status_refresh(page_02_scroll_section_t *section) // 根据滚动位置刷新页码
-{
-    uint8_t current_page;
-    lv_coord_t scroll_top;
-    lv_coord_t real_bottom_scroll_y;
-
-    if (section == NULL) return;
-
-    scroll_top = lv_obj_get_scroll_top(section->container);
-    if (scroll_top < 0) {
-        scroll_top = 0;
-    }
-    real_bottom_scroll_y = page_02_scroll_section_real_bottom_scroll_y_get(section);
-
-    // 最后一页条目不足一整页时，到达真实底部就应进入最后一页
-    if (!page_02_scroll_section_small_data(section)
-        && scroll_top >= real_bottom_scroll_y) {
-        current_page = (uint8_t)((section->total_row + section->page_size - 1) / section->page_size);
-    } else {
-        current_page = (section->first_row / section->page_size) + 1;
-    }
-    if (current_page < 1) current_page = 1;
-
-    switch (section->section_id) {
-    case PAGE_02_SECTION_A:
-        if (current_page > page_02_a_report_status.total_page) current_page = page_02_a_report_status.total_page;
-        if (page_02_a_report_status.curent_page == current_page) break;
-        page_02_a_report_status.curent_page = current_page;
-        page_02_a_page_num_refre();
-        break;
-    case PAGE_02_SECTION_B:
-        if (current_page > page_02_b_report_status.total_page) current_page = page_02_b_report_status.total_page;
-        if (page_02_b_report_status.curent_page == current_page) break;
-        page_02_b_report_status.curent_page = current_page;
-        page_02_b_page_num_refre();
-        break;
-    case PAGE_02_SECTION_C:
-        if (current_page > page_02_c_report_status.total_page) current_page = page_02_c_report_status.total_page;
-        if (page_02_c_report_status.curent_page == current_page) break;
-        page_02_c_report_status.curent_page = current_page;
-        page_02_c_page_num_refre();
-        break;
-    default:
-        break;
-    }
-}
-
-static void page_02_scroll_section_sync_to_status(page_02_scroll_section_t *section, bool anim_en) // 根据页码同步滚动位置
-{
-    uint16_t first_row = 0;
-
-    if (section == NULL || section->container == NULL) return;
-
-    switch (section->section_id) {
-    case PAGE_02_SECTION_A:
-        if (page_02_a_report_status.curent_page > 0) {
-            first_row = (page_02_a_report_status.curent_page - 1) * PAGE_02_A_ITEM;
-        }
-        break;
-    case PAGE_02_SECTION_B:
-        if (page_02_b_report_status.curent_page > 0) {
-            first_row = (page_02_b_report_status.curent_page - 1) * PAGE_02_B_ITEM;
-        }
-        break;
-    case PAGE_02_SECTION_C:
-        if (page_02_c_report_status.curent_page > 0) {
-            first_row = (page_02_c_report_status.curent_page - 1) * PAGE_02_C_ITEM;
-        }
-        break;
-    default:
-        break;
-    }
-
-    if (first_row > page_02_scroll_section_last_page_first_row_get(section)) {
-        first_row = page_02_scroll_section_last_page_first_row_get(section);
-    }
-
-    lv_obj_scroll_to_y(section->container, first_row * PAGE_02_SCROLL_ROW_GAP, anim_en ? LV_ANIM_ON : LV_ANIM_OFF);
-    page_02_scroll_section_visible_refresh(section, false);
-    page_02_scroll_section_status_refresh(section);
-}
-
-static void page_02_scroll_section_event_cb(lv_event_t *e) // 处理滚动与点击翻页
-{
-    lv_event_code_t code;
-    page_02_scroll_section_t *section;
-
-    if (e == NULL) return;
-
-    code = lv_event_get_code(e);
-    section = lv_event_get_user_data(e);
-    if (section == NULL) return;
-
-    if (code == LV_EVENT_PRESSED) {
-        lv_indev_t *indev = lv_event_get_indev(e);
-        if (indev == NULL) return;
-        lv_indev_get_point(indev, &section->press_point);
-        section->pressing = true;
-        section->press_moved = false;
-        return;
-    }
-
-    if (code == LV_EVENT_PRESSING) {
-        lv_indev_t *indev = lv_event_get_indev(e);
-        lv_point_t point;
-        lv_coord_t delta_x;
-        lv_coord_t delta_y;
-
-        if (indev == NULL) return;
-        lv_indev_get_point(indev, &point);
-        delta_x = LV_ABS(point.x - section->press_point.x);
-        delta_y = LV_ABS(point.y - section->press_point.y);
-        if (delta_x > 8 || delta_y > 8) {
-            section->press_moved = true;
-        }
-        return;
-    }
-
-    if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
-        section->pressing = false;
-        return;
-    }
-
-    if (code == LV_EVENT_SCROLL) {
-        page_02_scroll_section_visible_refresh(section, true);
-        page_02_scroll_section_status_refresh(section);
-        return;
-    }
-
-    if (code == LV_EVENT_SCROLL_END) {
-        if (section->pressing) {
-            page_02_scroll_section_visible_refresh(section, true);
-            page_02_scroll_section_status_refresh(section);
-            return;
-        }
-        if (page_02_scroll_section_small_data(section)) {
-            lv_obj_scroll_to_y(section->container, 0, LV_ANIM_ON);
-            page_02_scroll_section_visible_refresh(section, true);
-            page_02_scroll_section_status_refresh(section);
-            return;
-        }
-        if (section->section_id == PAGE_02_SECTION_A ||
-            section->section_id == PAGE_02_SECTION_C) {
-            lv_coord_t scroll_top;
-            lv_coord_t last_page_scroll_y;
-
-            scroll_top = lv_obj_get_scroll_top(section->container);
-            last_page_scroll_y = (lv_coord_t)page_02_scroll_section_last_page_first_row_get(section) * PAGE_02_SCROLL_ROW_GAP;
-            if (scroll_top > last_page_scroll_y) {
-                page_02_scroll_section_status_refresh(section);
-                page_02_scroll_section_sync_to_status(section, true);
-                return;
-            }
-        }
-        if (section->section_id == PAGE_02_SECTION_B) {
-            lv_coord_t scroll_top;
-            lv_coord_t last_page_scroll_y;
-
-            scroll_top = lv_obj_get_scroll_top(section->container);
-            last_page_scroll_y = (lv_coord_t)page_02_scroll_section_last_page_first_row_get(section) * PAGE_02_SCROLL_ROW_GAP;
-            if (scroll_top > last_page_scroll_y) {
-                page_02_scroll_section_status_refresh(section);
-                page_02_scroll_section_sync_to_status(section, true);
-                return;
-            }
-        }
-        page_02_scroll_section_visible_refresh(section, true);
-        page_02_scroll_section_status_refresh(section);
-        return;
-    }
-
-    if (code == LV_EVENT_CLICKED) {
-        section->press_moved = false;
-        return; //A/B/C都只保留滑动，不再通过点击翻页
-    }
-}
-
-static void page_02_a_page_refre(void)
-{
-    update_label_by_name(page_02_list_obj, page_02_list_len,
-                         "02_a_pcs_amount", "%d", counting_data_current()->total_pcs);
-    update_label_by_name(page_02_list_obj, page_02_list_len,
-                         "02_a_amount_total", "%.0f", counting_data_current()->total_amount);
-    page_02_list_section_refresh(PAGE_02_SECTION_A);
-}
-
-static void page_02_b_page_refre(void)
-{
-    if (page_02_list_len <= 0) return;
-    page_02_list_section_refresh(PAGE_02_SECTION_B);
-}
-
-static void page_02_c_page_refre(void)
-{
-    if (page_02_list_len <= 0) return;
-    page_02_list_section_refresh(PAGE_02_SECTION_C);
-}
-
-static void page_02_curr_refre(void)
-{
-    char curr_code[4];
-
-    currency_state_get_active_code(curr_code);
-    update_label_by_name(page_02_list_obj, page_02_list_len,
-                         "02_page_curr", "%s", curr_code);
-}
-
-static void page_02_a_page_num_refre(void)
-{
-    char page_text[16];
-
-    snprintf(page_text, sizeof(page_text), "%d/%d",
-             page_02_a_report_status.curent_page,
-             page_02_a_report_status.total_page);
-    update_label_by_name(page_02_list_obj, page_02_list_len,
-                         "02_a_page_refre", "%s", page_text);
-}
-
-static void page_02_b_page_num_refre(void)
-{
-    char page_text[16];
-    int valid_total = page_02_b_valid_count_get();
-
-    page_02_b_report_status.total_page = valid_total == 0
-        ? 1
-        : (valid_total + PAGE_02_B_ITEM - 1) / PAGE_02_B_ITEM;
-    if (page_02_b_report_status.curent_page < 1) {
-        page_02_b_report_status.curent_page = 1;
-    } else if (page_02_b_report_status.curent_page >
-               page_02_b_report_status.total_page) {
-        page_02_b_report_status.curent_page = page_02_b_report_status.total_page;
-    }
-
-    snprintf(page_text, sizeof(page_text), "%d/%d",
-             page_02_b_report_status.curent_page,
-             page_02_b_report_status.total_page);
-    update_label_by_name(page_02_list_obj, page_02_list_len,
-                         "02_b_page_refre", "%s", page_text);
-}
-
-static void page_02_c_page_num_refre(void)
-{
-    char page_text[16];
-
-    snprintf(page_text, sizeof(page_text), "%d/%d",
-             page_02_c_report_status.curent_page,
-             page_02_c_report_status.total_page);
-    update_label_by_name(page_02_list_obj, page_02_list_len,
-                         "02_c_page_refre", "%s", page_text);
-}
-
-void page_02_list_section_refresh(page_02_section_id_t section_id) // 刷新指定分区滚动内容
-{
-    page_02_scroll_section_t *section = page_02_scroll_section_get(section_id);
-
-    if (section == NULL || section->container == NULL || !lv_obj_is_valid(section->container)) return;
-    page_02_scroll_section_total_page_refresh(section);
-    section->bound_first_row = UINT16_MAX;
-    page_02_scroll_section_visible_refresh(section, false);
-    page_02_scroll_section_status_refresh(section);
-}
-
-void page_02_list_section_refresh_all(void) // 刷新全部分区滚动内容
-{
-    for (int i = 0; i < PAGE_02_SECTION_COUNT; i++) {
-        page_02_list_section_refresh((page_02_section_id_t)i);
-    }
-}
-
-static bool page_02_list_is_visible(void)
-{
-    return list_page != NULL && lv_obj_is_valid(list_page) &&
-           !lv_obj_has_flag(list_page, LV_OBJ_FLAG_HIDDEN);
-}
-
-void page_02_list_section_mark_dirty(page_02_section_id_t section_id)
-{
-    if (section_id < PAGE_02_SECTION_COUNT) {
-        g_page_02_dirty |= (1U << section_id);
-    }
-}
-
-void page_02_list_section_data_ready(page_02_section_id_t section_id)
-{
-    page_02_report_status_t *status = NULL;
-    int item_count;
-    int page_size;
-
-    switch (section_id) {
-    case PAGE_02_SECTION_A:
-        status = &page_02_a_report_status;
-        item_count = page_02_a_valid_count_get();
-        page_size = PAGE_02_A_ITEM;
-        break;
-    case PAGE_02_SECTION_B:
-        status = &page_02_b_report_status;
-        item_count = page_02_b_valid_count_get();
-        page_size = PAGE_02_B_ITEM;
-        break;
-    case PAGE_02_SECTION_C:
-        status = &page_02_c_report_status;
-        item_count = counting_data_error_detail_count(counting_data_current());
-        page_size = PAGE_02_C_ITEM;
-        break;
-    default:
-        return;
-    }
-
-    status->curent_page = 1;
-    status->total_page = item_count == 0 ? 1
-        : (item_count + page_size - 1) / page_size;
-
-    page_02_list_section_mark_dirty(section_id);
-    if (!page_02_list_is_visible()) {
-        return;
-    }
-
-    switch (section_id) {
-    case PAGE_02_SECTION_A:
-        page_02_a_page_refre();
-        page_02_a_page_num_refre();
-        break;
-    case PAGE_02_SECTION_B:
-        page_02_b_page_refre();
-        page_02_b_page_num_refre();
-        break;
-    case PAGE_02_SECTION_C:
-        page_02_c_page_refre();
-        page_02_c_page_num_refre();
-        break;
-    default:
-        break;
-    }
-    g_page_02_dirty &= ~(1U << section_id);
-}
-
-void page_02_list_report_reset(void)
-{
-    int sn_count = counting_data_serial_valid_count(counting_data_current());
-    int error_count = counting_data_error_detail_count(counting_data_current());
-
-    page_02_a_report_status.curent_page = 1;
-    page_02_a_report_status.total_page = counting_data_current()->denom_number == 0
-        ? 1 : (counting_data_current()->denom_number + PAGE_02_A_ITEM - 1) / PAGE_02_A_ITEM;
-    page_02_b_report_status.curent_page = 1;
-    page_02_b_report_status.total_page = sn_count == 0
-        ? 1 : (sn_count + PAGE_02_B_ITEM - 1) / PAGE_02_B_ITEM;
-    page_02_c_report_status.curent_page = 1;
-    page_02_c_report_status.total_page = error_count == 0
-        ? 1 : (error_count + PAGE_02_C_ITEM - 1) / PAGE_02_C_ITEM;
-}
-
-void page_02_list_section_scroll_to_page(page_02_section_id_t section_id, bool anim_en) // 按页码同步滚动位置
-{
-    page_02_scroll_section_t *section = page_02_scroll_section_get(section_id);
-
-    if (section == NULL) return;
-    page_02_scroll_section_total_page_refresh(section);
-    page_02_scroll_section_spacer_refresh(section);
-    page_02_scroll_section_sync_to_status(section, anim_en);
-}
-
-void page_02_list_section_page_step(page_02_section_id_t section_id, int step, bool anim_en) // 分区翻页，供点击与其它入口复用
-{
-    page_02_scroll_section_t *section = page_02_scroll_section_get(section_id);
-
-    if (section == NULL) return;
-    page_02_scroll_section_total_page_refresh(section);
-
-    switch (section_id) {
-    case PAGE_02_SECTION_A:
-        page_02_a_report_status.curent_page += step;
-        if (page_02_a_report_status.curent_page == 0) page_02_a_report_status.curent_page = page_02_a_report_status.total_page;
-        if (page_02_a_report_status.curent_page > page_02_a_report_status.total_page) page_02_a_report_status.curent_page = 1;
-        page_02_a_page_refre();
-        page_02_a_page_num_refre();
-        break;
-    case PAGE_02_SECTION_B:
-        page_02_b_report_status.curent_page += step;
-        if (page_02_b_report_status.curent_page == 0) page_02_b_report_status.curent_page = page_02_b_report_status.total_page;
-        if (page_02_b_report_status.curent_page > page_02_b_report_status.total_page) page_02_b_report_status.curent_page = 1;
-        page_02_b_page_refre();
-        page_02_b_page_num_refre();
-        break;
-    case PAGE_02_SECTION_C:
-        page_02_c_report_status.curent_page += step;
-        if (page_02_c_report_status.curent_page == 0) page_02_c_report_status.curent_page = page_02_c_report_status.total_page;
-        if (page_02_c_report_status.curent_page > page_02_c_report_status.total_page) page_02_c_report_status.curent_page = 1;
-        page_02_c_page_refre();
-        page_02_c_page_num_refre();
-        break;
-    default:
-        break;
-    }
-
-    page_02_list_section_scroll_to_page(section_id, anim_en);
-}
-
-
-
-void ui_page_02_list_create(lv_obj_t* parent)
-{
-    (void)parent;
-    page_02_list_report_reset();
-
-    //creat page_main 
-    if (list_page) return;
-    list_page = lv_obj_create(lv_scr_act());
-    lv_obj_remove_style_all(list_page);
-    lv_obj_set_pos(list_page, 0, 0);
-    lv_obj_set_size(list_page, 1280, 400);
-    lv_obj_clear_flag(list_page, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_scrollbar_mode(list_page, LV_SCROLLBAR_MODE_OFF); // 滚动条关闭
-
-    // 计算数组长度
-    page_02_list_len = sizeof(page_02_list_obj) / sizeof(ui_element_t);
-    
-    //创建图片
-    lv_ui_obj_init(list_page, page_02_list_obj, page_02_list_len);
-    page_02_action_skins_attach();
-    page_02_scroll_section_init_config();
-    for (int i = 0; i < PAGE_02_SECTION_COUNT; i++) {
-        page_02_scroll_section_create(&s_page_02_scroll_sections[i]);
-        perf_profile_watch_invalidation(
-            s_page_02_scroll_sections[i].container,
-            s_page_02_inv_names[i]);
-    }
-    page_02_a_page_refre();
-    page_02_b_page_refre();
-    page_02_c_page_refre();
-    page_02_curr_refre();
-    page_02_a_page_num_refre();
-    page_02_b_page_num_refre();
-    page_02_c_page_num_refre();
-    page_02_list_section_refresh_all();
-    currency_state_get_active_code(g_page_02_currency_code);
-    g_page_02_dirty = 0;
-
-}
-
-bool ui_page_02_list_resume(void)
-{
-    char active_code[4];
-    uint32_t dirty;
-    bool profile_enabled;
-    uint64_t profile_started_us = 0;
-
-    if (list_page == NULL || !lv_obj_is_valid(list_page)) {
+    lv_obj_t *o=surface(parent,x,y,27,27,0,0xFFFFFF);
+    if (!o) return false;
+    lv_obj_set_style_bg_opa(o,LV_OPA_TRANSP,0);
+    if (!lv_obj_add_event_cb(o,icon_draw,LV_EVENT_DRAW_MAIN,(void *)(uintptr_t)kind)) {
+        lv_obj_del(o);
         return false;
-    }
-
-    currency_state_get_active_code(active_code);
-    if (strncmp(active_code, g_page_02_currency_code, 3) != 0) {
-        g_page_02_dirty |= PAGE_02_DIRTY_CURRENCY;
-    }
-    dirty = g_page_02_dirty;
-    profile_enabled = perf_profile_is_enabled();
-    if (profile_enabled) {
-        profile_started_us = app_clock_monotonic_us();
-    }
-    lv_obj_clear_flag(list_page, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_move_foreground(list_page);
-    if (g_page_02_dirty & PAGE_02_DIRTY_SECTION_A) {
-        page_02_a_page_refre();
-        page_02_a_page_num_refre();
-    }
-    if (g_page_02_dirty & PAGE_02_DIRTY_SECTION_B) {
-        page_02_b_page_refre();
-        page_02_b_page_num_refre();
-    }
-    if (g_page_02_dirty & PAGE_02_DIRTY_SECTION_C) {
-        page_02_c_page_refre();
-        page_02_c_page_num_refre();
-    }
-    if (g_page_02_dirty & PAGE_02_DIRTY_CURRENCY) {
-        page_02_curr_refre();
-        memcpy(g_page_02_currency_code, active_code,
-               sizeof(g_page_02_currency_code));
-    }
-    g_page_02_dirty = 0;
-    if (profile_enabled) {
-        perf_profile_report_event_us(
-            "LIST", dirty == 0 ? "RESUME_CLEAN" : "RESUME_DIRTY",
-            app_clock_elapsed_us32(profile_started_us,
-                                   app_clock_monotonic_us()));
     }
     return true;
 }
-
-void ui_page_02_list_suspend(void)
+static lv_obj_t *button_create(lv_obj_t *parent,int x,int y,int w,int h,
+                               const lv_font_t *font,lv_event_cb_t cb,void *data)
 {
-    if (list_page == NULL || !lv_obj_is_valid(list_page)) {
-        return;
+    if (!parent || !font || !cb) return NULL;
+    const lv_damped_button_style_t style={0xFFFFFF,0xEBEBEB,0xF6F7F8,BODY,0xAAB5BE,12};
+    lv_obj_t *o=lv_damped_button_create(parent,&style,"",font);
+    if (!o) return NULL;
+    if (!lv_damped_button_get_label(o)) {
+        lv_obj_del(o);
+        return NULL;
     }
-
-    for (int i = 0; i < PAGE_02_SECTION_COUNT; i++) {
-        page_02_scroll_section_t *section = &s_page_02_scroll_sections[i];
-
-        section->pressing = false;
-        section->press_moved = false;
-        if (section->container && lv_obj_is_valid(section->container)) {
-            lv_anim_del(section->container, NULL);
+    lv_obj_set_pos(o,x,y); lv_obj_set_size(o,w,h);
+    lv_obj_set_style_border_width(o,1,0);
+    lv_obj_set_style_border_color(o,lv_color_hex(LINE),0);
+    if (!lv_obj_add_event_cb(o,cb,LV_EVENT_CLICKED,data)) {
+        lv_obj_del(o);
+        return NULL;
+    }
+    return o;
+}
+static lv_obj_t *row_create(lv_obj_t *parent,lv_coord_t width,void *context)
+{
+    list_section_t *s=context;
+    if (!parent || !s || !s->layout) return NULL;
+    lv_obj_t *row=surface(parent,0,0,width,ROW_HEIGHT,5,0xFFFFFF);
+    if (!row) return NULL;
+    for (unsigned col=0;col<3;++col) {
+        uint32_t color=col==0 && s->layout->id!=PAGE_02_SECTION_A ? MUTED : BODY;
+        if (s->layout->id==PAGE_02_SECTION_C && col==1) color=AMBER;
+        const lv_font_t *font=&lv_font_instrument_sans_medium_20;
+        bool small=col==0 && s->layout->id!=PAGE_02_SECTION_A;
+        if (small) font=&lv_font_instrument_sans_medium_14;
+        if (s->layout->id==PAGE_02_SECTION_C && col==2) font=&lv_font_instrument_sans_medium_18;
+        if (!label_create(row,s->layout->col_x[col],small ? 9 : 5,s->layout->col_w[col],28,
+                          font,color,s->layout->align[col])) {
+            lv_obj_del(row);
+            return NULL;
         }
     }
-    lv_obj_add_flag(list_page, LV_OBJ_FLAG_HIDDEN);
+    return row;
 }
+static void row_bind(lv_obj_t *row,uint32_t index,void *context)
+{
+    list_section_t *s=context;
+    const counting_sim_t *data=counting_data_current();
+    lv_obj_t *a=lv_obj_get_child(row,0),*b=lv_obj_get_child(row,1),*c=lv_obj_get_child(row,2);
+    lv_obj_set_style_bg_color(row,lv_color_hex(index%2 ? 0xF4F6F7 : 0xFFFFFF),0);
+    if (s->layout->id==PAGE_02_SECTION_A) {
+        const denom_t zero={0};
+        const denom_t *d=index<view->data.denom_count ? &data->denom[view->data.denom[index]] : &zero;
+        number_set(a,d->value,&lv_font_instrument_sans_medium_20);
+        number_set(b,d->pcs,&lv_font_instrument_sans_medium_20);
+        number_set(c,d->amount,&lv_font_instrument_sans_medium_20);
+    } else if (s->layout->id==PAGE_02_SECTION_B) {
+        int slot=index<view->data.serial_count ? view->data.serial[index] : -1;
+        number_set(a,index+1,&lv_font_instrument_sans_medium_14);
+        bool valid=slot>=0 && slot<counting_data_serial_scan_limit(data) && data->sn_str[slot];
+        text_set(b,valid ? data->sn_str[slot] : "");
+        number_set(c,valid ? data->denom_mix[slot] : 0,&lv_font_instrument_sans_medium_20);
+    } else {
+        bool valid=index<(uint32_t)counting_data_error_detail_count(data);
+        number_set(a,index+1,&lv_font_instrument_sans_medium_14);
+        number_set(b,valid ? data->err_pcs[index] : 0,&lv_font_instrument_sans_medium_20);
+        text_set(c,ui_text_counting_reject_reason(valid ? data->err_code[index] : UINT8_MAX));
+    }
+}
+static void range_changed(const ui_list_window_t *w,void *context)
+{
+    list_section_t *s=context;
+    if (!s->mode) return;
+    char text[64];
+    if (w->paged) snprintf(text,sizeof(text),ui_text_get(UI_TEXT_LIST_PAGE_FMT),
+                           (unsigned)ui_list_window_page_number(w),(unsigned)ui_list_window_pages(w));
+    else snprintf(text,sizeof(text),ui_text_get(UI_TEXT_LIST_RANGE_FMT),
+                  w->count ? (unsigned)w->first+1 : 0,(unsigned)ui_list_window_last(w),(unsigned)w->count);
+    text_set(s->range,text);
+    lv_damped_button_set_text(s->mode,ui_text_get(w->paged ? UI_TEXT_LIST_PAGES : UI_TEXT_LIST_SCROLL));
+    if (w->paged) {
+        lv_obj_clear_flag(s->previous,LV_OBJ_FLAG_HIDDEN); lv_obj_clear_flag(s->next,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_x(s->range,52); lv_obj_set_width(s->range,s->layout->width-212);
+    } else {
+        lv_obj_add_flag(s->previous,LV_OBJ_FLAG_HIDDEN); lv_obj_add_flag(s->next,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_x(s->range,20); lv_obj_set_width(s->range,s->layout->width-125);
+    }
+    lv_damped_button_set_enabled(s->previous,w->count && w->first>0);
+    lv_damped_button_set_enabled(s->next,ui_list_window_page_number(w)<ui_list_window_pages(w));
+    if (w->count) lv_obj_add_flag(s->empty,LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_clear_flag(s->empty,LV_OBJ_FLAG_HIDDEN);
+}
+static void mode_clicked(lv_event_t *e)
+{
+    list_section_t *s=lv_event_get_user_data(e);
+    const ui_list_window_t *w=lv_recycled_list_window(s->list);
+    if (w) lv_recycled_list_set_paged(s->list,!w->paged);
+}
+static void page_clicked(lv_event_t *e)
+{
+    list_section_t *s=lv_event_get_user_data(e);
+    lv_recycled_list_page_step(s->list,lv_event_get_target(e)==s->previous ? -1 : 1);
+}
+static bool section_create(list_section_t *s,const section_layout_t *layout)
+{
+    if (!view || !view->page || !s || !layout) return false;
+    s->layout=layout;
+    s->panel=surface(view->page,layout->x,12,layout->width,PANEL_HEIGHT,15,0xFFFFFF);
+    if (!s->panel) return false;
+    lv_obj_t *badge=surface(s->panel,18,16,24,24,7,0xF0F3F5);
+    if (!badge) return false;
+    lv_obj_t *letter=label_create(badge,0,3,24,22,&lv_font_instrument_sans_semibold_14,MUTED,LV_TEXT_ALIGN_CENTER);
+    if (!letter) return false;
+    text_set(letter,ui_text_get((ui_text_id_t)(UI_TEXT_PAGE01_DETAIL_BTN_A+layout->id)));
+    s->title=label_create(s->panel,52,16,layout->width-70,28,&lv_font_instrument_sans_semibold_20,INK,LV_TEXT_ALIGN_LEFT);
+    if (!s->title) return false;
+    for (int col=0;col<3;++col) {
+        s->headers[col]=label_create(s->panel,12+layout->col_x[col],54,layout->col_w[col],22,
+                                    &lv_font_instrument_sans_medium_12,MUTED,layout->align[col]);
+        if (!s->headers[col]) return false;
+    }
+    if (!surface(s->panel,12,75,layout->width-36,1,0,LINE) ||
+        !surface(s->panel,0,FOOTER_Y,layout->width,1,0,LINE)) return false;
+    if (layout->id==PAGE_02_SECTION_A) {
+        view->total_title=label_create(s->panel,22,FOOTER_Y+15,86,26,&lv_font_instrument_sans_semibold_14,BODY,LV_TEXT_ALIGN_LEFT);
+        view->pcs=label_create(s->panel,119,FOOTER_Y+10,74,32,&lv_font_instrument_sans_semibold_22,BODY,LV_TEXT_ALIGN_RIGHT);
+        view->amount=label_create(s->panel,209,FOOTER_Y+10,117,32,&lv_font_instrument_sans_semibold_22,BODY,LV_TEXT_ALIGN_RIGHT);
+        if (!view->total_title || !view->pcs || !view->amount) return false;
+    } else {
+        s->empty=label_create(s->panel,22,178,layout->width-58,48,&lv_font_instrument_sans_medium_16,MUTED,LV_TEXT_ALIGN_CENTER);
+        s->range=label_create(s->panel,20,FOOTER_Y+16,layout->width-125,24,&lv_font_instrument_sans_medium_14,MUTED,LV_TEXT_ALIGN_LEFT);
+        if (!s->empty || !s->range) return false;
+        s->mode=button_create(s->panel,layout->width-102,FOOTER_Y+5,90,38,
+                              &lv_font_instrument_sans_semibold_12,mode_clicked,s);
+        if (!s->mode) return false;
+        lv_obj_t *mode_label=lv_damped_button_get_label(s->mode);
+        lv_obj_set_width(mode_label,62);
+        lv_obj_set_style_text_align(mode_label,LV_TEXT_ALIGN_CENTER,0);
+        lv_obj_align(mode_label,LV_ALIGN_LEFT_MID,1,0);
+        if (!icon_create(s->mode,62,5,ICON_TOGGLE)) return false;
+        s->previous=button_create(s->panel,10,FOOTER_Y+5,36,38,&lv_font_instrument_sans_medium_14,page_clicked,s);
+        if (!s->previous) return false;
+        s->next=button_create(s->panel,layout->width-150,FOOTER_Y+5,36,38,&lv_font_instrument_sans_medium_14,page_clicked,s);
+        if (!s->next || !icon_create(s->previous,4,5,ICON_PREV) ||
+            !icon_create(s->next,4,5,ICON_NEXT)) return false;
+    }
+    const lv_recycled_list_config_t cfg={12,BODY_Y,layout->width-12,ROWS,ROW_HEIGHT,
+                                         row_create,row_bind,range_changed,s};
+    s->list=lv_recycled_list_create(s->panel,&cfg);
+    if (!s->list) return false;
+    /* Device input ownership is a platform registration, not a page rule in
+     * the reusable list. Raw edge/two-finger capture may still cancel it. */
+    lv_port_indev_set_drag_obj(lv_recycled_list_object(s->list),true);
+    if (s->empty) lv_obj_move_foreground(s->empty);
+    perf_profile_watch_invalidation(lv_recycled_list_object(s->list),inv_names[layout->id]);
+    return true;
+}
+static bool visible(void)
+{ return view && view->page && !lv_obj_has_flag(view->page,LV_OBJ_FLAG_HIDDEN); }
+static void translate(void)
+{
+    view->language=ui_lang_get();
+    text_set(view->total_title,ui_text_get(UI_TEXT_LIST_TOTAL));
+    text_set(view->reject_title,ui_text_get(UI_TEXT_LIST_REJECTED_NOTES));
+    const ui_text_id_t actions[]={UI_TEXT_LIST_HISTORY,UI_TEXT_LIST_PRINT,UI_TEXT_LIST_MAIN};
+    for (int i=0;i<3;++i) {
+        text_set(lv_damped_button_get_label(view->actions[i]),ui_text_get(actions[i]));
+        list_section_t *s=&view->section[i];
+        text_set(s->title,ui_text_get(s->layout->title));
+        for (int c=0;c<3;++c) text_set(s->headers[c],ui_text_get(s->layout->columns[c]));
+        if (s->empty) text_set(s->empty,ui_text_get(i==PAGE_02_SECTION_B ? UI_TEXT_LIST_NO_SERIAL_NUMBERS : UI_TEXT_LIST_NO_REJECT_DETAILS));
+    }
+}
+static void commit(void *context,uint32_t flags)
+{
+    (void)context; (void)flags;
+    if (!visible()) return;
+    const counting_sim_t *data=counting_data_current();
+    if (view->language!=ui_lang_get()) { translate(); dirty|=ALL_SECTIONS; }
+    uint32_t pending=dirty; dirty=0;
+    for (int i=0;i<PAGE_02_SECTION_COUNT;++i) {
+        if (!(pending&(1U<<i))) continue;
+        uint32_t count;
+        if (i==PAGE_02_SECTION_A) {
+            page_02_list_data_denoms(&view->data,data);
+            count=view->data.denom_count ? view->data.denom_count : 1;
+            number_set(view->pcs,data->total_pcs,&lv_font_instrument_sans_semibold_22);
+            number_set(view->amount,data->total_amount,&lv_font_instrument_sans_semibold_22);
+        } else if (i==PAGE_02_SECTION_B) {
+            page_02_list_data_serials(&view->data,data); count=view->data.serial_count;
+        } else {
+            count=counting_data_error_detail_count(data);
+            number_set(view->reject_count,counting_data_reject_pcs_count(data),&lv_font_instrument_sans_medium_32);
+        }
+        lv_recycled_list_refresh(view->section[i].list,count,(reset_positions&(1U<<i))!=0);
+        reset_positions&=~(1U<<i);
+    }
+}
+void page_02_list_section_mark_dirty(page_02_section_id_t id)
+{
+    if ((unsigned)id>=PAGE_02_SECTION_COUNT) return;
+    dirty|=1U<<id;
+    if (visible() && !ui_frame_commit_defer(commit,NULL,dirty)) commit(NULL,dirty);
+}
+void page_02_list_section_data_ready(page_02_section_id_t id)
+{ page_02_list_section_mark_dirty(id); }
+void page_02_list_report_reset(void)
+{
+    dirty=reset_positions=ALL_SECTIONS;
+    if (visible() && !ui_frame_commit_defer(commit,NULL,dirty)) commit(NULL,dirty);
+}
+void ui_page_02_list_create(lv_obj_t *parent)
+{
+    if (view) return;
+    view=lv_mem_alloc(sizeof(*view));
+    if (!view) return;
+    memset(view,0,sizeof(*view));
+    view->page=surface(parent ? parent : lv_scr_act(),0,0,1280,400,0,0xF1F3F5);
+    if (!view->page) goto creation_failed;
+    for (int i=0;i<PAGE_02_SECTION_COUNT;++i)
+        if (!section_create(&view->section[i],&layouts[i])) goto creation_failed;
+    const lv_event_cb_t callbacks[]={page_02_history_btn_event_cb,page_01_print_btn_event_cb,page_01_back_btn_event_cb};
+    const int positions[]={12,112,300};
+    for (int i=0;i<3;++i) {
+        view->actions[i]=button_create(view->page,1168,positions[i],96,88,
+            &lv_font_instrument_sans_semibold_12,callbacks[i],NULL);
+        if (!view->actions[i]) goto creation_failed;
+        lv_obj_t *label=lv_damped_button_get_label(view->actions[i]);
+        if (!label) goto creation_failed;
+        lv_obj_set_size(label,90,23); lv_obj_align(label,LV_ALIGN_BOTTOM_MID,0,-6);
+        lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_CENTER,0);
+        if (!icon_create(view->actions[i],35,17,i)) goto creation_failed;
+    }
+    view->reject_count=label_create(view->page,1170,215,92,40,&lv_font_instrument_sans_medium_32,AMBER,LV_TEXT_ALIGN_CENTER);
+    view->reject_title=label_create(view->page,1175,260,82,32,&lv_font_instrument_sans_medium_10,MUTED,LV_TEXT_ALIGN_CENTER);
+    if (!view->reject_count || !view->reject_title) goto creation_failed;
+    lv_label_set_long_mode(view->reject_title,LV_LABEL_LONG_WRAP);
+    translate(); page_02_list_report_reset();
+    return;
 
+creation_failed:
+    ui_page_02_list_destroy();
+}
+bool ui_page_02_list_resume(void)
+{
+    if (!view || !view->page) return false;
+    lv_obj_clear_flag(view->page,LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(view->page);
+    /* Reentry also covers prewarm before runtime notifications existed. Keep
+     * anchors/modes unless a real result reset has requested otherwise. */
+    dirty|=ALL_SECTIONS; commit(NULL,dirty);
+    return true;
+}
+void ui_page_02_list_suspend(void)
+{
+    if (!view) return;
+    ui_frame_commit_cancel(commit,NULL);
+    for (int i=0;i<PAGE_02_SECTION_COUNT;++i) lv_recycled_list_stop(view->section[i].list);
+    if (view->page) lv_obj_add_flag(view->page,LV_OBJ_FLAG_HIDDEN);
+}
 void ui_page_02_list_destroy(void)
 {
-    for (int i = 0; i < PAGE_02_SECTION_COUNT; i++) {
-        perf_profile_unwatch_invalidation(
-            s_page_02_scroll_sections[i].container);
-    }
-    memset(s_page_02_scroll_sections, 0, sizeof(s_page_02_scroll_sections));
-    page_02_action_skins_release();
-    if (list_page) {
-        lv_obj_del(list_page);
-        list_page = NULL;
-    }
-    memset(g_page_02_currency_code, 0, sizeof(g_page_02_currency_code));
-    g_page_02_dirty = PAGE_02_DIRTY_ALL;
+    if (!view) return;
+    ui_page_02_list_suspend();
+    for (int i=0;i<PAGE_02_SECTION_COUNT;++i)
+        perf_profile_unwatch_invalidation(lv_recycled_list_object(view->section[i].list));
+    if (view->page) lv_obj_del(view->page);
+    lv_mem_free(view); view=NULL;
+    dirty=reset_positions=ALL_SECTIONS;
 }

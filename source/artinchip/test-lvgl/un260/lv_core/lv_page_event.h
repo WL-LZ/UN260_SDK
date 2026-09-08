@@ -50,12 +50,6 @@ void page_03_work_mode_event_cb(lv_event_t* e);
 void page_03_update_menu_button_states_refresh(void);
 void page_03_function_button_cache_reset(void);
 //PAGE03 翻页
-void page_03_a_up_event_cb(lv_event_t* e);
-void page_03_a_down_event_cb(lv_event_t* e);
-void page_03_b_up_event_cb(lv_event_t* e);
-void page_03_b_down_event_cb(lv_event_t* e);
-void page_03_c_up_event_cb(lv_event_t* e);
-void page_03_c_down_event_cb(lv_event_t* e);
 //PAGE 07 货币切换
 
 
