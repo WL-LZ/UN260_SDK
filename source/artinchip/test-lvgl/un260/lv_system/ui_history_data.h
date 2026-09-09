@@ -2,6 +2,7 @@
 #define UI_HISTORY_DATA_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "un260/counting/counting_data_types.h"
@@ -48,6 +49,9 @@ bool ui_history_data_poll(uint32_t now_ms);
 storage_job_id_t ui_history_last_commit_id(void);
 storage_job_status_t ui_history_commit_status(storage_job_id_t id);
 storage_job_status_t ui_history_data_status(void);
+/* False after a failed boot read; the original index is preserved and history
+ * writes are disabled until a successful load on the next application start. */
+bool ui_history_data_is_available(void);
 bool ui_history_data_can_accept(void);
 bool ui_history_record_build_from_session(const counting_sim_t *sim_data,
     uint32_t pcs_total, float amount_total, const char *error_frame_text,
@@ -71,6 +75,9 @@ int ui_history_record_selected_count_get(void);
 void ui_history_record_clear_selected(void);
 void ui_history_record_set_all_selected(bool selected);
 bool ui_history_record_delete_selected(void);
+/* Delete exactly these stable IDs in one accepted snapshot. Every ID must be
+ * unique, nonzero and present; invalid input is rejected without any change. */
+bool ui_history_record_delete_records(const uint32_t *record_nos, size_t count);
 bool ui_history_record_get(uint8_t index, ui_history_record_t *out);
 bool ui_history_record_get_by_no(uint32_t record_no, ui_history_record_t *out);
 #endif

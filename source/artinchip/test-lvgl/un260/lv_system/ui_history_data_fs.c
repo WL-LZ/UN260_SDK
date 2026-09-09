@@ -406,6 +406,28 @@ static void history_insert_front(const ui_history_record_t *rec)
     g_history_store.record_count++;
 }
 
+static uint8_t history_next_available_slot(void)
+{
+    bool occupied[UI_HISTORY_MAX_RECORDS + 1] = { false };
+    uint8_t candidate = g_history_store.next_slot_no;
+    int i;
+
+    /* Records remain newest-first even when the machine clock is adjusted.
+     * A full store replaces its oldest record, never an arbitrary cursor slot. */
+    if (g_history_store.record_count >= UI_HISTORY_MAX_RECORDS) {
+        return g_history_store.records[g_history_store.record_count - 1].slot_no;
+    }
+    for (i = 0; i < g_history_store.record_count; i++) {
+        occupied[g_history_store.records[i].slot_no] = true;
+    }
+    if (candidate == 0 || candidate > UI_HISTORY_MAX_RECORDS) candidate = 1;
+    for (i = 0; i < UI_HISTORY_MAX_RECORDS; i++) {
+        if (!occupied[candidate]) return candidate;
+        candidate = (uint8_t)(candidate % UI_HISTORY_MAX_RECORDS + 1);
+    }
+    return 0;
+}
+
 static void history_record_defaults(ui_history_record_t *rec)
 {
     if (rec == NULL) {
@@ -775,10 +797,13 @@ static void history_load_from_file(void)
     bool record_count_seen = false;
 
     history_store_reset();
+    g_history_loaded = false;
 
     fp = fopen(UI_HISTORY_INDEX_PATH, "r");
     if (fp == NULL) {
-        g_history_loaded = true;
+        /* Only a genuinely absent index is a new empty store. Treating a
+         * permission/device error as empty would overwrite saved history. */
+        g_history_loaded = errno == ENOENT;
         return;
     }
 
@@ -887,7 +912,7 @@ static void history_load_from_file(void)
         history_store_reset();
     }
 
-    g_history_loaded = true;
+    g_history_loaded = file_valid;
 }
 
 static bool history_load_job(const void *snapshot, size_t size)
@@ -895,6 +920,8 @@ static bool history_load_job(const void *snapshot, size_t size)
     (void)snapshot;
     (void)size;
     history_load_from_file();
+    /* The read attempt completed; availability is reported separately. Keep
+     * corrupt/unreadable history from pinning the shared worker's FIFO lane. */
     return true;
 }
 
@@ -986,6 +1013,12 @@ bool ui_history_data_can_accept(void)
            g_history_job_count < STORAGE_WORKER_CAPACITY && storage_worker_has_capacity();
 }
 
+bool ui_history_data_is_available(void)
+{
+    history_ensure_loaded();
+    return g_history_loaded;
+}
+
 const ui_history_store_t *ui_history_data_get(void)
 {
     history_ensure_loaded();
@@ -1066,8 +1099,8 @@ bool ui_history_record_append_snapshot(const ui_history_record_t *record,
     if (record == NULL || !record->valid || !ui_history_data_can_accept() ||
         g_history_store.next_record_no == UINT32_MAX) return false;
     rec = *record;
-    slot_no = g_history_store.next_slot_no;
-    if (slot_no == 0 || slot_no > UI_HISTORY_MAX_RECORDS) slot_no = 1;
+    slot_no = history_next_available_slot();
+    if (slot_no == 0 || slot_no > UI_HISTORY_MAX_RECORDS) return false;
     rec.slot_no = slot_no;
     rec.record_no = g_history_store.next_record_no;
     history_insert_front(&rec);
@@ -1168,45 +1201,60 @@ void ui_history_record_set_all_selected(bool selected)
     if (changed) (void)history_submit_or_restore();
 }
 
-bool ui_history_record_delete_selected(void)
+static bool history_delete_marked(const bool remove[UI_HISTORY_MAX_RECORDS])
 {
-    ui_history_record_t kept[UI_HISTORY_MAX_RECORDS];
     int kept_count = 0;
     int i;
-    uint32_t next_record_no = 1;
-
-    history_ensure_loaded();
 
     for (i = 0; i < g_history_store.record_count; i++) {
-        if (g_history_store.records[i].selected) {
+        if (remove[i]) {
             continue;
         }
-        if (kept_count < UI_HISTORY_MAX_RECORDS) {
-            kept[kept_count++] = g_history_store.records[i];
-        }
+        if (kept_count != i)
+            g_history_store.records[kept_count] = g_history_store.records[i];
+        kept_count++;
     }
 
     if (kept_count == (int)g_history_store.record_count) {
         return false;
     }
 
-    for (i = 0; i < kept_count; i++) {
-        kept[i].selected = false;
-        kept[i].slot_no = (uint8_t)(i + 1);
-        if (kept[i].record_no >= next_record_no) {
-            next_record_no = kept[i].record_no + 1;
-        }
-    }
-
-    memset(g_history_store.records, 0, sizeof(g_history_store.records));
-    for (i = 0; i < kept_count; i++) {
-        g_history_store.records[i] = kept[i];
-    }
+    memset(&g_history_store.records[kept_count], 0,
+           (UI_HISTORY_MAX_RECORDS - kept_count) * sizeof(g_history_store.records[0]));
     g_history_store.record_count = (uint8_t)kept_count;
-    g_history_store.next_slot_no = (uint8_t)((kept_count >= UI_HISTORY_MAX_RECORDS) ? 1 : (kept_count + 1));
-    g_history_store.next_record_no = next_record_no;
+    g_history_store.next_slot_no = history_next_available_slot();
+    /* Keep surviving slot identities and the monotonic record number, even
+     * after deleting every record. Reusing a deleted ID targets the wrong item
+     * in an open detail view or in a saved selection/search result. */
 
     return history_submit_or_restore();
+}
+
+bool ui_history_record_delete_selected(void)
+{
+    bool remove[UI_HISTORY_MAX_RECORDS] = { false };
+    history_ensure_loaded();
+    if (!ui_history_data_can_accept()) return false;
+    for (size_t i = 0; i < g_history_store.record_count; ++i)
+        remove[i] = g_history_store.records[i].selected;
+    return history_delete_marked(remove);
+}
+
+bool ui_history_record_delete_records(const uint32_t *record_nos, size_t count)
+{
+    bool remove[UI_HISTORY_MAX_RECORDS] = { false };
+    history_ensure_loaded();
+    if (!record_nos || count == 0 || count > UI_HISTORY_MAX_RECORDS ||
+        !ui_history_data_can_accept()) return false;
+    for (size_t requested = 0; requested < count; ++requested) {
+        if (record_nos[requested] == 0) return false;
+        size_t index = 0;
+        while (index < g_history_store.record_count &&
+               g_history_store.records[index].record_no != record_nos[requested]) ++index;
+        if (index == g_history_store.record_count || remove[index]) return false;
+        remove[index] = true;
+    }
+    return history_delete_marked(remove);
 }
 
 bool ui_history_record_get(uint8_t index, ui_history_record_t *out)

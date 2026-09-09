@@ -70,3 +70,48 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
     (state / "meta.cfg").write_text("corrupt metadata mirror\n")
     assert dump() == after_rename, "Self-contained v2 index remains the only recovery authority"
     print("PASS: fresh-process v2 recovery, before-fsync/before-rename/after-rename interruption models, stale-mirror isolation")
+
+    subprocess.run([str(binary), "retention"], check=True)
+    retained = dump()
+    assert retained == (20, after_rename[1] + 23, after_rename[2] + 23)
+
+    def record_fields():
+        return dict(line.split("=", 1) for line in authoritative.read_text().splitlines())
+
+    before = record_fields()
+    oldest_id = int(before["record19_record_no"])
+    oldest_slot = before["record19_slot_no"]
+    subprocess.run([str(binary), "append-one"], check=True)
+    after = record_fields()
+    assert int(after["record00_record_no"]) == retained[2]
+    assert after["record00_slot_no"] == oldest_slot
+    assert oldest_id not in [int(after[f"record{i:02d}_record_no"]) for i in range(20)]
+    assert dump() == (20, retained[1] + 1, retained[2] + 1)
+
+    subprocess.run([str(binary), "delete-all"], check=True)
+    empty = dump()
+    assert empty == (0, retained[1] + 1, retained[2] + 1)
+    subprocess.run([str(binary), "append-one"], check=True)
+    assert dump() == (1, empty[1] + 1, empty[2] + 1)
+    assert int(record_fields()["record00_record_no"]) == empty[2]
+    print("PASS: retention and delete-all survive fresh-process reload without record ID reuse")
+
+    healthy_index = authoritative.read_bytes()
+    healthy_state = dump()
+    for command in ("load-eio", "load-eacces", "load-read-error"):
+        subprocess.run([str(binary), command], check=True)
+        assert authoritative.read_bytes() == healthy_index
+        assert dump() == healthy_state
+    for corrupt_index in (b"invalid index\n", healthy_index[:-1],
+                          healthy_index.replace(b"version=2\n", b"version=999\n")):
+        authoritative.write_bytes(corrupt_index)
+        subprocess.run([str(binary), "load-corrupt"], check=True)
+        assert authoritative.read_bytes() == corrupt_index
+        # Repair is simulated only in this temporary fixture. Production never
+        # replaces or migrates an unreadable index automatically.
+        authoritative.write_bytes(healthy_index)
+        assert dump() == healthy_state
+    print("PASS: EIO/EACCES/read failure/corrupt index protection and recovery on restart")
+    subprocess.run([str(binary), "delete-records"], check=True)
+    assert dump() == (0, healthy_state[1] + 20, healthy_state[2] + 20)
+    print("PASS: stable-ID batch deletion remains committed after fresh-process reload")
