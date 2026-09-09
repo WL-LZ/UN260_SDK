@@ -115,6 +115,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/diagnostic/diagnostic.c
     un260/history/history_export_sn_parser.c
     un260/history/history_record_detail.c
+    un260/history/history_query.c
     un260/counting/counting_serial_text.c
     un260/history/history_export_text.c
     un260/currency/currency_state.c
@@ -168,6 +169,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_core/page_17_motor_test.c
     un260/lv_core/page_18_pure.c
     un260/lv_core/page_19_history.c
+    un260/lv_core/page_19_history_search.c
     un260/lv_core/page_33_set_brightness.c
     un260/lv_core/page_20_set_print.c
     un260/lv_core/page_21_set_language.c
