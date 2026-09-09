@@ -47,3 +47,41 @@ lv_obj_t *lv_nav_button_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
     }
     return button;
 }
+
+static void nav_home_icon_draw(lv_event_t *event)
+{
+    static const uint8_t lines[][4] = {
+        {2,12,13,2}, {13,2,24,12}, {4,10,4,24},
+        {4,24,22,24}, {22,24,22,10}
+    };
+    lv_obj_t *icon = lv_event_get_target(event);
+    lv_area_t area;
+    lv_obj_get_coords(icon, &area);
+    lv_draw_ctx_t *ctx = lv_event_get_draw_ctx(event);
+    lv_draw_line_dsc_t dsc;
+    lv_draw_line_dsc_init(&dsc);
+    lv_obj_init_draw_line_dsc(icon, LV_PART_MAIN, &dsc);
+    for(unsigned i = 0; i < sizeof(lines) / sizeof(lines[0]); ++i) {
+        lv_point_t from = {area.x1 + lines[i][0], area.y1 + lines[i][1]};
+        lv_point_t to = {area.x1 + lines[i][2], area.y1 + lines[i][3]};
+        lv_draw_line(ctx, &dsc, &from, &to);
+    }
+}
+
+lv_obj_t *lv_nav_home_icon_create(lv_obj_t *parent)
+{
+    if(!parent) return NULL;
+    lv_obj_t *icon = lv_obj_create(parent);
+    if(!icon) return NULL;
+    lv_obj_remove_style_all(icon);
+    lv_obj_set_size(icon, 27, 27);
+    lv_obj_set_style_line_color(icon, lv_color_hex(0x657F90), 0);
+    lv_obj_set_style_line_width(icon, 2, 0);
+    lv_obj_set_style_line_rounded(icon, true, 0);
+    lv_obj_clear_flag(icon, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    if(!lv_obj_add_event_cb(icon, nav_home_icon_draw, LV_EVENT_DRAW_MAIN, NULL)) {
+        lv_obj_del(icon);
+        return NULL;
+    }
+    return icon;
+}

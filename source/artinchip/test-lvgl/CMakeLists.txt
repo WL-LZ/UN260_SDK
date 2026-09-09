@@ -79,6 +79,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_components/ui_list_window.c
     un260/lv_components/lv_recycled_list.c
     un260/lv_core/page_02_list_data.c
+    un260/lv_core/page_02_list_search.c
     un260/app_service/setting_service.c
     un260/lv_system/app_clock.c
     un260/app_service/app_boot_runtime.c
@@ -94,6 +95,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/counting/counting_control_reply.c
     un260/counting/counting_action_service.c
     un260/counting/counting_data_store.c
+    un260/counting/counting_serial_query.c
     un260/counting/counting_denom_query_service.c
     un260/counting/counting_denom_reply.c
     un260/counting/counting_history_service.c
@@ -112,6 +114,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/data_collection/data_collection.c
     un260/diagnostic/diagnostic.c
     un260/history/history_export_sn_parser.c
+    un260/counting/counting_serial_text.c
     un260/history/history_export_text.c
     un260/currency/currency_state.c
     un260/currency/currency_service.c
@@ -143,6 +146,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_components/lv_nav_button.c
     un260/lv_components/lv_pin_input.c
     un260/lv_components/lv_pin_keypad.c
+    un260/lv_components/lv_alnum_keyboard.c
     un260/lv_core/settings_detail_ui.c
     un260/lv_core/page_07_curr.c
     un260/lv_core/page_07_curr/page_07_curr_model.c
