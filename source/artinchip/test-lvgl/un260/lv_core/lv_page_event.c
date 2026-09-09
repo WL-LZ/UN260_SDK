@@ -575,7 +575,6 @@ void page_03_batch_num_keypad_event_cb(lv_event_t* e)
 void page_03_batch_num_keypad_clear_event_cb(lv_event_t* e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    page_03_menu_icon_feedback("page_03_ok_icon.png");
     page_03_batch_num_edit_reset();
 }
 
@@ -585,7 +584,6 @@ void page_03_batch_num_keypad_clear_event_cb(lv_event_t* e)
 void page_03_batch_num_keypad_enter_event_cb(lv_event_t* e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    page_03_menu_icon_feedback("page_03_del_icon.png");
 
     page_03_menu_clear_batch_tip();
     int num = 0;
@@ -709,7 +707,6 @@ void page_03_update_menu_button_states_refresh(void)
     #undef PAGE_03_APPLY_FUNCTION_BTN
 
     page_03_menu_sync_button_skins();
-    page_03_menu_preview_refresh();
 }
 
 // BEEP 模式（复用原 CFD 回调）
@@ -725,7 +722,6 @@ void page_03_cfd_mode_event_cb(lv_event_t* e)
     }
 
     if (!setting_service_request_beep(target)) return;
-    page_03_menu_function_feedback(0, target);
 #if LV_DEBUG
     printf("BEEP mode request -> %s\n", target ? "ON" : "OFF");
 #endif
@@ -741,7 +737,6 @@ void page_03_speed_mode_event_cb(lv_event_t* e)
     /* ================== 0x16 设置清分机点钞速度 ================== */
     /* 协议定义：0x01=1000张/分钟, 0x02=800张/分钟, 0x03=600张/分钟 */
     if (!setting_service_request_speed(speed_code)) return;
-    page_03_menu_function_feedback(1, speed_code);
 #if LV_DEBUG
     printf("速度模式请求切换到： %u\n", speed_code);
 #endif // LV_DEBUG
@@ -758,7 +753,6 @@ void page_03_add_mode_event_cb(lv_event_t* e)
 
     if (target == machine_state_add_enabled()) return;
     if (!setting_service_request_add(target)) return;
-    page_03_menu_function_feedback(2, target);
 #if LV_DEBUG
     printf("ADD模式请求切换为：%s\n", target ? "ON" : "OFF");
 #endif // LV_DEBUG
@@ -775,7 +769,6 @@ void page_03_fo_mode_event_cb(lv_event_t* e)
         /* 协议第31条：菜单页直接发送 0~3 编码 */
         if (!setting_service_request_fo_mode(fo_code)) return;
     }
-    page_03_menu_function_feedback(3, fo_code);
 #if LV_DEBUG
     char* fo[] = {"OFF","F","O","F/O"};
     printf("F/O 模式请求切换为：%s\n", fo[fo_code]);
@@ -793,7 +786,6 @@ void page_03_work_mode_event_cb(lv_event_t* e)
     uint8_t word_code = atoi(word_str);
     if (word_code >= WORK_MODE || word_code == machine_state_work_mode()) return;
     if (!setting_service_request_work_mode(word_code)) return;
-    page_03_menu_function_feedback(4, word_code);
 #if LV_DEBUG
     printf("工作模式请求切换为：%s\n", (word_code > 0) ? "MANUAL" : "AUTO");
 #endif // LV_DEBUG

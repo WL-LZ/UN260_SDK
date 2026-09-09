@@ -8,6 +8,7 @@
 #include "un260/lv_components/smart_island.h"
 #include "un260/lv_core/lv_page_event.h"
 #include "un260/lv_core/page_03_menu.h"
+#include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/page_07_curr.h"
 #include "un260/lv_drivers/lv_drivers.h"
 #include "un260/lv_core/page_01_main.h"
@@ -51,6 +52,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
             }
             page_01_curr_img_refre();
             page_07_curr_apply_mode_result(requested_mode, true);
+            ui_manager_publish_data_changed(UI_DATA_TOPIC_MACHINE_SETTINGS);
             actions = (app_setting_reply_action_t)(actions |
                       APP_SETTING_REPLY_ACTION_SCHEDULE_MODE_CLEAR);
             uart_debug_printf("Set work mode success\n");
@@ -89,6 +91,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
             }
             page_01_curr_img_refre();
             uart_debug_printf("Boot work mode: 0x%02X\n", protocol_mode);
+            ui_manager_publish_data_changed(UI_DATA_TOPIC_MACHINE_SETTINGS);
             smart_island_refresh_summary();
         }
         break;

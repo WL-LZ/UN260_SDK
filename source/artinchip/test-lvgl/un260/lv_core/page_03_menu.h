@@ -10,13 +10,11 @@ void ui_page_03_menu_suspend(void);
 bool page_03_menu_is_created(void);
 bool page_03_menu_is_visible(void);
 lv_obj_t *page_03_menu_find_obj(const char *name);
-void page_03_menu_icon_feedback(const char *name);
 void switch_to_amount_batch(void);
 void switch_to_pcs_batch(void);
 void toggle_batch_mode(void);
-void page_03_menu_function_focus(uint8_t function);
-void page_03_menu_function_feedback(uint8_t function, uint8_t value);
-void page_03_menu_preview_refresh(void);
+/* Page-manager data subscription; refresh only the confirmed context summary. */
+void ui_page_03_menu_refresh_data(uint32_t topics);
 void page_03_menu_clear_batch_tip(void);
 void page_03_menu_show_batch_saved_tip(void);
 void page_03_menu_refresh_batch_number(void);

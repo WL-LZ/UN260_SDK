@@ -12,6 +12,7 @@
 #include "un260/currency/currency_reply.h"
 #include "un260/currency/currency_state.h"
 #include "un260/lv_core/page_01_main.h"
+#include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/page_07_curr.h"
 #include "un260/lv_components/smart_island.h"
 #include "un260/lv_drivers/lv_drivers.h"
@@ -53,6 +54,7 @@ void app_currency_runtime_handle_reply(counting_detail_state_t *detail_state,
                                         app_clock_uptime_ms())) return;
     reply = currency_reply_handle(buf, len);
     if (reply.kind == CURRENCY_REPLY_SWITCH_SUCCESS) {
+        ui_manager_publish_data_changed(UI_DATA_TOPIC_CURRENCY_CATALOG);
         if (!app_counting_runtime_reset_session(session, "currency change")) return;
         sim_reset_for_currency(counting_data_mutable());
         counting_action_cancel_all();
@@ -73,6 +75,7 @@ void app_currency_runtime_handle_reply(counting_detail_state_t *detail_state,
             currency_state_confirm_auto_selection();
         }
         uart_debug_printf("Boot curr: %s\n", reply.active_code);
+        ui_manager_publish_data_changed(UI_DATA_TOPIC_CURRENCY_CATALOG);
         if (!app_counting_runtime_reset_session(session, "boot currency sync")) return;
         sim_reset_for_currency(counting_data_mutable());
         detail_state->wait_sn_after_reject_end = false;

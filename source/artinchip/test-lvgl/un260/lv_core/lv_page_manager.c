@@ -203,6 +203,8 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .cache_policy = UI_PAGE_RETAINED,
         .static_images = g_page_menu_static_images,
         .static_image_count = UI_ARRAY_SIZE(g_page_menu_static_images),
+        .data_topics = UI_DATA_TOPIC_CURRENCY_CATALOG | UI_DATA_TOPIC_MACHINE_SETTINGS,
+        .refresh_data = ui_page_03_menu_refresh_data,
     },
     [UI_PAGE_SETTING] = {
         .create = ui_page_06_settings_create,

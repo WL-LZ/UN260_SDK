@@ -135,8 +135,17 @@ bool app_protocol_runtime_handle_reply(uint8_t cmd,
 
     case 0x58:
     case 0x56:
-        startup_sync_reply_dispatch(cmd, buf, len);
+    {
+        startup_sync_reply_result_t result = startup_sync_reply_dispatch(cmd, buf, len);
+        /* Late startup replies are valid after the boot page has closed too.
+         * Publish only accepted model changes; the page manager coalesces them
+         * into the visible page's next frame and retains hidden-page dirtiness. */
+        if (cmd == 0x56 && result == STARTUP_SYNC_REPLY_END)
+            ui_manager_publish_data_changed(UI_DATA_TOPIC_CURRENCY_CATALOG);
+        if (cmd == 0x58 && result == STARTUP_SYNC_REPLY_DATA && buf[4] == 0x01)
+            ui_manager_publish_data_changed(UI_DATA_TOPIC_MACHINE_SETTINGS);
         return true;
+    }
 
     default:
         return false;
