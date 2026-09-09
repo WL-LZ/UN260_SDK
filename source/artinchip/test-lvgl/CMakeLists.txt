@@ -114,6 +114,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/data_collection/data_collection.c
     un260/diagnostic/diagnostic.c
     un260/history/history_export_sn_parser.c
+    un260/history/history_record_detail.c
     un260/counting/counting_serial_text.c
     un260/history/history_export_text.c
     un260/currency/currency_state.c
