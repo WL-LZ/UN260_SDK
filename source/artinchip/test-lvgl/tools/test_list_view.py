@@ -73,6 +73,7 @@ def main():
         command = [compiler, "-std=c11", "-O1", "-g", "-Wall", "-Wextra",
                    "-DLV_DRV_CONF_H",  # Hardware driver config is not a host raster configuration.
                    "-fsanitize=undefined", "-fno-sanitize-recover=all",
+                   "-Wl,--wrap=lv_timer_create",  # Test-only motion timer allocation failure.
                    f"-I{work}", f"-I{ROOT}", f"-I{lvgl}", f"-DLV_CONF_PATH={conf}",
                    *map(str, sources), "-lm", "-o", str(executable)]
         subprocess.run(command, check=True)

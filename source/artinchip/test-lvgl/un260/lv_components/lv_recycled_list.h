@@ -19,20 +19,39 @@ typedef struct {
     void *context;
 } lv_recycled_list_config_t;
 
-/* Generic vertical viewport. Owns only a bounded row pool and a paused-when-
- * idle motion timer. Caller owns data; callbacks never perform protocol/IO.
+/* Generic read-only viewport: vertical scroll with bounded edge elasticity;
+ * paged mode accepts a horizontal swipe on normal release, one page per drag.
+ * Direction locking and PRESS_LOST cancellation leave global input ownership
+ * with the platform. The scrollbar is 40% opaque inside the range, 100% at edges.
+ * Owns only a bounded row pool and an idle-paused motion timer.
+ * Caller owns data; callbacks never perform protocol/IO.
  * Deleting its parent destroys the viewport, timer and private allocation.
- * Fixed pixel dimensions, including one recycled row beyond the viewport,
+ * Fixed pixel dimensions, including one extra row and edge elasticity,
  * must fit LV_COORD_MAX. A create_row failure returns NULL and cleans up the
- * partial viewport. Timer allocation failure only disables release inertia. */
+ * partial viewport. Timer allocation failure disables release animation and
+ * settles any visual stretch immediately; logical offsets always stay valid. */
 lv_recycled_list_t *lv_recycled_list_create(lv_obj_t *parent,
                                             const lv_recycled_list_config_t *config);
 lv_obj_t *lv_recycled_list_object(lv_recycled_list_t *list);
 const ui_list_window_t *lv_recycled_list_window(const lv_recycled_list_t *list);
-/* Data changes preserve an active press and reading position, clamping and
- * rebasing only when rows shrink. reset starts a new result and stops motion. */
+/* Data changes preserve an active press and reading position, rebasing when
+ * the valid range or stretched edge changes. reset stops the current motion. */
 void lv_recycled_list_refresh(lv_recycled_list_t *list, uint32_t count, bool reset);
 void lv_recycled_list_set_paged(lv_recycled_list_t *list, bool paged);
 void lv_recycled_list_page_step(lv_recycled_list_t *list, int step);
+/* Locate a zero-based data index without changing count or navigation mode.
+ * Scroll mode puts it at the top where possible, clamped at the last viewport;
+ * page mode selects its containing page. A valid request cancels held input,
+ * inertia and edge stretch, then refreshes rows, scrollbar and range callback.
+ * NULL, empty lists and out-of-range indices return false without changes. */
+bool lv_recycled_list_scroll_to_index(lv_recycled_list_t *list, uint32_t index);
+/* Hit-test a display-coordinate point against currently visible bound rows,
+ * including edge stretch and partial rows, clipped to the viewport. Updates
+ * pending LVGL layout for UI-event use; does not stop motion or change range.
+ * The scrollbar gutter, blank/hidden rows and invalid arguments return false
+ * and leave out_index unchanged. */
+bool lv_recycled_list_index_at_point(lv_recycled_list_t *list,
+                                     const lv_point_t *point, uint32_t *out_index);
+/* Owner hide/reset/gesture cancellation clears any stretch and pauses motion. */
 void lv_recycled_list_stop(lv_recycled_list_t *list);
 #endif
