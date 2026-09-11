@@ -14,7 +14,8 @@ if not compiler:
 
 
 def function(source, name):
-    match = re.search(r"^(?:static )?(?:void|bool) " + name + r"\(", source, re.M)
+    match = re.search(r"^(?:static\s+)?(?:void|bool|const\s+char\s*\*)\s*" +
+                      re.escape(name) + r"\(", source, re.M)
     if not match:
         raise AssertionError("Missing production function: " + name)
     brace = source.index("{", match.start())
@@ -42,8 +43,11 @@ functions = ["page_01_main_commit", "page_01_main_mark_dirty", "page_01_main_def
              "page_01_work_refre", "page_01_face_refre", "page_01_speed_refre",
              "page_01_batch_refre", "page_01_cfd_refre",
              "page_01_bottom_text_anim_opa_cb", "page_01_bottom_text_anim_x_cb",
-             "page_01_bottom_text_anim_zoom_cb", "page_01_bottom_label_anim_stop",
+             "page_01_bottom_label_anim_stop",
              "page_01_bottom_animations_stop", "page_01_bottom_label_anim_run",
+             "page_01_bottom_mode_text_get", "page_01_bottom_add_text_get",
+             "page_01_bottom_work_text_get", "page_01_bottom_fo_text_get",
+             "page_01_bottom_speed_text_get",
              "page_01_bottom_a_refresh_mode", "page_01_bottom_a_refresh_add",
              "page_01_bottom_a_refresh_work", "page_01_bottom_a_refresh_fo",
              "page_01_bottom_c_refresh_speed", "page_01_bottom_c_refresh_batch",
@@ -62,5 +66,5 @@ with tempfile.TemporaryDirectory(prefix="un260-main-animation-") as directory:
                str(ROOT / "un260/lv_core/ui_frame_commit.c"), "-o", str(executable)]
     if os.name != "nt":
         command.append("-fsanitize=undefined")
-    subprocess.run(command, check=True)
-    subprocess.run([str(executable)], check=True)
+    subprocess.run(command, check=True, timeout=60)
+    subprocess.run([str(executable)], check=True, timeout=15)

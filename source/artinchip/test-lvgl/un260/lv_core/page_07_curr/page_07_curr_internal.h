@@ -56,8 +56,8 @@ typedef struct {
     int favorite_count;
     int visible_indices[PAGE07_CURR_MAX_ITEMS];
     int visible_count;
-    /* Controller selection (and legacy grid request preview), never changed
-     * by card scrolling. Carousel motion owns the independent visual focus. */
+    /* Controller-confirmed selection, never a request preview. Carousel motion
+     * owns the independent visual focus. */
     int selected_abs_idx;
     int selected_visible_idx;
     page07_curr_view_mode_t view_mode;
@@ -102,6 +102,7 @@ void page07_curr_model_save(void);
 bool page07_curr_model_code_equal(const char *left, const char *right);
 int page07_curr_model_find_abs_idx(const char *code);
 bool page07_curr_model_is_favorite(int abs_idx);
+bool page07_curr_model_is_fixed(int abs_idx);
 void page07_curr_model_toggle_favorite(int abs_idx);
 void page07_curr_model_refresh_visible(void);
 int page07_curr_model_find_visible_pos(int abs_idx);

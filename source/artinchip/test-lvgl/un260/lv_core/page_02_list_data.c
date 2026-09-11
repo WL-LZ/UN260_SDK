@@ -4,7 +4,7 @@
 void page_02_list_data_denoms(page_02_list_data_t *view, const counting_sim_t *data)
 {
     view->denom_count = 0;
-    if (!data) return;
+    if (!counting_data_monetary_result_supported(data)) return;
     for (unsigned i = 0; i < data->denom_number && i < COUNTING_DENOM_MAX_ITEMS; ++i)
         if (data->denom[i].value > 0) view->denom[view->denom_count++] = i;
 }

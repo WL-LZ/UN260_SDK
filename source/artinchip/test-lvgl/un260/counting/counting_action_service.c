@@ -77,6 +77,11 @@ bool counting_action_clear_pending(void)
     return protocol_request_is_pending(&g_clear_request);
 }
 
+bool counting_action_start_pending(void)
+{
+    return protocol_request_is_pending(&g_start_request);
+}
+
 void counting_action_cancel_all(void)
 {
     protocol_request_finish(&g_start_request);

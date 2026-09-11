@@ -47,11 +47,19 @@ static bool app_command_runtime_main_page_active(void)
 
 bool app_command_runtime_request_count_start(void)
 {
+    if (app_command_runtime_count_start_busy()) return false;
     if (!counting_action_request_start()) {
         uart_debug_printf("count start request rejected or send failed\n");
         return false;
     }
+    page_01_main_refresh_start_state();
     return true;
+}
+
+bool app_command_runtime_count_start_busy(void)
+{
+    return counting_action_start_pending() || g_counting_session.start_confirmed ||
+        g_counting_session.phase == COUNTING_SESSION_ACTIVE;
 }
 
 bool app_command_runtime_clear_counting_data(const char *reason)
@@ -67,7 +75,11 @@ bool app_command_runtime_clear_counting_data(const char *reason)
     sim_reset_counting_result(counting_data_mutable());
     currency_state_begin_count_session();
     page_01_curr_img_refre();
-    if (!counting_action_request_clear()) {
+    const bool clear_requested = counting_action_request_clear();
+    /* CLEAR cancels a pending START even when its own send fails. Reflect the
+     * settled request state, not the pre-clear state seen by the data reset. */
+    page_01_main_refresh_start_state();
+    if (!clear_requested) {
         uart_debug_printf("count clear request rejected or send failed reason=%s\n",
                     reason != NULL ? reason : "unknown");
         return false;
@@ -210,6 +222,7 @@ uint32_t app_command_runtime_process_frames_budget(uint32_t budget_us)
         g_deferred_frame_blocked = false;
         processed++;
     }
+    if (processed) page_01_main_refresh_start_state();
     return processed;
 }
 
@@ -220,6 +233,7 @@ void app_command_runtime_poll(uint32_t now_ms)
 
     if ((action_timeouts & COUNTING_ACTION_TIMEOUT_START) != 0U) {
         uart_debug_printf("count start request timeout\n");
+        page_01_main_refresh_start_state();
     }
     if ((action_timeouts & COUNTING_ACTION_TIMEOUT_CLEAR) != 0U) {
         uart_debug_printf("count clear request timeout\n");

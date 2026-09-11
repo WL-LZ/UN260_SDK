@@ -2,6 +2,7 @@
 #define COUNTING_UI_RUNTIME_H
 
 #include "un260/counting/counting_data_types.h"
+#include <stddef.h>
 
 void start_counting_sim(void);
 void stop_counting_sim(void);
@@ -14,8 +15,8 @@ void sim_reset_counting_result(counting_sim_t *sim_data);
 void sim_reset_for_currency(counting_sim_t *sim_data);
 
 void ui_refresh_main_page(void);
+void format_amount_with_comma(char *dest, size_t dest_size, float amount);
 void page_01_main_detail_refresh_rows_only(void);
-void page_01_main_detail_refresh_rows_during_scroll(void);
 void ui_count_end_anim_cancel(void);
 void ui_count_end_anim_begin(const char *result_text);
 void ui_count_end_anim_poll(void);

@@ -33,7 +33,6 @@ void page_01_curr_btn_event_cb(lv_event_t* e);
 
 void page_03_batch_label_input_event_cb(lv_event_t* e);
 void page_03_void_batch_label_gesture_event_cb(lv_event_t* e);
-void page_01_detail_area_event_cb(lv_event_t* e);
 
 //page 03 batch按键
 void page_03_batch_num_keypad_event_cb(lv_event_t* e);

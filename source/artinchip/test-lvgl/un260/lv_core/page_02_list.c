@@ -5,6 +5,7 @@
 #include "ui_frame_commit.h"
 #include "lv_port_indev.h"
 #include "un260/counting/counting_data_store.h"
+#include "un260/currency/currency_state.h"
 #include "un260/lv_components/lv_recycled_list.h"
 #include "un260/lv_components/lv_card_surface.h"
 #include "un260/lv_components/lv_damped_button.h"
@@ -66,6 +67,11 @@ static list_view_t *view;
 static uint32_t dirty = ALL_SECTIONS, reset_positions = ALL_SECTIONS;
 static void commit(void *context,uint32_t flags);
 static void search_open(lv_event_t *e);
+static bool list_monetary_result_supported(void)
+{
+    return !currency_state_multi_selected() &&
+           counting_data_monetary_result_supported(counting_data_current());
+}
 static const section_layout_t layouts[PAGE_02_SECTION_COUNT] = {
     { PAGE_02_SECTION_A, 16, 360, {10,112,192}, {88,64,122},
       {LV_TEXT_ALIGN_LEFT,LV_TEXT_ALIGN_RIGHT,LV_TEXT_ALIGN_RIGHT},
@@ -263,6 +269,12 @@ static void row_bind(lv_obj_t *row,uint32_t index,void *context)
     lv_obj_t *a=lv_obj_get_child(row,0),*b=lv_obj_get_child(row,1),*c=lv_obj_get_child(row,2);
     lv_obj_set_style_bg_color(row,lv_color_hex(index%2 ? 0xF4F6F7 : 0xFFFFFF),0);
     if (s->layout->id==PAGE_02_SECTION_A) {
+        if (!list_monetary_result_supported()) {
+            text_set(a,"--");
+            number_set(b,data->total_pcs,&lv_font_instrument_sans_medium_20);
+            text_set(c,"--");
+            return;
+        }
         const denom_t zero={0};
         const denom_t *d=index<view->data.denom_count ? &data->denom[view->data.denom[index]] : &zero;
         number_set(a,d->value,&lv_font_instrument_sans_medium_20);
@@ -275,7 +287,9 @@ static void row_bind(lv_obj_t *row,uint32_t index,void *context)
         if (valid && slot==view->located_slot)
             lv_obj_set_style_bg_color(row,lv_color_hex(0xDCE6EC),0);
         text_set(b,valid ? data->sn_str[slot] : "");
-        number_set(c,valid ? data->denom_mix[slot] : 0,&lv_font_instrument_sans_medium_20);
+        if (list_monetary_result_supported())
+            number_set(c,valid ? data->denom_mix[slot] : 0,&lv_font_instrument_sans_medium_20);
+        else text_set(c,"--");
     } else {
         bool valid=index<(uint32_t)counting_data_error_detail_count(data);
         number_set(a,index+1,&lv_font_instrument_sans_medium_14);
@@ -323,11 +337,12 @@ static bool section_create(list_section_t *s,const section_layout_t *layout)
     s->layout=layout;
     s->panel=surface(view->page,layout->x,PANEL_Y,layout->width,PANEL_HEIGHT,15,0xFFFFFF);
     if (!s->panel) return false;
-    lv_obj_t *badge=surface(s->panel,18,16,24,24,7,layout->badge_color);
+    lv_obj_t *badge=surface(s->panel,17,15,26,26,7,layout->badge_color);
     if (!badge) return false;
-    lv_obj_t *letter=label_create(badge,0,3,24,22,&lv_font_instrument_sans_bold_14,0xFFFFFF,LV_TEXT_ALIGN_CENTER);
+    lv_obj_t *letter=label_create(badge,0,0,26,LV_SIZE_CONTENT,&lv_font_instrument_sans_bold_14,0xFFFFFF,LV_TEXT_ALIGN_CENTER);
     if (!letter) return false;
     text_set(letter,ui_text_get((ui_text_id_t)(UI_TEXT_PAGE01_DETAIL_BTN_A+layout->id)));
+    lv_obj_center(letter);
     if (!section_image_create(s->panel,layout->width-42,16,layout->title_icon)) return false;
     s->title=label_create(s->panel,52,16,layout->width-104,28,&lv_font_instrument_sans_semibold_20,INK,LV_TEXT_ALIGN_LEFT);
     if (!s->title) return false;
@@ -414,9 +429,12 @@ static void commit(void *context,uint32_t flags)
         uint32_t count;
         if (i==PAGE_02_SECTION_A) {
             page_02_list_data_denoms(&view->data,data);
+            if (!list_monetary_result_supported()) view->data.denom_count=0;
             count=view->data.denom_count ? view->data.denom_count : 1;
             number_set(view->pcs,data->total_pcs,&lv_font_instrument_sans_semibold_22);
-            number_set(view->amount,data->total_amount,&lv_font_instrument_sans_semibold_22);
+            if (list_monetary_result_supported())
+                number_set(view->amount,data->total_amount,&lv_font_instrument_sans_semibold_22);
+            else text_set(view->amount,"--");
         } else if (i==PAGE_02_SECTION_B) {
             page_02_list_data_serials(&view->data,data); count=view->data.serial_count;
         } else {

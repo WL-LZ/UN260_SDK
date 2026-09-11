@@ -244,7 +244,10 @@ const char* get_currency_img(const char* code)
     // 使用路径加载货币图片
     static char img_path[256];
     
-    if (strcmp(code, CURRENCY_AUTO_CODE) == 0) {
+    if (currency_state_is_multi_code(code)) {
+        return "L:/usr/local/share/lvgl_data/main_icons/multi_card.png";
+    }
+    if (currency_state_is_auto_code(code)) {
         snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_AUTO.png");
         return img_path;
     }

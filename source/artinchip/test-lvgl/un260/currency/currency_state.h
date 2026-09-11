@@ -7,6 +7,7 @@
 
 /* Three-byte internal selector used for the four-character UI label "AUTO". */
 #define CURRENCY_AUTO_CODE "AUT"
+#define CURRENCY_MULTI_CODE "MUL"
 
 typedef struct {
     uint8_t count;
@@ -34,9 +35,15 @@ void currency_state_get_selected_code(char code[4]);
 void currency_state_get_effective_code(char code[4]);
 const char *currency_state_display_code(const char code[4]);
 bool currency_state_is_auto_code(const char code[4]);
+bool currency_state_is_multi_code(const char code[4]);
+bool currency_state_is_special_code(const char code[4]);
 bool currency_state_auto_selected(void);
+bool currency_state_multi_selected(void);
+bool currency_state_special_selected(void);
 bool currency_state_confirm_auto_selection(void);
+bool currency_state_confirm_multi_selection(void);
 bool currency_state_leave_auto_selection(void);
+bool currency_state_leave_special_selection(void);
 void currency_state_begin_count_session(void);
 bool currency_state_confirm_detected_code(const char code[4]);
 curr_item_t currency_state_active_currency(void);

@@ -56,6 +56,9 @@ void smart_island_set_scene(smart_island_scene_t scene, const char *title, const
 void smart_island_notify_count_start(void); //通知：开始点钞
 void smart_island_update_counting(int pcs, float amount); //更新跑钞态实时数量/金额
 void smart_island_notify_count_end(const char *result_text); //通知：点钞结束
+/* The owner accepted a result/session reset. Cancel counting presentation,
+ * but retain unrelated warning, update and QR scenes. */
+void smart_island_notify_count_reset(void);
 void smart_island_notify_serial_number(int denomination, const char *serial_number); //通知：本把冠字号更新
 void smart_island_set_count_analysis(int valid_pcs, int suspect_pcs, int damaged_pcs); //更新本轮点钞分析
 void smart_island_clear_count_analysis(void); //清除本轮点钞分析

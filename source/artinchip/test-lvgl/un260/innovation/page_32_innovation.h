@@ -12,6 +12,8 @@ void ui_page_32_innovation_destroy(void);
 
 /* The handle belongs to the main page and only recognizes a downward drag. */
 void page_32_innovation_handle_attach(lv_obj_t *main_page);
+/* The invisible drag surface forwards stationary taps to its owner's controls. */
+void page_32_innovation_handle_set_tap_handler(void (*handler)(const lv_point_t *point));
 void page_32_innovation_handle_detach(void);
 /* Arm the preview snapshot only after the page manager has committed Main.
  * Main is often constructed during boot/prewarm while another page is still

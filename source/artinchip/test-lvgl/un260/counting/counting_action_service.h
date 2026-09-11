@@ -16,6 +16,7 @@ void counting_action_handle_reply(uint8_t cmd, const uint8_t *frame,
                                   uint8_t frame_len);
 uint32_t counting_action_take_timeouts(void);
 bool counting_action_clear_pending(void);
+bool counting_action_start_pending(void);
 void counting_action_cancel_all(void);
 
 #endif

@@ -256,6 +256,7 @@ static bool is_favorite;
 static void curr_select_and_exit_abs(int i) { commits++;commit_index=i; }
 static void page07_curr_model_toggle_favorite(int i) { (void)i;favorite_toggles++;is_favorite=!is_favorite; }
 static bool page07_curr_model_is_favorite(int i) { (void)i;return is_favorite; }
+static bool page07_curr_model_is_fixed(int i) { (void)i;return false; }
 static void curr_refresh_right_views(void) { refreshes++;page07_curr_carousel_destroy(&g_page07_curr.carousel); }
 static lv_dma_snapshot_t cache[68];
 static unsigned cache_count,cache_acquires,cache_captures,cache_releases;

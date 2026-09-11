@@ -8,7 +8,6 @@
 #include "lvgl/src/misc/lv_timer.h"
 #include "un260/lv_system/machine_time.h"
 #include "un260/lv_core/page_03_menu.h"
-#include "un260/lv_core/page_01_detail_scroll.h"
 #include "un260/protocol/protocol_send.h"
 #include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_components/lv_qr_popup.h"
@@ -23,7 +22,6 @@
 #include "un260/machine_state/machine_state.h"
 #include "un260/currency/currency_state.h"
 
-#define PAGE_01_DETAIL_TAP_THRESHOLD     10
 typedef struct {
     lv_obj_t* beep[2];
     lv_obj_t* speed[3];
@@ -116,6 +114,12 @@ static void page_01_qr_show_popup(void) //显示当前点钞结果二维码
 {
     char qr_text[3072];
 
+    if (currency_state_multi_selected() ||
+        !counting_data_monetary_result_supported(counting_data_current())) {
+        page_01_qr_show_toast(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED);
+        return;
+    }
+
     if (!ui_qr_data_build(qr_text, sizeof(qr_text))) {
         page_01_qr_show_toast(UI_TEXT_WIDGET_QR_POPUP_DATA_TOO_LARGE);
         return;
@@ -153,73 +157,7 @@ void page_02_history_btn_event_cb(lv_event_t* e)
     ui_manager_push_page(UI_PAGE_HISTORY);
 }
 
-void page_01_detail_area_event_cb(lv_event_t* e)
-{
-    typedef struct {
-        bool pressed;
-        bool dragging;
-        lv_point_t start_pt;
-        lv_point_t last_pt;
-    } detail_touch_state_t;
 
-    static detail_touch_state_t s_touch = {0};
-    lv_event_code_t code = lv_event_get_code(e);
-    lv_indev_t* indev = lv_indev_get_act();
-    lv_obj_t* cont = lv_event_get_target(e);
-    lv_point_t pt;
-
-    if (cont == NULL || indev == NULL) return;
-
-    lv_indev_get_point(indev, &pt);
-
-    switch (code) {
-    case LV_EVENT_PRESSED:
-        s_touch.pressed = true;
-        s_touch.dragging = false;
-        s_touch.start_pt = pt;
-        s_touch.last_pt = pt;
-        break;
-
-    case LV_EVENT_PRESSING:
-        if (!s_touch.pressed) break;
-
-        if (!s_touch.dragging) {
-            if (LV_ABS(pt.y - s_touch.start_pt.y) > PAGE_01_DETAIL_TAP_THRESHOLD ||
-                LV_ABS(pt.x - s_touch.start_pt.x) > PAGE_01_DETAIL_TAP_THRESHOLD) {
-                s_touch.dragging = true;
-            }
-        }
-
-        s_touch.last_pt = pt;
-        break;
-
-    case LV_EVENT_RELEASED:
-        if (!s_touch.pressed) break;
-
-        if (!s_touch.dragging &&
-            LV_ABS(pt.y - s_touch.start_pt.y) < PAGE_01_DETAIL_TAP_THRESHOLD &&
-            LV_ABS(pt.x - s_touch.start_pt.x) < PAGE_01_DETAIL_TAP_THRESHOLD) {
-            ui_manager_push_page(UI_PAGE_LIST);
-        }
-
-        if (page_01_is_small_denom_mode() && cont && lv_obj_is_valid(cont)) {
-            // 小面额币种支持拖动回弹，松手后自动回到顶部
-            lv_obj_scroll_to_y(cont, 0, LV_ANIM_ON);
-        }
-
-        s_touch.pressed = false;
-        s_touch.dragging = false;
-        break;
-
-    case LV_EVENT_PRESS_LOST:
-        s_touch.pressed = false;
-        s_touch.dragging = false;
-        break;
-
-    default:
-        break;
-    }
-}
 
 void page_01_menu_btn_event_cb(lv_event_t* e) {
     if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
@@ -263,53 +201,7 @@ void page_01_esc_btn_event_cb(lv_event_t* e)
         page_01_main_icon_feedback("page_01_esc_icon.png");
     }
     app_command_runtime_clear_counting_data("user clear");
-    page_01_scroll_hint_force_hide();
 }
-
-// static Machine_Mode_t mode_next(int temp_mode)
-// {
-//     switch(temp_mode) {
-//         case MODE_MDC: return Machine_MODE_SDC;
-//         case MODE_SDC: return Machine_MODE_CNT;
-//         case MODE_CNT: return Machine_MODE_MDC;
-//         default:               return Machine_MODE_MDC; // 循环回到起点
-//     }
-// }
-
-
-// void page_01_mode_btn_event_cb(lv_event_t* e)
-// {
-//     if (lv_event_get_code(e) == LV_EVENT_CLICKED)
-//     {   
-//         // 用当前模式来循环，而不是每次都从 MDC 开始
-//         Machine_Mode_t Temp_Mode = mode_next(machine_state_mode());
-//         machine_state_confirm_mode(Temp_Mode);  // 更新当前模式
-
-//         uart_debug_printf("mode:%02X\n", Temp_Mode);
-//         page_01_main_icon_feedback("page_01_mode_icon.png");
-
-//         uint8_t send_data = 0;
-
-//         if (strcmp(active_currency_code, "AUT") == 0)
-//         {
-//             send_data = Machine_AUT_MODE_MDC;
-//         }
-//         else if (strcmp(active_currency_code, "MUL") == 0)
-//         {
-//             send_data = Machine_MUL_MODE_MDC;
-//         }
-//         else
-//         {
-//             // 普通循环模式
-//             send_data = Temp_Mode;
-//         }
-
-//         protocol_send(0x04, &send_data, 1);  // 发送字节
-//         Machine_work_code.mode_code = send_data; // 保存当前发送的模式代码
-//         uart_debug_printf("send_data:%02X\n", send_data);
-        
-//     }
-// }
 
 static bool page_01_mode_req_busy(void) //判断模式切换是否仍在等待回包
 {
@@ -413,6 +305,20 @@ void page_01_print_btn_event_cb(lv_event_t* e)
     lv_print_toast_config_t toast_cfg;
 
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
+        return;
+    }
+
+    if (currency_state_multi_selected() ||
+        !counting_data_monetary_result_supported(counting_data_current())) {
+        toast_cfg = lv_print_toast_get_default_config();
+        toast_cfg.x = 320;
+        toast_cfg.w = 640;
+        toast_cfg.h = 120;
+        toast_cfg.text = ui_text_get(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED);
+        toast_cfg.show_loader = false;
+        toast_cfg.align_center = true;
+        toast_cfg.auto_hide_ms = 3500;
+        lv_print_toast_show_with_config(&toast_cfg);
         return;
     }
 

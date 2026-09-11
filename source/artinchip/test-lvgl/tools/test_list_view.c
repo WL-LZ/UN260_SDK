@@ -477,7 +477,9 @@ static void assert_palette(bool page_visible)
         assert(lv_obj_get_style_bg_color(s->panel,0).full==lv_color_hex(0xFFFFFF).full);
         assert(lv_obj_get_style_bg_opa(s->panel,0)==LV_OPA_COVER);
         lv_obj_t *badge=lv_obj_get_child(s->panel,0),*letter=lv_obj_get_child(badge,0);
-        assert(lv_obj_get_width(badge)==24 && lv_obj_get_height(badge)==24);
+        assert(lv_obj_get_width(badge)==26 && lv_obj_get_height(badge)==26);
+        assert(lv_obj_get_height(letter)==lv_font_get_line_height(&lv_font_instrument_sans_bold_14));
+        assert(abs(2*lv_obj_get_y(letter)+lv_obj_get_height(letter)-26)<=1);
         assert(lv_obj_get_style_bg_color(badge,0).full==lv_color_hex(badge_colors[i]).full);
         assert(lv_obj_get_style_bg_opa(badge,0)==LV_OPA_COVER);
         assert(lv_obj_get_child_cnt(badge)==1 && lv_obj_check_type(letter,&lv_label_class));
@@ -796,6 +798,26 @@ int main(void)
         assert(lv_obj_get_y(row)>=0 && lv_obj_get_y(row)<252);
         label_fits(lv_obj_get_child(row,0));label_fits(lv_obj_get_child(row,2));
     }
+    /* MULTI has no per-note currency from the current controller. The current
+     * selector and a retained mixed result both prevent fabricated amounts. */
+    assert(currency_state_confirm_multi_selection());
+    page_02_list_report_reset();tick(40);
+    assert(view->data.denom_count==0 && !strcmp(lv_label_get_text(view->amount),"--"));
+    assert(!strcmp(lv_label_get_text(view->pcs),"10000"));
+    for(unsigned i=0;i<lv_obj_get_child_cnt(vp);++i) {
+        lv_obj_t *row=lv_obj_get_child(vp,i);
+        if(lv_obj_has_flag(row,LV_OBJ_FLAG_HIDDEN)||lv_obj_get_child_cnt(row)!=3)continue;
+        assert(!strcmp(lv_label_get_text(lv_obj_get_child(row,2)),"--"));
+        assert(strlen(lv_label_get_text(lv_obj_get_child(row,1)))>0);
+    }
+    write_bmp("list-multi-safe");
+    counting_data_mark_multi_result(data);
+    assert(currency_state_leave_special_selection());
+    page_02_list_report_reset();tick(40);
+    assert(!strcmp(lv_label_get_text(view->amount),"--"));
+    counting_data_reset_result_scope(data);
+    page_02_list_report_reset();tick(40);
+    assert(view->data.denom_count==6 && strcmp(lv_label_get_text(view->amount),"--"));
     const int navigation_actions[]={LIST_ACTION_HISTORY,LIST_ACTION_PRINT,LIST_ACTION_MAIN};
     for(unsigned i=0;i<sizeof(navigation_actions)/sizeof(navigation_actions[0]);++i)
         lv_event_send(view->actions[navigation_actions[i]],LV_EVENT_CLICKED,NULL);

@@ -42,6 +42,10 @@ attach = function(page, "page_32_innovation_handle_attach")
 assert "lv_port_indev_set_drag_obj(g_handle_touch, true)" in attach
 assert "LV_EVENT_PRESS_LOST" in attach and "LV_EVENT_RELEASED" in attach
 assert "return NULL;" in function(page, "innovation_transition_target")
+constants = "\n".join(re.findall(
+    r"^#define INNOVATION_(?:PREVIEW_ARM_DY|TRANSITION_SETTLE_MS|TRANSITION_CANCEL_MS)\s+.*$",
+    page, re.M))
+assert len(constants.splitlines()) == 3
 capture = block(port, port.index("if(capture && !g_contact_captured)"))
 production = "\n".join([
     function(port, "lv_port_indev_set_drag_obj"),
@@ -67,9 +71,7 @@ stub = r'''
 #define LV_OBJ_FLAG_CLICKABLE 4U
 #define LV_STATE_PRESSED 1U
 #define LV_INDEV_TYPE_POINTER 1
-#define INNOVATION_PREVIEW_ARM_DY 1
-#define INNOVATION_TRANSITION_SETTLE_MS 180U
-#define INNOVATION_TRANSITION_CANCEL_MS 150U
+#define LV_ABS(x) ((x) < 0 ? -(x) : (x))
 #define LV_RES_OK 0
 typedef int lv_coord_t;
 typedef int lv_event_code_t;
@@ -82,13 +84,14 @@ typedef struct {lv_event_code_t code;} lv_event_t;
 typedef struct {int unused;} lv_anim_t;
 typedef void (*lv_anim_ready_cb_t)(lv_anim_t *);
 typedef struct {
-    bool pressed, opened, preview_active;
+    bool pressed, opened, preview_active, tap_moved;
     lv_point_t start;
     int drag_y;
     uint32_t start_tick, last_render_tick;
     int last_render_y;
 } innovation_handle_gesture_t;
 static innovation_handle_gesture_t g_handle_gesture;
+static void (*g_handle_tap_handler)(const lv_point_t *point);
 static struct {lv_obj_t *root;} g_page;
 static struct {lv_obj_t *image;} g_transition_snapshot;
 static bool g_page_transitioning, g_transition_snapshot_valid;
@@ -212,7 +215,11 @@ int main(void) {
     /* Slow multi-second drag crosses the original hit box and opening threshold
      * while remaining held. Only physical release can start settlement. */
     fixture(true); press();
-    move(11,100); assert_held(1);
+    move(19,80);
+    assert(g_handle_gesture.pressed && !g_handle_gesture.preview_active && !preview_begins);
+    assert(!g_handle_gesture.tap_moved);
+    move(20,100); assert_held(10);
+    assert(g_handle_gesture.tap_moved);
     move(43,700); assert_held(33);
     move(44,1100); assert_held(34);
     move(70,1800); assert_held(60);
@@ -282,7 +289,7 @@ with tempfile.TemporaryDirectory(prefix="un260-pulldown-test-") as directory:
     source = work / "test.c"
     binary = work / ("test.exe" if os.name == "nt" else "test")
     # Source generation is an intentional test fixture, not a production rewrite.
-    source.write_text(stub + production + "\nstatic void raw_capture(void) {\n"
+    source.write_text(constants + "\n" + stub + production + "\nstatic void raw_capture(void) {\n"
                       + "bool capture=true;\n" + capture + "\n}\n" + test, encoding="utf-8")
     flags = ["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror"]
     if os.environ.get("UN260_TEST_SANITIZE", "0" if os.name == "nt" else "1") == "1":

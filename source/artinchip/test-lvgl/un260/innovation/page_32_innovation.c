@@ -34,7 +34,7 @@
 #define INNOVATION_GREEN          0x27B36A
 #define INNOVATION_RED            0xE45454
 #define INNOVATION_LINE           0xDDE5EA
-#define INNOVATION_PREVIEW_ARM_DY 1
+#define INNOVATION_PREVIEW_ARM_DY 10
 #define INNOVATION_TRANSITION_SETTLE_MS 180U
 #define INNOVATION_TRANSITION_CANCEL_MS 150U
 
@@ -74,6 +74,7 @@ typedef struct {
     bool pressed;
     bool opened;
     bool preview_active;
+    bool tap_moved;
     lv_point_t start;
     int drag_y;
     uint32_t start_tick;
@@ -85,6 +86,7 @@ static innovation_page_context_t g_page = {
     .target_passes = MULTI_PASS_VERIFY_MIN_PASSES,
 };
 static lv_obj_t *g_handle_touch;
+static void (*g_handle_tap_handler)(const lv_point_t *point);
 static lv_modal_dialog_t g_prompt;
 static innovation_handle_gesture_t g_handle_gesture;
 static lv_dma_static_surface_t g_transition_snapshot;
@@ -783,6 +785,7 @@ static void innovation_handle_event_cb(lv_event_t *event)
         lv_indev_get_point(indev, &g_handle_gesture.start);
         g_handle_gesture.pressed = true;
         g_handle_gesture.opened = false;
+        g_handle_gesture.tap_moved = false;
         g_handle_gesture.drag_y = 0;
         g_handle_gesture.start_tick = lv_tick_get();
         g_handle_gesture.last_render_tick = g_handle_gesture.start_tick;
@@ -791,6 +794,10 @@ static void innovation_handle_event_cb(lv_event_t *event)
     }
     if (code == LV_EVENT_PRESSING) {
         if (!g_handle_gesture.pressed) return;
+        lv_indev_get_point(indev, &point);
+        if (LV_ABS(point.x - g_handle_gesture.start.x) >= 10 ||
+            LV_ABS(point.y - g_handle_gesture.start.y) >= 10)
+            g_handle_gesture.tap_moved = true;
         if (!g_handle_gesture.preview_active) {
             lv_indev_get_point(indev, &point);
             if ((point.y - g_handle_gesture.start.y) <
@@ -806,14 +813,21 @@ static void innovation_handle_event_cb(lv_event_t *event)
         return;
     }
     if (code == LV_EVENT_RELEASED) {
+        lv_indev_get_point(indev, &point);
+        if (g_handle_gesture.pressed && !g_handle_gesture.preview_active &&
+            !g_handle_gesture.tap_moved &&
+            LV_ABS(point.x - g_handle_gesture.start.x) < 10 &&
+            LV_ABS(point.y - g_handle_gesture.start.y) < 10) {
+            g_handle_gesture.pressed = false;
+            if (g_handle_tap_handler) g_handle_tap_handler(&point);
+            return;
+        }
         innovation_handle_drag_finish(indev);
     }
 }
 
 void page_32_innovation_handle_attach(lv_obj_t *main_page)
 {
-    lv_obj_t *handle;
-
     page_32_innovation_handle_detach();
     if (main_page == NULL) return;
 
@@ -834,16 +848,8 @@ void page_32_innovation_handle_attach(lv_obj_t *main_page)
     lv_obj_add_event_cb(g_handle_touch, innovation_handle_event_cb,
                         LV_EVENT_PRESS_LOST, NULL);
 
-    handle = innovation_box(g_handle_touch, 24, 1, 164, 16, 0xFFFFFF, 8);
-    lv_obj_set_style_border_width(handle, 1, 0);
-    lv_obj_set_style_border_color(handle, lv_color_hex(0xB8CADA), 0);
-    lv_obj_clear_flag(handle, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_t *hint = innovation_label(handle, "PULL DOWN",
-        &lv_font_instrument_sans_bold_10, INNOVATION_BLUE);
-    lv_obj_set_pos(hint, 27, 2);
-    lv_obj_t *chevron = innovation_label(handle, LV_SYMBOL_DOWN,
-        &lv_font_montserrat_12, INNOVATION_BLUE);
-    lv_obj_set_pos(chevron, 128, 2);
+    /* No visible hint until the Main design specifies one. Keep the existing
+     * drag area, but forward small stationary taps to the Main controls below. */
     lv_obj_move_foreground(g_handle_touch);
     /* Main can be constructed while another page is still current (for
      * example during boot/self-test prewarm).  Capturing at that point is
@@ -908,6 +914,11 @@ static void innovation_preview_preload_async(void *user_data)
     (void)innovation_transition_prepare(false);
 }
 
+void page_32_innovation_handle_set_tap_handler(void (*handler)(const lv_point_t *point))
+{
+    g_handle_tap_handler = handler;
+}
+
 void page_32_innovation_handle_detach(void)
 {
     if (g_preview_preload_timer != NULL) {
@@ -918,6 +929,7 @@ void page_32_innovation_handle_detach(void)
         lv_obj_del(g_handle_touch);
     }
     g_handle_touch = NULL;
+    g_handle_tap_handler = NULL;
     memset(&g_handle_gesture, 0, sizeof(g_handle_gesture));
     if (ui_manager_get_current_page() != UI_PAGE_INNOVATION_CENTER &&
         g_page.root != NULL && lv_obj_is_valid(g_page.root)) {

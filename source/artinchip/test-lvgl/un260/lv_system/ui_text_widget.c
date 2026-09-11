@@ -180,7 +180,8 @@ static const ui_text_item_t g_ui_text_widget_group[UI_TEXT_MAX - UI_TEXT_WIDGET_
     [UI_TEXT_WIDGET_FAULT_TIME_FMT - UI_TEXT_WIDGET_BASE] = {"TIME: %s", "时间: %s", "시간: %s"},
     [UI_TEXT_WIDGET_FAULT_MODEL_FMT - UI_TEXT_WIDGET_BASE] = {"MODEL: %s", "机型: %s", "모델: %s"},
     [UI_TEXT_WIDGET_FAULT_REASON_FALLBACK - UI_TEXT_WIDGET_BASE] = {"Please check machine status and related hardware.", "请检查设备状态及相关硬件。", "장비 상태와 관련 하드웨어를 확인하세요."},
-    [UI_TEXT_WIDGET_FAULT_SOLUTION_FALLBACK - UI_TEXT_WIDGET_BASE] = {"Press CONFIRM after checking the machine.", "检查设备后按确认。", "장비를 점검한 뒤 확인을 누르세요."}
+    [UI_TEXT_WIDGET_FAULT_SOLUTION_FALLBACK - UI_TEXT_WIDGET_BASE] = {"Press CONFIRM after checking the machine.", "检查设备后按确认。", "장비를 점검한 뒤 확인을 누르세요."},
+    [UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED - UI_TEXT_WIDGET_BASE] = {"MULTI currency details unavailable. History, print and export are disabled.", "MULTI 暂缺逐币种数据，无法保存历史、打印或导出。", "MULTI 통화별 데이터가 없어 기록, 인쇄 및 내보내기를 사용할 수 없습니다."}
 };
 
 static const char* ui_text_pick(const ui_text_item_t* item) //按当前语言选择文本

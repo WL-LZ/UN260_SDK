@@ -9,6 +9,7 @@
 
 #include "un260/counting/counting_control_reply.h"
 #include "un260/counting/counting_data_store.h"
+#include "un260/counting/counting_data_store_internal.h"
 #include "un260/counting/counting_denom_reply.h"
 #include "un260/counting/counting_history_service.h"
 #include "un260/counting/counting_info_reply.h"
@@ -22,7 +23,7 @@
 #include "un260/lv_components/smart_island.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/ui_frame_commit.h"
-#include "un260/lv_core/page_01_detail_scroll.h"
+#include "un260/lv_core/page_01_main_detail.h"
 #include "un260/lv_core/page_01_main.h"
 #include "un260/lv_core/page_02_list.h"
 #include "un260/lv_core/page_06_settings.h"
@@ -130,6 +131,8 @@ static bool app_counting_runtime_cb_calibration_active(void)
 static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t len)
 {
     currency_state_begin_count_session();
+    if (currency_state_multi_selected())
+        counting_data_mark_multi_result(counting_data_mutable());
     page_02_list_report_reset();
     page_01_curr_img_refre();
     hide_counting_error_popup();
@@ -274,6 +277,9 @@ bool app_counting_runtime_reset_session(counting_session_state_t *session,
     }
     memset(session, 0, sizeof(*session));
     ui_count_end_anim_cancel();
+    /* Late 0x0E frames are now rejected by the reset session. Its visual
+     * owner must stop here as well, rather than waiting for that end frame. */
+    smart_island_notify_count_reset();
     return true;
 }
 
@@ -308,7 +314,7 @@ static void app_counting_runtime_on_serial_data_started(void *context)
 {
     (void)context;
     page_02_list_section_mark_dirty(PAGE_02_SECTION_B);
-    page_01_detail_scroll_reset_all();
+    page_01_main_scroll_reset();
 }
 
 static void app_counting_runtime_on_serial_report_ready(void *context)

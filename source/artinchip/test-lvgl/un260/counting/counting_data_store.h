@@ -7,6 +7,10 @@
 
 /* Read-only view of the single application counting-result store. */
 const counting_sim_t *counting_data_current(void);
+/* Sticky until an actual result clear; changing selected mode is not a clear. */
+void counting_data_mark_multi_result(counting_sim_t *sim_data);
+void counting_data_reset_result_scope(counting_sim_t *sim_data);
+bool counting_data_monetary_result_supported(const counting_sim_t *sim_data);
 void counting_data_clear_serials(counting_sim_t *sim_data);
 bool counting_data_ensure_serial_capacity(counting_sim_t *sim_data,
                                           int required_count);

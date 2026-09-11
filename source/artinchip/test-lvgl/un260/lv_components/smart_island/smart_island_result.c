@@ -15,6 +15,18 @@ static void smart_island_result_source_opa_cb(void *var, int32_t value)
     lv_obj_set_style_opa((lv_obj_t *)var, (lv_opa_t)value, 0);
 }
 
+static void smart_island_result_cancel_transition(void)
+{
+    if (!g_si_ctx.lifecycle.result_transition_pending) return;
+    if (g_si_ctx.objects.counting_root &&
+        lv_obj_is_valid(g_si_ctx.objects.counting_root)) {
+        lv_anim_del(g_si_ctx.objects.counting_root,
+                    smart_island_result_source_opa_cb);
+        lv_obj_set_style_opa(g_si_ctx.objects.counting_root, LV_OPA_COVER, 0);
+    }
+    g_si_ctx.lifecycle.result_transition_pending = false;
+}
+
 static void smart_island_result_source_fade_finish_cb(lv_anim_t *animation)
 {
     lv_obj_t *counting_root = g_si_ctx.objects.counting_root;
@@ -87,16 +99,7 @@ void smart_island_notify_count_start(void)
     /* 新会话开始前先清掉上一轮残留的结束动画状态。 */
     ui_count_end_anim_cancel();
 
-    if (g_si_ctx.lifecycle.result_transition_pending) {
-        if (g_si_ctx.objects.counting_root &&
-            lv_obj_is_valid(g_si_ctx.objects.counting_root)) {
-            lv_anim_del(g_si_ctx.objects.counting_root,
-                        smart_island_result_source_opa_cb);
-            lv_obj_set_style_opa(g_si_ctx.objects.counting_root,
-                                 LV_OPA_COVER, 0);
-        }
-        g_si_ctx.lifecycle.result_transition_pending = false;
-    }
+    smart_island_result_cancel_transition();
 
     g_si_ctx.lifecycle.count_session_active = true;
     g_si_ctx.warning.level = SMART_ISLAND_WARNING_LEVEL_WARNING;
@@ -201,10 +204,32 @@ void smart_island_notify_count_end(const char *result_text)
         lv_anim_set_path_cb(&animation, lv_anim_path_ease_in);
         lv_anim_set_ready_cb(&animation,
                              smart_island_result_source_fade_finish_cb);
-        lv_anim_start(&animation);
+        if (lv_anim_start(&animation) == NULL) {
+            /* End state must not depend on allocating a cosmetic animation.
+             * Duplicated transport ends are intentionally ignored above. */
+            g_si_ctx.lifecycle.result_transition_pending = false;
+            smart_island_result_present();
+        }
     } else {
         g_si_ctx.lifecycle.result_transition_pending = false;
         smart_island_result_present();
+    }
+}
+
+void smart_island_notify_count_reset(void)
+{
+    bool from_result = g_si_ctx.view.scene == SMART_ISLAND_SCENE_RESULT;
+
+    g_si_ctx.lifecycle.count_session_active = false;
+    g_si_ctx.warning.resume_counting = false;
+    smart_island_result_cancel_transition();
+    smart_island_result_stop_timer();
+    if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_COUNTING ||
+        from_result) {
+        smart_island_restore_idle();
+        /* A reset can interrupt RESULT before its normal collapse. In that
+         * case restore_idle deliberately skips geometry, so settle it here. */
+        if (from_result) smart_island_set_visual(SMART_ISLAND_VISUAL_COMPACT, true);
     }
 }
 

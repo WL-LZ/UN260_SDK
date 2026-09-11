@@ -18,6 +18,8 @@ typedef struct {
     uint8_t denom_number;
     int total_pcs;
     float total_amount;
+    /* Current result contains MULTI notes without per-currency protocol data. */
+    bool multi_currency_result;
     char **sn_str;
     int sn_capacity;
     uint8_t *err_pcs;

@@ -13,7 +13,6 @@
 #include "un260/lv_components/smart_island.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/page_01_main.h"
-#include "un260/lv_core/page_01_detail_scroll.h"
 #include "un260/lv_resources/lv_image_declear.h"
 #include "un260/lv_resources/lv_img_init.h"
 #include "un260/currency/currency_state.h"
@@ -36,6 +35,7 @@ static char g_curr_page_selected_code[4];
 static lv_timer_t *g_curr_snapshot_prewarm_timer;
 
 static void curr_snapshot_prewarm_timer_cb(lv_timer_t *timer);
+static void curr_focus_confirmed_selection_on_entry(void);
 
 ui_element_t page_07_curr_obj[] = {
     // 背景图
@@ -64,6 +64,7 @@ void ui_page_07_curr_create(lv_obj_t* parent)
     lv_obj_set_scrollbar_mode(curr_page, LV_SCROLLBAR_MODE_OFF);
     lv_ui_obj_init(curr_page, page_07_curr_obj, page_07_curr_len);
     page_07_curr_img_refre();
+    curr_focus_confirmed_selection_on_entry();
     if (g_curr_snapshot_prewarm_timer == NULL) {
         g_curr_snapshot_prewarm_timer =
             lv_timer_create(curr_snapshot_prewarm_timer_cb, 120, NULL);
@@ -93,7 +94,7 @@ page07_curr_context_t g_page07_curr = {
 
 typedef enum {
     CURR_MODE_TRANSITION_NONE = 0,
-    CURR_MODE_TRANSITION_TO_AUTO,
+    CURR_MODE_TRANSITION_TO_SPECIAL,
     CURR_MODE_TRANSITION_TO_MANUAL,
     CURR_MODE_TRANSITION_WAIT_MANUAL_CURRENCY,
 } curr_mode_transition_t;
@@ -259,18 +260,22 @@ static void curr_select_and_exit_abs(int abs_idx)
         return;
     }
 
-    if (currency_state_is_auto_code(target_code)) {
+    if (currency_state_is_special_code(target_code)) {
+        bool multi = currency_state_is_multi_code(target_code);
         memset(&g_curr_mode_transition, 0, sizeof(g_curr_mode_transition));
-        g_curr_mode_transition.kind = CURR_MODE_TRANSITION_TO_AUTO;
+        g_curr_mode_transition.kind = CURR_MODE_TRANSITION_TO_SPECIAL;
         g_curr_mode_transition.target_index = (uint8_t)abs_idx;
+        g_curr_mode_transition.requested_mode = multi
+            ? SETTING_MODE_TARGET_MULTI_CURRENCY : SETTING_MODE_TARGET_AUTO_CURRENCY;
         memcpy(g_curr_mode_transition.target_code, target_code, 4);
-        if (!setting_service_request_auto_currency()) {
+        if (!(multi ? setting_service_request_multi_currency()
+                    : setting_service_request_auto_currency())) {
             memset(&g_curr_mode_transition, 0, sizeof(g_curr_mode_transition));
         }
         return;
     }
 
-    if (currency_state_is_auto_code(curr_code)) {
+    if (currency_state_is_special_code(curr_code)) {
         uint8_t restore_mode = machine_state_mode();
 
         if (restore_mode != MODE_MDC && restore_mode != MODE_SDC &&
@@ -303,8 +308,8 @@ void page_07_curr_apply_mode_result(uint8_t requested_mode, bool success)
     curr_mode_transition_t transition = g_curr_mode_transition.kind;
     uint8_t target_index = g_curr_mode_transition.target_index;
 
-    if ((transition == CURR_MODE_TRANSITION_TO_AUTO &&
-         requested_mode != SETTING_MODE_TARGET_AUTO_CURRENCY) ||
+    if ((transition == CURR_MODE_TRANSITION_TO_SPECIAL &&
+         requested_mode != g_curr_mode_transition.requested_mode) ||
         (transition == CURR_MODE_TRANSITION_TO_MANUAL &&
          requested_mode != g_curr_mode_transition.requested_mode) ||
         transition == CURR_MODE_TRANSITION_NONE) {
@@ -316,12 +321,9 @@ void page_07_curr_apply_mode_result(uint8_t requested_mode, bool success)
         return;
     }
 
-    if (transition == CURR_MODE_TRANSITION_TO_AUTO) {
+    if (transition == CURR_MODE_TRANSITION_TO_SPECIAL) {
         memset(&g_curr_mode_transition, 0, sizeof(g_curr_mode_transition));
-        if (!currency_state_confirm_auto_selection()) {
-            if (curr_page != NULL) show_currency_set_fail_popup();
-            return;
-        }
+        /* The reply service has already confirmed AUTO/MULTI. Only project it. */
         g_page07_curr.model.selected_abs_idx = target_index;
         g_page07_curr.model.selected_visible_idx =
             page07_curr_model_find_visible_pos(target_index);
@@ -330,7 +332,6 @@ void page_07_curr_apply_mode_result(uint8_t requested_mode, bool success)
         smart_island_refresh_summary();
         if (curr_page != NULL) {
             ui_manager_switch(UI_PAGE_MAIN);
-            page_01_scroll_hint_force_hide();
             page_01_main_scroll_reset();
         }
         return;
@@ -374,6 +375,11 @@ void page_07_curr_cancel_pending_selection(void)
     if (curr_page != NULL) show_currency_set_fail_popup();
 }
 
+void page_07_curr_reset_pending_selection(void)
+{
+    memset(&g_curr_mode_transition, 0, sizeof(g_curr_mode_transition));
+}
+
 void page_07_curr_apply_switch_result(const currency_switch_result_t* result)
 {
     char curr_code[4];
@@ -385,7 +391,6 @@ void page_07_curr_apply_switch_result(const currency_switch_result_t* result)
         page07_curr_model_save();
         if (curr_page == NULL) return;
         ui_manager_switch(UI_PAGE_MAIN);
-        page_01_scroll_hint_force_hide();
         // 切换币种成功后再次归零，确保不会出现首行被遮挡
         page_01_main_scroll_reset();
         return;
@@ -427,7 +432,8 @@ static void curr_update_card_fav_ui(int i)
     page07_curr_card_t *card = &g_page07_curr.cards[i];
     if (card->fav_btn == NULL || card->fav_icon == NULL) return;
 
-    if (!sel || g_page07_curr.model.view_mode != PAGE07_CURR_VIEW_CARD) {
+    if (!sel || g_page07_curr.model.view_mode != PAGE07_CURR_VIEW_CARD ||
+        page07_curr_model_is_fixed(card->abs_idx)) {
         lv_obj_add_flag(card->fav_btn, LV_OBJ_FLAG_HIDDEN);
         return;
     }
@@ -441,6 +447,11 @@ static void curr_update_grid_fav_ui(int i)
     bool fav = page07_curr_model_is_favorite(g_page07_curr.grid_items[i].abs_idx);
 
     if (g_page07_curr.grid_items[i].fav_btn == NULL || g_page07_curr.grid_items[i].fav_icon == NULL) return;
+
+    if (page07_curr_model_is_fixed(g_page07_curr.grid_items[i].abs_idx)) {
+        lv_obj_add_flag(g_page07_curr.grid_items[i].fav_btn, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
 
     lv_obj_set_style_bg_opa(g_page07_curr.grid_items[i].fav_btn, LV_OPA_TRANSP, 0);
     lv_img_set_src(g_page07_curr.grid_items[i].fav_icon, fav ? "L:/usr/local/share/lvgl_data/fav.png" : "L:/usr/local/share/lvgl_data/unfav.png");
@@ -603,9 +614,6 @@ static void curr_grid_item_click_cb(lv_event_t* e)
     if (vis_idx < 0 || vis_idx >= g_page07_curr.model.visible_count) return;
 
     int abs_idx = g_page07_curr.model.visible_indices[vis_idx];
-    g_page07_curr.model.selected_abs_idx = abs_idx;
-    g_page07_curr.model.selected_visible_idx = vis_idx;
-    curr_set_left_info_by_abs(abs_idx);
     curr_select_and_exit_abs(abs_idx);
 }
 
@@ -1267,8 +1275,8 @@ static void curr_refresh_cached_selection(void)
 {
     char curr_code[4];
 
-    page07_curr_model_load();
-    page07_curr_model_refresh_visible();
+    /* A retained view owns its current filter and index map. Reloading a
+     * saved FAV preference here could remap still-cached ALL card objects. */
     currency_state_get_selected_code(curr_code);
     g_page07_curr.model.selected_abs_idx = page07_curr_model_find_abs_idx(curr_code);
     g_page07_curr.model.selected_visible_idx =
@@ -1277,9 +1285,6 @@ static void curr_refresh_cached_selection(void)
     curr_refresh_left_buttons();
 
     if (g_page07_curr.model.view_mode == PAGE07_CURR_VIEW_CARD) {
-        curr_apply_selected_style();
-        curr_scroll_to_visible_idx(g_page07_curr.model.selected_visible_idx,
-                                   false);
         return;
     }
 
@@ -1302,6 +1307,39 @@ static void curr_refresh_cached_selection(void)
         curr_update_grid_fav_ui(i);
     }
     g_curr_grid_styled_abs_idx = g_page07_curr.model.selected_abs_idx;
+}
+
+static void curr_focus_confirmed_selection_on_entry(void)
+{
+    int selected = g_page07_curr.model.selected_abs_idx;
+
+    if (g_page07_curr.model.visible_count <= 0) return;
+
+    /* Browsing focus is not a currency selection. If the current currency
+     * is filtered out, reveal ALL for this visit without changing favorites
+     * or persisting an automatic filter preference change. */
+    if (g_page07_curr.model.favorite_only &&
+        !page07_curr_model_is_fixed(selected) &&
+        !page07_curr_model_is_favorite(selected)) {
+        g_page07_curr.model.favorite_only = false;
+        curr_refresh_left_buttons();
+        curr_refresh_right_views();
+    }
+
+    if (g_page07_curr.model.view_mode == PAGE07_CURR_VIEW_CARD) {
+        curr_scroll_to_visible_idx(g_page07_curr.model.selected_visible_idx,
+                                   false);
+    } else {
+        for (int i = 0; i < g_page07_curr.model.visible_count; i++) {
+            if (g_page07_curr.grid_items[i].abs_idx == selected &&
+                g_page07_curr.grid_items[i].item != NULL) {
+                lv_obj_update_layout(g_page07_curr.objects.grid_scroll);
+                lv_obj_scroll_to_view(g_page07_curr.grid_items[i].item,
+                                      LV_ANIM_OFF);
+                break;
+            }
+        }
+    }
 }
 
 bool ui_page_07_curr_resume(void)
@@ -1332,6 +1370,9 @@ bool ui_page_07_curr_resume(void)
         memcpy(g_curr_page_selected_code, selected_code,
                sizeof(g_curr_page_selected_code));
     }
+    /* A clean model snapshot says nothing about a retained browsing offset.
+     * Restore focus before showing the page, even when selection is unchanged. */
+    curr_focus_confirmed_selection_on_entry();
     lv_obj_clear_flag(curr_page, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(curr_page);
     page07_curr_carousel_enable(&g_page07_curr.carousel,

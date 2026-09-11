@@ -9,6 +9,8 @@
 #include "un260/lv_system/ui_qr_data.h"
 #include "un260/lv_system/ui_state_runtime.h"
 #include "un260/lv_system/ui_text.h"
+#include "un260/counting/counting_data_store.h"
+#include "un260/currency/currency_state.h"
 
 #define SMART_ISLAND_ACTION_BTN_W          221
 #define SMART_ISLAND_ACTION_BTN_H          54
@@ -433,6 +435,19 @@ static void smart_island_show_qr_error_toast(const char *text)
 static void smart_island_show_qr_popup(void)
 {
     char qr_text[3072];
+    if (currency_state_multi_selected() ||
+        !counting_data_monetary_result_supported(counting_data_current())) {
+        lv_print_toast_config_t toast_cfg = lv_print_toast_get_default_config();
+        toast_cfg.x = 320;
+        toast_cfg.w = 640;
+        toast_cfg.h = 120;
+        toast_cfg.text = ui_text_get(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED);
+        toast_cfg.show_loader = false;
+        toast_cfg.align_center = true;
+        toast_cfg.auto_hide_ms = 3500;
+        lv_print_toast_show_with_config(&toast_cfg);
+        return;
+    }
     if (!ui_qr_data_is_ready()) {
         smart_island_show_qr_error_toast(ui_text_get(UI_TEXT_WIDGET_QR_POPUP_NO_DATA));
         return;

@@ -32,6 +32,8 @@ static bool ui_qr_data_append(char* buf, size_t buf_size, size_t* used,
 
 bool ui_qr_data_is_ready(void) //判断当前是否有有效点钞数据
 {
+    if (currency_state_multi_selected() ||
+        !counting_data_monetary_result_supported(counting_data_current())) return false;
     if (counting_data_current()->total_pcs > 0) return true;
     if (counting_data_current()->total_amount > 0.0f) return true;
     if (counting_data_reject_pcs_count(counting_data_current()) > 0) return true;

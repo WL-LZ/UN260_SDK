@@ -39,11 +39,14 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
             }
             if (requested_mode == SETTING_MODE_TARGET_AUTO_CURRENCY) {
                 currency_state_confirm_auto_selection();
+            } else if (requested_mode == SETTING_MODE_TARGET_MULTI_CURRENCY) {
+                currency_state_confirm_multi_selection();
             } else {
                 machine_state_confirm_mode(requested_mode);
-                currency_state_leave_auto_selection();
+                currency_state_leave_special_selection();
             }
-            if (requested_mode != SETTING_MODE_TARGET_AUTO_CURRENCY) {
+            if (requested_mode != SETTING_MODE_TARGET_AUTO_CURRENCY &&
+                requested_mode != SETTING_MODE_TARGET_MULTI_CURRENCY) {
                 if (requested_mode != 0) {
                     page_01_main_icon_feedback("page_01_mode_icon.png");
                 }
@@ -77,16 +80,19 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
 
             if (protocol_mode == 0x01) {
                 currency_state_confirm_auto_selection();
+            } else if (protocol_mode == 0x02) {
+                currency_state_confirm_multi_selection();
             } else {
                 if (!mode_codec_decode(protocol_mode, &machine_mode)) {
                     uart_debug_printf("Boot work mode invalid: 0x%02X\n", protocol_mode);
                     break;
                 }
                 machine_state_confirm_mode(machine_mode);
-                currency_state_leave_auto_selection();
+                currency_state_leave_special_selection();
             }
             setting_service_cancel_mode_request();
-            if (protocol_mode != 0x01) {
+            page_07_curr_reset_pending_selection();
+            if (protocol_mode != 0x01 && protocol_mode != 0x02) {
                 page_01_mode_switch_refre();
             }
             page_01_curr_img_refre();

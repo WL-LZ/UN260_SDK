@@ -5,6 +5,8 @@
 #include <stdint.h>
 
 bool app_command_runtime_request_count_start(void);
+/* Pending command or a controller-confirmed counting session. */
+bool app_command_runtime_count_start_busy(void);
 bool app_command_runtime_clear_counting_data(const char *reason);
 void app_command_runtime_process_frames(void);
 /* A frame is indivisible. Zero budget dispatches at most one ready frame.

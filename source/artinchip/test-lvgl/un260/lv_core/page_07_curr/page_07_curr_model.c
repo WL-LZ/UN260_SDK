@@ -89,7 +89,8 @@ static bool curr_is_favorite_code(const char* code)
 
 static bool curr_add_favorite_code(const char* code)
 {
-    if (code == NULL || code[0] == '\0') return false;
+    if (code == NULL || code[0] == '\0' ||
+        currency_state_is_special_code(code)) return false;
     if (curr_is_favorite_code(code)) return true;
     if (g_page07_curr.model.favorite_count >= PAGE07_CURR_MAX_ITEMS) return false;
 
@@ -121,11 +122,19 @@ bool page07_curr_model_is_favorite(int abs_idx)
     return curr_is_favorite_code(curr_code);
 }
 
+bool page07_curr_model_is_fixed(int abs_idx)
+{
+    char code[4];
+    return abs_idx >= 0 && currency_state_get_code((uint8_t)abs_idx, code) &&
+           currency_state_is_special_code(code);
+}
+
 void page07_curr_model_toggle_favorite(int abs_idx)
 {
     char curr_code[4];
 
-    if (abs_idx < 0 || !currency_state_get_code((uint8_t)abs_idx, curr_code)) return;
+    if (abs_idx < 0 || !currency_state_get_code((uint8_t)abs_idx, curr_code) ||
+        currency_state_is_special_code(curr_code)) return;
 
 #if LV_DEBUG
     printf("[curr_fav] toggle abs_idx=%d code=%s\n",
@@ -149,7 +158,8 @@ void page07_curr_model_refresh_visible(void)
 
     for (int i = 0; i < total; i++) {
         bool keep = true;
-        if (g_page07_curr.model.favorite_only) keep = page07_curr_model_is_favorite(i);
+        if (g_page07_curr.model.favorite_only && !page07_curr_model_is_fixed(i))
+            keep = page07_curr_model_is_favorite(i);
         if (!keep) continue;
         g_page07_curr.model.visible_indices[g_page07_curr.model.visible_count++] = i;
     }

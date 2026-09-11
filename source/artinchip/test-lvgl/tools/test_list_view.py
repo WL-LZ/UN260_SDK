@@ -122,6 +122,7 @@ def main():
                      "un260/lv_system/ui_text_widget.c",
                      "un260/lv_system/ui_lang.c",
                      "un260/counting/counting_data_store.c",
+                     "un260/currency/currency_state.c",
                      "un260/counting/counting_serial_query.c",
                      "un260/counting/counting_serial_text.c"]:
             sources.append(ROOT / path)

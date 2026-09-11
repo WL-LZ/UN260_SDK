@@ -4,6 +4,7 @@
 #include "un260/lv_components/smart_island.h"
 #include "un260/lv_components/lv_damped_button.h"
 #include "un260/counting/counting_data_store.h"
+#include "un260/currency/currency_state.h"
 #include "un260/lv_system/ui_lang.h"
 #include "un260/lv_system/ui_text.h"
 #include <stdio.h>
@@ -130,7 +131,11 @@ static void pure_refresh_values(void)
     char pcs_buf[32];
     int reject_cnt = counting_data_reject_pcs_count(counting_data_current());
 
-    pure_format_amount(amount_buf, sizeof(amount_buf), counting_data_current()->total_amount);
+    if (currency_state_multi_selected() ||
+        !counting_data_monetary_result_supported(counting_data_current()))
+        snprintf(amount_buf, sizeof(amount_buf), "--");
+    else
+        pure_format_amount(amount_buf, sizeof(amount_buf), counting_data_current()->total_amount);
     pure_format_pcs(pcs_buf, sizeof(pcs_buf), counting_data_current()->total_pcs);
 
     if ((!g_pure_page.values_valid ||

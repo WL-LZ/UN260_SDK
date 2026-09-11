@@ -3,7 +3,7 @@
 #include <string.h>
 
 static const char g_currency_default_codes[][4] = {
-    CURRENCY_AUTO_CODE,
+    CURRENCY_AUTO_CODE, CURRENCY_MULTI_CODE,
     "USD", "CNY", "EUR", "AED", "SAR", "OMR", "QAR", "MAD",
     "EGP", "DZD", "INR", "PKR", "GBP", "IQD"
 };
@@ -11,23 +11,28 @@ static const char g_currency_default_codes[][4] = {
 static currency_state_snapshot_t g_currency_state = {
     .count = sizeof(g_currency_default_codes) / sizeof(g_currency_default_codes[0]),
     .codes = {
-        CURRENCY_AUTO_CODE,
+        CURRENCY_AUTO_CODE, CURRENCY_MULTI_CODE,
         "USD", "CNY", "EUR", "AED", "SAR", "OMR", "QAR", "MAD",
         "EGP", "DZD", "INR", "PKR", "GBP", "IQD"
     },
     .active_code = "CNY",
     .active_currency = CURR_CNY_ITEM,
-    .active_index = 2,
+    .active_index = 3,
 };
 
-/* The protocol list contains real currencies only. AUTO/MIX are UI features. */
+/* Controller list order is preserved after the two fixed mode selectors. */
 static char g_currency_sync_codes[CONTROLLER_MAX_CURRENCIES][4];
 static bool g_currency_sync_seen[CONTROLLER_MAX_CURRENCIES];
 static uint8_t g_currency_sync_count;
 static bool g_currency_sync_active;
 static bool g_currency_list_ready;
 static char g_detected_code[4];
-static bool g_auto_selected;
+typedef enum {
+    CURRENCY_SELECTION_MANUAL,
+    CURRENCY_SELECTION_AUTO,
+    CURRENCY_SELECTION_MULTI,
+} currency_selection_t;
+static currency_selection_t g_selection;
 
 static bool currency_state_code_is_valid(const char *code)
 {
@@ -53,9 +58,21 @@ bool currency_state_is_auto_code(const char code[4])
     return code != NULL && strncmp(code, CURRENCY_AUTO_CODE, 3) == 0;
 }
 
+bool currency_state_is_multi_code(const char code[4])
+{
+    return code != NULL && strncmp(code, CURRENCY_MULTI_CODE, 3) == 0;
+}
+
+bool currency_state_is_special_code(const char code[4])
+{
+    return currency_state_is_auto_code(code) || currency_state_is_multi_code(code);
+}
+
 const char *currency_state_display_code(const char code[4])
 {
-    return currency_state_is_auto_code(code) ? "AUTO" : code;
+    if (currency_state_is_auto_code(code)) return "AUTO";
+    if (currency_state_is_multi_code(code)) return "MULTI";
+    return code;
 }
 
 void currency_state_reset(void)
@@ -67,8 +84,8 @@ void currency_state_reset(void)
            sizeof(g_currency_default_codes));
     currency_state_copy_code(g_currency_state.active_code, "CNY");
     g_currency_state.active_currency = CURR_CNY_ITEM;
-    g_currency_state.active_index = 2;
-    g_auto_selected = false;
+    g_currency_state.active_index = 3;
+    g_selection = CURRENCY_SELECTION_MANUAL;
     memset(g_detected_code, 0, sizeof(g_detected_code));
     memset(g_currency_sync_codes, 0, sizeof(g_currency_sync_codes));
     memset(g_currency_sync_seen, 0, sizeof(g_currency_sync_seen));
@@ -92,7 +109,7 @@ bool currency_state_append_list_code(uint8_t protocol_index, const char code[4])
     if (!g_currency_sync_active || protocol_index == 0 ||
         protocol_index > CONTROLLER_MAX_CURRENCIES ||
         !currency_state_code_is_valid(code) ||
-        currency_state_is_auto_code(code)) {
+        currency_state_is_special_code(code)) {
         return false;
     }
     index = (uint8_t)(protocol_index - 1);
@@ -121,31 +138,32 @@ bool currency_state_finish_list_sync(void)
     if (valid) {
         memset(g_currency_state.codes, 0, sizeof(g_currency_state.codes));
         currency_state_copy_code(g_currency_state.codes[0], CURRENCY_AUTO_CODE);
+        currency_state_copy_code(g_currency_state.codes[1], CURRENCY_MULTI_CODE);
         for (uint8_t i = 0; i < g_currency_sync_count; i++) {
-            currency_state_copy_code(g_currency_state.codes[i + 1],
+            currency_state_copy_code(g_currency_state.codes[i + 2],
                                      g_currency_sync_codes[i]);
         }
-        g_currency_state.count = (uint8_t)(g_currency_sync_count + 1);
+        g_currency_state.count = (uint8_t)(g_currency_sync_count + 2);
 
-        if (g_auto_selected) {
+        if (currency_state_special_selected()) {
             uint8_t real_index;
 
             if (!currency_state_find_code(g_currency_state.active_code,
                                           &real_index)) {
                 currency_state_copy_code(g_currency_state.active_code,
-                                         g_currency_state.codes[1]);
+                                         g_currency_state.codes[2]);
                 g_currency_state.active_currency =
-                    currency_state_code_to_item(g_currency_state.codes[1]);
+                    currency_state_code_to_item(g_currency_state.codes[2]);
             }
-            g_currency_state.active_index = 0;
+            g_currency_state.active_index = currency_state_multi_selected() ? 1 : 0;
         } else if (!currency_state_find_code(g_currency_state.active_code,
                                              &g_currency_state.active_index)) {
             /* Never retain a currency that the controller no longer supports. */
-            g_currency_state.active_index = 1;
+            g_currency_state.active_index = 2;
             currency_state_copy_code(g_currency_state.active_code,
-                                     g_currency_state.codes[1]);
+                                     g_currency_state.codes[2]);
             g_currency_state.active_currency =
-                currency_state_code_to_item(g_currency_state.codes[1]);
+                currency_state_code_to_item(g_currency_state.codes[2]);
         }
         g_currency_list_ready = true;
     }
@@ -164,7 +182,7 @@ bool currency_state_list_is_ready(void)
 
 curr_item_t currency_state_code_to_item(const char *code)
 {
-    if (!code || currency_state_is_auto_code(code)) return CURR_COUNT;
+    if (!code || currency_state_is_special_code(code)) return CURR_COUNT;
     if (strncmp(code, "CNY", 3) == 0) return CURR_CNY_ITEM;
     if (strncmp(code, "USD", 3) == 0) return CURR_USD_ITEM;
     if (strncmp(code, "EUR", 3) == 0) return CURR_EUR_ITEM;
@@ -191,18 +209,16 @@ bool currency_state_confirm_active_code(const char *code)
 {
     curr_item_t currency;
     uint8_t index;
-    bool auto_selected = g_auto_selected;
 
     if (!currency_state_code_is_valid(code) ||
-        currency_state_is_auto_code(code)) {
+        currency_state_is_special_code(code)) {
         return false;
     }
     currency_state_copy_code(g_currency_state.active_code, code);
     memset(g_detected_code, 0, sizeof(g_detected_code));
-    if (!auto_selected && currency_state_find_code(code, &index)) {
+    if (!currency_state_special_selected() && currency_state_find_code(code, &index)) {
         g_currency_state.active_index = index;
     }
-    g_auto_selected = auto_selected;
     currency = currency_state_code_to_item(code);
     if (currency < CURR_COUNT) g_currency_state.active_currency = currency;
     return true;
@@ -214,14 +230,14 @@ bool currency_state_confirm_active_selection(uint8_t index, const char code[4])
 
     if (index >= g_currency_state.count || index >= MAX_CURRENCIES ||
         !currency_state_code_is_valid(code) ||
-        currency_state_is_auto_code(code) ||
+        currency_state_is_special_code(code) ||
         strncmp(code, g_currency_state.codes[index], 3) != 0) {
         return false;
     }
 
     g_currency_state.active_index = index;
     currency_state_copy_code(g_currency_state.active_code, code);
-    g_auto_selected = false;
+    g_selection = CURRENCY_SELECTION_MANUAL;
     memset(g_detected_code, 0, sizeof(g_detected_code));
     currency = currency_state_code_to_item(code);
     if (currency < CURR_COUNT) g_currency_state.active_currency = currency;
@@ -234,23 +250,39 @@ bool currency_state_confirm_auto_selection(void)
 
     if (!currency_state_find_code(CURRENCY_AUTO_CODE, &index)) return false;
     g_currency_state.active_index = index;
-    g_auto_selected = true;
+    g_selection = CURRENCY_SELECTION_AUTO;
     memset(g_detected_code, 0, sizeof(g_detected_code));
     return true;
 }
 
 bool currency_state_leave_auto_selection(void)
 {
+    return !currency_state_auto_selected() || currency_state_leave_special_selection();
+}
+
+bool currency_state_confirm_multi_selection(void)
+{
     uint8_t index;
 
-    if (!g_auto_selected) return true;
+    if (!currency_state_find_code(CURRENCY_MULTI_CODE, &index)) return false;
+    g_currency_state.active_index = index;
+    g_selection = CURRENCY_SELECTION_MULTI;
+    memset(g_detected_code, 0, sizeof(g_detected_code));
+    return true;
+}
+
+bool currency_state_leave_special_selection(void)
+{
+    uint8_t index;
+
+    if (!currency_state_special_selected()) return true;
     if (!currency_state_find_code(g_currency_state.active_code, &index)) {
-        if (g_currency_state.count <= 1) return false;
-        index = 1;
+        if (g_currency_state.count <= 2) return false;
+        index = 2;
         currency_state_copy_code(g_currency_state.active_code,
                                  g_currency_state.codes[index]);
     }
-    g_auto_selected = false;
+    g_selection = CURRENCY_SELECTION_MANUAL;
     g_currency_state.active_index = index;
     memset(g_detected_code, 0, sizeof(g_detected_code));
     return true;
@@ -258,7 +290,7 @@ bool currency_state_leave_auto_selection(void)
 
 void currency_state_begin_count_session(void)
 {
-    if (g_auto_selected) {
+    if (currency_state_special_selected()) {
         memset(g_detected_code, 0, sizeof(g_detected_code));
     }
 }
@@ -267,9 +299,9 @@ bool currency_state_confirm_detected_code(const char code[4])
 {
     uint8_t index;
 
-    if (!g_auto_selected ||
+    if (!currency_state_auto_selected() ||
         !currency_state_code_is_valid(code) ||
-        !currency_state_find_code(code, &index) || index == 0) {
+        !currency_state_find_code(code, &index) || index < 2) {
         return false;
     }
     currency_state_copy_code(g_detected_code, code);
@@ -278,9 +310,11 @@ bool currency_state_confirm_detected_code(const char code[4])
 
 void currency_state_get_effective_code(char code[4])
 {
-    if (g_auto_selected && g_detected_code[0] != '\0') {
+    if (currency_state_multi_selected()) {
+        currency_state_copy_code(code, CURRENCY_MULTI_CODE);
+    } else if (currency_state_auto_selected() && g_detected_code[0] != '\0') {
         currency_state_copy_code(code, g_detected_code);
-    } else if (g_auto_selected) {
+    } else if (currency_state_auto_selected()) {
         currency_state_copy_code(code, CURRENCY_AUTO_CODE);
     } else {
         currency_state_copy_code(code, g_currency_state.active_code);
@@ -296,11 +330,11 @@ void currency_state_confirm_active_currency(curr_item_t currency)
 void currency_state_confirm_active_index(uint8_t index)
 {
     /* Protocol indices refer only to the real-currency list. */
-    uint8_t ui_index = (uint8_t)(index + 1);
+    unsigned ui_index = (unsigned)index + 2U;
 
-    if (g_auto_selected) return;
+    if (currency_state_special_selected()) return;
     if (ui_index >= g_currency_state.count) return;
-    g_currency_state.active_index = ui_index;
+    g_currency_state.active_index = (uint8_t)ui_index;
 }
 
 void currency_state_get_snapshot(currency_state_snapshot_t *snapshot)
@@ -343,13 +377,24 @@ void currency_state_get_active_code(char code[4])
 void currency_state_get_selected_code(char code[4])
 {
     currency_state_copy_code(code,
-                             g_auto_selected ? CURRENCY_AUTO_CODE
-                                             : g_currency_state.active_code);
+                             currency_state_multi_selected() ? CURRENCY_MULTI_CODE :
+                             currency_state_auto_selected() ? CURRENCY_AUTO_CODE :
+                             g_currency_state.active_code);
 }
 
 bool currency_state_auto_selected(void)
 {
-    return g_auto_selected;
+    return g_selection == CURRENCY_SELECTION_AUTO;
+}
+
+bool currency_state_multi_selected(void)
+{
+    return g_selection == CURRENCY_SELECTION_MULTI;
+}
+
+bool currency_state_special_selected(void)
+{
+    return g_selection != CURRENCY_SELECTION_MANUAL;
 }
 
 curr_item_t currency_state_active_currency(void)

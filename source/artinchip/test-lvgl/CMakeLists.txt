@@ -119,6 +119,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/counting/counting_serial_text.c
     un260/history/history_export_text.c
     un260/currency/currency_state.c
+    un260/currency/currency_metadata.c
     un260/currency/currency_service.c
     un260/currency/currency_reply.c
     un260/serial_number/serial_number.c
@@ -140,7 +141,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_core/lv_page_event.c
     un260/lv_core/lv_page_manager.c
     un260/lv_core/page_01_main.c
-    un260/lv_core/page_01_detail_scroll.c
+    un260/lv_core/page_01_main_detail.c
     un260/lv_core/page_02_list.c
     un260/lv_core/page_03_menu.c
     un260/lv_core/page_05_set_password.c
@@ -208,6 +209,8 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_drivers/uart_io.c
     un260/lv_drivers/uart_bridge_service.c
     #font
+    un260/font/lv_font_main_numeric_64.c
+    un260/font/lv_font_main_currency_56.c
 	un260/font/lv_font_montserrat_8.c 
     un260/font/lv_font_montserrat_10.c
     un260/font/lv_font_montserrat_12_subpx.c

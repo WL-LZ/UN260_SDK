@@ -345,6 +345,11 @@ static void smart_island_get_currency_code(char *buf, size_t size)
 
     if (buf == NULL || size == 0U) return;
 
+    if (!counting_data_monetary_result_supported(counting_data_current())) {
+        lv_snprintf(buf, size, "%s", currency_state_display_code(CURRENCY_MULTI_CODE));
+        return;
+    }
+
     /* Keep the island consistent with the main page: AUTO is shown until
      * the controller explicitly reports a detected currency via 0x50. */
     currency_state_get_effective_code(curr_code);
@@ -739,6 +744,8 @@ static void smart_island_rebuild_scene_texts(void)
     char curr[8] = {0};
     char detail_line[96] = {0};
     const char *work_text = smart_island_get_work_mode_text();
+    bool monetary_supported = !currency_state_multi_selected() &&
+        counting_data_monetary_result_supported(counting_data_current());
     memset(g_si_ctx.text.compact, 0, sizeof(g_si_ctx.text.compact));
     memset(g_si_ctx.text.info_title, 0, sizeof(g_si_ctx.text.info_title));
     memset(g_si_ctx.text.info_summary, 0, sizeof(g_si_ctx.text.info_summary));
@@ -760,7 +767,7 @@ static void smart_island_rebuild_scene_texts(void)
         }
         lv_snprintf(g_si_ctx.text.info_title, sizeof(g_si_ctx.text.info_title), "%s",
             ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_COUNTING_INFO_TITLE));
-        if (counting_data_current()->total_pcs > 0 && counting_data_current()->total_amount > 0.0f) {
+        if (monetary_supported && counting_data_current()->total_pcs > 0 && counting_data_current()->total_amount > 0.0f) {
             lv_snprintf(g_si_ctx.text.info_summary, sizeof(g_si_ctx.text.info_summary),
                 ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_CUR_PCS_AMOUNT_FMT), curr, counting_data_current()->total_pcs, counting_data_current()->total_amount);
         } else if (counting_data_current()->total_pcs > 0) {
@@ -813,7 +820,10 @@ static void smart_island_rebuild_scene_texts(void)
             smart_island_text_or_default(g_si_ctx.view.content.title, UI_TEXT_WIDGET_SMART_ISLAND_QR_READY));
         lv_snprintf(g_si_ctx.text.info_summary, sizeof(g_si_ctx.text.info_summary), "%s",
             ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_QR_INFO_SUBTITLE));
-        if (counting_data_current()->total_pcs > 0 && counting_data_current()->total_amount > 0.0f) {
+        if (!monetary_supported) {
+            lv_snprintf(g_si_ctx.text.info_footer, sizeof(g_si_ctx.text.info_footer),
+                ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_CUR_PCS_FMT), curr, counting_data_current()->total_pcs);
+        } else if (counting_data_current()->total_pcs > 0 && counting_data_current()->total_amount > 0.0f) {
             lv_snprintf(g_si_ctx.text.info_footer, sizeof(g_si_ctx.text.info_footer),
                 ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_CUR_PCS_AMOUNT_FMT), curr, counting_data_current()->total_pcs, counting_data_current()->total_amount);
         } else {
@@ -841,7 +851,11 @@ static void smart_island_rebuild_scene_texts(void)
         g_si_ctx.text.idle_has_data = g_si_ctx.text.analysis_valid && current_total > 0;
         g_si_ctx.text.idle_no_count = !g_si_ctx.text.analysis_valid;
 
-        if (g_si_ctx.text.idle_line1[0] != '\0') {
+        if (!monetary_supported) {
+            lv_snprintf(g_si_ctx.text.info_summary, sizeof(g_si_ctx.text.info_summary),
+                ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_CUR_PCS_FMT), curr,
+                counting_data_current()->last_total_pcs);
+        } else if (g_si_ctx.text.idle_line1[0] != '\0') {
             lv_snprintf(g_si_ctx.text.info_summary, sizeof(g_si_ctx.text.info_summary), "%s",
                 g_si_ctx.text.idle_line1);
         } else if (counting_data_current()->last_total_pcs > 0 || counting_data_current()->last_total_amount > 0.0f) {

@@ -15,6 +15,8 @@ RUNTIME = (ROOT / "un260/app_service/app_counting_runtime.c").read_text(encoding
 PLATFORM = (ROOT / "un260/lv_system/platform_app.c").read_text(encoding="utf-8")
 DETAIL = (ROOT / "un260/counting/counting_reject_sn_reply.c").read_text(encoding="utf-8")
 DENOM = (ROOT / "un260/counting/counting_denom_reply.c").read_text(encoding="utf-8")
+MAIN = (ROOT / "un260/lv_core/page_01_main.c").read_text(encoding="utf-8")
+MAIN_DETAIL = (ROOT / "un260/lv_core/page_01_main_detail.c").read_text(encoding="utf-8")
 
 
 def function(source, name):
@@ -72,9 +74,17 @@ class ListInvalidationContracts(unittest.TestCase):
 
     def test_serial_stream_start_invalidates_cleared_b_and_preserves_main_reset(self):
         body = function(RUNTIME, "app_counting_runtime_on_serial_data_started")
-        self.assertIn(mark("B"), body)
-        self.assertIn("page_01_detail_scroll_reset_all();", body)
+        self.assert_before(body, mark("B"), "page_01_main_scroll_reset();")
         self.assertNotIn("page_02_list_report_reset", body)
+        # The new public Main wrapper must still reset every detail anchor;
+        # accepting a renamed call alone would hide a partial-reset regression.
+        self.assertIn("page_01_main_detail_reset();", function(MAIN, "page_01_main_scroll_reset"))
+        reset = function(MAIN_DETAIL, "page_01_main_detail_reset")
+        self.assertIn("view->tap.pressed = false;", reset)
+        self.assertRegex(reset, r"for\s*\(unsigned i\s*=\s*0;\s*i\s*<\s*DETAIL_SECTIONS;\s*\+\+i\)")
+        self.assertIn("lv_recycled_list_refresh(view->section[i].list, 0, true);", reset)
+        self.assertIn("view->section[i].dirty = true;", reset)
+        self.assertIn("if (view->visible) section_refresh(&view->section[view->active]);", reset)
 
     def test_serial_completion_keeps_other_sections_and_reading_anchors(self):
         body = function(RUNTIME, "app_counting_runtime_on_serial_report_ready")

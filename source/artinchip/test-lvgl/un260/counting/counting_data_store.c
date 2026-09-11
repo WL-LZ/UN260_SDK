@@ -17,6 +17,21 @@ counting_sim_t *counting_data_mutable(void)
     return &g_counting_data;
 }
 
+void counting_data_mark_multi_result(counting_sim_t *sim_data)
+{
+    if (sim_data != NULL) sim_data->multi_currency_result = true;
+}
+
+void counting_data_reset_result_scope(counting_sim_t *sim_data)
+{
+    if (sim_data != NULL) sim_data->multi_currency_result = false;
+}
+
+bool counting_data_monetary_result_supported(const counting_sim_t *sim_data)
+{
+    return sim_data != NULL && !sim_data->multi_currency_result;
+}
+
 static bool counting_data_capacity_is_valid(int capacity)
 {
     return capacity >= 0 && capacity <= COUNTING_DATA_MAX_ITEMS;

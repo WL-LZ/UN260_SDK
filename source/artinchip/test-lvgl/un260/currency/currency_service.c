@@ -25,7 +25,8 @@ bool currency_service_request_switch(uint8_t target_index, const char target_cod
 {
     char listed_code[4];
 
-    if (!target_code || target_code[0] == '\0') return false;
+    if (!target_code || target_code[0] == '\0' ||
+        currency_state_is_special_code(target_code)) return false;
     if (!currency_state_get_code(target_index, listed_code) ||
         strncmp(listed_code, target_code, 3) != 0) {
         return false;
