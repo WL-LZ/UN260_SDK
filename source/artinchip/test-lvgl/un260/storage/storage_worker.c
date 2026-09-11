@@ -1,6 +1,7 @@
 #include "storage_worker.h"
 
 #include <pthread.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct {
@@ -9,10 +10,7 @@ typedef struct {
     bool running;
     storage_job_run_t run;
     size_t size;
-    union {
-        uint64_t alignment;
-        unsigned char bytes[STORAGE_WORKER_MAX_JOB_BYTES];
-    } payload;
+    void *payload;
 } storage_job_t;
 
 static storage_job_t g_jobs[STORAGE_WORKER_CAPACITY];
@@ -55,7 +53,7 @@ static void *storage_thread(void *unused)
         job->running = true;
         pthread_mutex_unlock(&g_lock);
         /* No UI/LVGL calls, and no service mutex held across filesystem I/O. */
-        succeeded = job->run(job->payload.bytes, job->size);
+        succeeded = job->run(job->payload, job->size);
         pthread_mutex_lock(&g_lock);
         job->running = false;
         job->status = succeeded ? STORAGE_JOB_SUCCEEDED : STORAGE_JOB_FAILED;
@@ -69,7 +67,8 @@ bool storage_worker_init(void)
 {
     bool ok = true;
     pthread_mutex_lock(&g_lock);
-    if (!g_started) {
+    if (g_stopping && g_started) ok = false;
+    else if (!g_started) {
         g_stopping = false;
         if (pthread_create(&g_thread, NULL, storage_thread, NULL) != 0) ok = false;
         else g_started = true;
@@ -89,8 +88,12 @@ bool storage_worker_submit(storage_job_run_t run, const void *snapshot,
     if (g_started && !g_stopping && g_next_id != 0) {
         for (i = 0; i < STORAGE_WORKER_CAPACITY; i++) {
             storage_job_t *job = &g_jobs[i];
+            void *payload;
             if (job->status != STORAGE_JOB_UNKNOWN) continue;
-            memcpy(job->payload.bytes, snapshot, size);
+            payload = malloc(size);
+            if (payload == NULL) break;
+            memcpy(payload, snapshot, size);
+            job->payload = payload;
             job->size = size;
             job->run = run;
             job->id = g_next_id++;
@@ -150,7 +153,8 @@ bool storage_worker_release(storage_job_id_t id)
     pthread_mutex_lock(&g_lock);
     job = find_job(id);
     if (job != NULL && job->status == STORAGE_JOB_SUCCEEDED) {
-        job->status = STORAGE_JOB_UNKNOWN;
+        free(job->payload);
+        memset(job, 0, sizeof(*job));
         released = true;
     }
     pthread_mutex_unlock(&g_lock);
@@ -165,7 +169,7 @@ bool storage_worker_copy_completed(storage_job_id_t id, void *out, size_t size)
     pthread_mutex_lock(&g_lock);
     job = find_job(id);
     if (job != NULL && job->status == STORAGE_JOB_SUCCEEDED && job->size == size) {
-        memcpy(out, job->payload.bytes, size);
+        memcpy(out, job->payload, size);
         copied = true;
     }
     pthread_mutex_unlock(&g_lock);
@@ -177,7 +181,7 @@ bool storage_worker_has_capacity(void)
     unsigned i;
     bool available = false;
     pthread_mutex_lock(&g_lock);
-    if (g_started && !g_stopping) {
+    if (g_started && !g_stopping && g_next_id != 0) {
         for (i = 0; i < STORAGE_WORKER_CAPACITY; i++)
             if (g_jobs[i].status == STORAGE_JOB_UNKNOWN) available = true;
     }
@@ -193,6 +197,10 @@ bool storage_worker_shutdown(void)
         pthread_mutex_unlock(&g_lock);
         return true;
     }
+    if (g_stopping) {
+        pthread_mutex_unlock(&g_lock);
+        return false;
+    }
     for (i = 0; i < STORAGE_WORKER_CAPACITY; i++) {
         if (g_jobs[i].status == STORAGE_JOB_PENDING || g_jobs[i].status == STORAGE_JOB_FAILED) {
             pthread_mutex_unlock(&g_lock);
@@ -204,6 +212,10 @@ bool storage_worker_shutdown(void)
     pthread_mutex_unlock(&g_lock);
     pthread_join(g_thread, NULL);
     pthread_mutex_lock(&g_lock);
+    for (i = 0; i < STORAGE_WORKER_CAPACITY; i++) {
+        free(g_jobs[i].payload);
+        memset(&g_jobs[i], 0, sizeof(g_jobs[i]));
+    }
     g_started = false;
     pthread_mutex_unlock(&g_lock);
     return true;
