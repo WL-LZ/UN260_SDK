@@ -13,6 +13,8 @@ typedef enum {
     COUNTING_HISTORY_COMMIT_SAVED,
     COUNTING_HISTORY_COMMIT_RETRY_PENDING,
     COUNTING_HISTORY_COMMIT_FAILED,
+    /* Result intentionally not stored: v2 cannot represent MULTI amounts. */
+    COUNTING_HISTORY_COMMIT_UNSUPPORTED,
 } counting_history_commit_result_t;
 
 void counting_history_session_start(const uint8_t *buf, uint8_t len);
@@ -34,6 +36,8 @@ counting_history_commit_result_t counting_history_poll_commit(
 bool counting_history_discard_pending(counting_session_state_t *session);
 /* Backpressure for new starts: accepted records are never discarded to make room. */
 bool counting_history_can_start(void);
+/* One-shot UI notice, including skipped captures reached through reset/start. */
+bool counting_history_take_unsupported_notice(void);
 /* Freeze pending count/details before any reset or controller-start transition.
  * False is backpressure: retain the frame AND all mutable session/detail data. */
 bool counting_history_prepare_reset(counting_session_state_t *session,

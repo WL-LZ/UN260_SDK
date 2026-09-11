@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "un260/lv_system/ui_history_data.h"
+#include "counting_data_store.h"
 
 #define COUNTING_HISTORY_FRAME_TEXT_SIZE 160
 #define COUNTING_HISTORY_SESSION_LOG_SIZE 4096
@@ -26,6 +27,7 @@ static counting_history_snapshot_t g_overflow_snapshot;
 static bool g_overflow_valid;
 static bool g_uncaptured_pending;
 static bool g_failure_reported;
+static bool g_unsupported_notice;
 
 static void counting_history_frame_to_hex(const uint8_t *buf,
                                           uint8_t len,
@@ -168,6 +170,15 @@ counting_history_commit_result_t counting_history_try_commit(
         !session->history_record.valid || !session->history_record.end_seen) {
         return COUNTING_HISTORY_COMMIT_NOT_READY;
     }
+    if (!counting_data_monetary_result_supported(sim_data)) {
+        /* Do not invent a single-currency record or a zero amount. This is an
+         * explicit capability limit, not storage failure/backpressure. Existing
+         * immutable single-currency snapshots retain their normal ownership. */
+        g_uncaptured_pending = false;
+        g_unsupported_notice = true;
+        counting_history_clear_pending(session);
+        return COUNTING_HISTORY_COMMIT_UNSUPPORTED;
+    }
     counting_history_promote_overflow();
     overflow = g_snapshot_count >= COUNTING_HISTORY_PENDING_CAPACITY;
     if (overflow && g_overflow_valid) {
@@ -246,6 +257,13 @@ bool counting_history_can_start(void)
     return !g_uncaptured_pending && !g_overflow_valid &&
            g_snapshot_count < COUNTING_HISTORY_PENDING_CAPACITY &&
            ui_history_data_can_accept() && ui_history_data_status() != STORAGE_JOB_FAILED;
+}
+
+bool counting_history_take_unsupported_notice(void)
+{
+    bool pending = g_unsupported_notice;
+    g_unsupported_notice = false;
+    return pending;
 }
 
 bool counting_history_prepare_reset(counting_session_state_t *session,

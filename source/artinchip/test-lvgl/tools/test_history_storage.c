@@ -160,11 +160,15 @@ static int history_test_rename(const char *from, const char *to)
 
 static const counting_sim_t *runtime_sim;
 static unsigned reset_animation_calls;
-static const counting_sim_t *counting_data_current(void) { return runtime_sim; }
+static unsigned reset_island_calls;
+static const counting_sim_t *history_runtime_test_current(void) { return runtime_sim; }
 static uint32_t lv_tick_get(void) { return 0; }
 static void ui_count_end_anim_cancel(void) { reset_animation_calls++; }
+static void smart_island_notify_count_reset(void) { reset_island_calls++; }
 static void uart_debug_printf(const char *format, ...) { (void)format; }
+#define counting_data_current history_runtime_test_current
 #include "history_runtime_under_test.h"
+#undef counting_data_current
 
 void currency_state_get_active_code(char code[4]) { memcpy(code, "USD", 4); }
 void machine_time_get(machine_time_value_t *value)
@@ -302,6 +306,7 @@ static void exercise(void)
         assert(!app_counting_runtime_reset_session(&session, "full-spool reset test"));
         assert(memcmp(&before, &session, sizeof(session)) == 0);
         assert(reset_animation_calls == 0);
+        assert(reset_island_calls == 0);
         assert(!counting_history_prepare_start(&session, &sim, now));
         assert(memcmp(&before, &session, sizeof(session)) == 0);
     }
@@ -320,8 +325,29 @@ static void exercise(void)
     assert(i < 10000 && !session.history_record.valid);
     assert(ui_history_total_notes_counted_get() == 23);
     assert(ui_history_data_get()->record_count == 20);
+    {
+        ui_history_record_t untouched, before;
+        storage_job_id_t old_job = ui_history_last_commit_id();
+        memset(&untouched, 0xA5, sizeof(untouched));
+        before = untouched;
+        counting_data_mark_multi_result(&sim);
+        assert(!ui_history_record_build_from_session(&sim, 12, 9999, "", "", "", "", &untouched));
+        assert(memcmp(&before, &untouched, sizeof(before)) == 0);
+        session.history_record.valid = true;
+        session.history_record.end_seen = true;
+        session.history_record.pcs = 12;
+        session.history_record.amount = 9999;
+        assert(counting_history_try_commit(&session, &sim, now) == COUNTING_HISTORY_COMMIT_UNSUPPORTED);
+        assert(!session.history_record.valid && counting_history_take_unsupported_notice());
+        assert(!counting_history_take_unsupported_notice());
+        assert(ui_history_last_commit_id() == old_job);
+        assert(ui_history_total_notes_counted_get() == 23 && ui_history_data_get()->record_count == 20);
+        assert(counting_history_can_start());
+        counting_data_reset_result_scope(&sim);
+    }
     assert(app_counting_runtime_reset_session(&session, "safe reset"));
     assert(reset_animation_calls == 1);
+    assert(reset_island_calls == 1);
     assert(storage_worker_shutdown());
     puts("PASS: worker-only I/O, immutable bounded jobs, durable completion, failure rollback/retry, incremental mirrors, counting backpressure");
 }

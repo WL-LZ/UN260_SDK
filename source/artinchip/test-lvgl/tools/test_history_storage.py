@@ -37,6 +37,7 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
                     str(ROOT / "tools/test_history_storage.c"),
                     str(ROOT / "un260/storage/storage_worker.c"),
                     str(ROOT / "un260/counting/counting_history_service.c"),
+                    str(ROOT / "un260/counting/counting_data_store.c"),
                     "-o", str(binary)], check=True)
     subprocess.run([str(binary), "exercise"], check=True)
 

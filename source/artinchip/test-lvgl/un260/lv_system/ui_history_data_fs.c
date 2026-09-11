@@ -10,6 +10,7 @@
 
 #include "un260/lv_system/machine_time.h"
 #include "un260/currency/currency_state.h"
+#include "un260/counting/counting_data_store.h"
 
 #ifndef UI_HISTORY_STORE_DIR
 #define UI_HISTORY_STORE_DIR         "/etc/ui_state/count_history"
@@ -1054,7 +1055,8 @@ bool ui_history_record_build_from_session(const counting_sim_t *sim_data, uint32
     machine_time_value_t now;
     char curr_code[4];
 
-    if (out == NULL || sim_data == NULL || sim_data->sn_capacity < 0 ||
+    if (out == NULL || !counting_data_monetary_result_supported(sim_data) ||
+        sim_data->sn_capacity < 0 ||
         sim_data->sn_capacity > COUNTING_DATA_MAX_ITEMS ||
         (sim_data->sn_capacity > 0 && sim_data->sn_str == NULL)) {
         return false;

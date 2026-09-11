@@ -23,6 +23,7 @@
 #include "un260/lv_components/smart_island.h"
 #include "un260/lv_drivers/lv_drivers.h"
 #include "un260/lv_system/counting_ui_runtime.h"
+#include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/app_clock.h"
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/protocol/protocol_frame.h"
@@ -247,6 +248,9 @@ void app_command_runtime_poll(uint32_t now_ms)
     }
     page_07_curr_poll_selection();
     app_counting_runtime_poll_history(&g_counting_session, counting_data_mutable(), now_ms);
+    if (counting_history_take_unsupported_notice())
+        smart_island_notify_warning_level(ui_text_get(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED),
+                                           SMART_ISLAND_WARNING_LEVEL_WARNING);
     counting_denom_query_poll(&g_counting_detail_state,
                               now_ms,
                               stage == BOOT_STAGE_DONE || stage == BOOT_STAGE_FAIL,

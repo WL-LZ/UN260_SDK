@@ -14,6 +14,7 @@
 #include "un260/storage/usb_storage.h"
 #include "un260/counting/counting_data_store.h"
 #include "un260/counting/counting_reject_reason.h"
+#include "un260/lv_system/ui_text.h"
 
 #define UI_EXPORT_LOCK_MS                  2000U
 #define UI_EXPORT_TOAST_TEXT_EXPORTING     "Exporting..."
@@ -626,6 +627,20 @@ bool ui_export_data_request(void)
     char html_tmp_path[sizeof(html_path) + 5] = {0};
     int written;
     bool ok = false;
+
+    if (currency_state_multi_selected() ||
+        !counting_data_monetary_result_supported(counting_data_current())) {
+        lv_print_toast_config_t toast_cfg = lv_print_toast_get_default_config();
+        toast_cfg.x = 320;
+        toast_cfg.w = 640;
+        toast_cfg.h = 120;
+        toast_cfg.text = ui_text_get(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED);
+        toast_cfg.show_loader = false;
+        toast_cfg.align_center = true;
+        toast_cfg.auto_hide_ms = 3500;
+        lv_print_toast_show_with_config(&toast_cfg);
+        return false;
+    }
 
     if (g_ui_export_data_lock) {
         ui_export_data_show_normal_toast(UI_EXPORT_TOAST_TEXT_EXPORTING);
