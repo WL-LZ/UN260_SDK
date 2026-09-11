@@ -86,6 +86,9 @@ for forbidden in ("lv_img_set_src", "lv_img_set_zoom", "lv_dma_snapshot_cache",
 assert "CURR_CAROUSEL_V4_" in renderer
 assert "CURR_CAROUSEL_V3_" not in page + renderer
 assert "lv_card_surface_focus_mark_apply(card->focus_mark, focused)" in function(renderer, "curr_set_card_render_state")
+cached_apply = function(renderer, "page07_curr_card_render_apply")
+assert "!card->has_scaled_flag" in cached_apply
+assert "card->using_cache = false" in cached_apply
 assert "lv_obj_create" not in function(surface, "lv_card_surface_focus_mark_apply")
 assert "CURR_CARD_UNSELECTED_BG_PATH" not in page
 assert "page07_curr_card_render_sync_snapshots" in projection
@@ -98,6 +101,7 @@ assert "page07_curr_carousel_busy" in function(page, "curr_snapshot_prewarm_time
 assert "page07_curr_carousel_busy" in function(page, "ui_page_07_curr_prepare_static_step")
 assert "page07_curr_carousel_bind_child(g_page07_curr.cards[i].fav_btn)" in page
 assert "page07_curr_carousel_bind_child(g_page07_curr.objects.list)" in page
+assert "g_page07_curr.cards[i].has_scaled_flag = true" in page
 
 stubs = r'''
 #include <assert.h>
@@ -528,6 +532,16 @@ int main(void) {
     assert(curr_card_snapshot_key(20,false,normal_key) && curr_card_snapshot_key(20,true,focus_key));
     assert(strcmp(normal_key,focus_key)!=0 && strstr(focus_key,"CURR_CAROUSEL_V4_")!=NULL);
     assert(!curr_card_snapshot_key(-1,false,normal_key) && !curr_card_snapshot_key(34,false,normal_key));
+
+    /* Production currency cards carry a width-scaled external flag.  Even
+     * with a warm snapshot available they must retain their live render tree
+     * when motion settles, otherwise the captured flag is re-sampled. */
+    fixture(10,2);
+    g_page07_curr.cards[2].has_scaled_flag=true;
+    page07_curr_card_render_apply(2,g_page07_curr.cards[2].base_x,0);
+    assert(!g_page07_curr.cards[2].using_cache);
+    assert(!lv_obj_has_flag(&renderers[2],LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_has_flag(&images[2],LV_OBJ_FLAG_HIDDEN));
 
     /* Make the currently bound focus face evictable. The fake cache's
      * release callback checks detach/hide ordering before dropping the pin. */

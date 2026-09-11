@@ -352,6 +352,10 @@ void page_01_curr_img_refre(void)
     if (s_curr_label) {
         const char *symbol = currency_metadata_symbol(code);
         lv_label_set_text(s_curr_label, symbol ? symbol : "");
+        lv_obj_set_style_text_font(s_curr_label,
+            symbol != NULL && strlen(symbol) > 3 ?
+                &lv_font_main_currency_32 : &lv_font_main_currency_56,
+            0);
         if (special || !symbol) lv_obj_add_flag(s_curr_label, LV_OBJ_FLAG_HIDDEN);
         else lv_obj_clear_flag(s_curr_label, LV_OBJ_FLAG_HIDDEN);
     }

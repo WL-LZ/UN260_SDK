@@ -376,6 +376,50 @@ const char* get_currency_img(const char* code)
         snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_RUB.png");
         return img_path;
     }
+    else if (strcmp(code, "ZAR") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_ZAR.png");
+        return img_path;
+    }
+    else if (strcmp(code, "IDR") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_IDR.png");
+        return img_path;
+    }
+    else if (strcmp(code, "MOP") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_MOP.png");
+        return img_path;
+    }
+    else if (strcmp(code, "THB") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_THB.png");
+        return img_path;
+    }
+    else if (strcmp(code, "XOF") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_XOF.png");
+        return img_path;
+    }
+    else if (strcmp(code, "XAF") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_XAF.png");
+        return img_path;
+    }
+    else if (strcmp(code, "TJS") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_TJS.png");
+        return img_path;
+    }
+    else if (strcmp(code, "UAH") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_UAH.png");
+        return img_path;
+    }
+    else if (strcmp(code, "AMD") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_AMD.png");
+        return img_path;
+    }
+    else if (strcmp(code, "AZN") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_AZN.png");
+        return img_path;
+    }
+    else if (strcmp(code, "LBP") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_LBP.png");
+        return img_path;
+    }
         
     else {
         snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_IQD.png");

@@ -210,6 +210,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_drivers/uart_bridge_service.c
     #font
     un260/font/lv_font_main_numeric_64.c
+    un260/font/lv_font_main_currency_32.c
     un260/font/lv_font_main_currency_56.c
 	un260/font/lv_font_montserrat_8.c 
     un260/font/lv_font_montserrat_10.c

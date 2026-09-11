@@ -140,7 +140,11 @@ void page07_curr_card_render_apply(int i, int pos_x, int pos_y)
 {
     page07_curr_card_t *card = &g_page07_curr.cards[i];
     lv_dma_snapshot_t *snapshot = card->surface_cache[card->focused ? 1 : 0];
-    if (snapshot != NULL && card->composite != NULL) {
+    /* The card snapshots are still useful to callers with purely static
+     * content. Currency cards contain a width-scaled external PNG, however;
+     * switching them from the live tree to a captured bitmap after scrolling
+     * ends re-samples that flag and creates the visible scale pulse. */
+    if (!card->has_scaled_flag && snapshot != NULL && card->composite != NULL) {
         const lv_img_dsc_t *image = lv_dma_snapshot_image(snapshot);
         lv_obj_add_flag(card->render_root, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(card->composite, LV_OBJ_FLAG_HIDDEN);

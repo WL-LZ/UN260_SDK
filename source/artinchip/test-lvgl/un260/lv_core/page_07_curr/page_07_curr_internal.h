@@ -37,6 +37,9 @@ typedef struct {
     bool render_initialized;
     bool render_focused;
     bool using_cache;
+    /* Whole-card snapshots cannot faithfully reproduce a transformed external
+     * flag image, so those cards always stay on the live render path. */
+    bool has_scaled_flag;
     bool favorite_initialized;
     bool favorite_value;
 } page07_curr_card_t;

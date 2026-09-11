@@ -672,6 +672,7 @@ static void curr_build_card_layer(void)
             lv_img_create(g_page07_curr.cards[i].render_root);
         lv_img_set_src(g_page07_curr.cards[i].img, get_currency_img(curr_code));
         page07_curr_view_set_img_target_width(g_page07_curr.cards[i].img, curr_code, CURR_FLAG_TARGET_W);
+        g_page07_curr.cards[i].has_scaled_flag = true;
         lv_obj_set_pos(g_page07_curr.cards[i].img, -35, CURR_FLAG_Y_IN_CARD);
 
         g_page07_curr.cards[i].name =
