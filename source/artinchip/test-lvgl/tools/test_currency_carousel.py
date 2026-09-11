@@ -543,6 +543,15 @@ int main(void) {
     assert(!lv_obj_has_flag(&renderers[2],LV_OBJ_FLAG_HIDDEN));
     assert(lv_obj_has_flag(&images[2],LV_OBJ_FLAG_HIDDEN));
 
+    /* Scaled flags must never produce or pin faces that apply() cannot use. */
+    for(int i=0;i<10;i++)g_page07_curr.cards[i].has_scaled_flag=true;
+    unsigned unused_captures=cache_captures;
+    for(int i=0;i<10;i++)page07_curr_card_render_sync_snapshots(i,2);
+    assert(!page07_curr_card_render_prewarm_step());
+    assert(cache_captures==unused_captures);
+    for(int i=0;i<10;i++)for(unsigned state=0;state<2;state++)
+        assert(g_page07_curr.cards[i].surface_cache[state]==NULL);
+
     /* Make the currently bound focus face evictable. The fake cache's
      * release callback checks detach/hide ordering before dropping the pin. */
     fixture(10,2);detach_verified=0;

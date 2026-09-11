@@ -58,7 +58,7 @@ static bool curr_acquire_card_snapshot(int i, bool focused, bool create_on_miss)
     char cache_key[48];
     if (i < 0 || i >= g_page07_curr.model.visible_count) return false;
     card = &g_page07_curr.cards[i];
-    if (card->render_root == NULL ||
+    if (card->has_scaled_flag || card->render_root == NULL ||
         !curr_card_snapshot_key(i, focused, cache_key)) return false;
     unsigned state = focused ? 1U : 0U;
     if (card->surface_cache[state] != NULL) return true;
@@ -86,7 +86,7 @@ bool page07_curr_card_render_sync_snapshots(int i, int focus)
     bool changed = false;
     for (unsigned state = 0; state < 2; state++) {
         lv_dma_snapshot_t *before = card->surface_cache[state];
-        if (curr_card_cache_wanted(i, state != 0, focus)) {
+        if (!card->has_scaled_flag && curr_card_cache_wanted(i, state != 0, focus)) {
             (void)curr_acquire_card_snapshot(i, state != 0, false);
         } else if (before != NULL) {
             /* Detach before making this image evictable; another cache
@@ -114,7 +114,7 @@ bool page07_curr_card_render_prewarm_step(void)
         for (int i = 0; i < g_page07_curr.model.visible_count; i++) {
             page07_curr_card_t *card = &g_page07_curr.cards[i];
             bool focused = pass != 1;
-            if ((pass == 0 && i != focus) ||
+            if (card->has_scaled_flag || (pass == 0 && i != focus) ||
                 !curr_card_cache_wanted(i, focused, focus) ||
                 card->render_root == NULL ||
                 card->surface_cache[focused ? 1 : 0] != NULL) continue;
