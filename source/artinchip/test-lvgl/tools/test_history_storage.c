@@ -31,6 +31,14 @@ static int load_open_error;
 static bool fail_load_read;
 static FILE *load_file;
 static unsigned unrelated_job_runs;
+static bool fail_snapshot_alloc;
+
+void *__real_malloc(size_t size);
+void *__wrap_malloc(size_t size)
+{
+    if (fail_snapshot_alloc) return NULL;
+    return __real_malloc(size);
+}
 
 static bool history_test_worker_init(void)
 {
@@ -324,7 +332,7 @@ static void exercise(void)
     }
     assert(i < 10000 && !session.history_record.valid);
     assert(ui_history_total_notes_counted_get() == 23);
-    assert(ui_history_data_get()->record_count == 20);
+    assert(ui_history_data_get()->record_count == (UI_HISTORY_MAX_RECORDS < 21 ? UI_HISTORY_MAX_RECORDS : 21));
     {
         ui_history_record_t untouched, before;
         storage_job_id_t old_job = ui_history_last_commit_id();
@@ -341,7 +349,8 @@ static void exercise(void)
         assert(!session.history_record.valid && counting_history_take_unsupported_notice());
         assert(!counting_history_take_unsupported_notice());
         assert(ui_history_last_commit_id() == old_job);
-        assert(ui_history_total_notes_counted_get() == 23 && ui_history_data_get()->record_count == 20);
+        assert(ui_history_total_notes_counted_get() == 23 &&
+            ui_history_data_get()->record_count == (UI_HISTORY_MAX_RECORDS < 21 ? UI_HISTORY_MAX_RECORDS : 21));
         assert(counting_history_can_start());
         counting_data_reset_result_scope(&sim);
     }
@@ -511,6 +520,14 @@ static void test_delete_records(void)
     EXPECT_DELETE_REJECTED(duplicate, 2);
     EXPECT_DELETE_REJECTED(missing, 2);
     EXPECT_DELETE_REJECTED(zero, 2);
+    fail_snapshot_alloc = true;
+    EXPECT_DELETE_REJECTED(ids, 7);
+    assert(g_history_job_count == 0);
+    assert(!ui_history_record_append_snapshot(&before->records[0],
+                                             before->total_notes_counted + 1U));
+    assert(memcmp(before, store, sizeof(*before)) == 0);
+    assert(ui_history_last_commit_id() == previous_job);
+    fail_snapshot_alloc = false;
 #undef EXPECT_DELETE_REJECTED
 
     /* Seven IDs exceed the four-job queue if implemented as temporary global
@@ -547,7 +564,60 @@ static void test_delete_records(void)
     assert(store->record_count == 0 && store->next_record_no == before->next_record_no);
     free(before);
     assert(storage_worker_shutdown());
-    puts("PASS: atomic stable-ID batch deletion, strict validation, one queued snapshot and failure rollback");
+    puts("PASS: atomic stable-ID batch deletion, strict validation, OOM/queue rejection, one queued snapshot and failure rollback");
+}
+
+static void fill_capacity(void)
+{
+    while (ui_history_data_get()->record_count < UI_HISTORY_MAX_RECORDS)
+        wait_saved(append(1), 0);
+    bool slots[UI_HISTORY_MAX_RECORDS + 1] = { false };
+    const ui_history_store_t *store = ui_history_data_get();
+    for (unsigned i = 0; i < store->record_count; ++i) {
+        unsigned slot = store->records[i].slot_no;
+        assert(slot > 0 && slot <= UI_HISTORY_MAX_RECORDS && !slots[slot]);
+        slots[slot] = true;
+    }
+    for (unsigned slot = 1; slot <= UI_HISTORY_MAX_RECORDS; ++slot) assert(slots[slot]);
+    assert(storage_worker_shutdown());
+}
+
+static void fill_escaped_text(char *text, size_t size)
+{
+    static const char characters[] = { '\\', '\n', '\r' };
+    for (size_t i = 0; i + 1U < size; ++i) text[i] = characters[i % sizeof(characters)];
+    text[size - 1U] = '\0';
+}
+
+static void test_maximum_text(bool write_records)
+{
+    ui_history_record_t sample = { .valid = true, .pcs = UINT32_MAX,
+        .amount = UINT32_MAX, .currency = "USD", .year = 2026,
+        .month = 9, .day = 10, .hour = 23, .minute = 59, .second = 59 };
+    fill_escaped_text(sample.denom_text, sizeof(sample.denom_text));
+    fill_escaped_text(sample.sn_text, sizeof(sample.sn_text));
+    fill_escaped_text(sample.sn_detail_text, sizeof(sample.sn_detail_text));
+    fill_escaped_text(sample.error_frame_text, sizeof(sample.error_frame_text));
+    fill_escaped_text(sample.start_frame_text, sizeof(sample.start_frame_text));
+    fill_escaped_text(sample.end_frame_text, sizeof(sample.end_frame_text));
+    fill_escaped_text(sample.session_log, sizeof(sample.session_log));
+    if (write_records) {
+        delete_all_saved(0);
+        for (unsigned i = 0; i < UI_HISTORY_MAX_RECORDS; ++i) {
+            assert(ui_history_record_append_snapshot(&sample, UINT32_MAX));
+            wait_saved(ui_history_last_commit_id(), 0);
+        }
+    }
+    const ui_history_store_t *store = ui_history_data_get();
+    assert(store->record_count == UI_HISTORY_MAX_RECORDS);
+    for (unsigned i = 0; i < store->record_count; ++i) {
+        ui_history_record_t expected = sample;
+        expected.record_no = store->records[i].record_no;
+        expected.slot_no = store->records[i].slot_no;
+        assert(memcmp(&expected, &store->records[i], sizeof(expected)) == 0);
+    }
+    assert(storage_worker_shutdown());
+    puts("PASS: every persisted text field at maximum escaped length round-trips without truncation");
 }
 
 static void test_unavailable_history(void)
@@ -618,6 +688,14 @@ int main(int argc, char **argv)
     else if (strcmp(argv[1], "total-arithmetic") == 0) test_total_arithmetic();
     else if (strcmp(argv[1], "retention") == 0) test_retention();
     else if (strcmp(argv[1], "delete-records") == 0) test_delete_records();
+    else if (strcmp(argv[1], "fill-capacity") == 0) fill_capacity();
+    else if (strcmp(argv[1], "maximum-text") == 0) test_maximum_text(true);
+    else if (strcmp(argv[1], "reload-maximum-text") == 0) test_maximum_text(false);
+    else if (strcmp(argv[1], "sizes") == 0) {
+        printf("%zu %zu %u\n", sizeof(ui_history_record_t), sizeof(ui_history_store_t),
+               UI_HISTORY_MAX_RECORDS);
+        assert(storage_worker_shutdown());
+    }
     else if (strcmp(argv[1], "delete-all") == 0) {
         uint32_t next_id = ui_history_data_get()->next_record_no;
         uint32_t total = ui_history_total_notes_counted_get();

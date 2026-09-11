@@ -8,12 +8,14 @@
 #include "un260/counting/counting_data_types.h"
 #include "un260/storage/storage_worker.h"
 
-#define UI_HISTORY_MAX_RECORDS 20
+#define UI_HISTORY_MAX_RECORDS 100
 
 typedef struct {
     bool valid;
     bool selected;
+    /* Reusable physical slot (1..capacity), not a visible row number. */
     uint8_t slot_no;
+    /* Stable identity: deletion and ring replacement never renumber survivors. */
     uint32_t record_no;
     uint32_t pcs;
     uint32_t amount;

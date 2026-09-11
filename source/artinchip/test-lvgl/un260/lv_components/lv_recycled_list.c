@@ -26,7 +26,7 @@ struct lv_recycled_list {
     float anchor, sample_offset, velocity, overscroll;
     int32_t drawn_offset, drawn_overscroll, page_drag;
     drag_axis_t axis;
-    bool pressed, moved;
+    bool pressed, moved, tap_allowed;
 };
 
 /* The data window always stays clamped. Only row projection may stretch;
@@ -117,6 +117,7 @@ void lv_recycled_list_stop(lv_recycled_list_t *list)
 {
     if (!list) return;
     list->pressed = list->moved = false;
+    list->tap_allowed = false;
     list->axis = DRAG_UNDECIDED;
     list->page_drag = 0;
     list->velocity = 0;
@@ -185,6 +186,7 @@ static void motion_tick(lv_timer_t *timer)
 static void drag_pointer(lv_recycled_list_t *list, const lv_point_t *p, uint32_t now)
 {
     int32_t dx = (int32_t)p->x - list->press_x, dy = (int32_t)p->y - list->press_y;
+    if (LV_MAX(LV_ABS(dx), LV_ABS(dy)) >= 6) list->tap_allowed = false;
     if (list->axis == DRAG_UNDECIDED) {
         if (LV_MAX(LV_ABS(dx), LV_ABS(dy)) < 6) return;
         if (LV_ABS(dx) * 4 > LV_ABS(dy) * 5) list->axis = DRAG_HORIZONTAL;
@@ -233,6 +235,7 @@ static void event_cb(lv_event_t *e)
     uint32_t now = lv_tick_get();
     if (code == LV_EVENT_PRESSED && indev) {
         /* Interrupt a spring at its current visual location, not at the edge. */
+        list->tap_allowed = list->velocity == 0 && list->overscroll == 0;
         if (list->timer) lv_timer_pause(list->timer);
         list->velocity = 0;
         list->moved = false;
@@ -253,6 +256,7 @@ static void event_cb(lv_event_t *e)
             lv_indev_get_point(indev, &p);
             drag_pointer(list, &p, now);
         }
+        bool tap_allowed = indev && list->tap_allowed;
         list->pressed = false;
         if (list->window.paged) {
             float distance = fabsf((float)list->page_drag);
@@ -272,8 +276,13 @@ static void event_cb(lv_event_t *e)
         } else {
             resume_motion(list, now);
         }
+        /* Settling a stationary release calls stop() too. Preserve only this
+         * completed contact's eligibility for the caller's RELEASED handler. */
+        list->tap_allowed = tap_allowed;
     } else if (code == LV_EVENT_PRESS_LOST) {
         lv_recycled_list_stop(list);
+    } else if (code == LV_EVENT_PRESSED || code == LV_EVENT_RELEASED) {
+        list->tap_allowed = false;
     }
 }
 
@@ -339,6 +348,8 @@ lv_obj_t *lv_recycled_list_object(lv_recycled_list_t *list)
 { return list ? list->object : NULL; }
 const ui_list_window_t *lv_recycled_list_window(const lv_recycled_list_t *list)
 { return list ? &list->window : NULL; }
+bool lv_recycled_list_tap_allowed(const lv_recycled_list_t *list)
+{ return list && !list->pressed && list->tap_allowed; }
 void lv_recycled_list_refresh(lv_recycled_list_t *list, uint32_t count, bool reset)
 {
     if (!list) return;

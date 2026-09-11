@@ -5,6 +5,7 @@
 #include "lvgl/lvgl.h"
 #include "aic_ui/compiled_asset.h"
 #include "un260/lv_system/ui_history_data.h"
+#include "un260/lv_system/machine_time.h"
 #include "un260/lv_system/ui_history_export_data.h"
 #include "un260/lv_components/lv_print_toast.h"
 #include "test_history_view_support.h"
@@ -22,6 +23,8 @@ static size_t test_deleted_count;
 static uint32_t test_exported_ids[UI_HISTORY_MAX_RECORDS];
 static size_t test_exported_count;
 static char test_toast[256];
+void machine_time_get(machine_time_value_t *out)
+{ *out=(machine_time_value_t){.year=2026,.month=9,.day=11,.hour=12,.minute=30,.second=15}; }
 
 void ui_history_data_init(void) {}
 bool ui_history_data_poll(uint32_t now_ms) { (void)now_ms; ++test_polls; return false; }
@@ -204,9 +207,10 @@ unsigned history_test_timers(void)
 { unsigned count = 0; for (lv_timer_t *t = lv_timer_get_next(NULL); t; t = lv_timer_get_next(t)) ++count; return count; }
 void history_test_bmp(const char *name)
 {
+    /* Optional output must not change whether the test lays out a new page. */
+    history_test_render();
     const char *directory = getenv("HISTORY_RASTER_OUTPUT");
     if (!directory) return;
-    history_test_render();
     char path[1024]; snprintf(path, sizeof(path), "%s/%s.bmp", directory, name);
     FILE *file = fopen(path, "wb"); assert(file);
     uint32_t bytes = 54 + 1280 * 400 * 4, offset = 54, dib = 40, width = 1280;
@@ -231,7 +235,7 @@ static void history_test_fixtures(unsigned count)
         *record = (ui_history_record_t){ .valid = true, .record_no = 1000 - i,
             .slot_no = (uint8_t)(i + 1), .pcs = 20 + i, .amount = 1000 + i * 100,
             .year = 2026, .month = 9, .day = (uint8_t)(9 - i % 3),
-            .hour = (uint8_t)(12 + i % 8), .minute = (uint8_t)(i * 3), .second = (uint8_t)i };
+            .hour = (uint8_t)(12 + i % 8), .minute = (uint8_t)((i * 3) % 60), .second = (uint8_t)(i % 60) };
         strcpy(record->currency, i % 2 ? "EUR" : "USD");
         snprintf(record->denom_text, sizeof(record->denom_text), "100 x %u\n50 x 2\n", 18 + i);
         snprintf(record->sn_detail_text, sizeof(record->sn_detail_text), "1\t100\tUNIQUE%04u\n2\t50\tSHARED001\n", i);
@@ -451,10 +455,10 @@ static void history_test_unknown_and_lifecycle(unsigned baseline_timers)
     ui_page_19_history_suspend(); ui_lang_set(LANGUAGE_CN);
     assert(ui_page_19_history_resume());
     assert(!strcmp(lv_label_get_text(history->title), ui_text_get(UI_TEXT_HISTORY_RECORDS)));
-    assert(!strcmp(lv_label_get_text(lv_obj_get_child(history->list_panel, 0)), ui_text_get(UI_TEXT_HISTORY_RECORDS)));
+    assert(!strcmp(lv_label_get_text(lv_obj_get_child(history->list_panel, 0)), ui_text_get(UI_TEXT_PAGE01_DETAIL_COL_NO)));
     ui_page_19_history_suspend(); ui_lang_set(LANGUAGE_EN);
     assert(ui_page_19_history_resume());
-    assert(!strcmp(lv_label_get_text(lv_obj_get_child(history->list_panel, 0)), "History records"));
+    assert(!strcmp(lv_label_get_text(lv_obj_get_child(history->list_panel, 0)), ui_text_get(UI_TEXT_PAGE01_DETAIL_COL_NO)));
     ui_page_19_history_destroy(); history_test_tick(300);
     assert(!history && history_test_timers() == baseline_timers);
     history_test_fixtures(1);
@@ -477,6 +481,11 @@ static void history_test_unknown_and_lifecycle(unsigned baseline_timers)
         ui_page_19_history_suspend(); assert(ui_page_19_history_resume());
         history_test_click(history->actions[0]); assert(history->search);
         ui_page_19_history_suspend(); assert(!history->search);
+        for(unsigned slot=0;slot<UI_HISTORY_MAX_RECORDS;++slot) {
+            assert(!history->details[slot] && !history->records[slot].detail);
+        }
+        assert(history->model_dirty);
+        ui_page_19_history_suspend(); /* Repeated hide is idempotent. */
         assert(ui_page_19_history_resume());
         ui_page_19_history_destroy(); history_test_tick(300);
         assert(!history && history_test_timers() == baseline_timers);
@@ -497,6 +506,138 @@ static void history_test_unknown_and_lifecycle(unsigned baseline_timers)
     ui_page_19_history_destroy(); history_test_tick(300); test_available = true;
     assert(history_test_timers() == baseline_timers);
     puts("PASS: incomplete results separated from confirmed matches, layered page ESC, hidden refresh deferral, repeated lifecycle heap/timer recovery and unreadable-store protection");
+}
+
+static void history_test_row_number(uint32_t index,unsigned number)
+{
+    assert(index<displayed_count());
+    assert(lv_recycled_list_scroll_to_index(history->list,index));
+    history_test_render();
+    lv_obj_t *row=lv_obj_get_child(lv_recycled_list_object(history->list),index%(HISTORY_ROWS+1U));
+    char expected[24];snprintf(expected,sizeof(expected),"%u",number);
+    assert(!strcmp(lv_label_get_text(lv_obj_get_child(row,0)),expected));
+}
+
+static void history_test_delete_confirm(void)
+{
+    history_test_click(history->actions[2]);assert(history->dialog);
+    history_test_click(history_test_button(history->dialog,ui_text_get(UI_TEXT_HISTORY_APPLY)));
+    assert(!history->dialog && !history->selecting);
+}
+
+static void history_test_contiguous_rows(unsigned baseline_timers)
+{
+    history_test_fixtures(5);
+    for(unsigned i=0;i<5;++i)test_store.records[i].record_no=5-i;
+    test_store.next_record_no=6;
+    ui_page_19_history_create(lv_scr_act());history_test_tick(100);
+    for(unsigned i=0;i<5;++i)history_test_row_number(i,5-i);
+    history_test_click(history->actions[2]);
+    assert(history_test_click_record(1)==4 && history_test_click_record(2)==3);
+    history_test_delete_confirm();
+    assert(displayed_count()==3 && displayed_id(0)==5 && displayed_id(1)==2 && displayed_id(2)==1);
+    for(unsigned i=0;i<3;++i)history_test_row_number(i,3-i);
+    history_test_bmp("history-after-middle-delete");
+    assert(history_test_click_record(0)==5 && history->current_id==5);
+    assert(strstr(lv_label_get_text(history->title),"#5"));
+    history_test_click(history->actions[2]);
+    assert(test_exported_count==1 && test_exported_ids[0]==5);
+    assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);
+    history_test_click(history->sort);
+    assert(displayed_id(0)==1 && displayed_id(2)==5);
+    for(unsigned i=0;i<3;++i)history_test_row_number(i,i+1);
+    ui_page_19_history_destroy();history_test_tick(300);
+
+    /* Removing the last viewport clamps to surviving rows, then empty state. */
+    history_test_fixtures(10);ui_page_19_history_create(lv_scr_act());
+    history_test_click(history->actions[2]);
+    for(unsigned i=5;i<10;++i)history_test_click_record(i);
+    assert(lv_recycled_list_window(history->list)->first==5);
+    history_test_delete_confirm();
+    assert(displayed_count()==5 && lv_recycled_list_window(history->list)->first==0);
+    for(unsigned i=0;i<5;++i)history_test_row_number(i,5-i);
+    history_test_click(history->actions[2]);history_test_click(history->actions[0]);
+    assert(history->selected_count==5);history_test_delete_confirm();
+    assert(!displayed_count() && lv_obj_is_visible(history->empty));
+    assert(!strcmp(lv_label_get_text(history->range),"0 / 0"));
+    assert(!lv_damped_button_is_enabled(history->actions[1]));
+    assert(!lv_damped_button_is_enabled(history->actions[2]));
+    history_test_bmp("history-after-delete-all");
+    history_test_fixtures(1);ui_page_19_history_refresh();
+    assert(displayed_count()==1 && !lv_obj_is_visible(history->empty));
+    history_test_row_number(0,1);
+    ui_page_19_history_destroy();history_test_tick(300);
+    assert(history_test_timers()==baseline_timers);
+    puts("PASS: contiguous result ordinals after middle/tail/all deletion; record IDs/detail/export stay stable; empty list recovers on arrival");
+}
+
+static void history_test_capacity_and_missing_detail(unsigned baseline_timers)
+{
+    assert(UI_HISTORY_MAX_RECORDS==100);
+    history_test_fixtures(UI_HISTORY_MAX_RECORDS);
+    ui_page_19_history_create(lv_scr_act());history_test_tick(100);
+    assert(displayed_count()==100);
+    assert(!strcmp(lv_label_get_text(history->notice),ui_text_get(UI_TEXT_HISTORY_CAPACITY_FULL)));
+    history_test_bmp("history-100-full");
+    history_test_row_number(0,100);history_test_row_number(99,1);
+    assert(history_test_click_record(99)==901 && history->detail_mode);
+    assert(current_detail() && section_count(1)==2);
+    assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);
+    assert(lv_recycled_list_window(history->list)->first==95);
+    history_test_bmp("history-100-tail");
+    history_query_input_t filter={0};strcpy(filter.currency,"USD");
+    history_test_apply(&filter);
+    assert(displayed_count()==50 && !history->detail_mode);
+    history_test_row_number(0,50);history_test_row_number(49,1);
+    history_test_click(history->sort);
+    assert(displayed_id(0)==902 && displayed_id(49)==1000);
+    history_test_row_number(0,1);history_test_row_number(49,50);
+    history_test_click(history->sort);
+    uint32_t expired=history_test_click_record(10);
+    assert(history->detail_mode && history->current_id==expired);
+    float offset=lv_recycled_list_window(history->list)->offset;
+    assert(ui_history_record_delete_records(&expired,1));ui_page_19_history_refresh();
+    assert(!history->detail_mode && history->current_id==0);
+    assert(!strcmp(history->input.currency,"USD") && displayed_count()==49);
+    assert(lv_recycled_list_window(history->list)->offset==offset);
+    assert(lv_obj_is_visible(history->list_panel));
+    assert(!strcmp(test_toast,ui_text_get(UI_TEXT_HISTORY_MISSING)));
+    for(unsigned i=0;i<3;++i)assert(!lv_obj_is_visible(history->sections[i].panel));
+    history_test_bmp("history-missing-detail-return");
+    ui_page_19_history_destroy();history_test_tick(300);
+    assert(history_test_timers()==baseline_timers);
+    puts("PASS: 100-record tail/detail/search, filtered ascending/descending ordinals, disappeared detail returns without clearing filter/scroll");
+}
+
+static void history_test_inertia_tap(unsigned baseline_timers)
+{
+    history_test_fixtures(20);ui_page_19_history_create(lv_scr_act());history_test_tick(100);
+    lv_area_t viewport;lv_obj_get_coords(lv_recycled_list_object(history->list),&viewport);
+    int x=viewport.x1+400,y=viewport.y1+100;
+    history_test_pointer(x,viewport.y1+210,true);
+    history_test_pointer(x,viewport.y1+170,true);
+    history_test_pointer(x,viewport.y1+90,false);
+    assert(!history->detail_mode);
+    float moving_offset=lv_recycled_list_window(history->list)->offset;
+    history_test_tick(40);
+    assert(lv_recycled_list_window(history->list)->offset>moving_offset);
+    history_test_pointer(x,y,true);history_test_pointer(x,y,false);
+    assert(!history->detail_mode && !lv_recycled_list_tap_allowed(history->list));
+    history_test_pointer(x,y,true);history_test_pointer(x,y,false);
+    assert(history->detail_mode);
+    assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);
+    history_test_click(history->actions[2]);
+    assert(lv_recycled_list_scroll_to_index(history->list,0));
+    history_test_pointer(x,viewport.y1+210,true);
+    history_test_pointer(x,viewport.y1+170,true);
+    history_test_pointer(x,viewport.y1+90,false);
+    history_test_pointer(x,y,true);history_test_pointer(x,y,false);
+    assert(history->selecting && !history->selected_count);
+    history_test_pointer(x,y,true);history_test_pointer(x,y,false);
+    assert(history->selected_count==1);
+    ui_page_19_history_destroy();history_test_tick(300);
+    assert(history_test_timers()==baseline_timers);
+    puts("PASS: touching to stop inertia cannot open or select a record; a fresh stationary tap works");
 }
 
 int main(void)
@@ -523,13 +664,16 @@ int main(void)
     history_test_bmp("history-empty");
     ui_page_19_history_destroy(); history_test_tick(300);
     assert(history_test_timers() == baseline_timers);
-    history_test_fixtures(UI_HISTORY_MAX_RECORDS);
+    history_test_fixtures(20);
     ui_page_19_history_create(lv_scr_act()); history_test_tick(100);
     history_test_bmp("history-full");
     history_test_list_and_detail();
     history_test_selection_and_delete();
     history_test_unknown_and_lifecycle(baseline_timers);
     assert(history_test_timers() == baseline_timers);
+    history_test_contiguous_rows(baseline_timers);
+    history_test_capacity_and_missing_detail(baseline_timers);
+    history_test_inertia_tap(baseline_timers);
     history_test_search_module();
     assert(history_test_timers() == baseline_timers);
     puts("PASS: actual History LVGL empty/full smoke and timer ownership");

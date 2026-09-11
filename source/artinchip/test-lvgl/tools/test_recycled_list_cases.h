@@ -834,6 +834,76 @@ static void recycled_cases_hit_test(lv_recycled_list_t *list,
     lv_recycled_list_set_paged(list, false);
 }
 
+static void recycled_cases_tap_eligibility(lv_recycled_list_t *list,
+    recycled_cases_context_t *ctx, lv_indev_t *indev, lv_timer_t *motion)
+{
+    assert(!lv_recycled_list_tap_allowed(NULL));
+    lv_recycled_list_set_paged(list, false);
+    lv_recycled_list_refresh(list, 100, true);
+    assert(!lv_recycled_list_tap_allowed(list));
+    recycled_cases_input(list, indev, LV_EVENT_PRESSED, 150, 20);
+    assert(!lv_recycled_list_tap_allowed(list)); /* Not a completed tap yet. */
+    recycled_cases_input(list, indev, LV_EVENT_RELEASED, 150, 20);
+    assert(lv_recycled_list_tap_allowed(list));
+    recycled_cases_input(list, indev, LV_EVENT_RELEASED, 150, 0);
+    assert(!lv_recycled_list_tap_allowed(list));
+
+    recycled_cases_input_xy(list, indev, LV_EVENT_PRESSED, 100, 150, 20);
+    recycled_cases_input_xy(list, indev, LV_EVENT_RELEASED, 105, 155, 20);
+    assert(lv_recycled_list_tap_allowed(list));
+    /* Crossing the drag threshold then returning to the original row is not
+     * a tap, even when direction locking keeps the viewport stationary. */
+    const int deltas[][2] = {{6, 0}, {0, 6}, {6, 6}, {40, 40}};
+    for (unsigned i = 0; i < sizeof(deltas)/sizeof(deltas[0]); ++i) {
+        lv_recycled_list_refresh(list, 100, true);
+        recycled_cases_input_xy(list, indev, LV_EVENT_PRESSED, 100, 150, 20);
+        recycled_cases_input_xy(list, indev, LV_EVENT_PRESSING,
+            100 + deltas[i][0], 150 + deltas[i][1], 20);
+        recycled_cases_input_xy(list, indev, LV_EVENT_RELEASED, 100, 150, 20);
+        assert(!lv_recycled_list_tap_allowed(list));
+    }
+
+    lv_recycled_list_refresh(list, 100, true);
+    recycled_cases_input(list, indev, LV_EVENT_PRESSED, 200, 20);
+    recycled_cases_input(list, indev, LV_EVENT_PRESSING, 100, 20);
+    recycled_cases_input(list, indev, LV_EVENT_RELEASED, 100, 0);
+    assert(!motion->paused && !lv_recycled_list_tap_allowed(list));
+    recycled_cases_input(list, indev, LV_EVENT_PRESSED, 150, 20);
+    assert(motion->paused);
+    recycled_cases_input(list, indev, LV_EVENT_RELEASED, 150, 20);
+    assert(!lv_recycled_list_tap_allowed(list)); /* Stop inertia, don't open. */
+    recycled_cases_input(list, indev, LV_EVENT_PRESSED, 150, 20);
+    recycled_cases_input(list, indev, LV_EVENT_RELEASED, 150, 20);
+    assert(lv_recycled_list_tap_allowed(list));
+
+    lv_recycled_list_refresh(list, 100, true);
+    recycled_cases_input(list, indev, LV_EVENT_PRESSED, 100, 20);
+    recycled_cases_input(list, indev, LV_EVENT_PRESSING, 180, 20);
+    recycled_cases_input(list, indev, LV_EVENT_RELEASED, 180, 0);
+    assert(recycled_cases_pull(list, ctx) > 0 && !motion->paused);
+    recycled_cases_input(list, indev, LV_EVENT_PRESSED, 150, 20);
+    recycled_cases_input(list, indev, LV_EVENT_RELEASED, 150, 20);
+    assert(!lv_recycled_list_tap_allowed(list)); /* Same rule for edge return. */
+
+    for (unsigned cancel = 0; cancel < 3; ++cancel) {
+        lv_recycled_list_refresh(list, 100, true);
+        recycled_cases_input(list, indev, LV_EVENT_PRESSED, 150, 20);
+        if (cancel == 0) lv_recycled_list_refresh(list, 100, true);
+        else if (cancel == 1) lv_recycled_list_stop(list);
+        else recycled_cases_input(list, indev, LV_EVENT_PRESS_LOST, 150, 0);
+        recycled_cases_input(list, indev, LV_EVENT_RELEASED, 150, 20);
+        assert(!lv_recycled_list_tap_allowed(list));
+    }
+    lv_recycled_list_set_paged(list, true);
+    recycled_cases_input(list, indev, LV_EVENT_PRESSED, 150, 20);
+    recycled_cases_input(list, indev, LV_EVENT_RELEASED, 150, 20);
+    assert(lv_recycled_list_tap_allowed(list));
+    recycled_cases_swipe(list, indev, -100, 0, 200, true);
+    assert(!lv_recycled_list_tap_allowed(list));
+    lv_recycled_list_set_paged(list, false);
+    puts("PASS recycled-list tap eligibility: inertia/edge regrab, threshold latch, cancellation and paging");
+}
+
 static void test_recycled_list_cases(void)
 {
     assert(sizeof(lv_coord_t) == 2); /* The firmware risk being tested is coord16. */
@@ -934,6 +1004,7 @@ static void test_recycled_list_cases(void)
     recycled_cases_pull_resize(list, &ctx, &indev, motion);
     recycled_cases_scroll_to_index(list, &ctx, &indev, motion);
     recycled_cases_hit_test(list, &ctx, &indev, motion);
+    recycled_cases_tap_eligibility(list, &ctx, &indev, motion);
     recycled_cases_timer_failure(parent, &indev);
     recycled_cases_short_viewport(parent, &indev);
 

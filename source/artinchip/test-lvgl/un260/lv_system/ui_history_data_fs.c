@@ -45,6 +45,10 @@ static uint32_t g_history_retry_tick;
 
 _Static_assert(sizeof(ui_history_store_t) <= STORAGE_WORKER_MAX_JOB_BYTES,
                "history snapshot exceeds bounded storage job payload");
+/* v2 indexes record00..record99; physical slots are 1..100. Increasing this
+ * further requires reviewing the two-digit index parser and uint8_t fields. */
+_Static_assert(UI_HISTORY_MAX_RECORDS > 0 && UI_HISTORY_MAX_RECORDS <= 100,
+               "history capacity exceeds v2 index range");
 
 static void history_ensure_loaded(void);
 

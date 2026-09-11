@@ -52,6 +52,12 @@ bool lv_recycled_list_scroll_to_index(lv_recycled_list_t *list, uint32_t index);
  * and leave out_index unchanged. */
 bool lv_recycled_list_index_at_point(lv_recycled_list_t *list,
                                      const lv_point_t *point, uint32_t *out_index);
+/* Query after RELEASED, in a callback registered after the viewport's own
+ * handler. A stationary touch is eligible only if it did not stop inertia or
+ * edge return. Dragging, PRESS_LOST, stop/reset and duplicate releases cancel
+ * eligibility; a fresh PRESSED starts a new contact. Caller still validates
+ * the hit row and data revision. No navigation or selection is performed. */
+bool lv_recycled_list_tap_allowed(const lv_recycled_list_t *list);
 /* Owner hide/reset/gesture cancellation clears any stretch and pauses motion. */
 void lv_recycled_list_stop(lv_recycled_list_t *list);
 #endif

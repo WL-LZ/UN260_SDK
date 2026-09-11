@@ -4,6 +4,9 @@
 #include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_components/lv_nav_button.h"
 #include "un260/lv_system/ui_text.h"
+#include "un260/lv_system/ui_history_data.h"
+#include "un260/lv_system/machine_time.h"
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -11,7 +14,7 @@
 #define SEARCH_BODY 0x4C606E
 #define SEARCH_MUTED 0x7A8D9B
 #define SEARCH_LINE 0xE7ECEF
-#define SEARCH_MAX_CURRENCIES 22
+#define SEARCH_MAX_CURRENCIES (UI_HISTORY_MAX_RECORDS + 2U) /* All + retained filter. */
 #define SEARCH_MAX_DENOMS HISTORY_DETAIL_MAX_DENOMS
 enum { FIELD_FROM, FIELD_TO, FIELD_TIME, FIELD_AMOUNT, FIELD_PCS, FIELD_SERIAL, FIELD_COUNT };
 
@@ -20,6 +23,10 @@ struct page_19_history_search {
     lv_obj_t *currency, *rejects, *denom_title, *denom_empty, *denom_all;
     lv_obj_t *denom_buttons[SEARCH_MAX_DENOMS], *matches[4];
     lv_alnum_keyboard_t *keyboard;
+    lv_obj_t *editor, *precision, *wheels[3], *wheel_titles[3], *year_button;
+    lv_obj_t *number[2], *number_title[2], *editor_error;
+    unsigned year_first, year_value, number_edit;
+    char number_text[2][21];
     history_query_input_t input;
     const history_query_record_t *records;
     size_t record_count;
@@ -36,6 +43,7 @@ struct page_19_history_search {
 };
 
 static void refresh_controls(page_19_history_search_t *s);
+static void open_editor(page_19_history_search_t *s, unsigned field);
 
 static lv_obj_t *surface(lv_obj_t *parent, int x, int y, int width, int height,
                          uint32_t color, int radius)
@@ -89,13 +97,15 @@ static lv_obj_t *button(lv_obj_t *parent, int x, int y, int width, int height,
 
 static void selected(lv_obj_t *o, bool active)
 {
-    uint32_t color = active ? 0xDCE6EC : 0xF4F6F7;
+    uint32_t color = active ? 0xEAF2FF : 0xF4F6F7;
     if (active) lv_obj_add_state(o, LV_STATE_CHECKED);
     else lv_obj_clear_state(o, LV_STATE_CHECKED);
     lv_damped_button_set_palette(o, lv_color_hex(color), lv_color_hex(color));
     lv_obj_set_style_border_width(o, active ? 1 : 0, 0);
-    lv_obj_set_style_border_color(o, lv_color_hex(0xA8BAC6), 0);
+    lv_obj_set_style_border_color(o, lv_color_hex(0xB8D4FC), 0);
     lv_obj_set_style_border_opa(o, active ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+    lv_obj_t *text=lv_damped_button_get_label(o);
+    if(text) lv_obj_set_style_text_color(text,lv_color_hex(active ? 0x0074F8 : SEARCH_BODY),0);
 }
 
 static char *field_value(page_19_history_search_t *s, unsigned field, size_t *size)
@@ -156,6 +166,10 @@ static void collect_denominations(page_19_history_search_t *s)
             if (!value || !r->detail->denoms[d].pcs) continue;
             offer_denomination(s, value);
         }
+        /* Older snapshots may retain denomination only beside each serial.
+         * Offer those known values too; zero still means unknown, not a note. */
+        for (size_t note = 0; note < r->detail->serial_count; ++note)
+            offer_denomination(s, r->detail->serials[note].denom);
     }
 }
 
@@ -246,15 +260,14 @@ static void input_event(lv_event_t *event)
         if (lv_event_get_target(event) == s->fields[field]) break;
     if (field == FIELD_COUNT || (field == FIELD_AMOUNT && !s->input.currency[0])) return;
     lv_dropdown_close(s->currency); lv_dropdown_close(s->rejects);
+    if (field != FIELD_SERIAL) { open_editor(s, field); return; }
     if (s->keyboard) { lv_alnum_keyboard_destroy(s->keyboard); s->keyboard = NULL; }
     size_t size;
     char *value = field_value(s, field, &size);
     s->editing_field = field;
     const lv_alnum_keyboard_config_t config = {
         .title = ui_text_get(field_title(field)),
-        .placeholder = ui_text_get(field == FIELD_SERIAL ? UI_TEXT_SERIAL_INPUT_HINT :
-            (field <= FIELD_TO ? UI_TEXT_HISTORY_DATE_HINT :
-             field == FIELD_TIME ? UI_TEXT_HISTORY_TIME_HINT : UI_TEXT_HISTORY_NUMBER_HINT)),
+        .placeholder = "",
         .apply_text = ui_text_get(UI_TEXT_HISTORY_APPLY),
         .clear_text = ui_text_get(UI_TEXT_SERIAL_CLEAR),
         .cancel_text = ui_text_get(UI_TEXT_SERIAL_ESC),
@@ -361,9 +374,287 @@ static lv_obj_t *dropdown(lv_obj_t *parent, int x, int y, int width,
     return o;
 }
 
+static void editor_close(page_19_history_search_t *s)
+{
+    if (s->keyboard) { lv_alnum_keyboard_destroy(s->keyboard); s->keyboard = NULL; }
+    lv_obj_t *editor = s->editor;
+    s->editor = NULL;
+    if (editor) lv_obj_del(editor);
+    s->precision = s->year_button = s->editor_error = NULL;
+    memset(s->wheels, 0, sizeof(s->wheels));
+    memset(s->wheel_titles, 0, sizeof(s->wheel_titles));
+    memset(s->number, 0, sizeof(s->number));
+    memset(s->number_title, 0, sizeof(s->number_title));
+}
+
+static void editor_cancel(lv_event_t *e) { editor_close(lv_event_get_user_data(e)); }
+
+static unsigned picker_days(unsigned year, unsigned month)
+{
+    static const unsigned days[] = {31,28,31,30,31,30,31,31,30,31,30,31};
+    return days[month-1] + (month == 2 && year%4 == 0 && (year%100 != 0 || year%400 == 0));
+}
+
+static bool wheel_options(lv_obj_t *wheel, unsigned first, unsigned last, unsigned value)
+{
+    size_t capacity = (last-first+1U)*6U+1U;
+    char *options = lv_mem_alloc(capacity);
+    if (!options) return false;
+    size_t used = 0;
+    for (unsigned n=first;n<=last;++n) {
+        int written=snprintf(options+used,capacity-used,n==first ? "%02u" : "\n%02u",n);
+        if (written<0 || (size_t)written>=capacity-used) {lv_mem_free(options);return false;}
+        used+=(size_t)written;
+    }
+    lv_roller_set_options(wheel,options,LV_ROLLER_MODE_NORMAL);
+    lv_mem_free(options);
+    lv_roller_set_selected(wheel,(uint16_t)(LV_CLAMP(first,value,last)-first),LV_ANIM_OFF);
+    return true;
+}
+
+static void editor_visibility(page_19_history_search_t *s)
+{
+    unsigned mode=lv_dropdown_get_selected(s->precision);
+    if (s->editing_field<=FIELD_TIME) {
+        for (unsigned i=1;i<3;++i) {
+            if (mode>=i) {
+                lv_obj_clear_flag(s->wheels[i],LV_OBJ_FLAG_HIDDEN);
+                lv_obj_clear_flag(s->wheel_titles[i],LV_OBJ_FLAG_HIDDEN);
+            } else {
+                lv_obj_add_flag(s->wheels[i],LV_OBJ_FLAG_HIDDEN);
+                lv_obj_add_flag(s->wheel_titles[i],LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+    } else {
+        if(mode==3) lv_obj_clear_flag(s->number[1],LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(s->number[1],LV_OBJ_FLAG_HIDDEN);
+        for(unsigned i=0;i<2;++i) {
+            if(mode==3) lv_obj_clear_flag(s->number_title[i],LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_add_flag(s->number_title[i],LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+}
+
+static void editor_changed(lv_event_t *e)
+{
+    page_19_history_search_t *s=lv_event_get_user_data(e);
+    if(s->editing_field<=FIELD_TO && lv_event_get_target(e)!=s->precision) {
+        s->year_value=s->year_first+lv_roller_get_selected(s->wheels[0]);
+        unsigned month=lv_roller_get_selected(s->wheels[1])+1;
+        unsigned day=lv_roller_get_selected(s->wheels[2])+1;
+        if(!wheel_options(s->wheels[2],1,picker_days(s->year_value,month),day))
+            lv_label_set_text(s->editor_error,ui_text_get(UI_TEXT_SERIAL_UNAVAILABLE));
+        char text[16];snprintf(text,sizeof(text),"%04u",s->year_value);
+        lv_damped_button_set_text(s->year_button,text);
+    }
+    editor_visibility(s);
+}
+
+static void editor_numeric_submit(const char *text, void *context)
+{
+    page_19_history_search_t *s=context;
+    if(!s->editor) return;
+    char *end=NULL;
+    bool digits=text && text[0];
+    for(const char *p=text;digits && *p;++p) if(*p<'0'||*p>'9') digits=false;
+    if(!digits) {lv_label_set_text(s->editor_error,ui_text_get(UI_TEXT_HISTORY_NUMBER_ERROR));return;}
+    if(s->editing_field<=FIELD_TO) {
+        unsigned long value=strtoul(text,&end,10);
+        if(!end || *end || value<1 || value>9999) {
+            lv_label_set_text(s->editor_error,ui_text_get(UI_TEXT_HISTORY_DATE_ERROR));return;
+        }
+        s->year_first=value>50 ? (unsigned)value-50 : 1;
+        if(!wheel_options(s->wheels[0],s->year_first,LV_MIN(9999U,s->year_first+100U),(unsigned)value)) return;
+        lv_event_send(s->wheels[0],LV_EVENT_VALUE_CHANGED,NULL);
+    } else {
+        snprintf(s->number_text[s->number_edit],sizeof(s->number_text[0]),"%s",text);
+        lv_damped_button_set_text(s->number[s->number_edit],text);
+    }
+    lv_label_set_text(s->editor_error,"");
+}
+
+static void editor_numeric_open(lv_event_t *e)
+{
+    page_19_history_search_t *s=lv_event_get_user_data(e);
+    s->number_edit=lv_event_get_target(e)==s->number[1];
+    if(s->keyboard) {lv_alnum_keyboard_destroy(s->keyboard);s->keyboard=NULL;}
+    const lv_alnum_keyboard_config_t config={
+        .title=ui_text_get(s->editing_field<=FIELD_TO ? UI_TEXT_HISTORY_YEAR : field_title(s->editing_field)),
+        .placeholder="",.apply_text=ui_text_get(UI_TEXT_HISTORY_APPLY),
+        .clear_text=ui_text_get(UI_TEXT_SERIAL_CLEAR),.cancel_text=ui_text_get(UI_TEXT_SERIAL_ESC),
+        .max_length=s->editing_field<=FIELD_TO ? 4 : 20,.submit=editor_numeric_submit,.context=s
+    };
+    s->keyboard=lv_alnum_keyboard_create(s->editor,&config);
+    char year[16];snprintf(year,sizeof(year),"%04u",s->year_value);
+    if(s->keyboard) {
+        lv_alnum_keyboard_set_text(s->keyboard,s->editing_field<=FIELD_TO ? year : s->number_text[s->number_edit]);
+        lv_alnum_keyboard_show(s->keyboard);
+    } else lv_label_set_text(s->editor_error,ui_text_get(UI_TEXT_SERIAL_UNAVAILABLE));
+}
+
+static void editor_apply(lv_event_t *e)
+{
+    page_19_history_search_t *s=lv_event_get_user_data(e);
+    unsigned mode=lv_dropdown_get_selected(s->precision);
+    char text[48];
+    if(s->editing_field<=FIELD_TO) {
+        unsigned year=s->year_first+lv_roller_get_selected(s->wheels[0]);
+        unsigned month=lv_roller_get_selected(s->wheels[1])+1;
+        unsigned day=lv_roller_get_selected(s->wheels[2])+1;
+        if(mode==0) snprintf(text,sizeof(text),"%04u",year);
+        else if(mode==1) snprintf(text,sizeof(text),"%04u-%02u",year,month);
+        else snprintf(text,sizeof(text),"%04u-%02u-%02u",year,month,day);
+    } else if(s->editing_field==FIELD_TIME) {
+        unsigned hour=lv_roller_get_selected(s->wheels[0]);
+        unsigned minute=lv_roller_get_selected(s->wheels[1]);
+        unsigned second=lv_roller_get_selected(s->wheels[2]);
+        if(mode==0) snprintf(text,sizeof(text),"%02u",hour);
+        else if(mode==1) snprintf(text,sizeof(text),"%02u:%02u",hour,minute);
+        else snprintf(text,sizeof(text),"%02u:%02u:%02u",hour,minute,second);
+    } else {
+        if(mode==3) snprintf(text,sizeof(text),"%s..%s",s->number_text[0],s->number_text[1]);
+        else snprintf(text,sizeof(text),"%s%s",mode==1 ? ">=" : mode==2 ? "<=" : "",s->number_text[0]);
+    }
+    history_query_input_t candidate=s->input;
+    char *target=s->editing_field==FIELD_FROM ? candidate.date_from :
+        s->editing_field==FIELD_TO ? candidate.date_to : s->editing_field==FIELD_TIME ? candidate.time :
+        s->editing_field==FIELD_AMOUNT ? candidate.amount : candidate.pcs;
+    size_t capacity=s->editing_field<=FIELD_TIME ? sizeof(candidate.time) : sizeof(candidate.amount);
+    if(strlen(text)>=capacity) {lv_label_set_text(s->editor_error,ui_text_get(UI_TEXT_HISTORY_NUMBER_ERROR));return;}
+    memcpy(target,text,strlen(text)+1);
+    history_query_t query;
+    history_query_error_t error=history_query_compile(&candidate,&query);
+    if(error!=HISTORY_QUERY_OK) {
+        lv_label_set_text(s->editor_error,ui_text_get(s->editing_field<=FIELD_TIME ?
+            UI_TEXT_HISTORY_DATE_ERROR : UI_TEXT_HISTORY_NUMBER_ERROR));return;
+    }
+    s->input=candidate;
+    editor_close(s);refresh_controls(s);
+}
+
+static void editor_clear(lv_event_t *e)
+{
+    page_19_history_search_t *s=lv_event_get_user_data(e);
+    size_t size;field_value(s,s->editing_field,&size)[0]='\0';
+    editor_close(s);refresh_controls(s);
+}
+
+static void open_editor(page_19_history_search_t *s, unsigned field)
+{
+    editor_close(s);s->editing_field=field;
+    s->editor=surface(s->root,0,0,1280,400,0xD8E2E8,0);
+    if(!s->editor) return;
+    lv_obj_add_flag(s->editor,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *card=surface(s->editor,160,16,960,368,0xFFFFFF,18);
+    if(!card || !label(card,28,18,420,32,&lv_font_instrument_sans_semibold_22,SEARCH_INK,ui_text_get(field_title(field)))) goto failed;
+    s->precision=lv_dropdown_create(card);
+    if(!s->precision) goto failed;
+    lv_obj_set_pos(s->precision,620,16);lv_obj_set_size(s->precision,310,44);
+    lv_obj_set_style_text_font(s->precision,&lv_font_instrument_sans_medium_18,0);
+    lv_obj_set_style_bg_color(s->precision,lv_color_hex(0xEAF2FF),0);
+    lv_obj_set_style_bg_opa(s->precision,LV_OPA_COVER,0);
+    lv_obj_set_style_text_color(s->precision,lv_color_hex(0x0074F8),0);
+    lv_obj_set_style_radius(s->precision,12,0);
+    lv_obj_set_style_pad_left(s->precision,16,0);
+    lv_obj_set_style_pad_right(s->precision,36,0);
+    lv_obj_set_style_pad_top(s->precision,10,0);
+    lv_dropdown_set_symbol(s->precision,NULL);
+    static const lv_point_t arrow_points[]={{0,0},{5,5},{10,0}};
+    lv_obj_t *arrow=lv_line_create(s->precision);
+    if(!arrow) goto failed;
+    lv_line_set_points(arrow,arrow_points,3);
+    lv_obj_set_style_line_color(arrow,lv_color_hex(0x0074F8),0);
+    lv_obj_set_style_line_width(arrow,2,0);
+    lv_obj_align(arrow,LV_ALIGN_RIGHT_MID,18,0);
+    lv_obj_clear_flag(arrow,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_text_font(lv_dropdown_get_list(s->precision),&lv_font_instrument_sans_medium_18,0);
+    lv_obj_set_style_bg_opa(lv_dropdown_get_list(s->precision),LV_OPA_COVER,0);
+    lv_obj_set_style_bg_color(lv_dropdown_get_list(s->precision),lv_color_hex(0xFFFFFF),0);
+    lv_dropdown_set_options(s->precision,ui_text_get(field<=FIELD_TO ? UI_TEXT_HISTORY_PRECISION_DATE :
+        field==FIELD_TIME ? UI_TEXT_HISTORY_PRECISION_TIME : UI_TEXT_HISTORY_NUMBER_MODES));
+    lv_obj_add_event_cb(s->precision,editor_changed,LV_EVENT_VALUE_CHANGED,s);
+    size_t size;const char *value=field_value(s,field,&size);
+    unsigned precision=2;
+    if(field<=FIELD_TIME) {
+        machine_time_value_t now;machine_time_get(&now);
+        unsigned values[3]={now.year ? now.year : 2026,now.month ? now.month : 1,now.day ? now.day : 1};
+        if(field==FIELD_TIME) {values[0]=now.hour;values[1]=now.minute;values[2]=now.second;}
+        char digits[16];unsigned n=0;
+        for(const char *p=value;*p && n<sizeof(digits)-1;++p) if(*p>='0' && *p<='9') digits[n++]=*p;
+        digits[n]='\0';
+        if(n) {
+            unsigned first=field==FIELD_TIME ? 2 : 4;
+            char part[5]={0};memcpy(part,digits,first);values[0]=(unsigned)atoi(part);
+            precision=(n-first)/2;
+            for(unsigned i=1;i<=precision && i<3;++i) {
+                memcpy(part,digits+first+(i-1)*2,2);part[2]=0;values[i]=(unsigned)atoi(part);
+            }
+        }
+        s->year_value=LV_CLAMP(1U,values[0],9999U);
+        /* The content-size limit is 8191 in this LVGL build. Keep the full
+         * options label below it; direct year entry retains the 1..9999 range. */
+        s->year_first=s->year_value>50 ? s->year_value-50 : 1;
+        for(unsigned i=0;i<3;++i) {
+            ui_text_id_t title=(ui_text_id_t)((field==FIELD_TIME ? UI_TEXT_HISTORY_HOUR : UI_TEXT_HISTORY_YEAR)+i);
+            s->wheel_titles[i]=label(card,100+i*260,76,220,26,&lv_font_instrument_sans_medium_18,SEARCH_BODY,ui_text_get(title));
+            if(!s->wheel_titles[i]) goto failed;
+            s->wheels[i]=lv_roller_create(card);if(!s->wheels[i]) goto failed;
+            lv_obj_set_style_text_font(s->wheels[i],&lv_font_instrument_sans_medium_22,0);
+            /* Match both text layers: different metrics can shift the selected
+             * overlay away from the actual option on long year wheels. */
+            lv_obj_set_style_text_font(s->wheels[i],&lv_font_instrument_sans_medium_22,LV_PART_SELECTED);
+            lv_obj_set_style_bg_color(s->wheels[i],lv_color_hex(0xF4F6F7),0);
+            lv_obj_set_style_bg_opa(s->wheels[i],LV_OPA_COVER,0);
+            lv_obj_set_style_text_color(s->wheels[i],lv_color_hex(SEARCH_MUTED),0);
+            lv_obj_set_style_text_align(s->wheels[i],LV_TEXT_ALIGN_CENTER,0);
+            lv_obj_set_style_text_align(s->wheels[i],LV_TEXT_ALIGN_CENTER,LV_PART_SELECTED);
+            lv_obj_set_style_text_line_space(s->wheels[i],18,0);
+            lv_obj_set_style_text_line_space(s->wheels[i],18,LV_PART_SELECTED);
+            lv_obj_set_style_radius(s->wheels[i],12,0);
+            lv_obj_set_style_bg_color(s->wheels[i],lv_color_hex(0xEAF2FF),LV_PART_SELECTED);
+            lv_obj_set_style_bg_opa(s->wheels[i],LV_OPA_COVER,LV_PART_SELECTED);
+            lv_obj_set_style_text_color(s->wheels[i],lv_color_hex(0x0074F8),LV_PART_SELECTED);
+            lv_roller_set_visible_row_count(s->wheels[i],3);
+            lv_obj_set_pos(s->wheels[i],100+i*260,112);lv_obj_set_width(s->wheels[i],220);
+            unsigned first=field==FIELD_TIME ? 0 : i==0 ? s->year_first : 1;
+            unsigned last=field==FIELD_TIME ? (i==0 ? 23 : 59) : i==0 ? LV_MIN(9999U,s->year_first+100U) : i==1 ? 12 : picker_days(s->year_value,LV_CLAMP(1U,values[1],12U));
+            if(!wheel_options(s->wheels[i],first,last,values[i])) goto failed;
+            if(field<=FIELD_TO && i<2) lv_obj_add_event_cb(s->wheels[i],editor_changed,LV_EVENT_VALUE_CHANGED,s);
+        }
+        if(field<=FIELD_TO) {
+            char year[16];snprintf(year,sizeof(year),"%04u",s->year_value);
+            s->year_button=button(card,100,72,220,34,year,editor_numeric_open,s);
+            if(!s->year_button) goto failed;
+        }
+    } else {
+        history_query_t query;history_query_number_range_t range={0};
+        if(history_query_compile(&s->input,&query)==HISTORY_QUERY_OK) range=field==FIELD_AMOUNT ? query.amount : query.pcs;
+        precision=strstr(value,"..") ? 3 : !strncmp(value,">=",2) ? 1 : !strncmp(value,"<=",2) ? 2 : 0;
+        snprintf(s->number_text[0],sizeof(s->number_text[0]),"%llu",(unsigned long long)(precision==2 ? range.max : range.min));
+        snprintf(s->number_text[1],sizeof(s->number_text[1]),"%llu",(unsigned long long)(precision==3 ? range.max : 0));
+        for(unsigned i=0;i<2;++i) {
+            s->number_title[i]=label(card,100+i*400,96,360,30,&lv_font_instrument_sans_medium_18,
+                SEARCH_BODY,ui_text_get(i ? UI_TEXT_HISTORY_MAXIMUM : UI_TEXT_HISTORY_MINIMUM));
+            s->number[i]=button(card,100+i*400,140,360,68,s->number_text[i],editor_numeric_open,s);
+            if(!s->number[i] || !s->number_title[i]) goto failed;
+            lv_obj_set_style_text_font(lv_damped_button_get_label(s->number[i]),&lv_font_instrument_sans_semibold_22,0);
+        }
+    }
+    lv_dropdown_set_selected(s->precision,(uint16_t)precision);
+    s->editor_error=label(card,28,250,904,32,&lv_font_instrument_sans_medium_16,0xF85820,"");
+    if(!s->editor_error || !lv_nav_button_create(card,28,306,180,44,editor_cancel,s) ||
+        !button(card,226,306,180,44,ui_text_get(UI_TEXT_SERIAL_ALL),editor_clear,s)) goto failed;
+    lv_obj_t *apply=button(card,680,306,250,44,ui_text_get(UI_TEXT_HISTORY_APPLY),editor_apply,s);
+    if(!apply) goto failed;
+    lv_damped_button_set_palette(apply,lv_color_hex(0x0074F8),lv_color_hex(0x005BCD));
+    lv_obj_set_style_text_color(lv_damped_button_get_label(apply),lv_color_hex(0xFFFFFF),0);
+    editor_visibility(s);return;
+failed:
+    editor_close(s);lv_label_set_text(s->error,ui_text_get(UI_TEXT_SERIAL_UNAVAILABLE));
+}
+
 static bool create_options(page_19_history_search_t *s)
 {
-    char currency_options[128];
     bool reject_seen[256] = { false };
     s->currency_count = 1;
     for (size_t r = 0; r < s->record_count; ++r) {
@@ -395,16 +686,28 @@ static bool create_options(page_19_history_search_t *s)
                 memcpy(s->currencies[i], s->currencies[j], 4); memcpy(s->currencies[j], swap, 4);
             }
     if (s->input.rejects == HISTORY_REJECT_CODE) reject_seen[s->input.reject_code] = true;
-    size_t used = (size_t)snprintf(currency_options, sizeof(currency_options), "%s", ui_text_get(UI_TEXT_SERIAL_ALL));
-    for (size_t i = 1; i < s->currency_count; ++i)
-        used += (size_t)snprintf(currency_options + used, sizeof(currency_options) - used, "\n%s", s->currencies[i]);
+    const char *all = ui_text_get(UI_TEXT_SERIAL_ALL);
+    size_t capacity = strlen(all) + 1U + (s->currency_count - 1U) * 4U;
+    char *currency_options = lv_mem_alloc(capacity);
+    if (!currency_options) return false;
+    int written = snprintf(currency_options, capacity, "%s", all);
+    if (written < 0 || (size_t)written >= capacity) { lv_mem_free(currency_options); return false; }
+    size_t used = (size_t)written;
+    for (size_t i = 1; i < s->currency_count; ++i) {
+        written = snprintf(currency_options + used, capacity - used, "\n%s", s->currencies[i]);
+        if (written < 0 || (size_t)written >= capacity - used) {
+            lv_mem_free(currency_options); return false;
+        }
+        used += (size_t)written;
+    }
     lv_dropdown_set_options(s->currency, currency_options);
+    lv_mem_free(currency_options);
     for (unsigned code = 1; code < 255; ++code)
         if (reject_seen[code]) s->reject_codes[s->reject_count++] = (uint8_t)code;
-    size_t capacity = 512 + s->reject_count * 256;
+    capacity = 512 + s->reject_count * 256;
     char *options = lv_mem_alloc(capacity);
     if (!options) return false;
-    int written = snprintf(options, capacity, "%s\n%s", ui_text_get(UI_TEXT_SERIAL_ALL), ui_text_get(UI_TEXT_HISTORY_REJECT_ANY));
+    written = snprintf(options, capacity, "%s\n%s", all, ui_text_get(UI_TEXT_HISTORY_REJECT_ANY));
     if (written < 0 || (size_t)written >= capacity) { lv_mem_free(options); return false; }
     used = (size_t)written;
     for (size_t i = 0; i < s->reject_count; ++i) {
@@ -417,6 +720,26 @@ static bool create_options(page_19_history_search_t *s)
     return true;
 }
 
+static const char *number_caption(const char *value, char *text, size_t size)
+{
+    const char *range=strstr(value,"..");
+    if(range) {
+        snprintf(text,size,"%.*s - %s",(int)(range-value),value,range+2);
+        return text;
+    }
+    unsigned mode=!strncmp(value,">=",2) ? 1 : !strncmp(value,"<=",2) ? 2 : 0;
+    if(!mode) return value;
+    const char *title=ui_text_get(UI_TEXT_HISTORY_NUMBER_MODES);
+    for(unsigned i=0;i<mode;++i) {
+        const char *next=strchr(title,'\n');
+        if(!next) return value;
+        title=next+1;
+    }
+    const char *end=strchr(title,'\n');
+    snprintf(text,size,"%.*s %s",(int)(end ? (size_t)(end-title) : strlen(title)),title,value+2);
+    return text;
+}
+
 static void refresh_controls(page_19_history_search_t *s)
 {
     lv_label_set_text(s->error, "");
@@ -424,7 +747,11 @@ static void refresh_controls(page_19_history_search_t *s)
         size_t size;
         const char *value = field_value(s, field, &size);
         (void)size;
-        lv_damped_button_set_text(s->fields[field], value[0] ? value : ui_text_get(UI_TEXT_SERIAL_ALL));
+        char caption[128];
+        const char *display=(field==FIELD_AMOUNT || field==FIELD_PCS) ?
+            number_caption(value,caption,sizeof(caption)) : value;
+        lv_damped_button_set_text(s->fields[field], value[0] ? display : ui_text_get(UI_TEXT_SERIAL_ALL));
+        selected(s->fields[field],value[0]!=0);
     }
     lv_damped_button_set_enabled(s->fields[FIELD_AMOUNT], s->input.currency[0] != '\0');
     if (!s->input.currency[0]) lv_damped_button_set_text(s->fields[FIELD_AMOUNT], ui_text_get(UI_TEXT_HISTORY_CURRENCY_REQUIRED));
@@ -465,7 +792,7 @@ page_19_history_search_t *page_19_history_search_create(lv_obj_t *parent,
     size_t count, page_19_history_search_close_cb_t close, void *context)
 {
     history_query_t validated;
-    if (!parent || !close || (count && !records) || count > SEARCH_MAX_CURRENCIES - 2 ||
+    if (!parent || !close || (count && !records) || count > UI_HISTORY_MAX_RECORDS ||
         (initial && history_query_compile(initial, &validated) != HISTORY_QUERY_OK)) return NULL;
     page_19_history_search_t *s = lv_mem_alloc(sizeof(*s));
     if (!s) return NULL;
@@ -479,10 +806,8 @@ page_19_history_search_t *page_19_history_search_create(lv_obj_t *parent,
     }
     lv_obj_add_flag(s->root, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_clear_flag(s->root, LV_OBJ_FLAG_GESTURE_BUBBLE);
-    if (!label(s->root, 22, 17, 330, 30, &lv_font_instrument_sans_semibold_22,
-               SEARCH_INK, ui_text_get(UI_TEXT_HISTORY_SEARCH_TITLE)) ||
-        !label(s->root, 365, 20, 783, 30, &lv_font_instrument_sans_medium_14,
-               SEARCH_MUTED, ui_text_get(UI_TEXT_HISTORY_FILTER_SCOPE))) goto failed;
+    if (!label(s->root, 22, 17, 800, 30, &lv_font_instrument_sans_semibold_22,
+               SEARCH_INK, ui_text_get(UI_TEXT_HISTORY_SEARCH_TITLE))) goto failed;
     lv_obj_t *esc = lv_nav_button_create(s->root, 1168, 12, 96, 36, cancel_event, s);
     if (!esc) goto failed;
     lv_damped_button_set_text(esc, ui_text_get(UI_TEXT_SERIAL_ESC));
@@ -494,15 +819,11 @@ page_19_history_search_t *page_19_history_search_create(lv_obj_t *parent,
     }
     for (unsigned i = 0; i < 3; ++i) {
         int x = 24 + i * 408;
-        if (!label(s->panels[0], x, 17, 384, 24, &lv_font_instrument_sans_semibold_14,
+        if (!label(s->panels[0], x, 46, 384, 28, &lv_font_instrument_sans_medium_18,
                    SEARCH_BODY, ui_text_get(field_title(i)))) goto failed;
-        s->fields[i] = button(s->panels[0], x, 48, 384, 44, "", input_event, s);
+        s->fields[i] = button(s->panels[0], x, 90, 384, 72, "", input_event, s);
         if (!s->fields[i]) goto failed;
     }
-    if (!label(s->panels[0], 24, 116, 788, 86, &lv_font_instrument_sans_medium_18,
-               SEARCH_MUTED, ui_text_get(UI_TEXT_HISTORY_DATE_HINT)) ||
-        !label(s->panels[0], 840, 116, 384, 86, &lv_font_instrument_sans_medium_18,
-               SEARCH_MUTED, ui_text_get(UI_TEXT_HISTORY_TIME_HINT))) goto failed;
     s->currency = dropdown(s->panels[1], 20, 43, 278, s);
     if (!s->currency || !label(s->panels[1], 20, 15, 278, 24,
             &lv_font_instrument_sans_semibold_14, SEARCH_BODY, ui_text_get(UI_TEXT_HISTORY_CURRENCY))) goto failed;
@@ -516,8 +837,7 @@ page_19_history_search_t *page_19_history_search_create(lv_obj_t *parent,
     }
     s->denom_title = label(s->panels[1], 20, 99, 168, 24, &lv_font_instrument_sans_semibold_14, SEARCH_BODY, "");
     s->denom_all = button(s->panels[1], 194, 94, 104, 30, ui_text_get(UI_TEXT_SERIAL_ALL), filter_event, s);
-    if (!s->denom_title || !s->denom_all || !label(s->panels[1], 318, 97, 888, 30,
-            &lv_font_instrument_sans_medium_14, SEARCH_MUTED, ui_text_get(UI_TEXT_HISTORY_NUMBER_HINT))) goto failed;
+    if (!s->denom_title || !s->denom_all) goto failed;
     lv_obj_t *grid = surface(s->panels[1], 20, 132, 1208, 78, 0xFFFFFF, 0);
     if (!grid) goto failed;
     lv_obj_add_flag(grid, LV_OBJ_FLAG_SCROLLABLE);
@@ -543,11 +863,12 @@ page_19_history_search_t *page_19_history_search_create(lv_obj_t *parent,
                                ui_text_get(modes[i]), filter_event, s);
         if (!s->matches[i]) goto failed;
     }
-    if (!label(s->panels[2], 24, 166, 1200, 45, &lv_font_instrument_sans_medium_14,
-               SEARCH_MUTED, ui_text_get(UI_TEXT_HISTORY_LIMITED))) goto failed;
     s->error = label(s->root, 24, 348, 892, 43, &lv_font_instrument_sans_medium_14, 0xAC4C3D, "");
-    if (!s->error || !button(s->root, 936, 346, 146, 42, ui_text_get(UI_TEXT_SERIAL_RESET), reset_event, s) ||
-        !button(s->root, 1096, 346, 168, 42, ui_text_get(UI_TEXT_HISTORY_APPLY), apply_event, s)) goto failed;
+    if (!s->error || !button(s->root, 936, 346, 146, 42, ui_text_get(UI_TEXT_SERIAL_RESET), reset_event, s)) goto failed;
+    lv_obj_t *apply=button(s->root, 1096, 346, 168, 42, ui_text_get(UI_TEXT_HISTORY_APPLY), apply_event, s);
+    if(!apply) goto failed;
+    lv_damped_button_set_palette(apply,lv_color_hex(0x0074F8),lv_color_hex(0x005BCD));
+    lv_obj_set_style_text_color(lv_damped_button_get_label(apply),lv_color_hex(0xFFFFFF),0);
     if (!create_options(s)) goto failed;
     collect_denominations(s); refresh_controls(s); activate_tab(s, 0);
     lv_obj_move_foreground(s->root);

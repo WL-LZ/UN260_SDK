@@ -105,6 +105,53 @@ static void cleanup_outputs(void)
     }
 }
 
+static void capacity_snapshot_and_rollback(void)
+{
+    uint32_t ids[UI_HISTORY_MAX_RECORDS];
+    memset(&test_store, 0, sizeof(test_store));
+    test_store.record_count = UI_HISTORY_MAX_RECORDS;
+    for (unsigned i = 0; i < UI_HISTORY_MAX_RECORDS; ++i) {
+        ui_history_record_t *record = &test_store.records[i];
+        *record = (ui_history_record_t){ .valid = true, .slot_no = (uint8_t)(i + 1U),
+            .record_no = 200000U + i * 101U, .pcs = 1000U + i, .amount = 50000U + i,
+            .year = 2026, .month = 9, .day = 10, .hour = 12, .minute = 34, .second = 56 };
+        strcpy(record->currency, "USD");
+        ids[UI_HISTORY_MAX_RECORDS - i - 1U] = record->record_no;
+    }
+    unlock_and_reset();
+    mutate_on_prepare = true;
+    assert(ui_history_export_data_request_records(ids, UI_HISTORY_MAX_RECORDS));
+    assert(pair_calls == UI_HISTORY_MAX_RECORDS && commit_calls == UI_HISTORY_MAX_RECORDS);
+    /* IDs are deliberately sparse and requested in reverse slot order. Even
+     * a store edit during USB preparation cannot change any exported snapshot. */
+    for (unsigned i = 0; i < UI_HISTORY_MAX_RECORDS; ++i) {
+        unsigned source = UI_HISTORY_MAX_RECORDS - i - 1U;
+        char expected[64];
+        char *csv = read_all(test_paths[i][0]);
+        snprintf(expected, sizeof(expected), "Total Pcs,%u\n", 1000U + source);
+        assert(strstr(csv, expected));
+        snprintf(expected, sizeof(expected), "Total Amount,%u\n", 50000U + source);
+        assert(strstr(csv, expected));
+        free(csv);
+    }
+    cleanup_outputs();
+    unlock_and_reset();
+    fail_commit = UI_HISTORY_MAX_RECORDS;
+    assert(!ui_history_export_data_request_records(ids, UI_HISTORY_MAX_RECORDS));
+    assert(pair_calls == UI_HISTORY_MAX_RECORDS && commit_calls == UI_HISTORY_MAX_RECORDS);
+    for (unsigned i = 0; i < UI_HISTORY_MAX_RECORDS; ++i) {
+        for (unsigned format = 0; format < 2; ++format) {
+            char temporary[264];
+            assert(access(test_paths[i][format], F_OK) != 0);
+            snprintf(temporary, sizeof(temporary), "%.255s.tmp", test_paths[i][format]);
+            assert(access(temporary, F_OK) != 0);
+        }
+    }
+    unlock_and_reset();
+    printf("PASS: %u-record reverse stable-ID snapshots and final-record failure rolls back every CSV/HTML/temp output\n",
+           UI_HISTORY_MAX_RECORDS);
+}
+
 int main(int argc, char **argv)
 {
     assert(argc == 2 && strlen(argv[1]) < sizeof(test_directory));
@@ -205,6 +252,7 @@ int main(int argc, char **argv)
     assert(ui_history_export_data_request());
     assert(pair_calls == 1);
     cleanup_outputs();
+    capacity_snapshot_and_rollback();
     puts("PASS: saved totals/metadata, all-log reject parsing, empty detail, stable IDs, snapshots, busy/no USB and paired rollback");
     return 0;
 }

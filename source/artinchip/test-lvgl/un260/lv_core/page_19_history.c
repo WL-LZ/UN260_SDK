@@ -232,7 +232,10 @@ static void record_row_bind(lv_obj_t *row,uint32_t index,void *context)
     lv_obj_set_x(lv_obj_get_child(row,0),history->selecting ? 46 : 16);
     lv_obj_set_width(lv_obj_get_child(row,0),history->selecting ? 110 : 140);
     char text[96];
-    snprintf(text,sizeof(text),"#%lu",(unsigned long)id);
+    /* Row numbering belongs to the displayed result set. Stable record IDs
+     * remain untouched for detail, selection, deletion and export. */
+    size_t number=history->input.oldest_first ? (size_t)index+1 : displayed_count()-index;
+    snprintf(text,sizeof(text),"%lu",(unsigned long)number);
     text_set(lv_obj_get_child(row,0),rec ? text : "");
     date_text(rec,text,sizeof(text));text_set(lv_obj_get_child(row,1),rec ? text : "");
     text_set(lv_obj_get_child(row,2),rec ? rec->currency : "");
@@ -262,6 +265,7 @@ static void record_pointer(lv_event_t *event)
         if (code==LV_EVENT_RELEASED) {
             uint32_t index=UINT32_MAX;
             bool tap=history->tapping && history->pressed_id &&
+                lv_recycled_list_tap_allowed(history->list) &&
                 history->pressed_revision==history->revision &&
                 lv_recycled_list_index_at_point(history->list,&point,&index) &&
                 displayed_id(index)==history->pressed_id;
@@ -411,13 +415,17 @@ static void show_record(uint32_t id)
     }
     refresh_header();
 }
-static void show_list(void)
+static void show_list_panels(void)
 {
     history->detail_mode=false;history->current_id=0;
     for (unsigned i=0;i<3;++i) {
         lv_recycled_list_stop(history->sections[i].list);show(history->sections[i].panel,false);
     }
-    show(history->list_panel,true);refresh_records(false);
+    show(history->list_panel,true);
+}
+static void show_list(void)
+{
+    show_list_panels();refresh_records(false);
 }
 static void refresh_header(void)
 {
@@ -452,7 +460,9 @@ static void refresh_header(void)
         } else {
             text_set(history->title,tr(UI_TEXT_HISTORY_MISSING));text_set(history->subtitle,"");
         }
-        text_set(history->summary,tr(UI_TEXT_HISTORY_LIMITED));text_set(history->notice,"");
+        history_record_detail_t *detail=current_detail();
+        text_set(history->summary,detail && (!detail->denoms_complete || !detail->serials_complete) ?
+            tr(UI_TEXT_HISTORY_PARTIAL) : "");text_set(history->notice,"");
         const ui_text_id_t ids[]={UI_TEXT_HISTORY_PREVIOUS,UI_TEXT_HISTORY_NEXT,UI_TEXT_HISTORY_EXPORT,UI_TEXT_HISTORY_BACK};
         for (unsigned i=0;i<4;++i) lv_damped_button_set_text(history->actions[i],tr(ids[i]));
         int position=-1;
@@ -465,11 +475,11 @@ static void refresh_header(void)
         lv_obj_set_width(history->subtitle,312);
         lv_obj_set_pos(history->summary,344,12);
         lv_obj_set_width(history->summary,470);
-        lv_obj_set_style_text_font(history->summary,&lv_font_instrument_sans_medium_18,0);
+        lv_obj_set_style_text_font(history->summary,&lv_font_instrument_sans_semibold_22,0);
         text_set(history->title,tr(UI_TEXT_HISTORY_RECORDS));
         if (history->selecting) {
             snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_SELECTED_FMT),(unsigned)history->selected_count);
-            text_set(history->subtitle,text);text_set(history->notice,tr(UI_TEXT_HISTORY_SELECTION_HINT));
+            text_set(history->subtitle,text);text_set(history->notice,"");
         } else {
             snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_STORAGE_FMT),(unsigned)history->record_count,UI_HISTORY_MAX_RECORDS);
             text_set(history->subtitle,text);
@@ -480,7 +490,8 @@ static void refresh_header(void)
             else if (history->unknown_count) {
                 snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_UNKNOWN_FMT),(unsigned)history->unknown_count);
                 text_set(history->notice,text);
-            } else text_set(history->notice,tr(UI_TEXT_HISTORY_LIMITED));
+            } else text_set(history->notice,history->record_count>=UI_HISTORY_MAX_RECORDS ?
+                tr(UI_TEXT_HISTORY_CAPACITY_FULL) : "");
         }
         if (history->reviewing_unknown) text_set(history->summary,tr(UI_TEXT_HISTORY_PARTIAL));
         else {
@@ -556,7 +567,11 @@ static void refresh_records(bool reset)
         history->record_count ? UI_TEXT_HISTORY_NO_MATCH : UI_TEXT_HISTORY_EMPTY));
     if (history->detail_mode) {
         uint32_t id=history->current_id;int i=record_index(id);
-        if (i>=0 && prepare_detail((unsigned)i)) {
+        if (i<0 || !record_find(id)) {
+            /* An external deletion or retention rollover invalidates the ID,
+             * not the user's filter/reading position. Do not recurse here. */
+            show_list_panels();toast(tr(UI_TEXT_HISTORY_MISSING));
+        } else if (prepare_detail((unsigned)i)) {
             for (unsigned s=0;s<3;++s) {
                 lv_recycled_list_refresh(history->sections[s].list,(uint32_t)section_count(s),false);
                 show(history->sections[s].empty,section_count(s)==0);
@@ -719,10 +734,10 @@ void ui_page_19_history_create(lv_obj_t *parent)
     if (!header) goto failed;
     history->title=label(header,22,10,780,30,&lv_font_instrument_sans_semibold_22,HISTORY_INK,LV_TEXT_ALIGN_LEFT);
     history->subtitle=label(header,22,39,312,22,&lv_font_instrument_sans_medium_14,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
-    history->summary=label(header,344,12,470,25,&lv_font_instrument_sans_medium_18,HISTORY_BODY,LV_TEXT_ALIGN_LEFT);
+    history->summary=label(header,344,12,470,28,&lv_font_instrument_sans_semibold_22,0x0074F8,LV_TEXT_ALIGN_LEFT);
     history->notice=label(header,344,39,470,22,&lv_font_instrument_sans_medium_12,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
     history->lifetime_title=label(header,830,10,182,20,&lv_font_instrument_sans_medium_12,HISTORY_MUTED,LV_TEXT_ALIGN_RIGHT);
-    history->lifetime=label(header,830,32,182,28,&lv_font_instrument_sans_semibold_22,HISTORY_BODY,LV_TEXT_ALIGN_RIGHT);
+    history->lifetime=label(header,830,32,182,28,&lv_font_instrument_sans_semibold_22,0x0074F8,LV_TEXT_ALIGN_RIGHT);
     history->reset_total=button(header,1030,14,96,38,tr(UI_TEXT_HISTORY_CLEAR_TOTAL),reset_event,NULL);
     if (!history->title || !history->subtitle || !history->summary || !history->notice ||
         !history->lifetime_title || !history->lifetime || !history->reset_total) goto failed;
@@ -737,7 +752,7 @@ void ui_page_19_history_create(lv_obj_t *parent)
     }
     history->list_panel=surface(history->root,16,90,1140,298,15,0xFFFFFF);
     if (!history->list_panel) goto failed;
-    const ui_text_id_t heads[]={UI_TEXT_HISTORY_RECORDS,UI_TEXT_HISTORY_DATE,UI_TEXT_HISTORY_CURRENCY,
+    const ui_text_id_t heads[]={UI_TEXT_PAGE01_DETAIL_COL_NO,UI_TEXT_HISTORY_DATE,UI_TEXT_HISTORY_CURRENCY,
         UI_TEXT_HISTORY_PCS,UI_TEXT_HISTORY_AMOUNT};
     const int xs[]={28,176,444,528,682},ws[]={132,250,76,116,194};
     for (unsigned i=0;i<5;++i) {
@@ -801,11 +816,14 @@ void ui_page_19_history_suspend(void)
     close_dialog();lv_recycled_list_stop(history->list);history->tapping=false;
     for (unsigned i=0;i<3;++i) lv_recycled_list_stop(history->sections[i].list);
     show(history->root,false);
+    /* Search is gone and all viewports are stopped. Labels own their text;
+     * parsed details have no consumer while a retained page is hidden. */
+    release_details();history->model_dirty=true;
 }
 void ui_page_19_history_destroy(void)
 {
     if (!history) return;
-    ui_page_19_history_suspend();release_details();
+    ui_page_19_history_suspend();
     if (history->root) lv_obj_del(history->root);
     lv_mem_free(history);history=NULL;
 }
