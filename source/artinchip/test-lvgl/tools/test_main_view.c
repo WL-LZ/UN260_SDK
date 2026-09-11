@@ -192,7 +192,7 @@ static void test_main(void)
         assert(!strcmp(lv_label_get_text(s_curr_label),currency_metadata_symbol(currencies[i])));
         assert(lv_obj_is_visible(s_curr_label) && !lv_obj_is_visible(s_amount_unit_icon));
         lv_point_t size;
-        lv_txt_get_size(&size,lv_label_get_text(s_curr_label),&lv_font_main_currency_56,
+        lv_txt_get_size(&size,lv_label_get_text(s_curr_label),lv_obj_get_style_text_font(s_curr_label,0),
             0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
         assert(size.x<=92 && size.y<=76); /* Multi-letter symbols cannot clip into the amount. */
         assert_labels(main_page);
