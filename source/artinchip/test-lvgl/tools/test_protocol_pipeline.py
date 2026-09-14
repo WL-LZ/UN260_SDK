@@ -36,18 +36,28 @@ code = r'''
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdarg.h>
+#include <string.h>
 #include "un260/protocol/protocol_frame_queue.h"
 static uint64_t now_us;
 static uint32_t frame_cost_us, next_frame, end_frame, dispatched;
 static uint32_t debug_logs;
 static bool debug_active, block_dispatch;
+static bool history_initialized, history_available, history_capacity;
 static unsigned backpressure_warnings;
+static char warning_text[100], warning_log[160];
+static unsigned warning_logs;
 static protocol_frame_t g_deferred_frame;
 static bool g_deferred_frame_valid, g_deferred_frame_blocked;
+static bool g_deferred_frame_warning_reported;
 #define SMART_ISLAND_WARNING_LEVEL_ERROR 2
 static void smart_island_notify_warning_level(const char *text, int level) {
-    (void)text; (void)level; backpressure_warnings++;
+    assert(level == SMART_ISLAND_WARNING_LEVEL_ERROR);
+    snprintf(warning_text, sizeof(warning_text), "%s", text); backpressure_warnings++;
 }
+static bool ui_history_data_is_initialized(void) { return history_initialized; }
+static bool ui_history_data_is_available(void) { return history_available; }
+static void page_01_main_refresh_start_state(void) {}
 static uint64_t app_clock_monotonic_us(void) { return now_us; }
 static uint32_t app_clock_elapsed_us32(uint64_t start, uint64_t end) {
     return (uint32_t)(end - start);
@@ -68,11 +78,17 @@ size_t protocol_frame_format_hex(const uint8_t *data, size_t len,
                                  char *out, size_t cap) {
     (void)data; (void)len; assert(cap > 0); out[0] = 0; return 0;
 }
-static void uart_debug_printf(const char *format, ...) { (void)format; }
+static void uart_debug_printf(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    vsnprintf(warning_log, sizeof(warning_log), format, args);
+    va_end(args);
+    warning_logs++;
+}
 static bool app_command_runtime_dispatch(uint8_t cmd, uint8_t *data, uint8_t len) {
     assert(cmd == 0x49 && len == 7);
     assert(data[4] == (uint8_t)dispatched && data[5] == (uint8_t)(dispatched >> 8));
-    if (block_dispatch) return false;
+    if (block_dispatch || !history_initialized || !history_available || !history_capacity) return false;
     dispatched++;
     now_us += frame_cost_us;
     return true;
@@ -81,7 +97,10 @@ static void reset(uint32_t count, uint32_t cost) {
     now_us = 0; frame_cost_us = cost; next_frame = 0; end_frame = count;
     dispatched = 0; debug_logs = 0;
     g_deferred_frame_valid = false; g_deferred_frame_blocked = false;
+    g_deferred_frame_warning_reported = false;
+    history_initialized = history_available = history_capacity = true;
     block_dispatch = false; backpressure_warnings = 0;
+    warning_logs = 0; warning_text[0] = warning_log[0] = '\0';
 }
 '''
 code += max_frames + "\n" + pending_function + "\n" + budget_function + r'''
@@ -110,6 +129,57 @@ int main(void) {
     assert(app_command_runtime_process_frames_budget(2000) == 5);
     assert(next_frame == 5 && dispatched == 5 && debug_logs == 5);
     assert(!g_deferred_frame_valid && !app_command_runtime_frames_pending());
+    /* A start arriving during a healthy asynchronous read is held silently.
+     * Loading completion must neither lose it nor invent a disk-full warning. */
+    reset(5, 10); history_initialized = false;
+    for (unsigned retry = 0; retry < 20; retry++) {
+        assert(app_command_runtime_process_frames_budget(2000) == 0);
+        assert(next_frame == 1 && dispatched == 0 && debug_logs == 1);
+        assert(g_deferred_frame_valid && g_deferred_frame_blocked);
+        assert(!g_deferred_frame_warning_reported && backpressure_warnings == 0);
+        assert(warning_logs == 0 && warning_text[0] == '\0');
+        assert(!app_command_runtime_frames_pending());
+    }
+    history_initialized = true;
+    assert(app_command_runtime_process_frames_budget(2000) == 5);
+    assert(next_frame == 5 && dispatched == 5 && debug_logs == 5);
+    assert(backpressure_warnings == 0 && !g_deferred_frame_warning_reported);
+    assert(warning_logs == 0);
+    /* Both a completed failed load and a completed load with no queue capacity
+     * still reject preflight. The deferred frame emits one real error then. */
+    for (unsigned blocked_reason = 0; blocked_reason < 2; blocked_reason++) {
+        reset(3, 10); history_initialized = false;
+        assert(app_command_runtime_process_frames_budget(2000) == 0);
+        assert(backpressure_warnings == 0 && !g_deferred_frame_warning_reported);
+        assert(warning_logs == 0);
+        history_initialized = true;
+        if (blocked_reason == 0) history_available = false;
+        else history_capacity = false;
+        assert(app_command_runtime_process_frames_budget(2000) == 0);
+        assert(backpressure_warnings == 1 && g_deferred_frame_warning_reported);
+        assert(warning_logs == 1);
+        assert(strcmp(warning_text, blocked_reason == 0 ? "History unavailable: receiving paused" :
+                      "History full: receiving paused") == 0);
+        assert(strcmp(warning_log, blocked_reason == 0 ?
+                      "RX transition paused: history unavailable; retaining frame and session\n" :
+                      "RX transition paused: history full; retaining frame and session\n") == 0);
+        assert(next_frame == 1 && dispatched == 0 && debug_logs == 1);
+        assert(!app_command_runtime_frames_pending());
+        assert(app_command_runtime_process_frames_budget(2000) == 0);
+        assert(backpressure_warnings == 1);
+        assert(warning_logs == 1);
+        history_available = history_capacity = true;
+        assert(app_command_runtime_process_frames_budget(2000) == 3);
+        assert(dispatched == 3 && debug_logs == 3 && !g_deferred_frame_warning_reported);
+        /* A new blocked frame owns a new warning, after the previous frame was
+         * consumed; resetting the flag must not suppress future real errors. */
+        end_frame++;
+        history_capacity = false;
+        assert(app_command_runtime_process_frames_budget(2000) == 0);
+        assert(backpressure_warnings == 2 && warning_logs == 2);
+        assert(strcmp(warning_text, "History full: receiving paused") == 0);
+    }
+    puts("PASS: pending history is silent and retains frames; loaded success resumes, terminal failure/full reports once");
     puts("frame budget tests passed");
     return 0;
 }

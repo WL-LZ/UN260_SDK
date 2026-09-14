@@ -24,6 +24,7 @@
 #include "un260/lv_drivers/lv_drivers.h"
 #include "un260/lv_system/counting_ui_runtime.h"
 #include "un260/lv_system/ui_text.h"
+#include "un260/lv_system/ui_history_data.h"
 #include "un260/lv_system/app_clock.h"
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/protocol/protocol_frame.h"
@@ -39,6 +40,7 @@ static counting_session_state_t g_counting_session;
 static protocol_frame_t g_deferred_frame;
 static bool g_deferred_frame_valid;
 static bool g_deferred_frame_blocked;
+static bool g_deferred_frame_warning_reported;
 
 static bool app_command_runtime_main_page_active(void)
 {
@@ -206,21 +208,30 @@ uint32_t app_command_runtime_process_frames_budget(uint32_t budget_us)
         if (len < PROTOCOL_FRAME_MIN_SIZE) {
             uart_debug_printf("Queued frame dropped: invalid len=%u\n", len);
             g_deferred_frame_valid = false;
+            g_deferred_frame_warning_reported = false;
             processed++;
             continue;
         }
 
         if (!app_command_runtime_dispatch(buf[3], buf, len)) {
-            if (!g_deferred_frame_blocked) {
-                uart_debug_printf("RX transition paused: history full; retaining frame and session\n");
-                smart_island_notify_warning_level("History full: receiving paused",
+            /* Initial history loading is normal backpressure, not a storage
+             * fault. Keep the frame and the bounded wait, but leave its warning
+             * unconsumed so a failed load/full queue can report after loading. */
+            if (!g_deferred_frame_warning_reported && ui_history_data_is_initialized()) {
+                const bool available = ui_history_data_is_available();
+                uart_debug_printf("RX transition paused: history %s; retaining frame and session\n",
+                                  available ? "full" : "unavailable");
+                smart_island_notify_warning_level(available ? "History full: receiving paused" :
+                                                   "History unavailable: receiving paused",
                                                    SMART_ISLAND_WARNING_LEVEL_ERROR);
+                g_deferred_frame_warning_reported = true;
             }
             g_deferred_frame_blocked = true;
             break;
         }
         g_deferred_frame_valid = false;
         g_deferred_frame_blocked = false;
+        g_deferred_frame_warning_reported = false;
         processed++;
     }
     if (processed) page_01_main_refresh_start_state();

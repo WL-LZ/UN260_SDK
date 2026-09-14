@@ -44,9 +44,17 @@ typedef struct {
 } ui_history_store_t;
 
 void ui_history_data_init(void);
+/* UI-thread startup API. async starts one read without waiting; poll publishes
+ * its private worker snapshot once and returns true on completion, including
+ * failure. Check is_available separately. The synchronous init remains for
+ * startup/test callers; ordinary getters never wait after async has started. */
+void ui_history_data_init_async(void);
+bool ui_history_data_init_poll(void);
+bool ui_history_data_is_initialized(void);
 /* Mutators return queue acceptance, never a durability acknowledgement. The
  * returned view includes accepted edits; consult the commit status for saving.
- * These APIs and the view are owned by the UI thread. init waits only at boot. */
+ * These APIs and the view are owned by the UI thread. Writes are rejected until
+ * a successful initial load; an unfinished read is not an empty database. */
 bool ui_history_data_poll(uint32_t now_ms);
 storage_job_id_t ui_history_last_commit_id(void);
 storage_job_status_t ui_history_commit_status(storage_job_id_t id);
