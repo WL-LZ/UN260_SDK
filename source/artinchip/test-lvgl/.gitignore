@@ -1,3 +1,4 @@
 # Reproducible build products; originals and the converter remain source-controlled.
 /aic_ui/generated_assets/
+/aic_ui/lvgl_data/boot_theme_c/boot-light.bin
 __pycache__/

@@ -25,6 +25,11 @@ if [ "${UN260_BOOT_TRACE+x}" != x ]; then
       [ ! -f /etc/un260/boot-trace.enabled ] || UN260_BOOT_TRACE=1
 fi
 export UN260_BOOT_TRACE
+if [ "${UN260_BOOT_FRAME_TRACE+x}" != x ]; then
+      UN260_BOOT_FRAME_TRACE=0
+      [ ! -f /etc/un260/boot-frames.enabled ] || UN260_BOOT_FRAME_TRACE=1
+fi
+export UN260_BOOT_FRAME_TRACE
 if [ "${UN260_EARLY_DISPLAY+x}" != x ]; then
       UN260_EARLY_DISPLAY=1
       [ ! -f /etc/un260/early-display.disabled ] || UN260_EARLY_DISPLAY=0

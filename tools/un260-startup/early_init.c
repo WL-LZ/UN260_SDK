@@ -67,13 +67,18 @@ int main(void)
     int log=open("/dev/.un260-early.log",O_CREAT|O_WRONLY|O_TRUNC,0600);
     if(log>=0){dup2(log,STDOUT_FILENO);dup2(log,STDERR_FILENO);if(log>2)close(log);}
     milestone("init_enter");
-    char cmd[4096]={0},root[256]="",type[64]="ubifs",options[512]="",init[256]="/linuxrc",disable[8]="";
+    char cmd[4096]={0},root[256]="",type[64]="ubifs",options[512]="",init[256]="/linuxrc",disable[8]="",frame_trace[8]="";
     int fd=open("/proc/cmdline",O_RDONLY);
     if(fd<0)fatal("read cmdline");
     ssize_t n=read(fd,cmd,sizeof(cmd)-1);close(fd);if(n<=0)fatal("empty cmdline");
     argument(cmd,"root=",root,sizeof(root));argument(cmd,"rootfstype=",type,sizeof(type));
     argument(cmd,"rootflags=",options,sizeof(options));argument(cmd,"init=",init,sizeof(init));
     argument(cmd,"un260.boot_light=",disable,sizeof(disable));
+    argument(cmd,"un260.boot_frames=",frame_trace,sizeof(frame_trace));
+    /* Independent from milestone logging. Retain this explicit opt-in across
+       switch-root; absence leaves the real init free to use its file flag. */
+    if(!strcmp(frame_trace,"1"))setenv("UN260_BOOT_FRAME_TRACE","1",1);
+    else unsetenv("UN260_BOOT_FRAME_TRACE");
     if(!root[0]||init[0]!='/'){errno=EINVAL;fatal("root/init arguments");}
     pid_t child=-1;
     if(strcmp(disable,"0")) {

@@ -21,6 +21,7 @@
 #define AICFB_WAIT_FOR_VSYNC 102
 
 typedef uint32_t lv_color_t;
+typedef void (*lv_port_present_observer_t)(uint64_t present_us);
 typedef int32_t lv_coord_t;
 typedef struct { lv_coord_t x1, y1, x2, y2; } lv_area_t;
 typedef struct { bool paused; } lv_timer_t;
@@ -72,9 +73,12 @@ static lv_disp_draw_buf_t disp_buf;
 static lv_disp_drv_t disp_drv;
 static lv_timer_t refresh_timer;
 static lv_disp_t display;
+static uint64_t app_clock_monotonic_us(void);
 /* ACTUAL_PRESENT_GLOBALS */
 
 static uint64_t clock_us;
+static unsigned clock_reads, observed_presents;
+static uint64_t observed_present_us;
 static unsigned visible_buffer, pan_target, pan_calls, vsync_calls, get_info_calls;
 static unsigned successful_vsyncs, acknowledged_vsyncs, flush_ready_calls;
 static unsigned copy_calls, copy_fail_at, pan_failures, vsync_failures, get_info_failures;
@@ -96,7 +100,7 @@ static uint32_t random_u32(void)
     return random_state;
 }
 
-static uint64_t app_clock_monotonic_us(void) { return clock_us; }
+static uint64_t app_clock_monotonic_us(void) { ++clock_reads; return clock_us; }
 static uint32_t app_clock_uptime_ms(void) { return (uint32_t)(clock_us / 1000U); }
 static uint32_t app_clock_elapsed_us32(uint64_t start, uint64_t end) { return (uint32_t)(end - start); }
 static lv_disp_t *_lv_refr_get_disp_refreshing(void) { return &display; }
@@ -209,6 +213,14 @@ static int mpp_ge_emit(struct mpp_ge *ge) { assert(ge == g_ge); return 0; }
 static int mpp_ge_sync(struct mpp_ge *ge) { assert(ge == g_ge); return 0; }
 
 /* ACTUAL_PRESENT_FUNCTIONS */
+
+static void observe_present(uint64_t present_us)
+{
+    ++observed_presents;
+    observed_present_us = present_us;
+    assert(present_us == clock_us);
+    assert(g_present_sequence == successful_vsyncs);
+}
 
 static bool point_in(present_rect_t r, int x, int y)
 {
@@ -383,6 +395,9 @@ static bool render_frame(void)
 
 static void reset_pipeline(void)
 {
+    lv_port_disp_set_present_observer(NULL);
+    observed_presents = clock_reads = 0;
+    observed_present_us = 0;
     memset(frame_storage, 0xa5, sizeof(frame_storage));
     memset(&disp_buf, 0, sizeof(disp_buf));
     memset(&display, 0, sizeof(display));
@@ -522,6 +537,7 @@ static void test_copy_fallback(void)
 static void test_submit_recovery(unsigned failure_kind)
 {
     reset_pipeline();
+    lv_port_disp_set_present_observer(observe_present);
     lv_area_t damage = {2, 2, 18, 17};
     change_scene(damage, 221);
     load_damage(&damage, 1);
@@ -533,6 +549,7 @@ static void test_submit_recovery(unsigned failure_kind)
     assert(render_frame());
     assert(g_retry_driver == &disp_drv && disp_buf.flushing);
     assert(g_previous_buffer == previous_front && g_present_sequence == previous_sequence);
+    assert(observed_presents == 0);
     assert(g_retry_buffer != disp_buf.buf_act);
 
     /* Model events after the failure in the SAME handler, including a joined
@@ -559,14 +576,41 @@ static void test_submit_recovery(unsigned failure_kind)
     clock_us += 50000;
     assert(!lv_port_disp_poll() && disp_buf.flushing); /* another transient failure */
     assert(g_present_sequence == previous_sequence && g_previous_buffer == previous_front);
+    assert(observed_presents == 0);
     clock_us += 50000;
     assert(lv_port_disp_poll());
     assert(!g_retry_driver && !disp_buf.flushing && full_invalidations == 1);
     assert(g_present_sequence == previous_sequence + 1 && display.inv_p == 1);
+    assert(observed_presents == 1 && observed_present_us == clock_us);
     assert(!refresh_timer.paused && memcmp(&display.inv_areas[0], &full_area, sizeof(full_area)) == 0);
     assert(render_frame()); /* recovers ALL model changes suppressed during hold */
+    assert(observed_presents == 2);
     assert_visible_reference();
     assert(lv_port_disp_poll());
+    assert(observed_presents == 2);
+    lv_port_disp_set_present_observer(NULL);
+}
+
+static void test_present_observer(void)
+{
+    reset_pipeline();
+    assert(observed_presents == 0);
+    /* Isolate the observer hook from normal rendering's existing clocks.
+     * A detached hook must not add a timestamp read to the ordinary UI path. */
+    unsigned before_reads = clock_reads, before_sequence = g_present_sequence;
+    notify_present();
+    assert(clock_reads == before_reads && g_present_sequence == before_sequence + 1U);
+    g_present_sequence = before_sequence;
+    lv_port_disp_set_present_observer(observe_present);
+    load_damage(&full_area, 1);
+    assert(render_frame());
+    assert(observed_presents == 1 && observed_present_us == clock_us);
+    lv_port_disp_set_present_observer(NULL);
+    load_damage(&full_area, 1);
+    assert(render_frame());
+    assert(observed_presents == 1);
+    lv_port_disp_set_present_observer(NULL); /* Detach is idempotent. */
+    puts("display: optional observer default-off, confirmed present only, detach stops callbacks without extra timestamp read");
 }
 
 static void test_eintr(void)
@@ -594,6 +638,7 @@ int main(void)
     test_submit_recovery(1);
     test_submit_recovery(2);
     test_eintr();
+    test_present_observer();
     puts("present pipeline tests passed");
     return 0;
 }

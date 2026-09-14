@@ -89,6 +89,9 @@ int main(void) {
     app_startup_trace_mark("history_load_started");
 #endif
     bool first_frame_presented = false;
+    bool boot_frames_active = ui_page_00_boot_anim_is_active() && app_startup_frames_begin();
+    if (boot_frames_active)
+        lv_port_disp_set_present_observer(app_startup_frames_present);
     uint32_t early_elapsed = 0;
     int early_visual = startup_visual_acquire(&early_elapsed);
     if (early_visual < 0) {
@@ -111,6 +114,11 @@ int main(void) {
         uint64_t wake_sequence = app_runtime_wakeup_snapshot();
         uint64_t loop_start_us = app_clock_monotonic_us();
         ui_page_00_boot_anim_poll();
+        if (boot_frames_active && !ui_page_00_boot_anim_is_active()) {
+            lv_port_disp_set_present_observer(NULL);
+            app_startup_frames_finish();
+            boot_frames_active = false;
+        }
         uint32_t now = app_clock_uptime_ms();
         ui_page_t current_page = ui_manager_get_current_page();
         uint64_t lvgl_start_us;

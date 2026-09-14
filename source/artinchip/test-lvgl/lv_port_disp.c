@@ -39,6 +39,18 @@ static struct fb_var_screeninfo g_pan_var;
 static int g_pan_var_valid = 0;
 static int g_live_vscreeninfo = 0;
 static uint32_t g_present_sequence;
+static lv_port_present_observer_t g_present_observer;
+
+void lv_port_disp_set_present_observer(lv_port_present_observer_t observer)
+{
+    g_present_observer = observer;
+}
+
+static void notify_present(void)
+{
+    ++g_present_sequence;
+    if (g_present_observer) g_present_observer(app_clock_monotonic_us());
+}
 static bool g_damage_reuse;
 static lv_color_t *g_previous_buffer;
 static present_rect_t g_previous_damage[LV_INV_BUF_SIZE];
@@ -378,7 +390,7 @@ static void present_complete(lv_disp_drv_t *drv, lv_color_t *buffer,
                              bool profile, uint64_t started)
 {
     g_previous_buffer = buffer;
-    ++g_present_sequence;
+    notify_present();
     sample->mirror_us = g_prepare_us;
     sample->mirror_pixels = g_prepare_pixels;
     /* Deferred mirror is still charged to output time. Moving it out of
@@ -568,7 +580,7 @@ static void fbdev_flush(lv_disp_drv_t * drv, const lv_area_t * area,
         }
 
         cal_frame_rate();
-        if (pan_result == 0) ++g_present_sequence;
+        if (pan_result == 0) notify_present();
         lv_disp_flush_ready(drv);
     }
     else {
@@ -706,6 +718,7 @@ bool lv_port_disp_adopt_scanout(void)
 
 void lv_port_disp_exit(void)
 {
+    g_present_observer = NULL;
     if (g_ge) {
         ge_close();
         g_ge = NULL;

@@ -540,6 +540,7 @@ $(LINUX_DIR)/.stamp_built: \
 	$(TOPDIR)/tools/un260-startup/early_init.c \
 	$(TOPDIR)/source/artinchip/test-lvgl/tools/build_boot_light_assets.py \
 	$(wildcard $(TOPDIR)/source/artinchip/test-lvgl/un260/lv_drivers/boot_light*) \
+	$(TOPDIR)/source/artinchip/test-lvgl/un260/lv_drivers/boot_frame_stats.h \
 	$(TOPDIR)/source/artinchip/test-lvgl/un260/lv_system/backlight_service.c \
 	$(TOPDIR)/source/artinchip/test-lvgl/un260/lv_core/page_00_boot_anim.h \
 	$(wildcard $(TOPDIR)/source/artinchip/test-lvgl/aic_ui/lvgl_data/boot_theme_c/*.png) \
