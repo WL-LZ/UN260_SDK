@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include "boot_light_protocol.h"
+#include "boot_frame_stats.h"
 #include "un260/lv_system/backlight_service.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -37,11 +38,26 @@
 #define ICON_BYTES (96U*96U*4U)
 #define TEXT_BYTES (500U*64U*4U)
 #define ASSET_BYTES (BG_BYTES+ICON_BYTES+2U*TEXT_BYTES)
+#define ACTIVE_X 390U
+#define ACTIVE_Y 78U
+#define ACTIVE_W 500U
+#define ACTIVE_H 229U
+#define ACTIVE_STRIDE (ACTIVE_W*4U)
+#define ACTIVE_BYTES (ACTIVE_STRIDE*ACTIVE_H)
+#define DOTS_X 619U
+#define DOTS_Y 290U
+#define DOTS_W 41U
+#define DOTS_H 13U
+typedef struct {
+    bool initialized;
+    bool settled;
+} frame_state_t;
 #ifndef ASSET_PATH
 #define ASSET_PATH "/usr/local/share/lvgl_data/boot_theme_c/boot-light.bin"
 #endif
 static volatile sig_atomic_t stopped;
 static uint64_t now_ms(void) {struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000U+t.tv_nsec/1000000U;}
+static uint64_t now_us(void) {struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000000U+t.tv_nsec/1000U;}
 static void stop_signal(int sig) {(void)sig;stopped=1;}
 static void trace(const char *stage)
 {
@@ -54,6 +70,8 @@ static void blend(uint8_t *dst,const uint8_t *src,unsigned count,unsigned opacit
 {
     for(unsigned i=0;i<count;i++,dst+=4,src+=4) {
         unsigned a=(src[3]*opacity+127)/255;
+        if(!a)continue;
+        if(a==255){memcpy(dst,src,4);continue;}
         for(unsigned c=0;c<3;c++)dst[c]=(src[c]*a+dst[c]*(255-a)+127)/255;
         dst[3]=255;
     }
@@ -64,17 +82,26 @@ static void sprite(uint8_t *frame,unsigned stride,const uint8_t *src,unsigned w,
     if(!a)return;
     for(unsigned row=0;row<h;row++)blend(frame+(y+row)*stride+x*4,src+row*w*4,w,a);
 }
-static void render(uint8_t *frame,unsigned stride,const uint8_t *assets,uint32_t elapsed,bool full)
+static void render(uint8_t *frame,unsigned stride,const uint8_t *assets,
+                   uint8_t *canvas,uint32_t elapsed,frame_state_t *state)
 {
-    /* Both framebuffer pages own a background copy. Restore only the moving
-     * area thereafter: no full-screen blend, decoder, or allocation per frame. */
-    unsigned y0=full?0:78,y1=full?H:307,x0=full?0:390,x1=full?W:890;
-    for(unsigned y=y0;y<y1;y++)memcpy(frame+y*stride+x0*4,assets+(y*W+x0)*4,(x1-x0)*4);
-    float p=progress(elapsed,150,800),q=1-p;
-    sprite(frame,stride,assets+BG_BYTES,96,96,592,82+(unsigned)(6*q*q*q+.5f),ease(p));
-    sprite(frame,stride,assets+BG_BYTES+ICON_BYTES,500,64,390,219+(unsigned)(4*q*q*q+.5f),ease(p)*(1-ease(progress(elapsed,2700,600))));
-    p=progress(elapsed,3450,700);q=1-p;
-    sprite(frame,stride,assets+BG_BYTES+ICON_BYTES+TEXT_BYTES,500,64,390,219+(unsigned)(4*q*q*q+.5f),ease(p));
+    /* This BSP maps the framebuffer uncached. Blend in normal RAM and only
+     * write completed rows to scanout; never read scanout pixels on the CPU. */
+    if(!state->initialized)
+        for(unsigned y=0;y<H;y++)memcpy(frame+y*stride,assets+y*W*4,W*4);
+    bool dots_only=state->settled&&elapsed>=4150U;
+    unsigned x=dots_only?DOTS_X:ACTIVE_X,y=dots_only?DOTS_Y:ACTIVE_Y;
+    unsigned width=dots_only?DOTS_W:ACTIVE_W,height=dots_only?DOTS_H:ACTIVE_H;
+    for(unsigned row=0;row<height;row++)
+        memcpy(canvas+(y+row-ACTIVE_Y)*ACTIVE_STRIDE+(x-ACTIVE_X)*4,
+               assets+((y+row)*W+x)*4,width*4);
+    if(!dots_only) {
+        float p=progress(elapsed,150,800),q=1-p;
+        sprite(canvas,ACTIVE_STRIDE,assets+BG_BYTES,96,96,592-ACTIVE_X,82-ACTIVE_Y+(unsigned)(6*q*q*q+.5f),ease(p));
+        sprite(canvas,ACTIVE_STRIDE,assets+BG_BYTES+ICON_BYTES,500,64,390-ACTIVE_X,219-ACTIVE_Y+(unsigned)(4*q*q*q+.5f),ease(p)*(1-ease(progress(elapsed,2700,600))));
+        p=progress(elapsed,3450,700);q=1-p;
+        sprite(canvas,ACTIVE_STRIDE,assets+BG_BYTES+ICON_BYTES+TEXT_BYTES,500,64,390-ACTIVE_X,219-ACTIVE_Y+(unsigned)(4*q*q*q+.5f),ease(p));
+    }
     for(unsigned i=0;i<3;i++) {
         unsigned phase=elapsed<4350?0:(elapsed-4350+1500-i*160)%1500;
         float jump=phase>=660?0:phase<240?ease((float)phase/240):1-ease((float)(phase-240)/420);
@@ -84,9 +111,25 @@ static void render(uint8_t *frame,unsigned stride,const uint8_t *assets,uint32_t
             int dx=(int)xx-3,dy=(int)yy-3;
             if(dx*dx+dy*dy>12)continue;
             const uint8_t color[4]={0x20,0x58,0xf8,255};
-            blend(frame+(y+yy)*stride+(x+xx)*4,color,1,(unsigned)(alpha*255+.5f));
+            blend(canvas+(y+yy-ACTIVE_Y)*ACTIVE_STRIDE+(x+xx-ACTIVE_X)*4,color,1,(unsigned)(alpha*255+.5f));
         }
     }
+    for(unsigned row=0;row<height;row++)
+        memcpy(frame+(y+row)*stride+x*4,
+               canvas+(y+row-ACTIVE_Y)*ACTIVE_STRIDE+(x-ACTIVE_X)*4,width*4);
+    state->initialized=true;
+    state->settled=elapsed>=4150U;
+}
+static int display_ioctl(int fd,unsigned long request,void *arg)
+{
+    int result;
+    do {result=ioctl(fd,request,arg);} while(result<0&&errno==EINTR&&!stopped);
+    return result;
+}
+static void quiet_pause(void)
+{
+    struct timespec remaining={0,16000000};
+    while(!stopped&&nanosleep(&remaining,&remaining)<0&&errno==EINTR) {}
 }
 
 #ifdef UN260_EARLY_INIT
@@ -100,9 +143,12 @@ int main(void)
 #endif
     trace("main_enter");
     int status=1,lease=-1,fb=-1,server=-1,ipc_dir=-1;
-    uint8_t *mapped=MAP_FAILED,*assets=NULL;
+    uint8_t *mapped=MAP_FAILED,*assets=NULL,*canvas=NULL;
     struct fb_fix_screeninfo fix={0};struct fb_var_screeninfo var={0};
     bool bound=false,ready=false;
+    const char *frame_trace_env=getenv("UN260_BOOT_FRAME_TRACE");
+    bool frame_trace=frame_trace_env&&!strcmp(frame_trace_env,"1");
+    boot_frame_stats_t frame_stats={0};
     prctl(PR_SET_NAME,"un260-boot",0,0,0);
     umask(077);signal(SIGTERM,stop_signal);signal(SIGINT,stop_signal);signal(SIGPIPE,SIG_IGN);
     lease=open(BOOT_LIGHT_LOCK,O_CREAT|O_RDWR|O_CLOEXEC,0600);
@@ -112,6 +158,8 @@ int main(void)
     if(!assets)goto done;
     uLongf length=ASSET_BYTES;
     if(uncompress(assets,&length,boot_light_packed,sizeof(boot_light_packed))!=Z_OK||length!=ASSET_BYTES)goto done;
+    canvas=malloc(ACTIVE_BYTES);
+    if(!canvas)goto done;
     trace("assets_ready");
     fb=open("/dev/fb0",O_RDWR|O_CLOEXEC);
     if(fb<0||ioctl(fb,FBIOGET_FSCREENINFO,&fix)||ioctl(fb,FBIOGET_VSCREENINFO,&var))goto done;
@@ -134,7 +182,7 @@ int main(void)
     trace("display_ready");
     /* First scanout already contains a soft, visible brand mark; do not spend
        the first half second displaying only an empty background. */
-    uint64_t start=now_ms()-450U;bool initialized[2]={false,false};unsigned visible=var.yoffset>=H?1:0;
+    uint64_t start=now_ms()-450U;frame_state_t pages[2]={{0},{0}};unsigned visible=var.yoffset>=H?1:0;
     while(!stopped&&now_ms()-start<20000U) {
         int client=accept4(server,NULL,NULL,SOCK_CLOEXEC|SOCK_NONBLOCK);
         if(client>=0) {
@@ -154,14 +202,18 @@ int main(void)
             close(client);
         }
         uint32_t elapsed=(uint32_t)(now_ms()-start);
-        if(initialized[0]&&initialized[1]&&
+        if(pages[0].initialized&&pages[1].initialized&&
            ((elapsed>=980&&elapsed<2700)||(elapsed>=3330&&elapsed<3450))) {
-            struct timespec pause={0,16000000};nanosleep(&pause,NULL);continue;
+            quiet_pause();continue;
         }
         unsigned target=visible^1U;
-        render(mapped+target*H*fix.line_length,fix.line_length,assets,elapsed,!initialized[target]);
-        initialized[target]=true;var.yoffset=target*H;int zero=0;
-        if(ioctl(fb,FBIOPAN_DISPLAY,&var)||ioctl(fb,AICFB_WAIT_FOR_VSYNC,&zero))goto done;
+        uint64_t work_started_us=0,work_us=0;
+        if(frame_trace)work_started_us=now_us();
+        render(mapped+target*H*fix.line_length,fix.line_length,assets,canvas,elapsed,&pages[target]);
+        if(frame_trace)work_us=now_us()-work_started_us;
+        var.yoffset=target*H;int zero=0;
+        if(display_ioctl(fb,FBIOPAN_DISPLAY,&var)||display_ioctl(fb,AICFB_WAIT_FOR_VSYNC,&zero))goto done;
+        if(frame_trace)boot_frame_stats_record(&frame_stats,now_us(),work_us);
         visible=target;
         if(!ready) {
             int fd=open(BOOT_LIGHT_READY,O_CREAT|O_WRONLY|O_TRUNC|O_CLOEXEC,0600);
@@ -171,7 +223,6 @@ int main(void)
             ready=true;
             trace("first_frame");
         }
-        struct timespec pause={0,1000000};nanosleep(&pause,NULL);
     }
 done:
     if(bound) {
@@ -187,7 +238,9 @@ done:
     if(mapped!=MAP_FAILED)munmap(mapped,fix.smem_len);
     if(fb>=0)close(fb);
     free(assets);
+    free(canvas);
     if(lease>=0)close(lease);
+    if(frame_trace)boot_frame_stats_print(stderr,&frame_stats,"native",status?"stopped_or_failed":"handoff");
     if(status)fprintf(stderr,"BOOT_LIGHT unavailable or expired; legacy UI retains fallback\n");
     return status;
 }
