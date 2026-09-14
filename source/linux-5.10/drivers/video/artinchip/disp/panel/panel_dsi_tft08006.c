@@ -20,6 +20,12 @@ struct tft08006 {
 	struct gpio_desc *reset;
 };
 
+/* Board-test rollback only. Both calls are enable operations, not an off/on
+ * pair. Keep the legacy sequence selectable without shortening PHY timeout. */
+static bool legacy_double_di_enable;
+module_param(legacy_double_di_enable, bool, 0444);
+MODULE_PARM_DESC(legacy_double_di_enable, "Repeat legacy DSI enable for board comparison");
+
 static inline struct tft08006 *panel_to_tft08006(struct aic_panel *panel)
 {
 	return (struct tft08006 *)panel->panel_private;
@@ -30,14 +36,13 @@ static int panel_enable(struct aic_panel *panel)
 	struct tft08006 *tft08006 = panel_to_tft08006(panel);
 	int ret;
 
-	//panel_di_enable(panel, 0);
-	//aic_delay_ms(20);
 	gpiod_direction_output(tft08006->reset, 1);
 	aic_delay_ms(10);
 	panel_di_enable(panel, 0);
 	aic_delay_ms(10);
-	panel_di_enable(panel, 1);
-	aic_delay_ms(1);
+	if (legacy_double_di_enable)
+		panel_di_enable(panel, 0);
+	aic_delay_ms(2);
 	gpiod_direction_output(tft08006->reset, 0);
 	aic_delay_ms(1);
 	gpiod_direction_output(tft08006->reset, 1);
