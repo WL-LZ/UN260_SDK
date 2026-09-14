@@ -53,6 +53,7 @@ int main(void) {
     while (1) {
         uint64_t wake_sequence = app_runtime_wakeup_snapshot();
         uint64_t loop_start_us = app_clock_monotonic_us();
+        ui_page_00_boot_anim_poll();
         uint32_t now = app_clock_uptime_ms();
         ui_page_t current_page = ui_manager_get_current_page();
         uint64_t lvgl_start_us;
