@@ -1,0 +1,2 @@
+# Empty context lines in this unified diff intentionally contain one space.
+0011-avoid-sections-crossing-load-segments.patch -whitespace

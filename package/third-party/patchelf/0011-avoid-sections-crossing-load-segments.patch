@@ -1,0 +1,131 @@
+From: UN260 SDK maintenance
+Subject: [PATCH] Fix sections crossing PT_LOAD boundaries after RPATH growth
+
+Adapt the upstream shiftFile fix to the SDK's patched patchelf 0.9.
+Retain the SDK make-rpath-relative extension and existing patches.
+
+Upstream: https://github.com/NixOS/patchelf/pull/415
+Commit: 109b771 (2022-10-10)
+Status: backport for the SDK's source-built host tool.
+
+--- a/src/patchelf.cc
++++ b/src/patchelf.cc
+@@ -196,7 +196,7 @@
+ 
+     void sortShdrs();
+ 
+-    void shiftFile(unsigned int extraPages, Elf_Addr startPage);
++    void shiftFile(unsigned int extraPages, size_t startOffset);
+ 
+     string getSectionName(const Elf_Shdr & shdr);
+ 
+@@ -476,34 +476,65 @@
+ 
+ 
+ template<ElfFileParams>
+-void ElfFile<ElfFileParamNames>::shiftFile(unsigned int extraPages, Elf_Addr startPage)
+-{
+-    /* Move the entire contents of the file `extraPages' pages
+-       further. */
++void ElfFile<ElfFileParamNames>::shiftFile(unsigned int extraPages, size_t startOffset)
++{
++    assert(startOffset >= sizeof(Elf_Ehdr));
+     unsigned int oldSize = fileSize;
++    assert(oldSize > startOffset);
++    /* Keep replaced sections within one load segment, splitting at the
++       first section which cannot move in virtual memory. */
+     unsigned int shift = extraPages * getPageSize();
+     growFile(fileSize + extraPages * getPageSize());
+-    memmove(contents + extraPages * getPageSize(), contents, oldSize);
+-    memset(contents + sizeof(Elf_Ehdr), 0, shift - sizeof(Elf_Ehdr));
++    memmove(contents + startOffset + shift, contents + startOffset,
++        oldSize - startOffset);
++    memset(contents + startOffset, 0, shift);
+ 
+     /* Adjust the ELF header. */
+     wri(hdr->e_phoff, sizeof(Elf_Ehdr));
+-    wri(hdr->e_shoff, rdi(hdr->e_shoff) + shift);
++    if (rdi(hdr->e_shoff) >= startOffset)
++        wri(hdr->e_shoff, rdi(hdr->e_shoff) + shift);
+ 
+     /* Update the offsets in the section headers. */
+-    for (int i = 1; i < rdi(hdr->e_shnum); ++i)
+-        wri(shdrs[i].sh_offset, rdi(shdrs[i].sh_offset) + shift);
+-
++    for (int i = 1; i < rdi(hdr->e_shnum); ++i) {
++        size_t sh_offset = rdi(shdrs[i].sh_offset);
++        if (sh_offset >= startOffset)
++            wri(shdrs[i].sh_offset, sh_offset + shift);
++    }
++
++    int splitIndex = -1;
++    size_t splitShift = 0;
+     /* Update the offsets in the program headers. */
+     for (int i = 0; i < rdi(hdr->e_phnum); ++i) {
+-        wri(phdrs[i].p_offset, rdi(phdrs[i].p_offset) + shift);
+-        if (rdi(phdrs[i].p_align) != 0 &&
+-            (rdi(phdrs[i].p_vaddr) - rdi(phdrs[i].p_offset)) % rdi(phdrs[i].p_align) != 0) {
+-            debug("changing alignment of program header %d from %d to %d\n", i,
+-                rdi(phdrs[i].p_align), getPageSize());
+-            wri(phdrs[i].p_align, getPageSize());
+-        }
+-    }
++        Elf_Off p_start = rdi(phdrs[i].p_offset);
++        if (p_start <= startOffset &&
++            p_start + rdi(phdrs[i].p_filesz) > startOffset &&
++            rdi(phdrs[i].p_type) == PT_LOAD) {
++            assert(splitIndex == -1);
++            splitIndex = i;
++            splitShift = startOffset - p_start;
++            wri(phdrs[i].p_offset, startOffset);
++            wri(phdrs[i].p_memsz, rdi(phdrs[i].p_memsz) - splitShift);
++            wri(phdrs[i].p_filesz, rdi(phdrs[i].p_filesz) - splitShift);
++            wri(phdrs[i].p_paddr, rdi(phdrs[i].p_paddr) + splitShift);
++            wri(phdrs[i].p_vaddr, rdi(phdrs[i].p_vaddr) + splitShift);
++            p_start = startOffset;
++        }
++        if (p_start >= startOffset) {
++            wri(phdrs[i].p_offset, p_start + shift);
++            if (rdi(phdrs[i].p_align) != 0 &&
++                (rdi(phdrs[i].p_vaddr) - rdi(phdrs[i].p_offset)) % rdi(phdrs[i].p_align) != 0) {
++                debug("changing alignment of program header %d from %d to %d\n", i,
++                    rdi(phdrs[i].p_align), getPageSize());
++                wri(phdrs[i].p_align, getPageSize());
++            }
++        } else {
++            if (rdi(phdrs[i].p_paddr) >= shift)
++                wri(phdrs[i].p_paddr, rdi(phdrs[i].p_paddr) - shift);
++            if (rdi(phdrs[i].p_vaddr) >= shift)
++                wri(phdrs[i].p_vaddr, rdi(phdrs[i].p_vaddr) - shift);
++        }
++    }
++    assert(splitIndex != -1);
+ 
+     /* Add a segment that maps the new program/section headers and
+        PT_INTERP segment into memory.  Otherwise glibc will choke. */
+@@ -511,9 +542,10 @@
+     wri(hdr->e_phnum, rdi(hdr->e_phnum) + 1);
+     Elf_Phdr & phdr = phdrs[rdi(hdr->e_phnum) - 1];
+     wri(phdr.p_type, PT_LOAD);
+-    wri(phdr.p_offset, 0);
+-    wri(phdr.p_vaddr, wri(phdr.p_paddr, startPage));
+-    wri(phdr.p_filesz, wri(phdr.p_memsz, shift));
++    wri(phdr.p_offset, rdi(phdrs[splitIndex].p_offset) - splitShift - shift);
++    wri(phdr.p_paddr, rdi(phdrs[splitIndex].p_paddr) - splitShift - shift);
++    wri(phdr.p_vaddr, rdi(phdrs[splitIndex].p_vaddr) - splitShift - shift);
++    wri(phdr.p_filesz, wri(phdr.p_memsz, splitShift + shift));
+     wri(phdr.p_flags, PF_R | PF_W);
+     wri(phdr.p_align, getPageSize());
+ }
+@@ -827,10 +859,9 @@
+         if (neededPages * getPageSize() > firstPage)
+             error("virtual address space underrun!");
+ 
++        shiftFile(neededPages, startOffset);
+         firstPage -= neededPages * getPageSize();
+         startOffset += neededPages * getPageSize();
+-
+-        shiftFile(neededPages, firstPage);
+     }
+ 
+ 
