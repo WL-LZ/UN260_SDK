@@ -346,6 +346,68 @@ static void test_refresh_budget(void)
     assert_no_owner();
 }
 
+static void test_scanout_cadence(void)
+{
+    /* Exercise real LVGL timer dispatch at a nominal 75 Hz scanout cadence,
+     * rather than the 20 ms ticks used by the long lifecycle tests. The old
+     * 16 ms theme timer skipped every other 13/14 ms service opportunity.
+     * This is a scheduling regression test, not a physical FPS measurement. */
+    const unsigned starts[] = {400U, 2780U, 3560U,
+                               DOT_START_MS + DOT_PERIOD_MS + 40U};
+    for (unsigned phase = 0; phase < sizeof(starts) / sizeof(starts[0]); ++phase) {
+        create();
+        assert(g_intro.timer->period == LV_DISP_DEF_REFR_PERIOD);
+        ui_page_00_boot_anim_set_startup_ready(false);
+        ui_page_00_boot_anim_adopt_elapsed(starts[phase]);
+        render();
+        unsigned opened = decode_opens;
+        unsigned children = lv_obj_get_child_cnt(g_intro.root);
+        unsigned elapsed = starts[phase];
+        for (unsigned scanout = 0; scanout < 18; ++scanout) {
+            unsigned step = scanout % 3U == 2U ? 14U : 13U;
+            elapsed += step;
+            lv_tick_inc(step);
+            reset_flush_stats();
+            lv_timer_handler();
+            assert(g_intro.timer->last_run == lv_tick_get());
+            assert(lv_tick_elaps(g_intro.start_tick) == elapsed);
+            if (phase == 0) {
+                lv_opa_t expected = opacity(ease(progress(elapsed, 150U, 800U)));
+                assert(lv_obj_get_style_img_opa(g_intro.icon, 0) == expected);
+                assert(lv_obj_get_style_text_opa(g_intro.brand, 0) == expected);
+            } else if (phase == 1) {
+                assert(lv_obj_get_style_text_opa(g_intro.brand, 0) ==
+                    opacity(1.0f - ease(progress(elapsed, 2700U, 600U))));
+            } else if (phase == 2) {
+                assert(lv_obj_get_style_text_opa(g_intro.welcome, 0) ==
+                    opacity(ease(progress(elapsed, 3450U, 700U))));
+            }
+            if (phase < 3) assert(flushes != 0);
+            assert(lv_obj_get_child_cnt(g_intro.root) == children);
+            assert(decode_opens == opened);
+            assert(timer_count() == baseline_timers + 1U);
+        }
+        ui_page_00_boot_anim_destroy();
+        assert_no_owner();
+    }
+    /* Faster service must not shorten the required three visible dot rounds. */
+    create();
+    ui_page_00_boot_anim_set_startup_ready(true);
+    for (unsigned scanout = 0; ui_page_00_boot_anim_is_active(); ++scanout) {
+        lv_tick_inc(scanout % 3U == 2U ? 14U : 13U);
+        lv_timer_handler();
+        if (ui_page_00_boot_anim_is_active()) {
+            unsigned elapsed = lv_tick_elaps(g_intro.start_tick);
+            if (elapsed < DOT_START_MS + 2U * DOT_PERIOD_MS + DOT_LANDED_MS)
+                assert(!g_intro.revealing);
+            if (g_intro.revealing) assert(g_intro.ready_dot_rounds == READY_DOT_ROUNDS);
+        }
+        assert(scanout < 800U);
+    }
+    assert_no_owner();
+    puts("PASS 13/14 ms real-LVGL dispatch: no 16 ms visual skips, no extra resources, three ready rounds retained");
+}
+
 static void test_lifetimes(void)
 {
     create();
@@ -574,6 +636,7 @@ int main(void)
     test_sequence();
     test_settling();
     test_refresh_budget();
+    test_scanout_cadence();
     test_lifetimes();
     test_resource_fallback();
     test_selftest_cover();

@@ -10,7 +10,11 @@
 /* Theme B's 7.875s hold + 320ms cubic dissolve, without its terminal layer. */
 #define INTRO_REVEAL_MS 7875U
 #define INTRO_FADE_MS 320U
-#define INTRO_TIMER_MS 16U
+/* Use the existing display update budget, not a separate 16 ms animation
+ * ceiling. The board's nominal scanout is about 13.4 ms; a 16 ms callback
+ * can otherwise leave alternate scanouts holding the previous visual state.
+ * VSYNC still limits presentation; this timer exists only while intro owns it. */
+#define INTRO_TIMER_MS LV_DISP_DEF_REFR_PERIOD
 #define DOT_START_MS 4350U
 #define DOT_PERIOD_MS 1500U
 #define INTRO_MIN_REVEAL_MS 5000U
