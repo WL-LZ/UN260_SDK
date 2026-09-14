@@ -1,5 +1,6 @@
 #include "un260/boot/boot_service.h"
 #include <stddef.h>
+#include <string.h>
 
 #define BOOT_SERVICE_TOTAL_TIMEOUT_MS 60000
 #define BOOT_SERVICE_HANDSHAKE_RETRY_MS 1000
@@ -29,6 +30,34 @@ static uint8_t g_self_test_first_failure_step = 0;
 static uint8_t g_self_test_first_failure_result = 0;
 static boot_self_test_event_t g_self_test_event = BOOT_SELF_TEST_EVENT_NONE;
 static bool g_self_test_event_consumed = false;
+
+void boot_service_snapshot(boot_snapshot_t *snapshot)
+{
+    if (!snapshot) return;
+    memset(snapshot, 0, sizeof(*snapshot));
+    snapshot->stage = g_stage;
+    snapshot->connected = g_handshake_state == HANDSHAKE_OK;
+    snapshot->requested_count = g_self_test_sequence_index;
+    for (uint8_t i = 0; i < BOOT_SELF_TEST_COUNT; ++i) {
+        snapshot->items[i].received = g_self_test_results[i].received;
+        snapshot->items[i].result = g_self_test_results[i].result;
+        if (g_self_test_results[i].received) ++snapshot->completed_count;
+    }
+}
+
+void boot_service_cancel(void)
+{
+    if (g_stage != BOOT_STAGE_DONE) g_stage = BOOT_STAGE_FAIL;
+    g_boot_started = false;
+    g_handshake_state = HANDSHAKE_IDLE;
+}
+
+bool boot_service_reply_window_open(uint32_t now_ms)
+{
+    return g_boot_started && g_stage >= BOOT_STAGE_HANDSHAKE &&
+           g_stage <= BOOT_STAGE_IMAGE &&
+           (uint32_t)(now_ms - g_boot_start_tick) < BOOT_SERVICE_TOTAL_TIMEOUT_MS;
+}
 
 static bool boot_self_test_step_to_protocol(selftest_type_t step, uint8_t *protocol_step)
 {

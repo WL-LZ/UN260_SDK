@@ -8,6 +8,7 @@
 #include "counting_denom_query_service.h"
 #include "un260/lv_drivers/lv_drivers.h"
 #include "un260/protocol/protocol_send.h"
+#include "un260/lv_system/app_clock.h"
 
 static void counting_denom_record_history(const counting_denom_reply_hooks_t *hooks,
                                           const uint8_t *buf,
@@ -147,6 +148,7 @@ static counting_denom_reply_result_t counting_denom_handle_data(
         return COUNTING_DENOM_REPLY_IGNORED;
     }
     if (detail->query_pending) {
+        detail->query_activity_tick = app_clock_uptime_ms();
         denom_items = detail->query_denom;
         denom_count = &detail->query_denom_number;
     } else {
@@ -187,6 +189,7 @@ static counting_denom_reply_result_t counting_denom_handle_data(
         return COUNTING_DENOM_REPLY_DATA;
     }
 
+    if (detail->query_pending) detail->query_overflow = true;
     uart_debug_printf("0x0B denom capacity exhausted value=%d\n", denom);
     return COUNTING_DENOM_REPLY_IGNORED;
 }
@@ -204,6 +207,13 @@ counting_denom_reply_result_t counting_denom_reply_handle(
     }
 
     if (counting_denom_payload_is(buf, 0x00)) {
+        /* A subsequent real counting stream takes over from an abandoned
+         * idle query. Do not let a missing query terminator block counting. */
+        if (detail->query_failed && session->phase != COUNTING_SESSION_IDLE) {
+            detail->query_pending = false;
+            detail->query_expired = false;
+            detail->query_started = false;
+        }
         if (!counting_denom_query_mark_start(detail)) {
             memset(sim_data->denom, 0, sizeof(sim_data->denom));
             sim_data->denom_number = 0;

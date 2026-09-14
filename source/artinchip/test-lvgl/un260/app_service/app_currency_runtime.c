@@ -27,10 +27,10 @@ static bool app_currency_runtime_boot_ready(void)
     return stage == BOOT_STAGE_DONE || stage == BOOT_STAGE_FAIL;
 }
 
-static void app_currency_runtime_trigger_denom_query(
+static void app_currency_runtime_expect_denom_refresh(
     counting_detail_state_t *detail_state)
 {
-    counting_denom_query_trigger(detail_state,
+    counting_denom_query_expect_push(detail_state,
                                  app_clock_uptime_ms(),
                                  app_currency_runtime_boot_ready());
 }
@@ -64,7 +64,7 @@ void app_currency_runtime_handle_reply(counting_detail_state_t *detail_state,
         page_07_curr_apply_switch_result(&reply.switch_result);
         uart_debug_printf("Set %s curr success\n", reply.active_code);
         detail_state->wait_sn_after_reject_end = false;
-        app_currency_runtime_trigger_denom_query(detail_state);
+        app_currency_runtime_expect_denom_refresh(detail_state);
     } else if (reply.kind == CURRENCY_REPLY_SWITCH_FAILURE) {
         page_07_curr_apply_switch_result(&reply.switch_result);
         uart_debug_printf("Set %s curr fail\n", reply.active_code);
@@ -80,7 +80,7 @@ void app_currency_runtime_handle_reply(counting_detail_state_t *detail_state,
         sim_reset_for_currency(counting_data_mutable());
         detail_state->wait_sn_after_reject_end = false;
         counting_denom_query_invalidate(detail_state);
-        app_currency_runtime_trigger_denom_query(detail_state);
+        app_currency_runtime_expect_denom_refresh(detail_state);
     }
 }
 

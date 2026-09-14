@@ -12,6 +12,23 @@ typedef enum {
     BOOT_SERVICE_ACTION_SELF_TEST_TIMEOUT,
 } boot_service_action_t;
 
+#define BOOT_SELF_TEST_COUNT 5U
+typedef struct {
+    bool received;
+    uint8_t result;
+} boot_item_result_t;
+typedef struct {
+    boot_stage_t stage;
+    bool connected;
+    uint8_t requested_count;
+    uint8_t completed_count;
+    boot_item_result_t items[BOOT_SELF_TEST_COUNT];
+} boot_snapshot_t;
+
+void boot_service_snapshot(boot_snapshot_t *snapshot);
+void boot_service_cancel(void);
+bool boot_service_reply_window_open(uint32_t now_ms);
+
 void boot_service_start(uint32_t now_ms);
 void boot_service_set_stage(boot_stage_t stage);
 boot_stage_t boot_service_get_stage(void);

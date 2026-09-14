@@ -13,7 +13,8 @@ static boot_reply_result_t boot_reply_handshake_handle(const uint8_t *buf,
     if (buf == NULL || len < 6) {
         return reply;
     }
-    if (buf[4] != 0x01 || boot_service_handshake_state() != HANDSHAKE_SENT) {
+    if (buf[4] != 0x01 || boot_service_handshake_state() != HANDSHAKE_SENT ||
+        boot_service_get_stage() != BOOT_STAGE_HANDSHAKE) {
         reply.kind = BOOT_REPLY_IGNORED;
         return reply;
     }

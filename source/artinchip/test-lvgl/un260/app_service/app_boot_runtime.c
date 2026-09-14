@@ -12,6 +12,8 @@
 #include "un260/lv_components/lv_fault_popup.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/page_08_boot.h"
+#include "un260/lv_core/page_00_boot_anim.h"
+#include "un260/lv_system/app_clock.h"
 #include "un260/lv_core/page_01_main.h"
 #include "un260/protocol/protocol_send.h"
 #include "un260/lv_system/ui_state_runtime.h"
@@ -24,6 +26,7 @@
 
 static lv_timer_t *g_boot_finish_timer = NULL;
 static counting_session_state_t *g_deferred_boot_finish;
+static bool g_boot_runtime_active;
 static bool g_boot_prewarm_active = false;
 static size_t g_boot_prewarm_cursor = 0;
 static uint32_t g_boot_prewarm_due_ms = 0;
@@ -169,6 +172,14 @@ static void app_boot_runtime_finish_timer_cb(lv_timer_t *timer)
     if (timer == NULL) {
         return;
     }
+    if (ui_manager_get_current_page() != UI_PAGE_BOOT ||
+        boot_service_get_stage() != BOOT_STAGE_DONE) {
+        g_boot_finish_timer = NULL;
+        g_deferred_boot_finish = NULL;
+        app_boot_runtime_cancel_prewarm();
+        lv_timer_del(timer);
+        return;
+    }
     counting_session = (counting_session_state_t *)timer->user_data;
     if (!app_boot_runtime_finish(counting_session)) return;
     g_boot_finish_timer = NULL;
@@ -180,6 +191,9 @@ void app_boot_runtime_handle_reply(counting_session_state_t *counting_session,
                                    const uint8_t *buf,
                                    uint8_t len)
 {
+    if (ui_manager_get_current_page() != UI_PAGE_BOOT ||
+        ui_page_00_boot_anim_is_active() ||
+        !boot_service_reply_window_open(app_clock_uptime_ms())) return;
     boot_reply_result_t reply = boot_reply_dispatch(cmd, buf, len);
 
     if (reply.kind == BOOT_REPLY_HANDSHAKE_ACCEPTED) {
@@ -221,10 +235,13 @@ void app_boot_runtime_poll(uint32_t now_ms, bool boot_page_active)
 
     if (!boot_page_active ||
         ui_manager_get_current_page() != UI_PAGE_BOOT) {
+        if (g_boot_runtime_active) boot_service_cancel();
+        g_boot_runtime_active = false;
         app_boot_runtime_cancel_finish();
         app_boot_runtime_cancel_prewarm();
         return;
     }
+    g_boot_runtime_active = true;
 
     if (g_deferred_boot_finish != NULL && g_boot_finish_timer == NULL)
         (void)app_boot_runtime_finish(g_deferred_boot_finish);
