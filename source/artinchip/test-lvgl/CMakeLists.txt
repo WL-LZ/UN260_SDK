@@ -33,6 +33,18 @@ file(GLOB_RECURSE UN260_ASSET_INPUTS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_D
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${UN260_ASSET_INPUTS}
              "${CMAKE_CURRENT_SOURCE_DIR}/tools/convert_lvgl_assets.py")
 include(${CMAKE_CURRENT_SOURCE_DIR}/aic_ui/generated_assets/assets.cmake)
+execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/build_boot_light_assets.py
+                RESULT_VARIABLE BOOT_LIGHT_ASSET_RESULT)
+if(NOT BOOT_LIGHT_ASSET_RESULT EQUAL 0)
+    message(FATAL_ERROR "boot-light asset generation failed")
+endif()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/build_boot_light_assets.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/lv_font_instrument_sans_semibold_48.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/lv_font_instrument_sans_medium_40.c")
+add_executable(un260_boot_light un260/lv_drivers/boot_light.c un260/lv_system/backlight_service.c)
+target_link_libraries(un260_boot_light z)
+install(TARGETS un260_boot_light RUNTIME DESTINATION bin)
 add_executable(${PROJECT_NAME} main.c
     ${UN260_ASSET_SOURCES}
 	aic_ui/aic_dec.c
@@ -82,6 +94,10 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_core/page_02_list_search.c
     un260/app_service/setting_service.c
     un260/lv_system/app_clock.c
+    un260/app_service/app_startup_trace.c
+    un260/app_service/app_startup_runtime.c
+    un260/lv_drivers/startup_devices.c
+    un260/lv_drivers/startup_visual.c
     un260/app_service/app_boot_runtime.c
     un260/app_service/app_command_runtime.c
     un260/app_service/app_counting_runtime.c
@@ -356,6 +372,9 @@ if ( ${USE_RTP_TSLIB} STREQUAL "yes")
 endif()
 
 find_library(LIBMPP_GE libmpp_ge.so)
+# Keep libraries required by real symbols; do not load unused media features
+# solely because they appear in this shared list for older themes/demos.
+set_property(TARGET ${PROJECT_NAME} APPEND_STRING PROPERTY LINK_FLAGS " -Wl,--as-needed")
 find_library(LIBMPP_BASE libmpp_base.so)
 find_library(LIBMPP_VE libmpp_ve.so)
 find_library(LIBMPP_DEC libmpp_decoder.so)

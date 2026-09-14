@@ -19,6 +19,7 @@ extern "C" {
 void lv_port_disp_init(void);
 
 void lv_port_disp_exit(void);
+bool lv_port_disp_adopt_scanout(void);
 /* UI-thread only; retry a failed submit without spinning in LVGL's flush wait. */
 bool lv_port_disp_poll(void);
 uint32_t fbdev_present_sequence(void);

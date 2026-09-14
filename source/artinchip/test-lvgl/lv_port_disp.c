@@ -687,6 +687,23 @@ void lv_port_disp_init(void)
     lv_disp_drv_register(&disp_drv);
 }
 
+bool lv_port_disp_adopt_scanout(void)
+{
+#if !defined(USE_DRAW_BUF) && !defined(TRIPLE_FRAME_BUF_EN)
+    struct fb_var_screeninfo current;
+    if(g_fb<0||!g_frame_buf[1]||g_present_sequence!=0||
+       ioctl(g_fb,FBIOGET_VSCREENINFO,&current)<0||current.xoffset||
+       (current.yoffset!=0&&current.yoffset!=current.yres))return false;
+    unsigned visible=current.yoffset?1U:0U;
+    lv_disp_draw_buf_init(&disp_buf,g_frame_buf[visible^1U],g_frame_buf[visible],
+                         current.xres*current.yres);
+    g_pan_var=current;g_pan_var_valid=1;
+    return true;
+#else
+    return false;
+#endif
+}
+
 void lv_port_disp_exit(void)
 {
     if (g_ge) {

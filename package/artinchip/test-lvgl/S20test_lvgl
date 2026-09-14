@@ -18,6 +18,61 @@ REQUIRED_DEVICES="/dev/fb0 /dev/ge /dev/ttyS4 /dev/ttyS5 /dev/ttyS6"
 TOUCH_MODULE_NAME=gt9xx_core
 TOUCH_MODULE_FILE="/lib/modules/$(uname -r)/kernel/drivers/input/touchscreen/gt9xx/gt9xx_core.ko"
 TOUCH_DEVICE=""
+POLL_METHOD=""
+POLL_LIMIT=100
+if [ "${UN260_BOOT_TRACE+x}" != x ]; then
+      UN260_BOOT_TRACE=0
+      [ ! -f /etc/un260/boot-trace.enabled ] || UN260_BOOT_TRACE=1
+fi
+export UN260_BOOT_TRACE
+if [ "${UN260_EARLY_DISPLAY+x}" != x ]; then
+      UN260_EARLY_DISPLAY=1
+      [ ! -f /etc/un260/early-display.disabled ] || UN260_EARLY_DISPLAY=0
+fi
+
+boot_trace() {
+      [ "${UN260_BOOT_TRACE:-0}" = "1" ] || return 0
+      read -r boot_uptime boot_idle < /proc/uptime
+      printf 'BOOT_TIME uptime=%s stage=%s\n' "$boot_uptime" "$1" >> "$STARTUP_LOG"
+}
+
+boot_light_owner() {
+      [ -r /dev/.un260-boot-light.ready ] || return 1
+      read -r candidate < /dev/.un260-boot-light.ready
+      case "$candidate" in ''|*[!0-9]*|0|1) return 1 ;; esac
+      [ -r "/proc/$candidate/comm" ] || return 1
+      read -r comm < "/proc/$candidate/comm"
+      [ "$comm" = un260-boot ] && kill -0 "$candidate" 2>/dev/null || return 1
+      light_pid=$candidate
+}
+
+select_poll_method() {
+      [ -z "$POLL_METHOD" ] || return 0
+      # The target BusyBox has usleep, but does not enable fractional sleep.
+      if command -v usleep >/dev/null 2>&1 && usleep 0 2>/dev/null; then
+          POLL_METHOD=usleep
+      elif sleep 0.0 2>/dev/null; then
+          POLL_METHOD=fractional
+      else
+          POLL_METHOD=seconds
+          POLL_LIMIT=10
+      fi
+}
+
+poll_pause() {
+      case "$POLL_METHOD" in
+          usleep) usleep 100000 ;;
+          fractional) sleep 0.1 ;;
+          *) sleep 1 ;;
+      esac
+}
+
+live_pidfile() {
+      [ -r "$1" ] || return 1
+      read -r found_pid < "$1"
+      case "$found_pid" in ''|*[!0-9]*|0) return 1 ;; esac
+      kill -0 "$found_pid" 2>/dev/null
+}
 
 cpu_performance_enter() {
       [ -r "$CPUFREQ_GOVERNOR" ] || return 0
@@ -44,9 +99,7 @@ cpu_performance_leave() {
       rm -f "$CPUFREQ_SAVED"
 }
 
-wait_required_devices() {
-      wait_count=0
-      while [ "$wait_count" -lt 10 ]; do
+required_devices_ready() {
           missing_devices=""
           for device in $REQUIRED_DEVICES; do
               [ -e "$device" ] || missing_devices="$missing_devices $device"
@@ -57,11 +110,29 @@ wait_required_devices() {
           if [ -z "$missing_devices" ]; then
               return 0
           fi
-          echo "Waiting for UI devices:$missing_devices"
-          sleep 1
+          return 1
+}
+
+early_display_ready() {
+      [ "$UN260_EARLY_DISPLAY" = 1 ] && [ -f "$TSCALIB" ] &&
+          [ -e /dev/fb0 ] && [ -e /dev/ge ]
+}
+
+wait_required_devices() {
+      select_poll_method
+      wait_count=0
+      previous_missing=""
+      while [ "$wait_count" -lt "$POLL_LIMIT" ]; do
+          required_devices_ready && return 0
+          if [ "$missing_devices" != "$previous_missing" ]; then
+              echo "Waiting for UI devices:$missing_devices"
+              previous_missing="$missing_devices"
+          fi
+          poll_pause
           wait_count=$((wait_count + 1))
       done
 
+      required_devices_ready && return 0
       echo "UI device readiness timeout; missing:$missing_devices"
       return 1
 }
@@ -101,60 +172,58 @@ find_touch_device() {
       return 1
 }
 
-start() {
-      if [ "${UN260_MDEV_READY:-0}" != "1" ]; then
-          : > "$STARTUP_LOG"
-          (
-              wait_count=0
-              while [ "$wait_count" -lt 10 ]; do
-                  mdev_pid=$(cat "$MDEV_PIDFILE" 2>/dev/null)
-                  if [ -n "$mdev_pid" ] && kill -0 "$mdev_pid" 2>/dev/null; then
-                      rm -f "$DEFER_PIDFILE"
-                      UN260_MDEV_READY=1 "$0" start >> "$STARTUP_LOG" 2>&1
-                      exit $?
-                  fi
-                  sleep 1
-                  wait_count=$((wait_count + 1))
-              done
-              echo "Starting test_lvgl: Fail (mdev readiness timeout)" >> "$STARTUP_LOG"
-              rm -f "$DEFER_PIDFILE"
-              exit 1
-          ) &
-          defer_pid=$!
-          echo "$defer_pid" > "$DEFER_PIDFILE"
-          printf "Starting test_lvgl: deferred until mdev is ready\n"
-          return 0
-      fi
-
-      if [ -f "$PIDFILE" ]; then
-          old_pid=$(cat "$PIDFILE" 2>/dev/null)
-          if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
-              printf "test_lvgl already running (pid %s)\n" "$old_pid"
-              return 0
-          fi
-          rm -f "$PIDFILE"
-      fi
-
-      # Complete/undo an interrupted file transaction before mapping UI binaries.
-      # No USB required: original inode links and the journal live on rootfs.
-      if [ -d /var/lib/un260-updater/transaction ]; then
-          if ! /usr/bin/ui_update.sh --recover >> "$STARTUP_LOG" 2>&1; then
-              echo "Starting test_lvgl: Fail (upgrade recovery required)"
-              return 1
-          fi
-      fi
-
+prepare_devices() {
+      boot_trace devices_prepare
       printf "Load touch driver: "
       if load_touch_driver; then
           echo "OK"
       else
           echo "driver load failed; waiting for an existing input device"
       fi
-      mdev -s 2>/dev/null || true
+      if ! required_devices_ready; then
+          boot_trace device_scan_begin
+          mdev -s 2>/dev/null || true
+          boot_trace device_scan_complete
+      fi
+      wait_required_devices || return 1
+      boot_trace devices_ready
+}
 
-      if ! wait_required_devices; then
-          printf "Starting test_lvgl: Fail (device readiness timeout, log=%s)\n" "$STARTUP_LOG"
-          return 1
+start_ready() {
+      PID=""
+      light_pid=""
+      # Complete/undo an interrupted file transaction before mapping UI binaries.
+      # No USB required: original inode links and the journal live on rootfs.
+      if [ -d /var/lib/un260-updater/transaction ]; then
+          boot_trace recovery_begin
+          if ! /usr/bin/ui_update.sh --recover >> "$STARTUP_LOG" 2>&1; then
+              boot_trace recovery_failed
+              echo "Starting test_lvgl: Fail (upgrade recovery required)"
+              return 1
+          fi
+          boot_trace recovery_complete
+      fi
+
+      if [ "$UN260_EARLY_DISPLAY" = 1 ] && [ -f "$TSCALIB" ]; then
+          select_poll_method
+          wait_count=0
+          while [ ! -e /dev/fb0 ] || [ ! -e /dev/ge ]; do
+              if [ "$wait_count" -ge "$POLL_LIMIT" ]; then
+                  echo "Starting test_lvgl: Fail (display readiness timeout)"
+                  return 1
+              fi
+              poll_pause
+              wait_count=$((wait_count + 1))
+          done
+          export UN260_STARTUP_PREPARE=1
+          unset TSLIB_TSDEVICE LVGL_EVDEV_DEVICE
+          boot_trace display_devices_ready
+      else
+          prepare_devices || return 1
+          export UN260_STARTUP_PREPARE=0
+          export TSLIB_TSDEVICE="$TOUCH_DEVICE"
+          export LVGL_EVDEV_DEVICE="$TOUCH_DEVICE"
+          echo "Touch input: $TOUCH_DEVICE"
       fi
 
       printf "Starting test_lvgl: "
@@ -162,18 +231,51 @@ start() {
       export TSLIB_FBDEVICE=/dev/fb0
       export POINTERCAL_CALIBFILE=$TSCALIB
       export TSLIB_CONSOLEDEVICE=none
-      export TSLIB_TSDEVICE="$TOUCH_DEVICE"
-      export LVGL_EVDEV_DEVICE="$TOUCH_DEVICE"
       export TSLIB_PLUGINDIR=/usr/lib/ts
 
-      echo "Touch input: $TOUCH_DEVICE"
-
       if [ ! -f "$TSCALIB" ]; then
-          /usr/bin/ts_calibrate
+          boot_trace calibration_begin
+          if ! /usr/bin/ts_calibrate || [ ! -f "$TSCALIB" ]; then
+              boot_trace calibration_failed
+              echo "Fail (touch calibration required)"
+              return 1
+          fi
+          # Preserve newly written calibration before launching the UI.
+          sync
+          boot_trace calibration_complete
       fi
       cpu_performance_enter
-      sync
-      : > "$STARTUP_LOG"
+      # Optional native first screen. It owns a display lease until LVGL
+      # explicitly takes over; no file-only readiness flag grants ownership.
+        unset UN260_BOOT_LIGHT_ACTIVE
+        if boot_light_owner; then
+            export UN260_BOOT_LIGHT_ACTIVE=1
+            boot_trace initramfs_visual_found
+        elif [ "$UN260_STARTUP_PREPARE" = 1 ] &&
+         [ ! -f /etc/un260/boot-light.disabled ] &&
+         [ -x /usr/local/bin/un260_boot_light ] &&
+         grep -q '/dev/.un260-boot-light.sock' /usr/local/bin/un260_boot_light; then
+          /usr/local/bin/un260_boot_light >> "$STARTUP_LOG" 2>&1 &
+          light_pid=$!
+          export UN260_BOOT_LIGHT_ACTIVE=1
+          light_wait=0
+          light_ok=0
+          case "$POLL_METHOD" in usleep) light_limit=100 ;; fractional) light_limit=10 ;; *) light_limit=1 ;; esac
+          while kill -0 "$light_pid" 2>/dev/null && [ "$light_wait" -lt "$light_limit" ]; do
+                if [ -r /dev/.un260-boot-light.ready ]; then
+                    read -r light_ready_pid < /dev/.un260-boot-light.ready
+                  if [ "$light_ready_pid" = "$light_pid" ]; then light_ok=1; break; fi
+              fi
+              if [ "$POLL_METHOD" = usleep ]; then usleep 10000; else poll_pause; fi
+              light_wait=$((light_wait + 1))
+          done
+          if [ "$light_ok" = 0 ] && [ "$(readlink /proc/$light_pid/exe 2>/dev/null)" = /usr/local/bin/un260_boot_light ]; then
+              kill -TERM "$light_pid" 2>/dev/null || true
+          fi
+      fi
+      # Upgrade recovery owns its durability barriers; a normal start has
+      # no persistent changes to flush and must not wait on unrelated I/O.
+      boot_trace daemon_launch
       "$DAEMON" $DAEMONOPTS >> "$STARTUP_LOG" 2>&1 &
       PID=$!
       if [ -z "$PID" ]; then
@@ -193,16 +295,106 @@ start() {
           return 1
       fi
 
+      boot_trace daemon_healthy
       printf "OK \n"
+      return 0
+}
+
+cancel_deferred_start() {
+      trap - HUP INT TERM
+      if [ -n "${light_pid:-}" ]; then
+          kill -TERM "$light_pid" 2>/dev/null || true
+      fi
+      if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+          kill -TERM "$PID" 2>/dev/null || true
+      fi
+      rm -f "$DEFER_PIDFILE"
+      cpu_performance_leave
+      exit 1
+}
+
+start() {
+      if live_pidfile "$PIDFILE"; then
+          printf "test_lvgl already running (pid %s)\n" "$found_pid"
+          return 0
+      fi
+      if live_pidfile "$DEFER_PIDFILE"; then
+          printf "test_lvgl start already pending (pid %s)\n" "$found_pid"
+          return 0
+      fi
+      rm -f "$PIDFILE" "$DEFER_PIDFILE"
+      : > "$STARTUP_LOG"
+      if [ "${UN260_BOOT_TRACE:-0}" = 1 ] && [ -r /dev/.un260-early.log ]; then
+          cat /dev/.un260-early.log >> "$STARTUP_LOG"
+      fi
+      boot_trace start_requested
+      select_poll_method
+      if [ "${UN260_MDEV_READY:-0}" = "1" ]; then
+          start_ready
+          return $?
+      fi
+
+      (
+          PID=""
+          trap cancel_deferred_start HUP INT TERM
+          wait_count=0
+          boot_trace mdev_wait_begin
+          while ! live_pidfile "$MDEV_PIDFILE"; do
+              if early_display_ready; then
+                  boot_trace display_before_mdev
+                  break
+              fi
+              if [ "$wait_count" -ge "$POLL_LIMIT" ]; then
+                  boot_trace mdev_timeout
+                  echo "Starting test_lvgl: Fail (mdev readiness timeout)"
+                  rm -f "$DEFER_PIDFILE"
+                  exit 1
+              fi
+              poll_pause
+              wait_count=$((wait_count + 1))
+          done
+          if live_pidfile "$MDEV_PIDFILE"; then
+              boot_trace mdev_ready
+          else
+              boot_trace mdev_deferred
+          fi
+          start_ready
+          start_status=$?
+          rm -f "$DEFER_PIDFILE"
+          exit "$start_status"
+      ) >> "$STARTUP_LOG" 2>&1 &
+      defer_pid=$!
+      echo "$defer_pid" > "$DEFER_PIDFILE"
+      printf "Starting test_lvgl: deferred until mdev is ready\n"
       return 0
 }
 
 stop() {
 	printf "Stopping test_lvgl: "
+        if [ -r /dev/.un260-boot-light.ready ]; then
+            read -r light_stop_pid < /dev/.un260-boot-light.ready
+            case "$light_stop_pid" in
+                ''|*[!0-9]*|0) ;;
+                *)
+                    if [ "$(cat /proc/$light_stop_pid/comm 2>/dev/null)" = un260-boot ]; then
+                        kill -TERM "$light_stop_pid" 2>/dev/null || true
+                    fi
+                    ;;
+            esac
+        fi
         if [ -f "$DEFER_PIDFILE" ]; then
             defer_pid=$(cat "$DEFER_PIDFILE" 2>/dev/null)
             if [ -n "$defer_pid" ] && kill -0 "$defer_pid" 2>/dev/null; then
                 kill -TERM "$defer_pid" 2>/dev/null || true
+                select_poll_method
+                wait_count=0
+                while kill -0 "$defer_pid" 2>/dev/null && [ "$wait_count" -lt "$POLL_LIMIT" ]; do
+                    poll_pause
+                    wait_count=$((wait_count + 1))
+                done
+                if kill -0 "$defer_pid" 2>/dev/null; then
+                    kill -KILL "$defer_pid" 2>/dev/null || true
+                fi
             fi
             rm -f "$DEFER_PIDFILE"
         fi
@@ -230,6 +422,9 @@ stop() {
 }
 
 case "$1" in
+    prepare-devices)
+        prepare_devices
+        ;;
     start)
 	start
 	;;

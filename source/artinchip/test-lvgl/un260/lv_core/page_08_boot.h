@@ -6,6 +6,11 @@
 #include "lv_page_event.h"
 void ui_page_08_curr_create(lv_obj_t* parent);
 void ui_page_08_curr_destroy(void);
+/* One-shot startup policy; construction still belongs to the UI thread. */
+void ui_page_08_curr_defer_next_create(void);
+bool ui_page_08_curr_prepare_step(void);
+/* Startup overlay owns this cover; false restores the existing self-test page. */
+void ui_page_08_curr_set_covered(bool covered);
 void boot_progress_set(uint8_t percent);
 void boot_progress_reset(void);
 void boot_selftest_list_reset(void); // 重置自检卡片显示

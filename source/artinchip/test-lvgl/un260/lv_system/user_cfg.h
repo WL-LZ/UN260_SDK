@@ -62,6 +62,15 @@ typedef enum {
 #define CFD_LEVEL_MAX 5
 #define USER_PASSWORD_MAX_LEN 4
 
+/* Isolated startup I/O result. Reading never changes the live preferences;
+ * publish on the UI thread before enabling their consumers. */
+typedef struct {
+    char password[USER_PASSWORD_MAX_LEN + 1];
+    bool screenshot, recording, performance_monitor, performance_profile, gesture;
+} user_cfg_startup_snapshot_t;
+void user_cfg_startup_read(user_cfg_startup_snapshot_t *snapshot);
+void user_cfg_startup_apply(const user_cfg_startup_snapshot_t *snapshot);
+
 bool user_cfg_password_load(void);
 bool user_cfg_password_save(const char* password);
 const char *user_cfg_password_get(void);

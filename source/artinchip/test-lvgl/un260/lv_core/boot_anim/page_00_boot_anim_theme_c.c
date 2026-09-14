@@ -5,6 +5,7 @@
 #include <string.h>
 #include "un260/font/manrope_fonts.h"
 #include "un260/lv_core/lv_page_manager.h"
+#include "un260/lv_core/page_08_boot.h"
 
 /* Theme B's 7.875s hold + 320ms cubic dissolve, without its terminal layer. */
 #define INTRO_REVEAL_MS 7875U
@@ -12,6 +13,9 @@
 #define INTRO_TIMER_MS 16U
 #define DOT_START_MS 4350U
 #define DOT_PERIOD_MS 1500U
+#define INTRO_MIN_REVEAL_MS 5000U
+#define READY_DOT_ROUNDS 3U
+#define DOT_LANDED_MS (320U + 660U)
 
 static const char background_src[] =
     "L:/usr/local/share/lvgl_data/boot_theme_c/background.png";
@@ -20,9 +24,15 @@ static const char emblem_src[] =
 
 static struct {
     lv_obj_t *root, *background, *icon, *brand, *welcome, *dots[3];
+    lv_obj_t *diagnostics;
     lv_timer_t *timer;
     uint32_t start_tick;
-    bool background_ready, icon_ready;
+    bool background_ready, icon_ready, selftest_covered, first_drawn;
+    bool managed, startup_ready, revealing, failed;
+    uint32_t reveal_elapsed;
+    uint32_t next_dot_round;
+    unsigned ready_dot_rounds;
+    bool dot_round_seen;
 } g_intro;
 static bool g_failed_create;
 
@@ -83,11 +93,17 @@ static void root_deleted(lv_event_t *event)
 {
     if (lv_event_get_target(event) != g_intro.root) return;
     stop_timer();
+    if (g_intro.selftest_covered) ui_page_08_curr_set_covered(false);
     /* These two paths are private to this short-lived theme. Release their
      * decoded DMA cache entries even when the parent deletes us externally. */
     lv_img_cache_invalidate_src(background_src);
     lv_img_cache_invalidate_src(emblem_src);
     memset(&g_intro, 0, sizeof(g_intro));
+}
+
+static void root_drawn(lv_event_t *event)
+{
+    if (lv_event_get_target(event) == g_intro.root) g_intro.first_drawn = true;
 }
 
 static void finish(void)
@@ -116,7 +132,9 @@ void ui_page_00_boot_anim_poll(void)
 
 static void apply_elapsed(uint32_t elapsed)
 {
-    float foreground = 1.0f - ease(progress(elapsed, INTRO_REVEAL_MS, INTRO_FADE_MS));
+    uint32_t reveal = g_intro.managed ?
+        (g_intro.revealing ? g_intro.reveal_elapsed : UINT32_MAX) : INTRO_REVEAL_MS;
+    float foreground = 1.0f - ease(progress(elapsed, reveal, INTRO_FADE_MS));
     float entrance = progress(elapsed, 150U, 800U);
     float icon = ease(entrance);
     float brand = icon *
@@ -149,6 +167,88 @@ static void apply_elapsed(uint32_t elapsed)
     }
 }
 
+void ui_page_00_boot_anim_adopt_elapsed(uint32_t elapsed_ms)
+{
+    if (!g_intro.root || g_intro.failed) return;
+    g_intro.start_tick = lv_tick_get() - elapsed_ms;
+    apply_elapsed(elapsed_ms);
+}
+
+void ui_page_00_boot_anim_set_startup_ready(bool ready)
+{
+    if (!g_intro.root || g_intro.failed) return;
+    g_intro.managed = true;
+    if (ready && !g_intro.startup_ready) {
+        uint32_t elapsed = lv_tick_elaps(g_intro.start_tick);
+        uint32_t rounds = elapsed <= DOT_START_MS ? 0U :
+            (elapsed - DOT_START_MS + DOT_PERIOD_MS - 1U) / DOT_PERIOD_MS;
+        g_intro.next_dot_round = DOT_START_MS + rounds * DOT_PERIOD_MS;
+        g_intro.ready_dot_rounds = 0;
+        g_intro.dot_round_seen = false;
+    }
+    g_intro.startup_ready = ready;
+}
+
+static void observe_ready_dots(uint32_t elapsed)
+{
+    if (!g_intro.startup_ready || g_intro.ready_dot_rounds >= READY_DOT_ROUNDS ||
+        elapsed < g_intro.next_dot_round) return;
+    uint32_t phase = elapsed - g_intro.next_dot_round;
+    if (phase < 240U) g_intro.dot_round_seen = true;
+    if (phase < DOT_LANDED_MS) return;
+    /* A delayed timer must not count three unseen cycles as three animations. */
+    if (g_intro.dot_round_seen) ++g_intro.ready_dot_rounds;
+    g_intro.dot_round_seen = false;
+    g_intro.next_dot_round = DOT_START_MS +
+        ((elapsed - DOT_START_MS) / DOT_PERIOD_MS + 1U) * DOT_PERIOD_MS;
+}
+
+static void startup_diagnostics(lv_event_t *event)
+{
+    LV_UNUSED(event);
+    ui_page_00_boot_anim_destroy();
+    ui_manager_switch(UI_PAGE_SENSOR);
+}
+
+void ui_page_00_boot_anim_set_startup_error(bool diagnostics_available)
+{
+    if (!g_intro.root) return;
+    if (!g_intro.failed) {
+        g_intro.managed = true;
+        g_intro.revealing = false;
+        apply_elapsed(INTRO_MIN_REVEAL_MS);
+        lv_label_set_text_static(g_intro.welcome, "STARTUP ERROR");
+        lv_label_set_text_static(g_intro.brand, "RESTART DEVICE");
+        lv_obj_set_style_text_font(g_intro.brand, LV_FONT_DEFAULT, 0);
+        lv_obj_set_y(g_intro.brand, 305);
+        text_opacity(g_intro.brand, LV_OPA_COVER);
+        for (unsigned i = 0; i < 3; ++i)
+            background_opacity(g_intro.dots[i], LV_OPA_TRANSP);
+        g_intro.failed = true;
+        stop_timer();
+    }
+    if (!diagnostics_available || g_intro.diagnostics) return;
+    g_intro.diagnostics = lv_btn_create(g_intro.root);
+    if (!g_intro.diagnostics) return;
+    text_opacity(g_intro.brand, LV_OPA_TRANSP);
+    lv_obj_remove_style_all(g_intro.diagnostics);
+    lv_obj_set_pos(g_intro.diagnostics, 480, 288);
+    lv_obj_set_size(g_intro.diagnostics, 320, 56);
+    lv_obj_set_style_bg_color(g_intro.diagnostics, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(g_intro.diagnostics, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(g_intro.diagnostics, 12, 0);
+    lv_obj_set_style_border_width(g_intro.diagnostics, 1, 0);
+    lv_obj_set_style_border_color(g_intro.diagnostics, lv_color_hex(0xCBD5DC), 0);
+    lv_obj_add_event_cb(g_intro.diagnostics, startup_diagnostics, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *text = lv_label_create(g_intro.diagnostics);
+    if (text) {
+        lv_label_set_text_static(text, "DIAGNOSTICS");
+        lv_obj_set_style_text_font(text, &lv_font_instrument_sans_medium_40, 0);
+        lv_obj_set_style_text_color(text, lv_color_hex(0x74818A), 0);
+        lv_obj_center(text);
+    }
+}
+
 static void timer_cb(lv_timer_t *timer)
 {
     LV_UNUSED(timer);
@@ -157,8 +257,32 @@ static void timer_cb(lv_timer_t *timer)
         ui_page_00_boot_anim_destroy();
         return;
     }
+    if (g_intro.failed) return;
     uint32_t elapsed = lv_tick_elaps(g_intro.start_tick);
-    if (elapsed >= INTRO_REVEAL_MS + INTRO_FADE_MS) { finish(); return; }
+    /* First draw skips the fully obscured self-test background. Restore it
+     * in the quiet hold after entrance (950ms), well before the exit fade.
+     * Its one-time decode then cannot delay the first visible intro frame. */
+    bool quiet = (elapsed >= 1000U && elapsed < 2700U) ||
+        (elapsed >= 4150U && elapsed < 4350U) ||
+        (elapsed >= 4350U && (elapsed - 4350U) % DOT_PERIOD_MS >= 1000U);
+    if (g_intro.selftest_covered && g_intro.first_drawn && quiet) {
+        if (ui_page_08_curr_prepare_step()) {
+            g_intro.selftest_covered = false;
+            ui_page_08_curr_set_covered(false);
+        }
+    }
+    if (g_intro.managed) observe_ready_dots(elapsed);
+    if (g_intro.managed && g_intro.startup_ready && !g_intro.revealing &&
+        !g_intro.selftest_covered &&
+        g_intro.ready_dot_rounds >= READY_DOT_ROUNDS &&
+        elapsed >= INTRO_MIN_REVEAL_MS) {
+        g_intro.revealing = true;
+        g_intro.reveal_elapsed = elapsed;
+    }
+    if ((!g_intro.managed && elapsed >= INTRO_REVEAL_MS + INTRO_FADE_MS) ||
+        (g_intro.revealing && elapsed - g_intro.reveal_elapsed >= INTRO_FADE_MS)) {
+        finish(); return;
+    }
     apply_elapsed(elapsed);
 }
 
@@ -194,6 +318,11 @@ void ui_page_00_boot_anim_create(lv_obj_t *parent)
     lv_obj_add_flag(g_intro.root, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_bg_color(g_intro.root, lv_color_hex(0xEDF3F6), 0);
     lv_obj_add_event_cb(g_intro.root, root_deleted, LV_EVENT_DELETE, NULL);
+    lv_obj_add_event_cb(g_intro.root, root_drawn, LV_EVENT_DRAW_POST_END, NULL);
+    if (ui_manager_get_current_page() == UI_PAGE_BOOT) {
+        g_intro.selftest_covered = true;
+        ui_page_08_curr_set_covered(true);
+    }
 
     g_intro.background = lv_img_create(g_intro.root);
     g_intro.icon = lv_img_create(g_intro.root);

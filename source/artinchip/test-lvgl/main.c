@@ -1,4 +1,6 @@
 #include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include "lvgl/lvgl.h"
 #include "lv_port_disp.h"
 #include "lv_port_indev.h"
@@ -6,6 +8,7 @@
 #include "aic_dec.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/page_00_boot_anim.h"
+#include "un260/lv_core/page_08_boot.h"
 #include "un260/lv_system/app_clock.h"
 #include "un260/app_service/app_boot_runtime.h"
 #include "un260/app_service/app_command_runtime.h"
@@ -20,17 +23,29 @@
 #include "aic_ui/perf_stats.h"
 #include "un260/lv_core/ui_frame_commit.h"
 #include "un260/app_service/app_runtime_wakeup.h"
+#include "un260/app_service/app_startup_trace.h"
+#include "un260/app_service/app_startup_runtime.h"
+#include "un260/lv_drivers/startup_devices.h"
+#include "un260/lv_drivers/startup_visual.h"
 #include "aic_ui/render_scratch.h"
 
 //-------------------- 主函数 --------------------
 int main(void) {
+    app_startup_trace_mark("main_enter");
+#if UI_BOOT_ANIM_THEME != UI_BOOT_ANIM_THEME_C
+    if (!startup_devices_prepare()) return 1;
+#endif
     lv_init();
     lv_img_cache_set_size(IMG_CACHE_NUM);
     aic_dec_create();
 
     lv_port_disp_init();
-    lv_port_indev_init();
+    app_startup_trace_mark("display_initialized");
     backlight_service_init();
+    app_startup_trace_mark("backlight_initialized");
+#if UI_BOOT_ANIM_THEME != UI_BOOT_ANIM_THEME_C
+    lv_port_indev_init();
+    app_startup_trace_mark("input_initialized");
     user_cfg_password_load();
     user_cfg_screenshot_load();
     user_cfg_screen_recording_load();
@@ -38,17 +53,59 @@ int main(void) {
     user_cfg_performance_profile_load();
     user_cfg_gesture_load();
     gesture_service_init();
+#endif
     device_info_init(UI_VERSION);
-    ui_history_data_init();
+#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_C
+    ui_page_08_curr_defer_next_create();
+#endif
     ui_manager_switch(UI_PAGE_BOOT );
+    app_startup_trace_mark("selftest_created");
     perf_stats_init();
+#if UI_BOOT_ANIM_THEME != UI_BOOT_ANIM_THEME_C
     perf_profile_set_enabled(user_cfg_performance_profile_enabled());
     app_ui_runtime_init();
+#endif
     ui_page_00_boot_anim_create(lv_layer_top());
+#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_C
+    if (!ui_page_00_boot_anim_is_active())
+        while (!ui_page_08_curr_prepare_step()) { }
+#endif
+    app_startup_trace_mark("intro_assets_ready");
 
+#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_C
+    /* A single renderer owns the display throughout startup. No preferences,
+     * serial state or business callbacks are consumed until the I/O worker
+     * publishes readiness; even input registration waits for that boundary. */
+    ui_page_00_boot_anim_set_startup_ready(false);
+    bool startup_started = false, startup_ready = false, startup_input_ready = false;
+    bool startup_error_reported = false;
+#else
     if (!app_serial_runtime_start()) {
+        app_startup_trace_mark("serial_failed");
         return -1;
     }
+    app_startup_trace_mark("serial_ready");
+    ui_history_data_init_async();
+    app_startup_trace_mark("history_load_started");
+#endif
+    bool first_frame_presented = false;
+    uint32_t early_elapsed = 0;
+    int early_visual = startup_visual_acquire(&early_elapsed);
+    if (early_visual < 0) {
+        fprintf(stderr,"Startup display ownership unavailable; refusing concurrent draw\n");
+        return 1;
+    }
+    if (getenv("UN260_BOOT_LIGHT_ACTIVE")) {
+        bool adopted_scanout = lv_port_disp_adopt_scanout();
+        if (early_visual > 0 && !adopted_scanout) return 1;
+    }
+    if (early_visual > 0) {
+#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_C
+        ui_page_00_boot_anim_adopt_elapsed(early_elapsed);
+#endif
+        app_startup_trace_mark("early_visual_adopted");
+    }
+    bool history_load_reported = false;
     uint32_t visual_commit_tick = app_clock_uptime_ms() - LV_DISP_DEF_REFR_PERIOD;
     while (1) {
         uint64_t wake_sequence = app_runtime_wakeup_snapshot();
@@ -74,6 +131,56 @@ int main(void) {
             lvgl_delay_ms = lv_timer_handler();
         }
         lvgl_end_us = app_clock_monotonic_us();
+        if (!first_frame_presented && fbdev_present_sequence() != 0U) {
+            first_frame_presented = true;
+            app_startup_trace_mark("first_frame_presented");
+        }
+#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_C
+        if (!startup_started && first_frame_presented) {
+            startup_started = true;
+            (void)app_startup_runtime_begin(app_clock_uptime_ms());
+            app_startup_trace_mark("startup_io_started");
+        }
+        if (startup_started && !startup_ready) {
+            app_startup_status_t status = app_startup_runtime_poll(app_clock_uptime_ms());
+            if (app_startup_runtime_is_settled() && !startup_input_ready) {
+                lv_port_indev_init();
+                gesture_service_init();
+                perf_profile_set_enabled(user_cfg_performance_profile_enabled());
+                app_ui_runtime_init();
+                startup_input_ready = true;
+                app_startup_trace_mark("input_initialized");
+            }
+            if (status == APP_STARTUP_READY) {
+                startup_ready = true;
+                ui_page_00_boot_anim_set_startup_ready(true);
+                app_startup_trace_mark("startup_ready");
+            } else if (status == APP_STARTUP_FAILED || status == APP_STARTUP_TIMED_OUT) {
+                if (!startup_error_reported) {
+                    fprintf(stderr, "Startup initialization %s; restart required\n",
+                            status == APP_STARTUP_TIMED_OUT ? "timed out" : "failed");
+                    app_startup_trace_mark("startup_failed");
+                    startup_error_reported = true;
+                }
+                ui_page_00_boot_anim_set_startup_error(startup_input_ready);
+            }
+        }
+        /* Preferences and UART must be published before any consumer runs.
+         * Once they are ready, keep draining unrelated replies while history
+         * loads; the existing counting preflight retains record backpressure. */
+        if (!app_startup_runtime_can_process()) {
+            uint32_t delay_ms = lvgl_delay_ms > 5U ? 5U : lvgl_delay_ms;
+            if (delay_ms == 0U) delay_ms = 1U;
+            usleep(delay_ms * 1000U);
+            continue;
+        }
+#else
+        ui_history_data_init_poll();
+#endif
+        if (!history_load_reported && ui_history_data_is_initialized()) {
+            history_load_reported = true;
+            app_startup_trace_mark("history_load_finished");
+        }
         perf_stats_report_lvgl_time_us(
             app_clock_elapsed_us32(lvgl_start_us, lvgl_end_us));
         if (perf_profile_frame_sequence() != profile_frame_seq) {
@@ -96,7 +203,8 @@ int main(void) {
 
         app_boot_runtime_poll(
             now, current_page == UI_PAGE_BOOT &&
-                 !ui_page_00_boot_anim_is_active());
+                 !ui_page_00_boot_anim_is_active() &&
+                 ui_history_data_is_initialized());
         ui_frame_commit_end_batch();
         render_scratch_poll(app_clock_uptime_ms());
 

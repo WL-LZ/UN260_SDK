@@ -1,4 +1,3 @@
-#include "lvgl/lvgl.h"
 #include"user_cfg.h"
 #include <errno.h>
 #include <stdio.h>
@@ -64,7 +63,7 @@ static void user_cfg_password_store(const char *password)
     g_user_password[len] = '\0';
 }
 
-bool user_cfg_password_load(void)
+static bool user_cfg_password_read(char *password)
 {
     FILE* fp;
     char buf[USER_PASSWORD_MAX_LEN + 4];
@@ -88,7 +87,15 @@ bool user_cfg_password_load(void)
         return false;
     }
 
-    user_cfg_password_store(buf);
+    memcpy(password, buf, USER_PASSWORD_MAX_LEN + 1);
+    return true;
+}
+
+bool user_cfg_password_load(void)
+{
+    char password[USER_PASSWORD_MAX_LEN + 1];
+    if (!user_cfg_password_read(password)) return false;
+    user_cfg_password_store(password);
     return true;
 }
 
@@ -141,6 +148,30 @@ static bool user_cfg_bool_load(const char *path, bool default_value,
     fclose(fp);
     *value_out = value != 0;
     return true;
+}
+
+void user_cfg_startup_read(user_cfg_startup_snapshot_t *snapshot)
+{
+    if (!snapshot) return;
+    *snapshot = (user_cfg_startup_snapshot_t){ .password = "1111" };
+    (void)user_cfg_password_read(snapshot->password);
+    (void)user_cfg_bool_load(SCREENSHOT_CFG_PATH, true, &snapshot->screenshot);
+    (void)user_cfg_bool_load(SCREEN_RECORDING_CFG_PATH, false, &snapshot->recording);
+    (void)user_cfg_bool_load(PERFORMANCE_MONITOR_CFG_PATH, false, &snapshot->performance_monitor);
+    (void)user_cfg_bool_load(PERFORMANCE_PROFILE_CFG_PATH, false, &snapshot->performance_profile);
+    (void)user_cfg_bool_load(GESTURE_CFG_PATH, false, &snapshot->gesture);
+}
+
+void user_cfg_startup_apply(const user_cfg_startup_snapshot_t *snapshot)
+{
+    if (!snapshot || snapshot->password[USER_PASSWORD_MAX_LEN] != '\0' ||
+        !user_cfg_password_is_valid(snapshot->password)) return;
+    user_cfg_password_store(snapshot->password);
+    g_screenshot_enabled = snapshot->screenshot;
+    g_screen_recording_enabled = snapshot->recording;
+    g_performance_monitor_enabled = snapshot->performance_monitor;
+    g_performance_profile_enabled = snapshot->performance_profile;
+    g_gesture_enabled = snapshot->gesture;
 }
 
 static bool user_cfg_bool_save(const char *path, const char *temp_path,

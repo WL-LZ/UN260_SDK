@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <glob.h>
 #if USE_BSD_EVDEV
 #include <dev/evdev/input.h>
 #else
@@ -97,8 +98,6 @@ static bool evdev_is_touch_device(const char *dev_name)
 static bool evdev_open_runtime_device(void)
 {
     const char *runtime_name = getenv("LVGL_EVDEV_DEVICE");
-    char candidate[32];
-    int index;
 
     if(runtime_name == NULL || runtime_name[0] == '\0')
         runtime_name = getenv("TSLIB_TSDEVICE");
@@ -110,20 +109,25 @@ static bool evdev_open_runtime_device(void)
     }
 
     if((runtime_name == NULL || strcmp(runtime_name, EVDEV_NAME) != 0) &&
-       evdev_set_file(EVDEV_NAME)) {
+       evdev_is_touch_device(EVDEV_NAME) && evdev_set_file(EVDEV_NAME)) {
         fprintf(stderr, "evdev input: %s (configured fallback)\n", EVDEV_NAME);
         return true;
     }
 
-    for(index = 0; index < 16; index++) {
-        snprintf(candidate, sizeof(candidate), "/dev/input/event%d", index);
+    glob_t devices = {0};
+    if(glob("/dev/input/event*", 0, NULL, &devices) == 0) {
+      for(size_t index = 0; index < devices.gl_pathc; index++) {
+        const char *candidate = devices.gl_pathv[index];
         if(!evdev_is_touch_device(candidate))
             continue;
         if(evdev_set_file(candidate)) {
             fprintf(stderr, "evdev input: %s (auto detected)\n", candidate);
+            globfree(&devices);
             return true;
         }
+      }
     }
+    globfree(&devices);
 
     fprintf(stderr, "evdev input: no usable touchscreen device found\n");
     return false;

@@ -521,7 +521,30 @@ endif
 
 endif # BR_BUILDING
 
+# Opt-in early userspace image. Other boards retain the original build path.
+ifneq ($(wildcard $(TARGET_BOARD_DIR)/early-init.enabled),)
+LINUX_DEPENDENCIES += zlib
+define LINUX_BUILD_EARLY_VISUAL
+	python3 $(TOPDIR)/tools/un260-startup/build_early_init.py \
+		--cc $(TARGET_CC) --output $(BINARIES_DIR) --kernel $(@D)
+endef
+LINUX_PRE_BUILD_HOOKS += LINUX_BUILD_EARLY_VISUAL
+endif
+
 $(eval $(kconfig-package))
+
+ifneq ($(wildcard $(TARGET_BOARD_DIR)/early-init.enabled),)
+# Keep the embedded renderer consistent with ordinary incremental UI builds.
+$(LINUX_DIR)/.stamp_built: \
+	$(TOPDIR)/tools/un260-startup/build_early_init.py \
+	$(TOPDIR)/tools/un260-startup/early_init.c \
+	$(TOPDIR)/source/artinchip/test-lvgl/tools/build_boot_light_assets.py \
+	$(wildcard $(TOPDIR)/source/artinchip/test-lvgl/un260/lv_drivers/boot_light*) \
+	$(TOPDIR)/source/artinchip/test-lvgl/un260/lv_system/backlight_service.c \
+	$(TOPDIR)/source/artinchip/test-lvgl/un260/lv_core/page_00_boot_anim.h \
+	$(wildcard $(TOPDIR)/source/artinchip/test-lvgl/aic_ui/lvgl_data/boot_theme_c/*.png) \
+	$(wildcard $(TOPDIR)/source/artinchip/test-lvgl/un260/font/lv_font_instrument_sans*_[44][08].c)
+endif
 
 # Support for rebuilding the kernel after the cpio archive has
 # been generated.

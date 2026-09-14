@@ -27,6 +27,21 @@ static lv_area_t flushed_bounds;
 static uint8_t *background_pixels;
 static uint8_t *emblem_pixels;
 static unsigned baseline_timers;
+static lv_obj_t *selftest_underlay;
+bool ui_page_08_curr_prepare_step(void) { return true; }
+static unsigned selftest_draws;
+
+void ui_page_08_curr_set_covered(bool covered)
+{
+    if (covered) lv_obj_add_flag(selftest_underlay, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_clear_flag(selftest_underlay, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void underlay_draw(lv_event_t *event)
+{
+    LV_UNUSED(event);
+    ++selftest_draws;
+}
 
 ui_page_t ui_manager_get_current_page(void)
 {
@@ -35,8 +50,8 @@ ui_page_t ui_manager_get_current_page(void)
 
 void ui_manager_switch(ui_page_t page)
 {
-    assert(current_page == UI_PAGE_BOOT_ANIM);
-    assert(page == UI_PAGE_BOOT);
+    assert((current_page == UI_PAGE_BOOT_ANIM && page == UI_PAGE_BOOT) ||
+           (current_page == UI_PAGE_BOOT && page == UI_PAGE_SENSOR));
     ++switches;
     ui_page_00_boot_anim_destroy();
     current_page = page;
@@ -406,6 +421,101 @@ static void test_lifetimes(void)
     puts("PASS early navigation retains SENSOR; elapsed timeline crosses tick wrap");
 }
 
+static void test_selftest_cover(void)
+{
+    create();
+    assert(lv_obj_has_flag(selftest_underlay, LV_OBJ_FLAG_HIDDEN));
+    selftest_draws = 0;
+    tick(980);
+    assert(lv_obj_has_flag(selftest_underlay, LV_OBJ_FLAG_HIDDEN));
+    assert(selftest_draws == 0);
+    tick(80);
+    render();
+    assert(!lv_obj_has_flag(selftest_underlay, LV_OBJ_FLAG_HIDDEN));
+    assert(selftest_draws > 0);
+    ui_page_00_boot_anim_destroy();
+    create();
+    lv_obj_del(g_intro.root);
+    assert(!lv_obj_has_flag(selftest_underlay, LV_OBJ_FLAG_HIDDEN));
+    assert_no_owner();
+    fail_next_timer = true;
+    ui_page_00_boot_anim_create(lv_layer_top());
+    assert(!lv_obj_has_flag(selftest_underlay, LV_OBJ_FLAG_HIDDEN));
+    assert_no_owner();
+    ui_page_00_boot_anim_poll();
+    current_page = UI_PAGE_BOOT;
+    ui_page_00_boot_anim_create(lv_layer_top());
+    lv_tick_inc(1500);
+    timer_cb(g_intro.timer);
+    assert(lv_obj_has_flag(selftest_underlay, LV_OBJ_FLAG_HIDDEN));
+    render();
+    timer_cb(g_intro.timer);
+    assert(!lv_obj_has_flag(selftest_underlay, LV_OBJ_FLAG_HIDDEN));
+    ui_page_00_boot_anim_destroy();
+    puts("PASS covered self-test: no first-frame underlay draw, quiet-hold restore, deletion/failure cleanup");
+}
+
+static void test_real_startup(void)
+{
+    create();
+    ui_page_00_boot_anim_set_startup_ready(false);
+    ui_page_00_boot_anim_adopt_elapsed(5000);
+    assert(lv_tick_elaps(g_intro.start_tick) == 5000);
+    assert(lv_obj_get_style_text_opa(g_intro.brand, 0) == LV_OPA_TRANSP);
+    assert(lv_obj_get_style_text_opa(g_intro.welcome, 0) == LV_OPA_COVER);
+    ui_page_00_boot_anim_destroy();
+    create();
+    ui_page_00_boot_anim_set_startup_ready(false);
+    tick(12000);
+    assert(ui_page_00_boot_anim_is_active() && !g_intro.revealing);
+    assert(lv_obj_get_style_text_opa(g_intro.welcome, 0) == LV_OPA_COVER);
+    lv_coord_t y = lv_obj_get_y(g_intro.dots[0]);
+    tick(200);
+    assert(lv_obj_get_y(g_intro.dots[0]) != y);
+    ui_page_00_boot_anim_set_startup_ready(true);
+    tick(5100);
+    assert(g_intro.ready_dot_rounds == 2 && !g_intro.revealing);
+    ui_page_00_boot_anim_set_startup_ready(true); /* Duplicate must not restart. */
+    tick(160);
+    assert(g_intro.revealing && ui_page_00_boot_anim_is_active());
+    tick(400);
+    assert_no_owner();
+    create();
+    ui_page_00_boot_anim_set_startup_ready(true);
+    tick(4800);
+    assert(!g_intro.revealing);
+    tick(3560);
+    assert(g_intro.ready_dot_rounds == 3 && g_intro.revealing);
+    tick(400);
+    assert_no_owner();
+    create();
+    ui_page_00_boot_anim_set_startup_ready(true);
+    lv_tick_inc(14000); /* No rendered jumps: elapsed time alone is insufficient. */
+    timer_cb(g_intro.timer);
+    assert(g_intro.ready_dot_rounds == 0 && !g_intro.revealing);
+    tick(5600);
+    assert_no_owner();
+    create();
+    ui_page_00_boot_anim_set_startup_ready(false);
+    tick(1200);
+    ui_page_00_boot_anim_set_startup_error(false);
+    assert(g_intro.failed && !g_intro.timer && !g_intro.diagnostics);
+    assert(strcmp(lv_label_get_text(g_intro.welcome), "STARTUP ERROR") == 0);
+    ui_page_00_boot_anim_set_startup_ready(true);
+    tick(1000);
+    assert(ui_page_00_boot_anim_is_active());
+    ui_page_00_boot_anim_set_startup_error(true);
+    lv_obj_t *button = g_intro.diagnostics;
+    assert(button);
+    ui_page_00_boot_anim_set_startup_error(true);
+    assert(g_intro.diagnostics == button);
+    screenshot("startup-error");
+    lv_event_send(button, LV_EVENT_CLICKED, NULL);
+    assert(current_page == UI_PAGE_SENSOR);
+    assert_no_owner();
+    puts("PASS real startup: prolonged moving wait, ready-controlled dissolve, minimum visual sequence, latched failure and SENSOR action");
+}
+
 static void test_resource_fallback(void)
 {
     for (unsigned variant = 1; variant <= 3; ++variant) {
@@ -455,6 +565,10 @@ int main(void)
     driver.draw_buf = &buffer; driver.flush_cb = flush;
     assert(lv_disp_drv_register(&driver));
     lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(0xBCD3DE), 0);
+    selftest_underlay = lv_obj_create(lv_scr_act());
+    lv_obj_remove_style_all(selftest_underlay);
+    lv_obj_set_size(selftest_underlay, 1280, 400);
+    lv_obj_add_event_cb(selftest_underlay, underlay_draw, LV_EVENT_DRAW_MAIN, NULL);
     render();
     baseline_timers = timer_count();
     test_sequence();
@@ -462,6 +576,8 @@ int main(void)
     test_refresh_budget();
     test_lifetimes();
     test_resource_fallback();
+    test_selftest_cover();
+    test_real_startup();
     lv_img_cache_invalidate_src(NULL);
     assert(decode_closes == decode_opens);
     lv_img_decoder_delete(decoder);

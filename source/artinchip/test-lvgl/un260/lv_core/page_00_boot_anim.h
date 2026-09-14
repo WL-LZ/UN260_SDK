@@ -29,6 +29,11 @@ bool ui_page_00_boot_anim_is_active(void);
 #if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_C
 /* Called outside page creation so a failed registered intro can safely exit. */
 void ui_page_00_boot_anim_poll(void);
+/* Opt into readiness-driven handover after create. Unmanaged previews keep
+ * their original duration. These APIs are UI-thread only. */
+void ui_page_00_boot_anim_set_startup_ready(bool ready);
+void ui_page_00_boot_anim_adopt_elapsed(uint32_t elapsed_ms);
+void ui_page_00_boot_anim_set_startup_error(bool diagnostics_available);
 #else
 static inline void ui_page_00_boot_anim_poll(void) {}
 #endif

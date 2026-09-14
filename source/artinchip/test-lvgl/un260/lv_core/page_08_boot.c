@@ -21,9 +21,11 @@ typedef struct {
     lv_timer_t *handshake_timer;
     lv_selftest_list_state_t item_states[BOOT_SELFTEST_LIST_COUNT];
     uint8_t progress_percent;
+    uint8_t prepare_step;
 } boot_page_context_t;
 
 static boot_page_context_t g_boot_page;
+static bool g_defer_next_create;
 
 static void boot_page_context_reset(void)
 {
@@ -336,10 +338,17 @@ static const char *boot_selftest_list_text_get(uint8_t index, lv_selftest_list_s
     }
 }
 
+void ui_page_08_curr_defer_next_create(void)
+{
+    g_defer_next_create = true;
+}
+
 void ui_page_08_curr_create(lv_obj_t* parent)
 {
     if (g_boot_page.page && lv_obj_is_valid(g_boot_page.page)) return;
 
+    bool deferred = g_defer_next_create;
+    g_defer_next_create = false;
     ui_page_08_curr_destroy();
     if (parent == NULL) {
         parent = lv_scr_act();
@@ -351,11 +360,29 @@ void ui_page_08_curr_create(lv_obj_t* parent)
     lv_obj_set_size(g_boot_page.page, 1280, 400);
     lv_obj_clear_flag(g_boot_page.page, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(g_boot_page.page, LV_SCROLLBAR_MODE_OFF);
-    lv_ui_obj_init(g_boot_page.page, page_08_curr_obj, page_08_curr_len);
-    boot_progress_create(g_boot_page.page);
-    boot_selftest_list_create(g_boot_page.page);
-    boot_selftest_list_reset();
-    boot_selftest_list_sync_step(boot_service_self_test_sequence_index());
+    g_boot_page.prepare_step = 1;
+    if (!deferred) while (!ui_page_08_curr_prepare_step()) { }
+}
+
+bool ui_page_08_curr_prepare_step(void)
+{
+    if (!g_boot_page.page || g_boot_page.prepare_step == 0) return true;
+    switch (g_boot_page.prepare_step++) {
+    case 1:
+        lv_ui_obj_init(g_boot_page.page, page_08_curr_obj, page_08_curr_len);
+        return false;
+    case 2:
+        boot_progress_create(g_boot_page.page);
+        return false;
+    case 3:
+        boot_selftest_list_create(g_boot_page.page);
+        boot_selftest_list_reset();
+        boot_selftest_list_sync_step(boot_service_self_test_sequence_index());
+        return false;
+    default:
+        g_boot_page.prepare_step = 0;
+        break;
+    }
 
     if (boot_service_get_stage() == BOOT_STAGE_HANDSHAKE &&
         boot_service_handshake_state() != HANDSHAKE_OK) {
@@ -370,10 +397,21 @@ void ui_page_08_curr_create(lv_obj_t* parent)
         boot_progress_handshake_tick_stop();
     }
 
-};
+    return true;
+}
+
+void ui_page_08_curr_set_covered(bool covered)
+{
+    if (!g_boot_page.page || !lv_obj_is_valid(g_boot_page.page)) return;
+    /* Failed/externally removed overlays must not expose an unfinished page. */
+    if (!covered) while (!ui_page_08_curr_prepare_step()) { }
+    if (covered) lv_obj_add_flag(g_boot_page.page, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_clear_flag(g_boot_page.page, LV_OBJ_FLAG_HIDDEN);
+}
 
 void ui_page_08_curr_destroy(void)
 {
+    g_defer_next_create = false;
     boot_progress_handshake_tick_stop();
 
     if (g_boot_page.page && lv_obj_is_valid(g_boot_page.page)) {
