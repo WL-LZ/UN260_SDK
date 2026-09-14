@@ -701,7 +701,7 @@ static void page_01_detail_section_btn_style_apply(void)
 static void page_01_detail_section_btn_text_refresh(void)
 {
     lv_obj_t *buttons[] = {s_detail_btn_a, s_detail_btn_b, s_detail_btn_c};
-    const char *titles[] = {"Report", "Serial", "Reject"};
+    const char *titles[] = {"REPORT", "SERIAL", "REJECT"};
     for (unsigned i = 0; i < 3; ++i)
         if (buttons[i]) lv_label_set_text(lv_obj_get_child(buttons[i], 1), titles[i]);
 }
@@ -723,8 +723,8 @@ static lv_obj_t *page_01_detail_section_btn_create(lv_coord_t x, lv_coord_t y,
         (void *)(uintptr_t)section);
     lv_obj_t *badge = lv_obj_create(btn);
     lv_obj_remove_style_all(badge);
-    lv_obj_set_pos(badge, 30, 9);
     lv_obj_set_size(badge, 26, 26);
+    lv_obj_align(badge, LV_ALIGN_LEFT_MID, 30, 0);
     lv_obj_set_style_bg_opa(badge, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_color(badge, lv_color_hex(colors[section]), 0);
     lv_obj_set_style_radius(badge, 6, 0);
@@ -737,15 +737,15 @@ static lv_obj_t *page_01_detail_section_btn_create(lv_coord_t x, lv_coord_t y,
     lv_obj_t *label = lv_label_create(btn);
     lv_label_set_text(label, text);
     lv_obj_set_style_text_font(label, &lv_font_instrument_sans_medium_16, 0);
-    lv_obj_set_pos(label, 64, 12);
+    lv_obj_align(label, LV_ALIGN_LEFT_MID, 64, 0);
     return btn;
 }
 
 static void page_01_detail_section_btn_create_all(void)
 {
-    s_detail_btn_a = page_01_detail_section_btn_create(620, 24, "Report", PAGE_01_DETAIL_SECTION_A);
-    s_detail_btn_b = page_01_detail_section_btn_create(795, 24, "Serial", PAGE_01_DETAIL_SECTION_B);
-    s_detail_btn_c = page_01_detail_section_btn_create(970, 24, "Reject", PAGE_01_DETAIL_SECTION_C);
+    s_detail_btn_a = page_01_detail_section_btn_create(620, 24, "REPORT", PAGE_01_DETAIL_SECTION_A);
+    s_detail_btn_b = page_01_detail_section_btn_create(795, 24, "SERIAL", PAGE_01_DETAIL_SECTION_B);
+    s_detail_btn_c = page_01_detail_section_btn_create(970, 24, "REJECT", PAGE_01_DETAIL_SECTION_C);
     page_01_detail_section_btn_style_apply();
 }
 
@@ -1011,7 +1011,6 @@ static void page_01_main_build_content(void)
     s_total_amount_label = main_label(s_summary_card, "01_amount_label", "0", 120, 223, 340,
         &lv_font_manrope_extrabold_48, 0x17212A);
     s_detail_card = main_box(main_page, 602, 12, 554, 320, 0xFFFFFF, 16);
-    page_01_main_detail_bind_tap(s_detail_card);
     page_01_main_detail_create(main_page, 620, 76, 518, 244);
     page_01_detail_section_btn_create_all();
 
@@ -1118,7 +1117,9 @@ static void page_01_top_strip_tap(const lv_point_t *point)
             return;
         }
     }
-    lv_obj_t *card = s_multi_layout ? s_multi_card : s_detail_card;
+    /* Single-currency navigation belongs only to the detail viewport below
+     * the headers, never to the surrounding card or this top-strip fallback. */
+    lv_obj_t *card = s_multi_layout ? s_multi_card : NULL;
     if (card) {
         lv_obj_get_coords(card, &area);
         if (point->x >= area.x1 && point->x <= area.x2 &&

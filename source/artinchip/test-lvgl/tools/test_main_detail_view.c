@@ -203,7 +203,7 @@ static void test_taps(lv_indev_t *indev)
     page_01_main_detail_refresh(PAGE_01_DETAIL_SECTION_B);
     render();
     unsigned start = navigations;
-    tap(800, 130); assert(navigations == ++start); /* Header. */
+    tap(800, 130); assert(navigations == start); /* Header is not a List entry. */
     tap(800, 165); assert(navigations == ++start); /* Table row. */
     pointer(800, 240, true); pointer(800, 233, true); pointer(800, 233, false);
     assert(navigations == start); /* 7px genuine scroll is not a sub-10px tap. */

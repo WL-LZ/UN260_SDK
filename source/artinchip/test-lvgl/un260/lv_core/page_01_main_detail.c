@@ -266,7 +266,6 @@ static bool section_create(main_detail_section_t *section, unsigned id,
     section->dirty = true;
     section->root = surface(detail_view->root, 0, 0, width, height, 0xFFFFFF);
     if (!section->root) return false;
-    page_01_main_detail_bind_tap(section->root);
     lv_coord_t usable = width - 24;
     if (id == PAGE_01_DETAIL_SECTION_A) {
         section->column_x[0] = 10; section->column_width[0] = usable * 2 / 5 - 20;

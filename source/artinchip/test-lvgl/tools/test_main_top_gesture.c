@@ -192,11 +192,11 @@ static void test_tap_routing(void)
     event(LV_EVENT_RELEASED, 1220, 32, 200); assert(menu_clicks == 1);
     tap(1168, 12); tap(1263, 43); assert(menu_clicks == 3);
     tap(1120, 32); assert(list_pushes == 0 && tab_clicks[2] == 1);
-    tap(1138, 32); assert(list_pushes == 1 && tab_clicks[2] == 1);
+    tap(1138, 32); assert(list_pushes == 0 && tab_clicks[2] == 1);
     s_multi_layout = true; s_detail_card = NULL;
     for(unsigned i=0;i<3;++i) lv_obj_add_flag(&tabs[i], LV_OBJ_FLAG_HIDDEN);
-    tap(1120, 32); assert(list_pushes == 2 && tab_clicks[2] == 1);
-    s_multi_card = NULL; tap(1120, 32); assert(list_pushes == 2);
+    tap(1120, 32); assert(list_pushes == 1 && tab_clicks[2] == 1);
+    s_multi_card = NULL; tap(1120, 32); assert(list_pushes == 1);
     fixture(); tap(1160, 32); tap(1269, 32); tap(1220, 5); no_route();
     manager_transitioning = true; tap(1220, 32); no_route();
     manager_transitioning = false; main_visible = false; tap(1120, 32); no_route();

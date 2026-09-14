@@ -131,7 +131,21 @@ static void test_main(void)
     click_object(s_bottom_c_btn_speed);assert(callbacks[CB_SPEED]==1);
     click_object(lv_obj_get_parent(s_curr_img));assert(callbacks[CB_CURRENCY]==1);
     unsigned opened=pushes;
-    tap(850,90);assert(pushes==++opened && destination==UI_PAGE_LIST);
+    tap(850,90);assert(pushes==opened); /* Column header. */
+    tap(606,180);assert(pushes==opened); /* Card left padding. */
+    tap(850,328);assert(pushes==opened); /* Card bottom padding. */
+    tap(780,32);assert(pushes==opened); /* Top-strip gap between tabs. */
+    lv_obj_t *tabs[]={s_detail_btn_a,s_detail_btn_b,s_detail_btn_c};
+    const char *titles[]={"REPORT","SERIAL","REJECT"};
+    for(unsigned i=0;i<3;++i) {
+        click_object(tabs[i]);render();assert(pushes==opened);
+        lv_obj_t *badge=lv_obj_get_child(tabs[i],0),*title=lv_obj_get_child(tabs[i],1);
+        lv_area_t ba,ta;lv_obj_get_coords(badge,&ba);lv_obj_get_coords(title,&ta);
+        assert(!strcmp(lv_label_get_text(title),titles[i]));
+        assert(LV_ABS((ba.y1+ba.y2)-(ta.y1+ta.y2))<=1);
+        tap(850,90);assert(pushes==opened);
+        tap(850,180);assert(pushes==++opened && destination==UI_PAGE_LIST);
+    }
     tap(1120,32);assert(s_detail_section==PAGE_01_DETAIL_SECTION_C && pushes==opened);
     tap(850,42);assert(s_detail_section==PAGE_01_DETAIL_SECTION_B && pushes==opened);
     tap(1220,32);assert(callbacks[CB_MENU]==2); /* Upper Menu area is not swallowed by PULL DOWN. */
