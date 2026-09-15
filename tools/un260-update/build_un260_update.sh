@@ -236,6 +236,21 @@ PACKAGE_ID=$(sha256sum "$PKG_ROOT/checksums.sha256" | awk '{print $1}')
 payload_bytes=$(find "$PKG_ROOT/payload" -type f -printf '%s\n' | awk '{s += $1} END {printf "%.0f", s}')
 [[ "$payload_bytes" -le "$PAYLOAD_BUDGET_BYTES" ]] ||
     die "Uncompressed payload exceeds 24 MiB update budget ($payload_bytes bytes); split optional resources or review firmware layout"
+if find "$PKG_ROOT/payload" -name boot-light.bin -print -quit | grep -q .; then
+    die "Host-only boot-light.bin fixture in release payload; rebuild target installation"
+fi
+# Check before publishing: UPK compression does not reduce replacement staging.
+# The explicit/pinned baseline and previous output cover supported transitions.
+BASELINE=${UN260_UPDATE_BASELINE:-"$(dirname "$OUTPUT_PATH")/UN260_UPDATE_BASE.upk"}
+if [[ -n "${UN260_UPDATE_BASELINE:-}" && ! -f "$BASELINE" ]]; then
+    die "Specified baseline missing: $BASELINE"
+fi
+for reference in "$BASELINE" "$OUTPUT_PATH"; do
+    if [[ -f "$reference" ]]; then
+        python3 "$SCRIPT_DIR/check_storage_budget.py" --base "$reference" \
+            --payload "$PKG_ROOT/payload"
+    fi
+done
 CREATED_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 cat > "$PKG_ROOT/manifest.ini" <<EOF
 format=UN260_UPGRADE

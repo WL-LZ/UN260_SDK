@@ -16,3 +16,23 @@ fi
 grep -q 'exceeds 24 MiB' "$FIXTURE/payload.log"
 [ ! -e "$FIXTURE/invalid.upk" ]
 echo "PASS package app/payload budgets; fixtures=$FIXTURE"
+mkdir -p "$FIXTURE/fixture-data/boot_theme_d"
+printf oracle > "$FIXTURE/fixture-data/boot_theme_d/boot-light.bin"
+if "$BUILD" --version budget-test --output "$FIXTURE/invalid.upk" --lvgl-data "$FIXTURE/fixture-data" > "$FIXTURE/fixture.log" 2>&1; then
+    echo 'FAIL: host-only fixture accepted'; exit 1
+fi
+grep -q 'Host-only boot-light.bin' "$FIXTURE/fixture.log"
+[ ! -e "$FIXTURE/invalid.upk" ]
+# A individually valid 15 MiB app still exceeds the transaction qualification
+# once the unchanged original and 2 MiB reserve must be retained.
+mkdir -p "$FIXTURE/empty-data"
+printf baseline > "$FIXTURE/small-app"
+"$BUILD" --version budget-test --output "$FIXTURE/qualified.upk" --app "$FIXTURE/small-app" --lvgl-data "$FIXTURE/empty-data" > "$FIXTURE/base.log" 2>&1
+before=$(sha256sum "$FIXTURE/qualified.upk")
+truncate -s $((15 * 1024 * 1024)) "$FIXTURE/staged-app"
+if "$BUILD" --version budget-test --output "$FIXTURE/qualified.upk" --app "$FIXTURE/staged-app" --lvgl-data "$FIXTURE/empty-data" > "$FIXTURE/staging.log" 2>&1; then
+    echo 'FAIL: oversized transaction accepted'; exit 1
+fi
+grep -q 'Release staging exceeds' "$FIXTURE/staging.log"
+[ "$before" = "$(sha256sum "$FIXTURE/qualified.upk")" ]
+echo 'PASS host-fixture rejection, staging qualification, previous output preserved'
