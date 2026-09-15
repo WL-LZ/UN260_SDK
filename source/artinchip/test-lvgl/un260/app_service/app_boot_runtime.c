@@ -171,7 +171,9 @@ static bool app_boot_runtime_finish(counting_session_state_t *counting_session)
     g_deferred_boot_finish = NULL;
     app_boot_runtime_cancel_prewarm();
     boot_selftest_list_finish();
-    sim_data_init();
+    /* The controller may have completed (or still be sending) its denomination
+     * query during self-test. Boot handoff must not replace that data with the
+     * simulator's local currency table. Session reset above owns only session state. */
 #if defined(UI_BOOT_ANIM_THEME) && UI_BOOT_ANIM_THEME == 4
     ui_page_08_curr_start_handoff();
 #endif

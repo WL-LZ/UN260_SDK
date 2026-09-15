@@ -29,7 +29,7 @@ static bool ui_manager_prewarm_page(ui_page_t p){(void)p;return true;}
 static bool ui_page_00_boot_anim_is_active(void){return intro;}
 static void protocol_send(uint8_t cmd,const uint8_t *p,unsigned len){assert(p && len==1);sends++;last_cmd=cmd;last_value=*p;}
 static bool app_counting_runtime_reset_session(counting_session_state_t *s,const char *why){assert(s&&why);return true;}
-static void sim_data_init(void){}
+#define sim_data_init() assert(!"Simulator initialization in production boot")
 static void boot_progress_set(uint8_t v){(void)v;}
 static void boot_selftest_list_sync_step(uint8_t v){(void)v;}
 static void boot_selftest_list_set_result(uint8_t i,uint8_t v){(void)i;(void)v;}
