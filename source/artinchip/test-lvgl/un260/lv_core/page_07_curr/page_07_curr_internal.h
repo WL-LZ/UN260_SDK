@@ -25,6 +25,7 @@ typedef struct {
     lv_obj_t *name;
     lv_obj_t *no;
     lv_obj_t *focus_mark;
+    lv_obj_t *selected_label;
     lv_obj_t *fav_btn;
     lv_obj_t *fav_icon;
     /* Two appearances, one geometry. Only the nearby working set is pinned. */
@@ -37,8 +38,8 @@ typedef struct {
     bool render_initialized;
     bool render_focused;
     bool using_cache;
-    /* Whole-card snapshots cannot faithfully reproduce a transformed external
-     * flag image, so those cards always stay on the live render path. */
+    /* True only when a transformed flag is inside render_root (legacy
+     * fallback). Split faces keep the flag in the live input-layer tree. */
     bool has_scaled_flag;
     bool favorite_initialized;
     bool favorite_value;
@@ -85,6 +86,8 @@ typedef struct {
     lv_obj_t *grid_layer;
     lv_obj_t *list;
     lv_obj_t *track;
+    lv_obj_t *arrow_prev;
+    lv_obj_t *arrow_next;
     lv_obj_t *thumb;
     lv_obj_t *grid_scroll;
     lv_obj_t *empty_label;

@@ -27,14 +27,16 @@ static void curr_set_card_render_state(int i, int pos_x, int pos_y,
         .border = focused ? CURR_CARD_FOCUS_BORDER : CURR_CARD_NORMAL_BORDER,
         .border_width = 1,
     };
-    lv_card_surface_apply(card->render_root, &skin);
-    lv_card_surface_focus_mark_apply(card->focus_mark, focused);
-    lv_obj_set_style_text_color(card->name,
-        lv_color_hex(focused ? 0x16181B : 0x7E7E7E), 0);
-    lv_obj_set_style_text_color(card->no,
-        lv_color_hex(focused ? 0x16181B : CURR_TEXT_UNSEL), 0);
-    if (focused) page07_curr_view_set_image_selected_style(card->img);
-    else page07_curr_view_set_image_unselected_style(card->img);
+    if (!card->render_initialized) {
+        lv_card_surface_apply(card->render_root, &skin);
+        lv_obj_set_style_text_color(card->name, lv_color_hex(0x283740), 0);
+        lv_obj_set_style_text_color(card->no, lv_color_hex(0x7E91A1), 0);
+        page07_curr_view_set_image_selected_style(card->img);
+    } else {
+        /* Focus changes two colors, not geometry, typography or image state. */
+        lv_obj_set_style_bg_color(card->render_root, lv_color_hex(skin.background), 0);
+        lv_obj_set_style_border_color(card->render_root, lv_color_hex(skin.border), 0);
+    }
     card->render_initialized = true;
     card->render_focused = focused;
 }
@@ -47,7 +49,7 @@ static bool curr_card_snapshot_key(int i, bool focused, char key[48])
                                  curr_code)) return false;
     /* The code, displayed sequence and renderer revision define identity.
      * Old enlarged SELECTED/NORMAL surfaces cannot match this generation. */
-    snprintf(key, 48, "CURR_CAROUSEL_V4_%s_%02d_%c", curr_code,
+    snprintf(key, 48, "CURR_CAROUSEL_V6_%s_%02d_%c", curr_code,
              g_page07_curr.cards[i].abs_idx + 1, focused ? 'F' : 'N');
     return true;
 }
@@ -140,10 +142,8 @@ void page07_curr_card_render_apply(int i, int pos_x, int pos_y)
 {
     page07_curr_card_t *card = &g_page07_curr.cards[i];
     lv_dma_snapshot_t *snapshot = card->surface_cache[card->focused ? 1 : 0];
-    /* The card snapshots are still useful to callers with purely static
-     * content. Currency cards contain a width-scaled external PNG, however;
-     * switching them from the live tree to a captured bitmap after scrolling
-     * ends re-samples that flag and creates the visible scale pulse. */
+    /* Only the static face is captured. The live flag/selection/favorite
+     * children of card stay visible regardless of cache hit or fallback. */
     if (!card->has_scaled_flag && snapshot != NULL && card->composite != NULL) {
         const lv_img_dsc_t *image = lv_dma_snapshot_image(snapshot);
         lv_obj_add_flag(card->render_root, LV_OBJ_FLAG_HIDDEN);

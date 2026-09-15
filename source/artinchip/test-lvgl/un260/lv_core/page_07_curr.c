@@ -24,6 +24,7 @@
 #include "lv_port_indev.h"
 #include "un260/lv_system/app_clock.h"
 #include "aic_ui/perf_stats.h"
+#include "un260/lv_core/page_07_curr/page_07_curr_star.h"
 
 static lv_obj_t* curr_page = NULL;
 static currency_state_snapshot_t g_curr_page_snapshot;
@@ -37,7 +38,7 @@ static void curr_focus_confirmed_selection_on_entry(void);
 ui_element_t page_07_curr_obj[] = {
     // 背景图
     {
-        .obj_name = "backgrounds/user.png",
+        .obj_name = "page_07_bg.png",
         .obj_type = LV_OBJ_TYPE_IMAGE,
         .obj_item = { .x = 0, .y = 0, .w = 1280, .h = 400 },
         .obj_style = { .opacity = 255 },
@@ -102,6 +103,16 @@ static void curr_style_back_button(void);
 
 static void curr_update_track_by_scroll(void)
 {
+    int nearest = (int)ui_scroll_physics_nearest(&g_page07_curr.carousel.motion);
+    if (g_page07_curr.objects.arrow_prev != NULL &&
+        lv_obj_get_style_opa(g_page07_curr.objects.arrow_prev, 0) != (nearest <= 0 ? 153 : LV_OPA_COVER))
+        lv_obj_set_style_opa(g_page07_curr.objects.arrow_prev,
+                            nearest <= 0 ? 153 : LV_OPA_COVER, 0);
+    if (g_page07_curr.objects.arrow_next != NULL &&
+        lv_obj_get_style_opa(g_page07_curr.objects.arrow_next, 0) !=
+            (nearest >= g_page07_curr.model.visible_count - 1 ? 153 : LV_OPA_COVER))
+        lv_obj_set_style_opa(g_page07_curr.objects.arrow_next,
+                            nearest >= g_page07_curr.model.visible_count - 1 ? 153 : LV_OPA_COVER, 0);
     if (g_page07_curr.objects.thumb == NULL || g_page07_curr.model.visible_count <= 0) return;
 
     int thumb_w = CURR_TRACK_W / g_page07_curr.model.visible_count;
@@ -152,7 +163,7 @@ static void curr_set_left_info_by_abs(int abs_idx)
         lv_label_set_text(g_page07_curr.objects.left_code_decor,
                           currency_state_display_code(curr_code));
     }
-    lv_label_set_text_fmt(g_page07_curr.objects.left_no, "NO.%02d", abs_idx + 1);
+    lv_label_set_text_fmt(g_page07_curr.objects.left_no, "NO. %02d", abs_idx + 1);
 }
 
 static void curr_style_view_button(void)
@@ -178,7 +189,7 @@ static void curr_style_fav_button(void)
 
     if (g_page07_curr.objects.btn_favorite == NULL || g_page07_curr.objects.btn_favorite_label == NULL) return;
 
-    bg = g_page07_curr.model.favorite_only ? lv_color_hex(0xE9DEBD) : lv_color_hex(0x8F8F8F);
+    bg = g_page07_curr.model.favorite_only ? lv_color_hex(0xBFDFFF) : lv_color_hex(0xE9EDF0);
     lv_obj_set_style_radius(g_page07_curr.objects.btn_favorite, 10, 0);
     lv_obj_set_style_bg_opa(g_page07_curr.objects.btn_favorite, LV_OPA_COVER, 0);
     lv_damped_button_set_palette(g_page07_curr.objects.btn_favorite, bg,
@@ -187,7 +198,7 @@ static void curr_style_fav_button(void)
     lv_obj_set_style_shadow_width(g_page07_curr.objects.btn_favorite, 0, 0);
     lv_obj_set_style_shadow_opa(g_page07_curr.objects.btn_favorite, LV_OPA_0, 0);
     lv_obj_set_style_text_color(g_page07_curr.objects.btn_favorite_label,
-                                g_page07_curr.model.favorite_only ? lv_color_hex(0x8A6A11) : lv_color_hex(0x5F5F5F), 0);
+                                g_page07_curr.model.favorite_only ? lv_color_hex(0x377DAE) : lv_color_hex(0x5F5F5F), 0);
     lv_label_set_text(g_page07_curr.objects.btn_favorite_label, "FAV");
     lv_obj_center(g_page07_curr.objects.btn_favorite_label);
 }
@@ -199,7 +210,7 @@ static void curr_style_back_button(void)
     lv_obj_set_style_radius(g_page07_curr.objects.btn_back, 10, 0);
     lv_obj_set_style_bg_opa(g_page07_curr.objects.btn_back, LV_OPA_COVER, 0);
     lv_damped_button_set_palette(g_page07_curr.objects.btn_back,
-                                 lv_color_hex(0xD9D9D9), lv_color_hex(0xBFC3C8));
+                                 lv_color_hex(0xE9EDF0), lv_color_hex(0xBFC3C8));
     lv_obj_set_style_border_width(g_page07_curr.objects.btn_back, 0, 0);
     lv_obj_set_style_shadow_width(g_page07_curr.objects.btn_back, 0, 0);
     lv_obj_set_style_shadow_opa(g_page07_curr.objects.btn_back, LV_OPA_0, 0);
@@ -290,10 +301,9 @@ static void curr_update_card_fav_content(int i)
     if (card->favorite_initialized && card->favorite_value == fav) return;
 
     lv_obj_set_style_bg_color(card->fav_btn,
-        fav ? lv_color_hex(0xBFDFFF) : lv_color_hex(0xE5E5E6), 0);
-    lv_obj_set_style_bg_opa(card->fav_btn, LV_OPA_COVER, 0);
-    lv_img_set_src(card->fav_icon, fav ? "L:/usr/local/share/lvgl_data/fav.png" :
-                                       "L:/usr/local/share/lvgl_data/unfav.png");
+        lv_color_hex(0xBFDFFF), 0);
+    lv_obj_set_style_bg_opa(card->fav_btn, LV_OPA_TRANSP, 0);
+    lv_img_set_src(card->fav_icon, fav ? (const void *)"L:/usr/local/share/lvgl_data/fav.png" : (const void *)&curr_star_outline);
     card->favorite_initialized = true;
     card->favorite_value = fav;
 }
@@ -302,6 +312,11 @@ static void curr_update_card_fav_ui(int i)
 {
     bool sel = (i == (int)ui_scroll_physics_nearest(&g_page07_curr.carousel.motion));
     page07_curr_card_t *card = &g_page07_curr.cards[i];
+    if (card->selected_label != NULL) {
+        if (card->abs_idx == g_page07_curr.model.selected_abs_idx)
+            lv_obj_clear_flag(card->selected_label, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(card->selected_label, LV_OBJ_FLAG_HIDDEN);
+    }
     if (card->fav_btn == NULL || card->fav_icon == NULL) return;
 
     if (!sel || g_page07_curr.model.view_mode != PAGE07_CURR_VIEW_CARD ||
@@ -326,7 +341,7 @@ static void curr_update_grid_fav_ui(int i)
     }
 
     lv_obj_set_style_bg_opa(g_page07_curr.grid_items[i].fav_btn, LV_OPA_TRANSP, 0);
-    lv_img_set_src(g_page07_curr.grid_items[i].fav_icon, fav ? "L:/usr/local/share/lvgl_data/fav.png" : "L:/usr/local/share/lvgl_data/unfav.png");
+    lv_img_set_src(g_page07_curr.grid_items[i].fav_icon, fav ? (const void *)"L:/usr/local/share/lvgl_data/fav.png" : (const void *)&curr_star_outline);
 }
 
 static void curr_fav_press_feedback_cb(lv_event_t* e)
@@ -489,6 +504,17 @@ static void curr_grid_item_click_cb(lv_event_t* e)
     curr_select_and_exit_abs(abs_idx);
 }
 
+/* Arrow navigation uses the same spring owner as swiping; it never selects
+ * or sends a currency command. Ignore taps while a drag contact is active. */
+static void curr_step_click_cb(lv_event_t *e)
+{
+    if (g_page07_curr.carousel.active || g_page07_curr.model.visible_count <= 1) return;
+    int next = (int)ui_scroll_physics_nearest(&g_page07_curr.carousel.motion)
+             + (int)(intptr_t)lv_event_get_user_data(e);
+    if (next < 0 || next >= g_page07_curr.model.visible_count) return;
+    page07_curr_carousel_snap(&g_page07_curr.carousel, (unsigned)next, true);
+}
+
 static void curr_build_card_layer(void)
 {
     g_page07_curr.objects.card_layer = lv_obj_create(g_page07_curr.objects.right_area);
@@ -502,6 +528,21 @@ static void curr_build_card_layer(void)
     lv_obj_set_style_bg_opa(g_page07_curr.objects.card_layer, LV_OPA_TRANSP, 0);
     lv_obj_clear_flag(g_page07_curr.objects.card_layer, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(g_page07_curr.objects.card_layer, LV_SCROLLBAR_MODE_OFF);
+    /* Page-owned labels: rebuilt with the catalog/filter, never in motion. */
+    lv_obj_t *heading = lv_label_create(g_page07_curr.objects.card_layer);
+    lv_label_set_text(heading, g_page07_curr.model.favorite_only ?
+                      "Favorite currencies" : "All currencies");
+    lv_obj_set_pos(heading, 24, 25);
+    lv_obj_set_style_text_font(heading, &lv_font_instrument_sans_medium_14, 0);
+    lv_obj_set_style_text_color(heading, lv_color_hex(0x60798D), 0);
+    lv_obj_t *available = lv_label_create(g_page07_curr.objects.card_layer);
+    /* currency_state owns AUT/MUL insertion; do not add them twice. */
+    lv_label_set_text_fmt(available, "%u AVAILABLE", (unsigned)currency_state_count());
+    lv_obj_set_size(available, 180, LV_SIZE_CONTENT);
+    lv_obj_set_pos(available, CURR_VIEW_W - 204, 25);
+    lv_obj_set_style_text_align(available, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_style_text_font(available, &lv_font_instrument_sans_medium_14, 0);
+    lv_obj_set_style_text_color(available, lv_color_hex(0x7E91A1), 0);
     page07_curr_carousel_init(&g_page07_curr.carousel,
         g_page07_curr.objects.card_layer,
         (unsigned)g_page07_curr.model.visible_count, CURR_CARD_STRIDE,
@@ -540,31 +581,28 @@ static void curr_build_card_layer(void)
         lv_obj_set_scrollbar_mode(g_page07_curr.cards[i].render_root,
                                   LV_SCROLLBAR_MODE_OFF);
 
-        g_page07_curr.cards[i].img =
-            lv_img_create(g_page07_curr.cards[i].render_root);
-        lv_img_set_src(g_page07_curr.cards[i].img, get_currency_img(curr_code));
-        page07_curr_view_set_img_target_width(g_page07_curr.cards[i].img, curr_code, CURR_FLAG_TARGET_W);
-        g_page07_curr.cards[i].has_scaled_flag = true;
-        lv_obj_set_pos(g_page07_curr.cards[i].img, -35, CURR_FLAG_Y_IN_CARD);
-
         g_page07_curr.cards[i].name =
             lv_label_create(g_page07_curr.cards[i].render_root);
         lv_label_set_text(g_page07_curr.cards[i].name,
                           currency_state_display_code(curr_code));
-        lv_obj_set_pos(g_page07_curr.cards[i].name, 21, 174);
-        lv_obj_set_style_text_font(g_page07_curr.cards[i].name, &lv_font_instrument_sans_medium_30, 0);
+        lv_obj_set_pos(g_page07_curr.cards[i].name, 22, 158);
+        lv_obj_set_style_text_font(g_page07_curr.cards[i].name, &lv_font_instrument_sans_semibold_32, 0);
 
         g_page07_curr.cards[i].no =
             lv_label_create(g_page07_curr.cards[i].render_root);
-        lv_label_set_text_fmt(g_page07_curr.cards[i].no, "NO.%02d", abs_idx + 1);
-        lv_obj_set_pos(g_page07_curr.cards[i].no, 21, 224);
-        lv_obj_set_style_text_font(g_page07_curr.cards[i].no, &lv_font_instrument_sans_medium_14, 0);
+        lv_label_set_text_fmt(g_page07_curr.cards[i].no, "NO. %02d", abs_idx + 1);
+        lv_obj_set_pos(g_page07_curr.cards[i].no, 22, 230);
+        lv_obj_set_style_text_font(g_page07_curr.cards[i].no, &lv_font_instrument_sans_medium_12, 0);
 
-        /* One non-interactive decoration, baked into both static faces.
-         * Its visibility follows visual focus, not controller selection. */
+        /* Static footer divider stays inside the original card footprint. */
         g_page07_curr.cards[i].focus_mark =
             lv_obj_create(g_page07_curr.cards[i].render_root);
         lv_obj_remove_style_all(g_page07_curr.cards[i].focus_mark);
+        lv_obj_set_pos(g_page07_curr.cards[i].focus_mark, 22, 214);
+        lv_obj_set_size(g_page07_curr.cards[i].focus_mark, 156, 1);
+        lv_obj_set_style_bg_color(g_page07_curr.cards[i].focus_mark, lv_color_hex(0xEEF1F6), 0);
+        lv_obj_set_style_bg_opa(g_page07_curr.cards[i].focus_mark, LV_OPA_COVER, 0);
+        lv_obj_clear_flag(g_page07_curr.cards[i].focus_mark, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
 
         /* Missing composites are captured by the active-page idle prewarmer,
          * never in a motion callback or while this retained page is hidden. */
@@ -594,6 +632,38 @@ static void curr_build_card_layer(void)
         lv_obj_add_event_cb(g_page07_curr.cards[i].card, curr_card_click_cb,
                             LV_EVENT_CLICKED, (void*)(intptr_t)i);
 
+        /* Keep the transformed flag outside the static face capture.
+         * Both layers share identical geometry; cached/live faces cannot
+         * re-sample or change the flag's source, zoom or position. */
+        g_page07_curr.cards[i].img =
+            lv_img_create(PAGE07_CURR_SPLIT_FACE_CACHE ? g_page07_curr.cards[i].card :
+                          g_page07_curr.cards[i].render_root);
+        lv_img_set_src(g_page07_curr.cards[i].img, get_currency_img(curr_code));
+        page07_curr_view_set_img_target_width(g_page07_curr.cards[i].img, curr_code, CURR_FLAG_TARGET_W);
+        g_page07_curr.cards[i].has_scaled_flag = !PAGE07_CURR_SPLIT_FACE_CACHE;
+        lv_obj_set_pos(g_page07_curr.cards[i].img, -27, 34);
+
+        lv_obj_clear_flag(g_page07_curr.cards[i].img, LV_OBJ_FLAG_CLICKABLE);
+
+        lv_obj_t *selected = lv_obj_create(g_page07_curr.cards[i].card);
+        lv_obj_remove_style_all(selected);
+        lv_obj_set_pos(selected, 94, 230);
+        lv_obj_set_size(selected, 84, 20);
+        lv_obj_clear_flag(selected, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+        static const lv_point_t selected_tick[] = {{1,8},{4,11},{10,4}};
+        lv_obj_t *tick = lv_line_create(selected);
+        lv_line_set_points(tick, selected_tick, 3);
+        lv_obj_set_style_line_color(tick, lv_color_hex(0x377DAE), 0);
+        lv_obj_set_style_line_width(tick, 1, 0);
+        lv_obj_set_style_line_rounded(tick, true, 0);
+        lv_obj_t *selected_text = lv_label_create(selected);
+        lv_label_set_text(selected_text, "Selected");
+        lv_obj_set_pos(selected_text, 17, 0);
+        lv_obj_set_style_text_font(selected_text, &lv_font_instrument_sans_medium_12, 0);
+        lv_obj_set_style_text_color(selected_text, lv_color_hex(0x377DAE), 0);
+        g_page07_curr.cards[i].selected_label = selected;
+        lv_obj_add_flag(selected, LV_OBJ_FLAG_HIDDEN);
+
         g_page07_curr.cards[i].fav_btn =
             lv_obj_create(g_page07_curr.cards[i].card);
         lv_obj_set_size(g_page07_curr.cards[i].fav_btn, CURR_FAV_BTN_IN_CARD_W, CURR_FAV_BTN_IN_CARD_H);
@@ -615,6 +685,36 @@ static void curr_build_card_layer(void)
         lv_obj_center(g_page07_curr.cards[i].fav_icon);
 
         page07_curr_card_render_apply(i, x, CURR_CARD_LOCAL_Y);
+    }
+
+    lv_obj_t *hint = lv_label_create(g_page07_curr.objects.card_layer);
+    lv_label_set_text(hint, "Select a currency to continue");
+    lv_obj_set_pos(hint, 24, 358);
+    lv_obj_set_style_text_font(hint, &lv_font_instrument_sans_medium_12, 0);
+    lv_obj_set_style_text_color(hint, lv_color_hex(0x7E91A1), 0);
+    /* Transparent arrow buttons retain a 36px touch target. */
+    static const lv_point_t chevron_left[] = {{18,12},{12,18},{18,24}};
+    static const lv_point_t chevron_right[] = {{12,12},{18,18},{12,24}};
+    for (int direction = -1; direction <= 1; direction += 2) {
+        lv_obj_t *button = lv_btn_create(g_page07_curr.objects.card_layer);
+        lv_obj_remove_style_all(button);
+        lv_obj_set_size(button, 36, 36);
+        lv_obj_set_pos(button, direction < 0 ? CURR_TRACK_X - 52 : CURR_TRACK_X + CURR_TRACK_W + 16, 348);
+        lv_obj_set_style_radius(button, 10, 0);
+        if (direction < 0) g_page07_curr.objects.arrow_prev = button;
+        else g_page07_curr.objects.arrow_next = button;
+        lv_obj_set_style_bg_opa(button, LV_OPA_50, 0);
+        lv_obj_set_style_border_width(button, 1, 0);
+        lv_obj_set_style_border_color(button, lv_color_hex(0xE1E7EC), 0);
+        lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_obj_add_event_cb(button, curr_step_click_cb, LV_EVENT_CLICKED, (void *)(intptr_t)direction);
+        lv_damped_button_register(button, lv_color_hex(0xF7F8FA), lv_color_hex(0xE9EDF0));
+        lv_obj_t *line = lv_line_create(button);
+        lv_line_set_points(line, direction < 0 ? chevron_left : chevron_right, 3);
+        lv_obj_set_style_line_color(line, lv_color_hex(0x7E91A1), 0);
+        lv_obj_set_style_line_width(line, 1, 0);
+        lv_obj_set_style_line_rounded(line, true, 0);
+        lv_obj_clear_flag(line, LV_OBJ_FLAG_CLICKABLE);
     }
 
     g_page07_curr.objects.track = lv_obj_create(g_page07_curr.objects.card_layer);
@@ -733,7 +833,7 @@ static void curr_build_grid_layer(void)
         lv_obj_add_event_cb(g_page07_curr.grid_items[i].fav_btn, curr_fav_press_feedback_cb, LV_EVENT_PRESS_LOST, NULL);
 
         g_page07_curr.grid_items[i].fav_icon = lv_img_create(g_page07_curr.grid_items[i].fav_btn);
-        lv_img_set_src(g_page07_curr.grid_items[i].fav_icon, "L:/usr/local/share/lvgl_data/unfav.png");
+        lv_img_set_src(g_page07_curr.grid_items[i].fav_icon, &curr_star_outline);
         lv_obj_center(g_page07_curr.grid_items[i].fav_icon);
 
         g_page07_curr.grid_items[i].name = lv_label_create(g_page07_curr.grid_items[i].item);
@@ -871,6 +971,8 @@ static void curr_refresh_right_views(void)
         g_page07_curr.objects.card_layer = NULL;
         g_page07_curr.objects.list = NULL;
         g_page07_curr.objects.track = NULL;
+    g_page07_curr.objects.arrow_prev = NULL;
+    g_page07_curr.objects.arrow_next = NULL;
         g_page07_curr.objects.thumb = NULL;
     }
 
@@ -1012,20 +1114,36 @@ void page_07_curr_img_refre(void)
     lv_img_set_zoom(g_page07_curr.objects.left_img, 170);
     lv_obj_align(g_page07_curr.objects.left_img, LV_ALIGN_TOP_MID, CURR_LEFT_IMG_ALIGN_X, CURR_LEFT_IMG_ALIGN_Y);
 
-    g_page07_curr.objects.left_code_decor = lv_label_create(g_page07_curr.objects.left_panel);
-    lv_obj_set_pos(g_page07_curr.objects.left_code_decor, CURR_LEFT_CODE_DECOR_X, CURR_LEFT_CODE_DECOR_Y);
-    lv_obj_set_style_text_font(g_page07_curr.objects.left_code_decor, &lv_font_instrument_sans_medium_48, 0);
-    lv_obj_set_style_text_color(g_page07_curr.objects.left_code_decor, lv_color_hex(0xEBEBEB), 0);
+    lv_obj_t *current_caption = lv_label_create(g_page07_curr.objects.left_panel);
+    lv_label_set_text(current_caption, "CURRENT CURRENCY");
+    lv_obj_set_pos(current_caption, 51, 82);
+    lv_obj_set_style_text_font(current_caption, &lv_font_instrument_sans_medium_12, 0);
+    lv_obj_set_style_text_color(current_caption, lv_color_hex(0x7E91A1), 0);
+    lv_obj_t *current_dot = lv_obj_create(g_page07_curr.objects.left_panel);
+    lv_obj_remove_style_all(current_dot);
+    lv_obj_set_pos(current_dot, 39, 87);
+    lv_obj_set_size(current_dot, 5, 5);
+    lv_obj_set_style_radius(current_dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(current_dot, lv_color_hex(0x2C9C7C), 0);
+    lv_obj_set_style_bg_opa(current_dot, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(current_dot, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *current_rule = lv_obj_create(g_page07_curr.objects.left_panel);
+    lv_obj_remove_style_all(current_rule);
+    lv_obj_set_pos(current_rule, 39, 288);
+    lv_obj_set_size(current_rule, 193, 2);
+    lv_obj_set_style_bg_color(current_rule, lv_color_hex(0xEEF1F6), 0);
+    lv_obj_set_style_bg_opa(current_rule, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(current_rule, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
 
     g_page07_curr.objects.left_code = lv_label_create(g_page07_curr.objects.left_panel);
     lv_obj_set_pos(g_page07_curr.objects.left_code, CURR_LEFT_CODE_X, CURR_LEFT_CODE_Y);
-    lv_obj_set_style_text_font(g_page07_curr.objects.left_code, &lv_font_instrument_sans_medium_30, 0);
+    lv_obj_set_style_text_font(g_page07_curr.objects.left_code, &lv_font_instrument_sans_semibold_40, 0);
     lv_obj_set_style_text_color(g_page07_curr.objects.left_code, lv_color_hex(0x202020), 0);
 
     g_page07_curr.objects.left_no = lv_label_create(g_page07_curr.objects.left_panel);
     lv_obj_set_pos(g_page07_curr.objects.left_no, CURR_LEFT_NO_X, CURR_LEFT_NO_Y);
     lv_obj_set_style_text_font(g_page07_curr.objects.left_no, &lv_font_instrument_sans_medium_14, 0);
-    lv_obj_set_style_text_color(g_page07_curr.objects.left_no, lv_color_hex(0x202020), 0);
+    lv_obj_set_style_text_color(g_page07_curr.objects.left_no, lv_color_hex(0x7E91A1), 0);
 
     g_page07_curr.objects.btn_view = lv_btn_create(g_page07_curr.objects.left_panel);
     lv_obj_set_size(g_page07_curr.objects.btn_view, CURR_BTN_W, CURR_BTN_H);
@@ -1045,7 +1163,7 @@ void page_07_curr_img_refre(void)
     lv_label_set_text(g_page07_curr.objects.btn_favorite_label, "FAV");
     lv_obj_center(g_page07_curr.objects.btn_favorite_label);
     lv_damped_button_register(g_page07_curr.objects.btn_favorite,
-                              lv_color_hex(0x8F8F8F), lv_color_hex(0x737373));
+                              lv_color_hex(0xE9EDF0), lv_color_hex(0x737373));
 
     g_page07_curr.objects.btn_back = lv_btn_create(g_page07_curr.objects.left_panel);
     lv_obj_set_size(g_page07_curr.objects.btn_back, CURR_BTN_W, CURR_BTN_H);
@@ -1055,7 +1173,7 @@ void page_07_curr_img_refre(void)
     lv_label_set_text(g_page07_curr.objects.btn_back_label, "BACK");
     lv_obj_center(g_page07_curr.objects.btn_back_label);
     lv_damped_button_register(g_page07_curr.objects.btn_back,
-                              lv_color_hex(0xD9D9D9), lv_color_hex(0xBFC3C8));
+                              lv_color_hex(0xE9EDF0), lv_color_hex(0xBFC3C8));
 
     g_page07_curr.objects.right_area = lv_obj_create(g_page07_curr.objects.root);
     lv_obj_remove_style_all(g_page07_curr.objects.right_area);

@@ -121,7 +121,7 @@ static const ui_page_static_image_t g_page_menu_static_images[] = {
 };
 
 static const ui_page_static_image_t g_page_currency_static_images[] = {
-    { UI_USER_BACKGROUND_SRC },
+    { LVGL_PATH(page_07_bg.png) },
 };
 
 static const ui_page_static_image_t g_page_pure_static_images[] = {

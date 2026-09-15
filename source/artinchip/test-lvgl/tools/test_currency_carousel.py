@@ -83,9 +83,15 @@ for forbidden in ("lv_img_set_src", "lv_img_set_zoom", "lv_dma_snapshot_cache",
                   "curr_set_left_info_by_abs", "model.selected_abs_idx =",
                   "model.selected_visible_idx =", "page07_curr_model_save"):
     assert forbidden not in projection, forbidden
-assert "CURR_CAROUSEL_V4_" in renderer
+assert "CURR_CAROUSEL_V6_" in renderer
 assert "CURR_CAROUSEL_V3_" not in page + renderer
-assert "lv_card_surface_focus_mark_apply(card->focus_mark, focused)" in function(renderer, "curr_set_card_render_state")
+assert "lv_card_surface_focus_mark_apply" not in renderer
+assert "currency_state_count()" in function(page, "curr_build_card_layer")
+assert "flag_well" not in page
+assert '"Selected"' in page
+assert "0xEEF1F6" in page
+assert "page07_curr_carousel_snap" in function(page, "curr_step_click_cb")
+assert "protocol_send" not in function(page, "curr_step_click_cb")
 cached_apply = function(renderer, "page07_curr_card_render_apply")
 assert "!card->has_scaled_flag" in cached_apply
 assert "card->using_cache = false" in cached_apply
@@ -101,7 +107,11 @@ assert "page07_curr_carousel_busy" in function(page, "curr_snapshot_prewarm_time
 assert "page07_curr_carousel_busy" in function(page, "ui_page_07_curr_prepare_static_step")
 assert "page07_curr_carousel_bind_child(g_page07_curr.cards[i].fav_btn)" in page
 assert "page07_curr_carousel_bind_child(g_page07_curr.objects.list)" in page
-assert "g_page07_curr.cards[i].has_scaled_flag = true" in page
+assert "g_page07_curr.cards[i].has_scaled_flag = !PAGE07_CURR_SPLIT_FACE_CACHE" in page
+builder = function(page, "curr_build_card_layer")
+assert "lv_img_create(PAGE07_CURR_SPLIT_FACE_CACHE ? g_page07_curr.cards[i].card :" in builder
+assert builder.index("g_page07_curr.cards[i].card = lv_obj_create") < builder.index("g_page07_curr.cards[i].img =")
+assert "#define PAGE07_CURR_SPLIT_FACE_CACHE 1" in layout
 
 stubs = r'''
 #include <assert.h>
@@ -112,6 +122,7 @@ stubs = r'''
 #include <stdarg.h>
 #include <string.h>
 #include <math.h>
+static const int curr_star_outline=2;
 typedef struct { int x,y; } lv_point_t;
 typedef struct lv_obj lv_obj_t;
 typedef struct lv_event lv_event_t;
@@ -196,6 +207,8 @@ static unsigned lv_color_hex(unsigned value) { return value; }
 static void lv_obj_set_style_bg_color(lv_obj_t *o,unsigned color,int selector) {
     (void)selector;marker_write(o);o->background=color;palette_sets++;if(o->favorite_ui)favorite_palette_sets++;
 }
+static unsigned lv_obj_get_style_opa(lv_obj_t *o,int selector) { (void)selector;return o->bg_opa; }
+static void lv_obj_set_style_opa(lv_obj_t *o,unsigned opa,int selector) { (void)selector;o->bg_opa=opa; }
 static void lv_obj_set_style_bg_opa(lv_obj_t *o,unsigned opa,int selector) {
     (void)selector;marker_write(o);o->bg_opa=opa;palette_sets++;if(o->favorite_ui)favorite_palette_sets++;
 }
@@ -249,7 +262,7 @@ typedef struct lv_dma_snapshot { lv_img_dsc_t image; char key[48]; unsigned refs
 static struct {
     page07_curr_carousel_t carousel;
     struct { int visible_count,visible_indices[34],selected_abs_idx,selected_visible_idx,view_mode; bool favorite_only; } model;
-    struct { lv_obj_t *list,*card_layer,*thumb; } objects;
+    struct { lv_obj_t *list,*card_layer,*thumb,*arrow_prev,*arrow_next; } objects;
     page07_curr_card_t cards[34];
 } g_page07_curr;
 static lv_obj_t *curr_page;
@@ -286,11 +299,12 @@ static lv_dma_snapshot_t *lv_dma_snapshot_cache_acquire(const char *key) {
 static lv_dma_snapshot_t *lv_dma_snapshot_cache_acquire_or_create(lv_obj_t *root,const char *key) {
     assert(root);cache_captures++;
     assert(!g_page07_curr.carousel.active && g_page07_curr.carousel.motion.phase==UI_SCROLL_IDLE);
-    bool focused=key[strlen(key)-1]=='F',found_root=false;
+    bool focused=true,found_root=false; /* Footer exists in both cached faces. */
     for(int i=0;i<g_page07_curr.model.visible_count;i++)if(g_page07_curr.cards[i].render_root==root) {
         lv_obj_t *mark=g_page07_curr.cards[i].focus_mark;
         assert(mark && mark->parent==root);
-        assert(lv_obj_has_flag(mark,LV_OBJ_FLAG_HIDDEN)!=focused);found_root=true;
+        assert(g_page07_curr.cards[i].img->parent != root); /* Never capture transformed flags. */
+        assert(!lv_obj_has_flag(mark,LV_OBJ_FLAG_HIDDEN));found_root=true;
     }
     assert(found_root); /* The captured face includes the real marker state. */
     for(unsigned i=0;i<cache_count;i++)if(!strcmp(cache[i].key,key)) {
@@ -314,7 +328,7 @@ view_stubs = view_stubs.replace("/* ACTUAL_CARD_LAYOUT */", card_layout)
 
 tests = r'''
 static lv_obj_t viewport,strip,card,favorite,thumb,renderers[34],images[34],hits[34],fav_buttons[34],fav_icons[34];
-static lv_obj_t flag_images[34],names[34],numbers[34];
+static lv_obj_t flag_images[34],names[34],numbers[34],selected_labels[34],prev_arrow,next_arrow;
 static lv_obj_t *focus_marks[34];
 static void project_counted(void) { project_count++;curr_project_carousel(); }
 static void fixture(unsigned count,unsigned index) {
@@ -339,18 +353,20 @@ static void fixture(unsigned count,unsigned index) {
         g_page07_curr.model.visible_indices[i]=(int)i+10;
         focus_marks[i]=lv_obj_create(&renderers[i]);focus_marks[i]->focus_marker=true;
         lv_obj_remove_style_all(focus_marks[i]);
+        focus_marks[i]->w=156;focus_marks[i]->h=1;focus_marks[i]->background=0xDFE6EC;focus_marks[i]->bg_opa=255;
         g_page07_curr.cards[i]=(page07_curr_card_t){
             .render_root=&renderers[i],.composite=&images[i],.card=&hits[i],
-            .img=&flag_images[i],.name=&names[i],.no=&numbers[i],.focus_mark=focus_marks[i],
+            .img=&flag_images[i],.name=&names[i],.no=&numbers[i],.focus_mark=focus_marks[i],.selected_label=&selected_labels[i],
             .base_x=244+(int)i*228,.base_y=CURR_CARD_LOCAL_Y,.drawn_y=CURR_CARD_LOCAL_Y,
             .abs_idx=(int)i+10,.fav_btn=&fav_buttons[i],.fav_icon=&fav_icons[i]};
+        flag_images[i].parent=&hits[i];
         fav_buttons[i].favorite_ui=fav_icons[i].favorite_ui=true;
         curr_update_card_fav_content((int)i); /* same eager binding as real builder */
         curr_set_card_render_state((int)i,244+(int)i*228,CURR_CARD_LOCAL_Y,false);
         if(seed_cache)for(unsigned state=0;state<2;state++) {
             lv_dma_snapshot_t *s=&cache[cache_count++];
             assert(curr_card_snapshot_key((int)i,state!=0,s->key));
-            s->available=true;s->focus_mark_visible=state!=0;
+            s->available=true;s->focus_mark_visible=true;
         }
     }
     page07_curr_carousel_init(&g_page07_curr.carousel,&viewport,count,228,index,project_counted);
@@ -383,16 +399,26 @@ static void drag(lv_obj_t *target) {
     emit(target,LV_EVENT_RELEASED,540,120,8);
 }
 static void assert_focus_mark(unsigned i,bool focused) {
+    (void)focused; /* The footer divider no longer represents scroll focus. */
     lv_obj_t *mark=focus_marks[i];
-    assert(mark && g_page07_curr.cards[i].focus_mark==mark && mark->parent==&renderers[i]);
-    assert(lv_obj_has_flag(mark,LV_OBJ_FLAG_HIDDEN)!=focused);
-    assert(mark->w==28 && mark->h==3 && mark->radius==LV_RADIUS_CIRCLE);
-    assert(mark->background==0x4D5965 && mark->bg_opa==LV_OPA_COVER);
-    assert(mark->border==0 && mark->pad==0 && mark->shadow==0 && mark->outline==0);
-    assert(mark->align==LV_ALIGN_BOTTOM_MID && mark->align_x==0 && mark->align_y==-11);
-    assert(!lv_obj_has_flag(mark,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE));
+    assert(mark && mark->parent==&renderers[i]);
+    assert(!lv_obj_has_flag(mark,LV_OBJ_FLAG_HIDDEN));
+    assert(mark->w==156 && mark->h==1 && mark->background==0xDFE6EC);
 }
+
 int main(void) {
+    fixture(10,2);
+    g_page07_curr.objects.arrow_prev=&prev_arrow;g_page07_curr.objects.arrow_next=&next_arrow;
+    g_page07_curr.carousel.motion.position=0;curr_update_track_by_scroll();
+    assert(prev_arrow.bg_opa==153 && next_arrow.bg_opa==255);
+    g_page07_curr.carousel.motion.position=9*228;curr_update_track_by_scroll();
+    assert(prev_arrow.bg_opa==255 && next_arrow.bg_opa==153);
+    g_page07_curr.carousel.motion.position=4*228;curr_update_track_by_scroll();
+    assert(prev_arrow.bg_opa==255 && next_arrow.bg_opa==255);
+    g_page07_curr.model.selected_abs_idx=12;
+    curr_update_card_fav_ui(2);curr_update_card_fav_ui(3);
+    assert(!lv_obj_has_flag(&selected_labels[2],LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_has_flag(&selected_labels[3],LV_OBJ_FLAG_HIDDEN));
     fixture(10,2);
     emit(&card,LV_EVENT_PRESSED,700,120,0);
     assert(g_page07_curr.carousel.active && !page07_curr_carousel_click_allowed(&g_page07_curr.carousel));
@@ -490,17 +516,15 @@ int main(void) {
     /* Execute the production render state and shared card surface, not a
      * pre-painted mock: normal and focus must share the same inside border. */
     fixture(10,2);
-    assert(CURR_CARD_NORMAL_BORDER==0xDEDFE1);
-    assert(CURR_CARD_FOCUS_BORDER==0xBFC7CF);
+    assert(CURR_CARD_NORMAL_BORDER==0xCBD5DE);
+    assert(CURR_CARD_FOCUS_BORDER==0x6499CA);
     assert_focus_mark(2,false);
-    focus_marks[2]->border=focus_marks[2]->pad=focus_marks[2]->shadow=focus_marks[2]->outline=9;
-    lv_obj_add_flag(focus_marks[2],LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
     curr_set_card_render_state(2,700,0,true);
-    assert(renderers[2].w==200 && renderers[2].h==265 && renderers[2].radius==14);
-    assert(renderers[2].border==1 && renderers[2].border_color==0xBFC7CF);
+    assert(renderers[2].w==200 && renderers[2].h==265 && renderers[2].radius==21);
+    assert(renderers[2].border==1 && renderers[2].border_color==0x6499CA);
     assert_focus_mark(2,true);
     assert(renderers[2].background==0xFFFFFF && renderers[2].bg_opa==LV_OPA_COVER);
-    assert(names[2].text_color==0x16181B && numbers[2].text_color==0x16181B);
+    assert(names[2].text_color==0x283740 && numbers[2].text_color==0x7E91A1);
     assert(flag_images[2].img_opa==LV_OPA_COVER && flag_images[2].recolor_opa==0);
     unsigned old_palette=palette_sets,old_sources=source_sets,old_borders=border_sets;
     unsigned old_marker_writes=marker_writes;old_objects=object_creates;
@@ -508,8 +532,8 @@ int main(void) {
     assert(palette_sets==old_palette && source_sets==old_sources && border_sets==old_borders);
     assert(marker_writes==old_marker_writes && object_creates==old_objects);
     curr_set_card_render_state(2,700,8,false);
-    assert(renderers[2].background==0xF7F8FA && renderers[2].border_color==0xDEDFE1);
-    assert(renderers[2].border==1 && renderers[2].radius==14 && flag_images[2].img_opa==LV_OPA_40);
+    assert(renderers[2].background==0xF7F8FA && renderers[2].border_color==0xCBD5DE);
+    assert(renderers[2].border==1 && renderers[2].radius==21 && flag_images[2].img_opa==LV_OPA_COVER);
     assert_focus_mark(2,false);
     assert(card.border==0); /* hit testing is not a second rectangle decoration */
 
@@ -526,11 +550,11 @@ int main(void) {
             assert((g_page07_curr.cards[i].surface_cache[state]!=NULL)==curr_card_cache_wanted(i,state!=0,focus));
         assert(images[focus].source==lv_dma_snapshot_image(g_page07_curr.cards[focus].surface_cache[1]));
         assert(g_page07_curr.cards[focus].surface_cache[1]->focus_mark_visible);
-        assert(!g_page07_curr.cards[focus+1].surface_cache[0]->focus_mark_visible);
+        assert(g_page07_curr.cards[focus+1].surface_cache[0]->focus_mark_visible);
     }
     char normal_key[48],focus_key[48];
     assert(curr_card_snapshot_key(20,false,normal_key) && curr_card_snapshot_key(20,true,focus_key));
-    assert(strcmp(normal_key,focus_key)!=0 && strstr(focus_key,"CURR_CAROUSEL_V4_")!=NULL);
+    assert(strcmp(normal_key,focus_key)!=0 && strstr(focus_key,"CURR_CAROUSEL_V6_")!=NULL);
     assert(!curr_card_snapshot_key(-1,false,normal_key) && !curr_card_snapshot_key(34,false,normal_key));
 
     /* Production currency cards carry a width-scaled external flag.  Even
@@ -563,6 +587,7 @@ int main(void) {
     page07_curr_card_render_apply(2,g_page07_curr.cards[2].base_x,0);
     assert(!g_page07_curr.cards[2].using_cache && !lv_obj_has_flag(&renderers[2],LV_OBJ_FLAG_HIDDEN));
     assert(renderers[2].background==0xFFFFFF && lv_obj_has_flag(&images[2],LV_OBJ_FLAG_HIDDEN));
+    assert(flag_images[2].parent==&hits[2] && !lv_obj_has_flag(&flag_images[2],LV_OBJ_FLAG_HIDDEN));
     assert_focus_mark(2,true);
 
     /* A FOCUS-only hit cannot substitute for missing NORMAL pixels. A live
@@ -587,11 +612,11 @@ int main(void) {
     seed_cache=false;fixture(10,2);
     assert(curr_acquire_card_snapshot(2,false,true));
     assert(g_page07_curr.cards[2].surface_cache[0] && !g_page07_curr.cards[2].surface_cache[1]);
-    assert(!g_page07_curr.cards[2].surface_cache[0]->focus_mark_visible);
+    assert(g_page07_curr.cards[2].surface_cache[0]->focus_mark_visible);
     assert_focus_mark(2,false);
     page07_curr_card_render_apply(2,g_page07_curr.cards[2].base_x,0);
     assert(!g_page07_curr.cards[2].using_cache && renderers[2].background==0xFFFFFF);
-    assert(flag_images[2].img_opa==255 && names[2].text_color==0x16181B);
+    assert(flag_images[2].img_opa==255 && names[2].text_color==0x283740);
     assert(!lv_obj_has_flag(&renderers[2],LV_OBJ_FLAG_HIDDEN) && lv_obj_has_flag(&images[2],LV_OBJ_FLAG_HIDDEN));
     assert_focus_mark(2,true);
     old_marker_writes=marker_writes;old_objects=object_creates;

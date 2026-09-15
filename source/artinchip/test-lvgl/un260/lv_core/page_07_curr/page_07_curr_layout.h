@@ -1,6 +1,11 @@
 #ifndef PAGE_07_CURR_LAYOUT_H
 #define PAGE_07_CURR_LAYOUT_H
 
+/* Build-time rollback to the original all-live card tree. */
+#ifndef PAGE07_CURR_SPLIT_FACE_CACHE
+#define PAGE07_CURR_SPLIT_FACE_CACHE 1
+#endif
+
 /* Currency-private geometry and palette. Shared only by this page's view
  * builders and card renderer, not application-wide theme state. */
 #define CURR_SEL_W               288
@@ -18,10 +23,10 @@
 #define CURR_CARD_FIRST_X        (CURR_CARD_FOCUS_X - CURR_CARD_W / 2)
 #define CURR_CARD_Y              68
 #define CURR_CARD_FOCUS_LIFT     8
-#define CURR_CARD_RADIUS         14
+#define CURR_CARD_RADIUS         21
 #define CURR_CARD_NORMAL_BG      0xF7F8FA
-#define CURR_CARD_NORMAL_BORDER  0xDEDFE1 /* RGB(normal) * 0.9, rounded */
-#define CURR_CARD_FOCUS_BORDER   0xBFC7CF /* Quiet silver edge; focus uses an inset cue. */
+#define CURR_CARD_NORMAL_BORDER  0xCBD5DE
+#define CURR_CARD_FOCUS_BORDER   0x6499CA
 /* Move only the actual card footprint, not the blank space above it. */
 #define CURR_CARD_STRIP_Y        (CURR_CARD_Y - CURR_CARD_FOCUS_LIFT)
 #define CURR_CARD_LOCAL_Y        CURR_CARD_FOCUS_LIFT
@@ -30,7 +35,7 @@
 #define CURR_TRACK_Y             365
 #define CURR_TRACK_H             4
 #define CURR_TRACK_W             176
-#define CURR_TRACK_X             ((CURR_VIEW_W - CURR_TRACK_W) / 2)
+#define CURR_TRACK_X             (CURR_VIEW_W - CURR_TRACK_W - 76)
 #define CURR_TRACK_MIN_THUMB     28
 
 #define CURR_LEFT_BG_COLOR       0xEDF0F4
@@ -51,13 +56,13 @@
 #define CURR_BACK_BTN_X          207
 
 
-#define CURR_LEFT_IMG_ALIGN_Y    72
-#define CURR_LEFT_IMG_ALIGN_X    2
-#define CURR_LEFT_CODE_X         54
+#define CURR_LEFT_IMG_ALIGN_Y    100
+#define CURR_LEFT_IMG_ALIGN_X    -46
+#define CURR_LEFT_CODE_X         39
 #define CURR_LEFT_CODE_Y         214
 #define CURR_LEFT_CODE_DECOR_X   128
 #define CURR_LEFT_CODE_DECOR_Y   228
-#define CURR_LEFT_NO_X           184
+#define CURR_LEFT_NO_X           39
 #define CURR_LEFT_NO_Y           300
 
 #define CURR_GRID_COLS           6
@@ -79,7 +84,7 @@
 #define CURR_FAV_BTN_IN_CARD_H   49
 
 #define CURR_FLAG_TARGET_W       82
-#define CURR_LEFT_FLAG_TARGET_W  121
+#define CURR_LEFT_FLAG_TARGET_W  100
 #define CURR_FLAG_Y_IN_CARD      19
 
 #endif
