@@ -2,7 +2,7 @@
 """Test production currency state, requests, ACK projection and selector order.
 
 Only the LVGL, persistence and UART edges are simulated. Actual page transition
-functions and the 0x04 reply branch are compiled unchanged with the real model
+functions and the ordinary 0x04 mode reply branch are compiled unchanged with the real model
 and request services. No device, existing config or history files are touched.
 """
 from pathlib import Path
@@ -47,8 +47,6 @@ def main():
     reply = (ROOT / "un260/app_service/app_setting_reply_basic.c").read_text(encoding="utf-8")
     enum = re.search(r"typedef enum \{[^{}]*\} page07_curr_view_mode_t;", internal).group()
     state = re.search(r"typedef struct \{[^{}]*\} page07_curr_model_state_t;", internal).group()
-    transition = re.search(r"typedef enum \{[^{}]*\} curr_mode_transition_t;", page).group()
-    pending = re.search(r"static struct \{[^{}]*\} g_curr_mode_transition;", page).group()
     mode_case = reply.index("case 0x04:")
     mode_block = block(reply, reply.index("{", mode_case))
     mode_reply = """app_setting_reply_action_t app_setting_reply_handle_basic(
@@ -58,16 +56,14 @@ def main():
         break; default: break; } return actions;
     }"""
     parts = [without_includes(model)]
-    for name in ("curr_select_and_exit_abs", "page_07_curr_apply_mode_result",
-                 "page_07_curr_poll_selection", "page_07_curr_cancel_pending_selection",
-                 "page_07_curr_reset_pending_selection", "page_07_curr_apply_switch_result",
+    for name in ("curr_select_and_exit_abs", "page_07_curr_apply_switch_result",
                  "curr_grid_item_click_cb"):
         parts.append(function(page, name))
     parts.append(mode_reply)
     with tempfile.TemporaryDirectory(prefix="un260-currency-modes-") as temp:
         work = Path(temp)
         (work / "currency_mode_types.inc").write_text(
-            "\n".join([enum, state, transition, pending]), encoding="utf-8")
+            "\n".join([enum, state]), encoding="utf-8")
         (work / "currency_mode_under_test.inc").write_text("\n".join(parts), encoding="utf-8")
         stub = work / "un260/lv_drivers/lv_drivers.h"
         stub.parent.mkdir(parents=True)

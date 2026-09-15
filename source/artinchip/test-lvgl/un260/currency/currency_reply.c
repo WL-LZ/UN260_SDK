@@ -44,7 +44,7 @@ currency_reply_result_t currency_reply_handle(const uint8_t *buf, uint8_t len)
         } else {
             reply.kind = CURRENCY_REPLY_SWITCH_FAILURE;
         }
-        currency_state_get_active_code(reply.active_code);
+        currency_state_get_selected_code(reply.active_code);
         return reply;
     }
 
@@ -53,9 +53,15 @@ currency_reply_result_t currency_reply_handle(const uint8_t *buf, uint8_t len)
             return reply;
         }
         currency_reply_copy_code(reply.active_code, &buf[5]);
-        if (!currency_state_confirm_active_code(reply.active_code)) {
-            return reply;
+        if (currency_state_is_auto_code(reply.active_code)) {
+            if (!currency_state_confirm_auto_selection()) return reply;
+        } else if (currency_state_is_multi_code(reply.active_code)) {
+            if (!currency_state_confirm_multi_selection()) return reply;
+        } else {
+            if (!currency_state_confirm_active_code(reply.active_code)) return reply;
+            currency_state_leave_special_selection();
         }
+        currency_service_cancel_switch();
         reply.kind = CURRENCY_REPLY_BOOT_ACTIVE;
         return reply;
     }

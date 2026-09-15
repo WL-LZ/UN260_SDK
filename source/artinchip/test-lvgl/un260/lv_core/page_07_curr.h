@@ -17,11 +17,6 @@ bool ui_page_07_curr_prepare_static_step(void);
 void page_07_curr_img_refre(void);
 void page_07_curr_img_reset(void);
 void page_07_curr_apply_switch_result(const currency_switch_result_t* result);
-void page_07_curr_apply_mode_result(uint8_t requested_mode, bool success);
-void page_07_curr_poll_selection(void);
-void page_07_curr_cancel_pending_selection(void);
-/* A controller boot-mode report supersedes an in-flight selection quietly. */
-void page_07_curr_reset_pending_selection(void);
 
 #ifdef __cplusplus
 }

@@ -9,10 +9,8 @@
 #include "un260/lv_core/lv_page_event.h"
 #include "un260/lv_core/page_03_menu.h"
 #include "un260/lv_core/lv_page_manager.h"
-#include "un260/lv_core/page_07_curr.h"
 #include "un260/lv_drivers/lv_drivers.h"
 #include "un260/lv_core/page_01_main.h"
-#include "un260/currency/currency_state.h"
 #include "un260/machine_state/machine_state.h"
 #include "un260/protocol/mode_codec.h"
 #include "un260/lv_system/user_cfg.h"
@@ -37,24 +35,13 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                 uart_debug_printf("Set work mode success ignored: no pending request\n");
                 break;
             }
-            if (requested_mode == SETTING_MODE_TARGET_AUTO_CURRENCY) {
-                currency_state_confirm_auto_selection();
-            } else if (requested_mode == SETTING_MODE_TARGET_MULTI_CURRENCY) {
-                currency_state_confirm_multi_selection();
-            } else {
-                machine_state_confirm_mode(requested_mode);
-                currency_state_leave_special_selection();
+            machine_state_confirm_mode(requested_mode);
+            if (requested_mode != 0) {
+                page_01_main_icon_feedback("page_01_mode_icon.png");
             }
-            if (requested_mode != SETTING_MODE_TARGET_AUTO_CURRENCY &&
-                requested_mode != SETTING_MODE_TARGET_MULTI_CURRENCY) {
-                if (requested_mode != 0) {
-                    page_01_main_icon_feedback("page_01_mode_icon.png");
-                }
-                page_01_mode_switch_refre();
-                page_01_bottom_a_refresh_mode(true);
-            }
+            page_01_mode_switch_refre();
+            page_01_bottom_a_refresh_mode(true);
             page_01_curr_img_refre();
-            page_07_curr_apply_mode_result(requested_mode, true);
             ui_manager_publish_data_changed(UI_DATA_TOPIC_MACHINE_SETTINGS);
             actions = (app_setting_reply_action_t)(actions |
                       APP_SETTING_REPLY_ACTION_SCHEDULE_MODE_CLEAR);
@@ -68,7 +55,6 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                 uart_debug_printf("Set work mode fail ignored: no pending request\n");
                 break;
             }
-            page_07_curr_apply_mode_result(requested_mode, false);
             uart_debug_printf("Set work mode fail\n");
             show_start_fault_popup(0x02, 0x06);
         }
@@ -78,23 +64,13 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
             uint8_t protocol_mode = buf[5];
             uint8_t machine_mode = MODE_NONE;
 
-            if (protocol_mode == 0x01) {
-                currency_state_confirm_auto_selection();
-            } else if (protocol_mode == 0x02) {
-                currency_state_confirm_multi_selection();
-            } else {
-                if (!mode_codec_decode(protocol_mode, &machine_mode)) {
-                    uart_debug_printf("Boot work mode invalid: 0x%02X\n", protocol_mode);
-                    break;
-                }
-                machine_state_confirm_mode(machine_mode);
-                currency_state_leave_special_selection();
+            if (!mode_codec_decode(protocol_mode, &machine_mode)) {
+                uart_debug_printf("Boot work mode invalid: 0x%02X\n", protocol_mode);
+                break;
             }
+            machine_state_confirm_mode(machine_mode);
             setting_service_cancel_mode_request();
-            page_07_curr_reset_pending_selection();
-            if (protocol_mode != 0x01 && protocol_mode != 0x02) {
-                page_01_mode_switch_refre();
-            }
+            page_01_mode_switch_refre();
             page_01_curr_img_refre();
             uart_debug_printf("Boot work mode: 0x%02X\n", protocol_mode);
             ui_manager_publish_data_changed(UI_DATA_TOPIC_MACHINE_SETTINGS);

@@ -26,7 +26,7 @@ static uint64_t tick;
 static unsigned sends, saves, navigations, errors;
 static uint8_t last_cmd, last_payload[8];
 static uint16_t last_length;
-static bool send_fails, mode_clear, clear_pending;
+static bool send_fails, mode_clear;
 typedef struct { int code; intptr_t data; } lv_event_t;
 static int lv_event_get_code(lv_event_t *e) { return e->code; }
 static void *lv_event_get_user_data(lv_event_t *e) { return (void *)e->data; }
@@ -36,9 +36,6 @@ int page07_curr_model_find_abs_idx(const char *code);
 int page07_curr_model_find_visible_pos(int index);
 bool page07_curr_model_is_fixed(int index);
 void page_07_curr_apply_switch_result(const currency_switch_result_t *result);
-void page_07_curr_apply_mode_result(uint8_t requested_mode, bool success);
-void page_07_curr_reset_pending_selection(void);
-void page_07_curr_cancel_pending_selection(void);
 
 uint64_t app_clock_monotonic_ms(void) { return tick; }
 void uart_debug_printf(const char *format, ...) { (void)format; }
@@ -65,8 +62,6 @@ static void curr_set_left_info_by_abs(int index) { (void)index; }
 static void curr_apply_selected_style(void) {}
 static void curr_scroll_to_visible_idx(int index, bool animate) { (void)index; (void)animate; }
 static void curr_refresh_right_views(void) {}
-static bool app_setting_runtime_mode_clear_pending(void) { return mode_clear; }
-static bool counting_action_clear_pending(void) { return clear_pending; }
 
 #include "currency_mode_under_test.inc"
 
@@ -92,12 +87,12 @@ static void reply_mode(uint8_t status, uint8_t value)
 static void reset(void)
 {
     currency_state_reset(); setting_service_cancel_mode_request();
-    currency_service_cancel_switch(); page_07_curr_reset_pending_selection();
+    currency_service_cancel_switch();
     memset(&saved, 0, sizeof(saved)); memset(&g_page07_curr, 0, sizeof(g_page07_curr));
     machine_state_confirm_mode(MODE_MDC);
     page07_curr_model_load(); page07_curr_model_refresh_visible();
     sends = saves = navigations = errors = 0;
-    tick = 0; send_fails = mode_clear = clear_pending = false;
+    tick = 0; send_fails = mode_clear = false;
 }
 static void test_catalog_and_model(void)
 {
@@ -107,10 +102,12 @@ static void test_catalog_and_model(void)
     assert(currency_state_get_code(2, code) && strcmp(code, "USD") == 0);
     assert(strcmp(currency_state_display_code("MUL"), "MULTI") == 0);
     assert(currency_state_count() == 16);
-    assert(!currency_service_request_switch(0, "AUT"));
-    assert(!currency_service_request_switch(1, "MUL"));
+    assert(currency_service_request_switch(0, "AUT"));
+    currency_service_cancel_switch();
+    assert(currency_service_request_switch(1, "MUL"));
+    currency_service_cancel_switch();
     assert(!currency_state_confirm_active_code("MUL"));
-    assert(!currency_state_confirm_active_selection(1, "MUL"));
+    assert(!currency_state_confirm_active_selection(2, "MUL"));
     assert(currency_state_code_to_item("MUL") == CURR_COUNT);
 
     saved.fav_only = 1; saved.fav_count = 4; saved.selected_abs_idx = 1;
@@ -147,66 +144,76 @@ static void test_catalog_and_model(void)
     currency_state_confirm_active_index(31); assert(currency_state_active_index() == 33);
     currency_state_confirm_active_index(UINT8_MAX); assert(currency_state_active_index() == 33);
 }
+
+static void currency_ack(uint8_t status)
+{
+    uint8_t frame[] = {0xFD,0xDF,6,3,status,0};
+    currency_reply_result_t r = currency_reply_handle(frame,sizeof(frame));
+    if (r.kind == CURRENCY_REPLY_SWITCH_SUCCESS || r.kind == CURRENCY_REPLY_SWITCH_FAILURE)
+        page_07_curr_apply_switch_result(&r.switch_result);
+}
+static void boot_currency(const char *code)
+{
+    uint8_t frame[] = {0xFD,0xDF,9,3,3,0,0,0,0};
+    memcpy(frame+5,code,3);
+    assert(currency_reply_handle(frame,sizeof(frame)).kind == CURRENCY_REPLY_BOOT_ACTIVE);
+}
 static void test_requests_replies_and_boot(void)
 {
     reset(); choose("MUL");
-    assert(sends == 1 && last_cmd == 4 && last_length == 1 && last_payload[0] == 2);
-    selected("CNY"); assert(setting_service_mode_is_pending());
-    choose("AUT"); assert(sends == 1); /* shared request slot and transition block */
-    reply_mode(2, 0); selected("CNY"); assert(!setting_service_mode_is_pending());
-    assert(g_curr_mode_transition.kind == CURR_MODE_TRANSITION_NONE);
-    choose("MUL"); reply_mode(1, 0); selected("MUL");
-    assert(currency_state_multi_selected() && !currency_state_auto_selected());
-    assert(machine_state_mode() == MODE_MDC && g_page07_curr.model.selected_abs_idx == 1);
-    char code[4]; currency_state_get_effective_code(code); assert(strcmp(code, "MUL") == 0);
-    currency_state_get_active_code(code); assert(strcmp(code, "CNY") == 0);
-    assert(!currency_state_confirm_detected_code("USD"));
-
-    choose("AUT"); assert(last_payload[0] == 1); selected("MUL");
-    tick = 801; assert(setting_service_take_basic_timeouts() & SETTING_REQUEST_TIMEOUT_MODE);
-    page_07_curr_cancel_pending_selection(); selected("MUL");
-    reply_mode(1, 0); selected("MUL"); /* late unsolicited ACK does not change selection */
-    send_fails = true; choose("AUT"); selected("MUL");
-    assert(!setting_service_mode_is_pending() && g_curr_mode_transition.kind == CURR_MODE_TRANSITION_NONE);
-    send_fails = false; choose("AUT"); reply_mode(1, 0); selected("AUT");
+    assert(sends==1 && last_cmd==3 && last_length==3 && !memcmp(last_payload,"MUL",3));
+    selected("CNY"); assert(currency_service_switch_pending());
+    choose("AUT"); assert(sends==1);
+    currency_ack(2); selected("CNY");
+    choose("MUL"); currency_ack(1); selected("MUL");
+    assert(machine_state_mode()==MODE_MDC);
+    choose("AUT"); selected("MUL");
+    tick=801; currency_switch_result_t result;
+    assert(currency_service_take_switch_timeout(&result));
+    page_07_curr_apply_switch_result(&result); selected("MUL");
+    currency_ack(1); selected("MUL");
+    send_fails=true; choose("AUT"); selected("MUL");
+    assert(!currency_service_switch_pending());
+    send_fails=false; choose("AUT");
+    assert(last_cmd==3 && last_length==3 && !memcmp(last_payload,"AUT",3));
+    currency_ack(1); selected("AUT");
     assert(currency_state_confirm_detected_code("USD"));
-    currency_state_get_effective_code(code); assert(strcmp(code, "USD") == 0);
-    currency_state_begin_count_session(); currency_state_get_effective_code(code); assert(strcmp(code, "AUT") == 0);
-
-    choose("MUL"); reply_mode(3, 1); selected("AUT");
-    assert(!setting_service_mode_is_pending() && g_curr_mode_transition.kind == CURR_MODE_TRANSITION_NONE);
-    reply_mode(3, 2); selected("MUL");
-    assert(currency_state_confirm_active_code("USD")); selected("MUL"); /* boot real currency keeps feature */
-    reply_mode(3, 4); selected("USD"); assert(machine_state_mode() == MODE_SDC);
-    reply_mode(3, 0x7F); selected("USD"); assert(machine_state_mode() == MODE_SDC);
+    char code[4]; currency_state_get_effective_code(code); assert(!strcmp(code,"USD"));
+    currency_state_begin_count_session(); currency_state_get_effective_code(code); assert(!strcmp(code,"AUT"));
+    /* Work mode is independent; it must never leave AUT/MUL implicitly. */
+    assert(setting_service_request_mode(MODE_SDC)); reply_mode(1,0);
+    selected("AUT"); assert(machine_state_mode()==MODE_SDC);
+    reply_mode(3,3); selected("AUT"); assert(machine_state_mode()==MODE_MDC);
+    reply_mode(3,1); selected("AUT"); /* obsolete special mode ignored */
+    boot_currency("MUL"); selected("MUL");
+    choose("EUR"); boot_currency("AUT"); selected("AUT");
+    assert(!currency_service_switch_pending()); currency_ack(1); selected("AUT");
+    boot_currency("USD"); selected("USD");
 }
 static void test_exit_special_and_grid(void)
 {
-    for (unsigned feature = 0; feature < 2; feature++) {
+    for (unsigned feature=0;feature<2;feature++) {
         reset(); machine_state_confirm_mode(MODE_SDC);
-        choose(feature ? "MUL" : "AUT"); reply_mode(1, 0);
-        mode_clear = false; unsigned before = sends;
-        choose("EUR"); assert(sends == before + 1 && last_cmd == 4 && last_payload[0] == 4);
-        selected(feature ? "MUL" : "AUT");
-        reply_mode(2, 0); selected(feature ? "MUL" : "AUT");
-        choose("EUR"); reply_mode(1, 0); selected("CNY");
-        before = sends; page_07_curr_poll_selection(); assert(sends == before);
-        mode_clear = false; clear_pending = true; page_07_curr_poll_selection(); assert(sends == before);
-        clear_pending = false; page_07_curr_poll_selection();
-        assert(sends == before + 1 && last_cmd == 3 && last_length == 3 && memcmp(last_payload, "EUR", 3) == 0);
-        selected("CNY"); uint8_t frame[] = {0, 0, 0, 3, 1, 0};
-        currency_reply_result_t result = currency_reply_handle(frame, sizeof(frame));
-        assert(result.kind == CURRENCY_REPLY_SWITCH_SUCCESS);
-        page_07_curr_apply_switch_result(&result.switch_result); selected("EUR");
+        choose(feature?"MUL":"AUT"); currency_ack(1);
+        unsigned before=sends;
+        choose("EUR");
+        assert(sends==before+1 && last_cmd==3 && last_length==3 && !memcmp(last_payload,"EUR",3));
+        selected(feature?"MUL":"AUT");
+        currency_ack(2); selected(feature?"MUL":"AUT");
+        choose("EUR"); currency_ack(1); selected("EUR");
+        assert(machine_state_mode()==MODE_SDC);
     }
-    reset(); g_page07_curr.model.view_mode = PAGE07_CURR_VIEW_GRID;
-    lv_event_t event = {LV_EVENT_CLICKED, 1}; curr_grid_item_click_cb(&event);
-    selected("CNY"); assert(g_page07_curr.model.selected_abs_idx == 3);
-    reply_mode(2, 0); selected("CNY"); assert(g_page07_curr.model.selected_abs_idx == 3);
+    reset(); g_page07_curr.model.view_mode=PAGE07_CURR_VIEW_GRID;
+    lv_event_t event={LV_EVENT_CLICKED,1};curr_grid_item_click_cb(&event);
+    selected("CNY");currency_ack(2);selected("CNY");
+    assert(g_page07_curr.model.selected_abs_idx==3);
+    /* Success after the view is destroyed updates model without navigation. */
+    choose("AUT");curr_page=NULL;unsigned before=navigations;
+    currency_ack(1);selected("AUT");assert(navigations==before);curr_page=(void*)1;
 }
 int main(void)
 {
-    test_catalog_and_model(); test_requests_replies_and_boot(); test_exit_special_and_grid();
-    puts("PASS currency AUTO/MULTI ACK/boot/failure/timeout, manual exit ordering, fixed cards and legacy favorites");
+    test_catalog_and_model();test_requests_replies_and_boot();test_exit_special_and_grid();
+    puts("PASS AUT/MUL ordinary 0x03, ACK/failure/timeout/send failure, boot sync, independent work mode, lifecycle");
     return 0;
 }

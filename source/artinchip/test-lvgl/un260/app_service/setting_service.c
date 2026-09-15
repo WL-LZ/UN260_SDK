@@ -320,24 +320,6 @@ bool setting_service_request_mode(uint8_t target)
                                        &protocol_mode, 1, target);
 }
 
-bool setting_service_request_auto_currency(void)
-{
-    const uint8_t protocol_mode = 0x01;
-
-    return setting_basic_request_begin(&g_mode_request, 0x04,
-                                       &protocol_mode, 1,
-                                       SETTING_MODE_TARGET_AUTO_CURRENCY);
-}
-
-bool setting_service_request_multi_currency(void)
-{
-    const uint8_t protocol_mode = 0x02;
-
-    return setting_basic_request_begin(&g_mode_request, 0x04,
-                                       &protocol_mode, 1,
-                                       SETTING_MODE_TARGET_MULTI_CURRENCY);
-}
-
 bool setting_service_mode_is_pending(void)
 {
     return setting_basic_request_is_pending(&g_mode_request);

@@ -17,10 +17,7 @@
 #include "un260/lv_resources/lv_img_init.h"
 #include "un260/currency/currency_state.h"
 #include "un260/currency/currency_service.h"
-#include "un260/counting/counting_action_service.h"
 #include "un260/app_service/setting_service.h"
-#include "un260/app_service/app_setting_runtime.h"
-#include "un260/machine_state/machine_state.h"
 #include "un260/protocol/protocol_send.h"
 #include "lv_page_event.h"
 #include "aic_ui/aic_ui.h"
@@ -91,20 +88,6 @@ void ui_page_07_curr_destroy(void)
 page07_curr_context_t g_page07_curr = {
     .model.view_mode = PAGE07_CURR_VIEW_CARD,
 };
-
-typedef enum {
-    CURR_MODE_TRANSITION_NONE = 0,
-    CURR_MODE_TRANSITION_TO_SPECIAL,
-    CURR_MODE_TRANSITION_TO_MANUAL,
-    CURR_MODE_TRANSITION_WAIT_MANUAL_CURRENCY,
-} curr_mode_transition_t;
-
-static struct {
-    curr_mode_transition_t kind;
-    uint8_t target_index;
-    uint8_t requested_mode;
-    char target_code[4];
-} g_curr_mode_transition;
 
 static int g_curr_track_x = -1;
 static int g_curr_track_w = -1;
@@ -252,44 +235,10 @@ static void curr_select_and_exit_abs(int abs_idx)
     char target_code[4];
 
     if (abs_idx < 0 || !currency_state_get_code((uint8_t)abs_idx, target_code)) return;
-    if (currency_service_switch_pending() || setting_service_mode_is_pending() ||
-        g_curr_mode_transition.kind != CURR_MODE_TRANSITION_NONE) return;
+    if (currency_service_switch_pending() || setting_service_mode_is_pending()) return;
     currency_state_get_selected_code(curr_code);
     if (page07_curr_model_code_equal(curr_code, target_code)) {
         ui_manager_switch(UI_PAGE_MAIN);
-        return;
-    }
-
-    if (currency_state_is_special_code(target_code)) {
-        bool multi = currency_state_is_multi_code(target_code);
-        memset(&g_curr_mode_transition, 0, sizeof(g_curr_mode_transition));
-        g_curr_mode_transition.kind = CURR_MODE_TRANSITION_TO_SPECIAL;
-        g_curr_mode_transition.target_index = (uint8_t)abs_idx;
-        g_curr_mode_transition.requested_mode = multi
-            ? SETTING_MODE_TARGET_MULTI_CURRENCY : SETTING_MODE_TARGET_AUTO_CURRENCY;
-        memcpy(g_curr_mode_transition.target_code, target_code, 4);
-        if (!(multi ? setting_service_request_multi_currency()
-                    : setting_service_request_auto_currency())) {
-            memset(&g_curr_mode_transition, 0, sizeof(g_curr_mode_transition));
-        }
-        return;
-    }
-
-    if (currency_state_is_special_code(curr_code)) {
-        uint8_t restore_mode = machine_state_mode();
-
-        if (restore_mode != MODE_MDC && restore_mode != MODE_SDC &&
-            restore_mode != MODE_CNT) {
-            restore_mode = MODE_MDC;
-        }
-        memset(&g_curr_mode_transition, 0, sizeof(g_curr_mode_transition));
-        g_curr_mode_transition.kind = CURR_MODE_TRANSITION_TO_MANUAL;
-        g_curr_mode_transition.target_index = (uint8_t)abs_idx;
-        g_curr_mode_transition.requested_mode = restore_mode;
-        memcpy(g_curr_mode_transition.target_code, target_code, 4);
-        if (!setting_service_request_mode(restore_mode)) {
-            memset(&g_curr_mode_transition, 0, sizeof(g_curr_mode_transition));
-        }
         return;
     }
 
@@ -301,83 +250,6 @@ static void curr_select_and_exit_abs(int abs_idx)
             page_07_curr_apply_switch_result(&result);
         }
     }
-}
-
-void page_07_curr_apply_mode_result(uint8_t requested_mode, bool success)
-{
-    curr_mode_transition_t transition = g_curr_mode_transition.kind;
-    uint8_t target_index = g_curr_mode_transition.target_index;
-
-    if ((transition == CURR_MODE_TRANSITION_TO_SPECIAL &&
-         requested_mode != g_curr_mode_transition.requested_mode) ||
-        (transition == CURR_MODE_TRANSITION_TO_MANUAL &&
-         requested_mode != g_curr_mode_transition.requested_mode) ||
-        transition == CURR_MODE_TRANSITION_NONE) {
-        return;
-    }
-    if (!success) {
-        memset(&g_curr_mode_transition, 0, sizeof(g_curr_mode_transition));
-        if (curr_page != NULL) show_currency_set_fail_popup();
-        return;
-    }
-
-    if (transition == CURR_MODE_TRANSITION_TO_SPECIAL) {
-        memset(&g_curr_mode_transition, 0, sizeof(g_curr_mode_transition));
-        /* The reply service has already confirmed AUTO/MULTI. Only project it. */
-        g_page07_curr.model.selected_abs_idx = target_index;
-        g_page07_curr.model.selected_visible_idx =
-            page07_curr_model_find_visible_pos(target_index);
-        page07_curr_model_save();
-        page_01_curr_img_refre();
-        smart_island_refresh_summary();
-        if (curr_page != NULL) {
-            ui_manager_switch(UI_PAGE_MAIN);
-            page_01_main_scroll_reset();
-        }
-        return;
-    }
-
-    g_curr_mode_transition.kind = CURR_MODE_TRANSITION_WAIT_MANUAL_CURRENCY;
-}
-
-void page_07_curr_poll_selection(void)
-{
-    uint8_t target_index;
-    char target_code[4];
-
-    if (g_curr_mode_transition.kind !=
-            CURR_MODE_TRANSITION_WAIT_MANUAL_CURRENCY ||
-        app_setting_runtime_mode_clear_pending() ||
-        counting_action_clear_pending() ||
-        currency_service_switch_pending()) {
-        return;
-    }
-
-    target_index = g_curr_mode_transition.target_index;
-    memcpy(target_code, g_curr_mode_transition.target_code, 4);
-    memset(&g_curr_mode_transition, 0, sizeof(g_curr_mode_transition));
-    if (!currency_service_request_switch(target_index, target_code) ||
-        protocol_send(0x03, (const uint8_t *)target_code, 3) < 0) {
-        currency_switch_result_t result;
-
-        if (currency_service_take_switch_result(0x02, &result)) {
-            page_07_curr_apply_switch_result(&result);
-        } else if (curr_page != NULL) {
-            show_currency_set_fail_popup();
-        }
-    }
-}
-
-void page_07_curr_cancel_pending_selection(void)
-{
-    if (g_curr_mode_transition.kind == CURR_MODE_TRANSITION_NONE) return;
-    memset(&g_curr_mode_transition, 0, sizeof(g_curr_mode_transition));
-    if (curr_page != NULL) show_currency_set_fail_popup();
-}
-
-void page_07_curr_reset_pending_selection(void)
-{
-    memset(&g_curr_mode_transition, 0, sizeof(g_curr_mode_transition));
 }
 
 void page_07_curr_apply_switch_result(const currency_switch_result_t* result)

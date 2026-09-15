@@ -43,13 +43,7 @@ typedef enum {
     SETTING_REQUEST_TIMEOUT_BEEP = 1U << 5,
 } setting_request_timeout_t;
 
-/* Result tag for 0x04/0x01. It is a currency selection, not a UI mode. */
-#define SETTING_MODE_TARGET_AUTO_CURRENCY 0xF0U
-#define SETTING_MODE_TARGET_MULTI_CURRENCY 0xF1U
-
 bool setting_service_request_mode(uint8_t target);
-bool setting_service_request_auto_currency(void);
-bool setting_service_request_multi_currency(void);
 bool setting_service_mode_is_pending(void);
 bool setting_service_take_mode_result(uint8_t *target);
 void setting_service_cancel_mode_request(void);

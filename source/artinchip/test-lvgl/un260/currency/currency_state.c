@@ -230,10 +230,12 @@ bool currency_state_confirm_active_selection(uint8_t index, const char code[4])
 
     if (index >= g_currency_state.count || index >= MAX_CURRENCIES ||
         !currency_state_code_is_valid(code) ||
-        currency_state_is_special_code(code) ||
         strncmp(code, g_currency_state.codes[index], 3) != 0) {
         return false;
     }
+
+    if (currency_state_is_auto_code(code)) return currency_state_confirm_auto_selection();
+    if (currency_state_is_multi_code(code)) return currency_state_confirm_multi_selection();
 
     g_currency_state.active_index = index;
     currency_state_copy_code(g_currency_state.active_code, code);

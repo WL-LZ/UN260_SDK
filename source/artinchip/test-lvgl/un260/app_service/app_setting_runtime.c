@@ -54,11 +54,6 @@ bool app_setting_runtime_take_mode_clear(void)
     return true;
 }
 
-bool app_setting_runtime_mode_clear_pending(void)
-{
-    return g_mode_clear_scheduled || g_mode_clear_due;
-}
-
 void app_setting_runtime_cancel_mode_clear(void)
 {
     g_mode_clear_scheduled = false;
@@ -136,9 +131,6 @@ void app_setting_runtime_poll(uint32_t now_ms)
     if (basic_timeouts != SETTING_REQUEST_TIMEOUT_NONE) {
         uart_debug_printf("basic setting request timeout mask=0x%02X\n",
                     (unsigned int)basic_timeouts);
-        if ((basic_timeouts & SETTING_REQUEST_TIMEOUT_MODE) != 0U) {
-            page_07_curr_cancel_pending_selection();
-        }
         notify_timeout = true;
     }
 

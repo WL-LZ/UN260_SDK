@@ -18,7 +18,6 @@
 #include "un260/currency/currency_state.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/page_01_main.h"
-#include "un260/lv_core/page_07_curr.h"
 #include "un260/lv_core/page_10_debug.h"
 #include "un260/lv_components/smart_island.h"
 #include "un260/lv_drivers/lv_drivers.h"
@@ -249,15 +248,11 @@ void app_command_runtime_poll(uint32_t now_ms)
     }
     if ((action_timeouts & COUNTING_ACTION_TIMEOUT_CLEAR) != 0U) {
         uart_debug_printf("count clear request timeout\n");
-        page_07_curr_cancel_pending_selection();
     }
 
     if (app_setting_runtime_take_mode_clear()) {
-        if (!app_command_runtime_clear_counting_data("mode change")) {
-            page_07_curr_cancel_pending_selection();
-        }
+        (void)app_command_runtime_clear_counting_data("mode change");
     }
-    page_07_curr_poll_selection();
     app_counting_runtime_poll_history(&g_counting_session, counting_data_mutable(), now_ms);
     if (counting_history_take_unsupported_notice())
         smart_island_notify_warning_level(ui_text_get(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED),
