@@ -4,6 +4,7 @@
 #include <string.h>
 #include "lvgl/lvgl.h"
 #include "aic_ui/compiled_asset.h"
+#include "test_page_background_asset.h"
 #include "un260/lv_system/ui_history_data.h"
 #include "un260/lv_system/machine_time.h"
 #include "un260/lv_system/ui_history_export_data.h"
@@ -137,7 +138,7 @@ static lv_res_t test_asset_info(lv_img_decoder_t *decoder, const void *src, lv_i
 {
     (void)decoder;
     if (lv_img_src_get_type(src) != LV_IMG_SRC_FILE) return LV_RES_INV;
-    const un260_compiled_asset_t *asset = un260_compiled_asset_find(src);
+    const un260_compiled_asset_t *asset = test_page_asset_find(src);
     if (!asset || !asset->has_alpha || asset->stride != asset->width * 4) return LV_RES_INV;
     memset(header, 0, sizeof(*header));
     header->w = asset->width; header->h = asset->height; header->cf = LV_IMG_CF_TRUE_COLOR_ALPHA;
@@ -146,7 +147,7 @@ static lv_res_t test_asset_info(lv_img_decoder_t *decoder, const void *src, lv_i
 static lv_res_t test_asset_open(lv_img_decoder_t *decoder, lv_img_decoder_dsc_t *dsc)
 {
     if (test_asset_info(decoder, dsc->src, &dsc->header) != LV_RES_OK) return LV_RES_INV;
-    dsc->img_data = un260_compiled_asset_find(dsc->src)->pixels;
+    dsc->img_data = test_page_asset_find(dsc->src)->pixels;
     return LV_RES_OK;
 }
 static void test_asset_close(lv_img_decoder_t *decoder, lv_img_decoder_dsc_t *dsc)

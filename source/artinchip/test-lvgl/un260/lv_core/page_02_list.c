@@ -1,3 +1,4 @@
+#include "un260/lv_resources/ui_page_background.h"
 #include "page_02_list.h"
 #include "page_02_list_data.h"
 #include "page_02_list_search.h"
@@ -505,6 +506,7 @@ void ui_page_02_list_create(lv_obj_t *parent)
     memset(view,0,sizeof(*view));
     view->located_slot=UINT16_MAX;
     view->page=surface(parent ? parent : lv_scr_act(),0,0,1280,400,0,0xD8E2E8);
+    ui_page_background_apply(view->page, UI_BACKGROUND_USER);
     if (!view->page) goto creation_failed;
     for (int i=0;i<PAGE_02_SECTION_COUNT;++i)
         if (!section_create(&view->section[i],&layouts[i])) goto creation_failed;

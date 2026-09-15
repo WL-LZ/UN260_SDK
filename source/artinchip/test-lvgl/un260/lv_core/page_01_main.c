@@ -1,3 +1,4 @@
+#include "un260/lv_resources/ui_page_background.h"
 #include "un260/lv_core/page_01_main.h"
 #include "un260/lv_core/page_01_main_detail.h"
 #include "un260/lv_components/lv_loading_orbit.h"
@@ -976,7 +977,7 @@ static void main_currency_target(lv_obj_t *parent, bool multi)
 
 static void page_01_main_build_content(void)
 {
-    main_icon(main_page, "page_01_back.png", LVGL_DIR"page_02_menu_bg.png", 0, 0);
+    main_icon(main_page, "page_01_back.png", UI_USER_BACKGROUND_SRC, 0, 0);
     main_action("mode_btn", "page_01_mode_icon.png", LVGL_DIR"main_icons/cube_28.png",
         "mode_label", "MDC", 16, 12, 80, 74, page_01_mode_btn_event_cb, false);
     main_action("setting_btn", "page_01_set_icon.png", LVGL_DIR"main_icons/gear_28.png",

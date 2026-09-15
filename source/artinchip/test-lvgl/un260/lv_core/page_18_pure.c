@@ -238,7 +238,7 @@ void ui_page_18_pure_create(lv_obj_t* parent)
     lv_obj_set_style_bg_color(g_pure_page.page, lv_color_hex(0xFFFFFF), 0);
 
     bg = lv_img_create(g_pure_page.page);
-    lv_img_set_src(bg, "L:/usr/local/share/lvgl_data/page_pure.png");
+    lv_img_set_src(bg, "L:/usr/local/share/lvgl_data/backgrounds/user.png");
     lv_obj_set_pos(bg, 0, 0);
 
     g_pure_page.amount_label = lv_label_create(g_pure_page.page);

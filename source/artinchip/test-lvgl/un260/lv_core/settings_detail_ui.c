@@ -1,3 +1,4 @@
+#include "un260/lv_resources/ui_page_background.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "un260/lv_core/settings_detail_ui.h"
 #include "un260/lv_core/page_06_settings.h"
@@ -83,7 +84,6 @@ lv_color_t settings_theme_color_hex(uint32_t color)
 static lv_color_t detail_bg(void)      { return lv_color_hex(0xF7F8FA); }
 static lv_color_t detail_panel(void)   { return lv_color_hex(0xFFFFFF); }
 static lv_color_t detail_line(void)    { return lv_color_hex(0xE9EDF2); }
-static lv_color_t detail_grid(void)    { return lv_color_hex(0xECEFF3); }
 static lv_color_t detail_primary(void) { return lv_color_hex(0x08C5D6); }
 static lv_color_t detail_primary_2(void){ return lv_color_hex(0xE3FAFD); }
 static lv_color_t detail_text(void)    { return lv_color_hex(0x0D3440); }
@@ -146,26 +146,7 @@ lv_obj_t* settings_detail_create_label(lv_obj_t* parent, const char* text,
     return label;
 }
 
-static void settings_detail_create_grid(lv_obj_t* parent)
-{
-    for (int x = 0; x < SETTINGS_DETAIL_W; x += 32) {
-        lv_obj_t* line = lv_obj_create(parent);
-        detail_style_plain(line);
-        lv_obj_set_pos(line, x, SETTINGS_DETAIL_HEADER_H);
-        lv_obj_set_size(line, 1, SETTINGS_DETAIL_H - SETTINGS_DETAIL_HEADER_H);
-        lv_obj_set_style_bg_color(line, detail_grid(), 0);
-        lv_obj_set_style_bg_opa(line, LV_OPA_50, 0);
-    }
 
-    for (int y = SETTINGS_DETAIL_HEADER_H; y < SETTINGS_DETAIL_H; y += 32) {
-        lv_obj_t* line = lv_obj_create(parent);
-        detail_style_plain(line);
-        lv_obj_set_pos(line, 0, y);
-        lv_obj_set_size(line, SETTINGS_DETAIL_W, 1);
-        lv_obj_set_style_bg_color(line, detail_grid(), 0);
-        lv_obj_set_style_bg_opa(line, LV_OPA_50, 0);
-    }
-}
 
 lv_obj_t* settings_detail_create_page(lv_obj_t* parent, const char* title,
                                       lv_event_cb_t back_cb,
@@ -188,7 +169,7 @@ lv_obj_t* settings_detail_create_page_ex(lv_obj_t* parent, const char* title,
     lv_obj_set_style_bg_opa(page, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(page, 0, 0);
 
-    settings_detail_create_grid(page);
+    ui_page_background_apply(page, UI_BACKGROUND_SETTINGS);
 
     lv_obj_t* header = lv_obj_create(page);
     detail_style_plain(header);

@@ -40,6 +40,7 @@ typedef struct {
     const char *success_icon_path;
     const char *error_icon_path;
     uint16_t spinner_time;
+    const lv_font_t *text_font;
 } lv_selftest_list_config_t;
 
 void lv_selftest_list_config_init(lv_selftest_list_config_t *cfg); // 初始化自检列表配置

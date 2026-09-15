@@ -138,7 +138,12 @@ def main():
                    f"-I{work}", f"-I{ROOT}", f"-I{lvgl}", f"-DLV_CONF_PATH={conf}",
                    *map(str, sources), "-lm", "-o", str(executable)]
         subprocess.run(command, check=True)
+        from PIL import Image
+        for name in ('user', 'settings'):
+            with Image.open(ROOT / 'aic_ui/lvgl_data/backgrounds' / (name+'.png')) as image:
+                (work / (name+'.bgra')).write_bytes(image.convert('RGBA').tobytes('raw','BGRA'))
         environment = os.environ.copy()
+        environment['UN260_BACKGROUND_DIR'] = str(work)
         if args.output_dir:
             args.output_dir.mkdir(parents=True, exist_ok=True)
             environment["LIST_RASTER_OUTPUT"] = str(args.output_dir.resolve())

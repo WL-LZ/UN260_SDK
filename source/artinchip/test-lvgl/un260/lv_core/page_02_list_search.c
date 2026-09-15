@@ -1,3 +1,4 @@
+#include "un260/lv_resources/ui_page_background.h"
 #include "page_02_list_search.h"
 #include "ui_frame_commit.h"
 #include "lv_port_indev.h"
@@ -297,6 +298,7 @@ page_02_list_search_t *page_02_list_search_create(lv_obj_t *parent,
     if (!s) return NULL;
     memset(s,0,sizeof(*s));s->close=close;s->context=context;
     s->root=search_surface(parent,0,0,1280,400,0,0xD8E2E8);
+    ui_page_background_apply(s->root, UI_BACKGROUND_USER);
     if (!s->root) { lv_mem_free(s);return NULL; }
     if (!lv_obj_add_event_cb(s->root,search_deleted,LV_EVENT_DELETE,s)) {
         lv_obj_del(s->root);lv_mem_free(s);return NULL;

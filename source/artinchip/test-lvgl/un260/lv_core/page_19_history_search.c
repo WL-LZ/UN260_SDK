@@ -1,3 +1,4 @@
+#include "un260/lv_resources/ui_page_background.h"
 #include "page_19_history_search.h"
 #include "lv_port_indev.h"
 #include "un260/lv_components/lv_alnum_keyboard.h"
@@ -543,6 +544,7 @@ static void open_editor(page_19_history_search_t *s, unsigned field)
 {
     editor_close(s);s->editing_field=field;
     s->editor=surface(s->root,0,0,1280,400,0xD8E2E8,0);
+    ui_page_background_apply(s->editor, UI_BACKGROUND_USER);
     if(!s->editor) return;
     lv_obj_add_flag(s->editor,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_t *card=surface(s->editor,160,16,960,368,0xFFFFFF,18);
@@ -800,6 +802,7 @@ page_19_history_search_t *page_19_history_search_create(lv_obj_t *parent,
     if (initial) s->input = *initial;
     s->records = records; s->record_count = count; s->close = close; s->context = context;
     s->root = surface(parent, 0, 0, 1280, 400, 0xD8E2E8, 0);
+    ui_page_background_apply(s->root, UI_BACKGROUND_USER);
     if (!s->root) { lv_mem_free(s); return NULL; }
     if (!lv_obj_add_event_cb(s->root, deleted, LV_EVENT_DELETE, s)) {
         lv_obj_del(s->root); lv_mem_free(s); return NULL;

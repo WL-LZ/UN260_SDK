@@ -24,6 +24,17 @@ find_program(UN260_ASSET_PYTHON NAMES python3 PATHS /usr/bin /usr/local/bin NO_D
 if(NOT UN260_ASSET_PYTHON)
     message(FATAL_ERROR "python3 + Pillow required for UN260 image conversion")
 endif()
+execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/build_boot_light_assets.py
+                RESULT_VARIABLE BOOT_LIGHT_ASSET_RESULT)
+if(NOT BOOT_LIGHT_ASSET_RESULT EQUAL 0)
+    message(FATAL_ERROR "boot-light asset generation failed")
+endif()
+execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_page_backgrounds.py
+                RESULT_VARIABLE PAGE_BACKGROUND_RESULT)
+if(NOT PAGE_BACKGROUND_RESULT EQUAL 0)
+    message(FATAL_ERROR "Page background generation failed")
+endif()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_page_backgrounds.py")
 execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/convert_lvgl_assets.py
                 RESULT_VARIABLE UN260_ASSET_RESULT)
 if(NOT UN260_ASSET_RESULT EQUAL 0)
@@ -33,19 +44,27 @@ file(GLOB_RECURSE UN260_ASSET_INPUTS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_D
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${UN260_ASSET_INPUTS}
              "${CMAKE_CURRENT_SOURCE_DIR}/tools/convert_lvgl_assets.py")
 include(${CMAKE_CURRENT_SOURCE_DIR}/aic_ui/generated_assets/assets.cmake)
-execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/build_boot_light_assets.py
-                RESULT_VARIABLE BOOT_LIGHT_ASSET_RESULT)
-if(NOT BOOT_LIGHT_ASSET_RESULT EQUAL 0)
-    message(FATAL_ERROR "boot-light asset generation failed")
-endif()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_boot_d_assets.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/un260/lv_core/boot_anim/boot_theme_config.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/lv_font_roboto_12.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/lv_font_roboto_16.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/build_boot_light_assets.py"
-    "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/lv_font_instrument_sans_semibold_48.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/lv_font_instrument_sans_medium_40.c")
+    "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/lv_font_open_runde_medium_48.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/lv_font_boot_welcome.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/un260/lv_core/boot_anim/boot_welcome_timing.h")
 add_executable(un260_boot_light un260/lv_drivers/boot_light.c un260/lv_system/backlight_service.c)
 target_link_libraries(un260_boot_light z)
 install(TARGETS un260_boot_light RUNTIME DESTINATION bin)
 add_executable(${PROJECT_NAME} main.c
+    un260/font/lv_font_open_runde_medium_24.c
+    un260/font/lv_font_open_runde_medium_40.c
+    un260/font/lv_font_open_runde_medium_48.c
+    un260/font/lv_font_boot_welcome.c
+    un260/font/lv_font_roboto_12.c
+    un260/font/lv_font_roboto_16.c
+    un260/font/lv_font_roboto_18.c
+    un260/font/lv_font_roboto_36.c
     ${UN260_ASSET_SOURCES}
 	aic_ui/aic_dec.c
     aic_ui/image_memory.c
@@ -203,6 +222,8 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_core/page_00_boot_anim.c
     un260/lv_core/boot_anim/page_00_boot_anim_theme_a.c
     un260/lv_core/boot_anim/page_00_boot_anim_theme_c.c
+    un260/lv_core/boot_anim/page_00_boot_anim_theme_d.c
+    un260/lv_core/boot_anim/page_08_boot_flow.c
     
     un260/lv_resources/lv_img_init.c
     un260/lv_system/platform_app.c
@@ -313,6 +334,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/font/lv_font_instrument_sans_medium_28.c
     un260/font/lv_font_instrument_sans_medium_30.c
     un260/font/lv_font_instrument_sans_medium_32.c
+    un260/font/lv_font_instrument_sans_medium_36.c
     un260/font/lv_font_instrument_sans_medium_40.c
     un260/font/lv_font_instrument_sans_medium_42.c
     un260/font/lv_font_instrument_sans_medium_44.c
@@ -397,6 +419,11 @@ endif()
 add_definitions(-DLVGL_DIR="L:${CMAKE_INSTALL_FULL_DATAROOTDIR}/lvgl_data/")
 
 if(DEFINED CMAKE_INSTALL_FULL_DATAROOTDIR)
+	install(FILES aic_ui/font/Roboto-OFL.txt aic_ui/font/OoohBaby-OFL.txt
+		DESTINATION ${CMAKE_INSTALL_FULL_DATAROOTDIR}/lvgl_data/boot_theme_d/licenses)
+	install(FILES aic_ui/font/OpenRunde-LICENSE.txt aic_ui/font/OoohBaby-OFL.txt
+		DESTINATION ${CMAKE_INSTALL_FULL_DATAROOTDIR}/lvgl_data/boot_theme_c/licenses)
 	install(DIRECTORY aic_ui/lvgl_data/
-		DESTINATION ${CMAKE_INSTALL_FULL_DATAROOTDIR}/lvgl_data)
+		DESTINATION ${CMAKE_INSTALL_FULL_DATAROOTDIR}/lvgl_data
+		PATTERN "boot-light.bin" EXCLUDE)
 endif() # CMAKE_INSTALL_FULL_DATAROOTDIR

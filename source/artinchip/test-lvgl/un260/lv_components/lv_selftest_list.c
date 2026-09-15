@@ -68,6 +68,7 @@ void lv_selftest_list_config_init(lv_selftest_list_config_t *cfg) // 初始化�
     }
 
     cfg->item_w = SELFTEST_LIST_DEFAULT_ITEM_W;
+    cfg->text_font = &lv_font_instrument_sans_medium_14;
     cfg->item_h = SELFTEST_LIST_DEFAULT_ITEM_H;
     cfg->item_gap = SELFTEST_LIST_DEFAULT_ITEM_GAP;
     cfg->item_pad_x = SELFTEST_LIST_DEFAULT_ITEM_PAD_X;
@@ -240,7 +241,7 @@ static void selftest_list_apply_item_style(lv_selftest_list_ctx_t *ctx, lv_selft
     lv_obj_set_style_pad_top(item->card, 0, 0);
     lv_obj_set_style_pad_bottom(item->card, 0, 0);
     lv_obj_set_style_pad_row(item->card, 0, 0);
-    lv_obj_set_style_text_font(item->card, &lv_font_instrument_sans_medium_14, 0);
+    lv_obj_set_style_text_font(item->card, ctx->cfg.text_font, 0);
 
     lv_obj_set_size(item->icon_box, ctx->cfg.icon_size, ctx->cfg.icon_size);
     lv_obj_set_size(item->spinner_arc, ctx->cfg.spinner_size, ctx->cfg.spinner_size);
@@ -294,7 +295,7 @@ static void selftest_list_item_layout_update(lv_selftest_list_ctx_t *ctx, lv_sel
     if (name_w < 0) {
         name_w = 0;
     }
-    line_h = lv_font_get_line_height(&lv_font_instrument_sans_medium_14);
+    line_h = lv_font_get_line_height(ctx->cfg.text_font);
     text_y = (ctx->cfg.item_h > line_h) ? (lv_coord_t)((ctx->cfg.item_h - line_h) / 2) : 0;
     lv_obj_set_pos(item->name_label,
                    ctx->cfg.item_pad_x + ctx->cfg.icon_size + ctx->cfg.name_gap,
@@ -390,7 +391,7 @@ static lv_obj_t *selftest_list_create_item_card(lv_selftest_list_ctx_t *ctx, lv_
     lv_obj_set_style_pad_right(card, ctx->cfg.item_pad_x, 0);
     lv_obj_set_style_pad_top(card, 0, 0);
     lv_obj_set_style_pad_bottom(card, 0, 0);
-    lv_obj_set_style_text_font(card, &lv_font_instrument_sans_medium_14, 0);
+    lv_obj_set_style_text_font(card, ctx->cfg.text_font, 0);
 
     item->left_box = lv_obj_create(card);
     lv_obj_remove_style_all(item->left_box);
@@ -437,13 +438,13 @@ static lv_obj_t *selftest_list_create_item_card(lv_selftest_list_ctx_t *ctx, lv_
 
     item->name_label = lv_label_create(card);
     lv_label_set_long_mode(item->name_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_font(item->name_label, &lv_font_instrument_sans_medium_14, 0);
+    lv_obj_set_style_text_font(item->name_label, ctx->cfg.text_font, 0);
     lv_obj_set_style_text_color(item->name_label, ctx->cfg.pending_text_color, 0);
 
     item->state_label = lv_label_create(card);
     lv_label_set_long_mode(item->state_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(item->state_label, ctx->cfg.state_w);
-    lv_obj_set_style_text_font(item->state_label, &lv_font_instrument_sans_medium_14, 0);
+    lv_obj_set_style_text_font(item->state_label, ctx->cfg.text_font, 0);
     lv_obj_set_style_text_align(item->state_label, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_set_style_text_color(item->state_label, ctx->cfg.pending_state_color, 0);
 
@@ -563,6 +564,8 @@ lv_obj_t *lv_selftest_list_create_with_config(lv_obj_t *parent, uint8_t item_cou
         cfg_in = &cfg_default;
     }
     ctx->cfg = *cfg_in;
+    if (!ctx->cfg.text_font)
+        ctx->cfg.text_font = &lv_font_instrument_sans_medium_14;
     ctx->item_count = item_count;
 
     ctx->root = lv_obj_create(parent);

@@ -63,6 +63,7 @@ def main():
     parser.add_argument("--sanitize", choices=("none", "undefined", "address,undefined"),
                         default="none" if os.name == "nt" else "undefined")
     parser.add_argument("--skip-theme-compile", action="store_true")
+    parser.add_argument("--reduced-motion", action="store_true")
     args = parser.parse_args()
     root = args.production_root.resolve()
     lvgl = args.lvgl_dir.resolve()
@@ -101,6 +102,8 @@ def main():
         common = [compiler, "-std=c11", "-O1", "-g", "-Wall", "-Wextra",
                   "-DLV_DRV_CONF_H", f"-I{work}", f"-I{root}", f"-I{lvgl}",
                   f"-DLV_CONF_PATH={conf}"]
+        if args.reduced_motion:
+            common.append("-DBOOT_WELCOME_MOTION_SCALE=0")
         if not args.skip_theme_compile:
             if not nm:
                 raise SystemExit("nm is required for theme-selection symbol checks")

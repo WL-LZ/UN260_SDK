@@ -32,7 +32,7 @@
 //-------------------- 主函数 --------------------
 int main(void) {
     app_startup_trace_mark("main_enter");
-#if UI_BOOT_ANIM_THEME != UI_BOOT_ANIM_THEME_C
+#if !UI_BOOT_EARLY_ENABLED
     if (!startup_devices_prepare()) return 1;
 #endif
     lv_init();
@@ -43,7 +43,7 @@ int main(void) {
     app_startup_trace_mark("display_initialized");
     backlight_service_init();
     app_startup_trace_mark("backlight_initialized");
-#if UI_BOOT_ANIM_THEME != UI_BOOT_ANIM_THEME_C
+#if !UI_BOOT_EARLY_ENABLED
     lv_port_indev_init();
     app_startup_trace_mark("input_initialized");
     user_cfg_password_load();
@@ -55,24 +55,24 @@ int main(void) {
     gesture_service_init();
 #endif
     device_info_init(UI_VERSION);
-#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_C
+#if UI_BOOT_EARLY_ENABLED
     ui_page_08_curr_defer_next_create();
 #endif
     ui_manager_switch(UI_PAGE_BOOT );
     app_startup_trace_mark("selftest_created");
     perf_stats_init();
-#if UI_BOOT_ANIM_THEME != UI_BOOT_ANIM_THEME_C
+#if !UI_BOOT_EARLY_ENABLED
     perf_profile_set_enabled(user_cfg_performance_profile_enabled());
     app_ui_runtime_init();
 #endif
     ui_page_00_boot_anim_create(lv_layer_top());
-#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_C
+#if UI_BOOT_EARLY_ENABLED
     if (!ui_page_00_boot_anim_is_active())
         while (!ui_page_08_curr_prepare_step()) { }
 #endif
     app_startup_trace_mark("intro_assets_ready");
 
-#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_C
+#if UI_BOOT_EARLY_ENABLED
     /* A single renderer owns the display throughout startup. No preferences,
      * serial state or business callbacks are consumed until the I/O worker
      * publishes readiness; even input registration waits for that boundary. */
@@ -103,7 +103,7 @@ int main(void) {
         if (early_visual > 0 && !adopted_scanout) return 1;
     }
     if (early_visual > 0) {
-#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_C
+#if UI_BOOT_EARLY_ENABLED
         ui_page_00_boot_anim_adopt_elapsed(early_elapsed);
 #endif
         app_startup_trace_mark("early_visual_adopted");
@@ -143,7 +143,7 @@ int main(void) {
             first_frame_presented = true;
             app_startup_trace_mark("first_frame_presented");
         }
-#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_C
+#if UI_BOOT_EARLY_ENABLED
         if (!startup_started && first_frame_presented) {
             startup_started = true;
             (void)app_startup_runtime_begin(app_clock_uptime_ms());

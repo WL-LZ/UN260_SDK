@@ -349,7 +349,7 @@ static void pcs_batch_label_anim_cb(void* var, int32_t v)
 }
 
 static ui_element_t page_03_menu_obj[] = {
-    { "page_02_menu_bg.png", LV_OBJ_TYPE_IMAGE, NULL,
+    { "backgrounds/user.png", LV_OBJ_TYPE_IMAGE, NULL,
         { 0, 0, 1280, 400, 0, 0, 0 },
         { NULL, 0, 0, 0, NULL },
         { 255, 0, 0, false },
@@ -657,7 +657,7 @@ static void page_03_menu_release_button_skins(void)
 
 static void page_03_bg_to_back(void)
 {
-    lv_obj_t* bg = page_03_find("page_02_menu_bg.png");
+    lv_obj_t* bg = page_03_find("backgrounds/user.png");
 
     if (bg && lv_obj_is_valid(bg)) {
         lv_obj_move_background(bg);

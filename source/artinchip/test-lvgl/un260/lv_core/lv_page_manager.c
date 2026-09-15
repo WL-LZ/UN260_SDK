@@ -1,3 +1,4 @@
+#include "un260/lv_resources/ui_page_background.h"
 
 #include "lvgl/lvgl.h"
 #include "lvgl/src/draw/lv_img_cache.h"
@@ -112,19 +113,23 @@ static uint8_t ui_manager_predecode_static_images(
  * the registry so boot-time prewarm can also populate LVGL's bounded image
  * cache instead of leaving an 80+ ms decode on the user's first click. */
 static const ui_page_static_image_t g_page_main_static_images[] = {
-    { LVGL_PATH(page_01_back.png) },
+    { UI_USER_BACKGROUND_SRC },
 };
 
 static const ui_page_static_image_t g_page_menu_static_images[] = {
-    { LVGL_PATH(page_02_menu_bg.png) },
+    { UI_USER_BACKGROUND_SRC },
 };
 
 static const ui_page_static_image_t g_page_currency_static_images[] = {
-    { LVGL_PATH(page_07_bg.png) },
+    { UI_USER_BACKGROUND_SRC },
 };
 
 static const ui_page_static_image_t g_page_pure_static_images[] = {
-    { LVGL_PATH(page_pure.png) },
+    { UI_USER_BACKGROUND_SRC },
+};
+
+static const ui_page_static_image_t g_page_settings_static_images[] = {
+    { UI_SETTINGS_BACKGROUND_SRC },
 };
 
 static void ui_manager_create_main(lv_obj_t *parent)
@@ -194,6 +199,8 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .resume = ui_page_02_list_resume,
         .suspend = ui_page_02_list_suspend,
         .cache_policy = UI_PAGE_RETAINED,
+        .static_images = g_page_main_static_images,
+        .static_image_count = UI_ARRAY_SIZE(g_page_main_static_images),
     },
     [UI_PAGE_MENU] = {
         .create = ui_page_03_menu_create,
@@ -215,6 +222,8 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .data_topics = UI_DATA_TOPIC_DEVICE_VERSION,
         .refresh_data = ui_page_06_settings_refresh_data,
         .reset_navigation = ui_page_06_settings_reset_navigation,
+        .static_images = g_page_settings_static_images,
+        .static_image_count = UI_ARRAY_SIZE(g_page_settings_static_images),
     },
     [UI_PAGE_SET_PASSAGE] = {
         .create = ui_page_05_set_password_create,
@@ -262,6 +271,8 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .resume = ui_page_19_history_resume,
         .suspend = ui_page_19_history_suspend,
         .cache_policy = UI_PAGE_RETAINED,
+        .static_images = g_page_main_static_images,
+        .static_image_count = UI_ARRAY_SIZE(g_page_main_static_images),
     },
     [UI_PAGE_PRINT_SETTING] = { ui_page_20_set_print_create, ui_page_20_set_print_destroy },
     [UI_PAGE_BRIGHTNESS_SETTING] = { ui_page_33_set_brightness_create, ui_page_33_set_brightness_destroy },
@@ -282,6 +293,8 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .resume = ui_page_32_innovation_resume,
         .suspend = ui_page_32_innovation_suspend,
         .cache_policy = UI_PAGE_RETAINED,
+        .static_images = g_page_main_static_images,
+        .static_image_count = UI_ARRAY_SIZE(g_page_main_static_images),
     },
 };
 

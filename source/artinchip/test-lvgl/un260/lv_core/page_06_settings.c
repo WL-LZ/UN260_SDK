@@ -1,3 +1,4 @@
+#include "un260/lv_resources/ui_page_background.h"
 #include "un260/lv_core/page_06_settings.h"
 #include "un260/lv_components/lv_nav_button.h"
 #include "un260/app_service/app_command_runtime.h"
@@ -171,7 +172,6 @@ static void page_06_set_selected_option(page_06_settings_menu_t menu,
 static lv_color_t color_bg(void)       { return lv_color_hex(0xF7F8FA); }
 static lv_color_t color_panel(void)    { return lv_color_hex(0xFFFFFF); }
 static lv_color_t color_line(void)     { return lv_color_hex(0xE9EDF2); }
-static lv_color_t color_grid(void)     { return lv_color_hex(0xECEFF3); }
 static lv_color_t color_primary(void)  { return lv_color_hex(0x08C5D6); }
 static lv_color_t color_primary_2(void){ return lv_color_hex(0xE3FAFD); }
 static lv_color_t color_text(void)     { return lv_color_hex(0x0D3440); }
@@ -568,36 +568,7 @@ static lv_obj_t* create_label(lv_obj_t* parent, const char* text,
     return label;
 }
 
-static void create_grid_background(lv_obj_t* parent)
-{
-    lv_obj_t* bg = lv_obj_create(parent);
-    style_plain(bg);
-    lv_obj_set_pos(bg, SETTINGS_CONTENT_X, SETTINGS_CONTENT_Y);
-    lv_obj_set_size(bg, SETTINGS_CONTENT_W, SETTINGS_CONTENT_H);
-    lv_obj_set_style_bg_color(bg, color_bg(), 0);
-    lv_obj_set_style_bg_opa(bg, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(bg, 0, 0);
 
-    for (int x = 0; x < SETTINGS_CONTENT_W; x += 32) {
-        lv_obj_t* line = lv_obj_create(bg);
-        style_plain(line);
-        lv_obj_set_pos(line, x, 0);
-        lv_obj_set_size(line, 1, SETTINGS_CONTENT_H);
-        lv_obj_set_style_bg_color(line, color_grid(), 0);
-        lv_obj_set_style_bg_opa(line, LV_OPA_60, 0);
-    }
-
-    for (int y = 0; y < SETTINGS_CONTENT_H; y += 32) {
-        lv_obj_t* line = lv_obj_create(bg);
-        style_plain(line);
-        lv_obj_set_pos(line, 0, y);
-        lv_obj_set_size(line, SETTINGS_CONTENT_W, 1);
-        lv_obj_set_style_bg_color(line, color_grid(), 0);
-        lv_obj_set_style_bg_opa(line, LV_OPA_60, 0);
-    }
-
-    lv_obj_move_background(bg);
-}
 
 static void create_header(lv_obj_t* parent)
 {
@@ -1462,7 +1433,7 @@ void ui_page_06_settings_create(lv_obj_t* parent)
     lv_obj_set_style_bg_opa(root, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(root, 0, 0);
 
-    create_grid_background(root);
+    ui_page_background_apply(root, UI_BACKGROUND_SETTINGS);
     create_header(root);
     create_sidebar(root);
 

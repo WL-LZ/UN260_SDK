@@ -77,7 +77,7 @@ def main():
         external_entries = []
         for entry in manifest["external"]:
             name = entry["name"]
-            if name != "page_02_menu_bg.png" and not name.startswith("CURR_"):
+            if name not in ("page_02_menu_bg.png", "backgrounds/user.png") and not name.startswith("CURR_"):
                 continue
             path = ROOT / "aic_ui/lvgl_data" / name
             if hashlib.sha256(path.read_bytes()).hexdigest() != entry["source_sha256"]:

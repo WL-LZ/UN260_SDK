@@ -1,3 +1,4 @@
+#include "un260/lv_resources/ui_page_background.h"
 #include "page_32_innovation.h"
 #include "lv_port_indev.h"
 #include "lv_port_disp.h"
@@ -1329,6 +1330,7 @@ void ui_page_32_innovation_create(lv_obj_t *parent)
     lv_obj_set_style_bg_opa(g_page.root, LV_OPA_TRANSP, 0);
     backdrop = innovation_box(g_page.root, 0, 0, 1280, 400,
                               INNOVATION_BG, 0);
+    ui_page_background_apply(backdrop, UI_BACKGROUND_USER);
     lv_obj_clear_flag(backdrop, LV_OBJ_FLAG_CLICKABLE |
                                LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_move_background(backdrop);

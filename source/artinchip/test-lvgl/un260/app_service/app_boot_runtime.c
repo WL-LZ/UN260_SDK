@@ -30,6 +30,9 @@ static bool g_boot_runtime_active;
 static bool g_boot_prewarm_active = false;
 static size_t g_boot_prewarm_cursor = 0;
 static uint32_t g_boot_prewarm_due_ms = 0;
+#if defined(UI_BOOT_ANIM_THEME) && UI_BOOT_ANIM_THEME == 4
+static uint32_t g_boot_prewarm_deadline_ms;
+#endif
 
 static const ui_page_t g_boot_prewarm_pages[] = {
     UI_PAGE_MENU,
@@ -69,6 +72,9 @@ static void app_boot_runtime_start_prewarm(void)
     g_boot_prewarm_cursor = 0;
     g_boot_prewarm_due_ms = lv_tick_get() + APP_BOOT_PREWARM_PERIOD_MS;
     g_boot_prewarm_active = true;
+#if defined(UI_BOOT_ANIM_THEME) && UI_BOOT_ANIM_THEME == 4
+    g_boot_prewarm_deadline_ms = lv_tick_get() + 4000U;
+#endif
 }
 
 static void app_boot_runtime_poll_prewarm(uint32_t now_ms)
@@ -86,6 +92,11 @@ static void app_boot_runtime_poll_prewarm(uint32_t now_ms)
     /* A controller-backed page can be temporarily unavailable.  Scan past it
      * instead of blocking every independent page behind it, but still perform
      * at most one expensive page construction per application loop. */
+#if defined(UI_BOOT_ANIM_THEME) && UI_BOOT_ANIM_THEME == 4
+    /* Cold page construction must not compete with the Ready choreography.
+     * Keep protocol polling live, then warm pages during the static hold. */
+    if (!ui_page_08_curr_visual_is_quiet()) return;
+#endif
     while (checked < page_count) {
         size_t index = g_boot_prewarm_cursor;
 
@@ -161,6 +172,9 @@ static bool app_boot_runtime_finish(counting_session_state_t *counting_session)
     app_boot_runtime_cancel_prewarm();
     boot_selftest_list_finish();
     sim_data_init();
+#if defined(UI_BOOT_ANIM_THEME) && UI_BOOT_ANIM_THEME == 4
+    ui_page_08_curr_start_handoff();
+#endif
     ui_manager_switch(ui_state_pure_count_is_enabled() ? UI_PAGE_PURE : UI_PAGE_MAIN);
     return true;
 }
@@ -181,6 +195,13 @@ static void app_boot_runtime_finish_timer_cb(lv_timer_t *timer)
         return;
     }
     counting_session = (counting_session_state_t *)timer->user_data;
+#if defined(UI_BOOT_ANIM_THEME) && UI_BOOT_ANIM_THEME == 4
+    if (g_boot_prewarm_active &&
+        !app_boot_runtime_time_reached(lv_tick_get(), g_boot_prewarm_deadline_ms)) {
+        lv_timer_set_period(timer, 20);
+        return;
+    }
+#endif
     if (!app_boot_runtime_finish(counting_session)) return;
     g_boot_finish_timer = NULL;
     lv_timer_del(timer);

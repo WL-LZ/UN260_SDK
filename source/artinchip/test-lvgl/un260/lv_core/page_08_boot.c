@@ -1,9 +1,12 @@
+#include "un260/lv_core/boot_anim/boot_theme_config.h"
+#if UI_BOOT_ANIM_THEME != UI_BOOT_ANIM_THEME_D
 #include "un260/lv_core/page_08_boot.h"
 #include "un260/lv_resources/lv_image_declear.h" 
 #include "un260/lv_resources/lv_img_init.h" 
 #include "un260/lv_components/lv_components.h"
 #include "un260/boot/boot_service.h"
 #include "../aic_ui/aic_ui.h"
+#include "un260/font/boot_fonts.h"
 
 #include <string.h>
 
@@ -175,15 +178,17 @@ static void boot_progress_create(lv_obj_t* parent)
     lv_obj_set_style_text_color(g_boot_page.progress_loading_label,
                                 lv_color_hex(0x6D92AA), 0);
     lv_obj_set_style_text_font(g_boot_page.progress_loading_label,
-                               LV_FONT_DEFAULT, 0);
+                               &lv_font_open_runde_medium_24, 0);
 
     g_boot_page.progress_percent_label = lv_label_create(parent);
     lv_label_set_text(g_boot_page.progress_percent_label, "0%");
-    lv_obj_set_pos(g_boot_page.progress_percent_label, 1220, 361);
+    lv_obj_set_pos(g_boot_page.progress_percent_label, 1147, 361);
+    lv_obj_set_width(g_boot_page.progress_percent_label, 100);
+    lv_obj_set_style_text_align(g_boot_page.progress_percent_label, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_set_style_text_color(g_boot_page.progress_percent_label,
                                 lv_color_hex(0x6D92AA), 0);
     lv_obj_set_style_text_font(g_boot_page.progress_percent_label,
-                               LV_FONT_DEFAULT, 0);
+                               &lv_font_open_runde_medium_24, 0);
 
     boot_progress_apply(g_boot_page.progress_percent);
 }
@@ -197,6 +202,7 @@ static void boot_selftest_list_create(lv_obj_t* parent) // 创建自检卡片列
     lv_selftest_list_config_t cfg;
 
     lv_selftest_list_config_init(&cfg);
+    cfg.text_font = &lv_font_open_runde_medium_24;
     cfg.item_w = 682;
     cfg.item_h = 36;
     cfg.item_gap = 10;
@@ -204,7 +210,7 @@ static void boot_selftest_list_create(lv_obj_t* parent) // 创建自检卡片列
     cfg.icon_size = 15;
     cfg.spinner_size = 15;
     cfg.name_gap = 7;
-    cfg.state_w = 100;
+    cfg.state_w = 130;
     cfg.success_text_color = lv_color_hex(0x0084FF);
     cfg.loading_text_color = lv_color_hex(0x0084FF);
     cfg.pending_text_color = lv_color_hex(0x0084FF);
@@ -420,3 +426,5 @@ void ui_page_08_curr_destroy(void)
 
     boot_page_context_reset();
 }
+
+#endif

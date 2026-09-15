@@ -227,38 +227,45 @@ static void assert_no_owner(void)
 
 static void test_sequence(void)
 {
+    lv_point_t measured;
+    lv_txt_get_size(&measured, "Loading...", &lv_font_open_runde_medium_24,
+                    0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    assert(measured.x <= 130 && measured.y <= 36);
+    lv_txt_get_size(&measured, "Read config parameters success", &lv_font_open_runde_medium_24,
+                    0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    assert(measured.x <= 490 && measured.y <= 36);
     create();
     lv_obj_t *original = g_intro.root;
     unsigned count = timer_count();
     ui_page_00_boot_anim_create(lv_layer_top());
     assert(g_intro.root == original && timer_count() == count);
     const void *icon_source = lv_img_get_src(g_intro.icon);
-    for (unsigned elapsed = 0; elapsed < 7875; elapsed += 25) {
+    for (unsigned elapsed = 0; elapsed < INTRO_REVEAL_MS; elapsed += 25) {
         apply_elapsed(elapsed);
         assert(lv_img_get_src(g_intro.icon) == icon_source);
         assert(lv_img_get_angle(g_intro.icon) == 0);
         assert(lv_img_get_zoom(g_intro.icon) == 256);
-        if (elapsed <= 2700)
+        if (elapsed <= BOOT_BRAND_EXIT_START)
             assert(lv_obj_get_style_img_opa(g_intro.icon, 0) ==
                    lv_obj_get_style_text_opa(g_intro.brand, 0));
         assert(!(lv_obj_get_style_text_opa(g_intro.brand, 0) > LV_OPA_MIN &&
                  lv_obj_get_style_text_opa(g_intro.welcome, 0) > LV_OPA_MIN));
     }
-    frame(550); screenshot("icon-fade");
-    frame(1000);
+    frame(300); screenshot("icon-fade");
+    frame(600);
     assert(lv_obj_get_style_img_opa(g_intro.icon, 0) >= LV_OPA_MAX);
     assert(lv_obj_get_style_text_opa(g_intro.brand, 0) >= LV_OPA_MAX);
-    frame(2000); screenshot("brand");
+    frame(600); screenshot("brand");
     assert(lv_obj_get_style_text_opa(g_intro.brand, 0) >= LV_OPA_MAX);
-    frame(3325);
+    frame(900);
     assert(lv_obj_get_style_text_opa(g_intro.brand, 0) <= LV_OPA_MIN);
     assert(lv_obj_get_style_text_opa(g_intro.welcome, 0) <= LV_OPA_MIN);
-    frame(4300); screenshot("welcome");
+    frame(1550); screenshot("welcome");
     assert(lv_obj_get_style_text_opa(g_intro.welcome, 0) >= LV_OPA_MAX);
     const char *welcome = lv_label_get_text(g_intro.welcome);
-    assert(strcmp(welcome, "WELCOME") == 0 || strcmp(welcome, "WELCOM") == 0);
-    frame(5000); screenshot("waiting");
-    frame(8030); screenshot("retiring");
+    assert(strcmp(welcome, BOOT_WELCOME_TEXT) == 0);
+    frame(2050); screenshot("waiting");
+    frame(INTRO_REVEAL_MS + INTRO_FADE_MS/2); screenshot("retiring");
     assert(lv_obj_get_style_text_opa(g_intro.welcome, 0) > LV_OPA_MIN);
     assert(lv_obj_get_style_text_opa(g_intro.welcome, 0) < LV_OPA_MAX);
     ui_page_00_boot_anim_destroy();
@@ -271,10 +278,12 @@ static void test_settling(void)
 {
     create();
     lv_obj_t *objects[] = {g_intro.icon, g_intro.brand, g_intro.welcome};
-    const unsigned starts[] = {150, 150, 3450};
-    const unsigned durations[] = {800, 800, 700};
-    const lv_coord_t bases[] = {82, 219, 219};
-    const lv_coord_t distances[] = {6, 4, 4};
+    const unsigned starts[] = {0, 0, BOOT_WELCOME_START};
+    const unsigned durations[] = {600, 600, BOOT_WELCOME_DURATION};
+    const lv_coord_t bases[] = {82, BOOT_TEXT_Y, BOOT_TEXT_Y};
+    const lv_coord_t distances[] = {6*BOOT_WELCOME_MOTION_SCALE,
+                                    4*BOOT_WELCOME_MOTION_SCALE,
+                                    4*BOOT_WELCOME_MOTION_SCALE};
     for (unsigned i = 0; i < 3; ++i) {
         frame(starts[i]);
         assert(lv_obj_get_y(objects[i]) == bases[i] + distances[i]);
@@ -294,17 +303,18 @@ static void test_settling(void)
     /* Sample settled dot cycles: asymmetric timing, stagger, quiet landing. */
     unsigned start = DOT_START_MS + DOT_PERIOD_MS;
     frame(start);
-    assert(lv_obj_get_y(g_intro.dots[0]) == 296);
+    assert(lv_obj_get_y(g_intro.dots[0]) == BOOT_DOT_Y);
     frame(start + 240);
-    assert(lv_obj_get_y(g_intro.dots[0]) == 290);
-    assert(lv_obj_get_y(g_intro.dots[1]) > 290);
+    assert(lv_obj_get_y(g_intro.dots[0]) == BOOT_DOT_Y-6*BOOT_WELCOME_MOTION_SCALE);
+    if (BOOT_WELCOME_MOTION_SCALE)
+        assert(lv_obj_get_y(g_intro.dots[1]) > BOOT_DOT_Y-6);
     frame(start + 450);
-    assert(lv_obj_get_y(g_intro.dots[0]) == 293);
+    assert(lv_obj_get_y(g_intro.dots[0]) == BOOT_DOT_Y-3*BOOT_WELCOME_MOTION_SCALE);
     frame(start + 660);
-    assert(lv_obj_get_y(g_intro.dots[0]) == 296);
+    assert(lv_obj_get_y(g_intro.dots[0]) == BOOT_DOT_Y);
     frame(start + 1000);
     for (unsigned i = 0; i < 3; ++i)
-        assert(lv_obj_get_y(g_intro.dots[i]) == 296);
+        assert(lv_obj_get_y(g_intro.dots[i]) == BOOT_DOT_Y);
     ui_page_00_boot_anim_destroy();
     assert_no_owner();
     puts("PASS settling: bounded monotonic motion, <=1px per 16ms, fixed fade-out position");
@@ -314,9 +324,10 @@ static void test_settling(void)
 static void test_refresh_budget(void)
 {
     create();
-    frame(1000);
+    ui_page_00_boot_anim_set_startup_ready(false);
+    frame(1550);
     reset_flush_stats();
-    for (unsigned elapsed = 1000; elapsed <= 1120; elapsed += 20) frame(elapsed);
+    for (unsigned elapsed = 1550; elapsed <= 1590; elapsed += 10) frame(elapsed);
     assert(flushes == 0 && flushed_pixels == 0);
     frame(5500);
     unsigned opened = decode_opens;
@@ -352,7 +363,7 @@ static void test_scanout_cadence(void)
      * rather than the 20 ms ticks used by the long lifecycle tests. The old
      * 16 ms theme timer skipped every other 13/14 ms service opportunity.
      * This is a scheduling regression test, not a physical FPS measurement. */
-    const unsigned starts[] = {400U, 2780U, 3560U,
+    const unsigned starts[] = {100U, 620U, 950U,
                                DOT_START_MS + DOT_PERIOD_MS + 40U};
     for (unsigned phase = 0; phase < sizeof(starts) / sizeof(starts[0]); ++phase) {
         create();
@@ -372,15 +383,15 @@ static void test_scanout_cadence(void)
             assert(g_intro.timer->last_run == lv_tick_get());
             assert(lv_tick_elaps(g_intro.start_tick) == elapsed);
             if (phase == 0) {
-                lv_opa_t expected = opacity(ease(progress(elapsed, 150U, 800U)));
+                lv_opa_t expected = opacity(ease(progress(elapsed, 0U, 600U)));
                 assert(lv_obj_get_style_img_opa(g_intro.icon, 0) == expected);
                 assert(lv_obj_get_style_text_opa(g_intro.brand, 0) == expected);
             } else if (phase == 1) {
                 assert(lv_obj_get_style_text_opa(g_intro.brand, 0) ==
-                    opacity(1.0f - ease(progress(elapsed, 2700U, 600U))));
+                    opacity(1.0f - ease(progress(elapsed, 600U, 300U))));
             } else if (phase == 2) {
                 assert(lv_obj_get_style_text_opa(g_intro.welcome, 0) ==
-                    opacity(ease(progress(elapsed, 3450U, 700U))));
+                    opacity(ease(progress(elapsed, 900U, 650U))));
             }
             if (phase < 3) assert(flushes != 0);
             assert(lv_obj_get_child_cnt(g_intro.root) == children);
@@ -390,7 +401,7 @@ static void test_scanout_cadence(void)
         ui_page_00_boot_anim_destroy();
         assert_no_owner();
     }
-    /* Faster service must not shorten the required three visible dot rounds. */
+    /* Ready cannot cut the minimum welcome sequence short. */
     create();
     ui_page_00_boot_anim_set_startup_ready(true);
     for (unsigned scanout = 0; ui_page_00_boot_anim_is_active(); ++scanout) {
@@ -398,14 +409,13 @@ static void test_scanout_cadence(void)
         lv_timer_handler();
         if (ui_page_00_boot_anim_is_active()) {
             unsigned elapsed = lv_tick_elaps(g_intro.start_tick);
-            if (elapsed < DOT_START_MS + 2U * DOT_PERIOD_MS + DOT_LANDED_MS)
+            if (elapsed < INTRO_MIN_REVEAL_MS)
                 assert(!g_intro.revealing);
-            if (g_intro.revealing) assert(g_intro.ready_dot_rounds == READY_DOT_ROUNDS);
         }
         assert(scanout < 800U);
     }
     assert_no_owner();
-    puts("PASS 13/14 ms real-LVGL dispatch: no 16 ms visual skips, no extra resources, three ready rounds retained");
+    puts("PASS 13/14 ms real-LVGL dispatch, minimum welcome sequence, no extra ready-round delay");
 }
 
 static void test_lifetimes(void)
@@ -488,7 +498,7 @@ static void test_selftest_cover(void)
     create();
     assert(lv_obj_has_flag(selftest_underlay, LV_OBJ_FLAG_HIDDEN));
     selftest_draws = 0;
-    tick(980);
+    tick(1500);
     assert(lv_obj_has_flag(selftest_underlay, LV_OBJ_FLAG_HIDDEN));
     assert(selftest_draws == 0);
     tick(80);
@@ -507,7 +517,7 @@ static void test_selftest_cover(void)
     ui_page_00_boot_anim_poll();
     current_page = UI_PAGE_BOOT;
     ui_page_00_boot_anim_create(lv_layer_top());
-    lv_tick_inc(1500);
+    lv_tick_inc(1560);
     timer_cb(g_intro.timer);
     assert(lv_obj_has_flag(selftest_underlay, LV_OBJ_FLAG_HIDDEN));
     render();
@@ -531,12 +541,12 @@ static void test_real_startup(void)
     tick(12000);
     assert(ui_page_00_boot_anim_is_active() && !g_intro.revealing);
     assert(lv_obj_get_style_text_opa(g_intro.welcome, 0) == LV_OPA_COVER);
-    lv_coord_t y = lv_obj_get_y(g_intro.dots[0]);
+    lv_opa_t dot_alpha = lv_obj_get_style_bg_opa(g_intro.dots[0], 0);
     tick(200);
-    assert(lv_obj_get_y(g_intro.dots[0]) != y);
+    assert(lv_obj_get_style_bg_opa(g_intro.dots[0], 0) != dot_alpha);
     ui_page_00_boot_anim_set_startup_ready(true);
-    tick(5100);
-    assert(g_intro.ready_dot_rounds == 2 && !g_intro.revealing);
+    tick(20);
+    assert(g_intro.revealing);
     ui_page_00_boot_anim_set_startup_ready(true); /* Duplicate must not restart. */
     tick(160);
     assert(g_intro.revealing && ui_page_00_boot_anim_is_active());
@@ -544,17 +554,15 @@ static void test_real_startup(void)
     assert_no_owner();
     create();
     ui_page_00_boot_anim_set_startup_ready(true);
-    tick(4800);
+    tick(2000);
     assert(!g_intro.revealing);
-    tick(3560);
-    assert(g_intro.ready_dot_rounds == 3 && g_intro.revealing);
-    tick(400);
+    tick(1400);
     assert_no_owner();
     create();
     ui_page_00_boot_anim_set_startup_ready(true);
     lv_tick_inc(14000); /* No rendered jumps: elapsed time alone is insufficient. */
     timer_cb(g_intro.timer);
-    assert(g_intro.ready_dot_rounds == 0 && !g_intro.revealing);
+    assert(!g_intro.revealing); /* Covered next page still needs preparation. */
     tick(5600);
     assert_no_owner();
     create();
@@ -591,7 +599,7 @@ static void test_resource_fallback(void)
             assert(lv_obj_get_style_bg_opa(g_intro.root, 0) == LV_OPA_COVER);
         }
         if (fail_emblem) assert(lv_obj_has_flag(g_intro.icon, LV_OBJ_FLAG_HIDDEN));
-        frame(5600);
+        frame(1600);
         assert(lv_obj_get_style_text_opa(g_intro.welcome, 0) >= LV_OPA_MAX);
         if (variant == 3) screenshot("missing-assets-fallback");
         tick(8240);

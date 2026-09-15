@@ -1,3 +1,4 @@
+#include "un260/lv_resources/ui_page_background.h"
 #include "page_19_history.h"
 #include "page_19_history_search.h"
 #include "lv_page_manager.h"
@@ -729,6 +730,7 @@ void ui_page_19_history_create(lv_obj_t *parent)
     if (!history) return;
     memset(history,0,sizeof(*history));history->model_dirty=true;history->language=ui_lang_get();
     history->root=surface(parent ? parent : lv_scr_act(),0,0,1280,400,0,HISTORY_BG);
+    ui_page_background_apply(history->root, UI_BACKGROUND_USER);
     if (!history->root) goto failed;
     lv_obj_t *header=surface(history->root,16,12,1140,66,15,0xFFFFFF);
     if (!header) goto failed;

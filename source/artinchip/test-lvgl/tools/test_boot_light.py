@@ -7,6 +7,7 @@ root=Path(__file__).resolve().parents[1]
 subprocess.run(['python3',str(root/'tools/build_boot_light_assets.py')],check=True)
 fixture=r'''
 #define _GNU_SOURCE
+#define UI_BOOT_ANIM_THEME 3
 #define BOOT_LIGHT_HOST_TEST
 #define main native_entry
 #include "un260/lv_drivers/boot_light.c"
@@ -16,6 +17,13 @@ fixture=r'''
 #include <stdarg.h>
 static unsigned mock_offset;
 static volatile unsigned mock_pan_interrupts,mock_vsync_interrupts;
+ssize_t __real_sendmsg(int,const struct msghdr*,int);
+ssize_t __wrap_sendmsg(int fd,const struct msghdr *msg,int flags) {
+ if(getenv("TEST_LEGACY_REPLY")&&msg->msg_iovlen==1&&
+    msg->msg_iov[0].iov_len==sizeof(boot_light_reply_t))
+  ((boot_light_reply_t*)msg->msg_iov[0].iov_base)->magic=0x554e4231U;
+ return __real_sendmsg(fd,msg,flags);
+}
 void backlight_service_init(void) {}
 int __real_open(const char*,int,...);
 int __wrap_open(const char *path,int flags,...) {
@@ -45,16 +53,16 @@ static void reference_sprite(uint8_t *frame,const uint8_t *src,unsigned w,unsign
 }
 static void reference_render(uint8_t *frame,const uint8_t *assets,uint32_t elapsed) {
  memcpy(frame,assets,BG_BYTES);
- float p=progress(elapsed,150,800),q=1-p;
- reference_sprite(frame,assets+BG_BYTES,96,96,592,82+(unsigned)(6*q*q*q+.5f),ease(p));
- reference_sprite(frame,assets+BG_BYTES+ICON_BYTES,500,64,390,219+(unsigned)(4*q*q*q+.5f),ease(p)*(1-ease(progress(elapsed,2700,600))));
- p=progress(elapsed,3450,700);q=1-p;
- reference_sprite(frame,assets+BG_BYTES+ICON_BYTES+TEXT_BYTES,500,64,390,219+(unsigned)(4*q*q*q+.5f),ease(p));
+ float p=progress(elapsed,BOOT_ENTRANCE_START,BOOT_ENTRANCE_DURATION),q=1-p;
+ reference_sprite(frame,assets+BG_BYTES,96,96,592,82+(unsigned)(BOOT_WELCOME_MOTION_SCALE*6*q*q*q+.5f),ease(p));
+ reference_sprite(frame,assets+BG_BYTES+ICON_BYTES,500,BOOT_TEXT_HEIGHT,390,BOOT_TEXT_Y+(unsigned)(BOOT_WELCOME_MOTION_SCALE*4*q*q*q+.5f),ease(p)*(1-ease(progress(elapsed,BOOT_BRAND_EXIT_START,BOOT_BRAND_EXIT_DURATION))));
+ p=progress(elapsed,BOOT_WELCOME_START,BOOT_WELCOME_DURATION);q=1-p;
+ reference_sprite(frame,assets+BG_BYTES+ICON_BYTES+TEXT_BYTES,500,BOOT_TEXT_HEIGHT,390,BOOT_TEXT_Y+(unsigned)(BOOT_WELCOME_MOTION_SCALE*4*q*q*q+.5f),ease(p));
  for(unsigned i=0;i<3;i++) {
-  unsigned phase=elapsed<4350?0:(elapsed-4350+1500-i*160)%1500;
+  unsigned phase=elapsed<BOOT_DOT_START?0:(elapsed-BOOT_DOT_START+BOOT_DOT_PERIOD-i*160)%BOOT_DOT_PERIOD;
   float jump=phase>=660?0:phase<240?ease((float)phase/240):1-ease((float)(phase-240)/420);
-  float alpha=ease(progress(elapsed,4350+i*120,450))*(.4f+.6f*jump);
-  unsigned x=619+i*17,y=296-(unsigned)(6*jump+.5f);
+  float alpha=ease(progress(elapsed,BOOT_DOT_START+i*120,450))*(.4f+.6f*jump);
+  unsigned x=619+i*17,y=BOOT_DOT_Y-(unsigned)(BOOT_WELCOME_MOTION_SCALE*6*jump+.5f);
   for(unsigned yy=0;yy<7;yy++)for(unsigned xx=0;xx<7;xx++) {
    int dx=(int)xx-3,dy=(int)yy-3;if(dx*dx+dy*dy>12)continue;
    const uint8_t color[4]={0x20,0x58,0xf8,255};
@@ -125,10 +133,10 @@ int main(int argc,char**argv) {
 '''
 with tempfile.TemporaryDirectory(prefix='un260-light-test-') as directory:
     tmp=Path(directory);src=tmp/'test.c';src.write_text(fixture);exe=tmp/'test'
-    defines=[]
-    for name,value in [('BOOT_LIGHT_SOCKET',tmp/'socket'),('BOOT_LIGHT_LOCK',tmp/'lock'),('BOOT_LIGHT_READY',tmp/'ready'),('ASSET_PATH',root/'aic_ui/lvgl_data/boot_theme_c/boot-light.bin')]:
+    defines=['-DBOOT_WELCOME_MOTION_SCALE=0'] if os.environ.get('TEST_REDUCED_MOTION')=='1' else []
+    for name,value in [('BOOT_LIGHT_SOCKET',tmp/'socket'),('BOOT_LIGHT_LOCK',tmp/'lock'),('BOOT_LIGHT_READY',tmp/'ready'),('ASSET_PATH',root/'aic_ui/generated_assets/boot_theme_c/boot-light.bin')]:
         defines.append('-D'+name+'="'+str(value)+'"')
-    subprocess.run(['cc','-std=c11','-O2','-Wall','-Wextra','-Werror','-fsanitize=undefined','-fno-sanitize-recover=all','-I'+str(root),*defines,str(src),'-Wl,--wrap=open','-Wl,--wrap=ioctl','-lz','-o',str(exe)],check=True)
+    subprocess.run(['cc','-std=c11','-O2','-Wall','-Wextra','-Werror','-fsanitize=undefined','-fno-sanitize-recover=all','-I'+str(root),*defines,str(src),'-Wl,--wrap=open','-Wl,--wrap=ioctl','-Wl,--wrap=sendmsg','-lz','-o',str(exe)],check=True)
     fb=tmp/'fb';fb.write_bytes(bytes(1280*400*4*2))
     env=dict(os.environ,TEST_FB=str(fb),UN260_BOOT_LIGHT_ACTIVE='1',UN260_BOOT_TRACE='1',TEST_CLIENT_READY=str(tmp/'client-ready'),TEST_CLIENT_RELEASE=str(tmp/'client-release'))
     subprocess.run([str(exe),'equivalence'],env=env,check=True)
@@ -161,6 +169,18 @@ with tempfile.TemporaryDirectory(prefix='un260-light-test-') as directory:
             client.wait(timeout=3)
         if native.poll() is None:native.terminate();native.wait(timeout=3)
     subprocess.run([str(exe),'fallback'],env=env,check=True)
+    legacy=subprocess.Popen([str(exe)],env=dict(env,TEST_LEGACY_REPLY='1'))
+    try:
+        deadline=time.monotonic()+3
+        while not (tmp/'ready').exists():
+            assert legacy.poll() is None and time.monotonic()<deadline
+            time.sleep(.01)
+        subprocess.run([str(exe),'fallback'],env=env,check=True)
+        assert legacy.wait(timeout=3)==0
+        print('PASS old visual revision does not adopt incompatible elapsed time')
+    finally:
+        if legacy.poll() is None:
+            legacy.terminate();legacy.wait(timeout=3)
     with (tmp/'lock').open('r+') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
         subprocess.run([str(exe),'busy'],env=env,check=True)

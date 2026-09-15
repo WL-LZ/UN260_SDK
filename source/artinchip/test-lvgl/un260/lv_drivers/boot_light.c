@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include "boot_light_protocol.h"
 #include "boot_frame_stats.h"
+#include "un260/lv_core/boot_anim/boot_welcome_timing.h"
 #include "un260/lv_system/backlight_service.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -15,7 +16,11 @@
 #include <sys/file.h>
 #include <sys/prctl.h>
 #include <zlib.h>
+#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D
+#include "aic_ui/generated_assets/boot_light_d_packed.h"
+#else
 #include "aic_ui/generated_assets/boot_light_packed.h"
+#endif
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
@@ -25,8 +30,7 @@
 #include <unistd.h>
 #ifdef BOOT_LIGHT_HOST_TEST
 #define AICFB_WAIT_FOR_VSYNC 0x1234
-#define UI_BOOT_ANIM_THEME 3
-#define UI_BOOT_ANIM_THEME_C 3
+
 #else
 #include <video/artinchip_fb.h>
 #include "un260/lv_core/page_00_boot_anim.h"
@@ -36,16 +40,21 @@
 #define H 400U
 #define BG_BYTES (W*H*4U)
 #define ICON_BYTES (96U*96U*4U)
-#define TEXT_BYTES (500U*64U*4U)
+#define TEXT_BYTES (500U*BOOT_TEXT_HEIGHT*4U)
 #define ASSET_BYTES (BG_BYTES+ICON_BYTES+2U*TEXT_BYTES)
 #define ACTIVE_X 390U
+#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D
+#define ACTIVE_Y 120U
+#define ACTIVE_H 196U
+#else
 #define ACTIVE_Y 78U
+#define ACTIVE_H 264U
+#endif
 #define ACTIVE_W 500U
-#define ACTIVE_H 229U
 #define ACTIVE_STRIDE (ACTIVE_W*4U)
 #define ACTIVE_BYTES (ACTIVE_STRIDE*ACTIVE_H)
 #define DOTS_X 619U
-#define DOTS_Y 290U
+#define DOTS_Y (BOOT_DOT_Y-6U)
 #define DOTS_W 41U
 #define DOTS_H 13U
 typedef struct {
@@ -64,7 +73,16 @@ static void trace(const char *stage)
     const char *enabled=getenv("UN260_BOOT_TRACE");
     if(enabled&&!strcmp(enabled,"1"))fprintf(stderr,"BOOT_LIGHT uptime_ms=%llu stage=%s\n",(unsigned long long)now_ms(),stage);
 }
-static float ease(float p) {if(p<=0)return 0;if(p>=1)return 1;if(p<.5f)return 4*p*p*p;float q=2-2*p;return 1-q*q*q/2;}
+#include "un260/lv_core/boot_anim/boot_d_motion.h"
+static float ease(float p) {
+#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D
+return boot_d_smooth(p);
+#endif
+    if(p<=0)return 0;
+    if(p>=1)return 1;
+    if(p<.5f)return 4*p*p*p;
+    float q=2-2*p;return 1-q*q*q/2;
+}
 static float progress(uint32_t t,uint32_t start,uint32_t duration) {return t<=start?0:t-start>=duration?1:(float)(t-start)/duration;}
 static void blend(uint8_t *dst,const uint8_t *src,unsigned count,unsigned opacity)
 {
@@ -89,28 +107,46 @@ static void render(uint8_t *frame,unsigned stride,const uint8_t *assets,
      * write completed rows to scanout; never read scanout pixels on the CPU. */
     if(!state->initialized)
         for(unsigned y=0;y<H;y++)memcpy(frame+y*stride,assets+y*W*4,W*4);
-    bool dots_only=state->settled&&elapsed>=4150U;
+    bool dots_only=state->settled&&elapsed>=BOOT_WELCOME_SETTLED;
     unsigned x=dots_only?DOTS_X:ACTIVE_X,y=dots_only?DOTS_Y:ACTIVE_Y;
     unsigned width=dots_only?DOTS_W:ACTIVE_W,height=dots_only?DOTS_H:ACTIVE_H;
     for(unsigned row=0;row<height;row++)
         memcpy(canvas+(y+row-ACTIVE_Y)*ACTIVE_STRIDE+(x-ACTIVE_X)*4,
                assets+((y+row)*W+x)*4,width*4);
     if(!dots_only) {
-        float p=progress(elapsed,150,800),q=1-p;
-        sprite(canvas,ACTIVE_STRIDE,assets+BG_BYTES,96,96,592-ACTIVE_X,82-ACTIVE_Y+(unsigned)(6*q*q*q+.5f),ease(p));
-        sprite(canvas,ACTIVE_STRIDE,assets+BG_BYTES+ICON_BYTES,500,64,390-ACTIVE_X,219-ACTIVE_Y+(unsigned)(4*q*q*q+.5f),ease(p)*(1-ease(progress(elapsed,2700,600))));
-        p=progress(elapsed,3450,700);q=1-p;
-        sprite(canvas,ACTIVE_STRIDE,assets+BG_BYTES+ICON_BYTES+TEXT_BYTES,500,64,390-ACTIVE_X,219-ACTIVE_Y+(unsigned)(4*q*q*q+.5f),ease(p));
+#if UI_BOOT_ANIM_THEME != UI_BOOT_ANIM_THEME_D
+        float p=progress(elapsed,BOOT_ENTRANCE_START,BOOT_ENTRANCE_DURATION),q=1-p;
+        sprite(canvas,ACTIVE_STRIDE,assets+BG_BYTES,96,96,592-ACTIVE_X,82-ACTIVE_Y+(unsigned)(BOOT_WELCOME_MOTION_SCALE*6*q*q*q+.5f),ease(p));
+        sprite(canvas,ACTIVE_STRIDE,assets+BG_BYTES+ICON_BYTES,500,BOOT_TEXT_HEIGHT,390-ACTIVE_X,BOOT_TEXT_Y-ACTIVE_Y+(unsigned)(BOOT_WELCOME_MOTION_SCALE*4*q*q*q+.5f),ease(p)*(1-ease(progress(elapsed,BOOT_BRAND_EXIT_START,BOOT_BRAND_EXIT_DURATION))));
+#else
+        float p,q;
+#endif
+        p=progress(elapsed,BOOT_WELCOME_START,BOOT_WELCOME_DURATION);q=1-p;
+#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D
+        q=0;
+#endif
+        sprite(canvas,ACTIVE_STRIDE,assets+BG_BYTES+ICON_BYTES+TEXT_BYTES,500,BOOT_TEXT_HEIGHT,390-ACTIVE_X,BOOT_TEXT_Y-ACTIVE_Y+(unsigned)(BOOT_WELCOME_MOTION_SCALE*4*q*q*q+.5f),ease(p));
     }
     for(unsigned i=0;i<3;i++) {
-        unsigned phase=elapsed<4350?0:(elapsed-4350+1500-i*160)%1500;
+        unsigned phase=elapsed<BOOT_DOT_START?0:(elapsed-BOOT_DOT_START+BOOT_DOT_PERIOD-i*160)%BOOT_DOT_PERIOD;
         float jump=phase>=660?0:phase<240?ease((float)phase/240):1-ease((float)(phase-240)/420);
-        float alpha=ease(progress(elapsed,4350+i*120,450))*(.4f+.6f*jump);
-        unsigned x=619+i*17,y=296-(unsigned)(6*jump+.5f);
+#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D
+        jump=boot_d_dot(elapsed,i);
+#endif
+        float alpha=ease(progress(elapsed,BOOT_DOT_START+i*120,450))*(.4f+.6f*jump);
+        unsigned lift=6;
+#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D
+        alpha=ease(progress(elapsed,2300U,800U))*(.4f+.6f*jump);lift=5;
+#endif
+        unsigned x=619+i*17,y=BOOT_DOT_Y-(unsigned)(BOOT_WELCOME_MOTION_SCALE*lift*jump+.5f);
         for(unsigned yy=0;yy<7;yy++)for(unsigned xx=0;xx<7;xx++) {
             int dx=(int)xx-3,dy=(int)yy-3;
             if(dx*dx+dy*dy>12)continue;
+#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D
+            const uint8_t color[4]={0x9e,0x87,0x7c,255};
+#else
             const uint8_t color[4]={0x20,0x58,0xf8,255};
+#endif
             blend(canvas+(y+yy-ACTIVE_Y)*ACTIVE_STRIDE+(x+xx-ACTIVE_X)*4,color,1,(unsigned)(alpha*255+.5f));
         }
     }
@@ -118,7 +154,7 @@ static void render(uint8_t *frame,unsigned stride,const uint8_t *assets,
         memcpy(frame+(y+row)*stride+x*4,
                canvas+(y+row-ACTIVE_Y)*ACTIVE_STRIDE+(x-ACTIVE_X)*4,width*4);
     state->initialized=true;
-    state->settled=elapsed>=4150U;
+    state->settled=elapsed>=BOOT_WELCOME_SETTLED;
 }
 static int display_ioctl(int fd,unsigned long request,void *arg)
 {
@@ -138,7 +174,7 @@ int boot_light_run(void)
 int main(void)
 #endif
 {
-#if UI_BOOT_ANIM_THEME != UI_BOOT_ANIM_THEME_C
+#if !UI_BOOT_EARLY_ENABLED
     return 1;
 #endif
     trace("main_enter");
@@ -202,8 +238,8 @@ int main(void)
             close(client);
         }
         uint32_t elapsed=(uint32_t)(now_ms()-start);
-        if(pages[0].initialized&&pages[1].initialized&&
-           ((elapsed>=980&&elapsed<2700)||(elapsed>=3330&&elapsed<3450))) {
+        if(pages[0].settled&&pages[1].settled&&
+           elapsed>=BOOT_WELCOME_SETTLED&&elapsed<BOOT_DOT_START) {
             quiet_pause();continue;
         }
         unsigned target=visible^1U;

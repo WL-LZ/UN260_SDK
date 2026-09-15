@@ -536,13 +536,20 @@ $(eval $(kconfig-package))
 ifneq ($(wildcard $(TARGET_BOARD_DIR)/early-init.enabled),)
 # Keep the embedded renderer consistent with ordinary incremental UI builds.
 $(LINUX_DIR)/.stamp_built: \
+	$(TOPDIR)/source/artinchip/test-lvgl/un260/lv_core/boot_anim/boot_theme_config.h \
+	$(wildcard $(TOPDIR)/source/artinchip/test-lvgl/un260/font/lv_font_roboto_*.c) \
+	$(wildcard $(TOPDIR)/source/artinchip/test-lvgl/aic_ui/lvgl_data/boot_theme_d/*.png) \
 	$(TOPDIR)/tools/un260-startup/build_early_init.py \
 	$(TOPDIR)/tools/un260-startup/early_init.c \
 	$(TOPDIR)/source/artinchip/test-lvgl/tools/build_boot_light_assets.py \
+	$(TOPDIR)/source/artinchip/test-lvgl/tools/gen_boot_d_assets.py \
 	$(wildcard $(TOPDIR)/source/artinchip/test-lvgl/un260/lv_drivers/boot_light*) \
 	$(TOPDIR)/source/artinchip/test-lvgl/un260/lv_drivers/boot_frame_stats.h \
 	$(TOPDIR)/source/artinchip/test-lvgl/un260/lv_system/backlight_service.c \
 	$(TOPDIR)/source/artinchip/test-lvgl/un260/lv_core/page_00_boot_anim.h \
+	$(TOPDIR)/source/artinchip/test-lvgl/un260/lv_core/boot_anim/boot_welcome_timing.h \
+	$(TOPDIR)/source/artinchip/test-lvgl/un260/font/lv_font_open_runde_medium_48.c \
+	$(TOPDIR)/source/artinchip/test-lvgl/un260/font/lv_font_boot_welcome.c \
 	$(wildcard $(TOPDIR)/source/artinchip/test-lvgl/aic_ui/lvgl_data/boot_theme_c/*.png) \
 	$(wildcard $(TOPDIR)/source/artinchip/test-lvgl/un260/font/lv_font_instrument_sans*_[44][08].c)
 endif

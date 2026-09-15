@@ -4,6 +4,7 @@
 #include <string.h>
 #include "lvgl/lvgl.h"
 #include "aic_ui/compiled_asset.h"
+#include "test_page_background_asset.h"
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/lv_core/page_02_list_search.c"
 /* Include the unchanged production translation unit to inspect its private
@@ -28,7 +29,7 @@ static lv_res_t host_asset_info(lv_img_decoder_t *decoder,const void *src,lv_img
 {
     (void)decoder;
     if(lv_img_src_get_type(src)!=LV_IMG_SRC_FILE) return LV_RES_INV;
-    const un260_compiled_asset_t *asset=un260_compiled_asset_find(src);
+    const un260_compiled_asset_t *asset=test_page_asset_find(src);
     if(!asset || !asset->has_alpha || asset->stride!=asset->width*4) return LV_RES_INV;
     memset(header,0,sizeof(*header));
     header->w=asset->width;header->h=asset->height;header->cf=LV_IMG_CF_TRUE_COLOR_ALPHA;
@@ -37,7 +38,7 @@ static lv_res_t host_asset_info(lv_img_decoder_t *decoder,const void *src,lv_img
 static lv_res_t host_asset_open(lv_img_decoder_t *decoder,lv_img_decoder_dsc_t *dsc)
 {
     if(host_asset_info(decoder,dsc->src,&dsc->header)!=LV_RES_OK) return LV_RES_INV;
-    const un260_compiled_asset_t *asset=un260_compiled_asset_find(dsc->src);
+    const un260_compiled_asset_t *asset=test_page_asset_find(dsc->src);
     dsc->img_data=asset->pixels;
     for(unsigned i=0;i<5;++i)
         if(!strcmp(dsc->src,image_paths[i])) ++image_opens[i];
@@ -464,14 +465,15 @@ static void assert_action_rail(bool page_visible)
 }
 static void assert_palette(bool page_visible)
 {
+    assert(!strcmp(lv_obj_get_style_bg_img_src(view->page,0),UI_USER_BACKGROUND_SRC));
     const uint32_t badge_colors[]={0x2BD900,0x0074F8,0xF85820};
-    assert(lv_obj_get_style_bg_color(view->page,0).full==lv_color_hex(0xD8E2E8).full);
+    assert(lv_obj_get_style_bg_color(view->page,0).full==lv_color_hex(0xF2F5F7).full);
     assert(lv_obj_get_style_bg_opa(view->page,0)==LV_OPA_COVER);
     lv_obj_update_layout(view->page);
     if(page_visible) render_page();
     assert_home_icon(page_visible);
     assert_action_rail(page_visible);
-    if(page_visible) assert(framebuffer[0].full==lv_color_hex(0xD8E2E8).full);
+    if(page_visible) assert((framebuffer[0].full&0xffffff)==(*(const uint32_t*)test_page_asset_find(UI_USER_BACKGROUND_SRC)->pixels&0xffffff));
     for(int i=0;i<3;++i) {
         list_section_t *s=&view->section[i];
         assert(lv_obj_get_style_bg_color(s->panel,0).full==lv_color_hex(0xFFFFFF).full);
@@ -716,7 +718,7 @@ static void test_search_background(void)
     lv_event_send(view->actions[LIST_ACTION_SEARCH],LV_EVENT_CLICKED,NULL);
     assert(view->search);
     page_02_list_search_t *s=view->search;
-    assert(lv_obj_get_style_bg_color(s->root,0).full==lv_color_hex(0xD8E2E8).full);
+    assert(lv_obj_get_style_bg_color(s->root,0).full==lv_color_hex(0xF2F5F7).full);
     assert(lv_obj_get_style_bg_opa(s->root,0)==LV_OPA_COVER);
     lv_obj_t *cards[]={lv_obj_get_parent(s->contains),lv_obj_get_parent(s->input)};
     for(unsigned i=0;i<2;++i) {
@@ -724,7 +726,7 @@ static void test_search_background(void)
         assert(lv_obj_get_style_bg_opa(cards[i],0)==LV_OPA_COVER);
     }
     render_page();
-    assert(framebuffer[0].full==lv_color_hex(0xD8E2E8).full);
+    assert((framebuffer[0].full&0xffffff)==(*(const uint32_t*)test_page_asset_find(UI_USER_BACKGROUND_SRC)->pixels&0xffffff));
     write_bmp("search-background");
     search_closed(UINT16_MAX,NULL);
     assert(!view->search);
@@ -736,6 +738,15 @@ int main(void)
     lv_disp_draw_buf_init(&buf,pixels,NULL,1280*40);
     lv_disp_drv_t driver;lv_disp_drv_init(&driver);driver.hor_res=1280;driver.ver_res=400;
     driver.draw_buf=&buf;driver.flush_cb=flush;lv_disp_drv_register(&driver);
+    lv_obj_t *probe=lv_obj_create(lv_scr_act());lv_obj_remove_style_all(probe);lv_obj_set_size(probe,1280,400);
+    for(unsigned theme=0;theme<2;theme++){
+        ui_page_background_apply(probe,theme?UI_BACKGROUND_SETTINGS:UI_BACKGROUND_USER);
+        lv_obj_update_layout(probe);lv_obj_invalidate(probe);lv_refr_now(NULL);
+        const uint32_t *expected=(const uint32_t*)test_page_asset_find(theme?UI_SETTINGS_BACKGROUND_SRC:UI_USER_BACKGROUND_SRC)->pixels;
+        for(unsigned i=0;i<1280*400;i++)assert((framebuffer[i].full&0xffffff)==(expected[i]&0xffffff));
+    }
+    lv_obj_del(probe);
+    puts("PASS both full-screen background styles match the actual generated PNG pixels");
     test_alnum_keyboard_cases();
     test_recycled_list_cases();
     counting_sim_t *data=counting_data_mutable();

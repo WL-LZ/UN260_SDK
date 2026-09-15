@@ -37,7 +37,7 @@ static void curr_focus_confirmed_selection_on_entry(void);
 ui_element_t page_07_curr_obj[] = {
     // 背景图
     {
-        .obj_name = "page_07_bg.png",
+        .obj_name = "backgrounds/user.png",
         .obj_type = LV_OBJ_TYPE_IMAGE,
         .obj_item = { .x = 0, .y = 0, .w = 1280, .h = 400 },
         .obj_style = { .opacity = 255 },
