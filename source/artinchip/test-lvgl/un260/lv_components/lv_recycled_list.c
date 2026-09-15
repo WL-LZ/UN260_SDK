@@ -294,6 +294,10 @@ lv_recycled_list_t *lv_recycled_list_create(lv_obj_t *parent,
         cfg->width <= 24 || cfg->width > LV_COORD_MAX ||
         (uint32_t)(cfg->rows + 1U) * cfg->row_height + (uint32_t)EDGE_LIMIT > (uint32_t)LV_COORD_MAX)
         return NULL;
+    lv_coord_t content_width = cfg->content_width ? cfg->content_width : cfg->width - 24;
+    lv_coord_t inset = cfg->scrollbar_right_inset ? cfg->scrollbar_right_inset : 12;
+    if (content_width <= 0 || inset < 2 || inset > cfg->width - 2 ||
+        content_width > cfg->width - inset - 2) return NULL;
     lv_recycled_list_t *list = lv_mem_alloc(sizeof(*list));
     if (!list) return NULL;
     memset(list, 0, sizeof(*list));
@@ -318,7 +322,7 @@ lv_recycled_list_t *lv_recycled_list_create(lv_obj_t *parent,
         return NULL;
     }
     for (unsigned i = 0; i <= cfg->rows; ++i) {
-        list->row[i] = cfg->create_row(list->object, cfg->width - 24, cfg->context);
+        list->row[i] = cfg->create_row(list->object, content_width, cfg->context);
         if (!list->row[i]) goto creation_failed;
         lv_obj_clear_flag(list->row[i], LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(list->row[i], LV_OBJ_FLAG_HIDDEN);
@@ -327,8 +331,7 @@ lv_recycled_list_t *lv_recycled_list_create(lv_obj_t *parent,
     if (!list->thumb) goto creation_failed;
     lv_obj_remove_style_all(list->thumb);
     lv_obj_set_size(list->thumb, 4, 18);
-    /* 24px content-to-panel gutter; thumb center is 12px from panel edge. */
-    lv_obj_set_x(list->thumb, cfg->width - 14);
+    lv_obj_set_x(list->thumb, cfg->width - inset - 2);
     lv_obj_set_style_radius(list->thumb, 2, 0);
     lv_obj_set_style_bg_color(list->thumb, lv_color_hex(0xC6D0D8), 0);
     lv_obj_set_style_bg_opa(list->thumb, LV_OPA_COVER, 0);

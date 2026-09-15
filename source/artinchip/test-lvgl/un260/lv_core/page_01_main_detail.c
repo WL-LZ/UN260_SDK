@@ -264,7 +264,7 @@ static bool section_create(main_detail_section_t *section, unsigned id,
 {
     section->id = (page_01_detail_section_t)id;
     section->dirty = true;
-    section->root = surface(detail_view->root, 0, 0, width, height, 0xFFFFFF);
+    section->root = surface(detail_view->root, 0, 0, width + 18, height, 0xFFFFFF);
     if (!section->root) return false;
     lv_coord_t usable = width - 24;
     if (id == PAGE_01_DETAIL_SECTION_A) {
@@ -293,7 +293,9 @@ static bool section_create(main_detail_section_t *section, unsigned id,
     }
     lv_recycled_list_config_t config = {0};
     config.y = DETAIL_HEADER_HEIGHT;
-    config.width = width;
+    config.width = width + 18;
+    config.content_width = width - 24;
+    config.scrollbar_right_inset = 6;
     config.rows = (height - DETAIL_HEADER_HEIGHT) / DETAIL_ROW_HEIGHT;
     config.row_height = DETAIL_ROW_HEIGHT;
     config.create_row = row_create;
@@ -323,12 +325,12 @@ static void root_deleted(lv_event_t *event)
 bool page_01_main_detail_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
                                 lv_coord_t width, lv_coord_t height)
 {
-    if (detail_view || !parent || width < 300 || height < DETAIL_HEADER_HEIGHT + DETAIL_ROW_HEIGHT ||
+    if (detail_view || !parent || width < 300 || width > LV_COORD_MAX - 18 || height < DETAIL_HEADER_HEIGHT + DETAIL_ROW_HEIGHT ||
         (height - DETAIL_HEADER_HEIGHT) / DETAIL_ROW_HEIGHT >= 16) return false;
     main_detail_view_t *view = lv_mem_alloc(sizeof(*view));
     if (!view) return false;
     memset(view, 0, sizeof(*view));
-    view->root = surface(parent, x, y, width, height, 0xFFFFFF);
+    view->root = surface(parent, x, y, width + 18, height, 0xFFFFFF);
     if (!view->root) { lv_mem_free(view); return false; }
     if (!lv_obj_add_event_cb(view->root, root_deleted, LV_EVENT_DELETE, view)) {
         lv_obj_del(view->root);

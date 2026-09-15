@@ -17,6 +17,8 @@ typedef struct {
     lv_recycled_list_bind_row_fn bind_row;
     lv_recycled_list_changed_fn changed;
     void *context;
+    /* Zero keeps the existing 24px gutter and 12px thumb-center inset. */
+    lv_coord_t content_width, scrollbar_right_inset;
 } lv_recycled_list_config_t;
 
 /* Generic read-only viewport: vertical scroll with bounded edge elasticity;

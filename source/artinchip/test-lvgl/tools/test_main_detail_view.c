@@ -267,6 +267,20 @@ static void test_lifecycle(void)
         lv_obj_t *parent = surface(lv_scr_act(), 0, 0, 1280, 400, 0xD8E2E8);
         fail_timer = iteration == 0;
         assert(page_01_main_detail_create(parent, 620, 120, 518, 200));
+        lv_obj_update_layout(detail_view->root);
+        for (unsigned section = 0; section < 3; ++section) {
+            lv_obj_t *viewport = lv_recycled_list_object(detail_view->section[section].list);
+            assert(lv_obj_get_width(viewport) == 536);
+            bool found_thumb = false;
+            for (unsigned child = 0; child < lv_obj_get_child_cnt(viewport); ++child) {
+                lv_obj_t *object = lv_obj_get_child(viewport, child);
+                if (lv_obj_get_width(object) == 4) {
+                    assert(lv_obj_get_x(object) == 528);
+                    found_thumb = true;
+                }
+            }
+            assert(found_thumb);
+        }
         assert(!fail_timer && timer_count() == baseline + (iteration == 0 ? 2U : 3U));
         page_01_main_detail_refresh(PAGE_01_DETAIL_SECTION_C);
         lv_recycled_list_scroll_to_index(active()->list, 100);
