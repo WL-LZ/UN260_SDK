@@ -250,6 +250,43 @@ static void render(void){lv_obj_clean(page);memset(&preview,0,sizeof(preview));m
 static void settings_tick(lv_timer_t*t){(void)t;char msg[160];if(standby_store_poll(msg,sizeof(msg))){if(saving){bool ok=!memcmp(&draft,standby_config(),sizeof(draft));saving=false;if(ok)tab=0;}render();redraw=false;if(note){lv_label_set_text(note,msg);lv_obj_clear_flag(note,LV_OBJ_FLAG_HIDDEN);notice_tick=lv_tick_get();notice_visible=true;}return;}if(redraw){render();redraw=false;}if(notice_visible&&lv_tick_elaps(notice_tick)>=2500){notice_visible=false;if(note)lv_obj_add_flag(note,LV_OBJ_FLAG_HIDDEN);}if(!(tab==4&&moving.active))scene_update(&preview,&draft,false);}
 void ui_page_34_standby_create(lv_obj_t*parent){if(page)return;draft=*standby_config();tab=0;selected=0;saving=false;gesture_service_set_page_policy(UI_PAGE_STANDBY_SETTING,owns_single_drag,handle_gesture);page=box(parent,0,0,1280,400,0xF6F8FA);render();settings_timer=lv_timer_create(settings_tick,100,NULL);}
 void ui_page_34_standby_destroy(void){gesture_service_clear_page_policy(UI_PAGE_STANDBY_SETTING);settings_detail_keyboard_hide();settings_detail_dialog_hide();if(settings_timer)lv_timer_del(settings_timer);settings_timer=NULL;if(page)lv_obj_del(page);page=NULL;body=NULL;note=NULL;hex_label=NULL;gallery=NULL;edit_hint=NULL;moving.active=false;notice_visible=false;memset(&preview,0,sizeof(preview));}
-static void clock_tick(lv_timer_t*t){(void)t;scene_update(&full,standby_config(),false);}
-void ui_page_35_standby_create(lv_obj_t*parent){app_standby_runtime_enter();scene_create(&full,parent,0,0,false,false,standby_config());clock_timer=lv_timer_create(clock_tick,1000,NULL);}
-void ui_page_35_standby_destroy(void){if(clock_timer)lv_timer_del(clock_timer);clock_timer=NULL;if(full.root)lv_obj_del(full.root);memset(&full,0,sizeof(full));}
+/* A black cover animates without a full-screen translucent object layer.
+ * The page owns cover and animation; entry and exit timings are independent. */
+#define STANDBY_FADE_IN_MS 300
+#define STANDBY_FADE_OUT_MS 150
+static lv_obj_t *fade_cover;
+static bool fade_exiting,fade_finished;
+static void fade_exec(void *obj,int32_t value){lv_obj_set_style_bg_opa(obj,(lv_opa_t)value,0);}
+static void fade_ready(lv_anim_t*a){(void)a;if(fade_exiting)fade_finished=true;}
+static void fade_start(int from,int to){
+ lv_anim_del(fade_cover,fade_exec);
+ lv_anim_t a;lv_anim_init(&a);lv_anim_set_var(&a,fade_cover);
+ lv_anim_set_values(&a,from,to);lv_anim_set_time(&a,fade_exiting?STANDBY_FADE_OUT_MS:STANDBY_FADE_IN_MS);
+ lv_anim_set_exec_cb(&a,fade_exec);lv_anim_set_path_cb(&a,lv_anim_path_linear);
+ lv_anim_set_ready_cb(&a,fade_ready);
+ if(!lv_anim_start(&a)){fade_exec(fade_cover,to);if(fade_exiting)fade_finished=true;}
+}
+bool ui_page_35_standby_fade_out(void){
+ if(!fade_cover)return true;
+ if(!fade_exiting){fade_exiting=true;fade_finished=false;
+  fade_start(lv_obj_get_style_bg_opa(fade_cover,0),LV_OPA_COVER);
+ }
+ return fade_finished;
+}
+static void clock_tick(lv_timer_t*t){(void)t;if(!fade_exiting)scene_update(&full,standby_config(),false);}
+void ui_page_35_standby_create(lv_obj_t*parent){
+ app_standby_runtime_enter();scene_create(&full,parent,0,0,false,false,standby_config());
+ fade_exiting=false;fade_finished=false;
+ fade_cover=box(full.root,0,0,1280,400,0x000000);
+ lv_obj_clear_flag(fade_cover,LV_OBJ_FLAG_CLICKABLE);
+ fade_start(LV_OPA_COVER,LV_OPA_TRANSP);
+ clock_timer=lv_timer_create(clock_tick,1000,NULL);
+}
+void ui_page_35_standby_destroy(void){
+ if(clock_timer)lv_timer_del(clock_timer);
+ clock_timer=NULL;
+ if(fade_cover)lv_anim_del(fade_cover,fade_exec);
+ fade_cover=NULL;fade_exiting=false;fade_finished=false;
+ if(full.root)lv_obj_del(full.root);
+ memset(&full,0,sizeof(full));
+}

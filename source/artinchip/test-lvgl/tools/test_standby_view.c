@@ -102,6 +102,33 @@ static void position_test(void){
  tab=5;render();snapshot("text-custom");p->auto_text=1;render();snapshot("text-auto");assert(p->text_color==0xCC3366);draft.mode=0;assert(text_ink(&draft,layout())==layout()->text_color);
  puts("PASS content+20 frames, independent date/dial, overlap area threshold, swap, hidden date, automatic/manual colour retention");
 }
+static void advance_fade(unsigned ms){lv_tick_inc(ms);lv_anim_refr_now();}
+static void fade_test(void){
+ touching=false;current_page=UI_PAGE_STANDBY;
+ ui_page_35_standby_create(lv_scr_act());lv_anim_refr_now();
+ assert(lv_obj_get_style_bg_opa(fade_cover,0)==255);snapshot("fade-in-start");
+ advance_fade(150);int mid=lv_obj_get_style_bg_opa(fade_cover,0);
+ assert(mid>0&&mid<255);snapshot("fade-in-middle");
+ advance_fade(150);assert(lv_obj_get_style_bg_opa(fade_cover,0)==0);
+ snapshot("fade-in-end");
+ assert(app_standby_runtime_touch(true));
+ app_standby_runtime_poll(lv_tick_get());assert(current_page==UI_PAGE_STANDBY);
+ assert(fade_exiting&&!fade_finished);
+ advance_fade(75);snapshot("fade-out-middle");
+ app_standby_runtime_poll(lv_tick_get());assert(current_page==UI_PAGE_STANDBY);
+ advance_fade(74);assert(!ui_page_35_standby_fade_out());
+ advance_fade(1);assert(ui_page_35_standby_fade_out());snapshot("fade-out-end");
+ app_standby_runtime_poll(lv_tick_get());assert(current_page==UI_PAGE_MAIN);
+ assert(app_standby_runtime_touch(false));ui_page_35_standby_destroy();
+ /* Reversal and forced destruction never retain animation callbacks. */
+ current_page=UI_PAGE_STANDBY;ui_page_35_standby_create(lv_scr_act());lv_anim_refr_now();
+ advance_fade(100);assert(!ui_page_35_standby_fade_out());
+ advance_fade(149);assert(!ui_page_35_standby_fade_out());
+ ui_page_35_standby_destroy();advance_fade(400);
+ assert(!fade_cover&&!full.root&&!clock_timer);
+ current_page=UI_PAGE_MAIN;
+ puts("PASS 300ms entry / 150ms exit, halfway opacity, deferred wake, reversal and destruction");
+}
 int main(void){standby_defaults(&saved);lv_init();wallpaper=load("wallpaper.bgra",1280*400*4);gear=load("gear.bgra",24*28*4);lv_disp_draw_buf_t db;lv_disp_draw_buf_init(&db,buffer,NULL,1280*40);lv_disp_drv_t dd;lv_disp_drv_init(&dd);dd.hor_res=1280;dd.ver_res=400;dd.draw_buf=&db;dd.flush_cb=flush;lv_disp_drv_register(&dd);lv_img_decoder_t*dec=lv_img_decoder_create();lv_img_decoder_set_info_cb(dec,info);lv_img_decoder_set_open_cb(dec,open_image);
  silver=load("silver.bgra",1280*400*4);champagne=load("champagne.bgra",1280*400*4);
  ui_page_34_standby_create(lv_scr_act());snapshot("settings");assert_flat(page);
@@ -109,5 +136,5 @@ int main(void){standby_defaults(&saved);lv_init();wallpaper=load("wallpaper.bgra
  tab=2;render();assert(ui_page_34_standby_request_back());assert(tab==0);tab=4;assert(owns_single_drag());tab=0;draft.mode=1;render();snapshot("settings-type");assert_flat(page);
  lv_obj_t*probe=button(page,0,0,150,"Pressed",3,true);lv_obj_add_state(probe,LV_STATE_PRESSED);lv_obj_update_layout(probe);assert(lv_obj_get_style_shadow_width(probe,LV_PART_MAIN)==0);assert(lv_color_to32(lv_obj_get_style_bg_color(probe,LV_PART_MAIN))!=lv_color_to32(lv_color_hex(0x176FE8)));lv_obj_del(probe);
  tab=1;render();snapshot("timeout");assert_flat(page);tab=2;draft.layout[1][0].date_bits=15;render();snapshot("date");assert_flat(page);tab=3;draft.mode=0;render();snapshot("photos");assert_flat(page);assert(!lv_obj_has_flag(body,LV_OBJ_FLAG_SCROLLABLE));with_imports=true;render();lv_obj_update_layout(page);lv_obj_scroll_to_y(gallery,100,LV_ANIM_OFF);assert(lv_obj_get_scroll_y(gallery)>0);assert(lv_obj_get_scroll_y(body)==0);snapshot("photos-scroll");with_imports=false;draft.mode=1;render();snapshot("palette");tab=4;render();snapshot("position");position_test();policy_test();ui_page_34_standby_destroy();assert(!registered_drag&&!registered_action);
- ui_page_35_standby_create(lv_scr_act());snapshot("standby-photo");ui_page_35_standby_destroy();saved.mode=1;ui_page_35_standby_create(lv_scr_act());snapshot("standby-type");ui_page_35_standby_destroy();
- for(unsigned i=0;i<10;i++){ui_page_34_standby_create(lv_scr_act());ui_page_34_standby_destroy();}assert(!page&&!settings_timer&&!clock_timer);runtime_test();puts("PASS actual LVGL standby view renders and repeated lifecycle");return 0;}
+ ui_page_35_standby_create(lv_scr_act());advance_fade(300);snapshot("standby-photo");ui_page_35_standby_destroy();saved.mode=1;ui_page_35_standby_create(lv_scr_act());advance_fade(300);snapshot("standby-type");ui_page_35_standby_destroy();
+ for(unsigned i=0;i<10;i++){ui_page_34_standby_create(lv_scr_act());ui_page_34_standby_destroy();}assert(!page&&!settings_timer&&!clock_timer);runtime_test();fade_test();puts("PASS actual LVGL standby view renders and repeated lifecycle");return 0;}

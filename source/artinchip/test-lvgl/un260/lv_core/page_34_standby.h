@@ -5,5 +5,7 @@ void ui_page_34_standby_create(lv_obj_t *parent);
 void ui_page_34_standby_destroy(void);
 void ui_page_35_standby_create(lv_obj_t *parent);
 void ui_page_35_standby_destroy(void);
+/* Idempotent: starts the 150ms exit fade, true once it has finished. */
+bool ui_page_35_standby_fade_out(void);
 bool ui_page_34_standby_request_back(void);
 #endif
