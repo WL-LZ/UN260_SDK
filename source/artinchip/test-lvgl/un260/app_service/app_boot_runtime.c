@@ -69,7 +69,13 @@ static void app_boot_runtime_start_prewarm(void)
 {
     app_boot_runtime_cancel_prewarm();
     memset(g_boot_prewarm_done, 0, sizeof(g_boot_prewarm_done));
+    /* Prepare the imminent destination before optional hidden pages. Ready's
+     * visual hold is bounded; optional pages must not leave Main cold at its end. */
     g_boot_prewarm_cursor = 0;
+    ui_page_t destination = ui_state_pure_count_is_enabled() ? UI_PAGE_PURE : UI_PAGE_MAIN;
+    for (size_t i = 0; i < sizeof(g_boot_prewarm_pages) / sizeof(g_boot_prewarm_pages[0]); i++) {
+        if (g_boot_prewarm_pages[i] == destination) { g_boot_prewarm_cursor = i; break; }
+    }
     g_boot_prewarm_due_ms = lv_tick_get() + APP_BOOT_PREWARM_PERIOD_MS;
     g_boot_prewarm_active = true;
 #if defined(UI_BOOT_ANIM_THEME) && UI_BOOT_ANIM_THEME == 4
@@ -198,8 +204,14 @@ static void app_boot_runtime_finish_timer_cb(lv_timer_t *timer)
     }
     counting_session = (counting_session_state_t *)timer->user_data;
 #if defined(UI_BOOT_ANIM_THEME) && UI_BOOT_ANIM_THEME == 4
-    if (g_boot_prewarm_active &&
-        !app_boot_runtime_time_reached(lv_tick_get(), g_boot_prewarm_deadline_ms)) {
+    bool destination_warm = false;
+    ui_page_t destination = ui_state_pure_count_is_enabled() ? UI_PAGE_PURE : UI_PAGE_MAIN;
+    for (size_t i=0;i<sizeof(g_boot_prewarm_pages)/sizeof(g_boot_prewarm_pages[0]);i++) {
+        if(g_boot_prewarm_pages[i]==destination) { destination_warm=g_boot_prewarm_done[i]; break; }
+    }
+    if (!ui_page_08_curr_ready_hold_complete() ||
+        (!destination_warm && g_boot_prewarm_active &&
+        !app_boot_runtime_time_reached(lv_tick_get(), g_boot_prewarm_deadline_ms))) {
         lv_timer_set_period(timer, 20);
         return;
     }

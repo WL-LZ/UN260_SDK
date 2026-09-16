@@ -14,12 +14,16 @@ LV_FONT_DECLARE(lv_font_instrument_sans_semibold_16);
 /* This page is a projection of the boot service. No inferred successes,
  * timed percentage increments, protocol requests or independent Ready flags. */
 static const char background[]="L:/usr/local/share/lvgl_data/boot_theme_d/background.png";
+static const char ready_background[]="L:/usr/local/share/lvgl_data/backgrounds/user.png";
+typedef struct { lv_obj_t *seal,*check,*title,*sub,*signature; } ready_visual_t;
 static const char *names[5]={"Configuration","Sensors","Motor","Electromagnet","Image board"};
 enum { WAIT, CHECK, PASS, FAIL };
 static struct {
     lv_obj_t *root,*title,*count,*progress,*percent,*caption,*track,*section;
     lv_obj_t *cards[5],*icons[5],*cores[5],*marks[5],*labels[5],*states[5];
     lv_obj_t *waiting;
+    lv_obj_t *ready_bg;
+    ready_visual_t ready;
     lv_timer_t *timer;
     uint32_t shown_at,active_at[5],done_at;
     uint8_t phase[5],step,completed;
@@ -30,7 +34,7 @@ static bool defer_create;
 #ifndef UI_BOOT_HANDOFF_FADE_ENABLE
 #define UI_BOOT_HANDOFF_FADE_ENABLE 1
 #endif
-static struct {lv_obj_t *root,*image,*text;lv_timer_t *timer;uint32_t tick;} bridge;
+static struct {lv_obj_t *root,*image;ready_visual_t ready;lv_timer_t *timer;uint32_t tick;uint8_t phase;} bridge;
 static void set_text(lv_obj_t *o,const char *s){if(o&&strcmp(lv_label_get_text(o),s))lv_label_set_text_static(o,s);}
 
 static float smooth(float p){if(p<=0)return 0;if(p>=1)return 1;return p*p*(3-2*p);}
@@ -44,20 +48,56 @@ static lv_obj_t *label(lv_obj_t *parent,int x,int y,int w,const char *text,const
     lv_obj_set_style_text_font(o,font,0);lv_obj_set_style_text_color(o,lv_color_hex(color),0);
     lv_label_set_long_mode(o,LV_LABEL_LONG_CLIP);lv_label_set_text_static(o,text);return o;
 }
+static void ready_create(lv_obj_t *parent, ready_visual_t *v)
+{
+    static const lv_point_t points[]={{7,14},{12,19},{21,9}};
+    v->seal=lv_obj_create(parent);
+    if(v->seal){lv_obj_remove_style_all(v->seal);lv_obj_set_pos(v->seal,615,101);lv_obj_set_size(v->seal,50,50);
+        lv_obj_set_style_radius(v->seal,LV_RADIUS_CIRCLE,0);lv_obj_set_style_bg_color(v->seal,lv_color_hex(0xE4EDF2),0);
+        lv_obj_clear_flag(v->seal,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
+        v->check=lv_line_create(v->seal);
+        if(v->check){lv_obj_set_pos(v->check,11,11);lv_line_set_points(v->check,points,3);lv_obj_set_style_line_width(v->check,2,0);lv_obj_set_style_line_rounded(v->check,true,0);lv_obj_set_style_line_color(v->check,lv_color_hex(0x598197),0);}}
+    v->title=label(parent,0,174,1280,"Ready to count.",&lv_font_instrument_sans_medium_36,0x304652);
+    v->sub=label(parent,0,230,1280,"Precision starts here.",&lv_font_instrument_sans_medium_16,0x869BAB);
+    v->signature=label(parent,0,366,1280,"UN260  /  PRECISION IN EVERY NOTE",&lv_font_instrument_sans_medium_12,0x90A4B3);
+    lv_obj_t *labels[]={v->title,v->sub,v->signature};
+    for(unsigned i=0;i<3;i++)if(labels[i])lv_obj_set_style_text_align(labels[i],LV_TEXT_ALIGN_CENTER,0);
+}
+static void ready_part(lv_obj_t *o,lv_opa_t a,int base,int dy)
+{
+    if(!o)return;
+    text_alpha(o,a);
+    if(lv_obj_get_y(o)!=base+dy)lv_obj_set_y(o,base+dy);
+}
+static void ready_render(ready_visual_t *v,uint32_t age,float exit)
+{
+    float icon=span(age,1240,730),title=span(age,1390,360),sub=span(age,1560,360),sig=span(age,1810,360);
+    bg_alpha(v->seal,(lv_opa_t)(255*icon*(1-exit)));
+    if(v->seal){int y=101+(int)(13*(1-icon)-7*exit);if(lv_obj_get_y(v->seal)!=y)lv_obj_set_y(v->seal,y);}
+    if(v->check){lv_opa_t a=(lv_opa_t)(255*icon*(1-exit));if(lv_obj_get_style_line_opa(v->check,0)!=a)lv_obj_set_style_line_opa(v->check,a,0);}
+    ready_part(v->title,(lv_opa_t)(255*title*(1-exit)),174,(int)(12*(1-title)-7*exit));
+    ready_part(v->sub,(lv_opa_t)(255*sub*(1-exit)),230,(int)(9*(1-sub)-7*exit));
+    ready_part(v->signature,(lv_opa_t)(255*sig*(1-exit)),366,0);
+}
 static void stop(void){if(view.waiting){lv_obj_del(view.waiting);view.waiting=NULL;}lv_timer_t *t=view.timer;view.timer=NULL;if(t)lv_timer_del(t);}
 static void deleted(lv_event_t *e){if(lv_event_get_target(e)!=view.root)return;stop();if(!bridge.root)lv_img_cache_invalidate_src(background);memset(&view,0,sizeof(view));}
 static void apply(uint32_t now){
     if(!view.root||view.covered||view.step)return;
     boot_snapshot_t s;boot_service_snapshot(&s);
+    uint32_t age=now-view.shown_at;
     bool failed=s.stage==BOOT_STAGE_FAIL;unsigned passed=0;
     for(unsigned i=0;i<5;i++){
         uint8_t state=s.items[i].received?(s.items[i].result==1?PASS:FAIL):
             s.connected&&s.requested_count==i+1?CHECK:WAIT;
+        /* Configuration also represents controller startup/handshake waiting.
+         * This is visual only; received results always win and progress stays real. */
+        if(i==0&&!s.items[i].received)state=CHECK;
         if(s.stage==BOOT_STAGE_FAIL&&state==CHECK)state=FAIL;
         if(state==FAIL)failed=true;
         if(state==PASS)passed++;
         if(view.phase[i]!=state){
             view.phase[i]=state;view.active_at[i]=now;
+            if(i==0&&state==CHECK&&age<970)view.active_at[i]=view.shown_at+970;
             uint32_t color=state==FAIL?0xB53622:state==PASS?0x209A78:state==CHECK?0x0074F8:0xA1B0BC;
             if(view.states[i]){lv_label_set_text_static(view.states[i],state==FAIL?"Not passed":state==PASS?"Ready":state==CHECK?"Checking":"Waiting");lv_obj_set_style_text_color(view.states[i],lv_color_hex(color),0);}
             if(view.icons[i]){lv_obj_set_style_border_color(view.icons[i],lv_color_hex(color),0);lv_obj_set_style_bg_color(view.icons[i],lv_color_hex(color),0);}
@@ -78,25 +118,28 @@ static void apply(uint32_t now){
     if(ready&&!view.done){view.done=true;view.done_at=now;}
     if(!ready)view.done=false;
     if(failed!=view.failed){view.failed=failed;if(view.title)lv_label_set_text_static(view.title,failed?"Needs attention.":"Getting ready.");}
-    set_text(view.caption,failed?"Check the reported fault before continuing.":!s.connected?"Connecting to controller":"");
+    set_text(view.caption,failed?"Check the reported fault before continuing.":"Checking your system.");
     if(view.caption){lv_color_t c=lv_color_hex(failed?0xB53622:0x68818F);if(lv_obj_get_style_text_color(view.caption,0).full!=c.full)lv_obj_set_style_text_color(view.caption,c,0);}
-    if(!s.connected&&!failed&&!view.waiting){
+    if(!ready&&!failed&&!view.waiting){
         view.waiting=lv_spinner_create(view.root,900,72);
-        if(view.waiting){lv_obj_set_pos(view.waiting,260,154);lv_obj_set_size(view.waiting,28,28);
+        if(view.waiting){lv_obj_set_pos(view.waiting,52,154);lv_obj_set_size(view.waiting,28,28);
             lv_obj_set_style_arc_width(view.waiting,3,LV_PART_MAIN);
             lv_obj_set_style_arc_color(view.waiting,lv_color_hex(0xD9D9DC),LV_PART_MAIN);
             lv_obj_set_style_arc_width(view.waiting,3,LV_PART_INDICATOR);
             lv_obj_set_style_arc_color(view.waiting,lv_color_hex(0x0074F8),LV_PART_INDICATOR);
             lv_obj_clear_flag(view.waiting,LV_OBJ_FLAG_CLICKABLE);}
-    }else if((s.connected||failed)&&view.waiting){lv_obj_del(view.waiting);view.waiting=NULL;}
+    }else if((ready||failed)&&view.waiting){lv_obj_del(view.waiting);view.waiting=NULL;}
     if(view.progress){lv_color_t color=lv_color_hex(failed?0xB53622:ready?0x209A78:0x0074F8);if(lv_obj_get_style_bg_color(view.progress,0).full!=color.full)lv_obj_set_style_bg_color(view.progress,color,0);}
-    uint32_t age=now-view.shown_at,done_age=view.done?now-view.done_at:0;
-    if(view.done&&view.title){set_text(view.title,done_age<240?"Getting ready.":"Ready.");text_alpha(view.title,(lv_opa_t)(255*(done_age<240?1-span(done_age,0,240):span(done_age,240,440))));}
-    else text_alpha(view.title,(lv_opa_t)(255*span(age,0,650)));
+    uint32_t done_age=view.done?now-view.done_at:0;
+    lv_opa_t heading_opa=(lv_opa_t)(255*(view.done?1-span(done_age,700,540):span(age,0,650)));
+    text_alpha(view.title,heading_opa);text_alpha(view.caption,heading_opa);
+    if(view.ready_bg){if(view.done&&done_age>=700)lv_obj_clear_flag(view.ready_bg,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(view.ready_bg,LV_OBJ_FLAG_HIDDEN);}
+    ready_render(&view.ready,view.done?done_age:0,0);
     for(unsigned i=0;i<5;i++){
-        float entry=span(age,i*80U,650U),leave=view.done?span(done_age,950U+i*75U,550U):0;
+        float entry=span(age,i*80U,650U),leave=view.done?span(done_age,720U+i*45U,490U):0;
         float alpha=entry*(1-leave);uint8_t state=view.phase[i];
-        uint32_t active=now-view.active_at[i];
+        int32_t active_delta=(int32_t)(now-view.active_at[i]);
+        uint32_t active=active_delta>0?(uint32_t)active_delta:0;
         float activation=state==WAIT?0:settle((float)active/720.0f);
         lv_opa_t ink=(lv_opa_t)(255*alpha*(.48f+.52f*activation));
         if(view.cards[i]){int y=216+(int)(5*(1-entry)+5*(1-activation)*entry-4*leave+.5f);if(lv_obj_get_y(view.cards[i])!=y)lv_obj_set_y(view.cards[i],y);bg_alpha(view.cards[i],(lv_opa_t)(alpha*(38+(state==CHECK?207:72)*activation)));}
@@ -105,18 +148,23 @@ static void apply(uint32_t now){
         if(view.marks[i]){lv_opa_t a=(lv_opa_t)(255*alpha);if(lv_obj_get_style_img_opa(view.marks[i],0)!=a)lv_obj_set_style_img_opa(view.marks[i],a,0);}
         if(view.icons[i]){
             float pulse=1;
-            if(state==CHECK&&active<5400U){uint32_t p=active%1800U;pulse=p<900?1-span(p,0,900):span(p,900,900);}
+            if(state==CHECK&&(active<5400U||i==0)){uint32_t p=active%1800U;pulse=p<900?1-span(p,0,900):span(p,900,900);}
             bg_alpha(view.icons[i],0);
             bg_alpha(view.cores[i],state==CHECK?(lv_opa_t)(alpha*255*(.42f+.58f*pulse)):0);
             lv_opa_t border=state==PASS||state==FAIL?0:ink;if(lv_obj_get_style_border_opa(view.icons[i],0)!=border)lv_obj_set_style_border_opa(view.icons[i],border,0);
         }
     }
-    lv_opa_t trim=view.done?(lv_opa_t)(255*(1-span(done_age,1350,550))):255;
+    lv_opa_t trim=view.done?(lv_opa_t)(255*(1-span(done_age,700,540))):255;
     text_alpha(view.section,trim);bg_alpha(view.track,trim);text_alpha(view.count,trim);text_alpha(view.percent,trim);bg_alpha(view.progress,trim);
 }
 static void tick(lv_timer_t *t){(void)t;if(ui_manager_get_current_page()!=UI_PAGE_BOOT){stop();return;}apply(lv_tick_get());}
 bool ui_page_08_curr_visual_is_quiet(void){
-    return !view.root || (view.done && !view.failed && lv_tick_elaps(view.done_at)>=1900);
+    return !view.root || (view.done && !view.failed && lv_tick_elaps(view.done_at)>=2170);
+}
+bool ui_page_08_curr_ready_hold_complete(void){
+    /* Title reaches full opacity at 1750 ms; hold it for 600 ms.
+     * All staggered text has finished by 2170 ms. */
+    return !view.root || (view.done && !view.failed && lv_tick_elaps(view.done_at)>=2350);
 }
 static void bridge_deleted(lv_event_t *e){
     if(lv_event_get_target(e)!=bridge.root)return;
@@ -124,13 +172,18 @@ static void bridge_deleted(lv_event_t *e){
     lv_img_cache_invalidate_src(background);
 }
 static void bridge_tick(lv_timer_t *t){
-    (void)t;ui_page_t page=ui_manager_get_current_page();uint32_t elapsed=lv_tick_elaps(bridge.tick);
-    if((page!=UI_PAGE_MAIN&&page!=UI_PAGE_PURE)||elapsed>=1000){lv_obj_del(bridge.root);return;}
+    (void)t;ui_page_t page=ui_manager_get_current_page();
+    if(page!=UI_PAGE_MAIN&&page!=UI_PAGE_PURE){lv_obj_del(bridge.root);return;}
+    /* Creation/resume and the first covered render are NOT animation time.
+     * Keep the cover opaque for one refresh before starting the visual clock. */
+    if(bridge.phase==0){bridge.phase=1;return;}
+    if(bridge.phase==1){bridge.phase=2;bridge.tick=lv_tick_get();}
+    uint32_t elapsed=lv_tick_elaps(bridge.tick);
+    if(elapsed>=1000){lv_obj_del(bridge.root);return;}
     /* Retire old text first. Only then admit Main, never overlap text layers.
      * Image opacity uses the existing renderer; no snapshot, zoom or obj layer. */
     float retired=span(elapsed,0,360);
-    text_alpha(bridge.text,(lv_opa_t)(255*(1-retired)));
-    if(bridge.text)lv_obj_set_y(bridge.text,110-(int)(6*retired));
+    ready_render(&bridge.ready,2440,retired);
 #if UI_BOOT_HANDOFF_FADE_ENABLE
     lv_opa_t a=(lv_opa_t)(255*(1-span(elapsed,400,600)));
 #else
@@ -146,8 +199,8 @@ void ui_page_08_curr_start_handoff(void){
     lv_obj_clear_flag(bridge.root,LV_OBJ_FLAG_SCROLLABLE);lv_obj_add_flag(bridge.root,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(bridge.root,bridge_deleted,LV_EVENT_DELETE,NULL);
     bridge.image=lv_img_create(bridge.root);if(!bridge.image){lv_obj_del(bridge.root);return;}
-    lv_img_set_src(bridge.image,background);
-    bridge.text=label(bridge.root,52,110,800,"Ready.",&lv_font_instrument_sans_medium_36,0x344759);
+    lv_img_set_src(bridge.image,ready_background);
+    ready_create(bridge.root,&bridge.ready);ready_render(&bridge.ready,2440,0);
     bridge.tick=lv_tick_get();bridge.timer=lv_timer_create(bridge_tick,LV_DISP_DEF_REFR_PERIOD,NULL);
     if(!bridge.timer)lv_obj_del(bridge.root);
 }
@@ -176,8 +229,9 @@ bool ui_page_08_curr_prepare_step(void){
     if(step==1){
         lv_obj_t *img=lv_img_create(view.root);if(img){lv_img_set_src(img,background);(void)_lv_img_cache_open(background,lv_color_black(),0);}
     }else if(step==2){
+        view.ready_bg=lv_img_create(view.root);if(view.ready_bg){lv_img_set_src(view.ready_bg,ready_background);lv_obj_add_flag(view.ready_bg,LV_OBJ_FLAG_HIDDEN);(void)_lv_img_cache_open(ready_background,lv_color_black(),0);}
         view.title=label(view.root,52,110,800,"Getting ready.",&lv_font_instrument_sans_medium_36,0x344759);
-        view.caption=label(view.root,52,159,1000,"",&lv_font_instrument_sans_medium_16,0xB53622);
+        view.caption=label(view.root,96,159,800,"Checking your system.",&lv_font_instrument_sans_medium_16,0x68818F);
 
         view.section=label(view.root,1098,107,130,"SELF-CHECK",&lv_font_instrument_sans_semibold_14,0x68818F);
         view.count=label(view.root,1068,132,160,"0 / 5 complete",&lv_font_instrument_sans_semibold_14,0x788B99);
@@ -188,6 +242,7 @@ bool ui_page_08_curr_prepare_step(void){
         if(view.count)lv_obj_set_style_text_align(view.count,LV_TEXT_ALIGN_RIGHT,0);
         if(view.percent)lv_obj_set_style_text_align(view.percent,LV_TEXT_ALIGN_RIGHT,0);
     }else if(step<=7){make_card(step-3);}else{
+        ready_create(view.root,&view.ready);ready_render(&view.ready,0,0);
         view.step=0;view.shown_at=lv_tick_get();view.completed=255;
         if(!view.covered){view.visible=true;apply(view.shown_at);view.timer=lv_timer_create(tick,LV_DISP_DEF_REFR_PERIOD,NULL);}return true;
     }return false;

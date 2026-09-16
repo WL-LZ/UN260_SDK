@@ -23,7 +23,7 @@ static void curr_set_card_render_state(int i, int pos_x, int pos_y,
     const lv_card_surface_style_t skin = {
         .width = CURR_CARD_W, .height = CURR_CARD_H,
         .radius = CURR_CARD_RADIUS,
-        .background = focused ? 0xFFFFFF : CURR_CARD_NORMAL_BG,
+        .background = CURR_CARD_BG,
         .border = focused ? CURR_CARD_FOCUS_BORDER : CURR_CARD_NORMAL_BORDER,
         .border_width = 1,
     };
@@ -33,8 +33,7 @@ static void curr_set_card_render_state(int i, int pos_x, int pos_y,
         lv_obj_set_style_text_color(card->no, lv_color_hex(0x7E91A1), 0);
         page07_curr_view_set_image_selected_style(card->img);
     } else {
-        /* Focus changes two colors, not geometry, typography or image state. */
-        lv_obj_set_style_bg_color(card->render_root, lv_color_hex(skin.background), 0);
+        /* Focus changes only the border, never the face brightness. */
         lv_obj_set_style_border_color(card->render_root, lv_color_hex(skin.border), 0);
     }
     card->render_initialized = true;
@@ -49,7 +48,7 @@ static bool curr_card_snapshot_key(int i, bool focused, char key[48])
                                  curr_code)) return false;
     /* The code, displayed sequence and renderer revision define identity.
      * Old enlarged SELECTED/NORMAL surfaces cannot match this generation. */
-    snprintf(key, 48, "CURR_CAROUSEL_V6_%s_%02d_%c", curr_code,
+    snprintf(key, 48, "CURR_CAROUSEL_V7_%s_%02d_%c", curr_code,
              g_page07_curr.cards[i].abs_idx + 1, focused ? 'F' : 'N');
     return true;
 }

@@ -24,7 +24,7 @@
 #define CURR_CARD_Y              68
 #define CURR_CARD_FOCUS_LIFT     8
 #define CURR_CARD_RADIUS         21
-#define CURR_CARD_NORMAL_BG      0xF7F8FA
+#define CURR_CARD_BG             0xFFFFFF
 #define CURR_CARD_NORMAL_BORDER  0xCBD5DE
 #define CURR_CARD_FOCUS_BORDER   0x6499CA
 /* Move only the actual card footprint, not the blank space above it. */

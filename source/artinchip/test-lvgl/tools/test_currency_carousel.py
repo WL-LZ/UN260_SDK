@@ -83,7 +83,7 @@ for forbidden in ("lv_img_set_src", "lv_img_set_zoom", "lv_dma_snapshot_cache",
                   "curr_set_left_info_by_abs", "model.selected_abs_idx =",
                   "model.selected_visible_idx =", "page07_curr_model_save"):
     assert forbidden not in projection, forbidden
-assert "CURR_CAROUSEL_V6_" in renderer
+assert "CURR_CAROUSEL_V7_" in renderer
 assert "CURR_CAROUSEL_V3_" not in page + renderer
 assert "lv_card_surface_focus_mark_apply" not in renderer
 assert "currency_state_count()" in function(page, "curr_build_card_layer")
@@ -532,7 +532,8 @@ int main(void) {
     assert(palette_sets==old_palette && source_sets==old_sources && border_sets==old_borders);
     assert(marker_writes==old_marker_writes && object_creates==old_objects);
     curr_set_card_render_state(2,700,8,false);
-    assert(renderers[2].background==0xF7F8FA && renderers[2].border_color==0xCBD5DE);
+    assert(renderers[2].background==0xFFFFFF && renderers[2].border_color==0xCBD5DE);
+    assert(renderers[2].bg_opa==LV_OPA_COVER && palette_sets==old_palette+1); /* border only */
     assert(renderers[2].border==1 && renderers[2].radius==21 && flag_images[2].img_opa==LV_OPA_COVER);
     assert_focus_mark(2,false);
     assert(card.border==0); /* hit testing is not a second rectangle decoration */
@@ -554,7 +555,7 @@ int main(void) {
     }
     char normal_key[48],focus_key[48];
     assert(curr_card_snapshot_key(20,false,normal_key) && curr_card_snapshot_key(20,true,focus_key));
-    assert(strcmp(normal_key,focus_key)!=0 && strstr(focus_key,"CURR_CAROUSEL_V6_")!=NULL);
+    assert(strcmp(normal_key,focus_key)!=0 && strstr(focus_key,"CURR_CAROUSEL_V7_")!=NULL);
     assert(!curr_card_snapshot_key(-1,false,normal_key) && !curr_card_snapshot_key(34,false,normal_key));
 
     /* Production currency cards carry a width-scaled external flag.  Even
@@ -598,7 +599,7 @@ int main(void) {
     assert(g_page07_curr.cards[3].surface_cache[1]->focus_mark_visible);
     assert_focus_mark(3,true);
     page07_curr_card_render_apply(3,g_page07_curr.cards[3].base_x,CURR_CARD_LOCAL_Y);
-    assert(!g_page07_curr.cards[3].using_cache && renderers[3].background==0xF7F8FA);
+    assert(!g_page07_curr.cards[3].using_cache && renderers[3].background==0xFFFFFF);
     assert(!lv_obj_has_flag(&renderers[3],LV_OBJ_FLAG_HIDDEN) && lv_obj_has_flag(&images[3],LV_OBJ_FLAG_HIDDEN));
     assert_focus_mark(3,false);assert_focus_mark(2,true);
     old_marker_writes=marker_writes;old_objects=object_creates;

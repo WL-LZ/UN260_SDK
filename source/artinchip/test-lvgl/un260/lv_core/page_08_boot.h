@@ -9,6 +9,7 @@ void ui_page_08_curr_destroy(void);
 /* Theme D only: retain a short visual bridge while MAIN/PURE becomes active. */
 void ui_page_08_curr_start_handoff(void);
 bool ui_page_08_curr_visual_is_quiet(void);
+bool ui_page_08_curr_ready_hold_complete(void);
 /* One-shot startup policy; construction still belongs to the UI thread. */
 void ui_page_08_curr_defer_next_create(void);
 bool ui_page_08_curr_prepare_step(void);
