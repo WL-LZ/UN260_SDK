@@ -40,7 +40,7 @@
  * variants before closing its dma-buf, so an fd can never be reused stale. */
 #define GE_SCALE_CACHE_CAPACITY 24U
 #define GE_SCALE_CACHE_MAX_BYTES (2U * 1024U * 1024U)
-#define GE_SCALE_CACHE_MAX_ENTRY_BYTES (512U * 1024U)
+#define GE_SCALE_CACHE_MAX_ENTRY_BYTES (1024U * 1024U)
 #define GE_DMA_IMAGE_REGISTRY_CAPACITY 48U
 
 typedef struct _img_info {
@@ -64,6 +64,7 @@ typedef struct {
     int target_height;
     uint32_t bytes;
     uint32_t last_use;
+    uint8_t *software_pixels; /* Tight BGRA sibling, same lifetime and budget. */
     struct mpp_frame frame;
 } ge_scale_cache_entry_t;
 
@@ -187,14 +188,35 @@ static bool draw_target_is_display_buffer(const lv_draw_ctx_t *draw_ctx)
            disp->driver->set_px_cb == NULL;
 }
 
+static struct mpp_frame *ge_prepare_scaled(const struct mpp_frame *source,
+    const lv_draw_img_dsc_t *dsc,const lv_area_t *coords,lv_area_t *scaled);
+static const uint8_t *ge_scaled_pixels(const struct mpp_frame *frame);
+
 static bool draw_dma_frame_software(lv_draw_ctx_t *draw_ctx,
                                     const lv_draw_img_dsc_t *draw_dsc,
                                     const lv_area_t *coords,
                                     const struct mpp_frame *frame,
                                     lv_img_cf_t cf)
 {
+    lv_area_t scaled;
+    struct mpp_frame *cached=ge_prepare_scaled(frame,draw_dsc,coords,&scaled);
+    const uint8_t *cached_pixels=cached?ge_scaled_pixels(cached):NULL;
+    if(cached_pixels) {
+        /* The transformed clip includes an antialiasing margin. The cached
+         * raster does not: the untransformed alpha decoder requires every
+         * clipped pixel to be inside its source, including masked draws. */
+        lv_area_t clipped;
+        const lv_area_t *saved_clip=draw_ctx->clip_area;
+        if(!_lv_area_intersect(&clipped,saved_clip,&scaled))return true;
+        lv_draw_img_dsc_t d=*draw_dsc;d.zoom=LV_IMG_ZOOM_NONE;d.pivot=(lv_point_t){0,0};
+        draw_ctx->clip_area=&clipped;
+        lv_draw_sw_img_decoded(draw_ctx,&d,&scaled,cached_pixels,LV_IMG_CF_TRUE_COLOR_ALPHA);
+        draw_ctx->clip_area=saved_clip;
+        return true;
+    }
     unsigned char *mapped = NULL;
     unsigned char *tight = NULL;
+    bool rgb24 = frame && frame->buf.format == MPP_FMT_RGB_888;
     const uint8_t *pixels;
     uint32_t row_bytes;
     uint32_t stride;
@@ -203,14 +225,14 @@ static bool draw_dma_frame_software(lv_draw_ctx_t *draw_ctx,
     if (frame == NULL || frame->buf.buf_type != MPP_DMA_BUF_FD ||
         frame->buf.fd[0] < 0 || frame->buf.size.width <= 0 ||
         frame->buf.size.height <= 0 ||
-        frame->buf.format != MPP_FMT_ARGB_8888) {
+        (frame->buf.format != MPP_FMT_ARGB_8888 && !rgb24)) {
         ge_offscreen_fail("invalid_dma_frame");
         return false;
     }
 
     row_bytes = (uint32_t)frame->buf.size.width * 4U;
     stride = frame->buf.stride[0];
-    if (stride < row_bytes) {
+    if (stride < (uint32_t)frame->buf.size.width * (rgb24 ? 3U : 4U)) {
         ge_offscreen_fail("stride");
         return false;
     }
@@ -223,7 +245,7 @@ static bool draw_dma_frame_software(lv_draw_ctx_t *draw_ctx,
     dmabuf_sync(frame->buf.fd[0], CACHE_INVALID);
 
     pixels = mapped;
-    if (stride != row_bytes) {
+    if (rgb24 || stride != row_bytes) {
         if(!image_mem_acquire(IMAGE_MEM_CPU, row_bytes * (uint32_t)frame->buf.size.height)) {
             dmabuf_munmap(mapped,(int)bytes);ge_offscreen_fail("tight_budget");return false;
         }
@@ -235,8 +257,15 @@ static bool draw_dma_frame_software(lv_draw_ctx_t *draw_ctx,
             return false;
         }
         for (int y = 0; y < frame->buf.size.height; y++) {
-            memcpy(tight + (uint32_t)y * row_bytes,
-                   mapped + (uint32_t)y * stride, row_bytes);
+            uint8_t *dst = tight + (uint32_t)y * row_bytes;
+            const uint8_t *src = mapped + (uint32_t)y * stride;
+            if (rgb24) {
+                /* MPP RGB888 is packed little-endian B,G,R; LVGL32 is B,G,R,A. */
+                for (int x=0;x<frame->buf.size.width;x++) {
+                    dst[x*4]=src[x*3];dst[x*4+1]=src[x*3+1];
+                    dst[x*4+2]=src[x*3+2];dst[x*4+3]=255;
+                }
+            } else memcpy(dst,src,row_bytes);
         }
         pixels = tight;
     }
@@ -397,6 +426,7 @@ static void ge_scale_cache_release(ge_scale_cache_entry_t *entry)
     }
 
     mpp_buf_free(&entry->frame.buf);
+    if(entry->software_pixels)lv_mem_free(entry->software_pixels);
     image_mem_release(IMAGE_MEM_SCALE, entry->bytes);
     if (g_scale_cache_bytes >= entry->bytes) {
         g_scale_cache_bytes -= entry->bytes;
@@ -478,6 +508,7 @@ static struct mpp_frame *ge_scale_cache_get(struct mpp_frame *source,
     int bytes_per_pixel;
     uint32_t stride;
     uint32_t bytes;
+    uint32_t pixel_bytes;
 
     if (source == NULL || g_ge == NULL ||
         mpp_ge_get_mode(g_ge) != GE_MODE_NORMAL ||
@@ -493,6 +524,8 @@ static struct mpp_frame *ge_scale_cache_get(struct mpp_frame *source,
 
     stride = ((uint32_t)target_width * (uint32_t)bytes_per_pixel + 15U) & ~15U;
     bytes = (stride * (uint32_t)target_height + 4095U) & ~4095U;
+    pixel_bytes=(source->buf.format==MPP_FMT_RGB_888||source->buf.format==MPP_FMT_ARGB_8888)?(uint32_t)target_width*target_height*4U:0;
+    bytes+=pixel_bytes;
     if (bytes == 0 || bytes > GE_SCALE_CACHE_MAX_ENTRY_BYTES) {
         return NULL;
     }
@@ -562,6 +595,24 @@ static struct mpp_frame *ge_scale_cache_get(struct mpp_frame *source,
         return NULL;
     }
 
+    /* Convert once per derivative, not on each masked draw/scroll frame. */
+    if(pixel_bytes) {
+        unsigned char *mapped=dmabuf_mmap(slot->frame.buf.fd[0],stride*target_height);
+        slot->software_pixels=lv_mem_alloc(pixel_bytes);
+        if(!mapped||!slot->software_pixels) {
+            if(mapped)dmabuf_munmap(mapped,stride*target_height);
+            if(slot->software_pixels)lv_mem_free(slot->software_pixels);
+            mpp_buf_free(&slot->frame.buf);image_mem_release(IMAGE_MEM_SCALE,bytes);memset(slot,0,sizeof(*slot));return NULL;
+        }
+        dmabuf_sync(slot->frame.buf.fd[0],CACHE_INVALID);
+        for(int y=0;y<target_height;y++) {
+            uint8_t *dst=slot->software_pixels+(uint32_t)y*target_width*4U;
+            const uint8_t *src=mapped+(uint32_t)y*stride;
+            if(source->buf.format==MPP_FMT_RGB_888)for(int x=0;x<target_width;x++){dst[4*x]=src[3*x];dst[4*x+1]=src[3*x+1];dst[4*x+2]=src[3*x+2];dst[4*x+3]=255;}
+            else memcpy(dst,src,(uint32_t)target_width*4U);
+        }
+        dmabuf_munmap(mapped,stride*target_height);
+    }
     slot->used = true;
     slot->source_fd = source->buf.fd[0];
     slot->source_width = source->buf.size.width;
@@ -572,6 +623,25 @@ static struct mpp_frame *ge_scale_cache_get(struct mpp_frame *source,
     slot->last_use = g_scale_cache_clock;
     g_scale_cache_bytes += bytes;
     return &slot->frame;
+}
+
+static struct mpp_frame *ge_prepare_scaled(const struct mpp_frame *source,
+    const lv_draw_img_dsc_t *dsc,const lv_area_t *coords,lv_area_t *scaled)
+{
+    if(!source||!dsc||!coords||dsc->angle||dsc->zoom<32||dsc->zoom>=LV_IMG_ZOOM_NONE)return NULL;
+    /* The LVGL transformed-area helper includes a +/-2 invalidation margin.
+     * It is NOT the raster extent: scaling into it shifts/stretchs images and
+     * disagrees with masked rendering during partial refreshes. */
+    lv_point_t start={0,0},end={source->buf.size.width,source->buf.size.height};
+    lv_point_transform(&start,0,dsc->zoom,&dsc->pivot);lv_point_transform(&end,0,dsc->zoom,&dsc->pivot);
+    if(end.x<=start.x||end.y<=start.y)return NULL;
+    *scaled=(lv_area_t){coords->x1+start.x,coords->y1+start.y,coords->x1+end.x-1,coords->y1+end.y-1};
+    return ge_scale_cache_get((struct mpp_frame*)source,end.x-start.x,end.y-start.y);
+}
+static const uint8_t *ge_scaled_pixels(const struct mpp_frame *frame)
+{
+    for(unsigned i=0;i<GE_SCALE_CACHE_CAPACITY;i++)if(g_scale_cache[i].used&&frame==&g_scale_cache[i].frame)return g_scale_cache[i].software_pixels;
+    return NULL;
 }
 
 static void transform_upscaled(const lv_draw_img_dsc_t *draw_dsc, int32_t xin,
@@ -646,16 +716,10 @@ static int ge_run_blit(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t *draw_d
     enum mpp_pixel_format fmt = draw_buf_fmt();
 
     if (draw_dsc->angle == 0 &&
-        draw_dsc->zoom >= 64 && draw_dsc->zoom < LV_IMG_ZOOM_NONE) {
+        draw_dsc->zoom >= 32 && draw_dsc->zoom < LV_IMG_ZOOM_NONE) {
         struct mpp_frame *cached_frame;
 
-        _lv_img_buf_get_transformed_area(
-            &cached_coords, frame->buf.size.width, frame->buf.size.height,
-            0, draw_dsc->zoom, &draw_dsc->pivot);
-        lv_area_move(&cached_coords, coords->x1, coords->y1);
-        cached_frame = ge_scale_cache_get(
-            frame, lv_area_get_width(&cached_coords),
-            lv_area_get_height(&cached_coords));
+        cached_frame = ge_prepare_scaled(frame,draw_dsc,coords,&cached_coords);
         if (cached_frame != NULL) {
             cached_draw_dsc = *draw_dsc;
             cached_draw_dsc.zoom = LV_IMG_ZOOM_NONE;
@@ -664,6 +728,9 @@ static int ge_run_blit(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t *draw_d
             draw_dsc = &cached_draw_dsc;
             frame = cached_frame;
             coords = &cached_coords;
+        } else if(frame->buf.format==MPP_FMT_ARGB_8888||frame->buf.format==MPP_FMT_RGB_888) {
+            /* Do not rescale each clipped strip independently on cache failure. */
+            return draw_dma_frame_software(draw_ctx,draw_dsc,coords,frame,frame->buf.format==MPP_FMT_RGB_888?LV_IMG_CF_TRUE_COLOR:LV_IMG_CF_TRUE_COLOR_ALPHA)?LV_RES_OK:LV_RES_INV;
         }
     }
 
@@ -1229,6 +1296,7 @@ lv_res_t lv_draw_aic_draw_img(lv_draw_ctx_t * draw_ctx, const lv_draw_img_dsc_t 
     }
 
     ptr = strrchr(src, '.');
+    file_type = ptr && (!strcmp(ptr, ".png") || !strcmp(ptr, ".jpg") || !strcmp(ptr, ".jpeg"));
     if (ptr == NULL) return LV_RES_INV;
 
     if (!strcmp(ptr, ".fake"))
@@ -1332,6 +1400,14 @@ LV_ATTRIBUTE_FAST_MEM void lv_draw_aic_img_decoded(struct _lv_draw_ctx_t * draw_
     blend_dsc.opa = draw_dsc->opa;
     blend_dsc.blend_mode = draw_dsc->blend_mode;
     blend_dsc.blend_area = &b_area;
+
+    if (mask_any || draw_dsc->recolor_opa != LV_OPA_TRANSP) {
+        /* Hardware-decoded pixels are an mpp_frame, not a CPU pixel array.
+         * Rounded clipping/recolour still needs the established SW fallback. */
+        draw_dma_frame_software(draw_ctx, draw_dsc, coords,
+                                (const struct mpp_frame *)src_buf, cf);
+        return;
+    }
 
     if (!mask_any && draw_dsc->recolor_opa == LV_OPA_TRANSP) {
         blend_dsc.src_buf = NULL;

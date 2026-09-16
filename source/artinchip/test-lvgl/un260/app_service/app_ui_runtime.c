@@ -1,4 +1,6 @@
 #include "app_ui_runtime.h"
+#include "app_standby_runtime.h"
+#include "un260/storage/standby_store.h"
 
 #include "un260/app_service/app_setting_runtime.h"
 #include "un260/diagnostic/diagnostic.h"
@@ -32,6 +34,8 @@ static void app_ui_runtime_poll_upgrade(uint32_t now_ms)
 {
     ui_upgrade_detect_info_t detect_info;
     ui_page_t current_page = ui_manager_get_current_page();
+    /* Do not offer an upgrade while a photo/config transaction owns storage. */
+    if (standby_store_busy()) return;
 
     if (current_page == UI_PAGE_BOOT_ANIM ||
         current_page == UI_PAGE_BOOT ||
@@ -71,4 +75,5 @@ void app_ui_runtime_poll(uint32_t now_ms)
     ui_screen_recording_indicator_poll();
     ui_count_end_anim_poll();
     app_ui_runtime_poll_upgrade(now_ms);
+    app_standby_runtime_poll(now_ms);
 }

@@ -1,4 +1,5 @@
 #include "gesture_service.h"
+#include "un260/app_service/app_standby_runtime.h"
 #include "touch_feedback.h"
 #include "lv_port_indev.h"
 #include "un260/gesture/gesture_guide.h"
@@ -27,6 +28,29 @@ static gesture_runtime_t g_runtime;
 static ui_page_t g_pending_origin;
 static bool g_pending;
 static uint32_t g_pending_tick;
+static struct {
+    bool registered;
+    uint32_t owner;
+    bool (*owns_single_drag)(void);
+    bool (*handle_action)(gesture_action_t);
+} g_page_policy;
+void gesture_service_set_page_policy(uint32_t owner, bool (*owns_single_drag)(void),
+                                     bool (*handle_action)(gesture_action_t))
+{
+    g_page_policy.registered=true;
+    g_page_policy.owner=owner;
+    g_page_policy.owns_single_drag=owns_single_drag;
+    g_page_policy.handle_action=handle_action;
+}
+void gesture_service_clear_page_policy(uint32_t owner)
+{
+    if(g_page_policy.registered && g_page_policy.owner==owner)
+        memset(&g_page_policy,0,sizeof(g_page_policy));
+}
+static bool page_policy_active(void)
+{
+    return g_page_policy.registered && g_page_policy.owner==(uint32_t)ui_manager_get_current_page();
+}
 static const gesture_definition_t g_definitions[] = {
     {1, false, GESTURE_ACTION_EXIT_PAGE, UI_TEXT_GESTURE_EXIT_TITLE, UI_TEXT_GESTURE_EXIT_BODY},
     {2, false, GESTURE_ACTION_EXPORT, UI_TEXT_GESTURE_HOME_TITLE, UI_TEXT_GESTURE_HOME_BODY},
@@ -54,6 +78,7 @@ static void gesture_navigate_async(void *user_data)
     uint32_t started = lv_tick_get();
     g_pending = false;
     if(!gesture_service_enabled() || page != g_pending_origin || !gesture_action_allowed(page, action)) return;
+    if(page_policy_active() && g_page_policy.handle_action && g_page_policy.handle_action(action)) return;
     if(action == GESTURE_ACTION_HOME) {
         if(page == UI_PAGE_MAIN) return;
         ui_manager_clear_stack();
@@ -105,6 +130,11 @@ static bool gesture_pointer_event(lv_indev_t *indev, lv_event_code_t event,
                                   const lv_point_t *point, uint8_t count, void *user_data)
 {
     LV_UNUSED(indev); LV_UNUSED(user_data);
+    if(app_standby_runtime_touch(count > 0 && event != LV_EVENT_RELEASED)) {
+        memset(&g_runtime, 0, sizeof(g_runtime));
+        touch_feedback_edge_hint(0, 0, 0);
+        return true;
+    }
     touch_feedback_sample(point, count);
     if(event == LV_EVENT_RELEASED || count == 0) {
         bool captured = g_runtime.captured;
@@ -112,6 +142,13 @@ static bool gesture_pointer_event(lv_indev_t *indev, lv_event_code_t event,
         if(g_runtime.triggered && !g_runtime.cancelled) gesture_queue();
         memset(&g_runtime, 0, sizeof(g_runtime));
         return captured;
+    }
+    /* A page may own a single drag, but a second contact transfers ownership
+     * to the global recognizer. Never drop captured/releasing sequences. */
+    if(count==1 && !g_runtime.captured && page_policy_active() &&
+       g_page_policy.owns_single_drag && g_page_policy.owns_single_drag()) {
+        memset(&g_runtime,0,sizeof(g_runtime));
+        return false;
     }
     if(!gesture_service_enabled() || !point ||
        !gesture_action_allowed(ui_manager_get_current_page(), GESTURE_ACTION_EXIT_PAGE) ||

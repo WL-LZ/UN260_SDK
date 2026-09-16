@@ -119,6 +119,10 @@ typedef struct {
 } settings_dialog_ctx_t;
 
 static settings_dialog_ctx_t g_settings_dialog = { 0 };
+bool settings_detail_overlay_is_open(void)
+{
+    return g_settings_dialog.root != NULL || g_settings_keyboard.root != NULL;
+}
 
 static void detail_style_plain(lv_obj_t* obj)
 {

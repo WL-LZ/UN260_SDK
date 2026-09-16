@@ -13,6 +13,12 @@ static uint8_t fingers;
 static unsigned home, back, exported;
 static lv_nav_back_result_t nav_result;
 static unsigned esc_calls;
+static bool editor_active;
+bool app_standby_runtime_touch(bool down){(void)down;return false;}
+static bool owns_single_drag(void){return editor_active;}
+static bool policy_blocked;static unsigned policy_calls;
+static bool handle_action(gesture_action_t action){(void)action;policy_calls++;return policy_blocked;}
+bool page_32_innovation_request_back(void){return false;}
 lv_nav_back_result_t lv_nav_button_request_back(void){esc_calls++;return nav_result;}
 static void (*queued)(void*);
 static void *queued_data;
@@ -58,6 +64,10 @@ static void release(void){sample(0,0,0,0);drain();page=UI_PAGE_MENU;}
 int main(void)
 {
     gesture_service_init();
+    gesture_service_set_page_policy(UI_PAGE_STANDBY_SETTING,owns_single_drag,handle_action);
+    page=UI_PAGE_STANDBY_SETTING;editor_active=true;
+    assert(!sample(1,200,120,0));assert(!sample(2,200,140,0));assert(!queued);
+    release();editor_active=false;
     assert(!sample(2,100,300,0)); release();
     assert(gesture_service_set_enabled(true));
     assert(!sample(1,100,300,0)); assert(!sample(1,100,100,0)); release();
@@ -125,5 +135,28 @@ int main(void)
     page=UI_PAGE_MENU;
     sample(1,5,200,0);sample(1,130,200,0);sample(0,0,0,0);
     gesture_service_set_enabled(false);drain();assert(back==previous_back+1 && !nav_wait);
+    /* Every page can own a single drag without disabling global multi-touch. */
+    gesture_service_set_enabled(true);
+    for(int editor=0;editor<2;editor++) {
+        editor_active=editor;page=UI_PAGE_STANDBY_SETTING;unsigned e=exported,h=home;
+        assert(!sample(1,200,200,0));
+        assert(sample(2,200,240,0));assert(sample(2,200,120,0));
+        sample(1,200,120,0);release();assert(exported==e+1);
+        page=UI_PAGE_STANDBY_SETTING;
+        sample(2,200,100,0);sample(2,200,220,0);release();assert(home==h+1);
+    }
+    /* Dirty/modal/busy policy is checked at dispatch, not by disabling recognition. */
+    page=UI_PAGE_STANDBY_SETTING;unsigned e=exported,h=home;
+    sample(2,200,100,0);sample(2,200,220,0);sample(0,0,0,0);
+    policy_blocked=true;drain();assert(home==h);
+    sample(2,200,240,0);sample(2,200,120,0);release();assert(exported==e);
+    policy_blocked=false;
+    /* Hidden owner must not affect another page, even when its policy blocks. */
+    policy_blocked=true;page=UI_PAGE_MENU;
+    sample(2,200,240,0);sample(2,200,120,0);release();assert(exported==e+1);
+    gesture_service_clear_page_policy(UI_PAGE_STANDBY_SETTING);
+    page=UI_PAGE_STANDBY_SETTING;unsigned calls_before=policy_calls;
+    sample(2,200,100,0);sample(2,200,220,0);release();
+    assert(home==h+1&&policy_calls==calls_before);
     puts("gesture: PASS (navigation without waiting for hint, cancellation, multi-touch and safety)");
 }

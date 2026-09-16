@@ -57,6 +57,11 @@ add_executable(un260_boot_light un260/lv_drivers/boot_light.c un260/lv_system/ba
 target_link_libraries(un260_boot_light z)
 install(TARGETS un260_boot_light RUNTIME DESTINATION bin)
 add_executable(${PROJECT_NAME} main.c
+    un260/font/lv_font_standby_112.c
+    un260/font/scaled_font.c
+    un260/storage/standby_store.c
+    un260/app_service/app_standby_runtime.c
+    un260/lv_core/page_34_standby.c
     un260/font/lv_font_open_runde_medium_24.c
     un260/font/lv_font_open_runde_medium_40.c
     un260/font/lv_font_open_runde_medium_48.c
@@ -407,6 +412,13 @@ target_link_libraries(${PROJECT_NAME} lvgl )
 target_link_libraries(${PROJECT_NAME} media_player)
 target_link_libraries(${PROJECT_NAME} m)
 target_link_libraries(${PROJECT_NAME} pthread)
+# Keep USB PNG import self-contained in the application update; older machines
+# need not have a separately deployed libpng shared library.
+find_library(UN260_STANDBY_PNG_STATIC NAMES libpng16.a libpng.a)
+if(NOT UN260_STANDBY_PNG_STATIC)
+    message(FATAL_ERROR "Static libpng is required for standby photo import")
+endif()
+target_link_libraries(${PROJECT_NAME} ${UN260_STANDBY_PNG_STATIC} z m)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH "/usr/local/lib")
 

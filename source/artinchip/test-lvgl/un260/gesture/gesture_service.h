@@ -23,6 +23,12 @@ typedef struct {
 } gesture_definition_t;
 
 void gesture_service_init(void);
+/* Page policy owns only single-finger drags, never raw multi-touch.
+ * handle_action returns true when handled/blocked (e.g. unsaved changes).
+ * Register on create/resume, clear on destroy/suspend; owner gates hidden pages. */
+void gesture_service_set_page_policy(uint32_t owner, bool (*owns_single_drag)(void),
+                                     bool (*handle_action)(gesture_action_t));
+void gesture_service_clear_page_policy(uint32_t owner);
 bool gesture_service_enabled(void);
 bool gesture_service_set_enabled(bool enabled);
 size_t gesture_service_definition_count(void);

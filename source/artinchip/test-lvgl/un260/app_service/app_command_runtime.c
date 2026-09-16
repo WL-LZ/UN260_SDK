@@ -1,4 +1,5 @@
 #include "app_command_runtime.h"
+#include "app_standby_runtime.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -212,6 +213,7 @@ uint32_t app_command_runtime_process_frames_budget(uint32_t budget_us)
             continue;
         }
 
+        if (fresh) app_standby_runtime_protocol_activity();
         if (!app_command_runtime_dispatch(buf[3], buf, len)) {
             /* Initial history loading is normal backpressure, not a storage
              * fault. Keep the frame and the bounded wait, but leave its warning

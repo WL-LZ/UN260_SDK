@@ -956,6 +956,8 @@ static void create_maintenance_page_content(lv_obj_t* parent)
 
 static void create_user_page_content(lv_obj_t* parent)
 {
+    create_tile(parent, 1, 2, "STANDBY", ">", false,
+                enter_page_event_cb, (void*)(uintptr_t)UI_PAGE_STANDBY_SETTING);
     create_tile(parent, 0, 0, ui_text_get(UI_TEXT_SETTINGS_PASSWORD), ">", true,
                 enter_page_event_cb, (void*)(uintptr_t)UI_PAGE_PASSWORD_CHANGE);
     create_tile(parent, 1, 0, ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_SETTING), ">", true,
