@@ -45,6 +45,7 @@ typedef enum {
     UI_PAGE_BRIGHTNESS_SETTING,
     UI_PAGE_STANDBY_SETTING,
     UI_PAGE_STANDBY,
+    UI_PAGE_DISPLAY_TEST,
     UI_PAGE_COUNT
 } ui_page_t;
 

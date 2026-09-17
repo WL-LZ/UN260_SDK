@@ -17,6 +17,7 @@
 #include"lv_page_declear.h"
 #include "page_33_set_brightness.h"
 #include "page_34_standby.h"
+#include "page_36_display_test.h"
 #include "un260/lv_drivers/uart_io.h"
 
 #define UI_PAGE_STACK_CAPACITY 10
@@ -170,6 +171,7 @@ static const char *const g_page_names[UI_PAGE_COUNT] = {
     [UI_PAGE_BRIGHTNESS_SETTING] = "BRIGHTNESS",
     [UI_PAGE_STANDBY_SETTING] = "STANDBY_SETTING",
     [UI_PAGE_STANDBY] = "STANDBY",
+    [UI_PAGE_DISPLAY_TEST] = "DISPLAY_TEST",
     [UI_PAGE_LANGUAGE_SETTING] = "LANGUAGE",
     [UI_PAGE_DOUBLE_NOTE_SETTING] = "DOUBLE_NOTE",
     [UI_PAGE_FLAP_SETTING] = "FLAP",
@@ -281,6 +283,7 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
     [UI_PAGE_BRIGHTNESS_SETTING] = { ui_page_33_set_brightness_create, ui_page_33_set_brightness_destroy },
     [UI_PAGE_STANDBY_SETTING] = { ui_page_34_standby_create, ui_page_34_standby_destroy },
     [UI_PAGE_STANDBY] = { ui_page_35_standby_create, ui_page_35_standby_destroy },
+    [UI_PAGE_DISPLAY_TEST] = { ui_page_36_display_test_create, ui_page_36_display_test_destroy },
     [UI_PAGE_LANGUAGE_SETTING] = { ui_page_21_set_language_create, ui_page_21_set_language_destroy },
     [UI_PAGE_DOUBLE_NOTE_SETTING] = { ui_page_22_set_double_note_create, ui_page_22_set_double_note_destroy },
     [UI_PAGE_FLAP_SETTING] = { ui_page_23_set_flap_create, ui_page_23_set_flap_destroy },
