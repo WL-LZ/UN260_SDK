@@ -109,7 +109,7 @@ def main():
         port_helper = work / "port_drag.c"
         port_helper.write_text('#include "lvgl/lvgl.h"\n' + match.group() + '\n')
         sources = [ROOT / "tools/test_list_view.c", port_helper, *asset_sources]
-        for path in ["un260/lv_components/lv_recycled_list.c",
+        for path in ["un260/lv_components/lv_recycled_list.c", "un260/lv_components/ui_scrollbar.c",
                      "un260/lv_components/ui_list_window.c",
                      "un260/lv_components/lv_card_surface.c",
                      "un260/lv_components/lv_damped_button.c",

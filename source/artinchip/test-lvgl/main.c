@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "lvgl/lvgl.h"
+#include "un260/lv_components/ui_scrollbar.h"
 #include "lv_port_disp.h"
 #include "lv_port_indev.h"
 #include "aic_ui.h"
@@ -40,6 +41,7 @@ int main(void) {
     aic_dec_create();
 
     lv_port_disp_init();
+    ui_scrollbar_init(lv_disp_get_default());
     app_startup_trace_mark("display_initialized");
     backlight_service_init();
     app_startup_trace_mark("backlight_initialized");

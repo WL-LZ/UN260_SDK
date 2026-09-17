@@ -1,4 +1,5 @@
 #include <assert.h>
+#include "un260/lv_components/ui_scrollbar.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -360,6 +361,7 @@ int main(void)
     static lv_disp_drv_t display;lv_disp_drv_init(&display);
     display.hor_res=1280;display.ver_res=400;display.draw_buf=&buffer;display.flush_cb=flush;
     assert(lv_disp_drv_register(&display));
+    ui_scrollbar_init(lv_disp_get_default());
     lv_img_decoder_t *decoder=lv_img_decoder_create();assert(decoder);
     lv_img_decoder_set_info_cb(decoder,host_image_info);lv_img_decoder_set_open_cb(decoder,host_image_open);
     lv_img_decoder_set_close_cb(decoder,host_image_close);

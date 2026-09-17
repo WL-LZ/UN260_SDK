@@ -20,6 +20,7 @@ COMPONENTS = [
     "un260/font/lv_font_main_currency_32.c",
     "un260/currency/currency_metadata.c",
     "un260/lv_components/lv_recycled_list.c",
+    "un260/lv_components/ui_scrollbar.c",
     "un260/lv_components/ui_list_window.c",
     "un260/lv_components/lv_card_surface.c",
     "un260/lv_components/lv_damped_button.c",

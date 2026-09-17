@@ -24,7 +24,8 @@ typedef struct {
 /* Generic read-only viewport: vertical scroll with bounded edge elasticity;
  * paged mode accepts a horizontal swipe on normal release, one page per drag.
  * Direction locking and PRESS_LOST cancellation leave global input ownership
- * with the platform. The scrollbar is 40% opaque inside the range, 100% at edges.
+ * with the platform. The shared scrollbar reserves arrow/gap space and shrinks
+ * at overscroll edges; the list physics owns release and return motion.
  * Owns only a bounded row pool and an idle-paused motion timer.
  * Caller owns data; callbacks never perform protocol/IO.
  * Deleting its parent destroys the viewport, timer and private allocation.

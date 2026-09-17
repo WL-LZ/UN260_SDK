@@ -46,7 +46,7 @@ def main():
     actual = [
         "un260/font/scaled_font.c",
         "un260/lv_core/page_01_multi.c", "un260/counting/counting_multi.c",
-        "un260/lv_components/lv_recycled_list.c", "un260/lv_components/ui_list_window.c",
+        "un260/lv_components/lv_recycled_list.c", "un260/lv_components/ui_scrollbar.c", "un260/lv_components/ui_list_window.c",
         "un260/lv_components/lv_damped_button.c", "un260/lv_components/lv_loading_orbit.c",
         "un260/lv_components/lv_capsule_pagination.c", "un260/lv_components/smart_island.c",
         "un260/lv_components/smart_island/smart_island_view.c",

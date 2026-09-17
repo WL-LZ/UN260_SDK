@@ -114,6 +114,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_components/ui_scroll_physics.c
     un260/lv_components/ui_list_window.c
     un260/lv_components/lv_recycled_list.c
+    un260/lv_components/ui_scrollbar.c
     un260/lv_core/page_02_list_data.c
     un260/lv_core/page_02_list_search.c
     un260/app_service/setting_service.c

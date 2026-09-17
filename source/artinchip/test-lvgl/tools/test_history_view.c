@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "lvgl/lvgl.h"
+#include "un260/lv_components/ui_scrollbar.h"
 #include "aic_ui/compiled_asset.h"
 #include "test_page_background_asset.h"
 #include "un260/lv_system/ui_history_data.h"
@@ -677,6 +678,32 @@ static void history_test_multi(unsigned baseline)
     lv_obj_t *body=lv_obj_get_child(history->multi_panel,3);
     history_test_click(lv_obj_get_child(body,0));history_test_tick(100);
     assert(history->multi_selected==0);history_test_bmp("history-multi-usd");
+    body=lv_obj_get_child(history->multi_panel,3);
+    assert(lv_obj_has_flag(body,LV_OBJ_FLAG_CLICKABLE));
+    lv_area_t scroll_area;lv_obj_get_coords(body,&scroll_area);
+    history_test_pointer(scroll_area.x1+600,scroll_area.y1+170,true);
+    history_test_pointer(scroll_area.x1+600,scroll_area.y1+100,true);
+    history_test_pointer(scroll_area.x1+600,scroll_area.y1+40,true);
+    history_test_pointer(scroll_area.x1+600,scroll_area.y1+40,false);
+    history_test_tick(400);
+    assert(lv_obj_get_scroll_y(body)>0);
+    history_test_bmp("history-multi-usd-scrolled");
+    lv_obj_scroll_to_y(body,0,LV_ANIM_OFF);history_test_tick(60);
+    history_test_pointer(scroll_area.x1+600,scroll_area.y1+40,true);
+    history_test_pointer(scroll_area.x1+600,scroll_area.y1+100,true);
+    history_test_pointer(scroll_area.x1+600,scroll_area.y1+160,true);
+    assert(lv_obj_get_scroll_y(body)<0);
+    history_test_bmp("history-multi-usd-pull-top");
+    history_test_pointer(scroll_area.x1+600,scroll_area.y1+160,false);
+    history_test_tick(600);assert(lv_obj_get_scroll_y(body)==0);
+    lv_obj_scroll_to_y(body,lv_obj_get_scroll_bottom(body),LV_ANIM_OFF);history_test_tick(60);
+    history_test_pointer(scroll_area.x1+600,scroll_area.y1+170,true);
+    history_test_pointer(scroll_area.x1+600,scroll_area.y1+100,true);
+    history_test_pointer(scroll_area.x1+600,scroll_area.y1+35,true);
+    assert(lv_obj_get_scroll_bottom(body)<0);
+    history_test_bmp("history-multi-usd-pull-bottom");
+    history_test_pointer(scroll_area.x1+600,scroll_area.y1+35,false);
+    history_test_tick(600);assert(lv_obj_get_scroll_bottom(body)==0);
     history_test_click(history->actions[3]);assert(history->detail_mode && history->multi_selected==-1);
     body=lv_obj_get_child(history->multi_panel,3);history_test_click(lv_obj_get_child(body,1));
     history_test_tick(100);history_test_bmp("history-multi-incomplete");
@@ -707,6 +734,7 @@ int main(void)
     lv_disp_drv_t display; lv_disp_drv_init(&display);
     display.hor_res = 1280; display.ver_res = 400; display.draw_buf = &buffer; display.flush_cb = test_flush;
     assert(lv_disp_drv_register(&display));
+    ui_scrollbar_init(lv_disp_get_default());
     lv_indev_drv_t pointer; lv_indev_drv_init(&pointer);
     pointer.type = LV_INDEV_TYPE_POINTER; pointer.read_cb = test_pointer_read;
     assert(lv_indev_drv_register(&pointer));

@@ -1,4 +1,5 @@
 #include "lv_recycled_list.h"
+#include "ui_scrollbar.h"
 #include "un260/lv_system/ui_update_batch.h"
 #include <math.h>
 #include <string.h>
@@ -67,11 +68,7 @@ static void project(lv_recycled_list_t *list, bool force)
     uint32_t first = (uint32_t)offset / w->row_height;
     if (w->paged) first = w->first;
     int32_t pull = (int32_t)lroundf(list->overscroll);
-    float limit = ui_list_window_limit(w);
-    lv_opa_t thumb_opa = w->offset <= 0 || w->offset >= limit ? LV_OPA_COVER : LV_OPA_40;
-    lv_opa_t current_opa = lv_obj_get_style_bg_opa(list->thumb, 0);
-    if (!force && offset == list->drawn_offset && pull == list->drawn_overscroll &&
-        current_opa == thumb_opa) return;
+    if (!force && offset == list->drawn_offset && pull == list->drawn_overscroll) return;
     list->drawn_offset = offset;
     list->drawn_overscroll = pull;
     ui_update_batch_t batch;
@@ -94,15 +91,9 @@ static void project(lv_recycled_list_t *list, bool force)
     }
     bool scrolling = !w->paged && w->count > w->rows;
     set_visible(list->thumb, scrolling);
-    if (current_opa != thumb_opa) lv_obj_set_style_bg_opa(list->thumb, thumb_opa, 0);
     if (scrolling) {
         int height = w->rows * w->row_height;
-        int thumb_h = (int)((uint64_t)height * w->rows / w->count);
-        if (thumb_h < 18) thumb_h = 18;
-        if (thumb_h > height) thumb_h = height;
-        int y = (int)((height - thumb_h) * w->offset / limit);
-        lv_obj_set_height(list->thumb, thumb_h);
-        lv_obj_set_y(list->thumb, y);
+        ui_scrollbar_update(list->thumb,height,(float)w->count*w->row_height,w->offset+list->overscroll);
     }
     ui_update_batch_end(&batch);
     uint32_t last = ui_list_window_last(w);
@@ -327,15 +318,8 @@ lv_recycled_list_t *lv_recycled_list_create(lv_obj_t *parent,
         lv_obj_clear_flag(list->row[i], LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(list->row[i], LV_OBJ_FLAG_HIDDEN);
     }
-    list->thumb = lv_obj_create(list->object);
+    list->thumb = ui_scrollbar_create(list->object,cfg->width-inset-4,0,8,cfg->rows*cfg->row_height);
     if (!list->thumb) goto creation_failed;
-    lv_obj_remove_style_all(list->thumb);
-    lv_obj_set_size(list->thumb, 4, 18);
-    lv_obj_set_x(list->thumb, cfg->width - inset - 2);
-    lv_obj_set_style_radius(list->thumb, 2, 0);
-    lv_obj_set_style_bg_color(list->thumb, lv_color_hex(0xC6D0D8), 0);
-    lv_obj_set_style_bg_opa(list->thumb, LV_OPA_COVER, 0);
-    lv_obj_clear_flag(list->thumb, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(list->thumb, LV_OBJ_FLAG_HIDDEN);
     list->timer = lv_timer_create(motion_tick, 16, list);
     if (list->timer) lv_timer_pause(list->timer);

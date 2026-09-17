@@ -1,4 +1,5 @@
 #include "un260/lv_core/page_07_curr.h"
+#include "un260/lv_components/ui_scrollbar.h"
 #include "un260/lv_core/page_07_curr/page_07_curr_internal.h"
 #include "un260/lv_core/page_07_curr/page_07_curr_layout.h"
 #include "un260/lv_core/page_07_curr/page_07_curr_card_render.h"
@@ -90,8 +91,6 @@ page07_curr_context_t g_page07_curr = {
     .model.view_mode = PAGE07_CURR_VIEW_CARD,
 };
 
-static int g_curr_track_x = -1;
-static int g_curr_track_w = -1;
 static int g_curr_card_styled_visible_idx = -1;
 static int g_curr_grid_styled_abs_idx = -1;
 static int g_curr_cache_focus_idx = -1;
@@ -115,37 +114,10 @@ static void curr_update_track_by_scroll(void)
                             nearest >= g_page07_curr.model.visible_count - 1 ? 153 : LV_OPA_COVER, 0);
     if (g_page07_curr.objects.thumb == NULL || g_page07_curr.model.visible_count <= 0) return;
 
-    int thumb_w = CURR_TRACK_W / g_page07_curr.model.visible_count;
-    if (thumb_w < CURR_TRACK_MIN_THUMB) thumb_w = CURR_TRACK_MIN_THUMB;
-    if (thumb_w > CURR_TRACK_W) thumb_w = CURR_TRACK_W;
-
-    float max_scroll = g_page07_curr.carousel.motion.max_position;
-    if (max_scroll <= 0 || g_page07_curr.model.visible_count <= 1) {
-        if (g_curr_track_w != CURR_TRACK_W) {
-            lv_obj_set_size(g_page07_curr.objects.thumb, CURR_TRACK_W, CURR_TRACK_H);
-            g_curr_track_w = CURR_TRACK_W;
-        }
-        if (g_curr_track_x != CURR_TRACK_X) {
-            lv_obj_set_pos(g_page07_curr.objects.thumb, CURR_TRACK_X, CURR_TRACK_Y);
-            g_curr_track_x = CURR_TRACK_X;
-        }
-        return;
-    }
-
-    float position = g_page07_curr.carousel.motion.position;
-    if (position < 0) position = 0;
-    if (position > max_scroll) position = max_scroll;
-    int x = CURR_TRACK_X +
-        (int)(position * (CURR_TRACK_W - thumb_w) / max_scroll + 0.5f);
-
-    if (g_curr_track_w != thumb_w) {
-        lv_obj_set_size(g_page07_curr.objects.thumb, thumb_w, CURR_TRACK_H);
-        g_curr_track_w = thumb_w;
-    }
-    if (g_curr_track_x != x) {
-        lv_obj_set_pos(g_page07_curr.objects.thumb, x, CURR_TRACK_Y);
-        g_curr_track_x = x;
-    }
+    float span=g_page07_curr.carousel.motion.stride;
+    ui_scrollbar_update(g_page07_curr.objects.thumb,span,
+        span+g_page07_curr.carousel.motion.max_position,
+        g_page07_curr.carousel.motion.position);
 }
 
 static void curr_set_left_info_by_abs(int abs_idx)
@@ -717,27 +689,9 @@ static void curr_build_card_layer(void)
         lv_obj_clear_flag(line, LV_OBJ_FLAG_CLICKABLE);
     }
 
-    g_page07_curr.objects.track = lv_obj_create(g_page07_curr.objects.card_layer);
-    lv_obj_remove_style_all(g_page07_curr.objects.track);
-    lv_obj_clear_flag(g_page07_curr.objects.track,
-                      LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_size(g_page07_curr.objects.track, CURR_TRACK_W, CURR_TRACK_H);
-    lv_obj_set_pos(g_page07_curr.objects.track, CURR_TRACK_X, CURR_TRACK_Y);
-    lv_obj_set_style_bg_color(g_page07_curr.objects.track, lv_color_hex(CURR_TRACK_BG), 0);
-    lv_obj_set_style_bg_opa(g_page07_curr.objects.track, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(g_page07_curr.objects.track, CURR_TRACK_H / 2, 0);
-
-    g_page07_curr.objects.thumb = lv_obj_create(g_page07_curr.objects.card_layer);
-    lv_obj_remove_style_all(g_page07_curr.objects.thumb);
-    lv_obj_clear_flag(g_page07_curr.objects.thumb,
-                      LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_size(g_page07_curr.objects.thumb, 1, CURR_TRACK_H);
-    lv_obj_set_pos(g_page07_curr.objects.thumb, CURR_TRACK_X, CURR_TRACK_Y);
-    lv_obj_set_style_bg_color(g_page07_curr.objects.thumb, lv_color_hex(CURR_TRACK_FG), 0);
-    lv_obj_set_style_bg_opa(g_page07_curr.objects.thumb, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(g_page07_curr.objects.thumb, CURR_TRACK_H / 2, 0);
-    g_curr_track_x = -1;
-    g_curr_track_w = -1;
+    g_page07_curr.objects.track = NULL;
+    g_page07_curr.objects.thumb = ui_scrollbar_create(g_page07_curr.objects.card_layer,
+        CURR_TRACK_X,CURR_TRACK_Y,CURR_TRACK_W,CURR_TRACK_H);
     g_curr_card_styled_visible_idx = -1;
     g_curr_cache_focus_idx = -1;
     curr_project_carousel();
@@ -1072,8 +1026,6 @@ void page_07_curr_img_reset(void)
     memset(g_page07_curr.grid_items, 0, sizeof(g_page07_curr.grid_items));
     memset(g_page07_curr.model.visible_indices, 0, sizeof(g_page07_curr.model.visible_indices));
     g_page07_curr.model.visible_count = 0;
-    g_curr_track_x = -1;
-    g_curr_track_w = -1;
     g_curr_card_styled_visible_idx = -1;
     g_curr_grid_styled_abs_idx = -1;
 }

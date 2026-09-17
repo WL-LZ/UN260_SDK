@@ -2,6 +2,7 @@
 #define TEST_RECYCLED_LIST_CASES_H
 
 #include <assert.h>
+#include "un260/lv_components/ui_scrollbar.h"
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -319,34 +320,36 @@ static void recycled_cases_page_thresholds(lv_obj_t *parent, lv_indev_t *indev)
 static void recycled_cases_scrollbar(lv_recycled_list_t *list, recycled_cases_context_t *ctx,
                                      lv_indev_t *indev, lv_timer_t *motion)
 {
-    lv_recycled_list_set_paged(list, false);
-    lv_recycled_list_refresh(list, 20, true);
-    lv_obj_t *thumb = recycled_cases_thumb(list, ctx);
-    assert(!lv_obj_has_flag(thumb, LV_OBJ_FLAG_HIDDEN));
-    assert(lv_obj_get_style_bg_opa(thumb, 0) == LV_OPA_COVER);
-    const float positions[] = {0.2f, 100.0f, 467.8f, 468.0f};
-    for (unsigned i = 0; i < 4; ++i) {
-        recycled_cases_position(list, positions[i]);
-        assert(lv_obj_get_style_bg_opa(thumb, 0) == (i == 3 ? LV_OPA_COVER : LV_OPA_40));
-        recycled_cases_rows(list, ctx);
+    (void)indev;(void)motion;
+    lv_recycled_list_set_paged(list,false);
+    lv_recycled_list_refresh(list,20,true);
+    lv_obj_t *thumb=recycled_cases_thumb(list,ctx);
+    assert(!lv_obj_has_flag(thumb,LV_OBJ_FLAG_HIDDEN));
+    int height=lv_obj_get_height(thumb);
+    const float positions[]={0,100,468};
+    for(unsigned i=0;i<3;i++){
+        recycled_cases_position(list,positions[i]);
+        assert(lv_obj_get_height(thumb)==height && lv_obj_get_y(thumb)==0);
+        recycled_cases_rows(list,ctx);
     }
-    /* Consecutive pointer samples cross the endpoint while both the floored
-     * offset and rounded pull remain zero: opacity cannot use that cache key. */
-    recycled_cases_position(list, 6.2f);
-    recycled_cases_input(list, indev, LV_EVENT_PRESSED, 100, 20);
-    recycled_cases_input(list, indev, LV_EVENT_PRESSING, 106, 200);
-    recycled_cases_offset(list, 0.2f);
-    assert(recycled_cases_pull(list, ctx) == 0);
-    assert(lv_obj_get_style_bg_opa(thumb, 0) == LV_OPA_40);
-    recycled_cases_input(list, indev, LV_EVENT_PRESSING, 107, 200);
-    recycled_cases_offset(list, 0);
-    assert(recycled_cases_pull(list, ctx) == 0);
-    assert(lv_obj_get_style_bg_opa(thumb, 0) == LV_OPA_COVER);
-    recycled_cases_input(list, indev, LV_EVENT_PRESSING, 106, 200);
-    recycled_cases_offset(list, 0.2f);
-    assert(lv_obj_get_style_bg_opa(thumb, 0) == LV_OPA_40);
-    recycled_cases_input(list, indev, LV_EVENT_PRESS_LOST, 106, 0);
-    assert(motion->paused);
+    const int sizes[]={10,20,208,500};
+    for(unsigned i=0;i<4;i++){
+        ui_scrollbar_geometry_t top,bottom,pull;
+        int n=sizes[i];
+        assert(ui_scrollbar_measure(n,100,300,0,&top));
+        assert(ui_scrollbar_measure(n,100,300,200,&bottom));
+        assert(top.thumb_start>=top.arrow+top.gap);
+        assert(bottom.thumb_start+bottom.thumb_length<=n-bottom.arrow-bottom.gap);
+        assert(ui_scrollbar_measure(n,100,300,-80,&pull));
+        assert(pull.thumb_start==top.thumb_start && pull.thumb_length<=top.thumb_length);
+        assert(ui_scrollbar_measure(n,100,300,280,&pull));
+        assert(pull.thumb_start+pull.thumb_length==bottom.thumb_start+bottom.thumb_length);
+        assert(pull.thumb_length<=bottom.thumb_length);
+        assert(!ui_scrollbar_measure(n,100,100,0,&pull));
+        assert(!ui_scrollbar_measure(n,0,300,0,&pull));
+    }
+    lv_recycled_list_refresh(list,0,true);
+    assert(lv_obj_has_flag(thumb,LV_OBJ_FLAG_HIDDEN));
 }
 
 static void recycled_cases_rubber(lv_recycled_list_t *list, recycled_cases_context_t *ctx,
@@ -370,7 +373,7 @@ static void recycled_cases_rubber(lv_recycled_list_t *list, recycled_cases_conte
     int saturated = recycled_cases_pull(list, ctx);
     assert(saturated >= large && saturated <= 48);
     recycled_cases_offset(list, 0);
-    assert(lv_obj_get_style_bg_opa(recycled_cases_thumb(list, ctx), 0) == LV_OPA_COVER);
+    assert(!lv_obj_has_flag(recycled_cases_thumb(list, ctx), LV_OBJ_FLAG_HIDDEN));
     recycled_cases_input(list, indev, LV_EVENT_RELEASED, 2100, 0);
     assert(recycled_cases_pull(list, ctx) == saturated);
     recycled_cases_settle(list, ctx, motion);
@@ -380,7 +383,7 @@ static void recycled_cases_rubber(lv_recycled_list_t *list, recycled_cases_conte
     recycled_cases_input(list, indev, LV_EVENT_PRESSING, 20, 20);
     assert(recycled_cases_pull(list, ctx) < 0);
     recycled_cases_offset(list, 468);
-    assert(lv_obj_get_style_bg_opa(recycled_cases_thumb(list, ctx), 0) == LV_OPA_COVER);
+    assert(!lv_obj_has_flag(recycled_cases_thumb(list, ctx), LV_OBJ_FLAG_HIDDEN));
     recycled_cases_input(list, indev, LV_EVENT_RELEASED, 20, 0);
     recycled_cases_settle(list, ctx, motion);
 
@@ -654,10 +657,8 @@ static void recycled_cases_scroll_to_index(lv_recycled_list_t *list,
         assert(ui_list_window_last(window) == first + 7);
         recycled_cases_offset(list, first * 36.0f);
         recycled_cases_rows(list, ctx);
-        assert(lv_obj_get_style_bg_opa(thumb, 0) ==
-               (first == 0 || first == 13 ? LV_OPA_COVER : LV_OPA_40));
-        int expected_y = (int)((252 - lv_obj_get_height(thumb)) * window->offset / 468);
-        assert(lv_obj_get_y(thumb) == expected_y);
+        assert(!lv_obj_has_flag(thumb, LV_OBJ_FLAG_HIDDEN));
+        assert(lv_obj_get_height(thumb)==252 && lv_obj_get_y(thumb)==0);
     }
     changes = ctx->changes;
     binds = ctx->binds;

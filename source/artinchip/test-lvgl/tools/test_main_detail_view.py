@@ -35,6 +35,7 @@ def main():
         conf.write_text("""#ifndef LV_CONF_H
 #define LV_CONF_H
 #define LV_COLOR_DEPTH 32
+#define LVGL_DIR "L:/usr/local/share/lvgl_data/"
 #define LV_MEM_SIZE (4U * 1024U * 1024U)
 #define LV_USE_LOG 0
 #define LV_USE_GPU_AIC 0
@@ -52,6 +53,7 @@ def main():
         sources = [ROOT / "tools/test_main_detail_view.c", helper]
         sources += [ROOT / path for path in (
             "un260/lv_components/lv_recycled_list.c",
+            "un260/lv_components/ui_scrollbar.c",
             "un260/lv_components/ui_list_window.c",
             "un260/lv_system/ui_update_batch.c",
             "un260/lv_system/ui_text_page.c",

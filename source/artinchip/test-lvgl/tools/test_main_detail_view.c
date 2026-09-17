@@ -96,7 +96,7 @@ static void assert_geometry(void)
 {
     render();
     assert(window()->rows == 5 && window()->row_height == 34);
-    assert(lv_obj_get_child_cnt(page_01_main_detail_scroll_obj()) == 8); /* Six rows, thumb, empty caption. */
+    assert(lv_obj_get_child_cnt(page_01_main_detail_scroll_obj()) == 7); /* Six rows and scrollbar; empty state is outside the viewport. */
     for (unsigned k = 0; k < window()->rows + 1U; ++k) {
         unsigned index = window()->first + k;
         if (index >= window()->count) break;
@@ -274,8 +274,8 @@ static void test_lifecycle(void)
             bool found_thumb = false;
             for (unsigned child = 0; child < lv_obj_get_child_cnt(viewport); ++child) {
                 lv_obj_t *object = lv_obj_get_child(viewport, child);
-                if (lv_obj_get_width(object) == 4) {
-                    assert(lv_obj_get_x(object) == 528);
+                if (lv_obj_get_width(object) == 8) {
+                    assert(lv_obj_get_x(object) == 526);
                     found_thumb = true;
                 }
             }

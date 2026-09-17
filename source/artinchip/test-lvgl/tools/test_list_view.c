@@ -453,15 +453,14 @@ static void assert_action_rail(bool page_visible)
 }
 static void assert_palette(bool page_visible)
 {
-    assert(lv_obj_get_style_bg_img_src(view->page,0)==NULL);
+    assert(!strcmp((const char *)lv_obj_get_style_bg_img_src(view->page,0),UI_USER_BACKGROUND_SRC));
     const uint32_t badge_colors[]={0x2BD900,0x0074F8,0xF85820};
-    assert(lv_obj_get_style_bg_color(view->page,0).full==lv_color_hex(0xF6F8FA).full);
+    assert(lv_obj_get_style_bg_color(view->page,0).full==lv_color_hex(0xF2F5F7).full);
     assert(lv_obj_get_style_bg_opa(view->page,0)==LV_OPA_COVER);
     lv_obj_update_layout(view->page);
     if(page_visible) render_page();
     assert_home_icon(page_visible);
     assert_action_rail(page_visible);
-    if(page_visible) assert((framebuffer[0].full&0xffffff)==0xF6F8FA);
     for(int i=0;i<3;++i) {
         list_section_t *s=&view->section[i];
         assert(lv_obj_get_style_bg_color(s->panel,0).full==lv_color_hex(0xFFFFFF).full);
@@ -706,7 +705,8 @@ static void test_search_background(void)
     lv_event_send(view->actions[LIST_ACTION_SEARCH],LV_EVENT_CLICKED,NULL);
     assert(view->search);
     page_02_list_search_t *s=view->search;
-    assert(lv_obj_get_style_bg_color(s->root,0).full==lv_color_hex(0xF6F8FA).full);
+    assert(lv_obj_get_style_bg_color(s->root,0).full==lv_color_hex(0xF2F5F7).full);
+    assert(!strcmp((const char *)lv_obj_get_style_bg_img_src(s->root,0),UI_SETTINGS_BACKGROUND_SRC));
     assert(lv_obj_get_style_bg_opa(s->root,0)==LV_OPA_COVER);
     lv_obj_t *cards[]={lv_obj_get_parent(s->contains),lv_obj_get_parent(s->input)};
     for(unsigned i=0;i<2;++i) {
@@ -714,7 +714,6 @@ static void test_search_background(void)
         assert(lv_obj_get_style_bg_opa(cards[i],0)==LV_OPA_COVER);
     }
     render_page();
-    assert((framebuffer[0].full&0xffffff)==0xF6F8FA);
     write_bmp("search-background");
     search_closed(UINT16_MAX,NULL);
     assert(!view->search);
@@ -730,11 +729,11 @@ int main(void)
     for(unsigned theme=0;theme<2;theme++){
         ui_page_background_apply(probe,theme?UI_BACKGROUND_SETTINGS:UI_BACKGROUND_USER);
         lv_obj_update_layout(probe);lv_obj_invalidate(probe);lv_refr_now(NULL);
-        assert(!lv_obj_get_style_bg_img_src(probe,0));
-        for(unsigned i=0;i<1280*400;i++)assert((framebuffer[i].full&0xffffff)==0xF6F8FA);
+        assert(!strcmp((const char *)lv_obj_get_style_bg_img_src(probe,0),UI_USER_BACKGROUND_SRC));
+        assert(lv_obj_get_style_bg_img_opa(probe,0)==LV_OPA_COVER);
     }
     lv_obj_del(probe);
-    puts("PASS both full-screen background styles are exactly F6F8FA without an image");
+    puts("PASS both full-screen background styles retain the restored shared image");
     test_alnum_keyboard_cases();
     test_recycled_list_cases();
     counting_sim_t *data=counting_data_mutable();
