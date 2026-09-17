@@ -502,7 +502,7 @@ static void multi_render(void)
     lv_obj_t *body=surface(panel,12,44,1116,208,0,0xFFFFFF);
     if(!body)return;
     lv_port_indev_set_drag_obj(body,true);
-    lv_obj_add_flag(body,LV_OBJ_FLAG_SCROLLABLE|LV_OBJ_FLAG_EVENT_BUBBLE|LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_flag(body,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE|LV_OBJ_FLAG_EVENT_BUBBLE|LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_set_scroll_dir(body,LV_DIR_VER);lv_obj_set_scrollbar_mode(body,LV_SCROLLBAR_MODE_AUTO);
     lv_obj_set_style_width(body,4,LV_PART_SCROLLBAR);
     lv_obj_set_style_bg_color(body,lv_color_hex(0x91A5B2),LV_PART_SCROLLBAR);
