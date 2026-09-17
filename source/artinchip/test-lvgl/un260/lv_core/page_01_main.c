@@ -1221,12 +1221,6 @@ void page_01_main_scroll_reset(void)
     page_01_main_detail_reset();
 }
 
-void page_01_main_icon_feedback(const char *name)
-{
-    if (!page_01_main_is_visible()) return;
-    icon_feedback_comp(name, page_01_main_obj, page_01_main_len);
-}
-
 static void page_01_main_summary_label_set(lv_obj_t **cached_label,
     bool *geometry_compact, const char *name, const char *text)
 {

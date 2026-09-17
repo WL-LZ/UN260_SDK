@@ -406,27 +406,6 @@ void batch_switch_set_last_on_num(uint8_t num)
 }
 
 
-static void zoom_anim_cb(void* var, int32_t zoom)
-{
-    lv_img_set_zoom((lv_obj_t*)var,zoom);
-}
-
-void icon_feedback_comp(const char* name,ui_element_t* page_cfg_obj,int len)
-{
-    lv_obj_t* img = find_obj_by_name(name,page_cfg_obj,len);
-    lv_anim_t a;
-    lv_anim_init(&a);
-    lv_anim_set_var(&a,img);
-    lv_anim_set_exec_cb(&a, zoom_anim_cb);
-    lv_anim_set_values(&a,256,285);
-    lv_anim_set_time(&a, 100);
-    lv_anim_set_playback_time(&a, 100);  // 回缩动画时间
-    lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
-    lv_anim_start(&a);
-}
-
-
-
 const char* get_system_error_desc(uint8_t code)
 {
     switch (code) {

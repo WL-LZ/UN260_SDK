@@ -9,8 +9,8 @@ const ui_text_item_t g_ui_text_page_group[UI_TEXT_PAGE_MAX] = {
     [UI_TEXT_HISTORY_ALL_VISIBLE] = {"ALL RESULTS", "全部结果", "전체 결과"},
     [UI_TEXT_HISTORY_DELETE] = {"DELETE", "删除", "삭제"},
     [UI_TEXT_HISTORY_EXPORT] = {"EXPORT", "导出", "내보내기"},
-    [UI_TEXT_HISTORY_BACK] = {"BACK", "返回", "뒤로"},
-    [UI_TEXT_HISTORY_CANCEL] = {"CANCEL", "取消", "취소"},
+    [UI_TEXT_HISTORY_BACK] = {"Back", "返回", "뒤로"},
+    [UI_TEXT_HISTORY_CANCEL] = {"Cancel", "取消", "취소"},
     [UI_TEXT_HISTORY_APPLY] = {"APPLY", "应用", "적용"},
     [UI_TEXT_HISTORY_SUMMARY_FMT] = {"%u matches | %llu PCS", "%u 条结果 | %llu 张", "%u개 결과 | %llu매"},
     [UI_TEXT_HISTORY_MIXED] = {"Mixed currencies", "多币种，不合计金额", "다중 통화"},
@@ -96,7 +96,7 @@ const ui_text_item_t g_ui_text_page_group[UI_TEXT_PAGE_MAX] = {
     [UI_TEXT_SERIAL_KEYBOARD_TITLE] = {"Enter serial number", "输入冠字号", "일련번호 입력"},
     [UI_TEXT_SERIAL_CLEAR] = {"CLEAR", "清空", "지우기"},
     [UI_TEXT_SERIAL_RESET] = {"RESET", "重置条件", "초기화"},
-    [UI_TEXT_SERIAL_ESC] = {"ESC", "返回", "뒤로"},
+    [UI_TEXT_SERIAL_ESC] = {"Back", "返回", "뒤로"},
     [UI_TEXT_SERIAL_LOCATE] = {"LOCATE", "定位", "위치"},
     [UI_TEXT_SERIAL_ORIGINAL_NO] = {"ORIG. NO.", "原序号", "원본 번호"},
     [UI_TEXT_SERIAL_MATCH_COUNT] = {"Matches: %u / %u records", "匹配：%u / %u 条记录", "일치: %u / %u개 기록"},
@@ -137,7 +137,7 @@ const ui_text_item_t g_ui_text_page_group[UI_TEXT_PAGE_MAX] = {
 
     //PAGE16
     [UI_TEXT_PAGE16_TITLE] = {"UI UPGRADE", "界面升级", "UI 업그레이드"},
-    [UI_TEXT_PAGE16_ESC] = {"ESC", "返回", "ESC"},
+    [UI_TEXT_PAGE16_ESC] = {"Back", "返回", "ESC"},
     [UI_TEXT_PAGE16_USB_STATUS_FMT] = {"U DISK: %s", "U盘: %s", "U DISK: %s"},
     [UI_TEXT_PAGE16_USB_INSERTED] = {"INSERTED", "已插入", "삽입됨"},
     [UI_TEXT_PAGE16_USB_NOT_INSERTED] = {"NOT INSERTED", "未插入", "삽입 안 됨"},
@@ -163,7 +163,7 @@ const ui_text_item_t g_ui_text_page_group[UI_TEXT_PAGE_MAX] = {
 
     //SETTINGS
     [UI_TEXT_SETTINGS_MENU_PREFERENCE] = {"PREFERENCE", "偏好设置", "PREFERENCE"},
-    [UI_TEXT_SETTINGS_ESC] = {"ESC", "返回", "ESC"},
+    [UI_TEXT_SETTINGS_ESC] = {"Back", "返回", "ESC"},
     [UI_TEXT_SETTINGS_DEBUG] = {"Debug", "调试", "Debug"},
     [UI_TEXT_DEBUG_DOWNLOAD] = {"Download", "下载", "다운로드"},
     [UI_TEXT_DEBUG_DOWNLOAD_SUCCESS] = {"Comm log saved to USB", "协议日志已保存到U盘", "통신 로그가 USB에 저장되었습니다"},
@@ -379,7 +379,7 @@ const ui_text_item_t g_ui_text_page_group[UI_TEXT_PAGE_MAX] = {
     [UI_TEXT_INNOVATION_CENTER_TITLE] = {"UN260 / INNOVATION CENTER", "UN260 / 创新中心", "UN260 / 혁신 센터"},
     [UI_TEXT_INNOVATION_LAYER] = {"LINUX INTELLIGENCE LAYER", "LINUX 智能功能层", "LINUX 지능 기능 계층"},
     [UI_TEXT_INNOVATION_GUIDE] = {"GUIDE", "说明", "안내"},
-    [UI_TEXT_INNOVATION_BACK] = {"BACK", "返回", "뒤로"},
+    [UI_TEXT_INNOVATION_BACK] = {"Back", "返回", "뒤로"},
     [UI_TEXT_INNOVATION_FEATURES] = {"FEATURES", "创新功能", "혁신 기능"},
     [UI_TEXT_INNOVATION_MULTI_PASS] = {"MULTI-PASS VERIFY", "多次复核", "다중 검증"},
     [UI_TEXT_INNOVATION_ACTIVE_FEATURE] = {"ACTIVE FEATURE", "当前功能", "현재 기능"},

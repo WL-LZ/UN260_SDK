@@ -361,7 +361,7 @@ static void upgrade_popup_style_init(void)
     lv_style_init(&style_upgrade_popup_btn_ghost_pressed);
     lv_style_set_bg_color(&style_upgrade_popup_btn_ghost_pressed, lv_color_hex(UPGRADE_POPUP_BTN_GHOST_PRS_COLOR));
     lv_style_set_bg_opa(&style_upgrade_popup_btn_ghost_pressed, LV_OPA_COVER);
-    lv_style_set_transform_zoom(&style_upgrade_popup_btn_ghost_pressed, 246);
+    lv_style_set_transform_zoom(&style_upgrade_popup_btn_ghost_pressed, 256);
 
     lv_style_init(&style_upgrade_popup_btn_main);
     lv_style_set_bg_color(&style_upgrade_popup_btn_main, lv_color_hex(UPGRADE_POPUP_BTN_MAIN_COLOR));
@@ -373,7 +373,7 @@ static void upgrade_popup_style_init(void)
     lv_style_init(&style_upgrade_popup_btn_main_pressed);
     lv_style_set_bg_color(&style_upgrade_popup_btn_main_pressed, lv_color_hex(UPGRADE_POPUP_BTN_MAIN_PRS_COLOR));
     lv_style_set_bg_opa(&style_upgrade_popup_btn_main_pressed, LV_OPA_COVER);
-    lv_style_set_transform_zoom(&style_upgrade_popup_btn_main_pressed, 246);
+    lv_style_set_transform_zoom(&style_upgrade_popup_btn_main_pressed, 256);
 
     lv_style_init(&style_upgrade_popup_btn_success);
     lv_style_set_bg_color(&style_upgrade_popup_btn_success, lv_color_hex(UPGRADE_POPUP_OK_COLOR));
@@ -385,7 +385,7 @@ static void upgrade_popup_style_init(void)
     lv_style_init(&style_upgrade_popup_btn_success_pressed);
     lv_style_set_bg_color(&style_upgrade_popup_btn_success_pressed, lv_color_hex(0x257A43));
     lv_style_set_bg_opa(&style_upgrade_popup_btn_success_pressed, LV_OPA_COVER);
-    lv_style_set_transform_zoom(&style_upgrade_popup_btn_success_pressed, 246);
+    lv_style_set_transform_zoom(&style_upgrade_popup_btn_success_pressed, 256);
 
     style_upgrade_popup_inited = true;
 }

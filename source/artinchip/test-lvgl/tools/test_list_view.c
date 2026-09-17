@@ -154,26 +154,13 @@ static void assert_home_icon(bool is_visible)
     assert(lv_obj_check_type(caption,&lv_label_class));
     assert(!strcmp(lv_label_get_text(caption),ui_text_get(UI_TEXT_LIST_MAIN)));
     lv_obj_t *icon=lv_obj_get_child(home,1);
-    assert(!lv_obj_check_type(icon,&lv_label_class) && !lv_obj_check_type(icon,&lv_img_class));
+    assert(lv_obj_check_type(icon,&lv_img_class));
     assert(lv_obj_get_child_cnt(icon)==0);
     assert(lv_obj_get_width(icon)==27 && lv_obj_get_height(icon)==27);
     assert(lv_obj_get_x(icon)==35 && lv_obj_get_y(icon)==17);
     assert(lv_obj_get_x(home)==1168 && lv_obj_get_y(home)==300);
     assert(lv_obj_get_width(home)==96 && lv_obj_get_height(home)==88);
-    assert_icon(icon,0x657F90,21,is_visible);
-}
-static void list_home_reference_draw(lv_event_t *event)
-{
-    /* Independent oracle: unchanged original List house geometry. */
-    static const lv_point_t segments[][2]={
-        {{2,12},{13,2}},{{13,2},{24,12}},{{4,10},{4,24}},
-        {{4,24},{22,24}},{{22,24},{22,10}}
-    };
-    lv_draw_line_dsc_t style;lv_draw_line_dsc_init(&style);
-    style.color=lv_color_hex(0x657F90);style.width=2;
-    style.round_start=style.round_end=1;
-    for(unsigned i=0;i<5;++i)
-        lv_draw_line(lv_event_get_draw_ctx(event),&style,&segments[i][0],&segments[i][1]);
+    assert_icon(icon,0x496574,21,is_visible);
 }
 static void test_home_glyph(void)
 {
@@ -189,12 +176,13 @@ static void test_home_glyph(void)
     lv_obj_set_style_bg_color(reference,lv_color_hex(0xFFFFFF),0);
     lv_obj_set_style_bg_opa(reference,LV_OPA_COVER,0);
     lv_obj_clear_flag(reference,LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_event_cb(reference,list_home_reference_draw,LV_EVENT_DRAW_MAIN,NULL);
+    lv_obj_t *image=lv_img_create(reference);assert(image);
+    lv_img_set_src(image,LVGL_DIR "ui_icons/home_27.png");
     render_page();
     for(unsigned y=0;y<27;++y) for(unsigned x=0;x<27;++x)
         assert(actual[y*27+x]==framebuffer[y*1280+x].full);
     lv_obj_del(reference);render_page();
-    printf("HOME_GLYPH list %08lx (original List 27x27 reference)\n",(unsigned long)signature);
+    printf("HOME_GLYPH list %08lx (standard raster 27x27 reference)\n",(unsigned long)signature);
 }
 static void search_reference_draw(lv_event_t *event)
 {
@@ -445,7 +433,7 @@ static void assert_action_rail(bool page_visible)
         lv_obj_t *icon=lv_obj_get_child(button,1);
         assert(lv_obj_get_width(icon)==27 && lv_obj_get_height(icon)==27);
         assert(lv_obj_get_x(icon)==35 && lv_obj_get_y(icon)==17);
-        assert_icon(icon,0x657F90,21,page_visible);
+        assert_icon(icon,lv_obj_check_type(icon,&lv_img_class) ? 0x496574 : 0x657F90,21,page_visible);
         lv_obj_get_coords(button,&rail[i]);
         if(i) assert(rail[i].y1-rail[i-1].y2-1==8);
     }
@@ -465,15 +453,15 @@ static void assert_action_rail(bool page_visible)
 }
 static void assert_palette(bool page_visible)
 {
-    assert(!strcmp(lv_obj_get_style_bg_img_src(view->page,0),UI_USER_BACKGROUND_SRC));
+    assert(lv_obj_get_style_bg_img_src(view->page,0)==NULL);
     const uint32_t badge_colors[]={0x2BD900,0x0074F8,0xF85820};
-    assert(lv_obj_get_style_bg_color(view->page,0).full==lv_color_hex(0xF2F5F7).full);
+    assert(lv_obj_get_style_bg_color(view->page,0).full==lv_color_hex(0xF6F8FA).full);
     assert(lv_obj_get_style_bg_opa(view->page,0)==LV_OPA_COVER);
     lv_obj_update_layout(view->page);
     if(page_visible) render_page();
     assert_home_icon(page_visible);
     assert_action_rail(page_visible);
-    if(page_visible) assert((framebuffer[0].full&0xffffff)==(*(const uint32_t*)test_page_asset_find(UI_USER_BACKGROUND_SRC)->pixels&0xffffff));
+    if(page_visible) assert((framebuffer[0].full&0xffffff)==0xF6F8FA);
     for(int i=0;i<3;++i) {
         list_section_t *s=&view->section[i];
         assert(lv_obj_get_style_bg_color(s->panel,0).full==lv_color_hex(0xFFFFFF).full);
@@ -540,7 +528,7 @@ static void test_handdrawn_icons(void)
         lv_obj_get_child(view->section[2].mode,1)};
     render_page();
     for(unsigned i=0;i<sizeof(icons)/sizeof(icons[0]);++i)
-        assert_icon(icons[i],0x657F90,i>=4 ? 12 : 21,true);
+        assert_icon(icons[i],i==3 ? 0x496574 : 0x657F90,i>=4 ? 12 : 21,true);
     test_home_glyph();test_search_glyph();
 }
 static void test_button_feedback(void)
@@ -560,7 +548,7 @@ static void test_button_feedback(void)
         assert(framebuffer[(before.y1+4)*1280+(before.x1+before.x2)/2].full==pressed.full);
         assert(lv_obj_get_style_translate_y(button,0)==0 && lv_obj_get_style_opa(button,0)==LV_OPA_COVER);
         for(unsigned j=0;j<lv_obj_get_child_cnt(button);++j)
-            assert(lv_obj_get_style_translate_y(lv_obj_get_child(button,j),0)==2);
+            assert(lv_obj_get_style_translate_y(lv_obj_get_child(button,j),0)==0);
         assert_caption_contained(button);
         if(i>=2) write_bmp((const char *[]){"list-history-pressed","list-search-pressed",
                                           "list-print-pressed","list-main-pressed"}[i-2]);
@@ -718,7 +706,7 @@ static void test_search_background(void)
     lv_event_send(view->actions[LIST_ACTION_SEARCH],LV_EVENT_CLICKED,NULL);
     assert(view->search);
     page_02_list_search_t *s=view->search;
-    assert(lv_obj_get_style_bg_color(s->root,0).full==lv_color_hex(0xF2F5F7).full);
+    assert(lv_obj_get_style_bg_color(s->root,0).full==lv_color_hex(0xF6F8FA).full);
     assert(lv_obj_get_style_bg_opa(s->root,0)==LV_OPA_COVER);
     lv_obj_t *cards[]={lv_obj_get_parent(s->contains),lv_obj_get_parent(s->input)};
     for(unsigned i=0;i<2;++i) {
@@ -726,7 +714,7 @@ static void test_search_background(void)
         assert(lv_obj_get_style_bg_opa(cards[i],0)==LV_OPA_COVER);
     }
     render_page();
-    assert((framebuffer[0].full&0xffffff)==(*(const uint32_t*)test_page_asset_find(UI_USER_BACKGROUND_SRC)->pixels&0xffffff));
+    assert((framebuffer[0].full&0xffffff)==0xF6F8FA);
     write_bmp("search-background");
     search_closed(UINT16_MAX,NULL);
     assert(!view->search);
@@ -742,11 +730,11 @@ int main(void)
     for(unsigned theme=0;theme<2;theme++){
         ui_page_background_apply(probe,theme?UI_BACKGROUND_SETTINGS:UI_BACKGROUND_USER);
         lv_obj_update_layout(probe);lv_obj_invalidate(probe);lv_refr_now(NULL);
-        const uint32_t *expected=(const uint32_t*)test_page_asset_find(theme?UI_SETTINGS_BACKGROUND_SRC:UI_USER_BACKGROUND_SRC)->pixels;
-        for(unsigned i=0;i<1280*400;i++)assert((framebuffer[i].full&0xffffff)==(expected[i]&0xffffff));
+        assert(!lv_obj_get_style_bg_img_src(probe,0));
+        for(unsigned i=0;i<1280*400;i++)assert((framebuffer[i].full&0xffffff)==0xF6F8FA);
     }
     lv_obj_del(probe);
-    puts("PASS both full-screen background styles match the actual generated PNG pixels");
+    puts("PASS both full-screen background styles are exactly F6F8FA without an image");
     test_alnum_keyboard_cases();
     test_recycled_list_cases();
     counting_sim_t *data=counting_data_mutable();

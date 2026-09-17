@@ -1,5 +1,6 @@
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "page_34_standby.h"
+#include "un260/lv_resources/ui_icons.h"
 #include "un260/gesture/gesture_service.h"
 #include "settings_detail_ui.h"
 #include "lv_page_manager.h"
@@ -142,7 +143,6 @@ static void scene_create(scene_t*s,lv_obj_t*parent,int x,int y,bool small,bool e
  scene_update(s,c,true);
 }
 static void action(lv_event_t*e);
-static void arrow_draw(lv_event_t*e){lv_obj_t*o=lv_event_get_target(e);int kind=(int)(intptr_t)lv_event_get_user_data(e);lv_area_t a;lv_obj_get_coords(o,&a);int x=kind==1?a.x1+12:a.x2-21,y=(a.y1+a.y2)/2;lv_draw_line_dsc_t d;lv_draw_line_dsc_init(&d);d.width=1;d.color=lv_color_hex(kind==3?0xFFFFFF:0x4682B8);lv_point_t p[4];if(kind==3||kind==14){p[0]=(lv_point_t){x,y+4};p[1]=(lv_point_t){x+8,y-4};p[2]=(lv_point_t){x+1,y-4};p[3]=(lv_point_t){x+8,y+3};lv_draw_line(lv_event_get_draw_ctx(e),&d,&p[0],&p[1]);lv_draw_line(lv_event_get_draw_ctx(e),&d,&p[2],&p[1]);lv_draw_line(lv_event_get_draw_ctx(e),&d,&p[1],&p[3]);}else{int sign=kind==1?-1:1;p[0]=(lv_point_t){x,y-4};p[1]=(lv_point_t){x+sign*4,y};p[2]=(lv_point_t){x,y+4};lv_draw_line(lv_event_get_draw_ctx(e),&d,&p[0],&p[1]);lv_draw_line(lv_event_get_draw_ctx(e),&d,&p[1],&p[2]);}}
 /* Own every state: the shared settings button intentionally has a different theme. */
 static lv_obj_t* control(lv_obj_t*p,int x,int y,int w,int h,int id,uint32_t bg,uint32_t border){
  lv_obj_t*b=box(p,x,y,w,h,bg);lv_obj_add_flag(b,LV_OBJ_FLAG_CLICKABLE);lv_obj_set_style_radius(b,12,0);
@@ -150,7 +150,7 @@ static lv_obj_t* control(lv_obj_t*p,int x,int y,int w,int h,int id,uint32_t bg,u
  lv_obj_set_style_bg_color(b,lv_color_mix(lv_color_hex(0x7096B3),lv_color_hex(bg),28),LV_STATE_PRESSED);
  lv_obj_add_event_cb(b,action,LV_EVENT_CLICKED,(void*)(intptr_t)id);return b;
 }
-static lv_obj_t*button(lv_obj_t*p,int x,int y,int w,const char*t,int id,bool active){bool neutral=!active&&(id==1||id==64);lv_obj_t*b=control(p,x,y,w,44,id,active?0x176FE8:neutral?0xE9EDF0:0xF0F5F9,0);char clean[96];snprintf(clean,sizeof(clean),"%s",t);char*arrow=strchr(clean,'>');bool has_arrow=arrow!=NULL||clean[0]=='<';if(arrow){while(arrow>clean&&arrow[-1]==' ')arrow--;*arrow=0;}const char*text=clean[0]=='<'?clean+1:clean;while(*text==' ')text++;lv_obj_t*l=label(b,text,0,0,&lv_font_instrument_sans_medium_14,active?0xFFFFFF:neutral?0x293B44:0x4682B8);lv_obj_align(l,LV_ALIGN_CENTER,has_arrow?(id==1?4:-7):0,0);if(has_arrow)lv_obj_add_event_cb(b,arrow_draw,LV_EVENT_DRAW_POST,(void*)(intptr_t)id);return b;}
+static lv_obj_t*button(lv_obj_t*p,int x,int y,int w,const char*t,int id,bool active){bool neutral=!active&&(id==1||id==64);lv_obj_t*b=control(p,x,y,w,44,id,active?0x176FE8:neutral?0xE9EDF0:0xF0F5F9,0);char clean[96];snprintf(clean,sizeof(clean),"%s",t);char*arrow=strchr(clean,'>');bool has_arrow=arrow!=NULL||clean[0]=='<';if(arrow){while(arrow>clean&&arrow[-1]==' ')arrow--;*arrow=0;}const char*text=clean[0]=='<'?clean+1:clean;while(*text==' ')text++;lv_obj_t*l=label(b,text,0,0,&lv_font_instrument_sans_medium_14,active?0xFFFFFF:neutral?0x293B44:0x4682B8);lv_obj_align(l,LV_ALIGN_CENTER,has_arrow?(id==1?4:-7):0,0);if(has_arrow){lv_obj_t*im=ui_icon_create(b,id==1?UI_ICON("back_18"):(id==3||id==14)?UI_ICON("expand_18"):UI_ICON("chevron_18"));if(im){lv_obj_align(im,id==1?LV_ALIGN_LEFT_MID:LV_ALIGN_RIGHT_MID,id==1?6:-6,0);lv_obj_set_style_img_recolor(im,lv_color_hex(active?0xFFFFFF:0x4682B8),0);lv_obj_set_style_img_recolor_opa(im,LV_OPA_COVER,0);}}return b;}
 static void link_button(lv_obj_t*p,int x,int y,int w,const char*t,int id){lv_obj_t*b=button(p,x,y,w,t,id,false);lv_obj_set_style_bg_opa(b,0,0);lv_obj_set_style_bg_opa(b,255,LV_STATE_PRESSED);lv_obj_set_style_text_font(lv_obj_get_child(b,0),&lv_font_instrument_sans_medium_12,0);}
 static lv_obj_t* choice(lv_obj_t*p,int x,int y,int w,int h,const char*t,int id,bool selected,uint32_t bg){lv_obj_t*b=control(p,x,y,w,h,id,bg,selected?0x3B87E7:0xDCE4E9);lv_obj_t*l=label(b,t,0,0,&lv_font_instrument_sans_medium_14,0x293B44);lv_obj_center(l);return b;}
 static void toggle(lv_obj_t*p,int x,int y,int w,const char*t,int id,bool on){lv_obj_t*b=control(p,x,y,w,48,id,0xFFFFFF,0xE4EBEF);label(b,t,15,15,&lv_font_instrument_sans_medium_14,0x293B44);lv_obj_t*s=box(b,w-59,11,43,25,on?0x287CE5:0xDCE4E9);lv_obj_clear_flag(s,LV_OBJ_FLAG_CLICKABLE);lv_obj_set_style_radius(s,13,0);lv_obj_t*k=box(s,on?20:2,2,21,21,0xFFFFFF);lv_obj_clear_flag(k,LV_OBJ_FLAG_CLICKABLE);lv_obj_set_style_radius(k,11,0);}

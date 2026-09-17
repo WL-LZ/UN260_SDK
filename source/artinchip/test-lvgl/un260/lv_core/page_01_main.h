@@ -18,7 +18,6 @@ bool page_01_main_is_visible(void);
 lv_obj_t *page_01_main_find_obj(const char *name);
 lv_obj_t *page_01_main_scroll_obj(void);
 void page_01_main_scroll_reset(void);
-void page_01_main_icon_feedback(const char *name);
 void page_01_main_refresh_start_state(void);
 void page_01_main_refresh_totals(int total_pcs, const char *amount_text);
 

@@ -142,7 +142,6 @@ void page_switch_btn_event_cb(lv_event_t* e)
 
 void page_01_list_btn_event_cb(lv_event_t* e) {
     if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-        page_01_main_icon_feedback("page_01_list_icon.png");
         /* 0x0C/0x0D 已在 0x0B 面额明细结束时提前发送，此处直接进 list */
         ui_manager_push_page(UI_PAGE_LIST);
     }
@@ -161,7 +160,6 @@ void page_02_history_btn_event_cb(lv_event_t* e)
 
 void page_01_menu_btn_event_cb(lv_event_t* e) {
     if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-        page_01_main_icon_feedback("page_01_menu_icon.png");
 
         ui_manager_push_page(UI_PAGE_MENU);
     }
@@ -186,9 +184,6 @@ void page_01_start_btn_event_cb(lv_event_t* e)
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
         return;
     }
-    if (page_01_main_is_created()) {
-        page_01_main_icon_feedback("page_01_start_icon.png");
-    }
     app_command_runtime_request_count_start();
 }
 
@@ -196,9 +191,6 @@ void page_01_esc_btn_event_cb(lv_event_t* e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
         return;
-    }
-    if (page_01_main_is_created()) {
-        page_01_main_icon_feedback("page_01_esc_icon.png");
     }
     app_command_runtime_clear_counting_data("user clear");
 }
@@ -208,11 +200,9 @@ static bool page_01_mode_req_busy(void) //判断模式切换是否仍在等待�
     return setting_service_mode_is_pending();
 }
 
-static void page_01_mode_send_next(bool show_icon_feedback) //发送主界面模式切换命令
+static void page_01_mode_send_next(void) //发送主界面模式切换命令
 {
     uint8_t next_mode = MODE_MDC;
-
-    (void)show_icon_feedback;
 
     if (page_01_mode_req_busy()) {
         return;
@@ -233,13 +223,13 @@ static void page_01_mode_send_next(bool show_icon_feedback) //发送主界面模
 void page_01_mode_btn_event_cb(lv_event_t* e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    page_01_mode_send_next(true);
+    page_01_mode_send_next();
 }
 
 void page_01_bottom_mode_btn_event_cb(lv_event_t* e) //切换主界面底部A区点钞模式
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    page_01_mode_send_next(false);
+    page_01_mode_send_next();
 }
 
 void page_01_add_btn_event_cb(lv_event_t* e) //切换主界面底部ADD开关
@@ -293,7 +283,6 @@ void page_01_bottom_speed_btn_event_cb(lv_event_t* e) //切换主界面底部C�
 
 void page_01_set_btn_event_cb(lv_event_t* e){
     if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-        page_01_main_icon_feedback("page_01_set_icon.png");
         uint8_t version_cmd = 0x01;
         protocol_send(0x17, &version_cmd, 1);
         ui_manager_switch(UI_PAGE_SET_PASSAGE);

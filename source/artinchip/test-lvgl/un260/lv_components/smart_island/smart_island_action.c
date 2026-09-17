@@ -69,7 +69,7 @@ static void smart_island_action_btn_touch_anim_cb(lv_event_t *e)
 
     code = lv_event_get_code(e);
     if (code == LV_EVENT_PRESSED) {
-        lv_obj_set_style_translate_y(btn, 1, 0);
+        lv_obj_set_style_translate_y(btn, 0, 0);
         smart_island_action_btn_set_pressed_visual(btn, true);
         return;
     }

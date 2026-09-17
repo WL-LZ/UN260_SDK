@@ -54,8 +54,6 @@ void machine_time_init(void) {}
 void machine_time_get(machine_time_value_t *value)
 { *value=(machine_time_value_t){2026,9,9,18,23,12}; }
 void machine_time_format(char *out,uint32_t size) { snprintf(out,size,"18:23:12"); }
-void icon_feedback_comp(const char *name,ui_element_t *objects,int count)
-{ (void)name;(void)objects;(void)count; }
 bool perf_profile_is_enabled(void) { return false; }
 void perf_profile_report_event_us(const char *group,const char *name,uint32_t us)
 { (void)group;(void)name;(void)us; }

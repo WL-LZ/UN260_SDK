@@ -215,7 +215,7 @@ static void curr_style_back_button(void)
     lv_obj_set_style_shadow_width(g_page07_curr.objects.btn_back, 0, 0);
     lv_obj_set_style_shadow_opa(g_page07_curr.objects.btn_back, LV_OPA_0, 0);
     lv_obj_set_style_text_color(g_page07_curr.objects.btn_back_label, lv_color_hex(0x000000), 0);
-    lv_label_set_text(g_page07_curr.objects.btn_back_label, "BACK");
+    lv_label_set_text(g_page07_curr.objects.btn_back_label, "Back");
     lv_obj_center(g_page07_curr.objects.btn_back_label);
 }
 
@@ -1170,7 +1170,7 @@ void page_07_curr_img_refre(void)
     lv_obj_set_pos(g_page07_curr.objects.btn_back, CURR_BACK_BTN_X, CURR_BTN_Y);
     lv_obj_add_event_cb(g_page07_curr.objects.btn_back, curr_back_btn_click_cb, LV_EVENT_CLICKED, NULL);
     g_page07_curr.objects.btn_back_label = lv_label_create(g_page07_curr.objects.btn_back);
-    lv_label_set_text(g_page07_curr.objects.btn_back_label, "BACK");
+    lv_label_set_text(g_page07_curr.objects.btn_back_label, "Back");
     lv_obj_center(g_page07_curr.objects.btn_back_label);
     lv_damped_button_register(g_page07_curr.objects.btn_back,
                               lv_color_hex(0xE9EDF0), lv_color_hex(0xBFC3C8));

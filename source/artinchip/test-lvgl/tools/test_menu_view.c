@@ -250,7 +250,7 @@ static lv_obj_t *check_home_icon(void)
     assert(!strcmp(lv_label_get_text(caption), ui_text_get(UI_TEXT_LIST_MAIN)));
     label_geometry(caption);
     lv_obj_t *icon = lv_obj_get_child(home, 1);
-    assert(!lv_obj_check_type(icon, &lv_label_class) && !lv_obj_check_type(icon, &lv_img_class));
+    assert(lv_obj_check_type(icon, &lv_img_class));
     assert(lv_obj_get_child_cnt(icon) == 0 && lv_obj_is_visible(icon));
     assert(lv_obj_get_width(icon) == 27 && lv_obj_get_height(icon) == 27);
     assert(!lv_obj_has_flag_any(icon, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
@@ -267,23 +267,6 @@ static lv_obj_t *check_home_icon(void)
     assert(icon_area.y1 == content_area.y1 + 20);
     assert(!overlap(&icon_area, &caption_area));
     return icon;
-}
-static void menu_home_reference_draw(lv_event_t *event)
-{
-    /* Independent oracle: the five strokes of the original List house. */
-    static const lv_point_t segments[][2] = {
-        {{2,12},{13,2}}, {{13,2},{24,12}}, {{4,10},{4,24}},
-        {{4,24},{22,24}}, {{22,24},{22,10}}
-    };
-    lv_draw_line_dsc_t style; lv_draw_line_dsc_init(&style);
-    style.color = lv_color_hex(0x657F90); style.width = 2;
-    style.round_start = style.round_end = 1;
-    lv_area_t area; lv_obj_get_coords(lv_event_get_target(event), &area);
-    for (unsigned i = 0; i < 5; ++i) {
-        lv_point_t from = {area.x1 + segments[i][0].x, area.y1 + segments[i][0].y};
-        lv_point_t to = {area.x1 + segments[i][1].x, area.y1 + segments[i][1].y};
-        lv_draw_line(lv_event_get_draw_ctx(event), &style, &from, &to);
-    }
 }
 static void test_home_icon(void)
 {
@@ -303,13 +286,14 @@ static void test_home_icon(void)
     lv_obj_set_pos(reference, lv_obj_get_x(icon), lv_obj_get_y(icon));
     lv_obj_set_size(reference, 27, 27);
     lv_obj_clear_flag(reference, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_event_cb(reference, menu_home_reference_draw, LV_EVENT_DRAW_MAIN, NULL);
+    lv_obj_t *image=lv_img_create(reference);assert(image);
+    lv_img_set_src(image,LVGL_DIR "ui_icons/home_27.png");
     lv_obj_add_flag(icon, LV_OBJ_FLAG_HIDDEN);
     render();
     for (unsigned y = 0; y < 27; ++y) for (unsigned x = 0; x < 27; ++x)
         assert(actual[y * 27 + x] == framebuffer[(area.y1 + y) * 1280 + area.x1 + x].full);
     lv_obj_del(reference); lv_obj_clear_flag(icon, LV_OBJ_FLAG_HIDDEN); render();
-    printf("HOME_GLYPH menu %08lx (original List 27x27 reference over Menu background)\n", (unsigned long)signature);
+    printf("HOME_GLYPH menu %08lx (standard raster 27x27 reference over Menu background)\n", (unsigned long)signature);
 
     lv_area_t before, pressed, icon_before, icon_pressed, caption_before, caption_pressed;
     lv_obj_get_coords(home, &before); lv_obj_get_coords(icon, &icon_before);
@@ -321,9 +305,9 @@ static void test_home_icon(void)
     lv_obj_get_coords(home, &pressed); lv_obj_get_coords(icon, &icon_pressed);
     lv_obj_get_coords(caption, &caption_pressed);
     assert(!memcmp(&before, &pressed, sizeof(before)));
-    assert(icon_pressed.x1 == icon_before.x1 && icon_pressed.y1 == icon_before.y1 + 2);
-    assert(caption_pressed.x1 == caption_before.x1 && caption_pressed.y1 == caption_before.y1 + 2);
-    assert(lv_obj_get_style_translate_y(icon, 0) == 2 && lv_obj_get_style_translate_y(caption, 0) == 2);
+    assert(icon_pressed.x1 == icon_before.x1 && icon_pressed.y1 == icon_before.y1);
+    assert(caption_pressed.x1 == caption_before.x1 && caption_pressed.y1 == caption_before.y1);
+    assert(lv_obj_get_style_translate_y(icon, 0) == 0 && lv_obj_get_style_translate_y(caption, 0) == 0);
     lv_indev_wait_release(input_device);
     pointer_state = LV_INDEV_STATE_RELEASED; tick(300); render();
     assert(home_requests == calls && !lv_obj_has_state(home, LV_STATE_PRESSED));

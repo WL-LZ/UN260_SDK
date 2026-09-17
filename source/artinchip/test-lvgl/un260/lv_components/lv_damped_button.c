@@ -85,77 +85,20 @@ static void lv_damped_button_color_anim_start(lv_damped_button_ctx_t *ctx,
     lv_anim_start(&anim);
 }
 
-static void lv_damped_button_translate_anim_cb(void *var, int32_t value)
+static void lv_damped_button_feedback_event_cb(lv_event_t *event)
 {
-    lv_obj_t *button = (lv_obj_t *)var;
-    uint32_t child_count;
-
-    if (button == NULL || !lv_obj_is_valid(button)) return;
-
-    /* A touch button keeps its outer silhouette fixed.  Moving the complete
-       object exposed the light page background (or the cached normal skin)
-       as a one-pixel strip above the pressed button.  Move only live content
-       such as its label/icon to retain tactile depth without a double edge. */
-    child_count = lv_obj_get_child_cnt(button);
-    for (uint32_t i = 0; i < child_count; i++) {
-        lv_obj_t *child = lv_obj_get_child(button, (int32_t)i);
-
-        if (child != NULL && lv_obj_is_valid(child)) {
-            lv_obj_set_style_translate_y(child, (lv_coord_t)value,
-                                         LV_PART_MAIN);
-        }
-    }
-}
-
-static void lv_damped_button_motion_start(lv_obj_t *button, lv_coord_t end,
-                                          uint32_t duration,
-                                          lv_anim_path_cb_t path)
-{
-    lv_anim_t anim;
-    lv_coord_t start;
-    lv_obj_t *first_child;
-
-    if (button == NULL || !lv_obj_is_valid(button)) return;
-    /* Neutralize legacy per-page pressed translations at the source. */
-    lv_obj_set_style_translate_y(button, 0,
-                                 LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_translate_y(button, 0,
-                                 LV_PART_MAIN | LV_STATE_PRESSED);
-    first_child = lv_obj_get_child_cnt(button) > 0 ?
-                  lv_obj_get_child(button, 0) : NULL;
-    start = first_child != NULL ?
-            lv_obj_get_style_translate_y(first_child, LV_PART_MAIN) : 0;
-    lv_anim_del(button, lv_damped_button_translate_anim_cb);
-    if (start == end) return;
-
-    lv_anim_init(&anim);
-    lv_anim_set_var(&anim, button);
-    lv_anim_set_exec_cb(&anim, lv_damped_button_translate_anim_cb);
-    lv_anim_set_values(&anim, start, end);
-    lv_anim_set_time(&anim, duration);
-    lv_anim_set_path_cb(&anim, path);
-    lv_anim_start(&anim);
-}
-
-static void lv_damped_button_motion_event_cb(lv_event_t *event)
-{
-    lv_obj_t *button = lv_event_get_target(event);
     lv_damped_button_ctx_t *ctx = lv_event_get_user_data(event);
 
     switch (lv_event_get_code(event)) {
     case LV_EVENT_PRESSED:
         lv_damped_button_color_anim_start(ctx, ctx->pressed_color,
                                           LV_DAMPED_BUTTON_PRESS_MS, 0);
-        lv_damped_button_motion_start(button, 2, LV_DAMPED_BUTTON_PRESS_MS,
-                                      lv_anim_path_ease_out);
         break;
     case LV_EVENT_RELEASED:
     case LV_EVENT_PRESS_LOST:
         lv_damped_button_color_anim_start(ctx, ctx->normal_color,
                                           LV_DAMPED_BUTTON_RELEASE_MS,
                                           LV_DAMPED_BUTTON_RELEASE_DELAY);
-        lv_damped_button_motion_start(button, 0, LV_DAMPED_BUTTON_RELEASE_MS,
-                                      lv_anim_path_overshoot);
         break;
     case LV_EVENT_DELETE:
         {
@@ -166,7 +109,6 @@ static void lv_damped_button_motion_event_cb(lv_event_t *event)
             if (*link == ctx) *link = ctx->next;
             lv_mem_free(ctx);
         }
-        lv_anim_del(button, lv_damped_button_translate_anim_cb);
         break;
     default:
         break;
@@ -285,7 +227,7 @@ void lv_damped_button_register(lv_obj_t *button,
                                 LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_event_cb(button, lv_damped_button_motion_event_cb,
+    lv_obj_add_event_cb(button, lv_damped_button_feedback_event_cb,
                         LV_EVENT_ALL, ctx);
 
     child_count = lv_obj_get_child_cnt(button);

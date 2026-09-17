@@ -36,9 +36,6 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                 break;
             }
             machine_state_confirm_mode(requested_mode);
-            if (requested_mode != 0) {
-                page_01_main_icon_feedback("page_01_mode_icon.png");
-            }
             page_01_mode_switch_refre();
             page_01_bottom_a_refresh_mode(true);
             page_01_curr_img_refre();

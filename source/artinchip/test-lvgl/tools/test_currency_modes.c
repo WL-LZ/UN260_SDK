@@ -50,7 +50,6 @@ void ui_state_page07_get(ui_state_page07_t *state) { *state = saved; }
 void ui_state_save_page07(const ui_state_page07_t *state) { saved = *state; saves++; }
 static void ui_manager_switch(int page) { assert(page == UI_PAGE_MAIN); navigations++; }
 static void ui_manager_publish_data_changed(uint32_t topics) { (void)topics; }
-static void page_01_main_icon_feedback(const char *name) { (void)name; }
 static void page_01_mode_switch_refre(void) {}
 static void page_01_bottom_a_refresh_mode(bool animate) { (void)animate; }
 static void page_01_curr_img_refre(void) {}

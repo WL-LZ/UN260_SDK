@@ -1,4 +1,5 @@
 #include <assert.h>
+#include "aic_ui/compiled_asset.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,8 +68,8 @@ static void runtime_test(void){
 static lv_color_t pixels[1280*400],buffer[1280*40];
 static void flush(lv_disp_drv_t*d,const lv_area_t*a,lv_color_t*p){for(int y=a->y1;y<=a->y2;y++)memcpy(pixels+y*1280+a->x1,p+(y-a->y1)*(a->x2-a->x1+1),(a->x2-a->x1+1)*4);lv_disp_flush_ready(d);}
 static unsigned char*wallpaper,*gear,*silver,*champagne;
-static lv_res_t info(lv_img_decoder_t*d,const void*src,lv_img_header_t*h){(void)d;if(lv_img_src_get_type(src)!=LV_IMG_SRC_FILE)return LV_RES_INV;memset(h,0,sizeof(*h));bool icon=strstr(src,"un260-mark")!=NULL;h->w=icon?24:1280;h->h=icon?28:400;h->cf=LV_IMG_CF_TRUE_COLOR_ALPHA;return LV_RES_OK;}
-static lv_res_t open_image(lv_img_decoder_t*d,lv_img_decoder_dsc_t*s){if(info(d,s->src,&s->header)!=LV_RES_OK)return LV_RES_INV;s->img_data=strstr(s->src,"un260-mark")?gear:strstr(s->src,"silver")?silver:strstr(s->src,"champagne")?champagne:wallpaper;return LV_RES_OK;}
+static lv_res_t info(lv_img_decoder_t*d,const void*src,lv_img_header_t*h){(void)d;if(lv_img_src_get_type(src)!=LV_IMG_SRC_FILE)return LV_RES_INV;memset(h,0,sizeof(*h));const un260_compiled_asset_t*a=un260_compiled_asset_find(src);if(a){h->w=a->width;h->h=a->height;h->cf=LV_IMG_CF_TRUE_COLOR_ALPHA;return LV_RES_OK;}bool icon=strstr(src,"un260-mark")!=NULL;h->w=icon?24:1280;h->h=icon?28:400;h->cf=LV_IMG_CF_TRUE_COLOR_ALPHA;return LV_RES_OK;}
+static lv_res_t open_image(lv_img_decoder_t*d,lv_img_decoder_dsc_t*s){if(info(d,s->src,&s->header)!=LV_RES_OK)return LV_RES_INV;const un260_compiled_asset_t*a=un260_compiled_asset_find(s->src);if(a){s->img_data=a->pixels;return LV_RES_OK;}s->img_data=strstr(s->src,"un260-mark")?gear:strstr(s->src,"silver")?silver:strstr(s->src,"champagne")?champagne:wallpaper;return LV_RES_OK;}
 static void assert_flat(lv_obj_t*o){assert(lv_obj_get_style_shadow_width(o,LV_PART_MAIN)==0);for(unsigned i=0;i<lv_obj_get_child_cnt(o);i++)assert_flat(lv_obj_get_child(o,i));}
 static void snapshot(const char*n){lv_obj_update_layout(lv_scr_act());lv_obj_invalidate(lv_scr_act());lv_refr_now(NULL);char path[256];snprintf(path,sizeof(path),"%s/%s.bgra",getenv("OUT"),n);FILE*f=fopen(path,"wb");assert(f);assert(fwrite(pixels,4,1280*400,f)==1280*400);fclose(f);}
 static unsigned char*load(const char*n,size_t size){char path[256];snprintf(path,sizeof(path),"%s/%s",getenv("OUT"),n);FILE*f=fopen(path,"rb");assert(f);unsigned char*p=malloc(size);assert(p&&fread(p,1,size,f)==size);fclose(f);return p;}
