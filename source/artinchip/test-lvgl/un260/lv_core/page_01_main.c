@@ -40,7 +40,7 @@ static lv_obj_t* main_page = NULL;
  * widget lifetime belong to this page, not the counting runtime. */
 static ui_element_t page_01_main_obj[40];
 static int page_01_main_len;
-static lv_obj_t *s_summary_card, *s_detail_card, *s_multi_card;
+static lv_obj_t *s_summary_card, *s_detail_card, *s_multi_card, *s_detail_tray;
 static lv_obj_t *s_amount_unit_icon, *s_currency_code;
 static lv_obj_t *s_multi_pcs, *s_multi_reject, *s_start_orbit;
 static lv_obj_t *s_multi_currency_icon, *s_multi_currency_label;
@@ -660,13 +660,13 @@ static void page_01_bottom_c_destroy(void) //销毁主界面底部C区三个区�
 static void page_01_detail_section_btn_update_one(lv_obj_t *btn, bool selected)
 {
     if (!btn || !lv_obj_is_valid(btn)) return;
-    lv_damped_button_set_palette(btn, lv_color_hex(selected ? 0xE6EFF4 : 0xF4F7F8),
+    lv_damped_button_set_palette(btn, lv_color_hex(selected ? 0xFFFFFF : 0xE7EDF0),
         lv_color_hex(0xD9E5ED));
     lv_obj_set_style_radius(btn, 8, 0);
-    lv_obj_set_style_border_width(btn, selected ? 1 : 0, 0);
+    lv_obj_set_style_border_width(btn, 0, 0);
     lv_obj_set_style_border_color(btn, lv_color_hex(0xCBDEE9), 0);
     lv_obj_t *label = lv_obj_get_child(btn, 1);
-    if (label) lv_obj_set_style_text_color(label, lv_color_hex(selected ? 0x17212A : 0x657F90), 0);
+    if (label) lv_obj_set_style_text_color(label, lv_color_hex(selected ? 0x233B49 : 0x526E80), 0);
 }
 
 static void page_01_detail_section_btn_skins_sync(void)
@@ -744,6 +744,14 @@ static lv_obj_t *page_01_detail_section_btn_create(lv_coord_t x, lv_coord_t y,
 
 static void page_01_detail_section_btn_create_all(void)
 {
+    s_detail_tray = lv_obj_create(main_page);
+    lv_obj_remove_style_all(s_detail_tray);
+    lv_obj_set_pos(s_detail_tray, 616, 20);
+    lv_obj_set_size(s_detail_tray, 526, 52);
+    lv_obj_set_style_bg_color(s_detail_tray, lv_color_hex(0xE7EDF0), 0);
+    lv_obj_set_style_bg_opa(s_detail_tray, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(s_detail_tray, 12, 0);
+    lv_obj_clear_flag(s_detail_tray, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
     s_detail_btn_a = page_01_detail_section_btn_create(620, 24, "REPORT", PAGE_01_DETAIL_SECTION_A);
     s_detail_btn_b = page_01_detail_section_btn_create(795, 24, "SERIAL", PAGE_01_DETAIL_SECTION_B);
     s_detail_btn_c = page_01_detail_section_btn_create(970, 24, "REJECT", PAGE_01_DETAIL_SECTION_C);
@@ -758,6 +766,8 @@ static void page_01_detail_section_btn_destroy_all(void)
     if (s_detail_btn_a) lv_obj_del(s_detail_btn_a);
     if (s_detail_btn_b) lv_obj_del(s_detail_btn_b);
     if (s_detail_btn_c) lv_obj_del(s_detail_btn_c);
+    if (s_detail_tray) lv_obj_del(s_detail_tray);
+    s_detail_tray = NULL;
 
     s_detail_btn_a = NULL;
     s_detail_btn_b = NULL;
@@ -948,14 +958,14 @@ static lv_obj_t *main_action(const char *name, const char *icon_name, const char
     const char *label_name, const char *text, int x, int y, int w, int h,
     lv_event_cb_t callback, bool primary)
 {
-    lv_obj_t *button = main_box(main_page, x, y, w, h, primary ? 0xE7F7D9 : 0xFFFFFF, 14);
+    lv_obj_t *button = main_box(main_page, x, y, w, h, primary ? 0xDCEFD5 : x < 108 ? 0xFFFFFF : 0xE9EDF0, 14);
     main_register(name, button);
-    lv_damped_button_register(button, lv_color_hex(primary ? 0xE7F7D9 : 0xFFFFFF),
+    lv_damped_button_register(button, lv_color_hex(primary ? 0xDCEFD5 : x < 108 ? 0xFFFFFF : 0xE9EDF0),
         lv_color_hex(primary ? 0xD6EDC2 : 0xE7EDF1));
     lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, NULL);
     main_icon(button, icon_name, source, (w - 28) / 2, h / 2 - 24);
     lv_obj_t *label = main_label(button, label_name, text, 0, h / 2 + 11, w,
-        &lv_font_instrument_sans_medium_14, primary ? 0x26810A : 0x4C606E);
+        &lv_font_instrument_sans_medium_14, primary ? 0x246A22 : x < 108 ? 0x4C606E : 0x496574);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     return button;
 }
@@ -993,6 +1003,9 @@ static void page_01_main_build_content(void)
     main_action("esc_btn", "page_01_esc_icon.png", LVGL_DIR"main_icons/clear_28.png",
         "esc_label", "CLEAR", 1168, 234, 96, 98, page_01_esc_btn_event_cb, false);
     s_summary_card = main_box(main_page, 108, 12, 482, 320, 0xFFFFFF, 16);
+    lv_obj_set_style_border_width(s_summary_card, 1, 0);
+    lv_obj_set_style_border_color(s_summary_card, lv_color_hex(0xECF0F3), 0);
+    lv_obj_set_style_border_opa(s_summary_card, LV_OPA_COVER, 0);
     main_currency_target(s_summary_card, false);
     lv_obj_t *reject = main_box(s_summary_card, 346, 25, 114, 38, 0xF4F7F8, 8);
     main_label(reject, NULL, "REJECT", 10, 13, 56, &lv_font_instrument_sans_medium_10, 0x657F90);
@@ -1012,6 +1025,9 @@ static void page_01_main_build_content(void)
     s_total_amount_label = main_label(s_summary_card, "01_amount_label", "0", 120, 223, 340,
         &lv_font_manrope_extrabold_48, 0x17212A);
     s_detail_card = main_box(main_page, 602, 12, 554, 320, 0xFFFFFF, 16);
+    lv_obj_set_style_border_width(s_detail_card, 1, 0);
+    lv_obj_set_style_border_color(s_detail_card, lv_color_hex(0xECF0F3), 0);
+    lv_obj_set_style_border_opa(s_detail_card, LV_OPA_COVER, 0);
     page_01_main_detail_create(main_page, 620, 76, 518, 244);
     page_01_detail_section_btn_create_all();
 
@@ -1049,7 +1065,7 @@ static void page_01_main_layout_refresh(void)
     const bool multi = currency_state_multi_selected() ||
         !counting_data_monetary_result_supported(counting_data_current());
     if (!s_summary_card || !s_multi_card) return;
-    lv_obj_t *single[] = {s_summary_card, s_detail_card, s_detail_btn_a, s_detail_btn_b, s_detail_btn_c};
+    lv_obj_t *single[] = {s_summary_card, s_detail_card, s_detail_btn_a, s_detail_btn_b, s_detail_btn_c, s_detail_tray};
     for (unsigned i = 0; i < sizeof(single) / sizeof(single[0]); ++i) {
         if (!single[i]) continue;
         if (multi) lv_obj_add_flag(single[i], LV_OBJ_FLAG_HIDDEN);
@@ -1190,7 +1206,7 @@ void ui_main_destroy(void)
     main_page = NULL;
     memset(page_01_main_obj, 0, sizeof(page_01_main_obj));
     page_01_main_len = 0;
-    s_summary_card = s_detail_card = s_multi_card = NULL;
+    s_summary_card = s_detail_card = s_multi_card = s_detail_tray = NULL;
     s_multi_pcs = s_multi_reject = s_start_orbit = NULL;
     s_amount_unit_icon = s_currency_code = s_multi_currency_icon = s_multi_currency_label = NULL;
     s_curr_img = s_curr_label = NULL;

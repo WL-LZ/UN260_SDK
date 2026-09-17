@@ -114,15 +114,34 @@ static void test_main(void)
     prewarming=true;ui_main_create(lv_scr_act());assert(protocol_calls==0);
     prewarming=false;assert(page_01_main_resume());assert(protocol_calls==1);
     render();assert(asset_opens>0 && page_01_main_is_created());assert_labels(main_page);
+    lv_obj_t *bordered_cards[]={s_summary_card,s_detail_card};
+    for(unsigned i=0;i<2;++i) {
+        assert(lv_obj_get_style_border_width(bordered_cards[i],0)==1);
+        assert(lv_obj_get_style_border_color(bordered_cards[i],0).full==lv_color_hex(0xECF0F3).full);
+        assert(lv_obj_get_style_border_opa(bordered_cards[i],0)==LV_OPA_COVER);
+    }
     assert(lv_recycled_list_window(detail_view->section[0].list)->count==7);
     assert(lv_recycled_list_window(detail_view->section[0].list)->rows==6);
     assert(lv_obj_get_y(s_detail_btn_a)==24 && lv_obj_get_y(detail_view->root)==76);
     assert(lv_obj_get_height(detail_view->root)==244);
+    assert(s_detail_tray && lv_obj_get_width(s_detail_tray)==526);
+    assert(lv_obj_get_style_bg_color(s_detail_tray,0).full==lv_color_hex(0xE7EDF0).full);
+    lv_obj_t *background = page_01_main_find_obj("page_01_back.png");
+    assert(background && lv_obj_check_type(background, &lv_img_class));
+    assert(!strcmp(lv_img_get_src(background), UI_USER_BACKGROUND_SRC));
     assert(lv_obj_get_style_text_font(s_curr_label,0)==&lv_font_main_currency_56);
     assert(lv_obj_get_child_cnt(s_detail_card)==0); /* No redundant section title. */
     write_bmp("main-empty-usd");
     const char *buttons[]={"mode_btn","setting_btn","list_btn","print_btn","menu_btn","start_btn","esc_btn"};
-    for(unsigned i=0;i<7;++i) { click_object(page_01_main_find_obj(buttons[i]));assert(callbacks[i]==1); }
+    for(unsigned i=0;i<7;++i) {
+        lv_obj_t *b=page_01_main_find_obj(buttons[i]);
+        assert(lv_obj_get_style_bg_color(b,0).full==lv_color_hex(i==5?0xDCEFD5:i<4?0xFFFFFF:0xE9EDF0).full);
+        lv_obj_add_state(b,LV_STATE_PRESSED);lv_event_send(b,LV_EVENT_PRESSED,NULL);tick(140);
+        for(unsigned j=0;j<lv_obj_get_child_cnt(b);++j)
+            assert(lv_obj_get_style_translate_y(lv_obj_get_child(b,j),0)==0);
+        lv_obj_clear_state(b,LV_STATE_PRESSED);lv_event_send(b,LV_EVENT_PRESS_LOST,NULL);tick(300);
+        click_object(b);assert(callbacks[i]==1);
+    }
     click_object(s_bottom_a_btn_mode);assert(callbacks[CB_BOTTOM_MODE]==1);
     click_object(s_bottom_a_btn_add);assert(callbacks[CB_ADD]==1);
     click_object(s_bottom_a_btn_work);assert(callbacks[CB_WORK]==1);
@@ -139,6 +158,8 @@ static void test_main(void)
     const char *titles[]={"REPORT","SERIAL","REJECT"};
     for(unsigned i=0;i<3;++i) {
         click_object(tabs[i]);render();assert(pushes==opened);
+        for(unsigned j=0;j<3;++j)
+            assert(lv_obj_get_style_bg_color(tabs[j],0).full==lv_color_hex(i==j?0xFFFFFF:0xE7EDF0).full);
         lv_obj_t *badge=lv_obj_get_child(tabs[i],0),*title=lv_obj_get_child(tabs[i],1);
         lv_area_t ba,ta;lv_obj_get_coords(badge,&ba);lv_obj_get_coords(title,&ta);
         assert(!strcmp(lv_label_get_text(title),titles[i]));
@@ -217,7 +238,7 @@ static void test_main(void)
     write_bmp("main-currency-inr");
     assert(currency_state_confirm_auto_selection());ui_refresh_main_page();tick(1000);write_bmp("main-auto");
     assert(currency_state_confirm_multi_selection());ui_refresh_main_page();render();
-    assert(s_multi_layout && lv_obj_is_visible(s_multi_card) && !lv_obj_is_visible(s_detail_btn_a));
+    assert(s_multi_layout && lv_obj_is_visible(s_multi_card) && !lv_obj_is_visible(s_detail_btn_a) && !lv_obj_is_visible(s_detail_tray));
     assert(!strcmp(lv_label_get_text(s_multi_currency_label),"MULTI"));
     page_01_main_suspend();page_01_main_reveal_for_transition();
     assert(lv_obj_is_visible(s_multi_card) && !lv_obj_is_visible(s_summary_card));
