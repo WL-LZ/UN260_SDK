@@ -10,6 +10,15 @@
 #include "un260/lv_core/page_01_main_detail.c"
 #include "un260/lv_core/page_01_main.c"
 #include "test_main_view_support.h"
+#include "un260/gesture/gesture_service.h"
+#include "un260/counting/counting_multi.h"
+static bool (*multi_policy)(gesture_action_t);
+void gesture_service_set_page_policy(uint32_t owner, bool (*drag)(void), bool (*action)(gesture_action_t)) {(void)owner;(void)drag;multi_policy=action;}
+void gesture_service_clear_page_policy(uint32_t owner) {(void)owner;multi_policy=NULL;}
+#include "un260/lv_components/lv_nav_button.c"
+static unsigned display_back_requests;
+bool ui_manager_pop_page(void) { ++display_back_requests; return true; }
+#include "un260/lv_core/page_36_display_test.c"
 
 static unsigned asset_opens;
 const un260_compiled_asset_t *host_external_asset_find(const char *path);
@@ -122,7 +131,7 @@ static void test_main(void)
     }
     assert(lv_recycled_list_window(detail_view->section[0].list)->count==7);
     assert(lv_recycled_list_window(detail_view->section[0].list)->rows==6);
-    assert(lv_obj_get_y(s_detail_btn_a)==24 && lv_obj_get_y(detail_view->root)==76);
+    assert(lv_obj_get_y(s_detail_btn_a)==29 && lv_obj_get_height(s_detail_btn_a)==34 && lv_obj_get_y(detail_view->root)==76);
     assert(lv_obj_get_height(detail_view->root)==244);
     assert(s_detail_tray && lv_obj_get_width(s_detail_tray)==526);
     assert(lv_obj_get_style_bg_color(s_detail_tray,0).full==lv_color_hex(0xE7EDF0).full);
@@ -173,6 +182,13 @@ static void test_main(void)
     pointer(1120,32,true);pointer(1120,44,true);pointer(1120,44,false);assert(pushes==opened);
     click_object(s_detail_btn_b);assert(s_detail_section==PAGE_01_DETAIL_SECTION_B && pushes==opened);
     assert(lv_obj_is_visible(detail_view->section[1].empty));
+    render();write_bmp("main-empty-serial");
+    lv_obj_t *empty=detail_view->section[1].empty;
+    lv_obj_t *empty_icon=lv_obj_get_child(empty,0), *empty_text=detail_view->section[1].empty_text;
+    assert(lv_obj_get_y(empty_text)-lv_obj_get_y(empty_icon)-lv_obj_get_height(empty_icon)==12);
+    assert(abs(lv_obj_get_y(empty_icon)+lv_obj_get_y(empty_text)+lv_obj_get_height(empty_text)-lv_obj_get_height(empty))<=2);
+    page_01_detail_section_set(PAGE_01_DETAIL_SECTION_C,true);render();write_bmp("main-empty-reject");
+    page_01_detail_section_set(PAGE_01_DETAIL_SECTION_B,true);render();
     tap(850,245);assert(pushes==++opened);
     fixture(true);ui_refresh_main_page();render();write_bmp("main-full-serial");
     assert(!strcmp(lv_label_get_text(s_total_pcs_label),"231"));
@@ -237,21 +253,76 @@ static void test_main(void)
     assert(currency_state_confirm_active_code("INR"));ui_refresh_main_page();render();
     write_bmp("main-currency-inr");
     assert(currency_state_confirm_auto_selection());ui_refresh_main_page();tick(1000);write_bmp("main-auto");
+    assert(strstr((const char *)lv_img_get_src(s_curr_img),"CURR_AUTO.png"));
+    assert(!lv_obj_is_visible(s_curr_label) && !lv_obj_is_visible(s_amount_unit_icon));
+    assert(currency_state_confirm_detected_code("CNY"));page_01_curr_img_refre();render();
+    assert(!strcmp(lv_label_get_text(s_curr_label),currency_metadata_symbol("CNY")));
+    assert(lv_obj_is_visible(s_curr_label));
+    assert(strstr((const char *)lv_img_get_src(s_curr_img),"CURR_CNY.png"));
+    write_bmp("main-auto-detected-cny");
+    currency_state_begin_count_session();page_01_curr_img_refre();render();
+    assert(!lv_obj_is_visible(s_curr_label) && !lv_obj_is_visible(s_amount_unit_icon));
+    assert(strstr((const char *)lv_img_get_src(s_curr_img),"CURR_AUTO.png"));
     assert(currency_state_confirm_multi_selection());ui_refresh_main_page();render();
+    counting_data_mark_multi_result(counting_data_mutable());
+    smart_island_notify_count_start();tick(400);
+    assert(!strcmp(lv_label_get_text(g_si_ctx.objects.counting_unit),"MULTI COUNT"));
+    assert(lv_obj_is_visible(g_si_ctx.objects.counting_serial));
+    assert(!lv_obj_is_visible(g_si_ctx.objects.counting_value));
+    write_bmp("multi-island-counting");
+    smart_island_notify_count_reset();tick(400);
     assert(s_multi_layout && lv_obj_is_visible(s_multi_card) && !lv_obj_is_visible(s_detail_btn_a) && !lv_obj_is_visible(s_detail_tray));
-    assert(!strcmp(lv_label_get_text(s_multi_currency_label),"MULTI"));
+    assert(page_01_multi_scroll());
     page_01_main_suspend();page_01_main_reveal_for_transition();
     assert(lv_obj_is_visible(s_multi_card) && !lv_obj_is_visible(s_summary_card));
-    assert(!lv_obj_is_visible(page_01_main_scroll_obj()) && !lv_obj_is_visible(s_detail_btn_a));
+    assert(lv_obj_is_visible(page_01_main_scroll_obj()) && !lv_obj_is_visible(s_detail_btn_a));
     assert(s_time_timer->paused);
     render();write_bmp("main-multi-return-first-frame");
     assert(page_01_main_resume());
-    tick(1000);write_bmp("main-multi");tap(750,245);assert(pushes==++opened);
+    tick(1000);write_bmp("main-multi");tap(750,245);assert(pushes==opened);
+    counting_multi_begin(false);
+    uint8_t multi_live[16]={0xfd,0xdf,16,14,'U','S','D',0,0,2,20,0,14,9,1,0};
+    assert(counting_multi_info(multi_live,16));
+    uint8_t multi_cny[16]={0xfd,0xdf,16,14,'C','N','Y',0,0,0,10,0,2,9,1,0};
+    assert(counting_multi_info(multi_cny,16));
+    uint8_t multi_end[13]={0xfd,0xdf,13,14,0,0,0,0,0,0,0,2,0};
+    assert(counting_multi_info(multi_end,13));ui_refresh_main_page();render();write_bmp("multi-currency-list");
+    tap(400,145);render();assert(counting_multi_query_busy());write_bmp("multi-query");
+    uint8_t df[16]={0xfd,0xdf,16,11};
+    counting_multi_denom(df,16,lv_tick_get());
+    const unsigned vals[]={100,50,20,10,5,2},qty[]={3,3,2,3,2,1};
+    for(unsigned i=0;i<6;i++){char b[12];snprintf(b,sizeof(b),"%8u%3u",vals[i],qty[i]);memcpy(df+4,b,11);counting_multi_denom(df,16,lv_tick_get());}
+    memset(df+4,255,11);counting_multi_denom(df,16,lv_tick_get());ui_refresh_main_page();render();
+    assert(counting_multi_current()->currencies[0].status==MULTI_DETAIL_READY);write_bmp("multi-usd-detail");
+    pointer(800,252,true);pointer(800,205,true);pointer(800,150,true);pointer(800,150,false);tick(200);
+    assert(lv_obj_get_scroll_y(page_01_multi_scroll())>0);
+    assert(!counting_multi_query_busy());
+    write_bmp("multi-usd-detail-scrolled");
+    assert(multi_policy && !multi_policy(GESTURE_ACTION_EXPORT));
+    assert(multi_policy(GESTURE_ACTION_HOME));render();write_bmp("multi-back");
+    assert(!multi_policy(GESTURE_ACTION_EXIT_PAGE));
+    smart_island_notify_warning("A long diagnostic message that must scroll without layout jumping during normal refresh");
+    tick(300);render();
+    lv_coord_t warning_width=lv_obj_get_width(g_si_ctx.objects.title);
+    lv_coord_t warning_x=lv_obj_get_x(g_si_ctx.objects.title);
+    smart_island_view_refresh_scene();render();
+    assert(lv_obj_get_width(g_si_ctx.objects.title)==warning_width);
+    assert(lv_obj_get_x(g_si_ctx.objects.title)==warning_x);
+    smart_island_restore_idle();tick(400);
+    /* Cached USD opens immediately even while the next currency is loading. */
+    counting_multi_prefetch(lv_tick_get());assert(!counting_multi_query_busy());
+    lv_tick_inc(250);counting_multi_prefetch(lv_tick_get());assert(counting_multi_query_busy());
+    tap(400,145);render();
+    assert(counting_multi_current()->currencies[0].status==MULTI_DETAIL_READY);
+    assert(counting_multi_current()->currencies[1].status==MULTI_DETAIL_LOADING);
+    assert(multi_policy(GESTURE_ACTION_HOME));
+    counting_multi_reset();
+    memset(df+4,255,11);counting_multi_denom(df,16,lv_tick_get());
     counting_data_mark_multi_result(counting_data_mutable());
     assert(currency_state_leave_special_selection());
     assert(currency_state_confirm_active_code("USD"));ui_refresh_main_page();
     assert(s_multi_layout && lv_obj_is_visible(s_multi_card) && !lv_obj_is_visible(s_summary_card));
-    assert(!strcmp(lv_label_get_text(s_multi_currency_label),"USD"));
+    assert(page_01_multi_scroll());
     write_bmp("main-latched-multi-result");
     counting_data_reset_result_scope(counting_data_mutable());ui_refresh_main_page();
     assert(!s_multi_layout && lv_obj_is_visible(s_summary_card));
@@ -295,6 +366,20 @@ int main(void)
     static lv_indev_drv_t driver;lv_indev_drv_init(&driver);driver.type=LV_INDEV_TYPE_POINTER;driver.read_cb=pointer_read;
     lv_indev_t *indev=lv_indev_drv_register(&driver);assert(indev);
     test_main();test_lifecycle();
+    unsigned test_timer_count = timers();
+    for(unsigned cycle = 0; cycle < 3; ++cycle) {
+        ui_page_36_display_test_create(lv_scr_act());
+        lv_obj_t *first = test_page;
+        ui_page_36_display_test_create(lv_scr_act());
+        assert(first == test_page);
+        render();
+        assert(framebuffer[230 * 1280 + 530].full == lv_color_hex(0xF6F1ED).full);
+        assert(framebuffer[152 * 1280 + 1250].full == lv_color_hex(0xFFFFFF).full);
+        if(cycle == 0) write_bmp("display-test");
+        ui_page_36_display_test_destroy();
+        ui_page_36_display_test_destroy();
+        assert(test_page == NULL && timers() == test_timer_count);
+    }
     counting_data_clear_serials(counting_data_mutable());counting_data_clear_errors(counting_data_mutable());
     lv_indev_delete(indev);lv_img_decoder_delete(decoder);lv_deinit();host_external_assets_release();
     puts("PASS actual Main/detail/Smart Island raster and pointer dispatch, all modes, pending START, retained lifecycle; DMA/controller/Innovation navigation remain board tests");

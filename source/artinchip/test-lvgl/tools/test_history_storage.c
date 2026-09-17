@@ -12,6 +12,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "un260/storage/storage_worker.h"
+#include "un260/counting/counting_multi.h"
+static counting_multi_t mock_multi;
+const counting_multi_t *counting_multi_current(void) { return &mock_multi; }
+void counting_multi_reset(void) { memset(&mock_multi,0,sizeof(mock_multi)); }
 
 enum { FAIL_NONE, FAIL_OPEN, FAIL_FLUSH, FAIL_FILE_SYNC, FAIL_CLOSE, FAIL_RENAME, FAIL_DIR_SYNC };
 static atomic_int fault;
@@ -208,9 +212,50 @@ static storage_job_id_t append(unsigned pcs)
 
 static void wait_saved(storage_job_id_t id, uint32_t now)
 {
-    assert(storage_worker_wait(id) == STORAGE_JOB_SUCCEEDED);
+    storage_job_status_t status=storage_worker_wait(id);
+    if(status!=STORAGE_JOB_SUCCEEDED)fprintf(stderr,"wait_saved tick=%u id=%llu status=%d\n",now,(unsigned long long)id,status);
+    assert(status == STORAGE_JOB_SUCCEEDED);
     (void)ui_history_data_poll(now);
     assert(ui_history_commit_status(id) == STORAGE_JOB_SUCCEEDED);
+}
+
+static void test_multi_history(void)
+{
+    counting_session_state_t session={0};counting_sim_t sim={0};sim.multi_currency_result=true;
+    uint32_t base=ui_history_total_notes_counted_get();
+    unsigned count=ui_history_data_get()->record_count;
+    mock_multi=(counting_multi_t){.generation=101,.group_generation=101,.passes=1,.count=2,.total_pcs=16,.reject=9};
+    memcpy(mock_multi.currencies[0].code,"USD",4);mock_multi.currencies[0].pcs=14;mock_multi.currencies[0].amount=532;
+    mock_multi.currencies[0].status=MULTI_DETAIL_INVALID;
+    memcpy(mock_multi.currencies[1].code,"CNY",4);mock_multi.currencies[1].pcs=2;mock_multi.currencies[1].amount=10;
+    assert(counting_history_try_commit(&session,&sim,0)==COUNTING_HISTORY_COMMIT_PENDING);
+    wait_saved(ui_history_last_commit_id(),0);counting_history_poll_commit(&session,&sim,0);
+    const ui_history_store_t *s=ui_history_data_get();uint32_t id=s->records[0].record_no;
+    assert(s->record_count==count+1 && s->total_notes_counted==base+16);
+    assert(s->records[0].multi.enabled && !s->records[0].multi.currencies[1].complete);
+    mock_multi.currencies[1].status=MULTI_DETAIL_READY;mock_multi.currencies[1].denom_count=1;
+    mock_multi.currencies[1].denom[0]=(multi_denom_t){5,2};
+    counting_history_poll_commit(&session,&sim,1);wait_saved(ui_history_last_commit_id(),1);
+    counting_history_poll_commit(&session,&sim,1);
+    assert(s->records[0].record_no==id && s->records[0].multi.currencies[1].complete);
+    assert(s->total_notes_counted==base+16 && s->record_count==count+1);
+    mock_multi.generation++;mock_multi.passes=2;mock_multi.add=true;mock_multi.total_pcs=18;
+    mock_multi.currencies[1].pcs=4;mock_multi.currencies[1].amount=20;
+    mock_multi.currencies[1].status=MULTI_DETAIL_NONE;
+    assert(counting_history_try_commit(&session,&sim,2)==COUNTING_HISTORY_COMMIT_PENDING);
+    wait_saved(ui_history_last_commit_id(),2);counting_history_poll_commit(&session,&sim,2);
+    assert(s->records[0].record_no==id && s->record_count==count+1 && s->total_notes_counted==base+18);
+    assert(!s->records[0].multi.currencies[1].complete);
+    assert(ui_history_record_delete_records(&id,1));wait_saved(ui_history_last_commit_id(),3);
+    mock_multi.currencies[1].status=MULTI_DETAIL_READY;mock_multi.currencies[1].denom[0].pcs=4;
+    counting_history_poll_commit(&session,&sim,4);
+    if(ui_history_data_status()==STORAGE_JOB_PENDING)wait_saved(ui_history_last_commit_id(),4);
+    counting_history_poll_commit(&session,&sim,4);
+    assert(s->record_count==count && s->total_notes_counted==base+18);
+    mock_multi.group_generation=mock_multi.generation=200;mock_multi.passes=1;
+    assert(counting_history_try_commit(&session,&sim,5)==COUNTING_HISTORY_COMMIT_PENDING);
+    wait_saved(ui_history_last_commit_id(),5);counting_history_poll_commit(&session,&sim,5);
+    assert(storage_worker_shutdown());puts("PASS: MULTI summary, async detail, ADD replacement, lifetime delta, deletion wins");
 }
 
 static void exercise(void)
@@ -345,9 +390,8 @@ static void exercise(void)
         session.history_record.end_seen = true;
         session.history_record.pcs = 12;
         session.history_record.amount = 9999;
-        assert(counting_history_try_commit(&session, &sim, now) == COUNTING_HISTORY_COMMIT_UNSUPPORTED);
-        assert(!session.history_record.valid && counting_history_take_unsupported_notice());
-        assert(!counting_history_take_unsupported_notice());
+        assert(counting_history_try_commit(&session, &sim, now) == COUNTING_HISTORY_COMMIT_NOT_READY);
+        session.history_record.valid=false; /* No MULTI result was supplied in this negative case. */
         assert(ui_history_last_commit_id() == old_job);
         assert(ui_history_total_notes_counted_get() == 23 &&
             ui_history_data_get()->record_count == (UI_HISTORY_MAX_RECORDS < 21 ? UI_HISTORY_MAX_RECORDS : 21));
@@ -684,6 +728,14 @@ int main(int argc, char **argv)
         assert(!ui_history_data_can_accept() && !counting_history_can_start());
         puts("PASS: failed boot load never retries/waits in getters or overwrites history");
     } else if (strncmp(argv[1], "load-", 5) == 0) test_unavailable_history();
+    else if (strcmp(argv[1], "multi-reload") == 0) {
+        const ui_history_record_t *r=&ui_history_data_get()->records[0];
+        assert(ui_history_data_is_available() && r->multi.enabled && r->multi.count==2 && r->pcs==18);
+        assert(!strcmp(r->multi.currencies[1].code,"CNY") && r->multi.currencies[1].complete);
+        assert(r->multi.currencies[1].denoms[0].pcs==4 && r->multi.currencies[1].amount==20);
+        assert(storage_worker_shutdown());puts("PASS: MULTI v3 groups and completeness survive fresh-process reload");
+    }
+    else if (strcmp(argv[1], "multi-history") == 0) test_multi_history();
     else if (strcmp(argv[1], "exercise") == 0) exercise();
     else if (strcmp(argv[1], "total-arithmetic") == 0) test_total_arithmetic();
     else if (strcmp(argv[1], "retention") == 0) test_retention();

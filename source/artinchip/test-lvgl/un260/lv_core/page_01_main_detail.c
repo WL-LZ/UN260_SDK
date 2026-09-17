@@ -4,6 +4,7 @@
 #include "un260/counting/counting_data_store.h"
 #include "un260/lv_components/lv_recycled_list.h"
 #include "un260/lv_system/ui_text.h"
+#include "un260/lv_resources/lv_img_init.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -16,7 +17,7 @@
 
 typedef struct {
     page_01_detail_section_t id;
-    lv_obj_t *root, *header[3], *empty;
+    lv_obj_t *root, *header[3], *empty, *empty_text;
     lv_recycled_list_t *list;
     lv_coord_t column_x[3], column_width[3];
     lv_text_align_t align[3];
@@ -249,10 +250,10 @@ static void section_refresh(main_detail_section_t *section)
             if (data->sn_str[slot] && data->denom_mix[slot] > 0)
                 detail_view->serial_slots[detail_view->serial_count++] = (uint16_t)slot;
         count = detail_view->serial_count;
-        label_text(section->empty, ui_text_get(UI_TEXT_LIST_NO_SERIAL_NUMBERS));
+        label_text(section->empty_text, ui_text_get(UI_TEXT_LIST_NO_SERIAL_NUMBERS));
     } else {
         count = (uint32_t)counting_data_error_detail_count(data);
-        label_text(section->empty, ui_text_get(UI_TEXT_LIST_NO_REJECT_DETAILS));
+        label_text(section->empty_text, ui_text_get(UI_TEXT_LIST_NO_REJECT_DETAILS));
     }
     lv_recycled_list_refresh(section->list, count, false);
     object_visible(section->empty, count == 0);
@@ -306,10 +307,20 @@ static bool section_create(main_detail_section_t *section, unsigned id,
     lv_obj_t *viewport = lv_recycled_list_object(section->list);
     lv_port_indev_set_drag_obj(viewport, true);
     page_01_main_detail_bind_tap(viewport);
-    section->empty = label_create(viewport, 12, width - 48,
+    section->empty = surface(section->root,0,DETAIL_HEADER_HEIGHT,width,height-DETAIL_HEADER_HEIGHT,0xFFFFFF);
+    if (!section->empty) return false;
+    lv_obj_set_flex_flow(section->empty,LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(section->empty,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(section->empty,12,0);
+    if(id!=PAGE_01_DETAIL_SECTION_A) {
+        lv_obj_t *icon=lv_img_create(section->empty);
+        lv_img_set_src(icon,id==PAGE_01_DETAIL_SECTION_B?LVGL_DIR"list_icons/barcode_36.png":LVGL_DIR"list_icons/warning_circle_36.png");
+        lv_obj_clear_flag(icon,LV_OBJ_FLAG_CLICKABLE);
+    }
+    section->empty_text = label_create(section->empty, 0, width - 48,
                                   &lv_font_instrument_sans_medium_18,
                                   LV_TEXT_ALIGN_CENTER, DETAIL_MUTED);
-    if (!section->empty) return false;
+    if (!section->empty_text) return false;
     object_visible(section->root, false);
     return true;
 }

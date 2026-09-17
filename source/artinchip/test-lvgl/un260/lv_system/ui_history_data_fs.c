@@ -19,7 +19,7 @@
 #define UI_HISTORY_META_PATH         UI_HISTORY_STORE_DIR "/meta.cfg"
 #define UI_HISTORY_SLOT_PATH_FMT     UI_HISTORY_STORE_DIR "/%02u.rec"
 #define UI_HISTORY_MAGIC             0x48495354u
-#define UI_HISTORY_VERSION           2u
+#define UI_HISTORY_VERSION           3u
 #define UI_HISTORY_LINE_BUFFER_SIZE  8192u
 
 static ui_history_store_t g_history_store;
@@ -447,6 +447,21 @@ static void history_record_defaults(ui_history_record_t *rec)
     memset(rec, 0, sizeof(*rec));
 }
 
+static void history_write_multi(FILE *fp, const char *prefix, const history_multi_t *m)
+{
+    if (!m->enabled) return;
+    fprintf(fp,"%smulti=%u,%u,%u,%u,%u\n",prefix,m->count,m->rejects,
+        m->passes,m->add,m->overflow);
+    for (unsigned i=0;i<m->count;i++) {
+        const history_multi_currency_t *c=&m->currencies[i];
+        fprintf(fp,"%smg%02u=%s,%u,%u,%u,%u",prefix,i,c->code,c->pcs,
+            c->amount,c->complete,c->count);
+        for(unsigned j=0;j<c->count;j++)
+            fprintf(fp,",%u:%u",c->denoms[j].value,c->denoms[j].pcs);
+        fputc('\n',fp);
+    }
+}
+
 static void history_write_kv(FILE *fp, uint8_t slot_no, const ui_history_record_t *rec)
 {
     char buf[128];
@@ -477,6 +492,7 @@ static void history_write_kv(FILE *fp, uint8_t slot_no, const ui_history_record_
     fputs(buf, fp);
 
     snprintf(prefix, sizeof(prefix), "slot%02u_", (unsigned)slot_no);
+    history_write_multi(fp,prefix,&rec->multi);
     history_write_escaped_field(fp, prefix, "denom", rec->denom_text);
     history_write_escaped_field(fp, prefix, "sn", rec->sn_text);
     history_write_escaped_field(fp, prefix, "sn_detail", rec->sn_detail_text);
@@ -522,6 +538,7 @@ static int history_write_file(const char *path, const ui_history_record_t *rec, 
         const ui_history_record_t *item = &rec[i];
 
         snprintf(prefix, sizeof(prefix), "record%02d_", i);
+        history_write_multi(fp,prefix,&item->multi);
         fprintf(fp, "%svalid=%d\n", prefix, item->valid ? 1 : 0);
         fprintf(fp, "%sselected=%d\n", prefix, item->selected ? 1 : 0);
         fprintf(fp, "%sslot_no=%u\n", prefix, (unsigned)item->slot_no);
@@ -678,6 +695,19 @@ static bool history_submit_or_restore(void)
     return false;
 }
 
+static bool history_multi_numbers_valid(const char *p)
+{
+    while(*p) {
+        if(*p>='0'&&*p<='9') {
+            uint64_t value=0;
+            do {value=value*10+(unsigned)(*p++-'0');if(value>UINT32_MAX)return false;}
+            while(*p>='0'&&*p<='9');
+        } else if((*p>='A'&&*p<='Z')||*p==','||*p==':')p++;
+        else return false;
+    }
+    return true;
+}
+
 static bool history_parse_key_value(ui_history_store_t *store, int record_index,
                                     const char *key, const char *value)
 {
@@ -693,7 +723,30 @@ static bool history_parse_key_value(ui_history_store_t *store, int record_index,
         return false;
     }
 
-    if (strcmp(key, "valid") == 0) {
+    if (strcmp(key, "multi") == 0) {
+        if(!history_multi_numbers_valid(value))return false;
+        unsigned count,rejects,passes,add,overflow; char extra;
+        if (sscanf(value,"%u,%u,%u,%u,%u%c",&count,&rejects,&passes,&add,&overflow,&extra)!=5 ||
+            count>HISTORY_MULTI_CURRENCIES || rejects>255 || !passes || add>1 || overflow>1)
+            return false;
+        rec->multi.enabled=true;rec->multi.count=count;rec->multi.rejects=rejects;
+        rec->multi.passes=passes;rec->multi.add=add;rec->multi.overflow=overflow;
+    } else if (strncmp(key,"mg",2)==0) {
+        if(!history_multi_numbers_valid(value))return false;
+        unsigned index,pcs,amount,complete,count;int used=0;char extra;
+        if(sscanf(key,"mg%u%c",&index,&extra)!=1 || index>=HISTORY_MULTI_CURRENCIES) return false;
+        history_multi_currency_t *c=&rec->multi.currencies[index];
+        if(sscanf(value,"%3[A-Z],%u,%u,%u,%u%n",c->code,&pcs,&amount,&complete,&count,&used)!=5 ||
+            strlen(c->code)!=3 || complete>1 || count>HISTORY_MULTI_DENOMS) return false;
+        c->pcs=pcs;c->amount=amount;c->complete=complete;c->count=count;
+        const char *p=value+used;
+        for(unsigned j=0;j<count;j++) {
+            unsigned d,n;used=0;
+            if(sscanf(p,",%u:%u%n",&d,&n,&used)!=2 || !used || !d) return false;
+            c->denoms[j]=(history_multi_denom_t){d,n};p+=used;
+        }
+        if(*p) return false;
+    } else if (strcmp(key, "valid") == 0) {
         return history_parse_bool(value, &rec->valid);
     } else if (strcmp(key, "selected") == 0) {
         return history_parse_bool(value, &rec->selected);
@@ -780,6 +833,23 @@ static bool history_loaded_records_valid(const ui_history_store_t *store)
             !machine_time_is_valid(&time_value)) {
             return false;
         }
+        if(rec->multi.enabled) {
+            if(rec->multi.count>HISTORY_MULTI_CURRENCIES || !rec->multi.passes ||
+                strcmp(rec->currency,"MUL") || rec->amount) return false;
+            for(unsigned g=0;g<rec->multi.count;g++) {
+                const history_multi_currency_t *c=&rec->multi.currencies[g];
+                if(c->code[3] || c->count>HISTORY_MULTI_DENOMS || (!c->complete && c->count))return false;
+                for(unsigned k=0;k<3;k++)if(c->code[k]<'A'||c->code[k]>'Z')return false;
+                for(unsigned k=0;k<g;k++)if(!strcmp(c->code,rec->multi.currencies[k].code))return false;
+                uint64_t pcs=0,amount=0;
+                for(unsigned k=0;k<c->count;k++) {
+                    if(!c->denoms[k].value)return false;
+                    for(unsigned n=0;n<k;n++)if(c->denoms[n].value==c->denoms[k].value)return false;
+                    pcs+=c->denoms[k].pcs;amount+=(uint64_t)c->denoms[k].value*c->denoms[k].pcs;
+                }
+                if(c->complete && (pcs!=c->pcs || amount!=c->amount))return false;
+            }
+        }
         for (j = 0; j < i; j++) {
             if (store->records[j].record_no == rec->record_no) {
                 return false;
@@ -843,7 +913,7 @@ static bool history_load_from_file(ui_history_store_t *store)
         if (strcmp(line, "version") == 0) {
             uint32_t parsed;
 
-            if (!history_parse_u32(eq, &parsed) || parsed != UI_HISTORY_VERSION) {
+            if (!history_parse_u32(eq, &parsed) || (parsed != 2u && parsed != UI_HISTORY_VERSION)) {
                 file_valid = false;
                 break;
             }
@@ -1094,17 +1164,18 @@ void ui_history_total_notes_counted_clear(void)
     ui_history_total_notes_counted_set(0);
 }
 
-bool ui_history_record_build_from_session(const counting_sim_t *sim_data, uint32_t pcs_total,
+static bool history_record_build(const counting_sim_t *sim_data, uint32_t pcs_total,
                                            float amount_total,
                                            const char *error_frame_text,
                                            const char *start_frame_text, const char *end_frame_text,
-                                           const char *session_log_text, ui_history_record_t *out)
+                                           const char *session_log_text, ui_history_record_t *out, bool multi)
 {
     ui_history_record_t rec;
     machine_time_value_t now;
     char curr_code[4];
 
-    if (out == NULL || !counting_data_monetary_result_supported(sim_data) ||
+    if (out == NULL || sim_data == NULL ||
+        (!multi && !counting_data_monetary_result_supported(sim_data)) ||
         sim_data->sn_capacity < 0 ||
         sim_data->sn_capacity > COUNTING_DATA_MAX_ITEMS ||
         (sim_data->sn_capacity > 0 && sim_data->sn_str == NULL)) {
@@ -1125,9 +1196,11 @@ bool ui_history_record_build_from_session(const counting_sim_t *sim_data, uint32
     rec.hour = now.hour;
     rec.minute = now.minute;
     rec.second = now.second;
-    history_format_denom(sim_data, rec.denom_text, sizeof(rec.denom_text));
-    history_format_sn(sim_data, rec.sn_text, sizeof(rec.sn_text));
-    history_format_sn_detail(sim_data, rec.sn_detail_text, sizeof(rec.sn_detail_text));
+    if (!sim_data->multi_currency_result) {
+        history_format_denom(sim_data, rec.denom_text, sizeof(rec.denom_text));
+        history_format_sn(sim_data, rec.sn_text, sizeof(rec.sn_text));
+        history_format_sn_detail(sim_data, rec.sn_detail_text, sizeof(rec.sn_detail_text));
+    }
     snprintf(rec.error_frame_text, sizeof(rec.error_frame_text), "%s",
                 error_frame_text ? error_frame_text : "");
     snprintf(rec.start_frame_text, sizeof(rec.start_frame_text), "%s",
@@ -1139,6 +1212,17 @@ bool ui_history_record_build_from_session(const counting_sim_t *sim_data, uint32
 
     *out = rec;
     return true;
+}
+
+bool ui_history_record_build_from_session(const counting_sim_t *sim,uint32_t pcs,float amount,
+    const char *error,const char *start,const char *end,const char *log,ui_history_record_t *out)
+{
+    return history_record_build(sim,pcs,amount,error,start,end,log,out,false);
+}
+bool ui_history_record_build_multi_base(const counting_sim_t *sim,uint32_t pcs,
+    const char *error,const char *start,const char *end,const char *log,ui_history_record_t *out)
+{
+    return sim && sim->multi_currency_result && history_record_build(sim,pcs,0,error,start,end,log,out,true);
 }
 
 bool ui_history_record_append_snapshot(const ui_history_record_t *record,
@@ -1164,6 +1248,21 @@ bool ui_history_record_append_snapshot(const ui_history_record_t *record,
     }
 
     return history_submit_or_restore();
+}
+
+bool ui_history_record_update_snapshot(const ui_history_record_t *record, uint32_t total_notes_after)
+{
+    history_ensure_loaded();
+    if (!record || !record->valid || !record->record_no || !ui_history_data_can_accept()) return false;
+    for (unsigned i=0;i<g_history_store.record_count;i++) {
+        ui_history_record_t *dst=&g_history_store.records[i];
+        if(dst->record_no!=record->record_no) continue;
+        uint8_t slot=dst->slot_no;bool selected=dst->selected;
+        *dst=*record;dst->slot_no=slot;dst->selected=selected;
+        g_history_store.total_notes_counted=total_notes_after;
+        return history_submit_or_restore();
+    }
+    return false;
 }
 
 bool ui_history_record_append_from_session(const counting_sim_t *sim_data, uint32_t pcs_total,

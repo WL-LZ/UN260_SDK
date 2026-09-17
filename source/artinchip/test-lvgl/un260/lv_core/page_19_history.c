@@ -13,6 +13,10 @@
 #include "un260/lv_system/ui_history_export_data.h"
 #include "un260/lv_system/ui_lang.h"
 #include "un260/lv_system/ui_text.h"
+#include "un260/currency/currency_metadata.h"
+#include "un260/lv_resources/lv_img_init.h"
+#include "un260/font/main_fonts.h"
+#include "un260/font/scaled_font.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -45,6 +49,7 @@ typedef struct {
     history_query_t query;
     history_query_result_t result;
     history_query_record_t records[UI_HISTORY_MAX_RECORDS];
+    history_multi_t multi_copies[UI_HISTORY_MAX_RECORDS];
     history_record_detail_t *details[UI_HISTORY_MAX_RECORDS];
     uint32_t result_ids[UI_HISTORY_MAX_RECORDS], unknown_ids[UI_HISTORY_MAX_RECORDS];
     uint32_t selected_ids[UI_HISTORY_MAX_RECORDS], confirmed_ids[UI_HISTORY_MAX_RECORDS];
@@ -53,6 +58,13 @@ typedef struct {
     lv_point_t press;
     bool detail_mode, selecting, reviewing_unknown, tapping, model_dirty, confirm_clear;
     language_t language;
+    lv_obj_t *multi_panel, *multi_header;
+    int multi_selected;
+    int multi_built_selected;
+    uint32_t multi_built_id;
+    lv_coord_t multi_overview_scroll;
+    scaled_font_t multi_symbol_font;
+    uint8_t multi_symbol_pixels[1024];
 } history_ctx_t;
 
 static history_ctx_t *history;
@@ -63,6 +75,7 @@ static void show_list(void);
 static void show_confirmation(bool clear_total);
 static void close_dialog(void);
 static void action_event(lv_event_t *event);
+static void multi_render(void);
 
 static const char *tr(ui_text_id_t id) { return ui_text_get(id); }
 static void text_set(lv_obj_t *label, const char *text)
@@ -96,7 +109,8 @@ static lv_obj_t *label(lv_obj_t *parent,int x,int y,int w,int h,
     lv_obj_t *obj=lv_label_create(parent);
     if (!obj) return NULL;
     lv_obj_remove_style_all(obj);lv_obj_set_pos(obj,x,y);lv_obj_set_size(obj,w,h);
-    lv_obj_set_style_text_font(obj,font,0);lv_obj_set_style_text_color(obj,lv_color_hex(color),0);
+    lv_obj_set_style_text_font(obj,font,0);
+    lv_obj_set_style_text_color(obj,lv_color_hex(color),0);
     lv_obj_set_style_text_align(obj,align,0);
     lv_label_set_long_mode(obj,LV_LABEL_LONG_CLIP);lv_label_set_text(obj,"");
     lv_obj_clear_flag(obj,LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
@@ -239,10 +253,19 @@ static void record_row_bind(lv_obj_t *row,uint32_t index,void *context)
     snprintf(text,sizeof(text),"%lu",(unsigned long)number);
     text_set(lv_obj_get_child(row,0),rec ? text : "");
     date_text(rec,text,sizeof(text));text_set(lv_obj_get_child(row,1),rec ? text : "");
-    text_set(lv_obj_get_child(row,2),rec ? rec->currency : "");
+    text_set(lv_obj_get_child(row,2),rec ? (rec->multi.enabled ? "MULTI" : rec->currency) : "");
+    const history_multi_currency_t *group=NULL;
+    if(rec && rec->multi.enabled && history->query.currency[0])
+        for(unsigned i=0;i<rec->multi.count;i++)
+            if(!strcmp(rec->multi.currencies[i].code,history->query.currency)) group=&rec->multi.currencies[i];
     snprintf(text,sizeof(text),"%lu",(unsigned long)(rec ? rec->pcs : 0));
+    if(group)snprintf(text,sizeof(text),"%lu",(unsigned long)group->pcs);
     text_set(lv_obj_get_child(row,3),rec ? text : "");
     snprintf(text,sizeof(text),"%lu",(unsigned long)(rec ? rec->amount : 0));
+    if(rec && rec->multi.enabled) {
+        if(group)snprintf(text,sizeof(text),"%s %lu",group->code,(unsigned long)group->amount);
+        else snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_MULTI_GROUPS_FMT),rec->multi.count);
+    }
     text_set(lv_obj_get_child(row,4),rec ? text : "");
     text_set(lv_obj_get_child(row,5),history->selecting ? "" : tr(UI_TEXT_HISTORY_RESULT_OPEN));
 }
@@ -401,6 +424,139 @@ failed:
     }
     return false;
 }
+static void multi_pick(lv_event_t *event)
+{
+    lv_indev_t *input=lv_event_get_indev(event);
+    if(input && lv_indev_get_scroll_obj(input))return;
+    history->multi_selected=(int)(uintptr_t)lv_event_get_user_data(event);
+    multi_render();refresh_header();
+}
+static void multi_render(void)
+{
+    const ui_history_record_t *r=record_find(history->current_id);
+    if(!r || !r->multi.enabled)return;
+    lv_coord_t scroll_y=0;
+    bool same_record=history->multi_built_id==r->record_no;
+    if(!same_record)history->multi_overview_scroll=0;
+    if(history->multi_panel) {
+        lv_obj_t *old_body=lv_obj_get_child(history->multi_panel,3);
+        if(old_body && same_record) {
+            if(history->multi_built_selected<0)history->multi_overview_scroll=lv_obj_get_scroll_y(old_body);
+            if(history->multi_built_selected==history->multi_selected)scroll_y=lv_obj_get_scroll_y(old_body);
+        }
+        lv_obj_del(history->multi_panel);
+    }
+    if(history->multi_selected<0)scroll_y=history->multi_overview_scroll;
+    history->multi_built_id=r->record_no;
+    history->multi_built_selected=history->multi_selected;
+    history->multi_panel=surface(history->root,16,90,1140,298,15,0xFFFFFF);
+    lv_obj_t *panel=history->multi_panel;
+    if(!panel)return;
+    scaled_font_init(&history->multi_symbol_font,&lv_font_main_currency_32,56,
+        history->multi_symbol_pixels,sizeof(history->multi_symbol_pixels));
+    int selected=history->multi_selected;
+    if(selected>=r->multi.count)selected=history->multi_selected=-1;
+    const history_multi_currency_t *g=selected>=0?&r->multi.currencies[selected]:NULL;
+    if(history->multi_header)lv_obj_del(history->multi_header);
+    history->multi_header=surface(history->root,16,12,1140,66,15,0xFFFFFF);
+    if(history->multi_header) {
+        char title_text[128],subtitle[160],number[64];
+        snprintf(title_text,sizeof(title_text),"%s",g?g->code:tr(UI_TEXT_HISTORY_MULTI_TITLE));
+        char date[64];date_text(r,date,sizeof(date));
+        snprintf(subtitle,sizeof(subtitle),"#%u / %s",r->record_no,date);
+        if(r->multi.add) {
+            size_t len=strlen(subtitle);snprintf(subtitle+len,sizeof(subtitle)-len," / ");len=strlen(subtitle);
+            snprintf(subtitle+len,sizeof(subtitle)-len,tr(UI_TEXT_HISTORY_MULTI_ADD_FMT),r->multi.passes);
+        }
+        lv_obj_t *l=label(history->multi_header,24,9,640,29,&lv_font_instrument_sans_semibold_22,HISTORY_INK,LV_TEXT_ALIGN_LEFT);
+        text_set(l,title_text);
+        l=label(history->multi_header,24,40,650,22,&lv_font_instrument_sans_medium_12,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
+        text_set(l,subtitle);
+        const ui_text_id_t metrics[]={g?UI_TEXT_PAGE01_DETAIL_COL_PCS:UI_TEXT_HISTORY_PCS,
+            g?UI_TEXT_PAGE01_DETAIL_COL_AMOUNT:UI_TEXT_HISTORY_MULTI_REJECT};
+        for(unsigned i=0;i<2;i++) {
+            int mx=i?922:728;
+            l=label(history->multi_header,mx,7,194,20,&lv_font_instrument_sans_medium_12,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
+            if(g && i)snprintf(number,sizeof(number),"%s / %s",tr(metrics[i]),g->code);
+            else snprintf(number,sizeof(number),"%s",tr(metrics[i]));
+            text_set(l,number);
+            snprintf(number,sizeof(number),"%u",i?(g?g->amount:r->multi.rejects):(g?g->pcs:r->pcs));
+            l=label(history->multi_header,mx,29,180,31,&lv_font_instrument_sans_semibold_24,HISTORY_INK,LV_TEXT_ALIGN_LEFT);
+            text_set(l,number);
+            if(g && i && currency_metadata_symbol(g->code)) {
+                lv_point_t size;lv_txt_get_size(&size,number,&lv_font_instrument_sans_semibold_24,
+                    0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+                lv_obj_t *unit=label(history->multi_header,mx+LV_MIN(size.x+8,150),34,42,26,
+                    &history->multi_symbol_font.font,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
+                text_set(unit,currency_metadata_symbol(g->code));
+            }
+        }
+    }
+    const ui_text_id_t heads[]={g?UI_TEXT_PAGE01_DETAIL_COL_DENOM:UI_TEXT_HISTORY_CURRENCY,
+        UI_TEXT_PAGE01_DETAIL_COL_PCS,UI_TEXT_PAGE01_DETAIL_COL_AMOUNT};
+    const int x[]={24,460,700};
+    for(unsigned i=0;i<3;i++) {
+        lv_obj_t *l=label(panel,x[i],14,300,22,&lv_font_instrument_sans_medium_14,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
+        text_set(l,tr(heads[i]));
+    }
+    lv_obj_t *body=surface(panel,12,44,1116,208,0,0xFFFFFF);
+    if(!body)return;
+    lv_port_indev_set_drag_obj(body,true);
+    lv_obj_add_flag(body,LV_OBJ_FLAG_SCROLLABLE|LV_OBJ_FLAG_EVENT_BUBBLE|LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_set_scroll_dir(body,LV_DIR_VER);lv_obj_set_scrollbar_mode(body,LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_style_width(body,4,LV_PART_SCROLLBAR);
+    lv_obj_set_style_bg_color(body,lv_color_hex(0x91A5B2),LV_PART_SCROLLBAR);
+    if((g && !g->complete) || (!g && !r->multi.count)) {
+        lv_obj_t *l=label(body,32,62,1020,88,&lv_font_instrument_sans_medium_18,HISTORY_BODY,LV_TEXT_ALIGN_CENTER);
+        lv_label_set_long_mode(l,LV_LABEL_LONG_WRAP);text_set(l,tr(UI_TEXT_HISTORY_MULTI_MISSING));
+    } else for(unsigned i=0;i<(g?g->count:r->multi.count);i++) {
+        lv_obj_t *row=surface(body,0,i*46,1096,46,7,i%2?0xF4F6F7:0xFFFFFF);
+        if(!row)continue;
+        char a[64],b[32],c[64];
+        if(g) {
+            snprintf(a,sizeof(a),"%u",g->denoms[i].value);
+            snprintf(b,sizeof(b),"%u",g->denoms[i].pcs);
+            snprintf(c,sizeof(c),"%llu",(unsigned long long)g->denoms[i].value*g->denoms[i].pcs);
+        } else {
+            const history_multi_currency_t *v=&r->multi.currencies[i];
+            snprintf(a,sizeof(a),"%s",v->code);snprintf(b,sizeof(b),"%u",v->pcs);
+            snprintf(c,sizeof(c),"%u",v->amount);
+            lv_obj_t *image=lv_img_create(row);
+            const char *src=currency_metadata_symbol(v->code)?get_currency_img(v->code):LVGL_DIR"main_icons/currencies_32.png";
+            lv_img_header_t h;
+            if(image && lv_img_decoder_get_info(src,&h)==LV_RES_OK && h.w && h.h) {
+                unsigned zoom=40U*256U/h.w;
+                lv_img_set_src(image,src);lv_img_set_pivot(image,0,0);lv_img_set_zoom(image,zoom);
+                lv_obj_set_pos(image,12,(46-(int)(h.h*zoom/256))/2);
+            }
+            lv_obj_add_flag(row,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_GESTURE_BUBBLE);
+            lv_obj_add_event_cb(row,multi_pick,LV_EVENT_CLICKED,(void *)(uintptr_t)i);
+            lv_obj_t *hint=label(row,920,14,166,22,&lv_font_instrument_sans_medium_14,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
+            text_set(hint,tr(v->complete?UI_TEXT_HISTORY_RESULT_OPEN:UI_TEXT_HISTORY_PARTIAL));
+        }
+        const char *values[]={a,b,c};
+        const char *code=g?g->code:r->multi.currencies[i].code;
+        const char *symbol=currency_metadata_symbol(code);
+        int symbol_x=g?x[0]-12:x[2]-12;
+        lv_obj_t *symbol_label=label(row,symbol_x,14,48,26,
+            symbol?&history->multi_symbol_font.font:&lv_font_instrument_sans_medium_14,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
+        text_set(symbol_label,symbol?symbol:code);
+        for(unsigned j=0;j<3;j++) {
+            int value_x=j==0&&!g?68:x[j]-12;
+            if((g&&j==0)||(!g&&j==2))value_x+=symbol?28:48;
+            lv_obj_t *l=label(row,value_x,10,j?210:400,30,
+                &lv_font_instrument_sans_semibold_20,HISTORY_BODY,LV_TEXT_ALIGN_LEFT);
+            text_set(l,values[j]);
+        }
+    }
+    lv_obj_t *foot=label(panel,24,264,1090,24,&lv_font_instrument_sans_medium_14,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
+    storage_job_status_t status=ui_history_data_status();
+    text_set(foot,tr(status==STORAGE_JOB_FAILED?UI_TEXT_HISTORY_SAVE_FAILED:
+        status==STORAGE_JOB_PENDING?UI_TEXT_HISTORY_SAVING:
+        r->multi.overflow?UI_TEXT_HISTORY_PARTIAL:UI_TEXT_HISTORY_MULTI_SNAPSHOT));
+    lv_obj_update_layout(body);lv_obj_scroll_to_y(body,scroll_y,LV_ANIM_OFF);
+}
+
 static void show_record(uint32_t id)
 {
     int index=record_index(id);
@@ -408,17 +564,24 @@ static void show_record(uint32_t id)
     if (!prepare_detail((unsigned)index) || !detail_create()) {toast(tr(UI_TEXT_SERIAL_UNAVAILABLE));return;}
     history->tapping=false;lv_recycled_list_stop(history->list);
     history->current_id=id;history->detail_mode=true;
+    history->multi_selected=-1;
     show(history->list_panel,false);
+    bool multi=record_find(id)->multi.enabled;
+    show(history->multi_panel,false);
+    show(history->multi_header,false);
     for (unsigned i=0;i<3;++i) {
-        show(history->sections[i].panel,true);
+        show(history->sections[i].panel,!multi);
         lv_recycled_list_refresh(history->sections[i].list,(uint32_t)section_count(i),true);
         show(history->sections[i].empty,section_count(i)==0);
     }
+    if(multi)multi_render();
     refresh_header();
 }
 static void show_list_panels(void)
 {
     history->detail_mode=false;history->current_id=0;
+    show(history->multi_panel,false);
+    show(history->multi_header,false);
     for (unsigned i=0;i<3;++i) {
         lv_recycled_list_stop(history->sections[i].list);show(history->sections[i].panel,false);
     }
@@ -471,6 +634,17 @@ static void refresh_header(void)
         lv_damped_button_set_enabled(history->actions[0],position>0);
         lv_damped_button_set_enabled(history->actions[1],position>=0 && (size_t)position+1<displayed_count());
         lv_damped_button_set_enabled(history->actions[2],rec!=NULL);
+        if(rec && rec->multi.enabled) {
+            const history_multi_currency_t *g=history->multi_selected>=0?&rec->multi.currencies[history->multi_selected]:NULL;
+            snprintf(text,sizeof(text),"%s / #%lu / %s",g?g->code:tr(UI_TEXT_HISTORY_MULTI_TITLE),
+                (unsigned long)rec->record_no,date);text_set(history->title,text);
+            if(g)snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_TOTAL_FMT),(unsigned long)g->pcs,g->code,(unsigned long)g->amount);
+            else snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_MULTI_TOTAL_FMT),rec->pcs,rec->multi.rejects);
+            text_set(history->subtitle,text);
+            if(rec->multi.add)snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_MULTI_ADD_FMT),rec->multi.passes);
+            else snprintf(text,sizeof(text),"%s",tr(UI_TEXT_HISTORY_MULTI_SNAPSHOT));
+            text_set(history->summary,text);
+        }
     } else {
         lv_obj_set_width(history->title,312);
         lv_obj_set_width(history->subtitle,312);
@@ -526,6 +700,10 @@ static void refresh_records(bool reset)
                 history_query_record_t *p=&history->records[history->record_count++];
                 memset(p,0,sizeof(*p));p->valid=true;p->record_no=r->record_no;
                 p->pcs=r->pcs;p->amount=r->amount;memcpy(p->currency,r->currency,sizeof(p->currency));
+                if(r->multi.enabled) {
+                    history_multi_t *copy=&history->multi_copies[history->record_count-1];
+                    *copy=r->multi;p->multi=copy;
+                }
                 p->year=r->year;p->month=r->month;p->day=r->day;p->hour=r->hour;p->minute=r->minute;p->second=r->second;
             }
         }
@@ -572,6 +750,8 @@ static void refresh_records(bool reset)
             /* An external deletion or retention rollover invalidates the ID,
              * not the user's filter/reading position. Do not recurse here. */
             show_list_panels();toast(tr(UI_TEXT_HISTORY_MISSING));
+        } else if(record_find(id)->multi.enabled) {
+            multi_render();
         } else if (prepare_detail((unsigned)i)) {
             for (unsigned s=0;s<3;++s) {
                 lv_recycled_list_refresh(history->sections[s].list,(uint32_t)section_count(s),false);
@@ -685,7 +865,10 @@ static void action_event(lv_event_t *event)
     unsigned action=(unsigned)(uintptr_t)lv_event_get_user_data(event);
     if (action==3) {
         if (history->dialog) {close_dialog();refresh_records(false);}
-        else if (history->detail_mode) show_list();
+        else if (history->detail_mode && history->multi_panel && history->multi_selected>=0 &&
+            record_find(history->current_id) && record_find(history->current_id)->multi.enabled) {
+            history->multi_selected=-1;multi_render();refresh_header();
+        } else if (history->detail_mode) show_list();
         else if (history->selecting) {history->selecting=false;history->selected_count=0;refresh_records(false);}
         else ui_manager_pop_page();
         return;
@@ -802,6 +985,8 @@ bool ui_page_19_history_resume(void)
     }
     /* A new visit starts at the history list; internal detail/back keeps filters. */
     history->detail_mode=false;history->current_id=0;history->selecting=false;
+    show(history->multi_panel,false);
+    show(history->multi_header,false);
     history->selected_count=0;history->reviewing_unknown=false;
     memset(&history->input,0,sizeof(history->input));history->model_dirty=true;
     show(history->root,true);show(history->list_panel,true);

@@ -15,13 +15,13 @@
 #define SEARCH_BODY 0x4C606E
 #define SEARCH_MUTED 0x7A8D9B
 #define SEARCH_LINE 0xE7ECEF
-#define SEARCH_MAX_CURRENCIES (UI_HISTORY_MAX_RECORDS + 2U) /* All + retained filter. */
+#define SEARCH_MAX_CURRENCIES (UI_HISTORY_MAX_RECORDS * HISTORY_MULTI_CURRENCIES + 2U)
 #define SEARCH_MAX_DENOMS HISTORY_DETAIL_MAX_DENOMS
 enum { FIELD_FROM, FIELD_TO, FIELD_TIME, FIELD_AMOUNT, FIELD_PCS, FIELD_SERIAL, FIELD_COUNT };
 
 struct page_19_history_search {
     lv_obj_t *root, *tabs[3], *panels[3], *fields[FIELD_COUNT], *error;
-    lv_obj_t *currency, *rejects, *denom_title, *denom_empty, *denom_all;
+    lv_obj_t *currency, *rejects, *mode, *denom_title, *denom_empty, *denom_all;
     lv_obj_t *denom_buttons[SEARCH_MAX_DENOMS], *matches[4];
     lv_alnum_keyboard_t *keyboard;
     lv_obj_t *editor, *precision, *wheels[3], *wheel_titles[3], *year_button;
@@ -161,6 +161,14 @@ static void collect_denominations(page_19_history_search_t *s)
         offer_denomination(s, s->input.denominations[i]);
     for (size_t record = 0; record < s->record_count; ++record) {
         const history_query_record_t *r = &s->records[record];
+        if(r->valid && r->multi && r->multi->enabled) {
+            for(unsigned i=0;i<r->multi->count;i++) {
+                const history_multi_currency_t *g=&r->multi->currencies[i];
+                if(strcmp(g->code,s->input.currency))continue;
+                for(unsigned j=0;j<g->count;j++)if(g->denoms[j].pcs)offer_denomination(s,g->denoms[j].value);
+            }
+            continue;
+        }
         if (!r->valid || !r->detail || strcmp(r->currency, s->input.currency)) continue;
         for (size_t d = 0; d < r->detail->denom_count; ++d) {
             uint32_t value = r->detail->denoms[d].value;
@@ -176,6 +184,7 @@ static void collect_denominations(page_19_history_search_t *s)
 
 static void activate_tab(page_19_history_search_t *s, unsigned tab)
 {
+    if(s->mode)lv_dropdown_close(s->mode);
     if (s->currency) lv_dropdown_close(s->currency);
     if (s->rejects) lv_dropdown_close(s->rejects);
     s->active_tab = tab;
@@ -204,6 +213,7 @@ static void stop_feedback(lv_obj_t *object)
 
 static void close_search(page_19_history_search_t *s, bool apply)
 {
+    if(s->mode)lv_dropdown_close(s->mode);
     history_query_input_t input = s->input;
     page_19_history_search_close_cb_t close = s->close;
     void *context = s->context;
@@ -309,6 +319,7 @@ static void dropdown_event(lv_event_t *event)
     page_19_history_search_t *s = lv_event_get_user_data(event);
     lv_obj_t *target = lv_event_get_target(event);
     unsigned index = lv_dropdown_get_selected(target);
+    if(target==s->mode){s->input.mode=index;return;}
     if (target == s->currency && index < s->currency_count) {
         if (strcmp(s->input.currency, s->currencies[index])) {
             memcpy(s->input.currency, s->currencies[index], sizeof(s->input.currency));
@@ -662,7 +673,17 @@ static bool create_options(page_19_history_search_t *s)
     for (size_t r = 0; r < s->record_count; ++r) {
         const history_query_record_t *record = &s->records[r];
         if (!record->valid) continue;
-        if (record->currency[0] >= 'A' && record->currency[0] <= 'Z' &&
+        if(record->multi && record->multi->enabled) {
+            for(unsigned g=0;g<record->multi->count;g++) {
+                const char *code=record->multi->currencies[g].code;
+                size_t i=1;
+                while(i<s->currency_count && strcmp(s->currencies[i],code))i++;
+                if(i==s->currency_count && i<SEARCH_MAX_CURRENCIES) {
+                    memcpy(s->currencies[i],code,4);s->currency_count++;
+                }
+            }
+        }
+        if (!record->multi && record->currency[0] >= 'A' && record->currency[0] <= 'Z' &&
             record->currency[1] >= 'A' && record->currency[1] <= 'Z' &&
             record->currency[2] >= 'A' && record->currency[2] <= 'Z' && !record->currency[3]) {
             size_t i = 1;
@@ -761,6 +782,7 @@ static void refresh_controls(page_19_history_search_t *s)
     for (size_t i = 1; i < s->currency_count; ++i)
         if (!strcmp(s->input.currency, s->currencies[i])) currency_index = (unsigned)i;
     lv_dropdown_set_selected(s->currency, (uint16_t)currency_index);
+    if(s->mode)lv_dropdown_set_selected(s->mode,s->input.mode);
     unsigned reject_index = s->input.rejects == HISTORY_REJECT_SAVED_ANY ? 1 : 0;
     if (s->input.rejects == HISTORY_REJECT_CODE) for (size_t i = 0; i < s->reject_count; ++i)
         if (s->reject_codes[i] == s->input.reject_code) reject_index = (unsigned)i + 2;
@@ -813,7 +835,13 @@ page_19_history_search_t *page_19_history_search_create(lv_obj_t *parent,
                SEARCH_INK, ui_text_get(UI_TEXT_HISTORY_SEARCH_TITLE))) goto failed;
     lv_obj_t *esc = lv_nav_button_create(s->root, 1168, 12, 96, 36, cancel_event, s);
     if (!esc) goto failed;
+    lv_obj_set_style_text_font(lv_damped_button_get_label(esc),&lv_font_instrument_sans_medium_18,0);
     lv_damped_button_set_text(esc, ui_text_get(UI_TEXT_SERIAL_ESC));
+    s->mode=dropdown(s->root,840,12,304,s);
+    if(!s->mode)goto failed;
+    lv_dropdown_set_options(s->mode,ui_text_get(UI_TEXT_HISTORY_MODE_OPTIONS));
+    if(!label(s->root,24,329,888,20,&lv_font_instrument_sans_medium_12,SEARCH_MUTED,
+        ui_text_get(UI_TEXT_HISTORY_MULTI_SCOPE)))goto failed;
     static const ui_text_id_t tab_names[] = { UI_TEXT_HISTORY_DATE, UI_TEXT_HISTORY_VALUES, UI_TEXT_HISTORY_SERIALS };
     for (unsigned i = 0; i < 3; ++i) {
         s->tabs[i] = button(s->root, 16 + i * 420, 60, 408, 38, ui_text_get(tab_names[i]), tab_event, s);

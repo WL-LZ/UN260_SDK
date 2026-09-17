@@ -1,6 +1,16 @@
 #include "ui_text.h"
 
 const ui_text_item_t g_ui_text_page_group[UI_TEXT_PAGE_MAX] = {
+    [UI_TEXT_HISTORY_MULTI_REJECT] = {"REJECT", "拒钞", "거부"},
+    [UI_TEXT_MULTI_HISTORY_HINT] = {"No cross-currency amount total. History saves currency groups after counting.", "不同币种金额不合计；点钞结束后按币种保存历史。", "통화 간 금액은 합산하지 않습니다. 계수 후 통화별 기록이 저장됩니다."},
+    [UI_TEXT_HISTORY_MODE_OPTIONS] = {"All modes\nMULTI\nOther modes", "所有模式\n多币种模式\n其他模式", "모든 모드\nMULTI\n기타 모드"},
+    [UI_TEXT_HISTORY_MULTI_TITLE] = {"Multi-currency record", "多币种点钞记录", "다중 통화 기록"},
+    [UI_TEXT_HISTORY_MULTI_GROUPS_FMT] = {"%u currencies", "%u 种币种", "%u개 통화"},
+    [UI_TEXT_HISTORY_MULTI_TOTAL_FMT] = {"%u PCS / Reject %u", "%u 张 / 拒钞 %u 张", "%u매 / 거부 %u매"},
+    [UI_TEXT_HISTORY_MULTI_SNAPSHOT] = {"Saved snapshot / No cross-currency amount total", "历史快照 / 不合计不同币种金额", "저장된 기록 / 통화 간 금액 합산 없음"},
+    [UI_TEXT_HISTORY_MULTI_MISSING] = {"Details not saved. Totals preserved; no live query for old records.", "明细未保存；汇总仍保留，历史记录不查询当前机器数据。", "상세 미저장. 합계는 보존됩니다. 과거 기록은 실시간 조회하지 않습니다."},
+    [UI_TEXT_HISTORY_MULTI_ADD_FMT] = {"ADD / %u passes / cumulative", "累计模式 / %u 次 / 累计结果", "ADD / %u회 / 누적 결과"},
+    [UI_TEXT_HISTORY_MULTI_SCOPE] = {"Selected currency: PCS and amount apply to that group in MULTI.", "指定币种后，张数和金额仅筛选 MULTI 中对应币种。", "통화 선택 시 MULTI의 해당 통화 매수와 금액을 검색합니다."},
     [UI_TEXT_HISTORY_RECORDS] = {"History records", "历史记录", "기록"},
     [UI_TEXT_HISTORY_STORAGE_FMT] = {"Stored %u / %u | newest reports", "已保存 %u / %u 条最近记录", "최근 기록 %u / %u"},
     [UI_TEXT_HISTORY_LIFETIME] = {"Lifetime PCS", "累计张数", "누적 매수"},

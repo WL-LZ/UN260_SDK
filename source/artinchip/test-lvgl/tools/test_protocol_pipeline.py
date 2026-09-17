@@ -58,6 +58,7 @@ static void smart_island_notify_warning_level(const char *text, int level) {
 static bool ui_history_data_is_initialized(void) { return history_initialized; }
 static bool ui_history_data_is_available(void) { return history_available; }
 static void page_01_main_refresh_start_state(void) {}
+static void app_standby_runtime_protocol_activity(void) {}
 static uint64_t app_clock_monotonic_us(void) { return now_us; }
 static uint32_t app_clock_elapsed_us32(uint64_t start, uint64_t end) {
     return (uint32_t)(end - start);

@@ -187,6 +187,8 @@ history_query_error_t history_query_compile(const history_query_input_t *input,
     query.rejects = input->rejects;
     query.reject_code = input->reject_code;
     query.oldest_first = input->oldest_first;
+    if(input->mode>2)return HISTORY_QUERY_BAD_CURRENCY;
+    query.mode=input->mode;
     *out = query;
     return HISTORY_QUERY_OK;
 }
@@ -259,6 +261,43 @@ history_query_match_t history_query_match_record(const history_query_t *query,
 {
     if (!record || !record->valid || !record->record_no) return HISTORY_QUERY_NO_MATCH;
     if (!query) return HISTORY_QUERY_MATCH;
+    bool is_multi=record->multi && record->multi->enabled;
+    if((query->mode==1&&!is_multi)||(query->mode==2&&is_multi))return HISTORY_QUERY_NO_MATCH;
+    if(record->multi && record->multi->enabled) {
+        const history_multi_t *m=record->multi;
+        history_query_record_t scoped=*record;
+        history_query_t filters=*query;
+        filters.mode=0;
+        history_record_detail_t detail={0};
+        scoped.multi=NULL;scoped.detail=&detail;
+        const history_multi_currency_t *group=NULL;
+        if(query->currency[0]) {
+            for(unsigned i=0;i<m->count;i++)
+                if(!strcmp(query->currency,m->currencies[i].code)) group=&m->currencies[i];
+            if(!group && !m->overflow) return HISTORY_QUERY_NO_MATCH;
+            if(group) {
+                memcpy(scoped.currency,group->code,4);scoped.pcs=group->pcs;scoped.amount=group->amount;
+                detail.denoms_complete=group->complete;
+                detail.denom_count=group->count;
+                for(unsigned i=0;i<group->count;i++) {
+                    detail.denoms[i].value=group->denoms[i].value;
+                    detail.denoms[i].pcs=group->denoms[i].pcs;
+                }
+            } else {filters.currency[0]=0;filters.pcs.enabled=filters.amount.enabled=false;}
+        }
+        /* No per-currency serial provenance is available in this stored schema. */
+        filters.rejects=HISTORY_REJECT_ALL;
+        history_query_match_t result=history_query_match_record(&filters,&scoped);
+        if(result==HISTORY_QUERY_NO_MATCH) return result;
+        if(query->currency[0]&&!group) result=HISTORY_QUERY_UNKNOWN;
+        if(query->rejects==HISTORY_REJECT_SAVED_ANY && !m->rejects) return HISTORY_QUERY_NO_MATCH;
+        if(query->rejects==HISTORY_REJECT_CODE) {
+            if(!m->rejects) return HISTORY_QUERY_NO_MATCH;
+            history_query_match_t reject=reject_condition(query,record->detail);
+            if(reject!=HISTORY_QUERY_MATCH) result=HISTORY_QUERY_UNKNOWN;
+        }
+        return result;
+    }
     bool unknown = false;
     if (query->date_enabled) {
         unsigned days = month_days(record->year, record->month);
@@ -309,14 +348,23 @@ history_query_result_t history_query_build(const history_query_record_t *records
         if (match == HISTORY_QUERY_UNKNOWN) { ++result.unknown_count; continue; }
         if (match != HISTORY_QUERY_MATCH) continue;
         char code[4];
-        bool code_valid = currency_code(record->currency, code);
+        uint32_t pcs=record->pcs,amount=record->amount;
+        bool multi=record->multi && record->multi->enabled;
+        bool code_valid = !multi && currency_code(record->currency, code);
+        if(multi && query && query->currency[0]) {
+            for(unsigned j=0;j<record->multi->count;j++) {
+                const history_multi_currency_t *g=&record->multi->currencies[j];
+                if(strcmp(g->code,query->currency))continue;
+                memcpy(code,g->code,4);code_valid=true;pcs=g->pcs;amount=g->amount;break;
+            }
+        }
         if (!result.matched_count) {
             result.amount_comparable = code_valid;
             if (code_valid) memcpy(result.currency, code, sizeof(code));
         } else if (!code_valid || strcmp(code, result.currency)) result.amount_comparable = false;
         ++result.matched_count;
-        result.matched_pcs += record->pcs;
-        if (result.amount_comparable) result.matched_amount += record->amount;
+        result.matched_pcs += pcs;
+        if (result.amount_comparable) result.matched_amount += amount;
         else { result.matched_amount = 0; result.currency[0] = '\0'; }
         if (!out_record_nos || !capacity) continue;
         size_t position = 0;

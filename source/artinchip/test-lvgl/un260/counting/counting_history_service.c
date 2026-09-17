@@ -6,6 +6,7 @@
 
 #include "un260/lv_system/ui_history_data.h"
 #include "counting_data_store.h"
+#include "counting_multi.h"
 
 #define COUNTING_HISTORY_FRAME_TEXT_SIZE 160
 #define COUNTING_HISTORY_SESSION_LOG_SIZE 4096
@@ -20,6 +21,7 @@ static size_t g_session_log_len;
 typedef struct {
     ui_history_record_t record;
     storage_job_id_t job;
+    uint32_t multi_group;
 } counting_history_snapshot_t;
 static counting_history_snapshot_t g_snapshots[COUNTING_HISTORY_PENDING_CAPACITY];
 static unsigned g_snapshot_count;
@@ -27,7 +29,8 @@ static counting_history_snapshot_t g_overflow_snapshot;
 static bool g_overflow_valid;
 static bool g_uncaptured_pending;
 static bool g_failure_reported;
-static bool g_unsupported_notice;
+static uint32_t g_multi_generation, g_submitted_group, g_submitted_id, g_submitted_pcs;
+static ui_history_record_t g_multi_snapshot;
 
 static void counting_history_frame_to_hex(const uint8_t *buf,
                                           uint8_t len,
@@ -146,15 +149,91 @@ static void counting_history_submit_snapshots(void)
     unsigned i;
     counting_history_promote_overflow();
     for (i = 0; i < g_snapshot_count; i++) {
-        uint32_t total;
+        uint32_t total, increment;
         if (g_snapshots[i].job != 0) continue;
         if (!ui_history_data_can_accept()) break;
         total = ui_history_total_notes_counted_get();
-        total = g_snapshots[i].record.pcs > UINT32_MAX - total
-            ? UINT32_MAX : total + g_snapshots[i].record.pcs;
-        if (!ui_history_record_append_snapshot(&g_snapshots[i].record, total)) break;
+        counting_history_snapshot_t *s=&g_snapshots[i];
+        bool update=s->multi_group && s->multi_group==g_submitted_group;
+        increment=update ? (s->record.pcs>g_submitted_pcs ? s->record.pcs-g_submitted_pcs : 0) : s->record.pcs;
+        total=increment>UINT32_MAX-total ? UINT32_MAX : total+increment;
+        if(update) {
+            s->record.record_no=g_submitted_id;
+            bool exists=false;
+            const ui_history_store_t *store=ui_history_data_get();
+            for(unsigned j=0;j<store->record_count;j++)
+                if(store->records[j].record_no==g_submitted_id) exists=true;
+            if(exists) {
+                if(!ui_history_record_update_snapshot(&s->record,total)) break;
+            } else {
+                /* Deletion wins over late detail; lifetime accounting remains independent. */
+                ui_history_total_notes_counted_set(total);
+                if(ui_history_total_notes_counted_get()!=total)break;
+            }
+        } else {
+            uint32_t id=ui_history_data_get()->next_record_no;
+            if(!ui_history_record_append_snapshot(&s->record,total)) break;
+            g_submitted_id=id;g_submitted_group=s->multi_group;
+        }
+        g_submitted_pcs=s->record.pcs;
         g_snapshots[i].job = ui_history_last_commit_id();
     }
+}
+
+static counting_history_commit_result_t capture_multi(counting_session_state_t *session,
+                                                       const counting_sim_t *sim, bool force)
+{
+    const counting_multi_t *m=counting_multi_current();
+    if(m->counting || !m->passes || !m->total_pcs) return COUNTING_HISTORY_COMMIT_NOT_READY;
+    bool waiting=false,blocked=false;
+    for(unsigned i=0;i<m->count;i++) {
+        multi_detail_status_t status=m->currencies[i].status;
+        if(status==MULTI_DETAIL_NONE || status==MULTI_DETAIL_LOADING)waiting=true;
+        if(status==MULTI_DETAIL_TIMEOUT)blocked=true;
+    }
+    /* Persist summary promptly, then coalesce the serial prefetch into one
+     * detail snapshot. Reset/start may force a partial snapshot before reuse. */
+    if(!force && g_multi_generation==m->generation && waiting && !blocked)
+        return COUNTING_HISTORY_COMMIT_NOT_READY;
+    history_multi_t data={0};
+    data.enabled=true;data.count=m->count;data.rejects=m->reject;
+    data.overflow=m->overflow;data.add=m->add;data.passes=m->passes;
+    uint32_t grouped_pcs=0;
+    for(unsigned i=0;i<m->count;i++) {
+        const multi_currency_t *src=&m->currencies[i];
+        history_multi_currency_t *dst=&data.currencies[i];
+        memcpy(dst->code,src->code,4);dst->pcs=src->pcs;dst->amount=src->amount;
+        grouped_pcs+=src->pcs;
+        dst->complete=src->status==MULTI_DETAIL_READY ||
+            (src->status==MULTI_DETAIL_EMPTY && !src->pcs && !src->amount);
+        if(dst->complete) {
+            dst->count=src->denom_count;
+            for(unsigned j=0;j<src->denom_count;j++)
+                dst->denoms[j]=(history_multi_denom_t){src->denom[j].value,src->denom[j].pcs};
+        }
+    }
+    if(grouped_pcs!=m->total_pcs)data.overflow=true;
+    if(g_multi_generation==m->generation && g_multi_snapshot.pcs==m->total_pcs &&
+       !memcmp(&g_multi_snapshot.multi,&data,sizeof(data))) return COUNTING_HISTORY_COMMIT_NOT_READY;
+    counting_history_promote_overflow();
+    bool overflow=g_snapshot_count>=COUNTING_HISTORY_PENDING_CAPACITY;
+    if(overflow && g_overflow_valid) {g_uncaptured_pending=true;return COUNTING_HISTORY_COMMIT_FAILED;}
+    counting_history_snapshot_t *s=overflow?&g_overflow_snapshot:&g_snapshots[g_snapshot_count];
+    memset(s,0,sizeof(*s));
+    if(g_multi_generation!=m->generation) {
+        if(!ui_history_record_build_multi_base(sim,m->total_pcs,g_last_error_frame_text,
+            g_last_start_frame_text,g_last_end_frame_text,g_session_log_text,&s->record))
+            return COUNTING_HISTORY_COMMIT_FAILED;
+    } else s->record=g_multi_snapshot;
+    s->record.multi=data;s->record.pcs=m->total_pcs;s->record.amount=0;
+    memcpy(s->record.currency,"MUL",4);
+    s->multi_group=m->group_generation;
+    g_multi_snapshot=s->record;g_multi_generation=m->generation;
+    if(overflow)g_overflow_valid=true;else g_snapshot_count++;
+    g_uncaptured_pending=false;
+    counting_history_clear_pending(session);
+    counting_history_submit_snapshots();
+    return COUNTING_HISTORY_COMMIT_PENDING;
 }
 
 counting_history_commit_result_t counting_history_try_commit(
@@ -166,18 +245,11 @@ counting_history_commit_result_t counting_history_try_commit(
     bool overflow;
     (void)now_ms;
 
+    if(session && sim_data && sim_data->multi_currency_result)
+        return capture_multi(session,sim_data,true);
     if (session == NULL || sim_data == NULL ||
         !session->history_record.valid || !session->history_record.end_seen) {
         return COUNTING_HISTORY_COMMIT_NOT_READY;
-    }
-    if (!counting_data_monetary_result_supported(sim_data)) {
-        /* Do not invent a single-currency record or a zero amount. This is an
-         * explicit capability limit, not storage failure/backpressure. Existing
-         * immutable single-currency snapshots retain their normal ownership. */
-        g_uncaptured_pending = false;
-        g_unsupported_notice = true;
-        counting_history_clear_pending(session);
-        return COUNTING_HISTORY_COMMIT_UNSUPPORTED;
     }
     counting_history_promote_overflow();
     overflow = g_snapshot_count >= COUNTING_HISTORY_PENDING_CAPACITY;
@@ -198,6 +270,7 @@ counting_history_commit_result_t counting_history_try_commit(
         return COUNTING_HISTORY_COMMIT_FAILED;
     }
     snapshot->job = 0;
+    snapshot->multi_group = 0;
     if (overflow) g_overflow_valid = true;
     else g_snapshot_count++;
     g_uncaptured_pending = false;
@@ -233,6 +306,8 @@ counting_history_commit_result_t counting_history_poll_commit(
         return COUNTING_HISTORY_COMMIT_PENDING;
     }
     g_failure_reported = false;
+    if(session && sim_data && sim_data->multi_currency_result)
+        (void)capture_multi(session,sim_data,false);
     if (saved) return COUNTING_HISTORY_COMMIT_SAVED;
     return g_snapshot_count != 0 || g_overflow_valid ? COUNTING_HISTORY_COMMIT_PENDING
                                  : COUNTING_HISTORY_COMMIT_NOT_READY;
@@ -259,18 +334,15 @@ bool counting_history_can_start(void)
            ui_history_data_can_accept() && ui_history_data_status() != STORAGE_JOB_FAILED;
 }
 
-bool counting_history_take_unsupported_notice(void)
-{
-    bool pending = g_unsupported_notice;
-    g_unsupported_notice = false;
-    return pending;
-}
-
 bool counting_history_prepare_reset(counting_session_state_t *session,
     const counting_sim_t *sim_data, uint32_t now_ms)
 {
     bool end_seen;
     if (session == NULL) return false;
+    if(sim_data && sim_data->multi_currency_result) {
+        (void)capture_multi(session,sim_data,true);
+        return !g_uncaptured_pending;
+    }
     if (!session->history_record.valid) return true;
     end_seen = session->history_record.end_seen;
     /* A new start/reset ends the opportunity for optional detail frames. Save

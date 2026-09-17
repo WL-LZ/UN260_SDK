@@ -35,12 +35,12 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
     runtime = (ROOT / "un260/app_service/app_counting_runtime.c").read_text(encoding="utf-8")
     (work / "history_runtime_under_test.h").write_text(extract_function(
         runtime, "bool app_counting_runtime_reset_session("), encoding="utf-8")
-    def compile_binary(output, overlay=None):
+    def compile_binary(output, overlay=None, store_path=state):
         includes = ["-I" + str(overlay)] if overlay else []
         subprocess.run([compiler, "-std=c11", "-O1", "-g", "-Wall", "-Wextra", "-Werror",
                         "-fno-omit-frame-pointer", "-fsanitize=" + args.sanitize,
                         "-no-pie", "-pthread", *includes, "-I" + str(ROOT), "-I" + str(work),
-                        '-DUI_HISTORY_STORE_DIR="' + state.as_posix() + '"',
+                        '-DUI_HISTORY_STORE_DIR="' + store_path.as_posix() + '"',
                         str(ROOT / "tools/test_history_storage.c"),
                         str(ROOT / "un260/storage/storage_worker.c"),
                         str(ROOT / "un260/counting/counting_history_service.c"),
@@ -48,6 +48,10 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
                         "-Wl,--wrap=malloc", "-o", str(output)], check=True)
 
     compile_binary(binary)
+    multi_binary=work / "multi-history-test"
+    compile_binary(multi_binary,store_path=work / "multi-history")
+    subprocess.run([str(multi_binary), "multi-history"], check=True)
+    subprocess.run([str(multi_binary), "multi-reload"], check=True)
     record_size, store_size, capacity = map(int, subprocess.check_output(
         [str(binary), "sizes"], text=True).split())
     assert capacity == 100
@@ -75,7 +79,9 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
     legacy_binary = work / "history-legacy20-test"
     compile_binary(legacy_binary, overlay)
     subprocess.run([str(legacy_binary), "fill-capacity"], check=True)
-    legacy_index = authoritative.read_bytes()
+    # Single-currency fields are identical in v2; exercise the actual v2 header.
+    legacy_index = authoritative.read_bytes().replace(b"version=3\n",b"version=2\n")
+    authoritative.write_bytes(legacy_index)
     legacy_records = record_fields()
     assert dump() == (20, 20, 21)
     assert authoritative.read_bytes() == legacy_index, "Upgrade read must not rewrite the old index"
@@ -158,7 +164,7 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
         assert authoritative.read_bytes() == healthy_index
         assert dump() == healthy_state
     for corrupt_index in (b"invalid index\n", healthy_index[:-1],
-                          healthy_index.replace(b"version=2\n", b"version=999\n")):
+                          healthy_index.replace(b"version=3\n", b"version=999\n")):
         authoritative.write_bytes(corrupt_index)
         subprocess.run([str(binary), "load-corrupt"], check=True)
         assert authoritative.read_bytes() == corrupt_index

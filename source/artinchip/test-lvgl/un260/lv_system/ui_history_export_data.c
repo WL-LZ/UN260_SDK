@@ -169,6 +169,39 @@ static void history_export_build_name_for_record(char *buf, size_t size, const u
                 (unsigned)rec->second);
 }
 
+static bool history_export_multi_file(const char *path,const ui_history_record_t *r,bool html)
+{
+    FILE *fp=fopen(path,"w");if(!fp)return false;
+    if(html)fprintf(fp,"<!doctype html><meta charset='utf-8'><title>MULTI history</title>"
+        "<style>body{font:16px sans-serif;color:#293b44;padding:24px}table{border-collapse:collapse;width:100%%}"
+        "td,th{text-align:left;padding:10px;border-bottom:1px solid #e7edf0}</style>"
+        "<h1>MULTI record #%u</h1><p>%04u-%02u-%02u %02u:%02u:%02u</p>"
+        "<p>Total PCS %u / Reject %u / ADD %s / Passes %u</p><p>No cross-currency amount total.</p>",
+        r->record_no,r->year,r->month,r->day,r->hour,r->minute,r->second,r->pcs,r->multi.rejects,
+        r->multi.add?"ON":"OFF",r->multi.passes);
+    else fprintf(fp,"Record,%u\nMode,MULTI\nTime,%04u-%02u-%02u %02u:%02u:%02u\nTotal PCS,%u\nTotal Reject,%u\nADD,%s\nPasses,%u\nNo cross-currency amount total\n",
+        r->record_no,r->year,r->month,r->day,r->hour,r->minute,r->second,r->pcs,r->multi.rejects,
+        r->multi.add?"ON":"OFF",r->multi.passes);
+    for(unsigned i=0;i<r->multi.count;i++) {
+        const history_multi_currency_t *g=&r->multi.currencies[i];
+        char code[32];
+        if(html)history_export_html_escape(code,sizeof(code),g->code);
+        else history_export_csv_escape(code,sizeof(code),g->code);
+        if(html)fprintf(fp,"<h2>%s</h2><p>PCS %u / Amount %u</p><p>%s</p><table><tr><th>Denomination</th><th>PCS</th><th>Amount</th></tr>",code,g->pcs,g->amount,g->complete?"Saved denominations":"Details incomplete; totals preserved");
+        else fprintf(fp,"\nCurrency,\"%s\"\nPCS,%u\nAmount,%u\nDetail status,%s\nDenomination,PCS,Amount\n",code,g->pcs,g->amount,g->complete?"Complete":"Incomplete");
+        for(unsigned j=0;j<g->count;j++) {
+            const history_multi_denom_t *d=&g->denoms[j];
+            fprintf(fp,html?"<tr><td>%u</td><td>%u</td><td>%llu</td></tr>":"%u,%u,%llu\n",
+                d->value,d->pcs,(unsigned long long)d->value*d->pcs);
+        }
+        if(html)fputs("</table>",fp);
+    }
+    fputs(html?"<p>Serial numbers not recorded by currency. Reject total applies to the whole record.</p>":
+        "\nSerial numbers not recorded by currency. Reject total applies to the whole record.\n",fp);
+    if(r->multi.overflow)fputs(html?"<p>Currency list incomplete.</p>":"Currency list incomplete\n",fp);
+    return history_export_flush_and_verify(fp,path);
+}
+
 static bool history_export_write_csv_file(const char *file_path, const ui_history_record_t *rec,
                                           const history_record_detail_t *detail)
 {
@@ -180,6 +213,7 @@ static bool history_export_write_csv_file(const char *file_path, const ui_histor
     if (file_path == NULL || file_path[0] == '\0' || rec == NULL || detail == NULL) {
         return false;
     }
+    if(rec->multi.enabled)return history_export_multi_file(file_path,rec,false);
 
     if (!history_export_csv_escape(currency_csv, sizeof(currency_csv),
                                    rec->currency[0] ? rec->currency : "CUR")) {
@@ -269,6 +303,7 @@ static bool history_export_write_html_file(const char *file_path, const ui_histo
     }
 
     total_pcs = rec->pcs;
+    if(rec->multi.enabled)return history_export_multi_file(file_path,rec,true);
     total_amount = rec->amount;
     denoms = detail->denoms;
     sns = detail->serials;

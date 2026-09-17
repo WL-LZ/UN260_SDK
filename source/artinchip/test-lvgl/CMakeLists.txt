@@ -124,6 +124,8 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_drivers/startup_visual.c
     un260/app_service/app_boot_runtime.c
     un260/app_service/app_command_runtime.c
+    un260/counting/counting_multi.c
+    un260/lv_core/page_01_multi.c
     un260/app_service/app_counting_runtime.c
     un260/app_service/app_currency_runtime.c
     un260/app_service/app_protocol_runtime.c

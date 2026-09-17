@@ -226,6 +226,20 @@ int main(int argc, char **argv)
     cleanup_outputs(); unlock_and_reset();
     rec->sn_text[0] = '\0';
 
+    rec->multi=(history_multi_t){.enabled=true,.count=2,.rejects=9,.passes=1};
+    rec->multi.currencies[0]=(history_multi_currency_t){.code="USD",.pcs=3,.amount=300,.complete=true,.count=1,.denoms={{100,3}}};
+    rec->multi.currencies[1]=(history_multi_currency_t){.code="CNY",.pcs=2,.amount=10};
+    memcpy(rec->currency,"MUL",4);rec->pcs=5;rec->amount=0;
+    assert(ui_history_export_data_request_records(ids,1));
+    csv=read_all(test_paths[0][0]);html=read_all(test_paths[0][1]);
+    assert(strstr(csv,"Currency,\"USD\"") && strstr(csv,"Currency,\"CNY\""));
+    assert(strstr(csv,"100,3,300") && strstr(csv,"Detail status,Incomplete"));
+    assert(!strstr(csv,"Total Amount,0") && !strstr(csv,"310"));
+    assert(strstr(html,"<h2>USD</h2>") && strstr(html,"<h2>CNY</h2>"));
+    assert(strstr(html,"Details incomplete; totals preserved"));
+    free(csv);free(html);cleanup_outputs();unlock_and_reset();
+    memset(&rec->multi,0,sizeof(rec->multi));memcpy(rec->currency,"USD",4);
+
     test_store.records[1] = *rec;
     test_store.records[1].record_no = 92;
     test_store.record_count = 2;

@@ -7,6 +7,8 @@
 #include "un260/app_service/app_counting_runtime.h"
 #include "un260/boot/boot_service.h"
 #include "un260/counting/counting_denom_query_service.h"
+#include "un260/counting/counting_multi.h"
+#include <string.h>
 #include "un260/counting/counting_action_service.h"
 #include "un260/counting/counting_history_service.h"
 #include "un260/currency/currency_reply.h"
@@ -30,6 +32,12 @@ static bool app_currency_runtime_boot_ready(void)
 static void app_currency_runtime_expect_denom_refresh(
     counting_detail_state_t *detail_state)
 {
+    if (currency_state_multi_selected()) {
+        if (detail_state->query_pending && !detail_state->query_wait_push)
+            counting_multi_drain_legacy();
+        memset(detail_state, 0, sizeof(*detail_state));
+        return;
+    }
     counting_denom_query_expect_push(detail_state,
                                  app_clock_uptime_ms(),
                                  app_currency_runtime_boot_ready());

@@ -7,6 +7,7 @@ root=Path(__file__).resolve().parents[1]
 reset=function((root/'un260/app_service/app_counting_runtime.c').read_text(),'app_counting_runtime_reset_session')
 finish=function((root/'un260/app_service/app_boot_runtime.c').read_text(),'app_boot_runtime_finish')
 fixture=r'''
+#include "un260/counting/counting_multi.h"
 #define main stream_regression_main
 #include "tools/test_denom_stream.c"
 #undef main
@@ -51,5 +52,5 @@ with tempfile.TemporaryDirectory(prefix='un260-boot-denom-') as tmp:
     stub.write_text('void uart_debug_printf(const char *fmt, ...);\n')
     src=tmp/'test.c';src.write_text(fixture+reset+finish+main)
     exe=tmp/'test'
-    subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-Wno-error=return-type','-Wno-error=sign-compare','-fsanitize=undefined','-fno-sanitize-recover=all','-I'+str(tmp),'-I'+str(root),str(src),str(root/'un260/counting/counting_denom_reply.c'),str(root/'un260/counting/counting_denom_query_service.c'),'-o',str(exe)],check=True)
+    subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-Wno-error=return-type','-Wno-error=sign-compare','-fsanitize=undefined','-fno-sanitize-recover=all','-I'+str(tmp),'-I'+str(root),str(src),str(root/'un260/counting/counting_multi.c'),str(root/'un260/counting/counting_denom_reply.c'),str(root/'un260/counting/counting_denom_query_service.c'),'-o',str(exe)],check=True)
     subprocess.run([str(exe)],check=True)

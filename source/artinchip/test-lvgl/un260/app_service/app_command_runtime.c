@@ -1,4 +1,5 @@
 #include "app_command_runtime.h"
+#include "un260/counting/counting_multi.h"
 #include "app_standby_runtime.h"
 
 #include <stdbool.h>
@@ -256,9 +257,15 @@ void app_command_runtime_poll(uint32_t now_ms)
         (void)app_command_runtime_clear_counting_data("mode change");
     }
     app_counting_runtime_poll_history(&g_counting_session, counting_data_mutable(), now_ms);
-    if (counting_history_take_unsupported_notice())
-        smart_island_notify_warning_level(ui_text_get(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED),
-                                           SMART_ISLAND_WARNING_LEVEL_WARNING);
+    uint32_t multi_revision = counting_multi_current()->revision;
+    counting_multi_poll(now_ms);
+    if (currency_state_multi_selected() && !app_command_runtime_count_start_busy() &&
+        !counting_action_clear_pending() && !app_command_runtime_frames_pending())
+        counting_multi_prefetch(now_ms);
+    if (multi_revision != counting_multi_current()->revision)
+        ui_refresh_main_page();
+    if (currency_state_multi_selected() || counting_data_current()->multi_currency_result ||
+        counting_multi_query_busy()) return;
     counting_denom_query_poll(&g_counting_detail_state,
                               now_ms,
                               stage == BOOT_STAGE_DONE || stage == BOOT_STAGE_FAIL,

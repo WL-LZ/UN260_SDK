@@ -44,6 +44,8 @@ def main():
     sources = [args.harness.resolve() if args.harness else ROOT / "tools/test_main_view.c",
                *[source.resolve() for source in args.extra_source], *compiled_asset_sources()]
     actual = [
+        "un260/font/scaled_font.c",
+        "un260/lv_core/page_01_multi.c", "un260/counting/counting_multi.c",
         "un260/lv_components/lv_recycled_list.c", "un260/lv_components/ui_list_window.c",
         "un260/lv_components/lv_damped_button.c", "un260/lv_components/lv_loading_orbit.c",
         "un260/lv_components/lv_capsule_pagination.c", "un260/lv_components/smart_island.c",
@@ -77,7 +79,7 @@ def main():
         external_entries = []
         for entry in manifest["external"]:
             name = entry["name"]
-            if name not in ("page_02_menu_bg.png", "backgrounds/user.png") and not name.startswith("CURR_"):
+            if name not in ("page_02_menu_bg.png", "backgrounds/user.png", "main_icons/multi_card.png") and not name.startswith("CURR_"):
                 continue
             path = ROOT / "aic_ui/lvgl_data" / name
             if hashlib.sha256(path.read_bytes()).hexdigest() != entry["source_sha256"]:

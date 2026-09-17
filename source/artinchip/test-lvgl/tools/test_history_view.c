@@ -15,6 +15,10 @@
 /* The real page and parser are compiled unchanged. Only history IO, navigation
  * and export side effects are replaced by deterministic host fixtures. */
 static ui_history_store_t test_store;
+const char *get_currency_img(const char *code)
+{
+    static char path[128];snprintf(path,sizeof(path),LVGL_DIR"CURR_%s.png",code);return path;
+}
 static bool test_available = true, test_accept = true, test_export_ok = true, test_clear_accept = true;
 static storage_job_status_t test_status = STORAGE_JOB_SUCCEEDED;
 static storage_job_id_t test_commit_id = 1;
@@ -134,11 +138,27 @@ void lv_print_toast_show(const char *text)
 
 /* Software decoder bridge reads the exact production compiled BGRA registry;
  * it does not synthesize icons or pretend to validate DMA/GE decoding. */
+static const un260_compiled_asset_t *history_test_asset(const char *src)
+{
+    static unsigned char pixels[2][182*103*4];
+    static un260_compiled_asset_t flags[2];
+    const char *names[]={"CURR_USD.png","CURR_CNY.png"};
+    for(unsigned i=0;i<2;i++)if(strstr(src,names[i])) {
+        if(!flags[i].pixels) {
+            char path[512];snprintf(path,sizeof(path),"%s/%s.bgra",getenv("UN260_BACKGROUND_DIR"),names[i]);
+            FILE *fp=fopen(path,"rb");assert(fp);
+            assert(fread(pixels[i],1,sizeof(pixels[i]),fp)==sizeof(pixels[i]));fclose(fp);
+            flags[i]=(un260_compiled_asset_t){names[i],182,103,182*4,1,pixels[i]};
+        }
+        return &flags[i];
+    }
+    return test_page_asset_find(src);
+}
 static lv_res_t test_asset_info(lv_img_decoder_t *decoder, const void *src, lv_img_header_t *header)
 {
     (void)decoder;
     if (lv_img_src_get_type(src) != LV_IMG_SRC_FILE) return LV_RES_INV;
-    const un260_compiled_asset_t *asset = test_page_asset_find(src);
+    const un260_compiled_asset_t *asset = history_test_asset(src);
     if (!asset || !asset->has_alpha || asset->stride != asset->width * 4) return LV_RES_INV;
     memset(header, 0, sizeof(*header));
     header->w = asset->width; header->h = asset->height; header->cf = LV_IMG_CF_TRUE_COLOR_ALPHA;
@@ -147,7 +167,7 @@ static lv_res_t test_asset_info(lv_img_decoder_t *decoder, const void *src, lv_i
 static lv_res_t test_asset_open(lv_img_decoder_t *decoder, lv_img_decoder_dsc_t *dsc)
 {
     if (test_asset_info(decoder, dsc->src, &dsc->header) != LV_RES_OK) return LV_RES_INV;
-    dsc->img_data = test_page_asset_find(dsc->src)->pixels;
+    dsc->img_data = history_test_asset(dsc->src)->pixels;
     return LV_RES_OK;
 }
 static void test_asset_close(lv_img_decoder_t *decoder, lv_img_decoder_dsc_t *dsc)
@@ -641,6 +661,39 @@ static void history_test_inertia_tap(unsigned baseline_timers)
     puts("PASS: touching to stop inertia cannot open or select a record; a fresh stationary tap works");
 }
 
+static void history_test_multi(unsigned baseline)
+{
+    history_test_fixtures(2);
+    ui_history_record_t *r=&test_store.records[0];
+    memcpy(r->currency,"MUL",4);r->pcs=16;r->amount=0;
+    r->multi=(history_multi_t){.enabled=true,.count=2,.rejects=9,.passes=1};
+    r->multi.currencies[0]=(history_multi_currency_t){.code="USD",.pcs=14,.amount=532,.complete=true,.count=6,
+        .denoms={{100,3},{50,3},{20,2},{10,3},{5,2},{2,1}}};
+    r->multi.currencies[1]=(history_multi_currency_t){.code="CNY",.pcs=2,.amount=10};
+    ui_page_19_history_create(lv_scr_act());history_test_tick(100);
+    history_test_bmp("history-multi-list");
+    show_record(r->record_no);history_test_tick(100);
+    assert(lv_obj_is_visible(history->multi_panel));history_test_bmp("history-multi-overview");
+    lv_obj_t *body=lv_obj_get_child(history->multi_panel,3);
+    history_test_click(lv_obj_get_child(body,0));history_test_tick(100);
+    assert(history->multi_selected==0);history_test_bmp("history-multi-usd");
+    history_test_click(history->actions[3]);assert(history->detail_mode && history->multi_selected==-1);
+    body=lv_obj_get_child(history->multi_panel,3);history_test_click(lv_obj_get_child(body,1));
+    history_test_tick(100);history_test_bmp("history-multi-incomplete");
+    assert(history->multi_selected==1);
+    history_test_click(history->actions[3]);history_test_click(history->actions[3]);
+    assert(!history->detail_mode);
+    strcpy(history->input.currency,"USD");history->input.mode=1;refresh_records(true);
+    assert(history->result.matched_count==1 && history->result.matched_pcs==14 && history->result.matched_amount==532);
+    ui_page_19_history_destroy();ui_lang_set(LANGUAGE_CN);
+    ui_page_19_history_create(lv_scr_act());show_record(r->record_no);history_test_tick(100);
+    ui_page_19_history_destroy();ui_lang_set(LANGUAGE_KR);
+    ui_page_19_history_create(lv_scr_act());show_record(r->record_no);history_test_tick(100);
+    ui_page_19_history_destroy();history_test_tick(300);assert(history_test_timers()==baseline);
+    ui_lang_set(LANGUAGE_EN);
+    puts("PASS: MULTI unchanged main list, nested currency/detail Back, incomplete state, USD search and lifecycle");
+}
+
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -676,6 +729,7 @@ int main(void)
     history_test_capacity_and_missing_detail(baseline_timers);
     history_test_inertia_tap(baseline_timers);
     history_test_search_module();
+    history_test_multi(baseline_timers);
     assert(history_test_timers() == baseline_timers);
     puts("PASS: actual History LVGL empty/full smoke and timer ownership");
     return 0;

@@ -1,4 +1,6 @@
 #include "app_counting_runtime.h"
+#include "un260/counting/counting_multi.h"
+#include "un260/lv_system/app_clock.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -130,7 +132,13 @@ static bool app_counting_runtime_cb_calibration_active(void)
 
 static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t len)
 {
+    const bool previous_multi = counting_data_current()->multi_currency_result;
     currency_state_begin_count_session();
+    if (currency_state_multi_selected()) {
+        if(!previous_multi)counting_multi_reset();
+        counting_multi_begin(machine_state_add_enabled());
+    }
+    else counting_multi_reset();
     if (currency_state_multi_selected())
         counting_data_mark_multi_result(counting_data_mutable());
     page_02_list_report_reset();
@@ -275,6 +283,7 @@ bool app_counting_runtime_reset_session(counting_session_state_t *session,
                           reason != NULL ? reason : "unknown");
         return false;
     }
+    counting_multi_reset();
     memset(session, 0, sizeof(*session));
     ui_count_end_anim_cancel();
     /* Late 0x0E frames are now rejected by the reset session. Its visual
@@ -468,7 +477,23 @@ void app_counting_runtime_handle_info(counting_session_state_t *session,
         return;
     }
 
-    result = counting_info_reply_handle(session, sim_data, buf, len,
+    uint8_t normalized[13] = {0};
+    const bool multi = sim_data->multi_currency_result;
+    if (multi) {
+        if (!session->start_confirmed || !counting_multi_info(buf, len)) return;
+        const counting_multi_t *m = counting_multi_current();
+        memcpy(normalized, buf, 4); normalized[2] = 13;
+        normalized[8] = (uint8_t)(m->total_pcs >> 8);
+        normalized[9] = (uint8_t)m->total_pcs;
+        normalized[10] = m->reject;
+        normalized[11] = buf[len == 16 ? 14 : 11] >= 2 ? 2 : 1;
+        /* MULTI has no meaningful aggregate monetary amount. */
+        sim_data->total_amount = 0;
+        sim_data->total_pcs = (int)m->total_pcs;
+    } else if (len != 13) {
+        return;
+    }
+    result = counting_info_reply_handle(session, sim_data, multi ? normalized : buf, multi ? 13 : len,
                                         ui_history_total_notes_counted_get());
     if (result.kind == COUNTING_INFO_REPLY_LIVE) {
         app_counting_runtime_refresh_compact(sim_data);
@@ -480,7 +505,7 @@ void app_counting_runtime_handle_info(counting_session_state_t *session,
         page_02_list_section_mark_dirty(PAGE_02_SECTION_C);
         uart_debug_printf("Count finished\n");
         counting_history_capture_end(buf, len);
-        if (machine_state_add_enabled() &&
+        if (!multi && machine_state_add_enabled() &&
             sim_data->last_total_pcs > 0 &&
             current_pcs >= sim_data->last_total_pcs) {
             current_pcs -= sim_data->last_total_pcs;
@@ -531,6 +556,12 @@ void app_counting_runtime_handle_denom(counting_detail_state_t *detail_state,
         return;
     }
 
+    if (sim_data->multi_currency_result || currency_state_multi_selected() ||
+        counting_multi_query_busy()) {
+        counting_multi_denom(buf, len, app_clock_uptime_ms());
+        app_counting_runtime_on_main_data_changed();
+        return;
+    }
     counting_denom_reply_handle(detail_state,
                                 session,
                                 sim_data,
@@ -555,6 +586,10 @@ void app_counting_runtime_handle_detail(uint8_t cmd,
     }
 
     context.session = session;
+    /* MULTI serial/reject detail frames have no active currency owner here.
+     * Do not run the single-currency 0C -> 0D query chain or publish them as
+     * single-currency report rows. The 0E global reject count remains valid. */
+    if (sim_data->multi_currency_result || currency_state_multi_selected()) return;
     context.sim_data = sim_data;
     hooks.context = &context;
     hooks.on_history_frame = app_counting_runtime_on_detail_history;

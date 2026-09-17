@@ -470,7 +470,8 @@ static void smart_island_counting_anim_start(void)
     }
     g_si_ctx.counting.gate_anim_running = true;
 
-    if (g_si_ctx.objects.counting_serial_scan &&
+    if (counting_data_monetary_result_supported(counting_data_current()) &&
+        g_si_ctx.objects.counting_serial_scan &&
         lv_obj_is_valid(g_si_ctx.objects.counting_serial_scan)) {
         lv_anim_init(&animation);
         lv_anim_set_var(&animation, g_si_ctx.objects.counting_serial_scan);
@@ -489,8 +490,9 @@ static void smart_island_counting_anim_start(void)
         lv_anim_init(&animation);
         lv_anim_set_var(&animation, g_si_ctx.objects.counting_value_scan);
         lv_anim_set_exec_cb(&animation, smart_island_serial_scan_anim_cb);
-        lv_anim_set_values(&animation, 0, 24);
-        lv_anim_set_time(&animation, 610);
+        const bool multi=!counting_data_monetary_result_supported(counting_data_current());
+        lv_anim_set_values(&animation, 0, multi?144:24);
+        lv_anim_set_time(&animation, multi?1400:610);
         lv_anim_set_playback_time(&animation, 190);
         lv_anim_set_repeat_delay(&animation, 100);
         lv_anim_set_repeat_count(&animation, LV_ANIM_REPEAT_INFINITE);
@@ -592,6 +594,35 @@ static void smart_island_counting_apply_visibility(void)
     lv_obj_set_size(g_si_ctx.objects.counting_root, root_w, SMART_ISLAND_COUNT_H);
     lv_obj_clear_flag(g_si_ctx.objects.counting_root, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(g_si_ctx.objects.counting_root);
+
+    const bool multi=!counting_data_monetary_result_supported(counting_data_current());
+    if(multi) {
+        lv_obj_add_flag(g_si_ctx.objects.counting_value,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g_si_ctx.objects.counting_value_next,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g_si_ctx.objects.counting_divider,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g_si_ctx.objects.counting_serial_track,LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(g_si_ctx.objects.counting_unit,"MULTI COUNT");
+        lv_obj_set_pos(g_si_ctx.objects.counting_unit,76,2);
+        lv_obj_clear_flag(g_si_ctx.objects.counting_unit,LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(g_si_ctx.objects.counting_serial,"Separating currencies");
+        lv_obj_set_pos(g_si_ctx.objects.counting_serial,76,19);
+        lv_obj_set_width(g_si_ctx.objects.counting_serial,214);
+        lv_obj_set_style_text_align(g_si_ctx.objects.counting_serial,LV_TEXT_ALIGN_LEFT,0);
+        lv_obj_set_style_text_font(g_si_ctx.objects.counting_serial,&lv_font_instrument_sans_medium_12,0);
+        lv_obj_clear_flag(g_si_ctx.objects.counting_serial,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_pos(g_si_ctx.objects.counting_value_track,76,39);
+        lv_obj_set_width(g_si_ctx.objects.counting_value_track,154);
+        lv_obj_clear_flag(g_si_ctx.objects.counting_value_track,LV_OBJ_FLAG_HIDDEN);
+        smart_island_counting_anim_start();
+        return;
+    }
+    lv_label_set_text(g_si_ctx.objects.counting_unit,"PCS");
+    lv_obj_set_pos(g_si_ctx.objects.counting_serial,142,12);
+    lv_obj_set_width(g_si_ctx.objects.counting_serial,154);
+    lv_obj_set_style_text_align(g_si_ctx.objects.counting_serial,LV_TEXT_ALIGN_CENTER,0);
+    lv_obj_set_style_text_font(g_si_ctx.objects.counting_serial,&lv_font_instrument_sans_medium_16,0);
+    lv_obj_set_pos(g_si_ctx.objects.counting_value_track,83,21);
+    lv_obj_set_width(g_si_ctx.objects.counting_value_track,34);
 
     if (g_si_ctx.objects.counting_value &&
         lv_obj_is_valid(g_si_ctx.objects.counting_value)) {
@@ -716,10 +747,12 @@ static void smart_island_apply_quality_indicator(void)
 static void smart_island_apply_texts(void)
 {
     if (g_si_ctx.objects.title && lv_obj_is_valid(g_si_ctx.objects.title)) {
-        lv_label_set_text(g_si_ctx.objects.title, g_si_ctx.text.compact);
+        if(strcmp(lv_label_get_text(g_si_ctx.objects.title),g_si_ctx.text.compact))
+            lv_label_set_text(g_si_ctx.objects.title, g_si_ctx.text.compact);
     }
     if (g_si_ctx.objects.expand_title && lv_obj_is_valid(g_si_ctx.objects.expand_title)) {
-        lv_label_set_text(g_si_ctx.objects.expand_title, g_si_ctx.text.info_title);
+        if(strcmp(lv_label_get_text(g_si_ctx.objects.expand_title),g_si_ctx.text.info_title))
+            lv_label_set_text(g_si_ctx.objects.expand_title, g_si_ctx.text.info_title);
     }
     if (g_si_ctx.objects.expand_subtitle && lv_obj_is_valid(g_si_ctx.objects.expand_subtitle)) {
         lv_label_set_text(g_si_ctx.objects.expand_subtitle, g_si_ctx.text.info_summary);
@@ -1032,7 +1065,8 @@ static void smart_island_apply_scene_style(void)
 
     if (g_si_ctx.objects.title && lv_obj_is_valid(g_si_ctx.objects.title)) {
         lv_obj_set_style_text_color(g_si_ctx.objects.title, title_color, 0);
-        lv_obj_set_style_text_opa(g_si_ctx.objects.title, LV_OPA_COVER, 0);
+        if(g_si_ctx.view.scene!=SMART_ISLAND_SCENE_WARNING)
+            lv_obj_set_style_text_opa(g_si_ctx.objects.title, LV_OPA_COVER, 0);
         if (show_counting) {
             lv_obj_add_flag(g_si_ctx.objects.title, LV_OBJ_FLAG_HIDDEN);
         } else {
@@ -1049,7 +1083,7 @@ static void smart_island_apply_scene_style(void)
             lv_label_set_long_mode(g_si_ctx.objects.title, LV_LABEL_LONG_CLIP);
             lv_obj_set_width(g_si_ctx.objects.title,
                              SMART_ISLAND_COUNT_W - 52);
-        } else {
+        } else if(g_si_ctx.view.scene!=SMART_ISLAND_SCENE_WARNING) {
             lv_label_set_long_mode(g_si_ctx.objects.title, LV_LABEL_LONG_CLIP);
             lv_obj_set_width(g_si_ctx.objects.title, 150);
         }
@@ -1060,7 +1094,8 @@ static void smart_island_apply_scene_style(void)
     }
 
     if (g_si_ctx.objects.expand_title && lv_obj_is_valid(g_si_ctx.objects.expand_title)) {
-        lv_obj_set_style_text_opa(g_si_ctx.objects.expand_title, LV_OPA_COVER, 0);
+        if(g_si_ctx.view.scene!=SMART_ISLAND_SCENE_WARNING)
+            lv_obj_set_style_text_opa(g_si_ctx.objects.expand_title, LV_OPA_COVER, 0);
         lv_obj_clear_flag(g_si_ctx.objects.expand_title, LV_OBJ_FLAG_HIDDEN);
     }
     if (g_si_ctx.objects.expand_subtitle && lv_obj_is_valid(g_si_ctx.objects.expand_subtitle)) {
@@ -1118,7 +1153,8 @@ static void smart_island_apply_scene_style(void)
     }
 
     if (g_si_ctx.objects.expand_title && lv_obj_is_valid(g_si_ctx.objects.expand_title)) {
-        lv_obj_set_pos(g_si_ctx.objects.expand_title, 20, 18);
+        if(g_si_ctx.view.scene!=SMART_ISLAND_SCENE_WARNING)
+            lv_obj_set_pos(g_si_ctx.objects.expand_title, 20, 18);
     }
 
     if (g_si_ctx.objects.expand_footer && lv_obj_is_valid(g_si_ctx.objects.expand_footer)) {

@@ -1,5 +1,6 @@
 #include "un260/lv_resources/ui_page_background.h"
 #include "un260/lv_core/page_01_main.h"
+#include "page_01_multi.h"
 #include "un260/lv_core/page_01_main_detail.h"
 #include "un260/lv_components/lv_loading_orbit.h"
 #include "un260/app_service/app_command_runtime.h"
@@ -42,8 +43,7 @@ static ui_element_t page_01_main_obj[40];
 static int page_01_main_len;
 static lv_obj_t *s_summary_card, *s_detail_card, *s_multi_card, *s_detail_tray;
 static lv_obj_t *s_amount_unit_icon, *s_currency_code;
-static lv_obj_t *s_multi_pcs, *s_multi_reject, *s_start_orbit;
-static lv_obj_t *s_multi_currency_icon, *s_multi_currency_label;
+static lv_obj_t *s_start_orbit;
 static bool s_multi_layout;
 static lv_obj_t* s_time_label = NULL;
 static lv_timer_t* s_time_timer = NULL;
@@ -93,6 +93,7 @@ static page_01_counting_snapshot_t s_main_counting_snapshot;
 static lv_obj_t *s_curr_img = NULL;
 static lv_obj_t *s_curr_label = NULL;
 static char s_curr_rendered_code[4];
+static char s_curr_rendered_effective[4];
 static bool s_curr_rendered_valid = false;
 static lv_obj_t *s_total_pcs_label = NULL;
 static lv_obj_t *s_total_amount_label = NULL;
@@ -324,34 +325,27 @@ void page_01_err_num_refre(void)
     if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_ERROR)) return;
     lv_snprintf(text, sizeof(text), "%d", counting_data_reject_pcs_count(counting_data_current()));
     update_label_by_name(page_01_main_obj, page_01_main_len, "reject_num_label", "%s", text);
-    if (s_multi_reject && strcmp(lv_label_get_text(s_multi_reject), text) != 0)
-        lv_label_set_text(s_multi_reject, text);
 }
 
 void page_01_curr_img_refre(void)
 {
-    char code[4];
+    char code[4], effective[4];
     if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_CURRENCY)) return;
     currency_state_get_selected_code(code);
+    currency_state_get_effective_code(effective);
     page_01_main_layout_refresh();
-    if (s_curr_rendered_valid && strcmp(code, s_curr_rendered_code) == 0) return;
-    const bool special = currency_state_is_special_code(code);
+    if (s_curr_rendered_valid && strcmp(code, s_curr_rendered_code) == 0 &&
+        strcmp(effective, s_curr_rendered_effective) == 0) return;
+    const bool special = currency_state_is_special_code(effective);
     if (s_curr_img) {
-        lv_img_set_src(s_curr_img, special ? LVGL_DIR"main_icons/currencies_32.png" : get_currency_img(code));
+        lv_img_set_src(s_curr_img, get_currency_img(effective));
         /* Flags are stored at 180x100. Keep their aspect ratio at 54x30. */
-        lv_img_set_zoom(s_curr_img, special ? 256 : 77);
+        lv_img_set_zoom(s_curr_img, 77);
         lv_img_set_pivot(s_curr_img, 0, 0);
     }
     if (s_currency_code) lv_label_set_text(s_currency_code, currency_state_display_code(code));
-    if (s_multi_currency_label)
-        lv_label_set_text(s_multi_currency_label, currency_state_display_code(code));
-    if (s_multi_currency_icon) {
-        lv_img_set_src(s_multi_currency_icon, special ? LVGL_DIR"main_icons/currencies_32.png" : get_currency_img(code));
-        lv_img_set_zoom(s_multi_currency_icon, special ? 256 : 77);
-        lv_img_set_pivot(s_multi_currency_icon, 0, 0);
-    }
     if (s_curr_label) {
-        const char *symbol = currency_metadata_symbol(code);
+        const char *symbol = currency_metadata_symbol(effective);
         lv_label_set_text(s_curr_label, symbol ? symbol : "");
         lv_obj_set_style_text_font(s_curr_label,
             symbol != NULL && strlen(symbol) > 3 ?
@@ -361,10 +355,11 @@ void page_01_curr_img_refre(void)
         else lv_obj_clear_flag(s_curr_label, LV_OBJ_FLAG_HIDDEN);
     }
     if (s_amount_unit_icon) {
-        if (special || !currency_metadata_symbol(code)) lv_obj_clear_flag(s_amount_unit_icon, LV_OBJ_FLAG_HIDDEN);
+        if (!special && !currency_metadata_symbol(effective)) lv_obj_clear_flag(s_amount_unit_icon, LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(s_amount_unit_icon, LV_OBJ_FLAG_HIDDEN);
     }
     snprintf(s_curr_rendered_code, sizeof(s_curr_rendered_code), "%s", code);
+    snprintf(s_curr_rendered_effective, sizeof(s_curr_rendered_effective), "%s", effective);
     s_curr_rendered_valid = true;
 }
 
@@ -716,7 +711,7 @@ static lv_obj_t *page_01_detail_section_btn_create(lv_coord_t x, lv_coord_t y,
     lv_obj_t *btn = lv_obj_create(main_page);
     lv_obj_remove_style_all(btn);
     lv_obj_set_pos(btn, x, y);
-    lv_obj_set_size(btn, 168, 44);
+    lv_obj_set_size(btn, 168, 34);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
     lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
     lv_damped_button_register(btn, lv_color_hex(0xF4F7F8), lv_color_hex(0xD9E5ED));
@@ -724,7 +719,7 @@ static lv_obj_t *page_01_detail_section_btn_create(lv_coord_t x, lv_coord_t y,
         (void *)(uintptr_t)section);
     lv_obj_t *badge = lv_obj_create(btn);
     lv_obj_remove_style_all(badge);
-    lv_obj_set_size(badge, 26, 26);
+    lv_obj_set_size(badge, 20, 20);
     lv_obj_align(badge, LV_ALIGN_LEFT_MID, 30, 0);
     lv_obj_set_style_bg_opa(badge, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_color(badge, lv_color_hex(colors[section]), 0);
@@ -732,13 +727,13 @@ static lv_obj_t *page_01_detail_section_btn_create(lv_coord_t x, lv_coord_t y,
     lv_obj_clear_flag(badge, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t *letter = lv_label_create(badge);
     lv_label_set_text(letter, letters[section]);
-    lv_obj_set_style_text_font(letter, &lv_font_instrument_sans_bold_16, 0);
+    lv_obj_set_style_text_font(letter, &lv_font_instrument_sans_bold_14, 0);
     lv_obj_set_style_text_color(letter, lv_color_white(), 0);
     lv_obj_center(letter);
     lv_obj_t *label = lv_label_create(btn);
     lv_label_set_text(label, text);
     lv_obj_set_style_text_font(label, &lv_font_instrument_sans_medium_16, 0);
-    lv_obj_align(label, LV_ALIGN_LEFT_MID, 64, 0);
+    lv_obj_align(label, LV_ALIGN_LEFT_MID, 58, 0);
     return btn;
 }
 
@@ -746,15 +741,15 @@ static void page_01_detail_section_btn_create_all(void)
 {
     s_detail_tray = lv_obj_create(main_page);
     lv_obj_remove_style_all(s_detail_tray);
-    lv_obj_set_pos(s_detail_tray, 616, 20);
-    lv_obj_set_size(s_detail_tray, 526, 52);
+    lv_obj_set_pos(s_detail_tray, 616, 26);
+    lv_obj_set_size(s_detail_tray, 526, 40);
     lv_obj_set_style_bg_color(s_detail_tray, lv_color_hex(0xE7EDF0), 0);
     lv_obj_set_style_bg_opa(s_detail_tray, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(s_detail_tray, 12, 0);
     lv_obj_clear_flag(s_detail_tray, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-    s_detail_btn_a = page_01_detail_section_btn_create(620, 24, "REPORT", PAGE_01_DETAIL_SECTION_A);
-    s_detail_btn_b = page_01_detail_section_btn_create(795, 24, "SERIAL", PAGE_01_DETAIL_SECTION_B);
-    s_detail_btn_c = page_01_detail_section_btn_create(970, 24, "REJECT", PAGE_01_DETAIL_SECTION_C);
+    s_detail_btn_a = page_01_detail_section_btn_create(620, 29, "REPORT", PAGE_01_DETAIL_SECTION_A);
+    s_detail_btn_b = page_01_detail_section_btn_create(795, 29, "SERIAL", PAGE_01_DETAIL_SECTION_B);
+    s_detail_btn_c = page_01_detail_section_btn_create(970, 29, "REJECT", PAGE_01_DETAIL_SECTION_C);
     page_01_detail_section_btn_style_apply();
 }
 
@@ -970,19 +965,18 @@ static lv_obj_t *main_action(const char *name, const char *icon_name, const char
     return button;
 }
 
-static void main_currency_target(lv_obj_t *parent, bool multi)
+static void main_currency_target(lv_obj_t *parent)
 {
-    lv_obj_t *target = main_box(parent, 18, 16, multi ? 256 : 278, 66, 0xFFFFFF, 8);
+    lv_obj_t *target = main_box(parent, 18, 16, 278, 66, 0xFFFFFF, 8);
     lv_damped_button_register(target, lv_color_white(), lv_color_hex(0xF1F5F7));
     lv_obj_add_event_cb(target, page_01_curr_btn_event_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *icon = main_icon(target, multi ? NULL : "curr_USD_img",
+    lv_obj_t *icon = main_icon(target, "curr_USD_img",
         LVGL_DIR"main_icons/currencies_32.png", 4, 15);
     main_label(target, NULL, "Currency", 80, 3, 120, &lv_font_instrument_sans_medium_12, 0x7A8D9B);
-    lv_obj_t *code = main_label(target, NULL, multi ? "MULTI" : "AUTO", 80, 24, 112,
+    lv_obj_t *code = main_label(target, NULL, "AUTO", 80, 24, 112,
         &lv_font_instrument_sans_semibold_24, 0x17212A);
     main_icon(target, NULL, LVGL_DIR"main_icons/caret_down_16.png", 206, 33);
-    if (multi) { s_multi_currency_icon = icon; s_multi_currency_label = code; }
-    else { s_curr_img = icon; s_currency_code = code; }
+    s_curr_img = icon; s_currency_code = code;
 }
 
 static void page_01_main_build_content(void)
@@ -1006,7 +1000,7 @@ static void page_01_main_build_content(void)
     lv_obj_set_style_border_width(s_summary_card, 1, 0);
     lv_obj_set_style_border_color(s_summary_card, lv_color_hex(0xECF0F3), 0);
     lv_obj_set_style_border_opa(s_summary_card, LV_OPA_COVER, 0);
-    main_currency_target(s_summary_card, false);
+    main_currency_target(s_summary_card);
     lv_obj_t *reject = main_box(s_summary_card, 346, 25, 114, 38, 0xF4F7F8, 8);
     main_label(reject, NULL, "REJECT", 10, 13, 56, &lv_font_instrument_sans_medium_10, 0x657F90);
     lv_obj_t *reject_num = main_label(reject, "reject_num_label", "0", 66, 8, 39,
@@ -1031,33 +1025,7 @@ static void page_01_main_build_content(void)
     page_01_main_detail_create(main_page, 620, 76, 518, 244);
     page_01_detail_section_btn_create_all();
 
-    /* The provided 04/02 protocol selects MULTI; it does not identify each
-     * counted note's currency. Do not fabricate per-currency totals from 0E. */
-    s_multi_card = main_box(main_page, 108, 12, 1048, 320, 0xFFFFFF, 16);
-    main_currency_target(s_multi_card, true);
-    main_label(s_multi_card, NULL, "Multi-currency count", 300, 27, 390,
-        &lv_font_instrument_sans_semibold_22, 0x4C606E);
-    main_label(s_multi_card, NULL, "TOTAL PCS", 760, 17, 108,
-        &lv_font_instrument_sans_medium_12, 0x7A8D9B);
-    s_multi_pcs = main_label(s_multi_card, NULL, "0", 712, 37, 150,
-        &lv_font_manrope_bold_40, 0x17212A);
-    lv_obj_set_style_text_align(s_multi_pcs, LV_TEXT_ALIGN_RIGHT, 0);
-    main_label(s_multi_card, NULL, "REJECT", 910, 17, 112,
-        &lv_font_instrument_sans_medium_12, 0xA67834);
-    s_multi_reject = main_label(s_multi_card, NULL, "0", 898, 43, 122,
-        &lv_font_manrope_bold_28, 0xA67834);
-    lv_obj_set_style_text_align(s_multi_reject, LV_TEXT_ALIGN_RIGHT, 0);
-    main_box(s_multi_card, 22, 92, 1004, 1, 0xEFF3F5, 0);
-    main_label(s_multi_card, NULL, "CURRENCY", 28, 108, 250,
-        &lv_font_instrument_sans_medium_12, 0x7A8D9B);
-    main_label(s_multi_card, NULL, "PCS", 442, 108, 100,
-        &lv_font_instrument_sans_medium_12, 0x7A8D9B);
-    main_label(s_multi_card, NULL, "AMOUNT BY CURRENCY", 700, 108, 302,
-        &lv_font_instrument_sans_medium_12, 0x7A8D9B);
-    main_label(s_multi_card, NULL, "Per-currency details are not available yet.", 250, 199, 550,
-        &lv_font_instrument_sans_medium_18, 0x7A8D9B);
-    page_01_main_detail_bind_tap(s_multi_card);
-    lv_obj_add_flag(s_multi_card, LV_OBJ_FLAG_HIDDEN);
+    s_multi_card = page_01_multi_create(main_page);
 }
 
 static void page_01_main_layout_refresh(void)
@@ -1075,6 +1043,7 @@ static void page_01_main_layout_refresh(void)
     else lv_obj_add_flag(s_multi_card, LV_OBJ_FLAG_HIDDEN);
     page_01_main_detail_set_visible(!multi && page_01_main_is_visible());
     s_multi_layout = multi;
+    page_01_multi_visible(multi && page_01_main_is_visible());
 }
 
 void page_01_main_refresh_start_state(void)
@@ -1134,15 +1103,7 @@ static void page_01_top_strip_tap(const lv_point_t *point)
             return;
         }
     }
-    /* Single-currency navigation belongs only to the detail viewport below
-     * the headers, never to the surrounding card or this top-strip fallback. */
-    lv_obj_t *card = s_multi_layout ? s_multi_card : NULL;
-    if (card) {
-        lv_obj_get_coords(card, &area);
-        if (point->x >= area.x1 && point->x <= area.x2 &&
-            point->y >= area.y1 && point->y <= area.y2)
-            ui_manager_push_page(UI_PAGE_LIST);
-    }
+    /* MULTI header taps never navigate to the unrelated single-currency List. */
 }
 
 void ui_main_create(lv_obj_t *parent)
@@ -1193,6 +1154,7 @@ void ui_main_destroy(void)
     if (page_01_main_is_created()) {
         /* The counting store outlives a cached page. UI destruction must never
          * clear a customer's count or pending history transaction. */
+        page_01_multi_destroy();
         page_01_main_detail_destroy();
         page_01_main_action_skins_release();
         page_01_bottom_a_destroy();
@@ -1207,8 +1169,8 @@ void ui_main_destroy(void)
     memset(page_01_main_obj, 0, sizeof(page_01_main_obj));
     page_01_main_len = 0;
     s_summary_card = s_detail_card = s_multi_card = s_detail_tray = NULL;
-    s_multi_pcs = s_multi_reject = s_start_orbit = NULL;
-    s_amount_unit_icon = s_currency_code = s_multi_currency_icon = s_multi_currency_label = NULL;
+    s_start_orbit = NULL;
+    s_amount_unit_icon = s_currency_code = NULL;
     s_curr_img = s_curr_label = NULL;
     s_total_pcs_label = s_total_amount_label = NULL;
     s_curr_rendered_valid = s_main_snapshot_valid = s_multi_layout = false;
@@ -1229,6 +1191,7 @@ lv_obj_t *page_01_main_find_obj(const char *name)
 
 lv_obj_t *page_01_main_scroll_obj(void)
 {
+    if (s_multi_layout) return page_01_multi_scroll();
     return page_01_main_detail_scroll_obj();
 }
 
@@ -1270,9 +1233,7 @@ void page_01_main_refresh_totals(int total_pcs, const char *amount_text)
     char pcs_text[32];
     if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_COUNTING)) return;
     lv_snprintf(pcs_text, sizeof(pcs_text), "%d", total_pcs);
-    if (s_multi_pcs && strcmp(lv_label_get_text(s_multi_pcs), pcs_text) != 0)
-        lv_label_set_text(s_multi_pcs, pcs_text);
-    if (s_multi_layout) return;
+    if (s_multi_layout) { page_01_multi_refresh(); return; }
     page_01_main_summary_label_set(&s_total_pcs_label, &s_total_pcs_compact,
         "01_pcs_label", pcs_text);
     page_01_main_summary_label_set(&s_total_amount_label, &s_total_amount_compact,
@@ -1287,6 +1248,7 @@ void page_01_main_suspend(void)
     if (s_time_timer) lv_timer_pause(s_time_timer);
     page_01_bottom_animations_stop();
     page_01_main_detail_set_visible(false);
+    page_01_multi_visible(false);
     lv_obj_add_flag(main_page, LV_OBJ_FLAG_HIDDEN);
     page_01_main_refresh_start_state();
 }

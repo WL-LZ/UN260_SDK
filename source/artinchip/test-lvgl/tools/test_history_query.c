@@ -300,9 +300,31 @@ static void result_cases(void)
     assert(!result.valid_count && !result.matched_count);
 }
 
+static void multi_cases(void)
+{
+    history_multi_t m={.enabled=true,.count=2,.rejects=9,.passes=1};
+    m.currencies[0]=(history_multi_currency_t){.code="USD",.pcs=14,.amount=532,.complete=true,.count=1,.denoms={{100,3}}};
+    m.currencies[1]=(history_multi_currency_t){.code="CNY",.pcs=2,.amount=10};
+    history_query_record_t r={.valid=true,.record_no=99,.currency="MUL",.pcs=16,.multi=&m};
+    history_query_input_t input={.currency="USD",.mode=1};history_query_t q=compile_ok(&input);
+    history_query_result_t result=history_query_build(&r,1,&q,NULL,0);
+    assert(result.matched_count==1 && result.matched_pcs==14 && result.matched_amount==532);
+    input.mode=2;q=compile_ok(&input);assert(history_query_match_record(&q,&r)==HISTORY_QUERY_NO_MATCH);
+    input.mode=0;input.currency[0]=0;q=compile_ok(&input);
+    result=history_query_build(&r,1,&q,NULL,0);assert(result.matched_pcs==16 && !result.amount_comparable);
+    strcpy(input.currency,"CNY");input.denominations[0]=5;input.denomination_count=1;q=compile_ok(&input);
+    assert(history_query_match_record(&q,&r)==HISTORY_QUERY_UNKNOWN);
+    strcpy(input.currency,"USD");input.denominations[0]=100;q=compile_ok(&input);
+    assert(history_query_match_record(&q,&r)==HISTORY_QUERY_MATCH);
+    strcpy(input.serial,"XYZ");q=compile_ok(&input);assert(history_query_match_record(&q,&r)==HISTORY_QUERY_UNKNOWN);
+    strcpy(input.currency,"EUR");q=compile_ok(&input);assert(history_query_match_record(&q,&r)==HISTORY_QUERY_NO_MATCH);
+    m.overflow=true;assert(history_query_match_record(&q,&r)==HISTORY_QUERY_UNKNOWN);
+}
+
 int main(void)
 {
     parser_cases(); serial_source_truncation_cases(); compiler_cases(); matching_cases(); result_cases();
+    multi_cases();
     puts("PASS: history detail/query, full-log rejects, source-specific fallback/tail safety, date/numeric validation, same-note AND, unknowns, stable IDs and currency totals");
     return 0;
 }

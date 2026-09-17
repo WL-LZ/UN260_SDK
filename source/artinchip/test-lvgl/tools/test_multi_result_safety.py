@@ -29,7 +29,7 @@ def function(source, name):
 def main():
     parts = []
     for path, names in (
-        ("un260/lv_system/ui_history_data_fs.c", ["ui_history_record_build_from_session"]),
+        ("un260/lv_system/ui_history_data_fs.c", ["history_record_build", "ui_history_record_build_from_session", "ui_history_record_build_multi_base"]),
         ("un260/lv_core/lv_page_event.c", ["page_01_print_btn_event_cb"]),
         ("un260/lv_system/ui_export_data.c", ["ui_export_data_request"]),
         ("un260/lv_core/page_18_pure.c", ["pure_format_amount", "pure_format_pcs", "pure_refresh_values"]),

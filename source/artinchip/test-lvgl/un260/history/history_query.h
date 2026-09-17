@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "history_record_detail.h"
+#include "history_multi.h"
 #include "un260/counting/counting_serial_text.h"
 
 typedef enum {
@@ -49,6 +50,7 @@ typedef struct {
     history_reject_filter_t rejects;
     uint8_t reject_code; /* Specific 0x01..0xFE; 0/FF are not reject codes. */
     bool oldest_first;  /* Default false = newest record_no first. */
+    uint8_t mode;       /* 0 all, 1 MULTI, 2 other/legacy. */
 } history_query_input_t;
 
 typedef struct {
@@ -70,6 +72,7 @@ typedef struct {
     history_reject_filter_t rejects;
     uint8_t reject_code;
     bool oldest_first;
+    uint8_t mode;
 } history_query_t;
 
 typedef struct {
@@ -82,6 +85,7 @@ typedef struct {
     bool valid;
     /* Borrowed immutable detail, or NULL when not yet parsed/unavailable. */
     const history_record_detail_t *detail;
+    const history_multi_t *multi;
 } history_query_record_t;
 
 typedef enum {

@@ -7,6 +7,8 @@
 
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/counting/counting_history_service.h"
+#include "un260/counting/counting_multi.h"
+const counting_multi_t *counting_multi_current(void) {static const counting_multi_t empty={0};return &empty;}
 #include "un260/currency/currency_state.h"
 #include "un260/lv_system/ui_history_data.h"
 #include "un260/lv_system/ui_qr_data.h"
@@ -92,6 +94,10 @@ static void history_format_sn_detail(const counting_sim_t *sim, char *out, size_
 { (void)sim; snprintf(out, size, "TEST001|10"); }
 
 bool ui_history_data_can_accept(void) { return history_available; }
+const ui_history_store_t *ui_history_data_get(void) {static const ui_history_store_t store={.next_record_no=1};return &store;}
+void ui_history_total_notes_counted_set(uint32_t total) {history_total=total;}
+bool ui_history_record_update_snapshot(const ui_history_record_t *record,uint32_t total)
+{(void)record;(void)total;assert(false);return false;}
 uint32_t ui_history_total_notes_counted_get(void) { return history_total; }
 bool ui_history_record_append_snapshot(const ui_history_record_t *record, uint32_t total)
 {
@@ -271,12 +277,9 @@ int main(void)
     assert(!ui_history_record_build_from_session(sim, 12, 9999, "", "", "", "", &record));
     assert(memcmp(&record, &before_record, sizeof(record)) == 0);
     pending(&session, true);
-    assert(counting_history_try_commit(&session, sim, 1) == COUNTING_HISTORY_COMMIT_UNSUPPORTED);
-    assert(!session.history_record.valid && append_calls == 1 && history_total == 12);
-    assert(counting_history_take_unsupported_notice());
-    assert(!counting_history_take_unsupported_notice());
+    assert(counting_history_try_commit(&session, sim, 1) == COUNTING_HISTORY_COMMIT_NOT_READY);
+    assert(append_calls == 1 && history_total == 12); /* No MULTI groups supplied. */
     assert(counting_history_try_commit(&session, sim, 2) == COUNTING_HISTORY_COMMIT_NOT_READY);
-    assert(!counting_history_take_unsupported_notice());
     accepted_status = STORAGE_JOB_SUCCEEDED;
     assert(counting_history_poll_commit(&session, sim, 2) == COUNTING_HISTORY_COMMIT_SAVED);
     assert(accepted.amount == 120 && strcmp(accepted.currency, "CNY") == 0);
@@ -284,11 +287,9 @@ int main(void)
 
     pending(&session, false);
     assert(counting_history_prepare_reset(&session, sim, 3));
-    assert(counting_history_take_unsupported_notice());
-    assert(!session.history_record.valid && append_calls == 1);
+    assert(append_calls == 1);
     pending(&session, false);
     assert(counting_history_prepare_start(&session, sim, 4));
-    assert(counting_history_take_unsupported_notice() && !counting_history_take_unsupported_notice());
     history_available = false; assert(!counting_history_can_start()); history_available = true;
 
     sim->total_pcs = 0; sim->total_amount = 0;

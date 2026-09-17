@@ -10,6 +10,8 @@
 
 #include "un260/lv_system/ui_history_data.h"
 #include "un260/counting/counting_history_service.h"
+#include "un260/counting/counting_multi.h"
+const counting_multi_t *counting_multi_current(void) { static const counting_multi_t empty={0};return &empty; }
 
 static pthread_t ui_thread;
 static pthread_mutex_t gate_lock = PTHREAD_MUTEX_INITIALIZER;

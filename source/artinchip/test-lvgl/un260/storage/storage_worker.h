@@ -9,7 +9,9 @@
  * never borrowed UI pointers. Failed jobs retain their payload and block later
  * jobs until retry. Both job count and per-job allocation are bounded. */
 #define STORAGE_WORKER_CAPACITY 4U
-#define STORAGE_WORKER_MAX_JOB_BYTES (768U * 1024U)
+/* 100 history records including bounded MULTI groups. Allocation is exact-size,
+ * not this maximum; queue capacity remains unchanged. */
+#define STORAGE_WORKER_MAX_JOB_BYTES (1536U * 1024U)
 typedef uint64_t storage_job_id_t;
 typedef enum {
     STORAGE_JOB_UNKNOWN = 0,

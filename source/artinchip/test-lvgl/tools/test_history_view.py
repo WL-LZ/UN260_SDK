@@ -16,6 +16,9 @@ from test_list_view import compiled_asset_sources
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPONENTS = [
+    "un260/font/scaled_font.c",
+    "un260/font/lv_font_main_currency_32.c",
+    "un260/currency/currency_metadata.c",
     "un260/lv_components/lv_recycled_list.c",
     "un260/lv_components/ui_list_window.c",
     "un260/lv_components/lv_card_surface.c",
@@ -92,6 +95,10 @@ def main():
             with Image.open(ROOT / 'aic_ui/lvgl_data/backgrounds' / (name+'.png')) as image:
                 (work / (name+'.bgra')).write_bytes(image.convert('RGBA').tobytes('raw','BGRA'))
         environment = os.environ.copy()
+        for name in ('CURR_USD.png','CURR_CNY.png'):
+            with Image.open(ROOT/'aic_ui/lvgl_data'/name) as im:
+                assert im.size==(182,103)
+                (work/(name+'.bgra')).write_bytes(im.convert('RGBA').tobytes('raw','BGRA'))
         environment['UN260_BACKGROUND_DIR'] = str(work)
         if args.output_dir:
             args.output_dir.mkdir(parents=True, exist_ok=True)
