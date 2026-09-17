@@ -29,6 +29,9 @@ bool print_config_request(uint8_t sub_command,
 bool print_config_take_reply(uint8_t sub_command,
                              uint8_t status,
                              print_config_request_result_t *result);
+/* Status-only ACK identifies the sole outstanding 0x41 transaction. */
+bool print_config_take_status_reply(uint8_t status,
+                                    print_config_request_result_t *result);
 bool print_config_take_timeout(print_config_request_result_t *result);
 void print_config_cancel_request(void);
 

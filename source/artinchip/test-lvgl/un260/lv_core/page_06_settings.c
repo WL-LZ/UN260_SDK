@@ -6,7 +6,6 @@
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/lv_page_event.h"
 #include "un260/lv_core/page_09_cis_cala.h"
-#include "un260/lv_core/page_27_set_cfd_level.h"
 #include "un260/lv_core/settings_detail_ui.h"
 #include "un260/lv_system/machine_time.h"
 #include "un260/lv_system/ui_text.h"
@@ -1426,7 +1425,6 @@ void ui_page_06_settings_create(lv_obj_t* parent)
         return;
     }
 
-    ui_page_27_set_cfd_level_query();
 
     settings_page = lv_obj_create(lv_scr_act());
     root = settings_page;
@@ -1501,7 +1499,6 @@ bool ui_page_06_settings_resume(void)
         lv_timer_resume(footer_time_timer);
         lv_timer_reset(footer_time_timer);
     }
-    ui_page_27_set_cfd_level_query();
     if (started_us != 0) {
         perf_profile_report_event_us("SETTINGS",
             dirty ? "RESUME_DIRTY" : "RESUME_CLEAN",

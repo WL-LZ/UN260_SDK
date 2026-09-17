@@ -41,7 +41,6 @@ static void motor_test_esc_cb(lv_event_t* e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
 
-    motor_test_stop_all();
     ui_manager_pop_page();
 }
 
@@ -117,6 +116,7 @@ void ui_page_17_motor_test_create(lv_obj_t* parent)
 
 void ui_page_17_motor_test_destroy(void)
 {
+    if (!motor_test_page) return;
     motor_test_stop_all();
 
     if (motor_test_page) {

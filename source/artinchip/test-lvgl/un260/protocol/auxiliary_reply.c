@@ -46,6 +46,14 @@ auxiliary_reply_result_t auxiliary_reply_dispatch(uint8_t cmd,
         }
         return result;
 
+    case 0x52:
+    case 0x53:
+    case 0x54:
+        if (frame_len != STATUS_REPLY_MIN_FRAME_LEN) return result;
+        result.kind = AUXILIARY_REPLY_MOTOR_ACK;
+        result.value = frame[4];
+        return result;
+
     case 0x3B:
         if (frame_len < STATUS_REPLY_MIN_FRAME_LEN) {
             return result;

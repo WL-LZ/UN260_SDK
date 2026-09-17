@@ -165,6 +165,13 @@ static void setting_reply_handle_print(const uint8_t *buf, uint8_t len)
 {
     print_config_request_result_t result;
 
+    if (len == 6) {
+        if (print_config_take_status_reply(buf[4], &result)) {
+            ui_page_20_set_print_on_reply(&result);
+        }
+        return;
+    }
+
     if (len < 7) {
         uart_debug_printf("0x41 invalid len=%d\n", len);
         return;

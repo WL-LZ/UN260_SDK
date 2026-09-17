@@ -124,7 +124,7 @@ static void cfd_refresh_view(void)
     }
 }
 
-bool ui_page_27_set_cfd_level_query(void)
+static bool cfd_query(void)
 {
     char query_currency[4];
 
@@ -363,10 +363,14 @@ void ui_page_27_set_cfd_level_create(lv_obj_t* parent)
     cfd_create_left_panel(content);
     cfd_create_detail_panel(content);
     cfd_refresh_view();
+    cfd_query();
 }
 
 void ui_page_27_set_cfd_level_destroy(void)
 {
+    /* A read has no outstanding device-side mutation after leaving.
+     * Keep an update transaction alive until its ACK or real timeout. */
+    cfd_service_cancel_query();
     if (cfd_level_page && lv_obj_is_valid(cfd_level_page)) {
         lv_obj_del(cfd_level_page);
     }

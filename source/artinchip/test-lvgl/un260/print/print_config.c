@@ -88,6 +88,15 @@ bool print_config_take_reply(uint8_t sub_command,
     return true;
 }
 
+bool print_config_take_status_reply(uint8_t status,
+                                    print_config_request_result_t *result)
+{
+    /* The controller sends FD DF 06 41 <status> <checksum>, without
+     * echoing the sub-command. Never infer a transaction when idle. */
+    if (status > 0x01 || !protocol_request_is_pending(&g_print_request)) return false;
+    return print_config_take_reply(g_print_request_sub_command, status, result);
+}
+
 bool print_config_take_timeout(print_config_request_result_t *result)
 {
     if (result == NULL || !protocol_request_take_timeout(&g_print_request)) {

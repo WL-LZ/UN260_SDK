@@ -68,6 +68,9 @@ static void handle_auxiliary_reply(uint8_t cmd, const uint8_t *buf, uint8_t len)
     case AUXILIARY_REPLY_PRINT_UNKNOWN:
         uart_debug_printf("0x3C unknown len=%d\n", reply.frame_len);
         break;
+    case AUXILIARY_REPLY_MOTOR_ACK:
+        uart_debug_printf("0x%02X motor test ack: res=0x%02X\n", cmd, reply.value);
+        break;
     case AUXILIARY_REPLY_CLEAR_DATA_ACK:
         uart_debug_printf("0x3B clear data ack: res=0x%02X\n", reply.value);
         break;
@@ -114,6 +117,9 @@ bool app_protocol_runtime_handle_reply(uint8_t cmd,
     case 0x40:
     case 0x3C:
     case 0x3B:
+    case 0x52:
+    case 0x53:
+    case 0x54:
         handle_auxiliary_reply(cmd, buf, len);
         return true;
 

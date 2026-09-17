@@ -12,6 +12,7 @@ typedef enum {
     AUXILIARY_REPLY_PRINT_DONE,
     AUXILIARY_REPLY_PRINT_UNKNOWN,
     AUXILIARY_REPLY_CLEAR_DATA_ACK,
+    AUXILIARY_REPLY_MOTOR_ACK,
 } auxiliary_reply_kind_t;
 
 typedef struct {
