@@ -7,6 +7,7 @@ static bool prefetch_pending;
 static bool prefetch_settling;
 static uint32_t prefetch_after;
 static uint8_t prefetch_attempts[COUNTING_MULTI_MAX];
+static uint32_t retry_after[COUNTING_MULTI_MAX];
 #define MULTI_SETTLE_MS 250U
 #define MULTI_PREFETCH_ATTEMPTS 3U
 /* 0B has no currency / transaction id. This ownership outlives all pages,
@@ -32,6 +33,7 @@ void counting_multi_reset(void)
     prefetch_pending = false;
     prefetch_settling = false;
     memset(prefetch_attempts, 0, sizeof(prefetch_attempts));
+    memset(retry_after, 0, sizeof(retry_after));
     uint32_t revision = model.revision + 1, generation = model.generation + 1;
     memset(&model, 0, sizeof(model));
     model.revision = revision;
@@ -44,6 +46,7 @@ void counting_multi_begin(bool add)
     prefetch_pending = false;
     prefetch_settling = false;
     memset(prefetch_attempts, 0, sizeof(prefetch_attempts));
+    memset(retry_after, 0, sizeof(retry_after));
     if (!add) counting_multi_reset();
     else {
         model.generation++;
@@ -102,6 +105,7 @@ bool counting_multi_request(unsigned index, uint32_t now)
     query.activity = query.sent = now;
     multi_currency_t *c = &model.currencies[index];
     if (prefetch_attempts[index] < MULTI_PREFETCH_ATTEMPTS) prefetch_attempts[index]++;
+    retry_after[index] = now + 1000U * prefetch_attempts[index];
     c->denom_count = 0;
     if (protocol_send(0x0b, payload, sizeof(payload)) < 0) {
         c->status = MULTI_DETAIL_INVALID; model.revision++; return false;
@@ -133,6 +137,9 @@ void counting_multi_denom(const uint8_t *f, uint8_t len, uint32_t now)
     if (uniform(f, 0xff)) {
         if (!query.abandoned && query.generation == model.generation) {
             multi_currency_t *c = &model.currencies[query.index];
+            /* The controller can finish a zero-valued catalog before its
+             * counted breakdown is ready. Do not exhaust retries in <1s. */
+            retry_after[query.index] = now + 1000U * prefetch_attempts[query.index];
             uint64_t amount = 0; uint32_t pcs = 0;
             for (unsigned i = 0; i < query.count; ++i) {
                 pcs += query.items[i].pcs;
@@ -207,15 +214,18 @@ void counting_multi_prefetch(uint32_t now)
             return;
         }
     }
+    bool waiting_retry = false;
     for (unsigned i = 0; i < model.count; ++i) {
         multi_currency_t *c = &model.currencies[i];
         if (c->status != MULTI_DETAIL_READY &&
             !(c->status == MULTI_DETAIL_EMPTY && !c->pcs && !c->amount) &&
             prefetch_attempts[i] < MULTI_PREFETCH_ATTEMPTS) {
+            waiting_retry = true;
+            if ((int32_t)(now - retry_after[i]) < 0) continue;
             counting_multi_request(i, now);
             prefetch_after = now + MULTI_SETTLE_MS;
             return;
         }
     }
-    prefetch_pending = false;
+    prefetch_pending = waiting_retry;
 }

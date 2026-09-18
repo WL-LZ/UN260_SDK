@@ -372,7 +372,12 @@ static void assert_icons(bool serial_empty,bool reject_empty,bool page_visible)
             assert(!strcmp(lv_label_get_text(s->headers[col]),ui_text_get(s->layout->columns[col])));
             label_fits(s->headers[col]);
         }
-        if(i==PAGE_02_SECTION_A) { assert(!s->empty && !s->empty_text);continue; }
+        if(i==PAGE_02_SECTION_A) {
+            assert(s->empty && s->empty_text);
+            assert(lv_obj_has_flag(s->empty,LV_OBJ_FLAG_HIDDEN));
+            assert_png_icon(lv_obj_get_child(s->empty,0),0,false);
+            continue;
+        }
         assert(s->empty && s->empty_text);
         assert(lv_obj_get_x(s->empty)==22 && lv_obj_get_y(s->empty)==BODY_Y);
         assert(lv_obj_get_width(s->empty)==s->layout->width-58 && lv_obj_get_height(s->empty)==ROWS*ROW_HEIGHT);
@@ -798,6 +803,17 @@ int main(void)
     }
     /* MULTI has no per-note currency from the current controller. The current
      * selector and a retained mixed result both prevent fabricated amounts. */
+    assert(currency_state_confirm_auto_selection());
+    data->total_pcs=0;
+    page_02_list_report_reset();tick(40);
+    assert(lv_recycled_list_window(view->section[0].list)->count==0);
+    assert(!lv_obj_has_flag(view->section[0].empty,LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_get_child_cnt(view->section[0].empty)==2);
+    data->total_pcs=1;
+    page_02_list_report_reset();tick(40);
+    assert(lv_recycled_list_window(view->section[0].list)->count>0);
+    assert(lv_obj_has_flag(view->section[0].empty,LV_OBJ_FLAG_HIDDEN));
+    data->total_pcs=10000;
     assert(currency_state_confirm_multi_selection());
     page_02_list_report_reset();tick(40);
     assert(view->data.denom_count==0 && !strcmp(lv_label_get_text(view->amount),"--"));

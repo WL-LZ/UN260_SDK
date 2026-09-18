@@ -1,5 +1,6 @@
 #include "app_command_runtime.h"
 #include "un260/counting/counting_multi.h"
+#include "un260/counting/counting_multi_extra.h"
 #include "app_standby_runtime.h"
 
 #include <stdbool.h>
@@ -106,6 +107,11 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
                                         app_clock_uptime_ms())) return false;
     counting_action_handle_reply(cmd, buf, len);
 
+    /* New 0x49/8 currency detection shares a command with 0x49/24 serials. */
+    if (cmd == 0x49 && len == 8) {
+        app_currency_runtime_handle_detected(buf, len);
+        return true;
+    }
     /* 0x49/0x18 is the controller's live serial-number frame. */
     if (cmd == 0x49 && len == 0x18) {
         app_counting_runtime_handle_detail(cmd,
@@ -259,13 +265,11 @@ void app_command_runtime_poll(uint32_t now_ms)
     app_counting_runtime_poll_history(&g_counting_session, counting_data_mutable(), now_ms);
     uint32_t multi_revision = counting_multi_current()->revision;
     counting_multi_poll(now_ms);
-    if (currency_state_multi_selected() && !app_command_runtime_count_start_busy() &&
-        !counting_action_clear_pending() && !app_command_runtime_frames_pending())
-        counting_multi_prefetch(now_ms);
+    counting_multi_extra_poll(now_ms);
     if (multi_revision != counting_multi_current()->revision)
         ui_refresh_main_page();
     if (currency_state_multi_selected() || counting_data_current()->multi_currency_result ||
-        counting_multi_query_busy()) return;
+        counting_multi_query_busy() || counting_multi_extra_busy()) return;
     counting_denom_query_poll(&g_counting_detail_state,
                               now_ms,
                               stage == BOOT_STAGE_DONE || stage == BOOT_STAGE_FAIL,

@@ -10,6 +10,8 @@
 #include "un260/lv_core/page_01_main_detail.c"
 
 static unsigned navigations;
+static bool auto_selected;
+bool currency_state_auto_selected(void) { return auto_selected; }
 static bool destroy_on_navigation, fail_owner, fail_timer;
 void ui_manager_push_page(ui_page_t page)
 {
@@ -315,6 +317,22 @@ int main(void)
     lv_indev_t *indev = lv_indev_drv_register(&pointer_driver); assert(indev);
     lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(0xD8E2E8), 0);
     fixture(); test_projection(); test_taps(indev); test_lifecycle();
+    lv_obj_t *parent=lv_obj_create(lv_scr_act());
+    page_01_main_detail_create(parent,0,0,518,244);
+    page_01_main_detail_set_visible(true);
+    counting_sim_t *data=counting_data_mutable();
+    auto_selected=true; data->total_pcs=0;
+    page_01_main_detail_refresh(PAGE_01_DETAIL_SECTION_A);
+    assert(window()->count==0);
+    assert(!lv_obj_has_flag(detail_view->section[0].empty,LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_get_child_cnt(detail_view->section[0].empty)==2);
+    data->total_pcs=1;
+    page_01_main_detail_refresh(PAGE_01_DETAIL_SECTION_A);
+    assert(window()->count>0);
+    data->total_pcs=0; auto_selected=false;
+    page_01_main_detail_refresh(PAGE_01_DETAIL_SECTION_A);
+    assert(window()->count>0);
+    lv_obj_del(parent);
     counting_data_clear_serials(counting_data_mutable());
     counting_data_clear_errors(counting_data_mutable());
     lv_indev_delete(indev); lv_deinit();

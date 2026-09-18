@@ -60,17 +60,18 @@ int main(void){
  before=sends;counting_multi_prefetch(9000);counting_multi_prefetch(9250);
  assert(sends==before+1);marker(0,9251);item(5,1,9252);marker(255,9253);
  assert(m->currencies[0].status==MULTI_DETAIL_INVALID);
- counting_multi_prefetch(9503);assert(sends==before+2);
- marker(0,9504);marker(0,9505);item(5,12,9506);marker(255,9507);
+ counting_multi_prefetch(9503);assert(sends==before+1);
+ counting_multi_prefetch(10253);assert(sends==before+2);
+ marker(0,10254);marker(0,10255);item(5,12,10256);marker(255,10257);
  assert(m->currencies[0].status==MULTI_DETAIL_READY);
- counting_multi_prefetch(9800);assert(sends==before+2);
+ counting_multi_prefetch(10507);assert(sends==before+2);
  counting_multi_begin(false);live("CNY",60,12,0);global(0,0,2);
  before=sends;counting_multi_prefetch(10000);
  for(unsigned n=0;n<3;n++) {
-   unsigned t=10250+n*300;counting_multi_prefetch(t);
+   unsigned t=10250+n*n*1100;counting_multi_prefetch(t);
    marker(0,t+1);marker(255,t+2);
  }
- counting_multi_prefetch(12000);assert(sends==before+3);
+ counting_multi_prefetch(16000);assert(sends==before+3);
  assert(m->currencies[0].status==MULTI_DETAIL_EMPTY);
  counting_multi_reset();
  counting_multi_begin(true);live("USD",100,1,0);global(0,0,2);
@@ -78,5 +79,15 @@ int main(void){
  counting_multi_begin(true);assert(m->group_generation==group&&m->passes==2);
  global(0,0,2);counting_multi_begin(false);
  assert(m->group_generation!=group&&m->passes==1&&m->count==0);
+ /* Captured CNY reply: live 15/3, then a complete all-zero catalog. */
+ counting_multi_begin(false);live("CNY",15,3,1);global(0,0,1);global(0,0,2);
+ before=sends;counting_multi_prefetch(20000);counting_multi_prefetch(20250);
+ marker(0,20251);item(100,0,20252);item(50,0,20253);item(20,0,20254);
+ item(10,0,20255);item(5,0,20256);item(1,0,20257);marker(255,20258);
+ assert(m->currencies[0].status==MULTI_DETAIL_INVALID && m->currencies[0].denom_count==0);
+ counting_multi_prefetch(20508);assert(sends==before+1);
+ counting_multi_prefetch(21258);assert(sends==before+2);
+ marker(0,21259);item(5,3,21260);marker(255,21261);
+ assert(m->currencies[0].status==MULTI_DETAIL_READY && m->currencies[0].amount==15);
  puts("PASS MULTI protocol, sequential prefetch/cache, ADD closure, clear cancellation, failed send progression, timeout quarantine and late FF");return 0;
 }

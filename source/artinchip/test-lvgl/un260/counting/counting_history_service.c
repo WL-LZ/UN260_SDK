@@ -188,10 +188,11 @@ static counting_history_commit_result_t capture_multi(counting_session_state_t *
     bool waiting=false,blocked=false;
     for(unsigned i=0;i<m->count;i++) {
         multi_detail_status_t status=m->currencies[i].status;
-        if(status==MULTI_DETAIL_NONE || status==MULTI_DETAIL_LOADING)waiting=true;
+        /* On-demand details must not prevent saving an unvisited result. */
+        if(status==MULTI_DETAIL_LOADING)waiting=true;
         if(status==MULTI_DETAIL_TIMEOUT)blocked=true;
     }
-    /* Persist summary promptly, then coalesce the serial prefetch into one
+    /* Persist summary promptly, then coalesce any user-requested details into one
      * detail snapshot. Reset/start may force a partial snapshot before reuse. */
     if(!force && g_multi_generation==m->generation && waiting && !blocked)
         return COUNTING_HISTORY_COMMIT_NOT_READY;

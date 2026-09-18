@@ -2,6 +2,7 @@
 #include "lv_page_manager.h"
 #include "lv_port_indev.h"
 #include "un260/counting/counting_data_store.h"
+#include "un260/currency/currency_state.h"
 #include "un260/lv_components/lv_recycled_list.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_resources/lv_img_init.h"
@@ -243,6 +244,8 @@ static void section_refresh(main_detail_section_t *section)
             if (data->denom[i].value > 0) detail_view->denom_slots[detail_view->denom_count++] = (uint8_t)i;
         /* Same no-catalog fallback as List; known denominations retain zero PCS. */
         count = detail_view->denom_count ? detail_view->denom_count : 1;
+        if (currency_state_auto_selected() && data->total_pcs == 0) count = 0;
+        label_text(section->empty_text, ui_text_get(UI_TEXT_LIST_NO_COUNTING_DATA));
     } else if (section->id == PAGE_01_DETAIL_SECTION_B) {
         detail_view->serial_count = 0;
         int limit = counting_data_serial_scan_limit(data);
@@ -312,9 +315,10 @@ static bool section_create(main_detail_section_t *section, unsigned id,
     lv_obj_set_flex_flow(section->empty,LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(section->empty,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_row(section->empty,12,0);
-    if(id!=PAGE_01_DETAIL_SECTION_A) {
+    {
         lv_obj_t *icon=lv_img_create(section->empty);
-        lv_img_set_src(icon,id==PAGE_01_DETAIL_SECTION_B?LVGL_DIR"list_icons/barcode_36.png":LVGL_DIR"list_icons/warning_circle_36.png");
+        if (!icon) return false;
+        lv_img_set_src(icon,id==PAGE_01_DETAIL_SECTION_A?LVGL_DIR"list_icons/receipt_24.png":id==PAGE_01_DETAIL_SECTION_B?LVGL_DIR"list_icons/barcode_36.png":LVGL_DIR"list_icons/warning_circle_36.png");
         lv_obj_clear_flag(icon,LV_OBJ_FLAG_CLICKABLE);
     }
     section->empty_text = label_create(section->empty, 0, width - 48,

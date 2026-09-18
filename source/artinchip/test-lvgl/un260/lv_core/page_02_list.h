@@ -17,5 +17,7 @@ void ui_page_02_list_suspend(void);
 void page_02_list_section_data_ready(page_02_section_id_t section_id);
 void page_02_list_section_mark_dirty(page_02_section_id_t section_id);
 void page_02_list_report_reset(void);
+/* Next Main -> List navigation restores this MULTI currency and detail tab. */
+void page_02_list_multi_open(int currency,int tab);
 
 #endif // PAGE_02_LIST_H

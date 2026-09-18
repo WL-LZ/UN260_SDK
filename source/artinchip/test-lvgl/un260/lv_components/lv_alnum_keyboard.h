@@ -23,6 +23,8 @@ typedef struct {
     void *context;
     /* Optional printable-symbol page; false preserves the alphanumeric layout. */
     bool symbols;
+    /* Opt-in search sheet; existing device-entry layouts remain unchanged. */
+    bool modern;
 } lv_alnum_keyboard_config_t;
 
 /* Creates a hidden 1280x400 modal owned by parent. Labels are copied by LVGL;

@@ -20,5 +20,7 @@ typedef struct {
 } currency_reply_result_t;
 
 currency_reply_result_t currency_reply_handle(const uint8_t *buf, uint8_t len);
+/* CRC-validated 0x49/8 or legacy 0x50/8, not live serial-number payloads. */
+bool currency_reply_detected_code(const uint8_t *buf, uint8_t len, char code[4]);
 
 #endif

@@ -96,18 +96,13 @@ void app_currency_runtime_handle_detected(const uint8_t *buf, uint8_t len)
 {
     char detected_code[4];
 
-    /* 0x50: automatic-mode detected currency, three ASCII letters + CRC. */
-    if (buf == NULL || len < 8) {
-        uart_debug_printf("0x50 detected currency invalid len=%u\n", len);
+    /* Transport validates CRC; the currency layer validates the exact shape. */
+    if (!currency_reply_detected_code(buf, len, detected_code)) {
+        uart_debug_printf("detected currency invalid len=%u\n", len);
         return;
     }
-
-    detected_code[0] = (char)buf[4];
-    detected_code[1] = (char)buf[5];
-    detected_code[2] = (char)buf[6];
-    detected_code[3] = '\0';
     if (!currency_state_confirm_detected_code(detected_code)) {
-        uart_debug_printf("0x50 detected currency ignored: %s\n", detected_code);
+        uart_debug_printf("detected currency ignored: %s\n", detected_code);
         return;
     }
 

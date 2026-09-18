@@ -46,6 +46,8 @@ def main():
     actual = [
         "un260/font/scaled_font.c",
         "un260/lv_core/page_01_multi.c", "un260/counting/counting_multi.c",
+        "un260/counting/counting_multi_extra.c", "un260/lv_components/ui_multi_detail.c",
+        "un260/lv_components/ui_detail_reveal.c", "un260/lv_components/lv_alnum_keyboard.c",
         "un260/lv_components/lv_recycled_list.c", "un260/lv_components/ui_scrollbar.c", "un260/lv_components/ui_list_window.c",
         "un260/lv_components/lv_damped_button.c", "un260/lv_components/lv_loading_orbit.c",
         "un260/lv_components/lv_capsule_pagination.c", "un260/lv_components/smart_island.c",
@@ -144,6 +146,7 @@ void host_external_assets_release(void) {
         port = (ROOT / "lv_port_indev.c").read_text(encoding="utf-8")
         platform = (ROOT / "un260/lv_system/platform_app.c").read_text(encoding="utf-8")
         images = (ROOT / "un260/lv_resources/lv_img_init.c").read_text(encoding="utf-8")
+        list_page = (ROOT / "un260/lv_core/page_02_list.c").read_text(encoding="utf-8")
         helper = work / "actual_helpers.c"
         helper.write_text('#include <stdio.h>\n#include <stdarg.h>\n#include <string.h>\n#include "lvgl/lvgl.h"\n'
                           '#include "un260/lv_resources/lv_img_init.h"\n'
@@ -153,7 +156,9 @@ void host_external_assets_release(void) {
                           function(platform, "label_set_text_if_changed") + '\n' +
                           function(platform, "update_label_by_name") + '\n' +
                           function(platform, "format_amount_with_comma") + '\n' +
-                          function(images, "get_currency_img") + '\n')
+                          function(images, "get_currency_img") + '\n' +
+                          function(list_page, "text_set") + '\n' +
+                          function(list_page, "number_set").replace('static void number_set', 'void host_list_number_set', 1) + '\n')
         sources.append(helper)
         innovation = (ROOT / "un260/innovation/page_32_innovation.c").read_text(encoding="utf-8")
         gesture_type = re.search(r"typedef struct \{[^}]*\} innovation_handle_gesture_t;", innovation)

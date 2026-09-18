@@ -13,6 +13,10 @@
 #include "test_main_view_support.h"
 #include "un260/gesture/gesture_service.h"
 #include "un260/counting/counting_multi.h"
+#include "un260/counting/counting_multi_extra.h"
+#include "un260/lv_components/ui_multi_detail.h"
+#include "un260/lv_components/ui_detail_reveal.h"
+void page_02_list_multi_open(int index,int tab) {(void)index;(void)tab;}
 static bool (*multi_policy)(gesture_action_t);
 void gesture_service_set_page_policy(uint32_t owner, bool (*drag)(void), bool (*action)(gesture_action_t)) {(void)owner;(void)drag;multi_policy=action;}
 void gesture_service_clear_page_policy(uint32_t owner) {(void)owner;multi_policy=NULL;}
@@ -132,9 +136,11 @@ static void test_main(void)
     }
     assert(lv_recycled_list_window(detail_view->section[0].list)->count==7);
     assert(lv_recycled_list_window(detail_view->section[0].list)->rows==6);
-    assert(lv_obj_get_y(s_detail_btn_a)==29 && lv_obj_get_height(s_detail_btn_a)==34 && lv_obj_get_y(detail_view->root)==76);
+    assert(lv_obj_get_y(s_detail_btn_a)==26 && lv_obj_get_height(s_detail_btn_a)==40 && lv_obj_get_y(detail_view->root)==76);
     assert(lv_obj_get_height(detail_view->root)==244);
-    assert(s_detail_tray && lv_obj_get_width(s_detail_tray)==526);
+    assert(s_detail_tray && lv_obj_get_width(s_detail_tray)==518);
+    assert(lv_obj_get_width(s_detail_btn_a)==lv_obj_get_width(s_detail_btn_b));
+    assert(lv_obj_get_width(s_detail_btn_b)==lv_obj_get_width(s_detail_btn_c));
     assert(lv_obj_get_style_bg_color(s_detail_tray,0).full==lv_color_hex(0xE7EDF0).full);
     lv_obj_t *background = page_01_main_find_obj("page_01_back.png");
     assert(background && lv_obj_check_type(background, &lv_img_class));
@@ -184,6 +190,11 @@ static void test_main(void)
     click_object(s_detail_btn_b);assert(s_detail_section==PAGE_01_DETAIL_SECTION_B && pushes==opened);
     assert(lv_obj_is_visible(detail_view->section[1].empty));
     render();write_bmp("main-empty-serial");
+    assert(!lv_obj_has_flag(detail_view->section[1].root,LV_OBJ_FLAG_OVERFLOW_VISIBLE));
+    assert(lv_obj_get_width(s_detail_btn_a)==172&&lv_obj_get_width(s_detail_btn_b)==172&&lv_obj_get_width(s_detail_btn_c)==172);
+    assert(lv_obj_get_x(s_detail_btn_a)==lv_obj_get_x(s_detail_tray));
+    assert(lv_obj_get_x(s_detail_btn_c)+172==lv_obj_get_x(s_detail_tray)+lv_obj_get_width(s_detail_tray));
+    assert(lv_obj_get_height(s_detail_btn_b)==lv_obj_get_height(s_detail_tray));
     lv_obj_t *empty=detail_view->section[1].empty;
     lv_obj_t *empty_icon=lv_obj_get_child(empty,0), *empty_text=detail_view->section[1].empty_text;
     assert(lv_obj_get_y(empty_text)-lv_obj_get_y(empty_icon)-lv_obj_get_height(empty_icon)==12);
@@ -260,8 +271,10 @@ static void test_main(void)
     assert(!strcmp(lv_label_get_text(s_curr_label),currency_metadata_symbol("CNY")));
     assert(lv_obj_is_visible(s_curr_label));
     assert(strstr((const char *)lv_img_get_src(s_curr_img),"CURR_CNY.png"));
+    assert(!strcmp(lv_label_get_text(s_currency_code),"CNY"));
     write_bmp("main-auto-detected-cny");
     currency_state_begin_count_session();page_01_curr_img_refre();render();
+    assert(!strcmp(lv_label_get_text(s_currency_code),"AUTO"));
     assert(!lv_obj_is_visible(s_curr_label) && !lv_obj_is_visible(s_amount_unit_icon));
     assert(strstr((const char *)lv_img_get_src(s_curr_img),"CURR_AUTO.png"));
     assert(currency_state_confirm_multi_selection());ui_refresh_main_page();render();
@@ -294,9 +307,10 @@ static void test_main(void)
     const unsigned vals[]={100,50,20,10,5,2},qty[]={3,3,2,3,2,1};
     for(unsigned i=0;i<6;i++){char b[12];snprintf(b,sizeof(b),"%8u%3u",vals[i],qty[i]);memcpy(df+4,b,11);counting_multi_denom(df,16,lv_tick_get());}
     memset(df+4,255,11);counting_multi_denom(df,16,lv_tick_get());ui_refresh_main_page();render();
-    assert(counting_multi_current()->currencies[0].status==MULTI_DETAIL_READY);write_bmp("multi-usd-detail");
+    assert(counting_multi_current()->currencies[0].status==MULTI_DETAIL_READY);tick(1000);write_bmp("multi-usd-detail");
     pointer(800,252,true);pointer(800,205,true);pointer(800,150,true);pointer(800,150,false);tick(200);
-    assert(lv_obj_get_scroll_y(page_01_multi_scroll())>0);
+    /* The recycled viewport moves its row pool, not LVGL's native scroll_y. */
+    assert(strcmp(lv_label_get_text(lv_obj_get_child(lv_obj_get_child(page_01_multi_scroll(),0),0)),"100")!=0);
     assert(!counting_multi_query_busy());
     write_bmp("multi-usd-detail-scrolled");
     assert(multi_policy && !multi_policy(GESTURE_ACTION_EXPORT));
@@ -311,8 +325,8 @@ static void test_main(void)
     assert(lv_obj_get_x(g_si_ctx.objects.title)==warning_x);
     smart_island_restore_idle();tick(400);
     /* Cached USD opens immediately even while the next currency is loading. */
-    counting_multi_prefetch(lv_tick_get());assert(!counting_multi_query_busy());
-    lv_tick_inc(250);counting_multi_prefetch(lv_tick_get());assert(counting_multi_query_busy());
+    assert(!counting_multi_query_busy());
+    assert(counting_multi_request(1,lv_tick_get()));
     tap(400,145);render();
     assert(counting_multi_current()->currencies[0].status==MULTI_DETAIL_READY);
     assert(counting_multi_current()->currencies[1].status==MULTI_DETAIL_LOADING);
@@ -338,6 +352,105 @@ static void test_main(void)
     ui_main_destroy();assert(!page_01_main_is_created() && !detail_view);
 }
 
+static void test_multi_expanded(void)
+{
+    unsigned baseline=timers();
+    counting_multi_begin(false);
+    uint8_t live[16]={0xfd,0xdf,16,14,'C','N','Y',0,0,1,169,0,85,4,1};
+    assert(counting_multi_info(live,16));
+    uint8_t end[13]={0xfd,0xdf,13,14,0,0,0,0,0,0,0,2};
+    assert(counting_multi_info(end,13));
+    ui_multi_detail_t *v=ui_multi_detail_create(lv_scr_act(),true,NULL,NULL);assert(v);
+    ui_multi_detail_visible(v,true);tick(200);write_bmp("list-multi-overview");
+    ui_multi_detail_select(v,0,1);tick(600);write_bmp("list-multi-loading");
+    uint8_t f[25]={0xfd,0xdf,25,13};
+    assert(counting_multi_extra_reply(13,f,25,lv_tick_get()));
+    for(unsigned i=1;i<=20;i++){
+        f[4]=i;char data[20];snprintf(data,sizeof(data),"%7uSN%010u",i%3?5:0,i);
+        memcpy(f+5,data,19);assert(counting_multi_extra_reply(13,f,25,lv_tick_get()));
+    }
+    memset(f+4,255,20);assert(counting_multi_extra_reply(13,f,25,lv_tick_get()));
+    tick(400);write_bmp("list-multi-serial");
+    pointer(800,300,true);pointer(800,230,true);pointer(800,160,true);pointer(800,160,false);tick(300);
+    write_bmp("list-multi-serial-scrolled");
+    ui_multi_detail_search(v);tick(200);write_bmp("list-multi-keyboard");
+    assert(ui_multi_detail_back(v));
+    ui_multi_detail_select(v,-2,0);
+    uint8_t r[7]={0xfd,0xdf,7,12};assert(counting_multi_extra_reply(12,r,7,lv_tick_get()));
+    r[4]=28;r[5]=4;assert(counting_multi_extra_reply(12,r,7,lv_tick_get()));
+    r[4]=r[5]=255;assert(counting_multi_extra_reply(12,r,7,lv_tick_get()));
+    tick(1000);write_bmp("list-multi-reject");
+    ui_multi_detail_visible(v,false);
+    ui_multi_detail_t *compact=ui_multi_detail_create(lv_scr_act(),false,NULL,NULL);assert(compact);
+    ui_multi_detail_visible(compact,true);tick(80);write_bmp("restored-main-multi-overview");
+    lv_obj_t *currency_target=ui_multi_detail_currency_target(compact);
+    pointer(230,48,true);tick(80);
+    assert(lv_obj_has_state(currency_target,LV_STATE_PRESSED));
+    assert(lv_obj_get_style_bg_opa(currency_target,0)>0);
+    write_bmp("multi-currency-pressed");
+    pointer(230,48,false);tick(80);
+    assert(lv_obj_get_style_bg_opa(currency_target,0)==0);
+    lv_obj_t *overview_row=lv_obj_get_child(ui_multi_detail_scroll(compact),0);
+    pointer(500,140,true);
+    assert(lv_obj_has_state(overview_row,LV_STATE_PRESSED));
+    write_bmp("multi-row-pressed");
+    pointer(500,160,true);
+    assert(!lv_obj_has_state(overview_row,LV_STATE_PRESSED));
+    pointer(500,160,false);
+    ui_multi_detail_select(compact,0,0);
+    uint8_t denom[16]={0xfd,0xdf,16,11};counting_multi_denom(denom,16,lv_tick_get());
+    memcpy(denom+4,"       5 85",11);counting_multi_denom(denom,16,lv_tick_get());
+    memset(denom+4,255,11);counting_multi_denom(denom,16,lv_tick_get());
+    tick(1000);write_bmp("restored-main-cny-denominations");
+    ui_multi_detail_select(compact,0,1);tick(80);write_bmp("restored-main-cny-serial");
+    assert(!counting_multi_extra_busy());
+    tap(900,308);tick(80);write_bmp("restored-main-search-keyboard");
+    tap(398,171);tap(1062,280);tick(80);
+    lv_obj_t *row=lv_obj_get_child(ui_multi_detail_scroll(compact),0);
+    assert(!strcmp(lv_label_get_text(lv_obj_get_child(row,0)),"4"));
+    write_bmp("restored-main-search-filtered");
+    tap(1114,308);tick(80);
+    assert(counting_multi_extra_busy());
+    memset(f+4,0,20);assert(counting_multi_extra_reply(13,f,25,lv_tick_get()));
+    for(unsigned i=1;i<=20;i++){
+        f[4]=i;char data[20];snprintf(data,sizeof(data),"%7uSN%010u",5,i);
+        memcpy(f+5,data,19);assert(counting_multi_extra_reply(13,f,25,lv_tick_get()));
+    }
+    memset(f+4,255,20);assert(counting_multi_extra_reply(13,f,25,lv_tick_get()));
+    tick(100);write_bmp("main-serial-refresh-loading");
+    tick(900);
+    assert(!strcmp(lv_label_get_text(lv_obj_get_child(row,0)),"1"));
+    ui_multi_detail_back(compact);tick(80);
+    unsigned total_ink=0,pcs_ink=0,amount_ink=0;
+    for(int y=32;y<78;y++)for(int x=814;x<880;x++)
+        if(framebuffer[y*1280+x].ch.red<180)total_ink++;
+    for(int y=98;y<110;y++){
+        for(int x=510;x<545;x++)if(framebuffer[y*1280+x].ch.red<180)pcs_ink++;
+        for(int x=750;x<910;x++)if(framebuffer[y*1280+x].ch.red<180)amount_ink++;
+    }
+    assert(total_ink>100&&pcs_ink>10&&amount_ink>50);
+    /* Partial redraw must match an explicit repaint of the header strip. */
+    lv_color_t before_header[1280*24];
+    memcpy(before_header,framebuffer+92*1280,sizeof(before_header));
+    render();
+    assert(!memcmp(before_header,framebuffer+92*1280,sizeof(before_header)));
+    write_bmp("multi-return-overview-headers");
+    ui_multi_detail_destroy(compact);
+    ui_multi_detail_destroy(v);counting_multi_reset();counting_multi_extra_revision();tick(200);
+    assert(timers()==baseline);
+    lv_obj_t *container=lv_obj_create(lv_scr_act()),*content=lv_obj_create(container);
+    ui_detail_reveal_t reveal;assert(ui_detail_reveal_init(&reveal,content));
+    ui_detail_reveal_begin(&reveal,false);ui_detail_reveal_update(&reveal,true);
+    assert(!reveal.active&&!reveal.orbit);assert(lv_obj_get_style_opa(content,0)==255);
+    ui_detail_reveal_begin(&reveal,false);ui_detail_reveal_update(&reveal,false);
+    assert(reveal.active&&reveal.orbit);
+    tick(880);ui_detail_reveal_update(&reveal,true);assert(reveal.active);
+    tick(40);ui_detail_reveal_update(&reveal,true);assert(!reveal.active);
+    ui_detail_reveal_begin(&reveal,true);ui_detail_reveal_update(&reveal,true);
+    assert(reveal.active&&reveal.orbit);tick(880);ui_detail_reveal_update(&reveal,true);assert(reveal.active);
+    tick(40);ui_detail_reveal_update(&reveal,true);assert(!reveal.active&&!reveal.orbit);
+    ui_detail_reveal_cancel(&reveal);lv_obj_del(container);
+}
 static void test_lifecycle(void)
 {
     unsigned baseline=timers();render();lv_mem_monitor_t before,after;lv_mem_monitor(&before);
@@ -353,6 +466,32 @@ static void test_lifecycle(void)
     render();lv_mem_monitor(&after);assert(after.free_size==before.free_size);
 }
 
+void host_list_number_set(lv_obj_t *,double,const lv_font_t *);
+static void test_list_initial_font(void)
+{
+    lv_obj_t *root=lv_obj_create(lv_scr_act());
+    lv_obj_set_size(root,400,200);lv_obj_add_flag(root,LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t *cell=lv_label_create(root);lv_obj_remove_style_all(cell);
+    lv_obj_set_size(cell,120,28);
+    host_list_number_set(cell,1000,&lv_font_instrument_sans_medium_20);
+    assert(lv_obj_get_style_text_font(cell,0)==&lv_font_instrument_sans_medium_20);
+    lv_obj_clear_flag(root,LV_OBJ_FLAG_HIDDEN);lv_obj_update_layout(root);
+    const lv_font_t *first=lv_obj_get_style_text_font(cell,0);
+    host_list_number_set(cell,1000,&lv_font_instrument_sans_medium_20);
+    assert(lv_obj_get_style_text_font(cell,0)==first);
+    lv_obj_t *total=lv_label_create(root);lv_obj_remove_style_all(total);lv_obj_set_size(total,117,32);
+    host_list_number_set(total,8888,&lv_font_instrument_sans_semibold_22);
+    assert(lv_obj_get_style_text_font(total,0)==&lv_font_instrument_sans_semibold_22);
+    lv_obj_set_width(cell,74);host_list_number_set(cell,999999999,&lv_font_instrument_sans_medium_20);
+    first=lv_obj_get_style_text_font(cell,0);
+    assert(first!=&lv_font_instrument_sans_medium_20);
+    lv_obj_update_layout(root);host_list_number_set(cell,999999999,&lv_font_instrument_sans_medium_20);
+    assert(first==lv_obj_get_style_text_font(cell,0));
+    host_list_number_set(cell,1,&lv_font_instrument_sans_medium_20);
+    assert(lv_obj_get_style_text_font(cell,0)==&lv_font_instrument_sans_medium_20);
+    lv_obj_del(root);
+    puts("PASS List first-frame fixed-width font fit, hidden prewarm, reentry and long-number fallback");
+}
 int main(void)
 {
     assert(sizeof(lv_coord_t)==2);lv_init();
@@ -367,7 +506,7 @@ int main(void)
     lv_img_decoder_set_close_cb(decoder,host_image_close);
     static lv_indev_drv_t driver;lv_indev_drv_init(&driver);driver.type=LV_INDEV_TYPE_POINTER;driver.read_cb=pointer_read;
     lv_indev_t *indev=lv_indev_drv_register(&driver);assert(indev);
-    test_main();test_lifecycle();
+    test_list_initial_font();test_main();test_lifecycle();test_multi_expanded();
     unsigned test_timer_count = timers();
     for(unsigned cycle = 0; cycle < 3; ++cycle) {
         ui_page_36_display_test_create(lv_scr_act());

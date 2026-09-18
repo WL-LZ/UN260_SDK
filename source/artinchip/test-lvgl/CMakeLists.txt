@@ -126,6 +126,9 @@ add_executable(${PROJECT_NAME} main.c
     un260/app_service/app_boot_runtime.c
     un260/app_service/app_command_runtime.c
     un260/counting/counting_multi.c
+    un260/counting/counting_multi_extra.c
+    un260/lv_components/ui_detail_reveal.c
+    un260/lv_components/ui_multi_detail.c
     un260/lv_core/page_01_multi.c
     un260/app_service/app_counting_runtime.c
     un260/app_service/app_currency_runtime.c

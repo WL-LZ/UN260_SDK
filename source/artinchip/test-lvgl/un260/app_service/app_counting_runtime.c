@@ -1,4 +1,5 @@
 #include "app_counting_runtime.h"
+#include "un260/counting/counting_multi_extra.h"
 #include "un260/counting/counting_multi.h"
 #include "un260/lv_system/app_clock.h"
 
@@ -585,6 +586,10 @@ void app_counting_runtime_handle_detail(uint8_t cmd,
         return;
     }
 
+    if (counting_multi_extra_reply(cmd,buf,len,app_clock_uptime_ms())) {
+        app_counting_runtime_on_main_data_changed();
+        return;
+    }
     context.session = session;
     /* MULTI serial/reject detail frames have no active currency owner here.
      * Do not run the single-currency 0C -> 0D query chain or publish them as

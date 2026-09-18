@@ -13,6 +13,16 @@ static void currency_reply_copy_code(char destination[4], const uint8_t *source)
     destination[3] = '\0';
 }
 
+bool currency_reply_detected_code(const uint8_t *buf, uint8_t len, char code[4])
+{
+    if (!buf || !code || len != 8 || buf[2] != 8 ||
+        (buf[3] != 0x49 && buf[3] != 0x50)) return false;
+    for (unsigned i = 4; i < 7; ++i)
+        if (buf[i] < 'A' || buf[i] > 'Z') return false;
+    currency_reply_copy_code(code, buf + 4);
+    return !currency_state_is_special_code(code);
+}
+
 currency_reply_result_t currency_reply_handle(const uint8_t *buf, uint8_t len)
 {
     currency_reply_result_t reply;

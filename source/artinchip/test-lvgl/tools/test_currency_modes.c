@@ -176,6 +176,16 @@ static void test_requests_replies_and_boot(void)
     send_fails=false; choose("AUT");
     assert(last_cmd==3 && last_length==3 && !memcmp(last_payload,"AUT",3));
     currency_ack(1); selected("AUT");
+    uint8_t detected[8]={0xfd,0xdf,8,0x49,'C','N','Y',0xa1};
+    char decoded[4];
+    assert(currency_reply_detected_code(detected,8,decoded));
+    assert(!strcmp(decoded,"CNY"));
+    assert(currency_state_confirm_detected_code(decoded));
+    assert(!currency_reply_detected_code(detected,7,decoded));
+    assert(!currency_reply_detected_code(detected,24,decoded));
+    detected[4]='c';assert(!currency_reply_detected_code(detected,8,decoded));
+    detected[4]='C';detected[3]=0x50;
+    assert(currency_reply_detected_code(detected,8,decoded));
     assert(currency_state_confirm_detected_code("USD"));
     char code[4]; currency_state_get_effective_code(code); assert(!strcmp(code,"USD"));
     currency_state_begin_count_session(); currency_state_get_effective_code(code); assert(!strcmp(code,"AUT"));

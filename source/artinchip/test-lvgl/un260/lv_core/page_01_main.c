@@ -343,7 +343,7 @@ void page_01_curr_img_refre(void)
         lv_img_set_zoom(s_curr_img, 77);
         lv_img_set_pivot(s_curr_img, 0, 0);
     }
-    if (s_currency_code) lv_label_set_text(s_currency_code, currency_state_display_code(code));
+    if (s_currency_code) lv_label_set_text(s_currency_code, currency_state_display_code(effective));
     if (s_curr_label) {
         const char *symbol = currency_metadata_symbol(effective);
         lv_label_set_text(s_curr_label, symbol ? symbol : "");
@@ -657,7 +657,7 @@ static void page_01_detail_section_btn_update_one(lv_obj_t *btn, bool selected)
     if (!btn || !lv_obj_is_valid(btn)) return;
     lv_damped_button_set_palette(btn, lv_color_hex(selected ? 0xFFFFFF : 0xE7EDF0),
         lv_color_hex(0xD9E5ED));
-    lv_obj_set_style_radius(btn, 8, 0);
+    lv_obj_set_style_radius(btn, 12, 0);
     lv_obj_set_style_border_width(btn, 0, 0);
     lv_obj_set_style_border_color(btn, lv_color_hex(0xCBDEE9), 0);
     lv_obj_t *label = lv_obj_get_child(btn, 1);
@@ -711,7 +711,7 @@ static lv_obj_t *page_01_detail_section_btn_create(lv_coord_t x, lv_coord_t y,
     lv_obj_t *btn = lv_obj_create(main_page);
     lv_obj_remove_style_all(btn);
     lv_obj_set_pos(btn, x, y);
-    lv_obj_set_size(btn, 168, 34);
+    lv_obj_set_size(btn, 172, 40);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
     lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
     lv_damped_button_register(btn, lv_color_hex(0xF4F7F8), lv_color_hex(0xD9E5ED));
@@ -741,15 +741,16 @@ static void page_01_detail_section_btn_create_all(void)
 {
     s_detail_tray = lv_obj_create(main_page);
     lv_obj_remove_style_all(s_detail_tray);
-    lv_obj_set_pos(s_detail_tray, 616, 26);
-    lv_obj_set_size(s_detail_tray, 526, 40);
+    lv_obj_set_pos(s_detail_tray, 620, 26);
+    lv_obj_set_size(s_detail_tray, 518, 40);
     lv_obj_set_style_bg_color(s_detail_tray, lv_color_hex(0xE7EDF0), 0);
     lv_obj_set_style_bg_opa(s_detail_tray, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(s_detail_tray, 12, 0);
     lv_obj_clear_flag(s_detail_tray, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-    s_detail_btn_a = page_01_detail_section_btn_create(620, 29, "REPORT", PAGE_01_DETAIL_SECTION_A);
-    s_detail_btn_b = page_01_detail_section_btn_create(795, 29, "SERIAL", PAGE_01_DETAIL_SECTION_B);
-    s_detail_btn_c = page_01_detail_section_btn_create(970, 29, "REJECT", PAGE_01_DETAIL_SECTION_C);
+    /* 3 equal 172px targets + two 1px seams fill the unchanged 518px tray. */
+    s_detail_btn_a = page_01_detail_section_btn_create(620, 26, "REPORT", PAGE_01_DETAIL_SECTION_A);
+    s_detail_btn_b = page_01_detail_section_btn_create(793, 26, "SERIAL", PAGE_01_DETAIL_SECTION_B);
+    s_detail_btn_c = page_01_detail_section_btn_create(966, 26, "REJECT", PAGE_01_DETAIL_SECTION_C);
     page_01_detail_section_btn_style_apply();
 }
 

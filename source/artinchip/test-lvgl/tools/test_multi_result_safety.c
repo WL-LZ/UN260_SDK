@@ -139,15 +139,29 @@ static struct {
 enum { PAGE_02_SECTION_A, PAGE_02_SECTION_B, PAGE_02_SECTION_C, PAGE_02_SECTION_COUNT };
 enum { ALL_SECTIONS = 7 };
 typedef struct { int id; } section_layout_t;
-typedef struct { const section_layout_t *layout; void *list; } list_section_t;
+typedef struct { const section_layout_t *layout; void *list; lv_obj_t *panel; } list_section_t;
 static struct {
     page_02_list_data_t data;
     int located_slot;
     void *search;
+    void *multi;
+    lv_obj_t *page;
+    bool multi_visible;
     language_t language;
     lv_obj_t *pcs, *amount;
     list_section_t section[3];
 } list_fixture, *view = &list_fixture;
+enum { LV_OBJ_FLAG_HIDDEN=1, UI_PAGE_LIST=2 };
+static void lv_obj_add_flag(lv_obj_t *o,int f){(void)o;(void)f;}
+static void lv_obj_clear_flag(lv_obj_t *o,int f){(void)o;(void)f;}
+static void *ui_multi_detail_create(lv_obj_t *p,bool expanded,void *cb,void *ctx)
+{(void)p;(void)expanded;(void)cb;(void)ctx;return &list_fixture;}
+static void ui_multi_detail_visible(void *v,bool visible){(void)v;(void)visible;}
+static void ui_multi_detail_refresh(void *v){(void)v;}
+static bool multi_gesture(int action){(void)action;return false;}
+static void gesture_service_set_page_policy(int page,void *drag,bool (*cb)(int))
+{(void)page;(void)drag;(void)cb;}
+static void gesture_service_clear_page_policy(int page){(void)page;}
 static uint32_t dirty, reset_positions, last_row_count;
 static bool visible(void) { return true; }
 static language_t ui_lang_get(void) { return LANGUAGE_EN; }
@@ -193,7 +207,8 @@ static void assert_texts_safe(void)
     assert(strcmp(a.text, "--") == 0 && strcmp(b.text, "12") == 0);
     view->pcs = &a; view->amount = &b; dirty = 1; reset_positions = 0;
     commit(NULL, 1);
-    assert(strcmp(a.text, "12") == 0 && strcmp(b.text, "--") == 0 && last_row_count == 1);
+    if(currency_state_multi_selected())assert(view->multi_visible&&view->multi);
+    else assert(strcmp(a.text, "12") == 0 && strcmp(b.text, "--") == 0 && last_row_count == 1);
     row_bind(&row, 0, &section);
     assert(strcmp(a.text, "--") == 0 && strcmp(b.text, "12") == 0 && strcmp(c.text, "--") == 0);
     section.layout = &layout_b;

@@ -1,6 +1,7 @@
 #include "lv_alnum_keyboard.h"
 #include "lv_damped_button.h"
 #include "lv_nav_button.h"
+#include "un260/lv_resources/lv_img_init.h"
 
 #include <string.h>
 
@@ -198,7 +199,7 @@ static lv_obj_t *button_create(lv_alnum_keyboard_t *keyboard, lv_obj_t *parent,
 {
     if (keyboard->button_count >= BUTTON_COUNT) return NULL;
     const lv_damped_button_style_t style = {
-        color, color, 0xEFF2F4, color == ACTION_COLOR ? 0xFFFFFF : TEXT_COLOR,
+        color, color, 0xEFF2F4, (color == ACTION_COLOR || color == 0x1875E8) ? 0xFFFFFF : TEXT_COLOR,
         MUTED_COLOR, 7
     };
     lv_obj_t *button = lv_damped_button_create(parent, &style, text, font);
@@ -244,7 +245,8 @@ lv_alnum_keyboard_t *lv_alnum_keyboard_create(lv_obj_t *parent,
         return NULL;
     }
 
-    lv_obj_t *panel = plain(keyboard->root, 80, 40, PANEL_WIDTH, PANEL_HEIGHT, 0xF6F8F9, 16);
+    lv_obj_t *panel = plain(keyboard->root, 80, 40, PANEL_WIDTH, PANEL_HEIGHT,
+                            config->modern ? 0xE8EFF4 : 0xF6F8F9, config->modern ? 24 : 16);
     if (!panel) goto failed;
     lv_obj_set_style_border_width(panel, 1, 0);
     lv_obj_set_style_border_color(panel, lv_color_hex(LINE_COLOR), 0);
@@ -254,7 +256,7 @@ lv_alnum_keyboard_t *lv_alnum_keyboard_create(lv_obj_t *parent,
     lv_obj_t *input = plain(panel, 24, 56, 1072, 44, 0xFFFFFF, 7);
     if (!input) goto failed;
     lv_obj_set_style_border_width(input, 1, 0);
-    lv_obj_set_style_border_color(input, lv_color_hex(0xC7D3DB), 0);
+    lv_obj_set_style_border_color(input, lv_color_hex(config->modern ? 0x6EA5EF : 0xC7D3DB), 0);
     keyboard->placeholder = label_create(input, config->placeholder,
         &lv_font_instrument_sans_medium_18, MUTED_COLOR, 17, 11, 1036, 26);
     keyboard->value_label = label_create(input, "", &lv_font_instrument_sans_medium_22,
@@ -270,15 +272,17 @@ lv_alnum_keyboard_t *lv_alnum_keyboard_create(lv_obj_t *parent,
             char key[2] = { rows[row][col], '\0' };
             if (!button_create(keyboard, panel, key, &lv_font_instrument_sans_medium_20,
                                x + (int)col * 84, 112 + row * 45, 78, 39,
-                               KEY_COLOR, key_event)) goto failed;
+                               config->modern ? 0xF8FAFC : KEY_COLOR, key_event)) goto failed;
         }
     }
-    if (!button_create(keyboard, panel, LV_SYMBOL_BACKSPACE, &lv_font_montserrat_20,
-                       880, 112, 216, 39, KEY_COLOR, backspace_event) ||
+    lv_obj_t *erase=button_create(keyboard, panel, config->modern ? "" : LV_SYMBOL_BACKSPACE, &lv_font_montserrat_20,
+                       880, 112, 216, 39, KEY_COLOR, backspace_event);
+    if(config->modern && erase){lv_obj_t *image=lv_img_create(erase);if(!image)goto failed;lv_img_set_src(image,LVGL_DIR"ui_icons/back_18.png");lv_obj_center(image);}
+    if (!erase ||
         !button_create(keyboard, panel, config->clear_text, &lv_font_instrument_sans_medium_18,
                        880, 157, 216, 39, KEY_COLOR, clear_event) ||
         !button_create(keyboard, panel, config->apply_text, &lv_font_instrument_sans_semibold_20,
-                       880, 202, 216, 84, ACTION_COLOR, apply_event)) goto failed;
+                       880, 202, 216, 84, config->modern ? 0x1875E8 : ACTION_COLOR, apply_event)) goto failed;
     if (config->symbols && !button_create(keyboard, panel, "#+=",
             &lv_font_instrument_sans_medium_18, 24, 247, 112, 39,
             KEY_COLOR, symbols_event)) goto failed;

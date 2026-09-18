@@ -2,7 +2,10 @@
 #include "page_02_list.h"
 #include "page_02_list_data.h"
 #include "page_02_list_search.h"
+#include "un260/lv_components/ui_multi_detail.h"
+#include "un260/gesture/gesture_service.h"
 #include "lv_page_event.h"
+#include "lv_page_manager.h"
 #include "ui_frame_commit.h"
 #include "lv_port_indev.h"
 #include "un260/counting/counting_data_store.h"
@@ -59,12 +62,19 @@ typedef struct {
     lv_obj_t *page, *total_title, *pcs, *amount;
     lv_obj_t *actions[LIST_ACTION_COUNT];
     page_02_list_search_t *search;
+    ui_multi_detail_t *multi;
+    bool multi_visible;
     uint16_t located_slot;
     list_section_t section[PAGE_02_SECTION_COUNT];
     page_02_list_data_t data;
     language_t language;
 } list_view_t;
 static list_view_t *view;
+static int requested_currency=-1,requested_tab;
+void page_02_list_multi_open(int currency,int tab)
+{requested_currency=currency;requested_tab=tab;}
+static bool multi_gesture(gesture_action_t action)
+{return view&&view->multi_visible&&(action==GESTURE_ACTION_EXIT_PAGE||action==GESTURE_ACTION_HOME)&&ui_multi_detail_back(view->multi);}
 static uint32_t dirty = ALL_SECTIONS, reset_positions = ALL_SECTIONS;
 static void commit(void *context,uint32_t flags);
 static void search_open(lv_event_t *e);
@@ -78,7 +88,7 @@ static const section_layout_t layouts[PAGE_02_SECTION_COUNT] = {
       {LV_TEXT_ALIGN_LEFT,LV_TEXT_ALIGN_RIGHT,LV_TEXT_ALIGN_RIGHT},
       UI_TEXT_LIST_DENOMINATIONS, {UI_TEXT_PAGE01_DETAIL_COL_DENOM,
       UI_TEXT_PAGE01_DETAIL_COL_PCS,UI_TEXT_PAGE01_DETAIL_COL_AMOUNT},
-      LVGL_DIR "list_icons/receipt_24.png", NULL, 0x2BD900 },
+      LVGL_DIR "list_icons/receipt_24.png", LVGL_DIR "list_icons/receipt_24.png", 0x2BD900 },
     { PAGE_02_SECTION_B, 388, 430, {10,58,308}, {42,242,76},
       {LV_TEXT_ALIGN_LEFT,LV_TEXT_ALIGN_LEFT,LV_TEXT_ALIGN_RIGHT},
       UI_TEXT_LIST_SERIAL_NUMBERS, {UI_TEXT_PAGE01_DETAIL_COL_NO,
@@ -107,9 +117,13 @@ static void number_set(lv_obj_t *label, double value, const lv_font_t *preferred
     const lv_font_t *font=preferred;
     const lv_font_t *fallback[]={&lv_font_instrument_sans_medium_18,
         &lv_font_instrument_sans_medium_16,&lv_font_instrument_sans_medium_14};
+    /* These numeric cells have fixed pixel widths. Before the first layout,
+     * lv_obj_get_width() can still be zero (or stale after resizing), which
+     * incorrectly selects the smallest font until the next page refresh. */
+    const lv_coord_t available_width=lv_obj_get_style_width(label,0);
     lv_point_t size;
     lv_txt_get_size(&size,text,font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
-    for (unsigned i=0;i<sizeof(fallback)/sizeof(fallback[0]) && size.x>lv_obj_get_width(label);++i) {
+    for (unsigned i=0;i<sizeof(fallback)/sizeof(fallback[0]) && size.x>available_width;++i) {
         if (fallback[i]->line_height>=font->line_height) continue;
         font=fallback[i];
         lv_txt_get_size(&size,text,font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
@@ -301,6 +315,10 @@ static void row_bind(lv_obj_t *row,uint32_t index,void *context)
 static void range_changed(const ui_list_window_t *w,void *context)
 {
     list_section_t *s=context;
+    if (s->empty) {
+        if (w->count) lv_obj_add_flag(s->empty,LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_clear_flag(s->empty,LV_OBJ_FLAG_HIDDEN);
+    }
     if (!s->mode) return;
     char text[64];
     if (w->paged) snprintf(text,sizeof(text),ui_text_get(UI_TEXT_LIST_PAGE_FMT),
@@ -318,8 +336,6 @@ static void range_changed(const ui_list_window_t *w,void *context)
     }
     lv_damped_button_set_enabled(s->previous,w->count && w->first>0);
     lv_damped_button_set_enabled(s->next,ui_list_window_page_number(w)<ui_list_window_pages(w));
-    if (w->count) lv_obj_add_flag(s->empty,LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_clear_flag(s->empty,LV_OBJ_FLAG_HIDDEN);
 }
 static void mode_clicked(lv_event_t *e)
 {
@@ -365,7 +381,8 @@ static bool section_create(list_section_t *s,const section_layout_t *layout)
         view->pcs=label_create(s->panel,119,FOOTER_Y+10,74,32,&lv_font_instrument_sans_semibold_22,BODY,LV_TEXT_ALIGN_RIGHT);
         view->amount=label_create(s->panel,209,FOOTER_Y+10,117,32,&lv_font_instrument_sans_semibold_22,BODY,LV_TEXT_ALIGN_RIGHT);
         if (!view->total_title || !view->pcs || !view->amount) return false;
-    } else {
+    }
+    {
         /* One visibility owner keeps the icon and text in step with the actual
          * row count. No reject details does not mean zero rejected notes. */
         s->empty=surface(s->panel,22,BODY_Y,layout->width-58,ROWS*ROW_HEIGHT,0,0xFFFFFF);
@@ -376,6 +393,9 @@ static bool section_create(list_section_t *s,const section_layout_t *layout)
         lv_obj_set_style_pad_row(s->empty,12,0);
         if (!section_image_create(s->empty,0,0,layout->empty_icon)) return false;
         s->empty_text=label_create(s->empty,0,0,layout->width-58,24,&lv_font_instrument_sans_medium_16,MUTED,LV_TEXT_ALIGN_CENTER);
+        if (!s->empty_text) return false;
+    }
+    if (layout->id!=PAGE_02_SECTION_A) {
         s->range=label_create(s->panel,20,FOOTER_Y+16,layout->width-125,24,&lv_font_instrument_sans_medium_14,MUTED,LV_TEXT_ALIGN_LEFT);
         if (!s->empty_text || !s->range) return false;
         s->mode=button_create(s->panel,layout->width-102,FOOTER_Y+5,90,38,
@@ -415,7 +435,7 @@ static void translate(void)
         list_section_t *s=&view->section[i];
         text_set(s->title,ui_text_get(s->layout->title));
         for (int c=0;c<3;++c) text_set(s->headers[c],ui_text_get(s->layout->columns[c]));
-        if (s->empty_text) text_set(s->empty_text,ui_text_get(i==PAGE_02_SECTION_B ? UI_TEXT_LIST_NO_SERIAL_NUMBERS : UI_TEXT_LIST_NO_REJECT_DETAILS));
+        if (s->empty_text) text_set(s->empty_text,ui_text_get(i==PAGE_02_SECTION_A ? UI_TEXT_LIST_NO_COUNTING_DATA : i==PAGE_02_SECTION_B ? UI_TEXT_LIST_NO_SERIAL_NUMBERS : UI_TEXT_LIST_NO_REJECT_DETAILS));
     }
 }
 static void commit(void *context,uint32_t flags)
@@ -423,6 +443,21 @@ static void commit(void *context,uint32_t flags)
     (void)context; (void)flags;
     if (!visible() || view->search) return;
     const counting_sim_t *data=counting_data_current();
+    const bool multi=currency_state_multi_selected();
+    if(multi&&!view->multi){
+        view->multi=ui_multi_detail_create(view->page,true,NULL,NULL);
+        ui_multi_detail_visible(view->multi,true);
+    }
+    for(unsigned i=0;i<PAGE_02_SECTION_COUNT;i++) {
+        if(multi)lv_obj_add_flag(view->section[i].panel,LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_clear_flag(view->section[i].panel,LV_OBJ_FLAG_HIDDEN);
+    }
+    if(view->multi_visible!=multi){
+        view->multi_visible=multi;ui_multi_detail_visible(view->multi,multi);
+        if(multi)gesture_service_set_page_policy(UI_PAGE_LIST,NULL,multi_gesture);
+        else gesture_service_clear_page_policy(UI_PAGE_LIST);
+    }
+    if(multi){ui_multi_detail_refresh(view->multi);return;}
     if (view->language!=ui_lang_get()) { translate(); dirty|=ALL_SECTIONS; }
     uint32_t pending=dirty; dirty=0;
     for (int i=0;i<PAGE_02_SECTION_COUNT;++i) {
@@ -432,6 +467,7 @@ static void commit(void *context,uint32_t flags)
             page_02_list_data_denoms(&view->data,data);
             if (!list_monetary_result_supported()) view->data.denom_count=0;
             count=view->data.denom_count ? view->data.denom_count : 1;
+            if (currency_state_auto_selected() && data->total_pcs == 0) count=0;
             number_set(view->pcs,data->total_pcs,&lv_font_instrument_sans_semibold_22);
             if (list_monetary_result_supported())
                 number_set(view->amount,data->total_amount,&lv_font_instrument_sans_semibold_22);
@@ -471,6 +507,7 @@ static void search_open(lv_event_t *e)
 {
     (void)e;
     if (!visible() || view->search) return;
+    if(view->multi_visible){ui_multi_detail_search(view->multi);return;}
     ui_frame_commit_cancel(commit,NULL);
     for (unsigned i=0;i<PAGE_02_SECTION_COUNT;++i)
         lv_recycled_list_stop(view->section[i].list);
@@ -533,12 +570,19 @@ bool ui_page_02_list_resume(void)
     /* Reentry also covers prewarm before runtime notifications existed. Keep
      * anchors/modes unless a real result reset has requested otherwise. */
     dirty|=ALL_SECTIONS; commit(NULL,dirty);
+    if(view->multi_visible&&view->multi){
+        ui_multi_detail_visible(view->multi,true);
+        if(requested_currency>=0){ui_multi_detail_select(view->multi,requested_currency,requested_tab);requested_currency=-1;}
+        gesture_service_set_page_policy(UI_PAGE_LIST,NULL,multi_gesture);
+    }
     return true;
 }
 void ui_page_02_list_suspend(void)
 {
     if (!view) return;
     ui_frame_commit_cancel(commit,NULL);
+    ui_multi_detail_visible(view->multi,false);
+    gesture_service_clear_page_policy(UI_PAGE_LIST);
     search_discard();
     for (int i=0;i<PAGE_02_SECTION_COUNT;++i) lv_recycled_list_stop(view->section[i].list);
     if (view->page) lv_obj_add_flag(view->page,LV_OBJ_FLAG_HIDDEN);
@@ -547,6 +591,7 @@ void ui_page_02_list_destroy(void)
 {
     if (!view) return;
     ui_page_02_list_suspend();
+    ui_multi_detail_destroy(view->multi);view->multi=NULL;
     for (int i=0;i<PAGE_02_SECTION_COUNT;++i)
         perf_profile_unwatch_invalidation(lv_recycled_list_object(view->section[i].list));
     if (view->page) lv_obj_del(view->page);
