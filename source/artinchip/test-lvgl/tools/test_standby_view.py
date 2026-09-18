@@ -8,7 +8,7 @@ from test_list_view import compiled_asset_sources
 root=Path(__file__).resolve().parents[1]
 lvgl=root.parents[1]/'third-party/lvgl-8.3.2'
 out=Path(sys.argv[1]).resolve();out.mkdir(parents=True,exist_ok=True)
-for src,name,size in [('standby/celadon.png','wallpaper',(1280,400)),('standby/silver.png','silver',(1280,400)),('standby/champagne.png','champagne',(1280,400)),('standby/un260-mark.png','gear',(24,28))]:
+for src,name,size in [('standby/mist.png','mist',(1280,400)),('backgrounds/user.png','user',(1280,400)),('standby/celadon.png','wallpaper',(1280,400)),('standby/silver.png','silver',(1280,400)),('standby/champagne.png','champagne',(1280,400)),('standby/un260-mark.png','gear',(24,28))]:
     im=Image.open(root/'aic_ui/lvgl_data'/src).convert('RGBA').resize(size)
     (out/(name+'.bgra')).write_bytes(im.tobytes('raw','BGRA'))
 fonts=sorted(set(re.findall(r'\blv_font_(?:instrument_sans|standby)_[a-zA-Z0-9_]+',(root/'un260/lv_core/page_34_standby.c').read_text())))

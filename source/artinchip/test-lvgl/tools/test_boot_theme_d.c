@@ -18,10 +18,10 @@ lv_timer_t *__real_lv_timer_create(lv_timer_cb_t,uint32_t,void*);
 lv_timer_t *__wrap_lv_timer_create(lv_timer_cb_t cb,uint32_t ms,void *d){if(fail_timer){fail_timer=false;return NULL;}return __real_lv_timer_create(cb,ms,d);}
 static lv_res_t info(lv_img_decoder_t *d,const void *s,lv_img_header_t *h){
  (void)d;if(lv_img_src_get_type(s)!=LV_IMG_SRC_FILE)return LV_RES_INV;
- bool full=strstr(s,"background.png")!=NULL||strstr(s,"backgrounds/user.png")!=NULL;if(!full&&!strstr(s,"emblem.png"))return LV_RES_INV;
+ bool full=strstr(s,"background.png")!=NULL||strstr(s,"backgrounds/boot.png")!=NULL;if(!full&&!strstr(s,"emblem.png"))return LV_RES_INV;
  memset(h,0,sizeof(*h));h->cf=LV_IMG_CF_TRUE_COLOR_ALPHA;h->w=full?1280:96;h->h=full?400:96;return LV_RES_OK;
 }
-static lv_res_t open_image(lv_img_decoder_t *d,lv_img_decoder_dsc_t *s){if(info(d,s->src,&s->header)!=LV_RES_OK)return LV_RES_INV;s->img_data=strstr(s->src,"backgrounds/user.png")?ready_bg:s->header.w==1280?bg:icon;opens++;return LV_RES_OK;}
+static lv_res_t open_image(lv_img_decoder_t *d,lv_img_decoder_dsc_t *s){if(info(d,s->src,&s->header)!=LV_RES_OK)return LV_RES_INV;s->img_data=strstr(s->src,"backgrounds/boot.png")?ready_bg:s->header.w==1280?bg:icon;opens++;return LV_RES_OK;}
 static void flush(lv_disp_drv_t *d,const lv_area_t *a,lv_color_t *p){assert(a->x1>=0&&a->y1>=0&&a->x2<1280&&a->y2<400);unsigned w=a->x2-a->x1+1;pixels+=w*(a->y2-a->y1+1);for(int y=a->y1;y<=a->y2;y++)memcpy(framebuffer+y*1280+a->x1,p+(y-a->y1)*w,w*4);lv_disp_flush_ready(d);}
 static uint8_t *load(const char *name,size_t size){char path[2048];snprintf(path,sizeof(path),"%s/%s",getenv("BOOT_THEME_C_PIXEL_INPUT"),name);FILE*f=fopen(path,"rb");assert(f);uint8_t*p=malloc(size);assert(p&&fread(p,1,size,f)==size);fclose(f);return p;}
 static void frame(unsigned ms){lv_tick_inc(ms);lv_timer_handler();lv_refr_now(NULL);}
@@ -29,7 +29,7 @@ static unsigned timers(void){unsigned n=0;for(lv_timer_t*t=lv_timer_get_next(NUL
 static void dump(const char *name){const char *dir=getenv("BOOT_THEME_C_RASTER_OUTPUT");if(!dir)return;char path[2048];snprintf(path,sizeof(path),"%s/%s.ppm",dir,name);FILE*f=fopen(path,"wb");assert(f);fprintf(f,"P6\n1280 400\n255\n");for(unsigned i=0;i<1280*400;i++){unsigned v=framebuffer[i].full;fputc(v>>16,f);fputc(v>>8,f);fputc(v,f);}fclose(f);}
 int main(void){
  bg=load("background.bgra",1280*400*4);icon=load("emblem.bgra",96*96*4);
- ready_bg=load("user.bgra",1280*400*4);
+ ready_bg=load("boot.bgra",1280*400*4);
  lv_init();lv_disp_draw_buf_t draw;lv_disp_draw_buf_init(&draw,buffer,NULL,1280*40);lv_disp_drv_t driver;lv_disp_drv_init(&driver);driver.hor_res=1280;driver.ver_res=400;driver.draw_buf=&draw;driver.flush_cb=flush;lv_disp_drv_register(&driver);
  lv_img_decoder_t*d=lv_img_decoder_create();lv_img_decoder_set_info_cb(d,info);lv_img_decoder_set_open_cb(d,open_image);unsigned baseline=timers();
  ui_page_08_curr_defer_next_create();ui_page_08_curr_create(NULL);ui_page_00_boot_anim_create(lv_layer_top());ui_page_00_boot_anim_set_startup_ready(false);

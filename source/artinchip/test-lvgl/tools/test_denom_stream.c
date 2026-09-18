@@ -7,11 +7,11 @@
 #include "un260/protocol/protocol_send.h"
 
 static uint32_t now;
-static unsigned sends, rejects;
+static unsigned sends, rejects, serial_requests;
 uint32_t app_clock_uptime_ms(void) { return now; }
 void uart_debug_printf(const char *fmt, ...) { (void)fmt; }
 int protocol_send(uint8_t cmd, const uint8_t *data, uint16_t len)
-{ assert(data && len == 1); if (cmd == 0x0B) sends++; else if (cmd == 0x0C) rejects++; return 0; }
+{ assert(data); if (cmd == 0x0D) {assert(len==2);serial_requests++;} else {assert(len==1);if(cmd==0x0B)sends++;else if(cmd==0x0C)rejects++;} return 0; }
 static counting_detail_state_t d;
 static counting_session_state_t s;
 static counting_sim_t sim;
@@ -92,7 +92,7 @@ int main(int argc, char **argv)
     for(int i=0;i<601;i++){now+=100;row(100);poll();}
     assert(d.query_expired && sends==1);
     s.phase=COUNTING_SESSION_ACTIVE;marker(0);row(10);marker(255);
-    assert(sim.denom_number==1 && rejects==1);
+    assert(sim.denom_number==1 && rejects==0);
 
     reset();now=UINT32_MAX-1000;counting_denom_query_trigger(&d,now,true);marker(0);
     for(int i=0;i<100;i++){now+=50;row(100);poll();}marker(255);

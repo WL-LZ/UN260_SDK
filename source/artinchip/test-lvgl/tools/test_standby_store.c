@@ -14,5 +14,13 @@ int main(int argc,char**argv){(void)argv;if(argc>1){const standby_config_t*p=sta
  assert(standby_store_import());wait_job();assert(standby_photo_exists(0));assert(!standby_photo_exists(1));assert(standby_store_import());wait_job();assert(!standby_photo_exists(1));
  c=*standby_config();c.layout[0][0].photo=3;c.layout[0][0].scheduled=0;assert(standby_store_save(&c));wait_job();assert(standby_store_delete(3));wait_job();assert(!standby_photo_exists(0));assert(standby_config()->layout[0][0].scheduled==1);
  FILE*f=fopen(STANDBY_USB_DIRECTORY "/un260_delay_02.png","wb");assert(f);fputs("not a PNG",f);fclose(f);assert(standby_store_import());wait_job();assert(standby_photo_exists(0));assert(!standby_photo_exists(1));
+ c=*standby_config();c.layout[0][0].photo=STANDBY_PHOTO_MIST;c.layout[0][0].scheduled=0;
+ assert(standby_config_valid(&c));assert(!standby_photo_is_imported(STANDBY_PHOTO_MIST));
+ assert(strstr(standby_photo_path(STANDBY_PHOTO_MIST),"standby/mist.png"));
+ assert(strstr(standby_photo_path(3),"standby_1.bin"));
+ assert(strstr(standby_photo_path(8),"standby_6.bin"));
+ assert(!standby_store_delete(STANDBY_PHOTO_MIST));assert(standby_store_save(&c));wait_job();
+ assert(standby_config()->layout[0][0].photo==STANDBY_PHOTO_MIST);
+ c.layout[0][0].photo=STANDBY_PHOTO_COUNT;assert(!standby_config_valid(&c));
  puts("PASS config bounds, custom save, busy exclusion, missing USB, PNG import, duplicate skip, corrupt PNG, delete fallback");return 0;
 }

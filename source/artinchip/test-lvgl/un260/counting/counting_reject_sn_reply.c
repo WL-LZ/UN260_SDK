@@ -40,6 +40,7 @@ static void counting_detail_notify_summary(
 
 static counting_detail_reply_result_t counting_reject_reply_handle(
     counting_detail_state_t *detail,
+    const counting_session_state_t *session,
     counting_sim_t *sim_data,
     const uint8_t *buf,
     uint8_t len,
@@ -72,11 +73,14 @@ static counting_detail_reply_result_t counting_reject_reply_handle(
                     (unsigned int)counting_data_error_detail_count(sim_data),
                     (unsigned int)sim_data->err_expected);
         counting_detail_notify_summary(hooks, true);
-        if (detail->wait_sn_after_reject_end) {
+        if (detail->wait_sn_after_reject_end && session &&
+            session->phase != COUNTING_SESSION_ACTIVE) {
             uint8_t sn_req[2] = {0x01, 0x01};
             protocol_send(0x0D, sn_req, 2);
             detail->wait_sn_after_reject_end = false;
         }
+        if (session && session->phase == COUNTING_SESSION_ACTIVE)
+            detail->wait_sn_after_reject_end = false;
         return COUNTING_DETAIL_REPLY_END;
     }
 
@@ -176,6 +180,10 @@ static counting_detail_reply_result_t counting_sn_reply_handle(
         counting_detail_notify(hooks, hooks != NULL
             ? hooks->on_serial_report_ready : NULL);
         counting_detail_record_history(hooks, "0x0D", buf, len);
+        if (session->phase == COUNTING_SESSION_ACTIVE) {
+            counting_sn_notify_item(hooks);
+            return COUNTING_DETAIL_REPLY_END;
+        }
         session->history_record.end_seen = true;
         if (hooks != NULL && hooks->on_history_record_ready != NULL) {
             hooks->on_history_record_ready(hooks->context);
@@ -344,7 +352,7 @@ counting_detail_reply_result_t counting_reject_sn_reply_dispatch(
 {
     switch (cmd) {
     case 0x0C:
-        return counting_reject_reply_handle(detail, sim_data, buf, len, hooks);
+        return counting_reject_reply_handle(detail, session, sim_data, buf, len, hooks);
     case 0x0D:
         return counting_sn_reply_handle(session, sim_data, buf, len, hooks);
     case 0x49:

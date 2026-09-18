@@ -354,6 +354,8 @@ static bool section_create(list_section_t *s,const section_layout_t *layout)
     s->layout=layout;
     s->panel=surface(view->page,layout->x,PANEL_Y,layout->width,PANEL_HEIGHT,15,0xFFFFFF);
     if (!s->panel) return false;
+    lv_obj_set_style_border_width(s->panel,1,0);
+    lv_obj_set_style_border_color(s->panel,lv_color_hex(0xECF0F3),0);
     lv_obj_t *badge=surface(s->panel,17,15,26,26,7,layout->badge_color);
     if (!badge) return false;
     lv_obj_t *letter=label_create(badge,0,0,26,LV_SIZE_CONTENT,&lv_font_instrument_sans_bold_14,0xFFFFFF,LV_TEXT_ALIGN_CENTER);

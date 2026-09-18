@@ -139,7 +139,8 @@ class ListInvalidationContracts(unittest.TestCase):
         self.assertIn("hooks->on_serial_report_ready", serial)
         reject = function(DETAIL, "counting_reject_reply_handle")
         self.assertIn("if (sim_data->err_expected == 0)", reject)
-        self.assertIn("if (detail->wait_sn_after_reject_end)", reject)
+        self.assertIn("if (detail->wait_sn_after_reject_end && session &&", reject)
+        self.assertIn("session->phase != COUNTING_SESSION_ACTIVE", reject)
         self.assertIn("protocol_send(0x0D, sn_req, 2);", reject)
         self.assertIn("protocol_send(0x0C, &reject_cmd, 1);", function(DENOM, "counting_denom_handle_end"))
 

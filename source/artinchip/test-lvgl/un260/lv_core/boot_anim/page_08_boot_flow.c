@@ -14,7 +14,7 @@ LV_FONT_DECLARE(lv_font_instrument_sans_semibold_16);
 /* This page is a projection of the boot service. No inferred successes,
  * timed percentage increments, protocol requests or independent Ready flags. */
 static const char background[]="L:/usr/local/share/lvgl_data/boot_theme_d/background.png";
-static const char ready_background[]="L:/usr/local/share/lvgl_data/backgrounds/user.png";
+static const char ready_background[]="L:/usr/local/share/lvgl_data/backgrounds/boot.png";
 typedef struct { lv_obj_t *seal,*check,*title,*sub,*signature; } ready_visual_t;
 static const char *names[5]={"Configuration","Sensors","Motor","Electromagnet","Image board"};
 enum { WAIT, CHECK, PASS, FAIL };

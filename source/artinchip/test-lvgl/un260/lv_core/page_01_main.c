@@ -967,9 +967,9 @@ static lv_obj_t *main_action(const char *name, const char *icon_name, const char
     const char *label_name, const char *text, int x, int y, int w, int h,
     lv_event_cb_t callback, bool primary)
 {
-    lv_obj_t *button = main_box(main_page, x, y, w, h, primary ? 0xDCEFD5 : x < 108 ? 0xFFFFFF : 0xE9EDF0, 14);
+    lv_obj_t *button = main_box(main_page, x, y, w, h, primary ? 0xDCEFD5 : 0xFFFFFF, 14);
     main_register(name, button);
-    lv_damped_button_register(button, lv_color_hex(primary ? 0xDCEFD5 : x < 108 ? 0xFFFFFF : 0xE9EDF0),
+    lv_damped_button_register(button, lv_color_hex(primary ? 0xDCEFD5 : 0xFFFFFF),
         lv_color_hex(primary ? 0xD6EDC2 : 0xE7EDF1));
     lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, NULL);
     main_icon(button, icon_name, source, (w - 28) / 2, h / 2 - 24);

@@ -3,6 +3,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 #define STANDBY_IMPORT_MAX 6
+/* Preserve persisted IDs 0..2 (built-in), 3..8 (USB). */
+#define STANDBY_PHOTO_MIST 9
+#define STANDBY_PHOTO_COUNT 10
+static inline bool standby_photo_is_imported(unsigned photo) { return photo >= 3 && photo < 9; }
 typedef struct {
     uint32_t color;
     uint16_t x, y;

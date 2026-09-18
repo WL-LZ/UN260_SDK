@@ -90,7 +90,7 @@ static void app_counting_visual_commit(void *context, uint32_t flags)
                                        sim_data->total_amount);
         page_01_main_refresh_totals(sim_data->total_pcs, amount_buf);
     }
-    if ((flags & 2U) && page_01_detail_section_get() == PAGE_01_DETAIL_SECTION_B)
+    if ((flags & 4U) || ((flags & 2U) && page_01_detail_section_get() == PAGE_01_DETAIL_SECTION_B))
         page_01_main_detail_refresh_rows_only();
 }
 
@@ -268,6 +268,13 @@ static void app_counting_runtime_on_main_data_changed(void)
     ui_refresh_main_page();
 }
 
+static void app_counting_runtime_on_live_denom_changed(void)
+{
+    page_02_list_section_mark_dirty(PAGE_02_SECTION_A);
+    if (!ui_frame_commit_defer(app_counting_visual_commit, NULL, 4U))
+        app_counting_visual_commit(NULL, 4U);
+}
+
 static const counting_denom_reply_hooks_t g_counting_denom_hooks = {
     .on_history_frame = counting_history_append_frame,
     .on_main_data_changed = app_counting_runtime_on_main_data_changed,
@@ -316,7 +323,11 @@ static void app_counting_runtime_on_summary_changed(void *context,
     page_02_list_section_mark_dirty(PAGE_02_SECTION_C);
     smart_island_refresh_summary();
     if (refresh_main && app_counting_runtime_main_page_active()) {
-        ui_refresh_main_page();
+        app_counting_detail_context_t *detail_context = context;
+        if (detail_context && detail_context->session->phase == COUNTING_SESSION_ACTIVE) {
+            if (!ui_frame_commit_defer(app_counting_visual_commit, NULL, 4U))
+                app_counting_visual_commit(NULL, 4U);
+        } else ui_refresh_main_page();
     }
 }
 
@@ -324,7 +335,9 @@ static void app_counting_runtime_on_serial_data_started(void *context)
 {
     (void)context;
     page_02_list_section_mark_dirty(PAGE_02_SECTION_B);
-    page_01_main_scroll_reset();
+    app_counting_detail_context_t *detail_context = context;
+    if (!detail_context || detail_context->session->phase != COUNTING_SESSION_ACTIVE)
+        page_01_main_scroll_reset();
 }
 
 static void app_counting_runtime_on_serial_report_ready(void *context)
@@ -563,12 +576,15 @@ void app_counting_runtime_handle_denom(counting_detail_state_t *detail_state,
         app_counting_runtime_on_main_data_changed();
         return;
     }
+    counting_denom_reply_hooks_t hooks = g_counting_denom_hooks;
+    if (session->phase == COUNTING_SESSION_ACTIVE)
+        hooks.on_main_data_changed = app_counting_runtime_on_live_denom_changed;
     counting_denom_reply_handle(detail_state,
                                 session,
                                 sim_data,
                                 buf,
                                 len,
-                                &g_counting_denom_hooks);
+                                &hooks);
 }
 
 void app_counting_runtime_handle_detail(uint8_t cmd,

@@ -25,9 +25,9 @@ def glyphs(filename,text,color,width,height):
         x+=(adv+8)//16
     return im
 out=root/'aic_ui/lvgl_data/boot_theme_d';out.mkdir(parents=True,exist_ok=True)
-# Same generated Main surface; only static brand/footer ink is composited below.
+# Dedicated boot surface; user-page palette changes must not alter early boot.
 runpy.run_path(str(root/'tools/gen_page_backgrounds.py'))
-bg=Image.open(root/'aic_ui/lvgl_data/backgrounds/user.png').convert('RGBA')
+bg=Image.open(root/'aic_ui/lvgl_data/backgrounds/boot.png').convert('RGBA')
 # Bake static brand/footer once, at the same pixels for native and LVGL.
 # Reuse the approved round-capped artwork, reduced offline with a coverage filter.
 # Both renderers consume these same baked pixels; no runtime scaling or drawing.

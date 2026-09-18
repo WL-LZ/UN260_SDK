@@ -151,7 +151,7 @@ static void test_main(void)
     const char *buttons[]={"mode_btn","setting_btn","list_btn","print_btn","menu_btn","start_btn","esc_btn"};
     for(unsigned i=0;i<7;++i) {
         lv_obj_t *b=page_01_main_find_obj(buttons[i]);
-        assert(lv_obj_get_style_bg_color(b,0).full==lv_color_hex(i==5?0xDCEFD5:i<4?0xFFFFFF:0xE9EDF0).full);
+        assert(lv_obj_get_style_bg_color(b,0).full==lv_color_hex(i==5?0xDCEFD5:0xFFFFFF).full);
         lv_obj_add_state(b,LV_STATE_PRESSED);lv_event_send(b,LV_EVENT_PRESSED,NULL);tick(140);
         for(unsigned j=0;j<lv_obj_get_child_cnt(b);++j)
             assert(lv_obj_get_style_translate_y(lv_obj_get_child(b,j),0)==0);

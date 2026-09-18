@@ -30,8 +30,9 @@ static const char *paths[] = {
  "L:/usr/local/share/lvgl_data/standby/champagne.png",
  "L:" DIR "/standby_1.bin", "L:" DIR "/standby_2.bin",
  "L:" DIR "/standby_3.bin", "L:" DIR "/standby_4.bin",
- "L:" DIR "/standby_5.bin", "L:" DIR "/standby_6.bin" };
-const char *standby_photo_path(unsigned photo) { return paths[photo < 9 ? photo : 1]; }
+ "L:" DIR "/standby_5.bin", "L:" DIR "/standby_6.bin",
+ "L:/usr/local/share/lvgl_data/standby/mist.png" };
+const char *standby_photo_path(unsigned photo) { return paths[photo < STANDBY_PHOTO_COUNT ? photo : 1]; }
 void standby_defaults(standby_config_t *c) {
  memset(c,0,sizeof(*c)); c->version=2; c->minutes=1;
  const uint32_t colors[]={0x14232D,0xEDF1EC,0x30243C};
@@ -46,7 +47,7 @@ bool standby_config_valid(const standby_config_t *c) {
  for(int m=0;m<2;m++)for(int i=0;i<3;i++) {
   const standby_layout_t*p=&c->layout[m][i];
   if(p->scale_percent&&(p->scale_percent<75||p->scale_percent>140))return false;
-  if(p->x>1240||p->y<40||p->y>290||p->date_x>1240||p->date_y<40||p->date_y>290||p->dial_x>1024||p->dial_y<40||p->dial_y>78||p->color>0xFFFFFF||p->text_color>0xFFFFFF||p->auto_text>1||p->date_bits>15||p->date_style>2||p->hour12>1||p->greeting>1||p->scheduled>1||p->photo>8||p->light_text>1)return false;
+  if(p->x>1240||p->y<40||p->y>290||p->date_x>1240||p->date_y<40||p->date_y>290||p->dial_x>1024||p->dial_y<40||p->dial_y>78||p->color>0xFFFFFF||p->text_color>0xFFFFFF||p->auto_text>1||p->date_bits>15||p->date_style>2||p->hour12>1||p->greeting>1||p->scheduled>1||p->photo>=STANDBY_PHOTO_COUNT||p->light_text>1)return false;
  }return true;
 }
 void standby_store_init(void) {

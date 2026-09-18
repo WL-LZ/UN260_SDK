@@ -8,6 +8,11 @@
 
 typedef struct {
     bool wait_sn_after_reject_end;
+    /* Live 0B snapshots are published only at their end marker. */
+    bool live_denom_started;
+    bool live_denom_invalid;
+    uint8_t live_denom_number;
+    denom_t live_denom[COUNTING_DENOM_MAX_ITEMS];
     bool query_pending;
     bool query_deferred;
     bool query_started;  /* Valid 0x0B start marker received. */

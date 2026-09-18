@@ -1,6 +1,7 @@
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "page_34_standby.h"
 #include "un260/lv_resources/ui_icons.h"
+#include "un260/lv_resources/ui_page_background.h"
 #include "un260/gesture/gesture_service.h"
 #include "settings_detail_ui.h"
 #include "lv_page_manager.h"
@@ -72,8 +73,8 @@ static void scene_update(scene_t*s,const standby_config_t*c,bool force){
  machine_time_value_t t;machine_time_get(&t);bool valid=machine_time_is_valid(&t)&&t.year>=2024;
  int stamp=valid?((t.year-2000)*535680+t.month*44640+t.day*1440+t.hour*60+t.minute):-1;if(!force&&stamp==s->minute)return;s->minute=stamp;
  if(s->dial)lv_obj_invalidate(s->dial);
- unsigned photo=p->scheduled?(valid?t.hour/8:1):p->photo;if(photo>=3&&!standby_photo_exists(photo-3))photo=1;
- if(!c->mode&&s->photo!=(int)photo){const char*path=standby_photo_path(photo);if(photo>=3)lv_img_cache_invalidate_src(path);lv_img_set_src(s->image,path);lv_img_set_pivot(s->image,0,0);s->photo=photo;}
+ unsigned photo=p->scheduled?(valid?t.hour/8:1):p->photo;if(standby_photo_is_imported(photo)&&!standby_photo_exists(photo-3))photo=1;
+ if(!c->mode&&s->photo!=(int)photo){const char*path=standby_photo_path(photo);if(standby_photo_is_imported(photo))lv_img_cache_invalidate_src(path);lv_img_set_src(s->image,path);lv_img_set_pivot(s->image,0,0);s->photo=photo;}
  char timebuf[32],datebuf[96];if(valid){snprintf(timebuf,sizeof(timebuf),"%02u:%02u",p->hour12?(t.hour%12?t.hour%12:12):t.hour,t.minute);date_format(datebuf,sizeof(datebuf),p,&t);}else{snprintf(timebuf,sizeof(timebuf),"--:--");snprintf(datebuf,sizeof(datebuf),"Set device date and time");}
  lv_label_set_text(s->time,timebuf);lv_label_set_text(s->date,datebuf);
  const char*g=t.hour<12?"Good morning.":t.hour<18?"Good afternoon.":"Good evening.";char greeting[48];snprintf(greeting,sizeof(greeting),"%s%s%s",p->greeting?g:"",p->greeting&&p->hour12?"  ":"",p->hour12?(t.hour<12?"AM":"PM"):"");lv_label_set_text(s->greeting,valid?greeting:"UN260");scene_layout(s,p);
@@ -125,7 +126,7 @@ static void scene_create(scene_t*s,lv_obj_t*parent,int x,int y,bool small,bool e
  const standby_layout_t*p=&c->layout[c->mode][c->active[c->mode]];uint32_t text=text_ink(c,p);
  int w=small?512:1280,h=small?160:400;s->root=box(parent,x,y,w,h,c->mode?p->color:0xEEF2F4);
  if(!c->mode){s->image=lv_img_create(s->root);lv_img_set_pivot(s->image,0,0);lv_obj_set_pos(s->image,0,0);if(small)lv_img_set_zoom(s->image,104);
- lv_obj_t*shade=box(s->root,0,0,w,h,ink(text)==0x304957?0x001421:0xFFFFFF);lv_obj_set_style_bg_opa(shade,p->photo>=3?(ink(text)==0x304957?80:65):0,0);lv_obj_clear_flag(shade,LV_OBJ_FLAG_CLICKABLE);
+ lv_obj_t*shade=box(s->root,0,0,w,h,ink(text)==0x304957?0x001421:0xFFFFFF);lv_obj_set_style_bg_opa(shade,standby_photo_is_imported(p->photo)?(ink(text)==0x304957?80:65):0,0);lv_obj_clear_flag(shade,LV_OBJ_FLAG_CLICKABLE);
  }else{
   uint32_t accent=text==0xFFFFFF?0xCDFB84:0x233B39;int k=small?4:10;
   lv_obj_t*rail=box(s->root,34*k/10,62*k/10,1212*k/10,1,text);lv_obj_set_style_bg_opa(rail,35,0);lv_obj_clear_flag(rail,LV_OBJ_FLAG_CLICKABLE);if(edit)lv_obj_add_flag(rail,LV_OBJ_FLAG_HIDDEN);
@@ -190,7 +191,7 @@ static void action(lv_event_t*e){int id=(int)(intptr_t)lv_event_get_user_data(e)
  else if(id==94){layout()->auto_text^=1;redraw=true;}
  else if(id==67){settings_detail_dialog_show("Delete imported photo?","Layouts using this photo return to daily rotation.","Delete","Cancel",delete_photo,NULL,NULL);}
  else if(id==68||id==69){layout()->scheduled=id==68;redraw=true;}
- else if(id>=70&&id<79){layout()->photo=id-70;layout()->scheduled=0;redraw=true;}
+ else if(id>=70&&id<70+STANDBY_PHOTO_COUNT){layout()->photo=id-70;layout()->scheduled=0;redraw=true;}
  else if(id==80){settings_detail_dialog_show("Restore this mode?","Reset all three layouts. Keep photos, timeout and the other mode.","Restore","Cancel",reset_mode,NULL,NULL);}
  else if(id>=90&&id<=92){lv_obj_t*f=frame(&preview,selected);uint16_t*xy=position(layout(),selected);xy[0]=id==90?20:id==91?(1280-lv_obj_get_width(f))/2:1260-lv_obj_get_width(f);editor_apply();}
 }
@@ -212,10 +213,10 @@ static void render(void){lv_obj_clean(page);memset(&preview,0,sizeof(preview));m
  scene_create(&preview,page,30,76,true,false,&draft);lv_obj_set_size(preview.root,520,163);lv_obj_set_style_radius(preview.root,16,0);lv_obj_set_style_clip_corner(preview.root,true,0);
  lv_obj_t*tag=box(preview.root,411,130,97,22,0xFFFFFF);lv_obj_clear_flag(tag,LV_OBJ_FLAG_CLICKABLE);lv_obj_set_style_radius(tag,7,0);label(tag,"LIVE PREVIEW",8,5,&lv_font_instrument_sans_medium_10,0x5C7480);
  note=label(page,standby_store_busy()?"Working... Please wait.":"",315,364,&lv_font_instrument_sans_medium_12,0x52758A);lv_obj_set_width(note,650);lv_obj_set_style_bg_color(note,lv_color_hex(0xFFFFFF),0);lv_obj_set_style_bg_opa(note,255,0);lv_obj_set_style_pad_all(note,7,0);lv_obj_set_style_radius(note,8,0);lv_obj_set_style_text_align(note,LV_TEXT_ALIGN_CENTER,0);if(!standby_store_busy())lv_obj_add_flag(note,LV_OBJ_FLAG_HIDDEN);
- body=box(page,574,76,676,296,0xF6F8FA);
+ body=box(page,574,76,676,296,0xF6F8FA);lv_obj_set_style_bg_opa(body,LV_OPA_TRANSP,0);
  standby_layout_t*p=layout();
- if(!tab){label(body,"APPEARANCE",0,0,&lv_font_instrument_sans_medium_10,0x8A9AA4);
-  lv_obj_t*seg=box(body,0,21,676,48,0xE7ECF0);lv_obj_set_style_radius(seg,13,0);
+ if(!tab){
+  lv_obj_t*seg=box(body,0,0,676,48,0xE7ECF0);lv_obj_set_style_radius(seg,13,0);
   for(int i=0;i<2;i++){lv_obj_t*b=choice(seg,4+i*336,4,332,40,i?"Aa  Typographic":"Photo",20+i,draft.mode==i,draft.mode==i?0xFFFFFF:0xE7ECF0);lv_obj_set_style_border_width(b,0,0);if(!i)label(b,LV_SYMBOL_IMAGE,119,13,LV_FONT_DEFAULT,0x7595AA);}
   lv_obj_t*rows=box(body,0,83,676,198,0xFFFFFF);lv_obj_set_style_radius(rows,16,0);lv_obj_set_style_border_width(rows,1,0);lv_obj_set_style_border_color(rows,lv_color_hex(0xE6ECF0),0);
   const char*rt[]={"Start after","Clock & date",draft.mode?"Colour palette":"Photo collection"};const char*rs[]={"When the device is not in use","Date details, format and greeting",draft.mode?"Three colours. No background images.":"Daily rotation and your own photos."};
@@ -240,15 +241,15 @@ static void render(void){lv_obj_clean(page);memset(&preview,0,sizeof(preview));m
   lv_obj_t*seg=box(body,0,0,662,44,0xE7ECF0);lv_obj_set_style_radius(seg,12,0);for(int i=0;i<2;i++){lv_obj_t*b=choice(seg,4+i*329,4,325,36,i?"Single photo":"Follow the day",68+i,false,p->scheduled==!i?0xFFFFFF:0xE7ECF0);lv_obj_set_style_border_width(b,0,0);}
   lv_obj_t*schedule=box(body,0,58,662,51,0xFFFFFF);lv_obj_set_style_radius(schedule,12,0);const char*periods[]={"00:00 - 08:00","08:00 - 16:00","16:00 - 24:00"};for(int i=0;i<3;i++){label(schedule,names[i],12+i*220,8,&lv_font_instrument_sans_medium_12,0x293B44);label(schedule,periods[i],12+i*220,29,&lv_font_instrument_sans_medium_10,0x667F90);}
   label(body,"CHOOSE A PHOTO",0,121,&lv_font_instrument_sans_medium_10,0x8395A1);
-gallery=box(body,0,140,676,156,0xF6F8FA);lv_obj_add_flag(gallery,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE|LV_OBJ_FLAG_SCROLL_ELASTIC);lv_obj_clear_flag(gallery,LV_OBJ_FLAG_SCROLL_CHAIN_VER);lv_obj_set_scroll_dir(gallery,LV_DIR_VER);lv_obj_set_scrollbar_mode(gallery,LV_SCROLLBAR_MODE_AUTO);lv_obj_set_style_width(gallery,4,LV_PART_SCROLLBAR);lv_obj_set_style_pad_right(gallery,1,LV_PART_SCROLLBAR);lv_obj_set_style_radius(gallery,2,LV_PART_SCROLLBAR);lv_obj_set_style_bg_opa(gallery,170,LV_PART_SCROLLBAR);lv_obj_set_style_bg_color(gallery,lv_color_hex(0x8395A1),LV_PART_SCROLLBAR);int count=0;
-  for(int i=0;i<9;i++){if(i>=3&&!standby_photo_exists(i-3))continue;char text[32];if(i<3)snprintf(text,sizeof(text),"%s",names[i]);else snprintf(text,sizeof(text),"USB photo %d",i-2);lv_obj_t*b=control(gallery,(count%3)*224,(count/3)*101,214,91,70+i,0xE6ECEE,!p->scheduled&&p->photo==i?0x3485E6:0xDCE4E9);count++;lv_obj_set_style_border_post(b,true,0);lv_obj_set_style_clip_corner(b,true,0);lv_obj_t*im=lv_img_create(b);lv_img_set_src(im,standby_photo_path(i));lv_img_set_pivot(im,0,0);lv_img_set_zoom(im,44);lv_obj_clear_flag(im,LV_OBJ_FLAG_CLICKABLE);lv_obj_t*caption=box(b,1,62,212,28,0xFFFFFF);lv_obj_clear_flag(caption,LV_OBJ_FLAG_CLICKABLE);label(caption,text,9,7,&lv_font_instrument_sans_medium_12,0x293B44);if(!p->scheduled&&p->photo==i)label(caption,LV_SYMBOL_OK,190,6,LV_FONT_DEFAULT,0x227AE1);}
-  button(page,30,284,190,"Import from USB",64,false);button(page,232,284,318,"Text colour",66,false);if(p->photo>=3)link_button(page,30,346,190,"Delete selected photo",67);
+gallery=box(body,0,140,676,156,0xF6F8FA);lv_obj_set_style_bg_opa(gallery,LV_OPA_TRANSP,0);lv_obj_add_flag(gallery,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE|LV_OBJ_FLAG_SCROLL_ELASTIC);lv_obj_clear_flag(gallery,LV_OBJ_FLAG_SCROLL_CHAIN_VER);lv_obj_set_scroll_dir(gallery,LV_DIR_VER);lv_obj_set_scrollbar_mode(gallery,LV_SCROLLBAR_MODE_AUTO);lv_obj_set_style_width(gallery,4,LV_PART_SCROLLBAR);lv_obj_set_style_pad_right(gallery,1,LV_PART_SCROLLBAR);lv_obj_set_style_radius(gallery,2,LV_PART_SCROLLBAR);lv_obj_set_style_bg_opa(gallery,170,LV_PART_SCROLLBAR);lv_obj_set_style_bg_color(gallery,lv_color_hex(0x8395A1),LV_PART_SCROLLBAR);int count=0;
+  for(int order=0;order<STANDBY_PHOTO_COUNT;order++){int i=order<3?order:order==3?STANDBY_PHOTO_MIST:order-1;if(standby_photo_is_imported(i)&&!standby_photo_exists(i-3))continue;char text[32];if(i<3)snprintf(text,sizeof(text),"%s",names[i]);else if(i==STANDBY_PHOTO_MIST)snprintf(text,sizeof(text),"Mist");else snprintf(text,sizeof(text),"USB photo %d",i-2);lv_obj_t*b=control(gallery,(count%3)*224,(count/3)*101,214,91,70+i,0xE6ECEE,!p->scheduled&&p->photo==i?0x3485E6:0xDCE4E9);count++;lv_obj_set_style_border_post(b,true,0);lv_obj_set_style_clip_corner(b,true,0);lv_obj_t*im=lv_img_create(b);lv_img_set_src(im,standby_photo_path(i));lv_img_set_pivot(im,0,0);lv_img_set_zoom(im,44);lv_obj_clear_flag(im,LV_OBJ_FLAG_CLICKABLE);lv_obj_t*caption=box(b,1,62,212,28,0xFFFFFF);lv_obj_clear_flag(caption,LV_OBJ_FLAG_CLICKABLE);label(caption,text,9,7,&lv_font_instrument_sans_medium_12,0x293B44);if(!p->scheduled&&p->photo==i)label(caption,LV_SYMBOL_OK,190,6,LV_FONT_DEFAULT,0x227AE1);}
+  button(page,30,284,190,"Import from USB",64,false);button(page,232,284,318,"Text colour",66,false);if(standby_photo_is_imported(p->photo))link_button(page,30,346,190,"Delete selected photo",67);
   label(page,"Changes apply only to this layout. Other layouts stay unchanged.",30,253,&lv_font_instrument_sans_medium_12,0x8395A1);label(page,"USB root: un260_delay_01.png ... 99.png\nPNG up to 5 MB. Max 6 photos.",232,338,&lv_font_instrument_sans_medium_12,0x667F90);
  }
  if(note)lv_obj_move_foreground(note);
 }
 static void settings_tick(lv_timer_t*t){(void)t;char msg[160];if(standby_store_poll(msg,sizeof(msg))){if(saving){bool ok=!memcmp(&draft,standby_config(),sizeof(draft));saving=false;if(ok)tab=0;}render();redraw=false;if(note){lv_label_set_text(note,msg);lv_obj_clear_flag(note,LV_OBJ_FLAG_HIDDEN);notice_tick=lv_tick_get();notice_visible=true;}return;}if(redraw){render();redraw=false;}if(notice_visible&&lv_tick_elaps(notice_tick)>=2500){notice_visible=false;if(note)lv_obj_add_flag(note,LV_OBJ_FLAG_HIDDEN);}if(!(tab==4&&moving.active))scene_update(&preview,&draft,false);}
-void ui_page_34_standby_create(lv_obj_t*parent){if(page)return;draft=*standby_config();tab=0;selected=0;saving=false;gesture_service_set_page_policy(UI_PAGE_STANDBY_SETTING,owns_single_drag,handle_gesture);page=box(parent,0,0,1280,400,0xF6F8FA);render();settings_timer=lv_timer_create(settings_tick,100,NULL);}
+void ui_page_34_standby_create(lv_obj_t*parent){if(page)return;draft=*standby_config();tab=0;selected=0;saving=false;gesture_service_set_page_policy(UI_PAGE_STANDBY_SETTING,owns_single_drag,handle_gesture);page=box(parent,0,0,1280,400,0xF6F8FA);ui_page_background_apply(page,UI_BACKGROUND_SETTINGS);render();settings_timer=lv_timer_create(settings_tick,100,NULL);}
 void ui_page_34_standby_destroy(void){gesture_service_clear_page_policy(UI_PAGE_STANDBY_SETTING);settings_detail_keyboard_hide();settings_detail_dialog_hide();if(settings_timer)lv_timer_del(settings_timer);settings_timer=NULL;if(page)lv_obj_del(page);page=NULL;body=NULL;note=NULL;hex_label=NULL;gallery=NULL;edit_hint=NULL;moving.active=false;notice_visible=false;memset(&preview,0,sizeof(preview));}
 /* A black cover animates without a full-screen translucent object layer.
  * The page owns cover and animation; entry and exit timings are independent. */

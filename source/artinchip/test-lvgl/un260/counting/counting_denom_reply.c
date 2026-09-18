@@ -98,6 +98,26 @@ static counting_denom_reply_result_t counting_denom_handle_end(
     bool query_was_pending;
 
     uart_debug_printf("0x0B denom detail receive end\n");
+    if (detail->live_denom_started) {
+        bool valid = !detail->live_denom_invalid;
+        detail->live_denom_started = false;
+        if (!valid) {
+            counting_denom_record_history(hooks, buf, len);
+            return COUNTING_DENOM_REPLY_IGNORED;
+        }
+        memcpy(sim_data->denom, detail->live_denom, sizeof(sim_data->denom));
+        sim_data->denom_number = detail->live_denom_number;
+        counting_denom_notify_main_data_changed(hooks);
+        /* A snapshot that straddles the real stop still needs final queries. */
+        if (session->phase == COUNTING_SESSION_ACTIVE) {
+            counting_denom_record_history(hooks, buf, len);
+            detail->wait_sn_after_reject_end = false;
+            return COUNTING_DENOM_REPLY_SESSION_END;
+        }
+    } else if (session->phase == COUNTING_SESSION_ACTIVE && !detail->query_pending) {
+        /* Never publish an orphan terminator as a finished count. */
+        return COUNTING_DENOM_REPLY_IGNORED;
+    }
     query_was_pending = counting_denom_query_complete(detail);
     counting_denom_record_history(hooks, buf, len);
 
@@ -113,11 +133,11 @@ static counting_denom_reply_result_t counting_denom_handle_end(
         return COUNTING_DENOM_REPLY_QUERY_END;
     }
 
-    {
+    if (session->phase != COUNTING_SESSION_ACTIVE) {
         uint8_t reject_cmd = 0x01;
         protocol_send(0x0C, &reject_cmd, 1);
     }
-    detail->wait_sn_after_reject_end = true;
+    detail->wait_sn_after_reject_end = session->phase != COUNTING_SESSION_ACTIVE;
     if (session->phase != COUNTING_SESSION_ACTIVE) {
         counting_denom_notify_main_data_changed(hooks);
     }
@@ -140,6 +160,7 @@ static counting_denom_reply_result_t counting_denom_handle_data(
     if (!counting_denom_parse_decimal(&buf[4], 8, &denom) ||
         !counting_denom_parse_decimal(&buf[12], 3, &pcs) ||
         denom <= 0 || pcs < 0) {
+        if (detail->live_denom_started) detail->live_denom_invalid = true;
         uart_debug_printf("0x0B invalid denom detail frame\n");
         return COUNTING_DENOM_REPLY_IGNORED;
     }
@@ -147,7 +168,10 @@ static counting_denom_reply_result_t counting_denom_handle_data(
         uart_debug_printf("0x0B query data ignored before start frame\n");
         return COUNTING_DENOM_REPLY_IGNORED;
     }
-    if (detail->query_pending) {
+    if (detail->live_denom_started) {
+        denom_items = detail->live_denom;
+        denom_count = &detail->live_denom_number;
+    } else if (detail->query_pending) {
         detail->query_activity_tick = app_clock_uptime_ms();
         denom_items = detail->query_denom;
         denom_count = &detail->query_denom_number;
@@ -190,6 +214,7 @@ static counting_denom_reply_result_t counting_denom_handle_data(
     }
 
     if (detail->query_pending) detail->query_overflow = true;
+    if (detail->live_denom_started) detail->live_denom_invalid = true;
     uart_debug_printf("0x0B denom capacity exhausted value=%d\n", denom);
     return COUNTING_DENOM_REPLY_IGNORED;
 }
@@ -207,13 +232,20 @@ counting_denom_reply_result_t counting_denom_reply_handle(
     }
 
     if (counting_denom_payload_is(buf, 0x00)) {
-        /* A subsequent real counting stream takes over from an abandoned
-         * idle query. Do not let a missing query terminator block counting. */
         if (detail->query_failed && session->phase != COUNTING_SESSION_IDLE) {
             detail->query_pending = false;
             detail->query_expired = false;
             detail->query_started = false;
         }
+        if (session->phase == COUNTING_SESSION_ACTIVE && !detail->query_pending) {
+            memset(detail->live_denom, 0, sizeof(detail->live_denom));
+            detail->live_denom_number = 0;
+            detail->live_denom_invalid = false;
+            detail->live_denom_started = true;
+            counting_denom_record_history(hooks, buf, len);
+            return COUNTING_DENOM_REPLY_START;
+        }
+        detail->live_denom_started = false;
         if (!counting_denom_query_mark_start(detail)) {
             memset(sim_data->denom, 0, sizeof(sim_data->denom));
             sim_data->denom_number = 0;
@@ -228,5 +260,8 @@ counting_denom_reply_result_t counting_denom_reply_handle(
                                          buf, len, hooks);
     }
 
+    if (session->phase == COUNTING_SESSION_ACTIVE &&
+        !detail->query_pending && !detail->live_denom_started)
+        return COUNTING_DENOM_REPLY_IGNORED;
     return counting_denom_handle_data(detail, sim_data, buf, len, hooks);
 }
