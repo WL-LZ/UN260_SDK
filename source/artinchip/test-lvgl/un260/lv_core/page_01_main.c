@@ -42,6 +42,7 @@ static lv_obj_t* main_page = NULL;
 static ui_element_t page_01_main_obj[40];
 static int page_01_main_len;
 static lv_obj_t *s_summary_card, *s_detail_card, *s_multi_card, *s_detail_tray;
+static lv_obj_t *s_detail_frame;
 static lv_obj_t *s_amount_unit_icon, *s_currency_code;
 static lv_obj_t *s_start_orbit;
 static bool s_multi_layout;
@@ -752,6 +753,16 @@ static void page_01_detail_section_btn_create_all(void)
     s_detail_btn_b = page_01_detail_section_btn_create(793, 26, "SERIAL", PAGE_01_DETAIL_SECTION_B);
     s_detail_btn_c = page_01_detail_section_btn_create(966, 26, "REJECT", PAGE_01_DETAIL_SECTION_C);
     page_01_detail_section_btn_style_apply();
+    /* A non-interactive stroke above all three flush selected surfaces. */
+    s_detail_frame = lv_obj_create(main_page);
+    lv_obj_remove_style_all(s_detail_frame);
+    lv_obj_set_pos(s_detail_frame, 620, 26);
+    lv_obj_set_size(s_detail_frame, 518, 40);
+    lv_obj_set_style_radius(s_detail_frame, 12, 0);
+    lv_obj_set_style_border_width(s_detail_frame, 3, 0);
+    lv_obj_set_style_border_color(s_detail_frame, lv_color_hex(0xECF0F3), 0);
+    lv_obj_set_style_border_opa(s_detail_frame, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(s_detail_frame, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
 }
 
 static void page_01_detail_section_btn_destroy_all(void)
@@ -763,6 +774,8 @@ static void page_01_detail_section_btn_destroy_all(void)
     if (s_detail_btn_b) lv_obj_del(s_detail_btn_b);
     if (s_detail_btn_c) lv_obj_del(s_detail_btn_c);
     if (s_detail_tray) lv_obj_del(s_detail_tray);
+    if (s_detail_frame) lv_obj_del(s_detail_frame);
+    s_detail_frame = NULL;
     s_detail_tray = NULL;
 
     s_detail_btn_a = NULL;
@@ -1034,7 +1047,7 @@ static void page_01_main_layout_refresh(void)
     const bool multi = currency_state_multi_selected() ||
         !counting_data_monetary_result_supported(counting_data_current());
     if (!s_summary_card || !s_multi_card) return;
-    lv_obj_t *single[] = {s_summary_card, s_detail_card, s_detail_btn_a, s_detail_btn_b, s_detail_btn_c, s_detail_tray};
+    lv_obj_t *single[] = {s_summary_card, s_detail_card, s_detail_btn_a, s_detail_btn_b, s_detail_btn_c, s_detail_tray, s_detail_frame};
     for (unsigned i = 0; i < sizeof(single) / sizeof(single[0]); ++i) {
         if (!single[i]) continue;
         if (multi) lv_obj_add_flag(single[i], LV_OBJ_FLAG_HIDDEN);
@@ -1170,6 +1183,7 @@ void ui_main_destroy(void)
     memset(page_01_main_obj, 0, sizeof(page_01_main_obj));
     page_01_main_len = 0;
     s_summary_card = s_detail_card = s_multi_card = s_detail_tray = NULL;
+    s_detail_frame = NULL;
     s_start_orbit = NULL;
     s_amount_unit_icon = s_currency_code = NULL;
     s_curr_img = s_curr_label = NULL;

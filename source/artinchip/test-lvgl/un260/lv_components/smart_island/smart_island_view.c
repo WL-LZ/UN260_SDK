@@ -4,6 +4,10 @@
 #include "un260/machine_state/machine_state.h"
 #include "un260/lv_system/machine_time.h"
 #include "un260/counting/counting_data_store.h"
+#include "un260/counting/counting_multi.h"
+#include "un260/currency/currency_metadata.h"
+#include "un260/font/scaled_font.h"
+#include "un260/font/main_fonts.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/user_cfg.h"
 #include <string.h>
@@ -14,6 +18,10 @@
 #define SMART_ISLAND_COMPACT_H            44
 #define SMART_ISLAND_RADIUS               22
 #define SMART_ISLAND_MINI_W               180
+
+/* Single island instance; no per-frame font allocation. */
+static scaled_font_t multi_symbol_font;
+static uint8_t multi_symbol_pixels[1024];
 
 #define SMART_ISLAND_BG_COUNTING          0x111111
 #define SMART_ISLAND_BG_WARNING           0xF59E0B
@@ -288,6 +296,7 @@ static void smart_island_clear_object_refs(void)
     g_si_ctx.objects.badge = NULL;
     g_si_ctx.objects.progress = NULL;
     g_si_ctx.objects.counting_root = NULL;
+    memset(g_si_ctx.objects.counting_multi,0,sizeof(g_si_ctx.objects.counting_multi));
     g_si_ctx.objects.counting_gate = NULL;
     g_si_ctx.objects.counting_gate_left = NULL;
     g_si_ctx.objects.counting_gate_right = NULL;
@@ -485,14 +494,14 @@ static void smart_island_counting_anim_start(void)
         lv_anim_start(&animation);
         g_si_ctx.counting.serial_anim_running = true;
     }
-    if (g_si_ctx.objects.counting_value_scan &&
+    if (counting_data_monetary_result_supported(counting_data_current()) &&
+        g_si_ctx.objects.counting_value_scan &&
         lv_obj_is_valid(g_si_ctx.objects.counting_value_scan)) {
         lv_anim_init(&animation);
         lv_anim_set_var(&animation, g_si_ctx.objects.counting_value_scan);
         lv_anim_set_exec_cb(&animation, smart_island_serial_scan_anim_cb);
-        const bool multi=!counting_data_monetary_result_supported(counting_data_current());
-        lv_anim_set_values(&animation, 0, multi?144:24);
-        lv_anim_set_time(&animation, multi?1400:610);
+        lv_anim_set_values(&animation, 0, 24);
+        lv_anim_set_time(&animation, 610);
         lv_anim_set_playback_time(&animation, 190);
         lv_anim_set_repeat_delay(&animation, 100);
         lv_anim_set_repeat_count(&animation, LV_ANIM_REPEAT_INFINITE);
@@ -570,6 +579,56 @@ static void smart_island_counting_value_apply(bool anim_en)
     g_si_ctx.counting.last_roll_tick = now;
 }
 
+static void smart_island_multi_live_apply(void)
+{
+    const multi_currency_t *current=counting_multi_latest();
+    char pcs[40],amount[24];
+    lv_snprintf(pcs,sizeof(pcs),"%s %s","--",ui_text_get(UI_TEXT_PAGE01_DETAIL_COL_PCS));
+    lv_snprintf(amount,sizeof(amount),"--");
+    const char *symbol=current?currency_metadata_symbol(current->code):NULL;
+    if(current){
+        lv_snprintf(pcs,sizeof(pcs),"%u %s",(unsigned)current->pcs,ui_text_get(UI_TEXT_PAGE01_DETAIL_COL_PCS));
+        lv_snprintf(amount,sizeof(amount),"%lu",(unsigned long)current->amount);
+    }
+    const char *values[4]={current?current->code:"---",pcs,amount,symbol?symbol:""};
+    const lv_font_t *fonts[]={&lv_font_instrument_sans_semibold_18,
+        &lv_font_instrument_sans_semibold_16,&lv_font_instrument_sans_semibold_14};
+    lv_point_t sizes[4];int total=0;unsigned fit=0;
+    for(fit=0;fit<3;fit++){
+        total=0;
+        for(unsigned i=0;i<4;i++){
+            lv_txt_get_size(&sizes[i],values[i],i==3?&multi_symbol_font.font:fonts[fit],0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+            total+=sizes[i].x;
+        }
+        total+=24+(sizes[3].x?5:0);
+        if(fit==0){
+            const int available=SMART_ISLAND_COUNT_W-76-14;
+            if(total>available)g_si_ctx.counting.multi_no_gate=true;
+            else if(total<=available-12)g_si_ctx.counting.multi_no_gate=false;
+        }
+        if(total<=SMART_ISLAND_COUNT_W-28)break;
+    }
+    if(fit>=3)fit=2;
+    int left=g_si_ctx.counting.multi_no_gate?14:76;
+    int x=left+(SMART_ISLAND_COUNT_W-14-left-total)/2;
+    for(unsigned i=0;i<4;i++){
+        lv_obj_t *label=g_si_ctx.objects.counting_multi[i];
+        if(strcmp(lv_label_get_text(label),values[i]))lv_label_set_text(label,values[i]);
+        lv_obj_set_style_text_font(label,i==3?&multi_symbol_font.font:fonts[fit],0);
+        lv_obj_set_size(label,sizes[i].x,sizes[i].y);
+        lv_obj_set_pos(label,x,(SMART_ISLAND_COUNT_H-sizes[i].y)/2);
+        lv_obj_clear_flag(label,LV_OBJ_FLAG_HIDDEN);
+        x+=sizes[i].x+(i<2?12:i==2?5:0);
+    }
+    if(g_si_ctx.counting.multi_no_gate){
+        lv_obj_add_flag(g_si_ctx.objects.counting_gate,LV_OBJ_FLAG_HIDDEN);
+        smart_island_counting_anim_stop();
+    }else{
+        lv_obj_clear_flag(g_si_ctx.objects.counting_gate,LV_OBJ_FLAG_HIDDEN);
+        smart_island_counting_anim_start();
+    }
+}
+
 static void smart_island_counting_apply_visibility(void)
 {
     bool visible =
@@ -601,21 +660,14 @@ static void smart_island_counting_apply_visibility(void)
         lv_obj_add_flag(g_si_ctx.objects.counting_value_next,LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(g_si_ctx.objects.counting_divider,LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(g_si_ctx.objects.counting_serial_track,LV_OBJ_FLAG_HIDDEN);
-        lv_label_set_text(g_si_ctx.objects.counting_unit,"MULTI COUNT");
-        lv_obj_set_pos(g_si_ctx.objects.counting_unit,76,2);
-        lv_obj_clear_flag(g_si_ctx.objects.counting_unit,LV_OBJ_FLAG_HIDDEN);
-        lv_label_set_text(g_si_ctx.objects.counting_serial,"Separating currencies");
-        lv_obj_set_pos(g_si_ctx.objects.counting_serial,76,19);
-        lv_obj_set_width(g_si_ctx.objects.counting_serial,214);
-        lv_obj_set_style_text_align(g_si_ctx.objects.counting_serial,LV_TEXT_ALIGN_LEFT,0);
-        lv_obj_set_style_text_font(g_si_ctx.objects.counting_serial,&lv_font_instrument_sans_medium_12,0);
-        lv_obj_clear_flag(g_si_ctx.objects.counting_serial,LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_pos(g_si_ctx.objects.counting_value_track,76,39);
-        lv_obj_set_width(g_si_ctx.objects.counting_value_track,154);
-        lv_obj_clear_flag(g_si_ctx.objects.counting_value_track,LV_OBJ_FLAG_HIDDEN);
-        smart_island_counting_anim_start();
+        lv_obj_add_flag(g_si_ctx.objects.counting_unit,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g_si_ctx.objects.counting_serial,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g_si_ctx.objects.counting_value_track,LV_OBJ_FLAG_HIDDEN);
+        smart_island_multi_live_apply();
         return;
     }
+    for(unsigned i=0;i<4;i++)lv_obj_add_flag(g_si_ctx.objects.counting_multi[i],LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(g_si_ctx.objects.counting_gate,LV_OBJ_FLAG_HIDDEN);
     lv_label_set_text(g_si_ctx.objects.counting_unit,"PCS");
     lv_obj_set_pos(g_si_ctx.objects.counting_serial,142,12);
     lv_obj_set_width(g_si_ctx.objects.counting_serial,154);
@@ -1661,6 +1713,17 @@ void smart_island_create(lv_obj_t *parent)
                     SMART_ISLAND_COUNT_W, SMART_ISLAND_COUNT_H);
     lv_obj_clear_flag(g_si_ctx.objects.counting_root, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(g_si_ctx.objects.counting_root, LV_OBJ_FLAG_HIDDEN);
+
+    if(!scaled_font_init(&multi_symbol_font,&lv_font_main_currency_32,56,
+                        multi_symbol_pixels,sizeof(multi_symbol_pixels)))
+        multi_symbol_font.font=lv_font_main_currency_32;
+    for(unsigned i=0;i<4;i++){
+        lv_obj_t *label=lv_label_create(g_si_ctx.objects.counting_root);
+        g_si_ctx.objects.counting_multi[i]=label;
+        lv_label_set_text(label,"");lv_label_set_long_mode(label,LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_text_color(label,lv_color_hex(i==3?0xB8C0C6:0xFFFFFF),0);
+        lv_obj_add_flag(label,LV_OBJ_FLAG_HIDDEN);
+    }
 
     g_si_ctx.objects.counting_gate = lv_obj_create(g_si_ctx.objects.counting_root);
     lv_obj_remove_style_all(g_si_ctx.objects.counting_gate);

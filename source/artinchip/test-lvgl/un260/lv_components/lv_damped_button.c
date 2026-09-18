@@ -8,6 +8,11 @@
 /* 20 / 255 = 7.84%, i.e. the requested perceptual 8% darkening. */
 #define LV_DAMPED_BUTTON_DARKEN_OPA     ((lv_opa_t)20U)
 
+lv_color_t lv_damped_button_pressed_color(lv_color_t normal_color)
+{
+    return lv_color_darken(normal_color, LV_DAMPED_BUTTON_DARKEN_OPA);
+}
+
 typedef struct lv_damped_button_ctx {
     lv_obj_t *button;
     lv_color_t normal_color;
@@ -127,8 +132,7 @@ void lv_damped_button_set_palette(lv_obj_t *button,
        compatibility.  Product-wide feedback is now deterministic: the
        pressed shade is always approximately 8% darker than the current base. */
     LV_UNUSED(pressed_color);
-    pressed_color = lv_color_darken(normal_color,
-                                    LV_DAMPED_BUTTON_DARKEN_OPA);
+    pressed_color = lv_damped_button_pressed_color(normal_color);
 
     ctx = lv_damped_button_ctx_find(button);
     if (ctx != NULL) {
@@ -171,8 +175,7 @@ void lv_damped_button_register(lv_obj_t *button,
     memset(ctx, 0, sizeof(*ctx));
     ctx->button = button;
     ctx->normal_color = normal_color;
-    ctx->pressed_color = lv_color_darken(normal_color,
-                                         LV_DAMPED_BUTTON_DARKEN_OPA);
+    ctx->pressed_color = lv_damped_button_pressed_color(normal_color);
     ctx->current_color = normal_color;
     ctx->next = s_damped_button_ctx_list;
     s_damped_button_ctx_list = ctx;

@@ -24,6 +24,8 @@ typedef struct {
     bool counting, overflow;
 } counting_multi_t;
 const counting_multi_t *counting_multi_current(void);
+/* Most recent accepted currency summary in this pass; NULL before its first frame. */
+const multi_currency_t *counting_multi_latest(void);
 void counting_multi_reset(void);
 void counting_multi_begin(bool add);
 /* Validated 16-byte per-currency / 13-byte global 0E; totals are never added twice. */

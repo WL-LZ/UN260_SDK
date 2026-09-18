@@ -749,6 +749,12 @@ int main(void)
     history_test_fixtures(0);
     ui_page_19_history_create(lv_scr_act()); history_test_tick(100);
     assert(history && !history->record_count && !history->result.matched_count);
+    for(unsigned i=0;i<4;i++) {
+        lv_obj_t *label=lv_damped_button_get_label(history->actions[i]);
+        assert(lv_obj_get_style_text_font(label,0)==&lv_font_instrument_sans_semibold_12);
+        if(!lv_obj_has_state(label,LV_STATE_DISABLED))
+            assert(lv_obj_get_style_text_color(label,0).full==lv_color_hex(HISTORY_BODY).full);
+    }
     assert(lv_obj_is_visible(history->empty));
     history_test_bmp("history-empty");
     ui_page_19_history_destroy(); history_test_tick(300);

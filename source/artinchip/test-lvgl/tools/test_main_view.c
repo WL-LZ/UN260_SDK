@@ -279,11 +279,45 @@ static void test_main(void)
     assert(strstr((const char *)lv_img_get_src(s_curr_img),"CURR_AUTO.png"));
     assert(currency_state_confirm_multi_selection());ui_refresh_main_page();render();
     counting_data_mark_multi_result(counting_data_mutable());
+    counting_multi_begin(false);
     smart_island_notify_count_start();tick(400);
-    assert(!strcmp(lv_label_get_text(g_si_ctx.objects.counting_unit),"MULTI COUNT"));
-    assert(lv_obj_is_visible(g_si_ctx.objects.counting_serial));
+    assert(!strcmp(lv_label_get_text(g_si_ctx.objects.counting_multi[0]),"---"));
+    assert(!lv_obj_is_visible(g_si_ctx.objects.counting_serial));
+    assert(!lv_obj_is_visible(g_si_ctx.objects.counting_unit));
     assert(!lv_obj_is_visible(g_si_ctx.objects.counting_value));
+    uint8_t island_live[16]={0xfd,0xdf,16,14,'U','S','D',0,0,2,20,0,14,0,1,0};
+    assert(counting_multi_info(island_live,16));smart_island_update_counting(14,0);tick(80);
+    assert(!strcmp(lv_label_get_text(g_si_ctx.objects.counting_multi[0]),"USD"));
+    assert(!strcmp(lv_label_get_text(g_si_ctx.objects.counting_multi[2]),"532"));
+    assert(!strcmp(lv_label_get_text(g_si_ctx.objects.counting_multi[3]),"$"));
+    assert(lv_obj_is_visible(g_si_ctx.objects.counting_gate));
     write_bmp("multi-island-counting");
+    memcpy(island_live+4,"CNY",3);island_live[9]=0;island_live[10]=5;island_live[12]=1;
+    assert(counting_multi_info(island_live,16));smart_island_update_counting(15,0);tick(80);
+    assert(!strcmp(lv_label_get_text(g_si_ctx.objects.counting_multi[0]),"CNY"));
+    write_bmp("multi-island-cny");
+    memcpy(island_live+4,"USD",3);island_live[9]=2;island_live[10]=88;island_live[12]=14;
+    assert(counting_multi_info(island_live,16));smart_island_update_counting(15,0);tick(80);
+    assert(!strcmp(lv_label_get_text(g_si_ctx.objects.counting_multi[0]),"USD"));
+    assert(!strcmp(lv_label_get_text(g_si_ctx.objects.counting_multi[2]),"600"));
+    memset(island_live+7,255,6);
+    assert(counting_multi_info(island_live,16));smart_island_update_counting(65536,0);tick(80);
+    assert(!strcmp(lv_label_get_text(g_si_ctx.objects.counting_multi[2]),"4294967295"));
+    assert(!lv_obj_is_visible(g_si_ctx.objects.counting_gate));
+    assert(!g_si_ctx.counting.gate_anim_running);
+    lv_area_t island_bounds;lv_obj_get_coords(g_si_ctx.objects.counting_root,&island_bounds);
+    int right=island_bounds.x1;
+    for(unsigned i=0;i<4;i++){
+        lv_area_t area;lv_obj_get_coords(g_si_ctx.objects.counting_multi[i],&area);
+        assert(area.x1>=right&&area.x2<island_bounds.x2-8);
+        assert(area.y1>=island_bounds.y1&&area.y2<=island_bounds.y2);
+        right=area.x2;
+    }
+    write_bmp("multi-island-long");
+    counting_multi_begin(true);smart_island_update_counting(65536,0);tick(80);
+    assert(!strcmp(lv_label_get_text(g_si_ctx.objects.counting_multi[0]),"---"));
+    assert(lv_obj_is_visible(g_si_ctx.objects.counting_gate));
+    counting_multi_reset();
     smart_island_notify_count_reset();tick(400);
     assert(s_multi_layout && lv_obj_is_visible(s_multi_card) && !lv_obj_is_visible(s_detail_btn_a) && !lv_obj_is_visible(s_detail_tray));
     assert(page_01_multi_scroll());
@@ -382,7 +416,25 @@ static void test_multi_expanded(void)
     tick(1000);write_bmp("list-multi-reject");
     ui_multi_detail_visible(v,false);
     ui_multi_detail_t *compact=ui_multi_detail_create(lv_scr_act(),false,NULL,NULL);assert(compact);
+    assert(lv_obj_get_style_border_width(ui_multi_detail_object(compact),0)==1);
+    assert(lv_obj_get_style_border_color(ui_multi_detail_object(compact),0).full==lv_color_hex(0xECF0F3).full);
     ui_multi_detail_visible(compact,true);tick(80);write_bmp("restored-main-multi-overview");
+    /* Reject uses x=22; returning must restore both title and explanation. */
+    for(unsigned cycle=0;cycle<3;cycle++){
+        ui_multi_detail_select(compact,-2,0);tick(80);
+        assert(ui_multi_detail_back(compact));tick(80);
+        lv_obj_t *root=ui_multi_detail_object(compact),*title=NULL,*subtitle=NULL;
+        for(unsigned i=0;i<lv_obj_get_child_cnt(root);i++){
+            lv_obj_t *child=lv_obj_get_child(root,i);
+            if(!lv_obj_check_type(child,&lv_label_class))continue;
+            const char *value=lv_label_get_text(child);
+            if(!strcmp(value,ui_text_get(UI_TEXT_MULTI_RESULTS)))title=child;
+            if(!subtitle&&!strcmp(value,ui_text_get(UI_TEXT_MULTI_SEPARATE)))subtitle=child;
+        }
+        assert(title&&subtitle&&lv_obj_get_x(title)==194);
+        assert(lv_obj_get_x(subtitle)==lv_obj_get_x(title));
+        assert(lv_obj_get_y(subtitle)>lv_obj_get_y(title));
+    }
     lv_obj_t *currency_target=ui_multi_detail_currency_target(compact);
     pointer(230,48,true);tick(80);
     assert(lv_obj_has_state(currency_target,LV_STATE_PRESSED));
@@ -393,6 +445,8 @@ static void test_multi_expanded(void)
     lv_obj_t *overview_row=lv_obj_get_child(ui_multi_detail_scroll(compact),0);
     pointer(500,140,true);
     assert(lv_obj_has_state(overview_row,LV_STATE_PRESSED));
+    assert(lv_obj_get_style_bg_color(overview_row,0).full==lv_color_darken(lv_color_white(),20).full);
+    assert(lv_obj_get_style_bg_color(overview_row,0).ch.red==lv_obj_get_style_bg_color(overview_row,0).ch.blue);
     write_bmp("multi-row-pressed");
     pointer(500,160,true);
     assert(!lv_obj_has_state(overview_row,LV_STATE_PRESSED));

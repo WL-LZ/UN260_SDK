@@ -10,8 +10,11 @@ static void marker(unsigned value,unsigned time){uint8_t f[16]={0xfd,0xdf,16,11}
 static void item(unsigned value,unsigned pcs,unsigned time){uint8_t f[16]={0xfd,0xdf,16,11};char d[12];snprintf(d,sizeof(d),"%8u%3u",value,pcs);memcpy(f+4,d,11);counting_multi_denom(f,16,time);}
 int main(void){
  const counting_multi_t *m=counting_multi_current();counting_multi_begin(false);global(0,0,0);
+ assert(!counting_multi_latest());
  live("USD",100,1,9);live("USD",532,14,9);live("USD",532,14,9);live("CNY",5,1,9);live("CNY",10,2,9);
  assert(m->count==2&&m->total_pcs==16&&m->currencies[0].amount==532);assert(!counting_multi_request(0,0));
+ assert(counting_multi_latest()==&m->currencies[1]);
+ assert(counting_multi_latest()->amount==10);
  global(16,9,1);global(0,0,2);assert(!m->counting&&m->total_pcs==16&&m->reject==9);
  assert(counting_multi_request(0,10));counting_multi_poll(9);assert(m->currencies[0].status==MULTI_DETAIL_LOADING);
  assert(!memcmp(last,"\0USD",4));assert(!counting_multi_request(1,10));
@@ -19,7 +22,7 @@ int main(void){
  assert(m->currencies[0].status==MULTI_DETAIL_LOADING);marker(255,18);
  assert(m->currencies[0].status==MULTI_DETAIL_READY&&m->currencies[0].denom_count==6);
  assert(counting_multi_request(1,20));marker(0,21);item(5,2,22);marker(255,23);assert(m->currencies[1].status==MULTI_DETAIL_READY);
- counting_multi_begin(true);global(0,0,0);live("CNY",15,3,9);global(17,9,1);global(0,0,2);
+ counting_multi_begin(true);assert(!counting_multi_latest());global(0,0,0);live("CNY",15,3,9);global(17,9,1);global(0,0,2);
  assert(m->count==2&&m->currencies[0].amount==532&&m->currencies[1].pcs==3&&m->total_pcs==17);
  assert(counting_multi_request(0,30));marker(0,31);item(100,1,32);counting_multi_poll(2600);
  assert(m->currencies[0].status==MULTI_DETAIL_TIMEOUT&&counting_multi_query_busy());assert(!counting_multi_request(1,2700));

@@ -3,6 +3,7 @@
 #include "un260/protocol/protocol_send.h"
 
 static counting_multi_t model;
+static int latest_index = -1;
 static bool prefetch_pending;
 static bool prefetch_settling;
 static uint32_t prefetch_after;
@@ -21,6 +22,10 @@ static struct {
 } query;
 
 const counting_multi_t *counting_multi_current(void) { return &model; }
+const multi_currency_t *counting_multi_latest(void)
+{
+    return latest_index>=0 && (unsigned)latest_index<model.count ? &model.currencies[latest_index] : NULL;
+}
 bool counting_multi_query_busy(void) { return query.busy; }
 void counting_multi_drain_legacy(void)
 {
@@ -30,6 +35,7 @@ void counting_multi_drain_legacy(void)
 }
 void counting_multi_reset(void)
 {
+    latest_index = -1;
     prefetch_pending = false;
     prefetch_settling = false;
     memset(prefetch_attempts, 0, sizeof(prefetch_attempts));
@@ -43,6 +49,7 @@ void counting_multi_reset(void)
 }
 void counting_multi_begin(bool add)
 {
+    latest_index = -1;
     prefetch_pending = false;
     prefetch_settling = false;
     memset(prefetch_attempts, 0, sizeof(prefetch_attempts));
@@ -78,6 +85,7 @@ bool counting_multi_info(const uint8_t *f, uint8_t len)
         if (index == model.count) { memcpy(c->code, f + 4, 3); c->code[3] = 0; model.count++; }
         c->amount = ((uint32_t)f[7] << 24) | ((uint32_t)f[8] << 16) | ((uint32_t)f[9] << 8) | f[10];
         c->pcs = ((uint16_t)f[11] << 8) | f[12];
+        latest_index = (int)index;
         c->status = MULTI_DETAIL_NONE;
         model.total_pcs = 0;
         for (unsigned i = 0; i < model.count; ++i) model.total_pcs += model.currencies[i].pcs;

@@ -26,6 +26,7 @@ typedef struct {
     lv_obj_t *badge;
     lv_obj_t *progress;
     lv_obj_t *counting_root;
+    lv_obj_t *counting_multi[4]; /* code, PCS, amount, currency symbol */
     lv_obj_t *counting_gate;
     lv_obj_t *counting_gate_left;
     lv_obj_t *counting_gate_right;
@@ -123,6 +124,8 @@ typedef struct {
     bool gate_anim_running;
     bool serial_anim_running;
     bool value_initialized;
+    bool multi_no_gate;
+    uint32_t multi_revision;
     char display_value[16];
     char serial[16];
 } smart_island_counting_state_t;

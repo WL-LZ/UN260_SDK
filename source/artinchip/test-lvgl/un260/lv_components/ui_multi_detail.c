@@ -156,7 +156,6 @@ static void tap(lv_event_t *e)
 static lv_obj_t *create_row(lv_obj_t *parent,lv_coord_t width,void *ctx)
 {
     ui_multi_detail_t *v=ctx;lv_obj_t *row=box(parent,0,0,width,42,0xFFFFFF,6);if(!row)return NULL;
-    lv_obj_set_style_bg_color(row,lv_color_hex(0xDFE8EE),LV_STATE_PRESSED);
     for(int i=0;i<3;i++)if(!label(row,12,8,200,"",&lv_font_instrument_sans_semibold_20,0x4C606E)){lv_obj_del(row);return NULL;}
     lv_obj_t *f=lv_img_create(row);if(!f){lv_obj_del(row);return NULL;}lv_obj_set_pos(f,12,9);
     if(!label(row,12,12,36,"",&v->symbol_font.font,0x7A8D9B)||
@@ -170,6 +169,7 @@ static void bind_row(lv_obj_t *row,uint32_t index,void *ctx)
     bool overview=v->selected==-1,rejects_view=v->selected==-2;
     uint32_t bg=index%2?0xF4F6F7:0xFFFFFF;
     lv_obj_set_style_bg_color(row,lv_color_hex(bg),0);
+    lv_obj_set_style_bg_color(row,lv_damped_button_pressed_color(lv_color_hex(bg)),LV_STATE_PRESSED);
     lv_obj_t *a=lv_obj_get_child(row,0),*b=lv_obj_get_child(row,1),*c=lv_obj_get_child(row,2),*f=lv_obj_get_child(row,3);
     int x1=overview?74:12,x2,x3;columns(v,&x2,&x3);
     lv_obj_t *symbol=lv_obj_get_child(row,4);
@@ -208,6 +208,8 @@ ui_multi_detail_t *ui_multi_detail_create(lv_obj_t *parent,bool expanded,ui_mult
     v->generation=counting_multi_current()->generation;v->dirty=true;
     if(!scaled_font_init(&v->symbol_font,&lv_font_main_currency_32,56,v->symbol_pixels,sizeof(v->symbol_pixels))){lv_mem_free(v);return NULL;}
     v->root=box(parent,expanded?16:108,12,v->width,v->height,0xFFFFFF,16);if(!v->root){lv_mem_free(v);return NULL;}
+    lv_obj_set_style_border_width(v->root,1,0);
+    lv_obj_set_style_border_color(v->root,lv_color_hex(0xECF0F3),0);
     if(!lv_obj_add_event_cb(v->root,deleted,LV_EVENT_DELETE,v)){lv_obj_del(v->root);lv_mem_free(v);return NULL;}
     int head_y=expanded?0:10;
     v->flag=lv_img_create(v->root);if(!v->flag)goto failed;lv_obj_set_pos(v->flag,22,head_y+18);
@@ -217,8 +219,8 @@ ui_multi_detail_t *ui_multi_detail_create(lv_obj_t *parent,bool expanded,ui_mult
     if(!v->currency_target)goto failed;
     lv_obj_set_style_bg_opa(v->currency_target,0,0);
     lv_obj_set_style_radius(v->currency_target,10,0);
-    lv_obj_set_style_bg_color(v->currency_target,lv_color_hex(0x496475),LV_STATE_PRESSED);
-    lv_obj_set_style_bg_opa(v->currency_target,30,LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(v->currency_target,lv_color_black(),LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(v->currency_target,20,LV_STATE_PRESSED);
     lv_obj_add_flag(v->currency_target,LV_OBJ_FLAG_CLICKABLE);
     v->title=label(v->root,expanded?208:194,head_y+12,168,"",&lv_font_instrument_sans_semibold_18,0x4C606E);
     v->subtitle=label(v->root,expanded?208:194,head_y+39,168,"",&lv_font_instrument_sans_medium_10,0x7A8D9B);
@@ -338,8 +340,10 @@ void ui_multi_detail_refresh(ui_multi_detail_t *v)
     text(v->title,ui_text_get(rejects_view?UI_TEXT_LIST_REJECT_ANALYSIS:overview?UI_TEXT_MULTI_RESULTS:UI_TEXT_MULTI_DETAILS));
     char scope[32];snprintf(scope,sizeof(scope),"MULTI / %s",c?c->code:"");
     text(v->subtitle,c?scope:ui_text_get(rejects_view?UI_TEXT_MULTI_GLOBAL_REJECT:UI_TEXT_MULTI_SEPARATE));
-    lv_obj_set_x(v->title,rejects_view?22:v->expanded?208:194);
-    lv_obj_set_x(v->subtitle,lv_obj_get_x(v->title));
+    /* Position getters still contain the previous layout inside this batch. */
+    const int title_x=rejects_view?22:v->expanded?208:194;
+    lv_obj_set_x(v->title,title_x);
+    lv_obj_set_x(v->subtitle,title_x);
     lv_obj_set_width(v->title,c?168:v->width-560);
     lv_obj_set_width(v->subtitle,c?168:v->width-560);
     lv_obj_set_style_text_font(v->title,c?&lv_font_instrument_sans_semibold_18:&lv_font_instrument_sans_semibold_22,0);

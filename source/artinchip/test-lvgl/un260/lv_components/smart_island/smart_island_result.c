@@ -2,6 +2,7 @@
 #include "un260/lv_components/lv_fault_popup.h"
 #include "un260/lv_system/counting_ui_runtime.h"
 #include "un260/counting/counting_data_store.h"
+#include "un260/counting/counting_multi.h"
 #include "un260/lv_system/user_cfg.h"
 #include "un260/machine_state/machine_state.h"
 
@@ -115,6 +116,8 @@ void smart_island_notify_count_start(void)
     g_si_ctx.counting.mode = machine_state_mode();
     g_si_ctx.counting.serial[0] = '\0';
     g_si_ctx.counting.value_initialized = false;
+    g_si_ctx.counting.multi_no_gate = false;
+    g_si_ctx.counting.multi_revision = counting_multi_current()->revision;
     smart_island_set_scene(SMART_ISLAND_SCENE_COUNTING, NULL, NULL);
     smart_island_set_visual(SMART_ISLAND_VISUAL_COMPACT, true);
     smart_island_view_update_counting();
@@ -126,17 +129,21 @@ void smart_island_update_counting(int pcs, float amount)
     int amount_integer = amount > 0.0f ? (int)(amount + 0.5f) : 0;
     uint8_t mode = machine_state_mode();
     bool mode_changed = g_si_ctx.counting.mode != mode;
+    uint32_t multi_revision = counting_multi_current()->revision;
+    bool multi_changed = !counting_data_monetary_result_supported(counting_data_current()) &&
+                         g_si_ctx.counting.multi_revision != multi_revision;
 
     if (pcs < 0) pcs = 0;
     if (g_si_ctx.counting.pcs == pcs &&
         g_si_ctx.counting.amount == amount_integer &&
-        g_si_ctx.counting.mode == mode) {
+        g_si_ctx.counting.mode == mode && !multi_changed) {
         return;
     }
 
     g_si_ctx.counting.pcs = pcs;
     g_si_ctx.counting.amount = amount_integer;
     g_si_ctx.counting.mode = mode;
+    g_si_ctx.counting.multi_revision = multi_revision;
     if (mode_changed && g_si_ctx.view.scene == SMART_ISLAND_SCENE_COUNTING &&
         !g_si_ctx.lifecycle.suspended) {
         smart_island_view_apply_visual(SMART_ISLAND_VISUAL_COMPACT, true);

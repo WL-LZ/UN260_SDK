@@ -221,7 +221,6 @@ static lv_obj_t *record_row_create(lv_obj_t *parent,lv_coord_t width,void *conte
     (void)context;
     lv_obj_t *row=surface(parent,0,0,width,HISTORY_ROW_HEIGHT,8,0xFFFFFF);
     if (!row) return NULL;
-    lv_obj_set_style_bg_color(row,lv_color_hex(0xDFE8EE),LV_STATE_PRESSED);
     const int x[]={16,164,432,516,670,982},w[]={140,250,76,116,194,118};
     for (unsigned i=0;i<6;++i)
         if (!label(row,x[i],14,w[i],25,i==0 ? &lv_font_instrument_sans_medium_14 :
@@ -242,6 +241,7 @@ static void record_row_bind(lv_obj_t *row,uint32_t index,void *context)
     const ui_history_record_t *rec=record_find(id);
     bool selected=id_selected(id);
     lv_obj_set_style_bg_color(row,lv_color_hex(selected ? 0xDCE6EC : index%2 ? 0xF4F6F7 : 0xFFFFFF),0);
+    lv_obj_set_style_bg_color(row,lv_damped_button_pressed_color(lv_color_hex(index%2 ? 0xF4F6F7 : 0xFFFFFF)),LV_STATE_PRESSED);
     lv_obj_t *box=lv_obj_get_child(row,6);
     show(box,history->selecting);
     lv_obj_set_style_bg_color(box,lv_color_hex(selected ? 0x657F90 : 0xFFFFFF),0);
@@ -936,6 +936,8 @@ void ui_page_19_history_create(lv_obj_t *parent)
         lv_damped_button_set_palette(history->actions[i],lv_color_hex(0xFFFFFF),lv_color_hex(0xEBEBEB));
         lv_obj_set_style_radius(history->actions[i],12,0);
         lv_obj_set_style_text_font(lv_damped_button_get_label(history->actions[i]),&lv_font_instrument_sans_semibold_12,0);
+        lv_obj_set_style_text_color(lv_damped_button_get_label(history->actions[i]),lv_color_hex(HISTORY_BODY),0);
+        lv_obj_set_style_text_color(lv_damped_button_get_label(history->actions[i]),lv_color_hex(0xAAB5BE),LV_STATE_DISABLED);
     }
     history->list_panel=surface(history->root,16,90,1140,298,15,0xFFFFFF);
     if (!history->list_panel) goto failed;
