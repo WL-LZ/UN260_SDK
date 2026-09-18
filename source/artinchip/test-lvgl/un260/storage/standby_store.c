@@ -33,7 +33,7 @@ static const char *paths[] = {
  "L:" DIR "/standby_5.bin", "L:" DIR "/standby_6.bin" };
 const char *standby_photo_path(unsigned photo) { return paths[photo < 9 ? photo : 1]; }
 void standby_defaults(standby_config_t *c) {
- memset(c,0,sizeof(*c)); c->version=2; c->minutes=5;
+ memset(c,0,sizeof(*c)); c->version=2; c->minutes=1;
  const uint32_t colors[]={0x14232D,0xEDF1EC,0x30243C};
  for(int m=0;m<2;m++) for(int i=0;i<3;i++) {
   standby_layout_t *p=&c->layout[m][i];p->x=44+328*i;p->y=64;
