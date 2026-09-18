@@ -63,4 +63,6 @@ bool lv_recycled_list_index_at_point(lv_recycled_list_t *list,
 bool lv_recycled_list_tap_allowed(const lv_recycled_list_t *list);
 /* Owner hide/reset/gesture cancellation clears any stretch and pauses motion. */
 void lv_recycled_list_stop(lv_recycled_list_t *list);
+/* Opt-in visual feedback only; navigation remains owned by the caller. */
+void lv_recycled_list_set_press_feedback(lv_recycled_list_t *list, bool enabled);
 #endif

@@ -221,6 +221,7 @@ static lv_obj_t *record_row_create(lv_obj_t *parent,lv_coord_t width,void *conte
     (void)context;
     lv_obj_t *row=surface(parent,0,0,width,HISTORY_ROW_HEIGHT,8,0xFFFFFF);
     if (!row) return NULL;
+    lv_obj_set_style_bg_color(row,lv_color_hex(0xDFE8EE),LV_STATE_PRESSED);
     const int x[]={16,164,432,516,670,982},w[]={140,250,76,116,194,118};
     for (unsigned i=0;i<6;++i)
         if (!label(row,x[i],14,w[i],25,i==0 ? &lv_font_instrument_sans_medium_14 :
@@ -530,6 +531,7 @@ static void multi_render(void)
                 lv_obj_set_pos(image,12,(46-(int)(h.h*zoom/256))/2);
             }
             lv_obj_add_flag(row,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_GESTURE_BUBBLE);
+            lv_damped_button_register(row,lv_color_hex(i%2?0xF4F6F7:0xFFFFFF),lv_color_hex(0xDFE8EE));
             lv_obj_add_event_cb(row,multi_pick,LV_EVENT_CLICKED,(void *)(uintptr_t)i);
             lv_obj_t *hint=label(row,920,14,166,22,&lv_font_instrument_sans_medium_14,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
             text_set(hint,tr(v->complete?UI_TEXT_HISTORY_RESULT_OPEN:UI_TEXT_HISTORY_PARTIAL));
@@ -954,6 +956,7 @@ void ui_page_19_history_create(lv_obj_t *parent)
         record_row_create,record_row_bind,list_changed,NULL};
     history->list=lv_recycled_list_create(history->list_panel,&config);
     if (!history->list) goto failed;
+    lv_recycled_list_set_press_feedback(history->list,true);
     lv_obj_t *viewport=lv_recycled_list_object(history->list);
     lv_port_indev_set_drag_obj(viewport,true);
     if (!lv_obj_add_event_cb(viewport,record_pointer,LV_EVENT_ALL,NULL)) goto failed;

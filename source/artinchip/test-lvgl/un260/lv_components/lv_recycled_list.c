@@ -15,7 +15,7 @@
 typedef enum { DRAG_UNDECIDED, DRAG_HORIZONTAL, DRAG_VERTICAL } drag_axis_t;
 
 struct lv_recycled_list {
-    lv_obj_t *object, *thumb;
+    lv_obj_t *object, *thumb, *pressed_row;
     lv_obj_t *row[MAX_POOL];
     uint32_t bound[MAX_POOL];
     lv_timer_t *timer;
@@ -27,8 +27,20 @@ struct lv_recycled_list {
     float anchor, sample_offset, velocity, overscroll;
     int32_t drawn_offset, drawn_overscroll, page_drag;
     drag_axis_t axis;
-    bool pressed, moved, tap_allowed;
+    bool pressed, moved, tap_allowed, press_feedback;
 };
+
+static void clear_press(lv_recycled_list_t *list)
+{
+    if(list->pressed_row)lv_obj_clear_state(list->pressed_row,LV_STATE_PRESSED);
+    list->pressed_row=NULL;
+}
+void lv_recycled_list_set_press_feedback(lv_recycled_list_t *list,bool enabled)
+{
+    if(!list)return;
+    if(!enabled)clear_press(list);
+    list->press_feedback=enabled;
+}
 
 /* The data window always stays clamped. Only row projection may stretch;
  * unlike a snapped card chooser, a vertical list settles at any valid pixel. */
@@ -81,8 +93,12 @@ static void project(lv_recycled_list_t *list, bool force)
         lv_obj_t *row = list->row[slot];
         bool visible = index < w->count && (!w->paged || k < w->rows);
         set_visible(row, visible);
-        if (!visible) { list->bound[slot] = NO_ROW; continue; }
+        if (!visible) {
+            if(list->pressed_row==row)clear_press(list);
+            list->bound[slot] = NO_ROW; continue;
+        }
         if (force || list->bound[slot] != index) {
+            if(list->pressed_row==row)clear_press(list);
             list->config.bind_row(row, index, list->config.context);
             list->bound[slot] = index;
         }
@@ -107,6 +123,7 @@ static void project(lv_recycled_list_t *list, bool force)
 void lv_recycled_list_stop(lv_recycled_list_t *list)
 {
     if (!list) return;
+    clear_press(list);
     list->pressed = list->moved = false;
     list->tap_allowed = false;
     list->axis = DRAG_UNDECIDED;
@@ -239,10 +256,18 @@ static void event_cb(lv_event_t *e)
         list->sample_offset = list->window.paged ? 0 : list->window.offset + list->overscroll;
         list->sample_tick = list->motion_tick = now;
         list->pressed = true;
+        clear_press(list);
+        uint32_t index;
+        if(list->press_feedback && list->tap_allowed && lv_recycled_list_index_at_point(list,&p,&index)) {
+            list->pressed_row=list->row[index%(list->window.rows+1)];
+            lv_obj_add_state(list->pressed_row,LV_STATE_PRESSED);
+        }
     } else if (code == LV_EVENT_PRESSING && list->pressed && indev) {
         lv_indev_get_point(indev, &p);
         drag_pointer(list, &p, now);
+        if(!list->tap_allowed)clear_press(list);
     } else if (code == LV_EVENT_RELEASED && list->pressed) {
+        clear_press(list);
         if (indev) {
             lv_indev_get_point(indev, &p);
             drag_pointer(list, &p, now);

@@ -636,6 +636,13 @@ static void history_test_inertia_tap(unsigned baseline_timers)
     history_test_fixtures(20);ui_page_19_history_create(lv_scr_act());history_test_tick(100);
     lv_area_t viewport;lv_obj_get_coords(lv_recycled_list_object(history->list),&viewport);
     int x=viewport.x1+400,y=viewport.y1+100;
+    lv_obj_t *first=lv_obj_get_child(lv_recycled_list_object(history->list),0);
+    history_test_pointer(x,viewport.y1+20,true);
+    assert(lv_obj_has_state(first,LV_STATE_PRESSED));
+    history_test_pointer(x,viewport.y1+32,true);
+    assert(!lv_obj_has_state(first,LV_STATE_PRESSED));
+    history_test_pointer(x,viewport.y1+32,false);
+    assert(!history->detail_mode);
     history_test_pointer(x,viewport.y1+210,true);
     history_test_pointer(x,viewport.y1+170,true);
     history_test_pointer(x,viewport.y1+90,false);
