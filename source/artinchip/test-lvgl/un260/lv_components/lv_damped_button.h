@@ -26,6 +26,11 @@ void lv_damped_button_register(lv_obj_t *button,
 void lv_damped_button_set_palette(lv_obj_t *button,
                                   lv_color_t normal_color,
                                   lv_color_t pressed_color);
+/* Opt-in design palette; preserves the shared timing and lifecycle while using
+ * the supplied shade verbatim. Legacy callers retain derived feedback. */
+void lv_damped_button_set_exact_palette(lv_obj_t *button,
+                                        lv_color_t normal_color,
+                                        lv_color_t pressed_color);
 /* Reuse the button palette for manually pressed list rows, without animation. */
 lv_color_t lv_damped_button_pressed_color(lv_color_t normal_color);
 

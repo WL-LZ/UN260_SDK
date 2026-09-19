@@ -1,0 +1,212 @@
+#define SETTINGS_THEME_DISABLE_COLOR_REMAP
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "lvgl/lvgl.h"
+#include "un260/lv_core/lv_page_manager.h"
+#include "un260/lv_core/settings_detail_ui.h"
+#include "un260/lv_core/page_20_set_print.h"
+#include "un260/lv_core/page_22_set_double_note.h"
+#include "un260/lv_core/page_23_set_flap.h"
+#include "un260/lv_core/page_24_set_reject_pocket.h"
+#include "un260/lv_core/page_25_set_serial_number.h"
+#include "un260/lv_core/page_27_set_cfd_level.h"
+#include "un260/lv_core/page_29_set_password.h"
+#include "un260/lv_core/page_30_set_factory.h"
+#include "un260/lv_core/page_33_set_brightness.h"
+#include "un260/lv_core/page_36_display_test.h"
+#include "un260/lv_components/lv_nav_button.h"
+#include "un260/lv_components/lv_print_toast.h"
+#include "un260/gesture/gesture_service.h"
+#include "un260/lv_system/ui_text.h"
+#include "un260/lv_system/user_cfg.h"
+#include "un260/cfd/cfd.h"
+#include "un260/serial_number/serial_number.h"
+#include "tools/test_page_background_asset.h"
+
+static unsigned sends, pops, reboots;
+static bool send_ok = true, persist_ok = true, backlight_ok = true, overlay;
+static uint8_t last_command, last_payload[32], double_level = 2, flap = 1, reject_capacity = 50;
+static int brightness = 50;
+static char password[5] = "1111", toast[160];
+static settings_detail_dialog_cb_t confirm_dialog;
+static void *dialog_data;
+static settings_detail_keyboard_cb_t keyboard_confirm;
+static void *keyboard_data;
+static bool (*gesture_policy)(gesture_action_t);
+uint64_t app_clock_monotonic_ms(void) { return lv_tick_get(); }
+uint32_t app_clock_uptime_ms(void) { return lv_tick_get(); }
+int protocol_send(uint8_t cmd, const uint8_t *data, uint16_t len)
+{ sends++; last_command=cmd; assert(len<=32); memcpy(last_payload,data,len); return send_ok?0:-1; }
+bool settings_detail_send_command(uint8_t cmd,const uint8_t *data,uint16_t len)
+{ return protocol_send(cmd,data,len)>=0; }
+uint8_t machine_state_double_note_level(void) { return double_level; }
+uint8_t machine_state_flap_position(void) { return flap; }
+uint8_t machine_state_reject_pocket_max(void) { return reject_capacity; }
+bool setting_service_request_double_note_level(uint8_t target,uint8_t previous)
+{ assert(previous==double_level); return settings_detail_send_command(0x31,&target,1); }
+bool setting_service_request_flap_position(uint8_t target,uint8_t previous)
+{ assert(previous==flap); return settings_detail_send_command(0x42,&target,1); }
+bool setting_service_request_reject_pocket_max(uint8_t target,uint8_t previous)
+{ assert(previous==reject_capacity); return settings_detail_send_command(0x33,&target,1); }
+void setting_service_clear_double_note_level_request(void) {}
+void setting_service_clear_reject_pocket_max_request(void) {}
+bool setting_service_request_factory_reset(void) { uint8_t value=1; return settings_detail_send_command(0x44,&value,1); }
+void currency_state_get_active_code(char out[4]) { memcpy(out,"CNY",4); }
+bool ui_manager_pop_page(void) { pops++; return true; }
+void ui_manager_switch(ui_page_t page) { (void)page; pops++; }
+void ui_manager_clear_stack(void) {}
+void ui_upgrade_service_reboot(void) { reboots++; }
+bool backlight_service_probe(void) { return backlight_ok; }
+int backlight_service_level(void) { return brightness; }
+int backlight_service_max(void) { return backlight_ok ? 100 : 0; }
+bool backlight_service_set(int level) { if(!backlight_ok)return false; brightness=level; return true; }
+bool backlight_service_save(void) { return persist_ok; }
+const char *user_cfg_password_get(void) { return password; }
+bool user_cfg_password_save(const char *value) { if(!persist_ok)return false; memcpy(password,value,5);return true; }
+bool user_cfg_password_visibility_enabled(void) { return false; }
+bool user_cfg_password_visibility_save(bool visible) { (void)visible;return true; }
+lv_print_toast_config_t lv_print_toast_get_default_config(void) { return (lv_print_toast_config_t){0}; }
+void lv_print_toast_show_with_config(const lv_print_toast_config_t *cfg) { snprintf(toast,sizeof(toast),"%s",cfg->text); }
+void gesture_service_set_page_policy(uint32_t owner,bool (*drag)(void),bool (*handler)(gesture_action_t))
+{ (void)owner;(void)drag;gesture_policy=handler; }
+void gesture_service_clear_page_policy(uint32_t owner) { (void)owner;gesture_policy=NULL; }
+bool settings_detail_overlay_is_open(void) { return overlay; }
+void settings_detail_dialog_hide(void) { overlay=false;confirm_dialog=NULL; }
+bool settings_detail_dialog_show_ex(settings_detail_dialog_kind_t kind,const char *title,const char *body,
+    const char *ok,const char *cancel,settings_detail_dialog_cb_t confirm,settings_detail_dialog_cb_t reject,void *data)
+{ (void)kind;(void)title;(void)body;(void)ok;(void)cancel;(void)reject;overlay=true;confirm_dialog=confirm;dialog_data=data;return true; }
+bool settings_detail_keyboard_show_ex(const char *title,const char *initial,uint16_t length,
+    settings_detail_keyboard_mode_t mode,settings_detail_keyboard_cb_t confirm,void *data,
+    settings_detail_keyboard_close_cb_t close,void *close_data)
+{ (void)title;(void)initial;(void)length;(void)mode;(void)close;(void)close_data;keyboard_confirm=confirm;keyboard_data=data;return true; }
+bool settings_detail_keyboard_show(const char *title,const char *initial,uint16_t length,
+    settings_detail_keyboard_mode_t mode,settings_detail_keyboard_cb_t confirm,void *data)
+{ return settings_detail_keyboard_show_ex(title,initial,length,mode,confirm,data,NULL,NULL); }
+void settings_detail_keyboard_hide(void) { keyboard_confirm=NULL; }
+
+static lv_color_t pixels[1280*400], buffer[1280*40];
+static lv_point_t pointer_position;
+static lv_indev_state_t pointer_state;
+static void pointer_read(lv_indev_drv_t *driver,lv_indev_data_t *data)
+{ (void)driver;data->point=pointer_position;data->state=pointer_state; }
+static void pointer_feed(int x,int y,lv_indev_state_t state)
+{ pointer_position=(lv_point_t){x,y};pointer_state=state;for(unsigned i=0;i<3;i++){lv_tick_inc(16);lv_timer_handler();} }
+static void pointer_tap(int x,int y)
+{ pointer_feed(x,y,LV_INDEV_STATE_PRESSED);pointer_feed(x,y,LV_INDEV_STATE_RELEASED); }
+static void flush(lv_disp_drv_t *d,const lv_area_t *a,lv_color_t *p)
+{ for(int y=a->y1;y<=a->y2;y++)memcpy(pixels+y*1280+a->x1,p+(y-a->y1)*(a->x2-a->x1+1),(a->x2-a->x1+1)*4);lv_disp_flush_ready(d); }
+static lv_res_t info(lv_img_decoder_t *d,const void *src,lv_img_header_t *h)
+{ (void)d;if(lv_img_src_get_type(src)!=LV_IMG_SRC_FILE)return LV_RES_INV;
+  const un260_compiled_asset_t *a=test_page_asset_find(src);if(!a){fprintf(stderr,"Missing asset: %s\n",(const char*)src);abort();}
+  memset(h,0,sizeof(*h));h->w=a->width;h->h=a->height;h->cf=LV_IMG_CF_TRUE_COLOR_ALPHA;return LV_RES_OK; }
+static lv_res_t image_open(lv_img_decoder_t *d,lv_img_decoder_dsc_t *s)
+{ if(info(d,s->src,&s->header)!=LV_RES_OK)return LV_RES_INV;s->img_data=test_page_asset_find(s->src)->pixels;return LV_RES_OK; }
+static void snapshot(const char *name)
+{ lv_obj_update_layout(lv_scr_act());lv_obj_invalidate(lv_scr_act());lv_refr_now(NULL);
+  char path[512];snprintf(path,sizeof(path),"%s/%s.bgra",getenv("OUT"),name);FILE *f=fopen(path,"wb");assert(f);assert(fwrite(pixels,4,1280*400,f)==1280*400);fclose(f); }
+static lv_obj_t *find_label(lv_obj_t *o,const char *text)
+{ if(lv_obj_check_type(o,&lv_label_class)&&!strcmp(lv_label_get_text(o),text))return o;
+  for(unsigned i=0;i<lv_obj_get_child_cnt(o);i++){lv_obj_t *r=find_label(lv_obj_get_child(o,i),text);if(r)return r;}return NULL; }
+static lv_obj_t *find_type(lv_obj_t *o,const lv_obj_class_t *type)
+{ if(lv_obj_check_type(o,type))return o;for(unsigned i=0;i<lv_obj_get_child_cnt(o);i++){lv_obj_t *r=find_type(lv_obj_get_child(o,i),type);if(r)return r;}return NULL; }
+static lv_obj_t *button(const char *text)
+{ lv_obj_t *o=find_label(lv_scr_act(),text);assert(o);while(o&&!lv_obj_has_flag(o,LV_OBJ_FLAG_CLICKABLE))o=lv_obj_get_parent(o);assert(o);return o; }
+static void click(const char *text) { lv_event_send(button(text),LV_EVENT_CLICKED,NULL); }
+static void accept(void) { assert(confirm_dialog);settings_detail_dialog_cb_t cb=confirm_dialog;void *data=dialog_data;settings_detail_dialog_hide();cb(data); }
+static void advance(unsigned ms) { lv_tick_inc(ms);lv_timer_handler(); }
+
+static void immediate_pages(void)
+{
+    setting_value_result_t result={.target=3,.previous=2,.success=false};
+    ui_page_22_set_double_note_create(lv_scr_act());snapshot("double");
+    click(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3));assert(last_command==0x31&&last_payload[0]==3);
+    assert(find_label(lv_scr_act(),"Confirmed level: 2"));snapshot("double-pending");
+    ui_page_22_set_double_note_on_reply(&result);assert(find_label(lv_scr_act(),"Confirmed level: 2"));
+    click(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3));double_level=3;result.success=true;
+    ui_page_22_set_double_note_on_reply(&result);assert(find_label(lv_scr_act(),"Confirmed level: 3"));ui_page_22_set_double_note_destroy();
+    ui_page_23_set_flap_create(lv_scr_act());snapshot("flap");click(ui_text_get(UI_TEXT_SETTINGS_FLAP_DOWN));
+    assert(last_command==0x42&&last_payload[0]==2);flap=2;ui_page_23_set_flap_on_reply(&result);ui_page_23_set_flap_destroy();
+    ui_page_24_set_reject_pocket_create(lv_scr_act());snapshot("reject");click("Enter capacity");assert(keyboard_confirm);
+    unsigned before=sends;keyboard_confirm("0",keyboard_data);assert(sends==before);keyboard_confirm("75",keyboard_data);
+    assert(last_payload[0]==75);reject_capacity=75;ui_page_24_set_reject_pocket_on_reply(&result);ui_page_24_set_reject_pocket_destroy();
+    serial_number_state_confirm(false,0);ui_page_25_set_serial_number_create(lv_scr_act());snapshot("serial-off");
+    click(ui_text_get(UI_TEXT_SETTINGS_SERIAL_LEVEL_2));assert(last_command==0x32&&last_payload[0]==2);
+    serial_number_setting_result_t serial_result;assert(serial_number_service_take_reply(2,1,&serial_result));
+    serial_number_state_confirm(true,2);ui_page_25_set_serial_number_on_reply(2,1);snapshot("serial-confirmed");ui_page_25_set_serial_number_destroy();
+    puts("PASS immediate parameters: confirmed values, pending locks, reject range, ACK refresh and serial OFF=0");
+}
+
+static void print_page_test(void)
+{
+    ui_page_20_set_print_create(lv_scr_act());snapshot("print");click(ui_text_get(UI_TEXT_SETTINGS_PRINT_CONTENT_SN));
+    assert(last_command==0x41&&last_payload[0]==1);print_config_request_result_t result;
+    assert(print_config_take_status_reply(1,&result));ui_page_20_set_print_on_reply(&result);
+    assert(lv_obj_has_state(button(ui_text_get(UI_TEXT_SETTINGS_PRINT_CONTENT_SN)),LV_STATE_CHECKED));
+    ui_page_20_set_print_destroy();puts("PASS print controller-confirmed content selection");
+}
+
+static void cfd_page_test(void)
+{
+    uint8_t reply[16]={'C','N','Y',1,3,3,3,3,3,3,3,3,3,3,3,3};
+    send_ok=false;ui_page_27_set_cfd_level_create(lv_scr_act());assert(lv_obj_has_state(button("--"),LV_STATE_DISABLED));
+    snapshot("cfd-query-failed");send_ok=true;click("Retry");assert(last_command==0x45&&last_payload[0]==1);
+    ui_page_27_set_cfd_level_on_info(reply,sizeof(reply));snapshot("cfd");
+    click("3");assert(find_label(lv_scr_act(),"4"));assert(gesture_policy&&gesture_policy(GESTURE_ACTION_HOME)&&overlay);
+    settings_detail_dialog_hide();click(ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE));assert(last_payload[0]==2);
+    assert(lv_nav_button_request_back()==LV_NAV_BACK_BLOCKED);assert(gesture_policy(GESTURE_ACTION_HOME));
+    advance(800);assert(cfd_service_take_update_timeout());ui_page_27_set_cfd_level_on_request_failed();
+    assert(find_label(lv_scr_act(),"4"));snapshot("cfd-save-failed");click(ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE));
+    reply[4]=4;reply[3]=2;ui_page_27_set_cfd_level_on_info(reply,sizeof(reply));assert(cfd_service_busy());
+    reply[3]=1;ui_page_27_set_cfd_level_on_info(reply,sizeof(reply));assert(!cfd_service_busy());
+    assert(lv_obj_has_state(button(ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE)),LV_STATE_DISABLED));
+    ui_page_27_set_cfd_level_destroy();assert(!gesture_policy);ui_page_27_set_cfd_level_on_info(reply,sizeof(reply));
+    puts("PASS CFD query gate, draft retention, Home/Back guard, timeout retry, wrong profile rejection and valid echo");
+}
+
+static void password_page_test(void)
+{
+    ui_page_29_set_password_create(lv_scr_act());snapshot("password");click("New password");snapshot("password-keypad");
+    click("0");click("0");click("2");click("2");click("Show");snapshot("password-keypad-visible");
+    assert(find_label(lv_scr_act(),"Hide"));
+    pointer_tap(102,284);assert(lv_obj_is_visible(find_label(lv_scr_act(),"Confirm")));
+    pointer_tap(48,180);assert(!lv_obj_is_visible(find_label(lv_scr_act(),"Confirm")));
+    click("New password");assert(find_label(lv_scr_act(),"Show"));
+    assert(gesture_policy&&gesture_policy(GESTURE_ACTION_HOME));assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);
+    ui_page_29_set_password_destroy();assert(!gesture_policy);
+}
+
+static void brightness_test(void)
+{
+    ui_page_33_set_brightness_create(lv_scr_act());snapshot("brightness");lv_obj_t *slider=find_type(lv_scr_act(),&lv_slider_class);assert(slider);
+    lv_slider_set_value(slider,80,LV_ANIM_OFF);lv_event_send(slider,LV_EVENT_VALUE_CHANGED,NULL);assert(brightness==80);snapshot("brightness-preview");
+    persist_ok=false;click("Keep");advance(8001);assert(brightness==50);persist_ok=true;
+    lv_slider_set_value(slider,70,LV_ANIM_OFF);lv_event_send(slider,LV_EVENT_VALUE_CHANGED,NULL);click("Keep");ui_page_33_set_brightness_destroy();assert(brightness==70);
+    ui_page_33_set_brightness_create(lv_scr_act());slider=find_type(lv_scr_act(),&lv_slider_class);
+    lv_slider_set_value(slider,90,LV_ANIM_OFF);lv_event_send(slider,LV_EVENT_VALUE_CHANGED,NULL);ui_page_33_set_brightness_destroy();assert(brightness==70);
+    backlight_ok=false;ui_page_33_set_brightness_create(lv_scr_act());snapshot("brightness-unavailable");
+    assert(lv_obj_has_state(find_type(lv_scr_act(),&lv_slider_class),LV_STATE_DISABLED));ui_page_33_set_brightness_destroy();backlight_ok=true;
+    puts("PASS brightness actual service-edge preview, save failure rollback, Keep, destroy rollback and unavailable driver");
+}
+
+static void factory_test(void)
+{
+    ui_page_30_set_factory_create(lv_scr_act());snapshot("factory");click(ui_text_get(UI_TEXT_SETTINGS_FACTORY_START));
+    assert(overlay);accept();assert(last_command==0x44);assert(lv_nav_button_request_back()==LV_NAV_BACK_BLOCKED);
+    assert(gesture_policy(GESTURE_ACTION_HOME));ui_page_30_set_factory_on_reply(0);settings_detail_dialog_hide();
+    click(ui_text_get(UI_TEXT_SETTINGS_FACTORY_START));accept();ui_page_30_set_factory_on_reply(1);accept();
+    assert(last_command==0x3B&&reboots==0);ui_page_30_set_factory_destroy();advance(1001);assert(reboots==1);
+    puts("PASS reset explicit confirmation, pending navigation lock, failure retry, success-only restart");
+}
+
+int main(void)
+{
+    lv_init();lv_disp_draw_buf_t db;lv_disp_draw_buf_init(&db,buffer,NULL,1280*40);
+    lv_disp_drv_t driver;lv_disp_drv_init(&driver);driver.hor_res=1280;driver.ver_res=400;driver.draw_buf=&db;driver.flush_cb=flush;lv_disp_drv_register(&driver);
+    lv_img_decoder_t *decoder=lv_img_decoder_create();lv_img_decoder_set_info_cb(decoder,info);lv_img_decoder_set_open_cb(decoder,image_open);
+    lv_indev_drv_t input;lv_indev_drv_init(&input);input.type=LV_INDEV_TYPE_POINTER;input.read_cb=pointer_read;lv_indev_drv_register(&input);
+    immediate_pages();print_page_test();cfd_page_test();password_page_test();brightness_test();
+    ui_page_36_display_test_create(lv_scr_act());snapshot("display-test");ui_page_36_display_test_destroy();factory_test();
+    puts("PASS 10 ordinary settings actual-LVGL host renders and state transitions (not board verification)");return 0;
+}

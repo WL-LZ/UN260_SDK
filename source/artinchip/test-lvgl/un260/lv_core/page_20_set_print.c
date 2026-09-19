@@ -1,6 +1,8 @@
 #include "page_20_set_print.h"
 #include "un260/lv_core/lv_page_manager.h"
+#define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "un260/lv_core/settings_detail_ui.h"
+#include "un260/lv_components/lv_settings.h"
 #include "un260/lv_system/user_cfg.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/print/print_config.h"
@@ -25,6 +27,8 @@ typedef enum {
     PRINT_CONTENT_LIST_SN = PRINT_SETTING_CONTENT_LIST_SN,
 } print_content_t;
 
+static lv_settings_frame_t print_frame;
+static bool print_pending;
 static lv_obj_t* print_page = NULL;
 static lv_obj_t* value_space_top = NULL;
 static lv_obj_t* value_head1 = NULL;
@@ -33,10 +37,6 @@ static lv_obj_t* value_space_bottom = NULL;
 static lv_obj_t* field_boxes[4] = { NULL };
 static lv_obj_t* status_label = NULL;
 static lv_obj_t* content_boxes[3] = { NULL };
-static lv_obj_t* preview_head1 = NULL;
-static lv_obj_t* preview_head2 = NULL;
-static lv_obj_t* preview_content = NULL;
-static int active_content_box = -1;
 static print_field_t active_field = PRINT_FIELD_SPACE_TOP;
 static bool active_field_valid = false;
 
@@ -49,32 +49,20 @@ static void print_set_status(const char* text, lv_color_t color)
     lv_obj_set_style_text_color(status_label, color, 0);
 }
 
-static int print_content_index(print_content_t content)
-{
-    switch (content) {
-    case PRINT_CONTENT_LIST:
-        return 0;
-    case PRINT_CONTENT_SN:
-        return 1;
-    case PRINT_CONTENT_LIST_SN:
-        return 2;
-    default:
-        return -1;
-    }
-}
-
 static void print_set_active_field(bool active, print_field_t field)
 {
-    if (active_field_valid) {
-        settings_detail_set_focus_box_active(field_boxes[active_field], false);
-    }
-
+    if (active_field_valid && field_boxes[active_field])
+        lv_obj_clear_state(field_boxes[active_field], LV_STATE_CHECKED);
     active_field = field;
     active_field_valid = active;
+    if (active && field_boxes[field]) lv_obj_add_state(field_boxes[field], LV_STATE_CHECKED);
+}
 
-    if (active) {
-        settings_detail_set_focus_box_active(field_boxes[field], true);
-    }
+static void print_request_started(void)
+{
+    print_pending = true;
+    print_set_status("Applying change - waiting for controller.", lv_color_hex(0x586B78));
+    if (print_page) print_refresh_view();
 }
 
 static void print_keyboard_close_cb(void* user_data)
@@ -105,6 +93,7 @@ static bool print_send_content(print_content_t content,
         print_set_status(ui_text_get(UI_TEXT_SETTINGS_UART_NOT_READY), lv_color_hex(0xC03A2B));
         return false;
     }
+    print_request_started();
     return true;
 }
 
@@ -129,6 +118,7 @@ static bool print_send_head(uint8_t index, const char* text,
         print_set_status(ui_text_get(UI_TEXT_SETTINGS_UART_NOT_READY), lv_color_hex(0xC03A2B));
         return false;
     }
+    print_request_started();
     return true;
 }
 
@@ -140,6 +130,7 @@ static bool print_send_space(uint8_t index, uint8_t lines,
         print_set_status(ui_text_get(UI_TEXT_SETTINGS_UART_NOT_READY), lv_color_hex(0xC03A2B));
         return false;
     }
+    print_request_started();
     return true;
 }
 
@@ -204,7 +195,7 @@ static void print_input_cb(lv_event_t* e)
     uint16_t max_len = 2;
     print_config_value_t config;
 
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED || print_pending) return;
 
     field = (print_field_t)(uintptr_t)lv_event_get_user_data(e);
     value[0] = '\0';
@@ -239,7 +230,6 @@ static void print_input_cb(lv_event_t* e)
         return;
     }
 
-    active_content_box = -1;
     print_refresh_view();
     print_set_active_field(true, field);
 
@@ -251,208 +241,84 @@ static void print_input_cb(lv_event_t* e)
     }
 }
 
-static void print_content_cb(lv_event_t* e)
+static void print_content_cb(lv_event_t *event)
 {
-    print_content_t content;
-    int index;
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED || print_pending) return;
+    print_content_t content = (print_content_t)(uintptr_t)lv_event_get_user_data(event);
     print_config_value_t config;
-
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-
-    content = (print_content_t)(uintptr_t)lv_event_get_user_data(e);
-    index = print_content_index(content);
-    print_set_active_field(false, active_field);
-    active_content_box = index;
-    print_refresh_view();
-
     print_config_get(&config);
+    if (config.content == content) return;
+    print_set_active_field(false, active_field);
     config.content = (uint8_t)content;
     print_send_content(content, &config);
 }
 
-static lv_obj_t* print_create_value_box(lv_obj_t* parent, lv_coord_t x, lv_coord_t y,
-                                        lv_coord_t w, const char* text,
-                                        print_field_t field)
-{
-    lv_obj_t* box = lv_obj_create(parent);
-    lv_obj_remove_style_all(box);
-    lv_obj_set_pos(box, x, y);
-    lv_obj_set_size(box, w, 42);
-    lv_obj_set_style_bg_color(box, lv_color_hex(0xF8F9FB), 0);
-    lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(box, 1, 0);
-    lv_obj_set_style_border_color(box, lv_color_hex(0xDDE6EF), 0);
-    lv_obj_set_style_radius(box, 4, 0);
-    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(box, print_input_cb, LV_EVENT_CLICKED, (void*)(uintptr_t)field);
-    field_boxes[field] = box;
-
-    lv_obj_t* label = settings_detail_create_label(box, text, &lv_font_instrument_sans_medium_18,
-                                                   lv_color_hex(0x0D3440), 12, 12);
-    lv_obj_set_width(label, w - 24);
-    lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
-    return label;
-}
-
-static void print_create_field(lv_obj_t* parent, lv_coord_t y,
-                               const char* title, lv_obj_t** out_value,
-                               print_field_t field)
-{
-    settings_detail_create_label(parent, title, &lv_font_instrument_sans_semibold_16,
-                                 lv_color_hex(0x0D3440), 24, y + 12);
-    *out_value = print_create_value_box(parent, 250, y, 440, "", field);
-}
-
-static void print_create_content_row(lv_obj_t* parent, int index,
-                                     lv_coord_t x, lv_coord_t y, lv_coord_t w,
-                                     const char* text,
-                                     print_content_t content)
-{
-    lv_obj_t* row = lv_obj_create(parent);
-    lv_obj_remove_style_all(row);
-    lv_obj_set_pos(row, x, y);
-    lv_obj_set_size(row, w, 30);
-    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
-    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
-
-    content_boxes[index] = settings_detail_create_select_box(row, 0, 3, 24,
-                                                             print_content_cb,
-                                                             (void*)(uintptr_t)content);
-
-    lv_obj_t* label = settings_detail_create_label(row, text, &lv_font_instrument_sans_medium_16,
-                                                   lv_color_hex(0x0D3440), 36, 6);
-    lv_obj_set_width(label, w - 42);
-    lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
-    lv_obj_clear_flag(label, LV_OBJ_FLAG_CLICKABLE);
-}
-
 static void print_refresh_view(void)
 {
-    const char* content_text = ui_text_get(UI_TEXT_SETTINGS_PRINT_CONTENT_LIST);
     print_config_value_t config;
-    print_content_t content;
-
     print_config_get(&config);
-    switch (config.content) {
-    case PRINT_CONTENT_LIST:
-    case PRINT_CONTENT_SN:
-    case PRINT_CONTENT_LIST_SN:
-        content = (print_content_t)config.content;
-        break;
-    default:
-        content = PRINT_CONTENT_LIST;
-        break;
+    if (value_space_top) lv_label_set_text_fmt(value_space_top, "%u", (unsigned)config.space_top);
+    if (value_head1) lv_label_set_text(value_head1, config.head1[0] ? config.head1 : "Not set");
+    if (value_head2) lv_label_set_text(value_head2, config.head2[0] ? config.head2 : "Not set");
+    if (value_space_bottom) lv_label_set_text_fmt(value_space_bottom, "%u", (unsigned)config.space_bottom);
+    for (unsigned i = 0; i < 3; ++i) {
+        if (!content_boxes[i]) continue;
+        if (config.content == i + 1) lv_obj_add_state(content_boxes[i], LV_STATE_CHECKED);
+        else lv_obj_clear_state(content_boxes[i], LV_STATE_CHECKED);
+        if (print_pending) lv_obj_add_state(content_boxes[i], LV_STATE_DISABLED);
+        else lv_obj_clear_state(content_boxes[i], LV_STATE_DISABLED);
     }
-
-    if (value_space_top) {
-        lv_label_set_text_fmt(value_space_top, "%u", (unsigned)config.space_top);
-    }
-    if (value_head1) {
-        lv_label_set_text(value_head1, config.head1[0] ? config.head1 : "---");
-    }
-    if (value_head2) {
-        lv_label_set_text(value_head2, config.head2[0] ? config.head2 : "---");
-    }
-    if (value_space_bottom) {
-        lv_label_set_text_fmt(value_space_bottom, "%u", (unsigned)config.space_bottom);
-    }
-
-    settings_detail_set_select_box_checked(content_boxes[0], content == PRINT_CONTENT_LIST);
-    settings_detail_set_select_box_checked(content_boxes[1], content == PRINT_CONTENT_SN);
-    settings_detail_set_select_box_checked(content_boxes[2], content == PRINT_CONTENT_LIST_SN);
-    for (int i = 0; i < 3; i++) {
-        settings_detail_set_select_box_active(content_boxes[i], i == active_content_box);
-    }
-
-    if (preview_head1) {
-        lv_label_set_text(preview_head1, config.head1[0] ? config.head1 : "----------------");
-    }
-    if (preview_head2) {
-        lv_label_set_text(preview_head2, config.head2[0] ? config.head2 : "----------------");
-    }
-
-    if (content == PRINT_CONTENT_SN) {
-        content_text = ui_text_get(UI_TEXT_SETTINGS_PRINT_CONTENT_SN);
-    } else if (content == PRINT_CONTENT_LIST_SN) {
-        content_text = ui_text_get(UI_TEXT_SETTINGS_PRINT_CONTENT_LIST_SN);
-    }
-
-    if (preview_content) {
-        lv_label_set_text_fmt(preview_content,
-                              "%s\n\nCOIN      QTY      VALUE\n----      ---      -----\n100       24       2400\n50        25       1250\n20        25       520\n\nTotal:          4571 ALL\nCount:           151 PCS",
-                              content_text);
+    for (unsigned i = 0; i < 4; ++i) {
+        if (!field_boxes[i]) continue;
+        if (print_pending) lv_obj_add_state(field_boxes[i], LV_STATE_DISABLED);
+        else lv_obj_clear_state(field_boxes[i], LV_STATE_DISABLED);
     }
 }
 
-static void print_create_preview(lv_obj_t* parent)
+static void print_create_field(lv_obj_t *parent, int y, const char *title,
+                               lv_obj_t **value, print_field_t field)
 {
-    lv_obj_t* card = settings_detail_create_card(parent, 820, 18, 370, 306);
-    lv_obj_set_style_shadow_width(card, 8, 0);
-
-    lv_obj_t* header = lv_obj_create(card);
-    lv_obj_remove_style_all(header);
-    lv_obj_set_pos(header, 0, 0);
-    lv_obj_set_size(header, 370, 42);
-    lv_obj_set_style_bg_color(header, lv_color_hex(0x08C5D6), 0);
-    lv_obj_set_style_bg_opa(header, LV_OPA_COVER, 0);
-    lv_obj_clear_flag(header, LV_OBJ_FLAG_SCROLLABLE);
-
-    settings_detail_create_label(header, ui_text_get(UI_TEXT_SETTINGS_PRINT_PREVIEW),
-                                 &lv_font_instrument_sans_medium_18, lv_color_hex(0xFFFFFF), 128, 12);
-
-    preview_head1 = settings_detail_create_label(card, "", &lv_font_instrument_sans_medium_14,
-                                                 lv_color_hex(0x0D3440), 24, 58);
-    preview_head2 = settings_detail_create_label(card, "", &lv_font_instrument_sans_medium_14,
-                                                 lv_color_hex(0x0D3440), 24, 80);
-    preview_content = settings_detail_create_label(card, "", &lv_font_instrument_sans_medium_14,
-                                                   lv_color_hex(0x0D3440), 24, 112);
-    lv_obj_set_width(preview_content, 320);
-    lv_label_set_long_mode(preview_content, LV_LABEL_LONG_WRAP);
+    lv_settings_label(parent, title, 368, y + 13,
+        &lv_font_instrument_sans_medium_16, 0x1D2B34);
+    lv_obj_t *button = lv_settings_button(parent, 578, y, 654, 44,
+        "", false, print_input_cb, (void *)(uintptr_t)field);
+    lv_obj_set_style_bg_color(button, lv_color_hex(0xFFFFFF), 0);
+    field_boxes[field] = button;
+    *value = lv_settings_label(button, "", 18, 13,
+        &lv_font_instrument_sans_medium_16, 0x1D2B34);
+    lv_obj_set_width(*value, 614);
+    lv_label_set_long_mode(*value, LV_LABEL_LONG_DOT);
 }
 
-void ui_page_20_set_print_create(lv_obj_t* parent)
+void ui_page_20_set_print_create(lv_obj_t *parent)
 {
-    lv_obj_t* content = NULL;
-
     if (print_page) return;
-    active_content_box = -1;
     active_field_valid = false;
-
-    print_page = settings_detail_create_page(parent,
-                                             ui_text_get(UI_TEXT_SETTINGS_PRINT_TITLE),
-                                             print_esc_cb, &content);
-
-    lv_obj_t* card = settings_detail_create_card(content, 38, 18, 730, 306);
-
-    print_create_field(card, 18, ui_text_get(UI_TEXT_SETTINGS_PRINT_SPACE_TOP),
-                       &value_space_top, PRINT_FIELD_SPACE_TOP);
-
-    print_create_field(card, 70, ui_text_get(UI_TEXT_SETTINGS_PRINT_HEAD1),
-                       &value_head1, PRINT_FIELD_HEAD1);
-    print_create_field(card, 122, ui_text_get(UI_TEXT_SETTINGS_PRINT_HEAD2),
-                       &value_head2, PRINT_FIELD_HEAD2);
-
-    settings_detail_create_label(card, ui_text_get(UI_TEXT_SETTINGS_PRINT_CONTENT),
-                                 &lv_font_instrument_sans_medium_16, lv_color_hex(0x5686A5), 24, 168);
-    print_create_content_row(card, 0, 250, 171, 190,
-                             ui_text_get(UI_TEXT_SETTINGS_PRINT_CONTENT_LIST),
-                             PRINT_CONTENT_LIST);
-    print_create_content_row(card, 1, 470, 171, 220,
-                             ui_text_get(UI_TEXT_SETTINGS_PRINT_CONTENT_SN),
-                             PRINT_CONTENT_SN);
-    print_create_content_row(card, 2, 250, 213, 260,
-                             ui_text_get(UI_TEXT_SETTINGS_PRINT_CONTENT_LIST_SN),
-                             PRINT_CONTENT_LIST_SN);
-
-    print_create_field(card, 260, ui_text_get(UI_TEXT_SETTINGS_PRINT_SPACE_BOTTOM),
-                       &value_space_bottom, PRINT_FIELD_SPACE_BOTTOM);
-
-    status_label = settings_detail_create_label(content, ui_text_get(UI_TEXT_SETTINGS_PRINT_READY),
-                                                &lv_font_instrument_sans_medium_14,
-                                                lv_color_hex(0x24D6A1), 982, 332);
-
-    print_create_preview(content);
+    lv_settings_header_t header = {
+        .title = ui_text_get(UI_TEXT_SETTINGS_PRINT_TITLE), .icon = "Settings", .back = print_esc_cb
+    };
+    print_frame = lv_settings_frame_create(parent, &header);
+    print_page = print_frame.root;
+    lv_obj_t *body = print_frame.body;
+    lv_obj_set_style_bg_opa(body, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(body, 0, 0);
+    lv_settings_label(body, ui_text_get(UI_TEXT_SETTINGS_PRINT_CONTENT), 0, 12,
+        &lv_font_instrument_sans_medium_18, 0x1D2B34);
+    const ui_text_id_t names[] = { UI_TEXT_SETTINGS_PRINT_CONTENT_LIST,
+        UI_TEXT_SETTINGS_PRINT_CONTENT_SN, UI_TEXT_SETTINGS_PRINT_CONTENT_LIST_SN };
+    for (unsigned i = 0; i < 3; ++i) {
+        content_boxes[i] = lv_settings_button(body, 0, 54 + (int)i * 64, 320, 52,
+            ui_text_get(names[i]), false, print_content_cb, (void *)(uintptr_t)(i + 1));
+        lv_obj_set_style_bg_color(content_boxes[i], lv_color_hex(0xFFFFFF), 0);
+    }
+    lv_settings_label(body, "Receipt layout", 368, 12,
+        &lv_font_instrument_sans_medium_18, 0x1D2B34);
+    print_create_field(body, 42, ui_text_get(UI_TEXT_SETTINGS_PRINT_SPACE_TOP), &value_space_top, PRINT_FIELD_SPACE_TOP);
+    print_create_field(body, 92, ui_text_get(UI_TEXT_SETTINGS_PRINT_HEAD1), &value_head1, PRINT_FIELD_HEAD1);
+    print_create_field(body, 142, ui_text_get(UI_TEXT_SETTINGS_PRINT_HEAD2), &value_head2, PRINT_FIELD_HEAD2);
+    print_create_field(body, 192, ui_text_get(UI_TEXT_SETTINGS_PRINT_SPACE_BOTTOM), &value_space_bottom, PRINT_FIELD_SPACE_BOTTOM);
+    status_label = print_frame.message;
+    lv_label_set_text(status_label, print_pending ? "Waiting for controller." : "Values update after controller confirmation.");
     print_refresh_view();
 }
 
@@ -465,14 +331,12 @@ void ui_page_20_set_print_destroy(void)
     }
 
     print_page = NULL;
+    memset(&print_frame, 0, sizeof(print_frame));
     value_space_top = NULL;
     value_head1 = NULL;
     value_head2 = NULL;
     value_space_bottom = NULL;
     status_label = NULL;
-    preview_head1 = NULL;
-    preview_head2 = NULL;
-    preview_content = NULL;
 
     for (int i = 0; i < 3; i++) {
         content_boxes[i] = NULL;
@@ -480,7 +344,6 @@ void ui_page_20_set_print_destroy(void)
     for (int i = 0; i < 4; i++) {
         field_boxes[i] = NULL;
     }
-    active_content_box = -1;
     active_field_valid = false;
 }
 
@@ -492,6 +355,7 @@ void ui_page_20_set_print_on_boot_setting(const uint8_t* data, uint16_t len)
     if (!data || len < 2) return;
 
     print_config_cancel_request();
+    print_pending = false;
     sub = data[0];
     print_config_get(&config);
     switch (sub) {
@@ -546,19 +410,20 @@ void ui_page_20_set_print_on_boot_setting(const uint8_t* data, uint16_t len)
 
     if (print_page) {
         print_refresh_view();
+        print_set_status("Configuration received.", lv_color_hex(0x586B78));
     }
 }
 
 void ui_page_20_set_print_on_reply(const print_config_request_result_t* result)
 {
     if (!result) return;
-    active_content_box = -1;
+    print_pending = false;
     if (print_page) print_refresh_view();
     if (!print_page) return;
 
     if (!result->success) {
         print_set_status(ui_text_get(UI_TEXT_SETTINGS_PRINT_FAIL), lv_color_hex(0xC03A2B));
     } else {
-        print_set_status(ui_text_get(UI_TEXT_SETTINGS_PRINT_SUCCESS), lv_color_hex(0x24D6A1));
+        print_set_status(ui_text_get(UI_TEXT_SETTINGS_PRINT_SUCCESS), lv_color_hex(0x1462CC));
     }
 }

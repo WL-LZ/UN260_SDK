@@ -20,6 +20,7 @@ static protocol_request_t g_cfd_query_request = PROTOCOL_REQUEST_INITIALIZER(CFD
 static char g_cfd_query_currency[4] = "";
 static protocol_request_t g_cfd_update_request = PROTOCOL_REQUEST_INITIALIZER(CFD_QUERY_TIMEOUT_MS);
 static cfd_state_value_t g_cfd_update_target;
+static uint8_t g_cfd_update_scene;
 
 static void cfd_copy_currency(char dst[4], const char *src)
 {
@@ -100,6 +101,7 @@ bool cfd_service_request_update(const cfd_state_value_t *target,
     }
 
     g_cfd_update_target = *target;
+    g_cfd_update_scene = selected_scene;
     payload[0] = 0x02;
     payload[1] = (uint8_t)target->currency[0];
     payload[2] = (uint8_t)target->currency[1];
@@ -118,11 +120,12 @@ bool cfd_service_request_update(const cfd_state_value_t *target,
     return true;
 }
 
-bool cfd_service_take_update_result(const cfd_state_value_t *response)
+bool cfd_service_take_update_result(const cfd_state_value_t *response,
+                                    uint8_t selected_scene)
 {
     bool taken;
 
-    if (response == NULL ||
+    if (response == NULL || selected_scene != g_cfd_update_scene ||
         strncmp(response->currency, g_cfd_update_target.currency, 3) != 0 ||
         memcmp(response->levels, g_cfd_update_target.levels,
                sizeof(response->levels)) != 0) {

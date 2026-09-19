@@ -124,15 +124,18 @@ void lv_damped_button_set_palette(lv_obj_t *button,
                                   lv_color_t normal_color,
                                   lv_color_t pressed_color)
 {
+    LV_UNUSED(pressed_color);
+    lv_damped_button_set_exact_palette(button, normal_color,
+                                       lv_damped_button_pressed_color(normal_color));
+}
+
+void lv_damped_button_set_exact_palette(lv_obj_t *button,
+                                        lv_color_t normal_color,
+                                        lv_color_t pressed_color)
+{
     lv_damped_button_ctx_t *ctx;
 
     if (button == NULL || !lv_obj_is_valid(button)) return;
-
-    /* pressed_color is retained in the public signature for source
-       compatibility.  Product-wide feedback is now deterministic: the
-       pressed shade is always approximately 8% darker than the current base. */
-    LV_UNUSED(pressed_color);
-    pressed_color = lv_damped_button_pressed_color(normal_color);
 
     ctx = lv_damped_button_ctx_find(button);
     if (ctx != NULL) {

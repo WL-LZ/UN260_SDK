@@ -20,7 +20,8 @@ bool cfd_service_take_query_result(const char currency[4]);
 bool cfd_service_take_query_timeout(void);
 bool cfd_service_request_update(const cfd_state_value_t *target,
                                 uint8_t selected_scene);
-bool cfd_service_take_update_result(const cfd_state_value_t *response);
+bool cfd_service_take_update_result(const cfd_state_value_t *response,
+                                    uint8_t selected_scene);
 bool cfd_service_take_update_timeout(void);
 void cfd_service_cancel_update(void);
 bool cfd_service_busy(void);

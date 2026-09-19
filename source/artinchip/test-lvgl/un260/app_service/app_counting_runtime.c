@@ -1,4 +1,5 @@
 #include "app_counting_runtime.h"
+#include "un260/app_service/work_mode_service.h"
 #include "un260/counting/counting_multi_extra.h"
 #include "un260/counting/counting_multi.h"
 #include "un260/lv_system/app_clock.h"
@@ -112,24 +113,6 @@ static bool app_counting_runtime_main_page_active(void)
            page_01_main_is_created();
 }
 
-static bool app_counting_runtime_should_keep_current_page(void)
-{
-    ui_page_t page = ui_manager_get_current_page();
-
-    return page == UI_PAGE_DEBUG ||
-           page == UI_PAGE_IMAGE_GET ||
-           page == UI_PAGE_WAVE_GET ||
-           page == UI_PAGE_SENSOR;
-}
-
-static bool app_counting_runtime_cb_calibration_active(void)
-{
-    calibration_state_snapshot_t calibration;
-
-    diagnostic_calibration_get_snapshot(&calibration);
-    return calibration.session_active &&
-           calibration.target == CALIB_TARGET_CB;
-}
 
 static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t len)
 {
@@ -167,9 +150,8 @@ static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t le
     if (data_collection_state_mode() != DATA_COLLECT_MODE_NONE) {
         data_collection_state_set_status("Counting started...");
         page_06_data_collection_refresh();
-    } else if (!app_counting_runtime_cb_calibration_active() &&
-               ui_manager_get_current_page() != UI_PAGE_PURE &&
-               !app_counting_runtime_should_keep_current_page()) {
+    } else if (ui_manager_get_current_page() != UI_PAGE_PURE &&
+               !work_mode_service_diagnostic_active()) {
         ui_manager_switch(UI_PAGE_MAIN);
     }
     smart_island_notify_count_start();

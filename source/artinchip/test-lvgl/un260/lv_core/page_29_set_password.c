@@ -2,7 +2,10 @@
 #include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_components/lv_pin_keypad.h"
 #include "un260/lv_core/lv_page_manager.h"
+#define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "un260/lv_core/settings_detail_ui.h"
+#include "un260/lv_components/lv_settings.h"
+#include "un260/gesture/gesture_service.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/user_cfg.h"
 
@@ -17,6 +20,8 @@ typedef enum {
     PASSWORD_FIELD_COUNT,
 } password_field_t;
 
+static lv_settings_frame_t password_frame;
+static bool password_leave_home;
 static lv_obj_t* password_setting_page = NULL;
 static lv_obj_t* password_setting_content = NULL;
 static lv_obj_t* password_setting_form = NULL;
@@ -27,9 +32,9 @@ static char field_text[PASSWORD_FIELD_COUNT][USER_PASSWORD_MAX_LEN + 1] = { 0 };
 static password_field_t active_field = PASSWORD_FIELD_CURRENT;
 
 static const char *const field_titles[PASSWORD_FIELD_COUNT] = {
-    "Current Password",
-    "New Password",
-    "Confirm Password",
+    "Current password",
+    "New password",
+    "Confirm password",
 };
 
 static const char *const field_prompts[PASSWORD_FIELD_COUNT] = {
@@ -53,17 +58,17 @@ static void password_setting_refresh_fields(void)
 
         if (field_cards[i]) {
             lv_obj_set_style_bg_color(field_cards[i],
-                                      active ? lv_color_hex(0xF2FBFF) : lv_color_hex(0xFFFFFF),
+                                      active ? lv_color_hex(0xEDF4FF) : lv_color_hex(0xFFFFFF),
                                       0);
             lv_obj_set_style_border_color(field_cards[i],
-                                          active ? lv_color_hex(0x0878C8) : lv_color_hex(0xDDE6EF),
+                                          active ? lv_color_hex(0x1462CC) : lv_color_hex(0xE3E9ED),
                                           0);
         }
         if (field_values[i]) {
             lv_label_set_text(field_values[i],
                               len > 0 ? masked : "Tap to enter PIN");
             lv_obj_set_style_text_color(field_values[i],
-                                        len > 0 ? lv_color_hex(0x0D3440) : lv_color_hex(0x8AA8B8),
+                                        len > 0 ? lv_color_hex(0x1D2B34) : lv_color_hex(0x586B78),
                                         0);
         }
     }
@@ -90,6 +95,7 @@ static void password_setting_close_keyboard(void *user_data)
     lv_pin_keypad_hide(&password_setting_keypad);
     if (password_setting_form && lv_obj_is_valid(password_setting_form))
         lv_obj_clear_flag(password_setting_form, LV_OBJ_FLAG_HIDDEN);
+    if (password_frame.footer) lv_obj_clear_flag(password_frame.footer, LV_OBJ_FLAG_HIDDEN);
 }
 
 static void password_setting_keyboard_cb(const char* value, void* user_data)
@@ -118,10 +124,12 @@ static void password_setting_open_keyboard(password_field_t field)
     };
     active_field = field;
     password_setting_refresh_fields();
-    if (!lv_pin_keypad_create(&password_setting_keypad, password_setting_content, 80, 12))
+    if (!lv_pin_keypad_create(&password_setting_keypad, password_setting_content, 80, 76))
         return;
-    if (lv_pin_keypad_show(&password_setting_keypad, &config, field_text[field]))
+    if (lv_pin_keypad_show(&password_setting_keypad, &config, field_text[field])) {
         lv_obj_add_flag(password_setting_form, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(password_frame.footer, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 static void password_setting_field_cb(lv_event_t* e)
@@ -172,14 +180,55 @@ static void password_setting_save_cb(lv_event_t* e)
     password_setting_show_toast("Password saved", false);
 }
 
-static void password_setting_esc_cb(lv_event_t* e)
+static bool password_dirty(void)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    for (unsigned i = 0; i < PASSWORD_FIELD_COUNT; ++i)
+        if (field_text[i][0]) return true;
+    return false;
+}
+
+static void password_leave(void *data)
+{
+    (void)data;
+    if (password_leave_home) { ui_manager_clear_stack(); ui_manager_switch(UI_PAGE_MAIN); }
+    else ui_manager_pop_page();
+}
+
+static void password_ask_leave(bool home)
+{
+    password_leave_home = home;
+    if (password_dirty()) settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING,
+        "Discard changes?", "Your new password has not been saved.",
+        "Discard", "Keep editing", password_leave, NULL, NULL);
+    else password_leave(NULL);
+}
+
+static void password_setting_esc_cb(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
     if (lv_pin_keypad_is_visible(&password_setting_keypad)) {
         password_setting_close_keyboard(NULL);
         return;
     }
-    ui_manager_pop_page();
+    password_ask_leave(false);
+}
+
+static void password_setting_cancel(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    password_leave_home = false;
+    password_leave(NULL);
+}
+
+static bool password_gesture(gesture_action_t action)
+{
+    if (!password_setting_page || !lv_obj_is_visible(password_setting_page)) return false;
+    if (settings_detail_overlay_is_open() || lv_pin_keypad_is_visible(&password_setting_keypad)) return true;
+    if (action == GESTURE_ACTION_HOME && password_dirty()) {
+        password_ask_leave(true);
+        return true;
+    }
+    return false;
 }
 
 static void password_setting_deleted_cb(lv_event_t *event)
@@ -188,6 +237,9 @@ static void password_setting_deleted_cb(lv_event_t *event)
         lv_event_get_target(event) != password_setting_page) return;
     /* The component's own delete event releases its timer after this event. */
     lv_pin_keypad_hide(&password_setting_keypad);
+    settings_detail_dialog_hide();
+    gesture_service_clear_page_policy(UI_PAGE_PASSWORD_CHANGE);
+    memset(&password_frame, 0, sizeof(password_frame));
     password_setting_page = NULL;
     password_setting_content = NULL;
     password_setting_form = NULL;
@@ -197,89 +249,62 @@ static void password_setting_deleted_cb(lv_event_t *event)
     active_field = PASSWORD_FIELD_CURRENT;
 }
 
-static lv_obj_t* password_setting_create_card(lv_obj_t* parent, lv_coord_t x, lv_coord_t y,
-                                              lv_coord_t w, lv_coord_t h)
+static void password_setting_outside(lv_event_t *event)
 {
-    lv_obj_t* card = settings_detail_create_card(parent, x, y, w, h);
-    lv_obj_set_style_shadow_width(card, 10, 0);
-    lv_obj_set_style_shadow_opa(card, LV_OPA_10, 0);
-    return card;
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED &&
+        lv_event_get_target(event) == password_setting_page &&
+        lv_pin_keypad_is_visible(&password_setting_keypad))
+        password_setting_close_keyboard(NULL);
 }
 
-static void password_setting_create_field(lv_obj_t* parent, password_field_t field, lv_coord_t y)
+static void password_setting_create_field(lv_obj_t *parent, password_field_t field)
 {
-    lv_obj_t* item = lv_obj_create(parent);
-
-    lv_obj_remove_style_all(item);
-    lv_obj_set_pos(item, 34, y);
-    lv_obj_set_size(item, 662, 62);
+    lv_obj_t *item = lv_settings_button(parent, (int)field * 416, 12, 400, 214,
+        "", false, password_setting_field_cb, (void *)(uintptr_t)field);
     lv_obj_set_style_bg_color(item, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_bg_opa(item, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(item, 2, 0);
-    lv_obj_set_style_border_color(item, lv_color_hex(0xDDE6EF), 0);
-    lv_obj_set_style_radius(item, 8, 0);
-    lv_obj_set_style_translate_y(item, 0, LV_STATE_PRESSED);
-    lv_obj_clear_flag(item, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(item, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(item, password_setting_field_cb, LV_EVENT_CLICKED,
-                        (void*)(uintptr_t)field);
-
-    settings_detail_create_label(item, field_titles[field],
-                                 &lv_font_instrument_sans_medium_16, lv_color_hex(0x0D3440), 22, 22);
-    field_values[field] = settings_detail_create_label(item,
-                                                       "Tap to enter PIN",
-                                                       &lv_font_instrument_sans_medium_16,
-                                                       lv_color_hex(0x8AA8B8), 430, 22);
-
+    lv_obj_set_style_border_width(item, 1, 0);
+    lv_obj_set_style_border_color(item, lv_color_hex(0xE3E9ED), 0);
+    lv_settings_label(item, field_titles[field], 24, 24,
+        &lv_font_instrument_sans_medium_18, 0x1D2B34);
+    field_values[field] = lv_settings_label(item, "Tap to enter PIN", 24, 90,
+        &lv_font_instrument_sans_medium_18, 0x586B78);
+    lv_settings_label(item, "4 digits", 24, 164,
+        &lv_font_instrument_sans_medium_14, 0x586B78);
     field_cards[field] = item;
 }
 
-void ui_page_29_set_password_create(lv_obj_t* parent)
+void ui_page_29_set_password_create(lv_obj_t *parent)
 {
-    lv_obj_t* content = NULL;
-    lv_obj_t* card;
-    lv_obj_t* accent;
-
-    if (password_setting_page && lv_obj_is_valid(password_setting_page)) return;
-
-    password_setting_page = settings_detail_create_page(parent,
-                                                        ui_text_get(UI_TEXT_SETTINGS_PASSWORD),
-                                                        password_setting_esc_cb,
-                                                        &content);
-    password_setting_content = content;
-    lv_obj_add_event_cb(password_setting_page, password_setting_deleted_cb,
-                        LV_EVENT_DELETE, NULL);
-
-    card = password_setting_create_card(content, 276, 18, 730, 306);
-    password_setting_form = card;
-    settings_detail_create_label(card, "Change Password",
-                                 &lv_font_instrument_sans_medium_18, lv_color_hex(0x0D3440), 34, 20);
-
-    accent = lv_obj_create(card);
-    lv_obj_remove_style_all(accent);
-    lv_obj_set_pos(accent, 274, 28);
-    lv_obj_set_size(accent, 182, 7);
-    lv_obj_set_style_bg_color(accent, lv_color_hex(0x08C5D6), 0);
-    lv_obj_set_style_bg_opa(accent, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(accent, 4, 0);
-    lv_obj_clear_flag(accent, LV_OBJ_FLAG_SCROLLABLE);
-
-    password_setting_create_field(card, PASSWORD_FIELD_CURRENT, 68);
-    password_setting_create_field(card, PASSWORD_FIELD_NEW, 138);
-    password_setting_create_field(card, PASSWORD_FIELD_CONFIRM, 208);
-
-    settings_detail_create_button(card, 560, 20, 136, 34,
-                                  "Save",
-                                  lv_color_hex(0x0878C8),
-                                  password_setting_save_cb, NULL);
-
+    if (password_setting_page) return;
+    lv_settings_header_t header = {
+        .title = ui_text_get(UI_TEXT_SETTINGS_PASSWORD), .icon = "ShieldCheck",
+        .back = password_setting_esc_cb
+    };
+    password_frame = lv_settings_frame_create(parent, &header);
+    password_setting_page = password_frame.root;
+    password_setting_content = password_frame.root;
+    password_setting_form = password_frame.body;
+    lv_obj_set_style_bg_opa(password_setting_form, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(password_setting_form, 0, 0);
+    lv_obj_add_event_cb(password_setting_page, password_setting_deleted_cb, LV_EVENT_DELETE, NULL);
+    lv_obj_add_flag(password_setting_page, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(password_setting_page, password_setting_outside, LV_EVENT_CLICKED, NULL);
+    for (unsigned field = 0; field < PASSWORD_FIELD_COUNT; ++field)
+        password_setting_create_field(password_setting_form, (password_field_t)field);
+    lv_label_set_text(password_frame.message, "Enter your current PIN, then enter and confirm a new PIN.");
+    lv_settings_button(password_frame.footer, 964, 0, 124, 46, "Cancel", false, password_setting_cancel, NULL);
+    lv_settings_button(password_frame.footer, 1100, 0, 132, 46, "Save", true, password_setting_save_cb, NULL);
     active_field = PASSWORD_FIELD_CURRENT;
+    password_leave_home = false;
     memset(field_text, 0, sizeof(field_text));
     password_setting_refresh_fields();
+    gesture_service_set_page_policy(UI_PAGE_PASSWORD_CHANGE, NULL, password_gesture);
 }
 
 void ui_page_29_set_password_destroy(void)
 {
+    gesture_service_clear_page_policy(UI_PAGE_PASSWORD_CHANGE);
+    settings_detail_dialog_hide();
     lv_pin_keypad_destroy(&password_setting_keypad);
 
     if (password_setting_page && lv_obj_is_valid(password_setting_page)) {

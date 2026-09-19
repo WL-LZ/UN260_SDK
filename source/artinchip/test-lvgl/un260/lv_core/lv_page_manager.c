@@ -10,8 +10,10 @@
 #include "un260/lv_system/counting_ui_runtime.h"
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/protocol/protocol_send.h"
+#include "un260/app_service/work_mode_service.h"
 #include "un260/lv_core/page_01_main.h"
 #include "un260/innovation/page_32_innovation.h"
+#include "un260/lv_core/page_01_main_quick.h"
 #include "un260/lv_system/app_clock.h"
 #include "aic_ui/perf_stats.h"
 #include"lv_page_declear.h"
@@ -197,6 +199,8 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .static_images = g_page_main_static_images,
         .static_image_count = UI_ARRAY_SIZE(g_page_main_static_images),
         .predecode_small_visible_images = true,
+        .data_topics = UI_DATA_TOPIC_DEVICE_VERSION,
+        .refresh_data = page_01_main_quick_refresh_data,
     },
     [UI_PAGE_LIST] = {
         .create = ui_page_02_list_create,
@@ -468,6 +472,16 @@ static void ui_manager_send_protocol(uint8_t cmd_g, uint8_t cmd_s)
     protocol_send(cmd_g, &cmd_s, 1);
 }
 
+static void ui_manager_update_diagnostic_scope(ui_page_t page)
+{
+    bool active=page==UI_PAGE_CIS_CALIB || page==UI_PAGE_DEBUG ||
+                page==UI_PAGE_SENSOR || page==UI_PAGE_IMAGE_GET ||
+                page==UI_PAGE_WAVE_GET || page==UI_PAGE_MOTOR_TEST ||
+                page==UI_PAGE_AGING_SETTING ||
+                (page==UI_PAGE_SETTING && page_06_settings_is_collection());
+    work_mode_service_set_diagnostic(active);
+}
+
 static void ui_manager_notify_page_switch(ui_page_t from, ui_page_t to)
 {
     static const page_switch_notify_rule_t rules[] = {
@@ -533,6 +547,7 @@ void ui_manager_switch(ui_page_t page)
         phase_started_us = app_clock_monotonic_us();
     }
     sample.leave_action = destroy_current_page();
+    ui_manager_update_diagnostic_scope(page);
     if (profile_enabled) {
         sample.leave_us = ui_manager_profile_elapsed_us(phase_started_us);
         phase_started_us = app_clock_monotonic_us();
@@ -549,7 +564,7 @@ void ui_manager_switch(ui_page_t page)
     ui_manager_history_on_commit(page);
     g_page_manager.current = page;
     if (page == UI_PAGE_MAIN) {
-        page_32_innovation_schedule_preload();
+        page_01_main_quick_schedule_preload();
     }
     ui_manager_schedule_first_frame();
     ui_manager_transition_finish();
@@ -658,6 +673,7 @@ bool ui_manager_adopt_precreated_page(ui_page_t page)
         phase_started_us = app_clock_monotonic_us();
     }
     sample.leave_action = destroy_current_page();
+    ui_manager_update_diagnostic_scope(page);
     if (profile_enabled) {
         sample.leave_us = ui_manager_profile_elapsed_us(phase_started_us);
         phase_started_us = app_clock_monotonic_us();
@@ -665,7 +681,7 @@ bool ui_manager_adopt_precreated_page(ui_page_t page)
     ui_manager_history_on_commit(page);
     g_page_manager.current = page;
     if (page == UI_PAGE_MAIN) {
-        page_32_innovation_schedule_preload();
+        page_01_main_quick_schedule_preload();
     }
     lv_obj_update_layout(lv_scr_act());
     ui_manager_schedule_first_frame();

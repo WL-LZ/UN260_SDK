@@ -2,7 +2,7 @@
 """Render actual Main/detail/Smart Island with real production compiled images.
 
 Peripheral actions are captured, DMA skin presenter uses real software snapshots,
-and Innovation's real handle is extracted without its hardware workflow.
+and the quick drawer runs its real controls, snapshots and touch arbitration.
 This host test does not validate the board or controller protocol.
 """
 import argparse
@@ -47,6 +47,8 @@ def main():
                *[source.resolve() for source in args.extra_source], *compiled_asset_sources()]
     actual = [
         "un260/font/scaled_font.c",
+        "un260/device_info/device_info.c",
+        "un260/gesture/gesture_guide.c", "un260/lv_components/lv_content_pager.c",
         "un260/lv_system/ui_main_layout.c",
         "un260/counting/counting_serial_query.c",
         "un260/counting/counting_serial_text.c",
@@ -54,6 +56,7 @@ def main():
         "un260/counting/counting_multi_extra.c", "un260/lv_components/ui_multi_detail.c",
         "un260/lv_components/ui_detail_reveal.c", "un260/lv_components/lv_alnum_keyboard.c",
         "un260/lv_components/lv_popup_style.c",
+        "un260/lv_components/lv_settings.c",
         "un260/lv_components/lv_recycled_list.c", "un260/lv_components/ui_scrollbar.c", "un260/lv_components/ui_list_window.c",
         "un260/lv_components/lv_damped_button.c", "un260/lv_components/lv_loading_orbit.c",
         "un260/lv_components/lv_capsule_pagination.c", "un260/lv_components/smart_island.c",
@@ -68,7 +71,7 @@ def main():
         "un260/currency/currency_metadata.c", "un260/lv_system/app_clock.c"]
     sources += [ROOT / path for path in actual]
     font_inputs = sources + [ROOT / "un260/lv_core/page_01_main.c",
-                             ROOT / "un260/lv_core/page_01_main_detail.c"]
+                             ROOT / "un260/lv_core/page_01_main_detail.c", ROOT / "un260/lv_core/page_01_main_quick.c"]
     fonts = {"lv_font_instrument_sans_bold_10"}
     for source in font_inputs:
         fonts.update(re.findall(r"\blv_font_(?:instrument_sans|manrope|main)_[a-zA-Z0-9_]+", source.read_text(encoding="utf-8")))
@@ -85,9 +88,10 @@ def main():
         # into a separate malloc-backed cache; never substitute a mock picture.
         manifest = json.loads((ROOT / "aic_ui/generated_assets/manifest.json").read_text())
         external_entries = []
-        for entry in manifest["external"]:
+        entries=manifest["external"] + [{"name":"quick_icons/"+p.name,"source_sha256":hashlib.sha256(p.read_bytes()).hexdigest()} for p in (ROOT/"aic_ui/lvgl_data/quick_icons").glob("*.png")]
+        for entry in entries:
             name = entry["name"]
-            if name not in ("page_02_menu_bg.png", "backgrounds/user.png", "main_icons/multi_card.png") and not name.startswith("CURR_"):
+            if name not in ("page_02_menu_bg.png", "backgrounds/user.png", "main_icons/multi_card.png") and not name.startswith(("CURR_", "quick_icons/")):
                 continue
             path = ROOT / "aic_ui/lvgl_data" / name
             if hashlib.sha256(path.read_bytes()).hexdigest() != entry["source_sha256"]:
@@ -168,47 +172,25 @@ void host_external_assets_release(void) {
                           function(list_page, "text_set") + '\n' +
                           function(list_page, "number_set").replace('static void number_set', 'void host_list_number_set', 1) + '\n')
         sources.append(helper)
+        # Use the production tutorial and its actual gesture catalog, while
+        # keeping the persistence/hardware service stubbed in this UI harness.
+        gesture_service = (ROOT / "un260/gesture/gesture_service.c").read_text(encoding="utf-8")
+        definitions = re.search(r"static const gesture_definition_t g_definitions\[\] = \{.*?\n\};", gesture_service, re.S)
+        if not definitions:
+            raise AssertionError("Missing production gesture definitions")
+        catalog = work / "actual_gesture_catalog.c"
+        catalog.write_text('#include "un260/gesture/gesture_service.h"\n' + definitions.group() + '''
+size_t gesture_service_definition_count(void) { return sizeof(g_definitions)/sizeof(g_definitions[0]); }
+const gesture_definition_t *gesture_service_definition(size_t index) {
+    return index<gesture_service_definition_count()?&g_definitions[index]:NULL;
+}
+''')
+        sources.append(catalog)
         skin = (ROOT / "un260/lv_components/lv_dma_snapshot_cache.c").read_text(encoding="utf-8")
         skin_presenter = work / "actual_skin_presenter.c"
         skin_presenter.write_text('#include <string.h>\n#include "un260/lv_components/lv_dma_snapshot_cache.h"\n' +
                                   skin[skin.index("static void static_skin_set_live_visual"):skin.index("const lv_img_dsc_t *lv_dma_snapshot_image")])
         sources += [skin_presenter, ROOT / "tools/test_main_skin_backend.c"]
-        innovation = (ROOT / "un260/innovation/page_32_innovation.c").read_text(encoding="utf-8")
-        gesture_type = re.search(r"typedef struct \{[^}]*\} innovation_handle_gesture_t;", innovation)
-        if not gesture_type: raise AssertionError("Actual Innovation gesture state missing")
-        arm = re.search(r"^#define INNOVATION_PREVIEW_ARM_DY\s+\d+", innovation, re.M)
-        if not arm: raise AssertionError("Actual Innovation gesture threshold missing")
-        handle = work / "actual_handle.c"
-        handle.write_text('''#include "lvgl/lvgl.h"
-#include "lv_port_indev.h"
-#include <string.h>
-#define INNOVATION_BLUE 0x3578F6
-''' + arm.group() + '''
-static lv_obj_t *g_handle_touch;
-static lv_timer_t *g_preview_preload_timer;
-static void (*g_handle_tap_handler)(const lv_point_t *point);
-static bool g_page_transitioning;
-''' + gesture_type.group() + '''
-static innovation_handle_gesture_t g_handle_gesture;
-/* Keep actual stationary tap routing. The separate Innovation regression
- * suite, not this Main raster harness, owns preview/navigation validation. */
-static void innovation_handle_drag_cancel(void) { g_handle_gesture.pressed=false; }
-static bool innovation_handle_preview_begin(void) { return false; }
-static void innovation_handle_drag_update(lv_indev_t *indev) { (void)indev; }
-static void innovation_handle_drag_finish(lv_indev_t *indev) { (void)indev;g_handle_gesture.pressed=false; }
-static void innovation_preview_preload_timer_cb(lv_timer_t *timer) { lv_timer_pause(timer); }
-void page_32_innovation_handle_detach(void) {
-    if(g_preview_preload_timer) lv_timer_del(g_preview_preload_timer);
-    g_preview_preload_timer=NULL;
-    if(g_handle_touch) lv_obj_del(g_handle_touch);
-    g_handle_touch=NULL;
-    g_handle_tap_handler=NULL;
-    memset(&g_handle_gesture,0,sizeof(g_handle_gesture));
-}
-''' + function(innovation, "innovation_handle_event_cb") + '\n' +
-                          function(innovation, "page_32_innovation_handle_attach") + '\n' +
-                          function(innovation, "page_32_innovation_handle_set_tap_handler") + '\n')
-        sources.append(handle)
         sources += sorted((lvgl / "src").rglob("*.c"))
         executable = work / "test-main-view"
         command = [compiler, "-std=c11", "-O1", "-g", "-Wall", "-Wextra", "-DLV_DRV_CONF_H", "-D_POSIX_C_SOURCE=200809L",

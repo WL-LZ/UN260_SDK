@@ -58,7 +58,6 @@ bool setting_service_request_speed(uint8_t target);
 bool setting_service_take_speed_result(uint8_t *target);
 
 bool setting_service_request_work_mode(uint8_t target);
-bool setting_service_take_work_mode_result(uint8_t *target);
 
 bool setting_service_request_beep(bool target);
 bool setting_service_take_beep_result(bool *target);

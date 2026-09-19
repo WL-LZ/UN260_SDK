@@ -5,6 +5,11 @@
 #include "un260/lv_system/app_clock.h"
 #include "un260/app_service/app_setting_reply.h"
 #include "un260/app_service/setting_service.h"
+#include "un260/app_service/work_mode_service.h"
+#include "un260/app_service/app_command_runtime.h"
+#include "un260/diagnostic/diagnostic.h"
+#include "un260/boot/boot_service.h"
+#include "un260/lv_components/smart_island.h"
 #include "un260/cfd/cfd.h"
 #include "un260/currency/currency_service.h"
 #include "un260/counting/counting_data_store.h"
@@ -118,6 +123,16 @@ void app_setting_runtime_poll(uint32_t now_ms)
     currency_switch_result_t currency_result;
     print_config_request_result_t print_result;
     setting_action_result_t action_result;
+    calibration_state_snapshot_t calibration;
+    const boot_stage_t boot_stage = boot_service_get_stage();
+    diagnostic_calibration_get_snapshot(&calibration);
+    work_mode_service_poll(now_ms, app_command_runtime_count_start_busy() ||
+        machine_state_aging_running() || calibration.session_active ||
+        (boot_stage != BOOT_STAGE_DONE && boot_stage != BOOT_STAGE_FAIL));
+    if (work_mode_service_take_failure()) {
+        smart_island_notify_warning_level(work_mode_service_status_text(),
+                                         SMART_ISLAND_WARNING_LEVEL_WARNING);
+    }
 
     if (g_mode_clear_scheduled &&
         (uint32_t)(now_ms - g_mode_clear_tick) >=
@@ -191,7 +206,7 @@ void app_setting_runtime_poll(uint32_t now_ms)
 
     if (setting_service_take_aging_timeout(&action_result)) {
         uart_debug_printf("aging start request timeout\n");
-        ui_page_26_set_aging_on_reply(0x01);
+        ui_page_26_set_aging_on_timeout();
         notify_timeout = true;
     }
 
@@ -214,6 +229,7 @@ void app_setting_runtime_poll(uint32_t now_ms)
 
 void app_setting_runtime_stop(void)
 {
+    work_mode_service_stop();
     app_setting_runtime_cancel_mode_clear();
     setting_service_cancel_all();
     serial_number_service_cancel_request();

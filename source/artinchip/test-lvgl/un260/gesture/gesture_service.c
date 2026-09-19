@@ -5,6 +5,7 @@
 #include "un260/gesture/gesture_guide.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/innovation/page_32_innovation.h"
+#include "un260/lv_core/page_01_main_quick.h"
 #include "un260/lv_core/page_06_settings.h"
 #include "un260/lv_components/lv_nav_button.h"
 #include "un260/lv_system/user_cfg.h"
@@ -86,7 +87,7 @@ static void gesture_navigate_async(void *user_data)
     } else if(action == GESTURE_ACTION_EXPORT) {
         /* Reuse the existing USB export validation, filenames and error UI. */
         ui_export_data_request();
-    } else if(page_32_innovation_request_back()) {
+    } else if(page_01_main_quick_request_back() || page_32_innovation_request_back()) {
         return;
     } else if(page != UI_PAGE_MAIN) {
         lv_nav_back_result_t result = lv_nav_button_request_back();

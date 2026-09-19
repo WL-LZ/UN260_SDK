@@ -19,6 +19,11 @@ void lv_damped_button_set_text(lv_obj_t *button, const char *text)
 {
     lv_label_set_text(button, text);
 }
+void lv_damped_button_set_exact_palette(lv_obj_t *button, lv_color_t normal, lv_color_t pressed)
+{
+    assert(normal == button->color);
+    button->pressed_color = pressed;
+}
 
 #include "../un260/lv_components/lv_pin_keypad.c"
 #include "../un260/lv_core/page_05_set_password.c"
@@ -109,11 +114,20 @@ static void test_component(void)
     assert(keypad.blink->paused);
     assert(lv_pin_keypad_show(&keypad, &config, ""));
     assert(!keypad.blink->paused && keypad.cursor->x == 44);
-    for (unsigned i=0; i<4; ++i) assert(keypad.dots[i]->color == 0xD9E0E3);
+    for (unsigned i=0; i<4; ++i) assert(keypad.dots[i]->color == 0xB9C5CD);
+    for (unsigned i=0; i<12; ++i) {
+        assert(keypad.keys[i]->w == 216 && keypad.keys[i]->h == 64);
+        assert(keypad.keys[i]->x == 424 + (int)(i % 3) * 228);
+        assert(keypad.keys[i]->y == 16 + (int)(i / 3) * 76);
+        assert(keypad.keys[i]->pressed_color == (pin_keys[i] == 11 ? 0x1054B0 : 0xE2E9EE));
+    }
+    assert(strstr(keypad.keys[9]->children[0]->text,"popup_icons/backspace.png"));
+    assert(!strcmp(keypad.keys[11]->text,"Confirm"));
+    assert(!strcmp(keypad.cancel->text,"Cancel") && keypad.cancel->h >= 44);
     keypad.blink->callback(keypad.blink);
     assert(keypad.cursor->opacity == LV_OPA_TRANSP);
     press_key(&keypad, 0);
-    assert(keypad.dots[0]->color == 0 && keypad.dots[1]->color == 0xD9E0E3);
+    assert(keypad.dots[0]->color == 0x1D2B34 && keypad.dots[1]->color == 0xB9C5CD);
     assert(keypad.cursor->x == 108 && keypad.cursor->opacity == LV_OPA_COVER);
     press_key(&keypad, 11);
     assert(confirmed == 0 && strcmp(keypad.status->text,"Enter exactly 4 digits.")==0);
@@ -125,7 +139,7 @@ static void test_component(void)
     assert(confirmed == 1 && strcmp(confirmed_pin, "0012") == 0);
     press_key(&keypad, 10);
     assert(!keypad.blink->paused && !lv_obj_has_flag(keypad.cursor,LV_OBJ_FLAG_HIDDEN));
-    assert(keypad.cursor->x == 236 && keypad.dots[3]->color == 0xD9E0E3);
+    assert(keypad.cursor->x == 236 && keypad.dots[3]->color == 0xB9C5CD);
     click(keypad.cancel);
     assert(cancelled == 1 && !lv_pin_keypad_is_visible(&keypad));
     assert(keypad.blink->paused && !keypad.confirm_cb && !keypad.cancel_cb);
@@ -196,24 +210,23 @@ static void test_visibility(void)
     lv_pin_keypad_create(&keypad, parent, 80, 12);
     lv_pin_keypad_show(&keypad, &config, "");
     assert(!keypad.digits_visible && !visibility_save_count);
-    /* Hit area is above/right of fourth dot and outside the digits/cursor. */
+    /* Text action has its own large target to the right of the digit slots. */
     assert(keypad.eye->x > keypad.dots[3]->x + keypad.dots[3]->w);
-    assert(keypad.eye->y + keypad.eye->h <= keypad.dots[3]->y);
-    assert(keypad.eye->w == 44 && keypad.eye->h == 36);
+    assert(keypad.eye->w == 104 && keypad.eye->h == 48);
     type_pin(&keypad, "00");
-    assert(!strcmp(keypad.eye->text, LV_SYMBOL_EYE_CLOSE));
+    assert(!strcmp(keypad.eye->text, "Show"));
     for (unsigned i=0; i<4; ++i) assert(!keypad.digits[i]->text[0]);
     click(keypad.eye);
     assert(keypad.digits_visible && saved_visibility && visibility_save_count == 1);
     assert(save_count == 0); /* Eye must never call the password writer. */
-    assert(!strcmp(keypad.eye->text, LV_SYMBOL_EYE_OPEN));
+    assert(!strcmp(keypad.eye->text, "Hide"));
     for (unsigned i=0; i<2; ++i) {
         assert(!strcmp(keypad.digits[i]->text,"0"));
         assert(lv_obj_has_flag(keypad.dots[i],LV_OBJ_FLAG_HIDDEN));
         assert(!lv_obj_has_flag(keypad.digits[i],LV_OBJ_FLAG_HIDDEN));
     }
     assert(!lv_obj_has_flag(keypad.dots[2],LV_OBJ_FLAG_HIDDEN));
-    assert(keypad.dots[2]->color == 0xD9E0E3 && !keypad.blink->paused);
+    assert(keypad.dots[2]->color == 0xB9C5CD && !keypad.blink->paused);
     type_pin(&keypad, "42");
     assert(!strcmp(keypad.digits[2]->text,"4") && !strcmp(keypad.digits[3]->text,"2"));
     assert(!strcmp(keypad.input.value,"0042") && keypad.blink->paused);
@@ -300,13 +313,32 @@ static void test_change_password_page(void)
     enter_field(PASSWORD_FIELD_NEW,"0022");
     enter_field(PASSWORD_FIELD_CONFIRM,"0022");
     assert(save_count == 0); /* Field confirmation alone never changes auth. */
+    assert(pin_gesture_policy && pin_gesture_policy(GESTURE_ACTION_HOME));
+    assert(pin_overlay && pin_discard && pop_count == 0);
+    settings_detail_dialog_hide();
+    click(password_frame.back);
+    assert(pin_overlay && pin_discard && pop_count == 0);
+    settings_detail_dialog_hide();
     click(field_cards[PASSWORD_FIELD_NEW]);
     press_key(&password_setting_keypad,10);
     press_key(&password_setting_keypad,3);
-    click(password_setting_page->children[0]);
+    click(password_frame.back);
     assert(pop_count == 0 && !lv_pin_keypad_is_visible(&password_setting_keypad));
     assert(strcmp(field_text[PASSWORD_FIELD_NEW],"0022")==0);
     assert_empty(&password_setting_keypad);
+    click(field_cards[PASSWORD_FIELD_NEW]);
+    press_key(&password_setting_keypad,10);
+    press_key(&password_setting_keypad,8);
+    assert(lv_obj_has_flag(password_setting_keypad.root,LV_OBJ_FLAG_CLICKABLE));
+    lv_event_t inside={LV_EVENT_CLICKED,password_setting_keypad.root,NULL};
+    password_setting_outside(&inside);
+    assert(lv_pin_keypad_is_visible(&password_setting_keypad));
+    click(password_setting_page);
+    assert(!lv_pin_keypad_is_visible(&password_setting_keypad));
+    assert(strcmp(field_text[PASSWORD_FIELD_NEW],"0022")==0 && save_count==0);
+    assert_empty(&password_setting_keypad);
+    assert(password_setting_keypad.blink->paused);
+    assert(!lv_obj_has_flag(password_frame.footer,LV_OBJ_FLAG_HIDDEN));
     enter_field(PASSWORD_FIELD_CURRENT,"1234");
     save_form(); assert(save_count == 0 && strstr(toast_text,"Incorrect current"));
     enter_field(PASSWORD_FIELD_CURRENT,"1111");
@@ -323,7 +355,7 @@ static void test_change_password_page(void)
     save_form(); assert(save_count == 2 && strcmp(saved_password,"0022")==0);
     for (unsigned i=0;i<PASSWORD_FIELD_COUNT;++i) assert(!field_text[i][0]);
     assert(strcmp(toast_text,"Password saved")==0);
-    click(password_setting_page->children[0]); assert(pop_count == 1);
+    click(password_frame.back); assert(pop_count == 1);
     enter_field(PASSWORD_FIELD_NEW,"3456");
     click(field_cards[PASSWORD_FIELD_CURRENT]);
     type_pin(&password_setting_keypad,"00");

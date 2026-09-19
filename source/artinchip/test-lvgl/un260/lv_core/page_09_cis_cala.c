@@ -1,277 +1,233 @@
-#include "un260/lv_core/page_09_cis_cala.h"
-
-#include "un260/lv_core/lv_page_manager.h"
-#include "un260/lv_core/settings_detail_ui.h"
+#include "page_09_cis_cala.h"
+#define SETTINGS_THEME_DISABLE_COLOR_REMAP
+#include "settings_detail_ui.h"
+#include "lv_page_manager.h"
+#include "un260/lv_components/lv_settings.h"
 #include "un260/lv_system/app_clock.h"
 #include "un260/diagnostic/diagnostic.h"
-#include "un260/lv_system/ui_text.h"
+#include "un260/app_service/work_mode_service.h"
+#include "un260/gesture/gesture_service.h"
+#include <string.h>
 
-#include <stdbool.h>
-
-typedef struct {
-    lv_obj_t* card;
-    lv_obj_t* accent;
-    lv_obj_t* icon_box;
-    lv_obj_t* icon;
-    lv_obj_t* status_dot;
-    lv_obj_t* status;
-    lv_obj_t* button;
-} calib_panel_t;
-
-static lv_obj_t* cis_page = NULL;
-static calib_panel_t cis_panel = { 0 };
-static calib_panel_t cb_panel = { 0 };
-
-static lv_obj_t* calib_create_plain(lv_obj_t* parent, lv_coord_t x, lv_coord_t y,
-                                    lv_coord_t w, lv_coord_t h, uint32_t color,
-                                    lv_coord_t radius)
+static lv_obj_t *mode_retry_button;
+static void mode_retry_clicked(lv_event_t *e)
 {
-    lv_obj_t* obj = lv_obj_create(parent);
-
-    lv_obj_remove_style_all(obj);
-    lv_obj_set_pos(obj, x, y);
-    lv_obj_set_size(obj, w, h);
-    lv_obj_set_style_bg_color(obj, lv_color_hex(color), 0);
-    lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(obj, radius, 0);
-    lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
-    return obj;
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) work_mode_service_retry();
+}
+static void mode_retry_refresh(void)
+{
+    if (!mode_retry_button) return;
+    work_mode_snapshot_t mode;
+    work_mode_service_get_snapshot(&mode);
+    if (mode.phase == WORK_MODE_FAILED) lv_obj_clear_flag(mode_retry_button, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(mode_retry_button, LV_OBJ_FLAG_HIDDEN);
 }
 
-static void calib_set_button_enabled(lv_obj_t* button, bool enabled)
+static lv_obj_t *cis_page, *status_title, *status_detail, *start_button;
+static lv_settings_frame_t frame;
+static bool selected_white_balance;
+static lv_timer_t *status_timer;
+static bool leave_home;
+static bool send_failed;
+static void calibration_leave(void *data)
 {
-    if (!button || !lv_obj_is_valid(button)) return;
+    (void)data;
+    if (leave_home) { ui_manager_clear_stack(); ui_manager_switch(UI_PAGE_MAIN); }
+    else ui_manager_pop_page();
+}
+static void calibration_leave_warning(bool home)
+{
+    leave_home=home;
+    settings_detail_dialog_show("Leave calibration?",
+        "The controller has not reported a final result. Leaving does not stop calibration. "
+        "Manual mode remains active for safety.",
+        "Leave","Stay",calibration_leave,NULL,NULL);
+}
+static bool calibration_gesture(gesture_action_t action)
+{
+    calibration_state_snapshot_t state;
+    if (action != GESTURE_ACTION_HOME && action != GESTURE_ACTION_EXIT_PAGE) return false;
+    diagnostic_calibration_get_snapshot(&state);
+    if (state.cis_state != CIS_CALIB_RUNNING && state.cb_state != CB_CALIB_RUNNING) return false;
+    if (state.timed_out) calibration_leave_warning(action==GESTURE_ACTION_HOME);
+    return true;
+}
+static void calibration_text(lv_obj_t *label,const char *text)
+{
+    if(strcmp(lv_label_get_text(label),text))lv_label_set_text(label,text);
+}
+static void status_tick(lv_timer_t *timer) { (void)timer; cis_calib_ui_refresh(); }
 
-    if (enabled) {
-        lv_obj_clear_state(button, LV_STATE_DISABLED);
-    } else {
-        lv_obj_add_state(button, LV_STATE_DISABLED);
-    }
+void ui_page_cis_calib_select(bool white_balance)
+{
+    if (!cis_page) selected_white_balance = white_balance;
 }
 
-static void calib_update_panel(calib_panel_t* panel, const char* text,
-                               lv_color_t color, const char* symbol)
-{
-    if (!panel || !panel->card || !lv_obj_is_valid(panel->card)) return;
-
-    lv_obj_set_style_border_color(panel->card, color, 0);
-    lv_obj_set_style_bg_color(panel->accent, color, 0);
-    lv_obj_set_style_bg_color(panel->icon_box, lv_color_mix(color, lv_color_white(), LV_OPA_20), 0);
-    lv_obj_set_style_text_color(panel->icon, color, 0);
-    lv_label_set_text(panel->icon, symbol);
-    lv_obj_set_style_bg_color(panel->status_dot, color, 0);
-    lv_label_set_text(panel->status, text);
-    lv_obj_set_style_text_color(panel->status, color, 0);
-}
-
-static void cis_panel_refresh(cis_calib_state_t state)
-{
-    switch (state) {
-    case CIS_CALIB_RUNNING:
-        calib_update_panel(&cis_panel, ui_text_get(UI_TEXT_SETTINGS_CIS_STARTED),
-                           lv_color_hex(0x1F6FE5), LV_SYMBOL_REFRESH);
-        break;
-    case CIS_CALIB_SUCCESS:
-        calib_update_panel(&cis_panel, ui_text_get(UI_TEXT_SETTINGS_CIS_SUCCESS),
-                           lv_color_hex(0x24B47E), LV_SYMBOL_OK);
-        break;
-    case CIS_CALIB_FAIL_UPPER:
-        calib_update_panel(&cis_panel, ui_text_get(UI_TEXT_SETTINGS_CIS_FAIL_UPPER),
-                           lv_color_hex(0xE5484D), LV_SYMBOL_CLOSE);
-        break;
-    case CIS_CALIB_FAIL_LOWER:
-        calib_update_panel(&cis_panel, ui_text_get(UI_TEXT_SETTINGS_CIS_FAIL_LOWER),
-                           lv_color_hex(0xE5484D), LV_SYMBOL_CLOSE);
-        break;
-    case CIS_CALIB_FAIL_IR:
-        calib_update_panel(&cis_panel, ui_text_get(UI_TEXT_SETTINGS_CIS_FAIL_IR),
-                           lv_color_hex(0xE5484D), LV_SYMBOL_CLOSE);
-        break;
-    case CIS_CALIB_IDLE:
-    default:
-        calib_update_panel(&cis_panel, ui_text_get(UI_TEXT_SETTINGS_CIS_IDLE),
-                           lv_color_hex(0x7A8AA0), LV_SYMBOL_IMAGE);
-        break;
-    }
-}
-
-static void cb_panel_refresh(cb_calib_state_t state)
-{
-    switch (state) {
-    case CB_CALIB_RUNNING:
-        calib_update_panel(&cb_panel, ui_text_get(UI_TEXT_SETTINGS_CB_STARTED),
-                           lv_color_hex(0x1F6FE5), LV_SYMBOL_REFRESH);
-        break;
-    case CB_CALIB_SUCCESS:
-        calib_update_panel(&cb_panel, ui_text_get(UI_TEXT_SETTINGS_CB_SUCCESS),
-                           lv_color_hex(0x24B47E), LV_SYMBOL_OK);
-        break;
-    case CB_CALIB_FAIL_IR:
-        calib_update_panel(&cb_panel, ui_text_get(UI_TEXT_SETTINGS_CB_FAIL_IR),
-                           lv_color_hex(0xE5484D), LV_SYMBOL_CLOSE);
-        break;
-    case CB_CALIB_IDLE:
-    default:
-        calib_update_panel(&cb_panel, ui_text_get(UI_TEXT_SETTINGS_CIS_IDLE),
-                           lv_color_hex(0x7A8AA0), LV_SYMBOL_REFRESH);
-        break;
-    }
-}
-
-void cis_enter_btn_cb(lv_event_t* e)
+void cis_enter_btn_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    ui_page_cis_calib_select(false);
     ui_manager_push_page(UI_PAGE_CIS_CALIB);
 }
 
-static void cis_esc_btn_cb(lv_event_t* e)
+static void cis_back(lv_event_t *e)
 {
+    calibration_state_snapshot_t state;
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    diagnostic_calibration_get_snapshot(&state);
+    /* No cancellation command exists. A timed-out session can be left explicitly,
+     * without claiming that the controller stopped or releasing Manual mode. */
+    if (state.cis_state == CIS_CALIB_RUNNING || state.cb_state == CB_CALIB_RUNNING) {
+        if (state.timed_out) calibration_leave_warning(false);
+        return;
+    }
     ui_manager_pop_page();
 }
 
-static void cis_start_btn_cb(lv_event_t* e)
+static void cis_start(lv_event_t *e)
 {
     calibration_state_snapshot_t state;
-    uint8_t sub = 0x01;
-
+    const uint8_t sub = 1;
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
     diagnostic_calibration_get_snapshot(&state);
-    if (state.cis_state == CIS_CALIB_RUNNING ||
-        state.cb_state == CB_CALIB_RUNNING) return;
-    if (!diagnostic_calibration_begin(CALIB_TARGET_CIS,
+    if (state.cis_state == CIS_CALIB_RUNNING || state.cb_state == CB_CALIB_RUNNING) return;
+    if (!work_mode_service_diagnostic_ready()) return;
+    send_failed = false;
+    if (!diagnostic_calibration_begin(selected_white_balance ? CALIB_TARGET_CB : CALIB_TARGET_CIS,
                                       app_clock_uptime_ms())) return;
-    if (!settings_detail_send_command(0x5B, &sub, 1)) {
+    if (!settings_detail_send_command(selected_white_balance ? 0x5F : 0x5B, &sub, 1)) {
         diagnostic_calibration_end_session();
+        send_failed = true;
+        lv_label_set_text(status_title, "Could not start");
+        lv_label_set_text(status_detail, "Check the controller connection, then try again.");
         return;
     }
-
+    work_mode_service_hold_operation(WORK_MODE_OPERATION_CALIBRATION, true);
     cis_calib_ui_refresh();
 }
 
-static void cb_start_btn_cb(lv_event_t* e)
+static void preparation_row(lv_obj_t *host, int y, const char *number,
+                            const char *title, const char *hint)
 {
-    calibration_state_snapshot_t state;
-    uint8_t sub = 0x01;
-
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    diagnostic_calibration_get_snapshot(&state);
-    if (state.cis_state == CIS_CALIB_RUNNING ||
-        state.cb_state == CB_CALIB_RUNNING) return;
-    if (!diagnostic_calibration_begin(CALIB_TARGET_CB,
-                                      app_clock_uptime_ms())) return;
-    if (!settings_detail_send_command(0x5F, &sub, 1)) {
-        diagnostic_calibration_end_session();
-        return;
-    }
-
-    cis_calib_ui_refresh();
+    lv_obj_t *badge = lv_settings_box(host, 24, y, 36, 36, 0xF1F4F5);
+    lv_obj_t *n = lv_settings_label(badge, number, 0, 0,
+                                   &lv_font_instrument_sans_medium_16, 0x586B78);
+    lv_obj_center(n);
+    lv_settings_label(host, title, 76, y - 1, &lv_font_instrument_sans_medium_18, 0x1D2B34);
+    lv_settings_label(host, hint, 76, y + 24, &lv_font_instrument_sans_medium_14, 0x586B78);
 }
 
-static void calib_create_panel(lv_obj_t* parent, calib_panel_t* panel,
-                               lv_coord_t x, const char* title,
-                               const char* symbol, lv_color_t button_color,
-                               lv_event_cb_t button_cb)
+void ui_page_cis_calib_create(lv_obj_t *parent)
 {
-    lv_obj_t* divider;
-    lv_obj_t* status_band;
-    lv_obj_t* title_label;
-
-    panel->card = settings_detail_create_card(parent, x, 18, 580, 306);
-    lv_obj_set_style_shadow_width(panel->card, 12, 0);
-    lv_obj_set_style_shadow_opa(panel->card, LV_OPA_10, 0);
-
-    panel->accent = calib_create_plain(panel->card, 0, 0, 6, 306, 0x2E85FF, 0);
-    panel->icon_box = calib_create_plain(panel->card, 26, 22, 44, 44, 0xEAF3FF, 6);
-    panel->icon = settings_detail_create_label(panel->icon_box, symbol,
-                                               &lv_font_montserrat_20,
-                                               lv_color_hex(0x1F6FE5), 0, 0);
-    lv_obj_center(panel->icon);
-
-    title_label = settings_detail_create_label(panel->card, title,
-                                               &lv_font_instrument_sans_semibold_20,
-                                               lv_color_hex(0x17223B), 86, 31);
-    lv_obj_set_width(title_label, 450);
-
-    divider = calib_create_plain(panel->card, 26, 82, 528, 1, 0xE4EBF5, 0);
-    lv_obj_clear_flag(divider, LV_OBJ_FLAG_CLICKABLE);
-
-    status_band = calib_create_plain(panel->card, 26, 103, 528, 82, 0xF6F8FB, 6);
-    lv_obj_set_style_border_width(status_band, 1, 0);
-    lv_obj_set_style_border_color(status_band, lv_color_hex(0xE4EBF5), 0);
-
-    panel->status_dot = calib_create_plain(status_band, 24, 35, 12, 12, 0x7A8AA0, 6);
-    lv_obj_align(panel->status_dot, LV_ALIGN_LEFT_MID, 24, 0);
-    panel->status = settings_detail_create_label(status_band,
-                                                 ui_text_get(UI_TEXT_SETTINGS_CIS_IDLE),
-                                                 &lv_font_instrument_sans_medium_18,
-                                                 lv_color_hex(0x7A8AA0), 54, 27);
-    lv_obj_set_width(panel->status, 440);
-    lv_label_set_long_mode(panel->status, LV_LABEL_LONG_DOT);
-    lv_obj_align(panel->status, LV_ALIGN_LEFT_MID, 54, 0);
-
-    panel->button = settings_detail_create_button(panel->card, 26, 218, 528, 58,
-                                                  title, button_color,
-                                                  button_cb, NULL);
-    lv_obj_set_style_opa(panel->button, LV_OPA_50, LV_STATE_DISABLED);
-}
-
-void ui_page_cis_calib_create(lv_obj_t* parent)
-{
-    lv_obj_t* content = NULL;
-
     if (cis_page) return;
+    lv_settings_header_t header = {
+        selected_white_balance ? "White balance" : "CIS calibration",
+        "Maintenance / Calibration", selected_white_balance ? "Sun" : "Layers", cis_back, NULL
+    };
+    frame = lv_settings_frame_create(parent, &header);
+    cis_page = frame.root;
+    lv_obj_set_style_bg_opa(frame.body, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(frame.body, 0, 0);
+    lv_obj_t *prepare = lv_settings_box(frame.body, 0, 0, 680, 242, 0xFFFFFF);
+    lv_obj_set_style_radius(prepare, 14, 0);
+    lv_settings_label(prepare, "Before you begin", 24, 20,
+                      &lv_font_instrument_sans_medium_18, 0x1D2B34);
+    preparation_row(prepare, 62, "1", "Prepare the transport path",
+                    "Remove banknotes and check that the path is clear.");
+    preparation_row(prepare, 119, "2", "Place the calibration material",
+                    "Use the material specified for this service procedure.");
+    preparation_row(prepare, 176, "3", "Start when ready",
+                    "Keep the material in place until the controller responds.");
 
-    cis_page = settings_detail_create_page(parent,
-                                           ui_text_get(UI_TEXT_SETTINGS_CIS_CALIBRATION),
-                                           cis_esc_btn_cb, &content);
-
-    calib_create_panel(content, &cis_panel, 38,
-                       ui_text_get(UI_TEXT_SETTINGS_CIS_CALIBRATION),
-                       LV_SYMBOL_IMAGE, lv_color_hex(0x1F6FE5),
-                       cis_start_btn_cb);
-    calib_create_panel(content, &cb_panel, 662,
-                       ui_text_get(UI_TEXT_SETTINGS_COLOR_BALANCE),
-                       LV_SYMBOL_REFRESH, lv_color_hex(0x24B47E),
-                       cb_start_btn_cb);
+    lv_obj_t *state = lv_settings_box(frame.body, 696, 0, 536, 242, 0xF1F4F5);
+    lv_obj_set_style_radius(state, 14, 0);
+    lv_settings_label(state, "CALIBRATION STATUS", 24, 24,
+                      &lv_font_instrument_sans_medium_14, 0x586B78);
+    status_title = lv_settings_label(state, "Ready to calibrate", 24, 63,
+                                     &lv_font_instrument_sans_medium_22, 0x1D2B34);
+    status_detail = lv_settings_label(state, "", 24, 103,
+                                      &lv_font_instrument_sans_medium_16, 0x586B78);
+    lv_obj_set_width(status_detail, 488);
+    lv_label_set_long_mode(status_detail, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(frame.message, "Calibration starts only when you press Start.");
+    start_button = lv_settings_button(frame.footer, 1060, 0, 172, 46, "Start", true, cis_start, NULL);
+    gesture_service_set_page_policy(UI_PAGE_CIS_CALIB, NULL, calibration_gesture);
+    mode_retry_button=lv_settings_button(frame.footer,904,0,130,46,"Retry",false,mode_retry_clicked,NULL);
+    lv_obj_add_flag(mode_retry_button,LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_width(frame.message,884);
+    status_timer = lv_timer_create(status_tick, 200, NULL);
     cis_calib_ui_refresh();
+}
+
+void cis_calib_ui_refresh(void)
+{
+    mode_retry_refresh();
+    calibration_state_snapshot_t state;
+    const char *title = "Ready to calibrate";
+    const char *detail = "Prepare the machine, then press Start.";
+    uint32_t color = 0x1D2B34;
+    if (!cis_page || !lv_obj_is_valid(cis_page)) return;
+    diagnostic_calibration_get_snapshot(&state);
+    bool running = state.cis_state == CIS_CALIB_RUNNING || state.cb_state == CB_CALIB_RUNNING;
+    bool success = selected_white_balance ? state.cb_state == CB_CALIB_SUCCESS : state.cis_state == CIS_CALIB_SUCCESS;
+    if (state.timed_out && running) {
+        title = "Waiting for a final result";
+        detail = "The controller has not confirmed completion. Manual mode stays active. "
+                 "Back lets you leave without stopping the calibration.";
+        color = 0xA35B12;
+    } else if (running) {
+        title = "Calibration in progress";
+        detail = "Waiting for the controller. Keep the path clear and do not power off.";
+        color = 0x1462CC;
+    } else if (send_failed) {
+        title = "Could not start";
+        detail = "Check the controller connection, then try again.";
+        color = 0xB63B32;
+    } else if (success) {
+        title = "Calibration complete";
+        detail = "The controller confirmed the result. You can return to settings.";
+        color = 0x247650;
+    } else if ((!selected_white_balance && state.cis_state >= CIS_CALIB_FAIL_UPPER) ||
+               (selected_white_balance && state.cb_state == CB_CALIB_FAIL_IR)) {
+        title = "Calibration not completed";
+        detail = !selected_white_balance && state.cis_state == CIS_CALIB_FAIL_UPPER ?
+                 "Check the upper channel and calibration material, then retry." :
+                 !selected_white_balance && state.cis_state == CIS_CALIB_FAIL_LOWER ?
+                 "Check the lower channel and calibration material, then retry." :
+                 "Check the infrared channel and calibration material, then retry.";
+        color = 0xB63B32;
+    }
+    calibration_text(status_title, title);
+    lv_obj_set_style_text_color(status_title, lv_color_hex(color), 0);
+    calibration_text(status_detail, detail);
+    if (running) {
+        lv_obj_add_state(start_button, LV_STATE_DISABLED);
+        if (state.timed_out) lv_obj_clear_state(frame.back, LV_STATE_DISABLED);
+        else lv_obj_add_state(frame.back, LV_STATE_DISABLED);
+    } else {
+        if (work_mode_service_diagnostic_ready()) lv_obj_clear_state(start_button, LV_STATE_DISABLED);
+        else lv_obj_add_state(start_button, LV_STATE_DISABLED);
+        lv_obj_clear_state(frame.back, LV_STATE_DISABLED);
+    }
+    calibration_text(frame.message, !work_mode_service_diagnostic_ready() ? work_mode_service_status_text() :
+                      running ? "Calibration is controlled by the machine." :
+                      "Calibration starts only when you press Start.");
 }
 
 void ui_page_cis_calib_destroy(void)
 {
     if (!cis_page) return;
-
+    gesture_service_clear_page_policy(UI_PAGE_CIS_CALIB);
+    settings_detail_dialog_hide();
+    if (status_timer) lv_timer_del(status_timer);
+    status_timer = NULL;
     lv_obj_del(cis_page);
-    cis_page = NULL;
-    cis_panel = (calib_panel_t){ 0 };
-    cb_panel = (calib_panel_t){ 0 };
-    diagnostic_calibration_end_session();
-}
-
-void cis_calib_ui_refresh(void)
-{
+    cis_page = status_title = status_detail = start_button = NULL;
+    frame = (lv_settings_frame_t){0};
+    mode_retry_button=NULL;
+    send_failed = false;
     calibration_state_snapshot_t state;
-    bool running;
-
-    if (!cis_page || !lv_obj_is_valid(cis_page)) return;
-
     diagnostic_calibration_get_snapshot(&state);
-    cis_panel_refresh(state.cis_state);
-    cb_panel_refresh(state.cb_state);
-    if (state.timed_out) {
-        if (state.target == CALIB_TARGET_CB) {
-            calib_update_panel(&cb_panel,
-                               ui_text_get(UI_TEXT_SETTINGS_CALIB_TIMEOUT),
-                               lv_color_hex(0xE5484D), LV_SYMBOL_CLOSE);
-        } else {
-            calib_update_panel(&cis_panel,
-                               ui_text_get(UI_TEXT_SETTINGS_CALIB_TIMEOUT),
-                               lv_color_hex(0xE5484D), LV_SYMBOL_CLOSE);
-        }
-    }
-
-    running = state.cis_state == CIS_CALIB_RUNNING ||
-              state.cb_state == CB_CALIB_RUNNING;
-    calib_set_button_enabled(cis_panel.button, !running);
-    calib_set_button_enabled(cb_panel.button, !running);
+    if (state.cis_state != CIS_CALIB_RUNNING && state.cb_state != CB_CALIB_RUNNING)
+        diagnostic_calibration_end_session();
 }

@@ -1,158 +1,120 @@
 #include "page_12_sensor.h"
-#include "un260/lv_core/lv_page_manager.h"
-#include "un260/lv_core/settings_detail_ui.h"
-#include "un260/lv_system/ui_text.h"
+#define SETTINGS_THEME_DISABLE_COLOR_REMAP
+#include "settings_detail_ui.h"
+#include "lv_page_manager.h"
+#include "un260/lv_components/lv_settings.h"
+#include "un260/lv_system/app_clock.h"
 #include "un260/diagnostic/diagnostic.h"
-
-#include <stdbool.h>
+#include "un260/app_service/work_mode_service.h"
 #include <string.h>
 
-#define SENSOR_SCALE_Y_DEFAULT 330
 #define SENSOR_QUERY_PERIOD_MS 300
-
-typedef struct {
-    lv_obj_t *page;
-    lv_obj_t *value_labels[SENSOR_VOLTAGE_CH_NUM];
-    lv_timer_t *poll_timer;
-    uint32_t last_update_count;
-    bool values_initialized;
-    bool displayed_valid[SENSOR_VOLTAGE_CH_NUM];
-    uint8_t displayed_raw[SENSOR_VOLTAGE_CH_NUM];
-} sensor_page_context_t;
-
-static sensor_page_context_t g_sensor_page;
-
-static void sensor_page_context_reset(void)
+static lv_obj_t *mode_retry_button;
+static void mode_retry_clicked(lv_event_t *e)
 {
-    memset(&g_sensor_page, 0, sizeof(g_sensor_page));
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) work_mode_service_retry();
+}
+static void mode_retry_refresh(void)
+{
+    if (!mode_retry_button) return;
+    work_mode_snapshot_t mode;
+    work_mode_service_get_snapshot(&mode);
+    if (mode.phase == WORK_MODE_FAILED) lv_obj_clear_flag(mode_retry_button, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(mode_retry_button, LV_OBJ_FLAG_HIDDEN);
 }
 
-static const char* sensor_names[SENSOR_VOLTAGE_CH_NUM] = {
+static struct {
+    lv_settings_frame_t frame;
+    lv_obj_t *values[SENSOR_VOLTAGE_CH_NUM];
+    lv_obj_t *received;
+    lv_timer_t *timer;
+    uint32_t last_update, last_received_ms;
+    bool initialized, query_failed;
+} sensor_page;
+static const char *sensor_names[SENSOR_VOLTAGE_CH_NUM] = {
     "QTH", "QTL", "RJH", "RJL", "PS1L", "PS1R", "PS2", "PS5L", "PS5R", "ST", "SD"
 };
-
-static float sensor_raw_to_volt(uint8_t raw)
+static void sensor_esc_cb(lv_event_t *e)
 {
-    return ((float)raw / 256.0f) * ((float)SENSOR_SCALE_Y_DEFAULT / 100.0f);
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) ui_manager_pop_page();
 }
-
-static void sensor_send_query(void)
-{
-    const uint8_t req[2] = { 0x01, 0x01 };
-    settings_detail_send_command(0x1D, req, 2);
-}
-
 static void sensor_refresh_view(void)
 {
+    mode_retry_refresh();
     sensor_voltage_snapshot_t snapshot;
-
     sensor_state_get_snapshot(&snapshot);
-    if (g_sensor_page.last_update_count == snapshot.update_count) return;
-    g_sensor_page.last_update_count = snapshot.update_count;
-
-    for (int i = 0; i < SENSOR_VOLTAGE_CH_NUM; i++) {
-        lv_obj_t *value_label = g_sensor_page.value_labels[i];
-
-        if (!value_label || !lv_obj_is_valid(value_label)) continue;
-        if (g_sensor_page.values_initialized &&
-            g_sensor_page.displayed_valid[i] == snapshot.valid[i] &&
-            (!snapshot.valid[i] ||
-             g_sensor_page.displayed_raw[i] == snapshot.raw[i])) {
-            continue;
+    uint32_t now = app_clock_uptime_ms();
+    if (!sensor_page.initialized || sensor_page.last_update != snapshot.update_count) {
+        bool changed = sensor_page.last_update != snapshot.update_count;
+        sensor_page.last_update = snapshot.update_count;
+        if (sensor_page.initialized && changed) sensor_page.last_received_ms = now;
+        unsigned count = 0;
+        for (int i = 0; i < SENSOR_VOLTAGE_CH_NUM; i++) {
+            if (snapshot.valid[i]) {
+                count++;
+                unsigned millivolts = ((unsigned)snapshot.raw[i] * 3300U + 128U) / 256U;
+                lv_label_set_text_fmt(sensor_page.values[i], "%u.%03u V",
+                                      millivolts / 1000U, millivolts % 1000U);
+            } else {
+                lv_label_set_text(sensor_page.values[i], "Waiting");
+            }
+            lv_obj_set_style_text_color(sensor_page.values[i],
+                                         lv_color_hex(snapshot.valid[i] ? 0x1D2B34 : 0x586B78), 0);
         }
-
-        if (snapshot.valid[i]) {
-            const uint8_t raw = snapshot.raw[i];
-            const float v = sensor_raw_to_volt(raw);
-            lv_label_set_text_fmt(value_label, "%.3f V", v);
-            lv_obj_set_style_text_color(value_label, lv_color_hex(0x1C8E4D), 0);
-        } else {
-            lv_label_set_text(value_label, "-- V");
-            lv_obj_set_style_text_color(value_label, lv_color_hex(0xdee2de), 0);
-        }
-        g_sensor_page.displayed_valid[i] = snapshot.valid[i];
-        g_sensor_page.displayed_raw[i] = snapshot.raw[i];
+        lv_label_set_text_fmt(sensor_page.received, "%u / %u channels", count, SENSOR_VOLTAGE_CH_NUM);
+        sensor_page.initialized = true;
     }
-    g_sensor_page.values_initialized = true;
+    const char *message = sensor_page.query_failed ? "Could not send query. Retrying the controller connection." :
+        !sensor_page.last_received_ms ? "Waiting for sensor readings from the controller." :
+        now - sensor_page.last_received_ms > 2000 ?
+        "No recent response. Readings shown are the last received values." :
+        "Live readings. Values are not a pass / fail assessment.";
+    if (!work_mode_service_diagnostic_ready()) message=work_mode_service_status_text();
+    if (strcmp(lv_label_get_text(sensor_page.frame.message),message))
+        lv_label_set_text(sensor_page.frame.message,message);
 }
-
-static void sensor_poll_timer_cb(lv_timer_t* timer)
+static void sensor_poll_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
-    sensor_send_query();
+    const uint8_t query[] = {1, 1};
+    sensor_page.query_failed = !settings_detail_send_command(0x1D, query, sizeof(query));
     sensor_refresh_view();
 }
-
-static void sensor_esc_cb(lv_event_t* e)
+void ui_page_12_sensor_create(lv_obj_t *parent)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    ui_manager_pop_page();
-}
-
-void ui_page_12_sensor_create(lv_obj_t* parent)
-{
-    if (g_sensor_page.page && lv_obj_is_valid(g_sensor_page.page)) return;
-
-    ui_page_12_sensor_destroy();
-
-    lv_obj_t* content = NULL;
-    g_sensor_page.page = settings_detail_create_page(
-        parent, ui_text_get(UI_TEXT_SETTINGS_SENSOR_VOLTAGE),
-        sensor_esc_cb, &content);
-
-    lv_obj_t* grid = lv_obj_create(content);
-    lv_obj_set_pos(grid, 20, 20);
-    lv_obj_set_size(grid, 1240, 300);
-    lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_border_width(grid, 0, 0);
-    lv_obj_set_style_bg_opa(grid, LV_OPA_TRANSP, 0);
-    lv_obj_set_layout(grid, LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
-    lv_obj_set_flex_align(grid, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_all(grid, 6, 0);
-    lv_obj_set_style_pad_gap(grid, 10, 0);
-
+    if (sensor_page.frame.root) return;
+    lv_settings_header_t header = {"Sensors", "Maintenance / Live voltage", "Wrench", sensor_esc_cb, NULL};
+    sensor_page.frame = lv_settings_frame_create(parent, &header);
+    lv_obj_set_style_bg_opa(sensor_page.frame.body, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(sensor_page.frame.body, 0, 0);
+    /* Six columns keep all eleven readings visible without tiny controls. */
     for (int i = 0; i < SENSOR_VOLTAGE_CH_NUM; i++) {
-        lv_obj_t* card = lv_obj_create(grid);
-        lv_obj_set_size(card, 236, 84);
-        lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_set_style_radius(card, 12, 0);
-        lv_obj_set_style_bg_color(card, lv_color_hex(0xFFFFFF), 0);
-        lv_obj_set_style_border_width(card, 2, 0);
-        lv_obj_set_style_border_color(card, lv_color_hex(0xD6E6F5), 0);
-        lv_obj_set_style_pad_all(card, 10, 0);
-
-        lv_obj_t* name = lv_label_create(card);
-        lv_label_set_text(name, sensor_names[i]);
-        lv_obj_set_style_text_font(name, &lv_font_instrument_sans_medium_16, 0);
-        lv_obj_set_style_text_color(name, lv_color_hex(0x355779), 0);
-        lv_obj_align(name, LV_ALIGN_TOP_LEFT, 0, 0);
-
-        g_sensor_page.value_labels[i] = lv_label_create(card);
-        lv_label_set_text(g_sensor_page.value_labels[i], "-- V");
-        lv_obj_set_style_text_font(g_sensor_page.value_labels[i],
-                                   &lv_font_instrument_sans_medium_20, 0);
-        lv_obj_set_style_text_color(g_sensor_page.value_labels[i],
-                                    lv_color_hex(0x8B9AAF), 0);
-        lv_obj_align(g_sensor_page.value_labels[i], LV_ALIGN_BOTTOM_LEFT, 0, 0);
+        int x = (i % 6) * 207, y = (i / 6) * 124;
+        lv_obj_t *card = lv_settings_box(sensor_page.frame.body, x, y, 197, 114, 0xFFFFFF);
+        lv_obj_set_style_radius(card, 14, 0);
+        lv_settings_label(card, sensor_names[i], 18, 17,
+                           &lv_font_instrument_sans_medium_16, 0x586B78);
+        sensor_page.values[i] = lv_settings_label(card, "Waiting", 18, 57,
+                           &lv_font_instrument_sans_medium_24, 0x1D2B34);
     }
-
+    lv_obj_t *summary = lv_settings_box(sensor_page.frame.body, 1035, 124, 197, 114, 0xF1F4F5);
+    lv_obj_set_style_radius(summary, 14, 0);
+    lv_settings_label(summary, "RECEIVING", 18, 17, &lv_font_instrument_sans_medium_14, 0x586B78);
+    sensor_page.received = lv_settings_label(summary, "0 / 11 channels", 18, 57,
+                                              &lv_font_instrument_sans_medium_18, 0x1D2B34);
+    mode_retry_button=lv_settings_button(sensor_page.frame.footer,1050,0,182,46,"Retry",false,mode_retry_clicked,NULL);
+    lv_obj_add_flag(mode_retry_button,LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_width(sensor_page.frame.message,1030);
+    sensor_page.last_update = 0;
+    sensor_page.last_received_ms = 0;
     sensor_refresh_view();
-    sensor_send_query();
-    g_sensor_page.poll_timer = lv_timer_create(sensor_poll_timer_cb,
-                                               SENSOR_QUERY_PERIOD_MS, NULL);
+    sensor_poll_timer_cb(NULL);
+    sensor_page.timer = lv_timer_create(sensor_poll_timer_cb, SENSOR_QUERY_PERIOD_MS, NULL);
 }
-
 void ui_page_12_sensor_destroy(void)
 {
-    if (g_sensor_page.poll_timer) {
-        lv_timer_del(g_sensor_page.poll_timer);
-        g_sensor_page.poll_timer = NULL;
-    }
-
-    if (g_sensor_page.page && lv_obj_is_valid(g_sensor_page.page)) {
-        lv_obj_del(g_sensor_page.page);
-    }
-
-    sensor_page_context_reset();
+    if (sensor_page.timer) lv_timer_del(sensor_page.timer);
+    if (sensor_page.frame.root) lv_obj_del(sensor_page.frame.root);
+    memset(&sensor_page, 0, sizeof(sensor_page));
+    mode_retry_button=NULL;
 }

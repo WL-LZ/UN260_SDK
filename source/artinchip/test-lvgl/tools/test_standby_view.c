@@ -34,6 +34,10 @@ void ui_manager_push_page(ui_page_t p){current_page=p;if(p==UI_PAGE_STANDBY)app_
 ui_page_t ui_manager_get_current_page(void){return current_page;}
 bool ui_manager_is_transitioning(void){return false;}
 bool settings_detail_dialog_show(const char*a,const char*b,const char*c,const char*d,settings_detail_dialog_cb_t e,settings_detail_dialog_cb_t f,void*g){(void)a;(void)b;(void)c;(void)d;confirm_cb=e;(void)f;(void)g;return true;}
+bool settings_detail_dialog_show_ex(settings_detail_dialog_kind_t kind,
+ const char*a,const char*b,const char*c,const char*d,settings_detail_dialog_cb_t e,settings_detail_dialog_cb_t f,void*g){
+ (void)kind;return settings_detail_dialog_show(a,b,c,d,e,f,g);
+}
 void settings_detail_dialog_hide(void){}
 bool settings_detail_overlay_is_open(void){return overlay;}
 bool settings_detail_keyboard_show(const char*a,const char*b,uint16_t c,settings_detail_keyboard_mode_t d,settings_detail_keyboard_cb_t e,void*f){(void)a;(void)b;(void)c;(void)d;(void)e;(void)f;return true;}
@@ -136,6 +140,7 @@ int main(void){standby_defaults(&saved);lv_init();mist=load("mist.bgra",1280*400
  assert(lv_obj_get_style_bg_opa(body,LV_PART_MAIN)==LV_OPA_TRANSP);
  assert(lv_obj_get_child_cnt(body)==2); /* mode selector and settings card only */
  assert(lv_obj_get_y(lv_obj_get_child(body,0))==0);
+ current_page=UI_PAGE_STANDBY_SETTING;assert(ui_page_34_standby_request_back());assert(current_page==UI_PAGE_MAIN);
  notice_visible=true;notice_tick=lv_tick_get();lv_obj_clear_flag(note,LV_OBJ_FLAG_HIDDEN);lv_tick_inc(2499);settings_tick(NULL);assert(!lv_obj_has_flag(note,LV_OBJ_FLAG_HIDDEN));lv_tick_inc(1);settings_tick(NULL);assert(lv_obj_has_flag(note,LV_OBJ_FLAG_HIDDEN));
  tab=2;render();assert(ui_page_34_standby_request_back());assert(tab==0);tab=4;assert(owns_single_drag());tab=0;draft.mode=1;render();snapshot("settings-type");assert_flat(page);
  lv_obj_t*probe=button(page,0,0,150,"Pressed",3,true);lv_obj_add_state(probe,LV_STATE_PRESSED);lv_obj_update_layout(probe);assert(lv_obj_get_style_shadow_width(probe,LV_PART_MAIN)==0);assert(lv_color_to32(lv_obj_get_style_bg_color(probe,LV_PART_MAIN))!=lv_color_to32(lv_color_hex(0x176FE8)));lv_obj_del(probe);

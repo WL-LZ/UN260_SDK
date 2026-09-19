@@ -10,6 +10,9 @@
 #include <string.h>
 
 #define LV_UNUSED(x) ((void)(x))
+#ifndef LVGL_DIR
+#define LVGL_DIR "L:/usr/local/share/lvgl_data/"
+#endif
 #define LV_OPA_COVER 255
 #define LV_OPA_TRANSP 0
 #define LV_OPA_10 25
@@ -25,7 +28,7 @@
 #define USER_PASSWORD_MAX_LEN 4
 #define lv_snprintf snprintf
 enum {LV_EVENT_CLICKED, LV_EVENT_DELETE};
-enum {UI_PAGE_MAIN, UI_PAGE_SETTING};
+enum {UI_PAGE_MAIN, UI_PAGE_SETTING, UI_PAGE_PASSWORD_CHANGE};
 enum {UI_TEXT_PASSWORD_LOGIN_TITLE, UI_TEXT_SETTINGS_PASSWORD};
 typedef int lv_coord_t;
 typedef uint32_t lv_color_t;
@@ -42,7 +45,7 @@ struct lv_obj_t {
     lv_obj_t *children[64];
     unsigned child_count;
     int flags, x, y, w, h, opacity;
-    uint32_t color;
+    uint32_t color, pressed_color;
     char text[160];
     lv_event_cb_t click_cb, delete_cb;
     void *click_data, *delete_data;
@@ -67,6 +70,8 @@ static const lv_font_t lv_font_instrument_sans_medium_14 = 14;
 static const lv_font_t lv_font_instrument_sans_medium_16 = 16;
 static const lv_font_t lv_font_instrument_sans_medium_18 = 18;
 static const lv_font_t lv_font_instrument_sans_medium_24 = 24;
+static const lv_font_t lv_font_instrument_sans_medium_28 = 28;
+static const lv_font_t lv_font_instrument_sans_semibold_28 = 28;
 static const lv_font_t lv_font_instrument_sans_bold_24 = 24;
 static const lv_font_t lv_font_montserrat_20 = 20;
 
@@ -88,6 +93,9 @@ static inline lv_obj_t *lv_obj_create(lv_obj_t *parent)
     return obj;
 }
 static inline lv_obj_t *lv_label_create(lv_obj_t *parent) {return lv_obj_create(parent);}
+static inline lv_obj_t *lv_img_create(lv_obj_t *parent) {lv_obj_t *o=lv_obj_create(parent);o->w=o->h=24;return o;}
+static inline void lv_img_set_src(lv_obj_t *obj, const char *src) {snprintf(obj->text,sizeof(obj->text),"%s",src);}
+static inline void lv_obj_center(lv_obj_t *obj) {assert(obj->parent);obj->x=(obj->parent->w-obj->w)/2;obj->y=(obj->parent->h-obj->h)/2;}
 static inline void lv_obj_remove_style_all(lv_obj_t *obj) {assert(lv_obj_is_valid(obj));}
 static inline void lv_obj_set_pos(lv_obj_t *obj, int x, int y) {obj->x=x; obj->y=y;}
 static inline void lv_obj_set_size(lv_obj_t *obj, int w, int h) {obj->w=w; obj->h=h;}
@@ -163,7 +171,8 @@ static inline void lv_timer_resume(lv_timer_t *timer) {timer->paused=false;}
 static inline void lv_timer_reset(lv_timer_t *timer) {assert(timer);}
 static inline void ui_manager_switch(int page) {switched_page=page;}
 static inline void ui_manager_pop_page(void) {++pop_count;}
-static inline const char *ui_text_get(int id) {return id == UI_TEXT_PASSWORD_LOGIN_TITLE ? "SECURE ACCESS" : "Change Password";}
+static inline void ui_manager_clear_stack(void) {}
+static inline const char *ui_text_get(int id) {return id == UI_TEXT_PASSWORD_LOGIN_TITLE ? "SECURE ACCESS" : "Change password";}
 static inline const char *user_cfg_password_get(void) {return saved_password;}
 static inline bool user_cfg_password_visibility_enabled(void) {return saved_visibility;}
 static inline bool user_cfg_password_visibility_save(bool visible)
@@ -210,5 +219,36 @@ static inline lv_obj_t *settings_detail_create_button(lv_obj_t *parent,int x,int
     lv_obj_t *button=settings_detail_create_card(parent,x,y,w,h);
     LV_UNUSED(color); lv_label_set_text(button,text); lv_obj_add_event_cb(button,cb,LV_EVENT_CLICKED,data); return button;
 }
+
+typedef struct { const char *title, *subtitle, *icon; lv_event_cb_t back; void *user_data; } lv_settings_header_t;
+typedef struct { lv_obj_t *root, *body, *footer, *back, *message; } lv_settings_frame_t;
+static inline lv_obj_t *lv_settings_label(lv_obj_t *parent,const char *text,int x,int y,const lv_font_t *font,uint32_t color)
+{ return settings_detail_create_label(parent,text,font,color,x,y); }
+static inline lv_obj_t *lv_settings_button(lv_obj_t *parent,int x,int y,int w,int h,const char *text,bool primary,lv_event_cb_t cb,void *data)
+{ LV_UNUSED(primary); return settings_detail_create_button(parent,x,y,w,h,text,0,cb,data); }
+static inline lv_settings_frame_t lv_settings_frame_create(lv_obj_t *parent,const lv_settings_header_t *header)
+{
+    lv_settings_frame_t frame={0};
+    frame.root=lv_obj_create(parent);
+    frame.back=lv_settings_button(frame.root,1162,21,94,46,"Back",false,header->back,header->user_data);
+    frame.body=settings_detail_create_card(frame.root,24,84,1232,242);
+    frame.footer=settings_detail_create_card(frame.root,24,338,1232,46);
+    frame.message=lv_settings_label(frame.footer,"",0,14,&lv_font_instrument_sans_medium_14,0);
+    return frame;
+}
+typedef enum { GESTURE_ACTION_EXIT_PAGE, GESTURE_ACTION_HOME, GESTURE_ACTION_EXPORT } gesture_action_t;
+static bool (*pin_gesture_policy)(gesture_action_t);
+static inline void gesture_service_set_page_policy(uint32_t owner,bool (*drag)(void),bool (*handler)(gesture_action_t))
+{ LV_UNUSED(owner); LV_UNUSED(drag); pin_gesture_policy=handler; }
+static inline void gesture_service_clear_page_policy(uint32_t owner) {LV_UNUSED(owner);pin_gesture_policy=NULL;}
+typedef enum {SETTINGS_DIALOG_INFO,SETTINGS_DIALOG_SUCCESS,SETTINGS_DIALOG_WARNING,SETTINGS_DIALOG_DESTRUCTIVE} settings_detail_dialog_kind_t;
+typedef void (*settings_detail_dialog_cb_t)(void *);
+static settings_detail_dialog_cb_t pin_discard;
+static bool pin_overlay;
+static inline bool settings_detail_overlay_is_open(void) {return pin_overlay;}
+static inline void settings_detail_dialog_hide(void) {pin_overlay=false;pin_discard=NULL;}
+static inline bool settings_detail_dialog_show_ex(settings_detail_dialog_kind_t kind,const char *title,const char *body,
+    const char *ok,const char *cancel,settings_detail_dialog_cb_t confirm,settings_detail_dialog_cb_t reject,void *data)
+{ LV_UNUSED(kind);LV_UNUSED(title);LV_UNUSED(body);LV_UNUSED(ok);LV_UNUSED(cancel);LV_UNUSED(reject);LV_UNUSED(data);pin_overlay=true;pin_discard=confirm;return true; }
 
 #endif

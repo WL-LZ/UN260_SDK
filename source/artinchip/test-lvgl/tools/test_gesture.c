@@ -23,6 +23,7 @@ static bool owns_single_drag(void){return editor_active;}
 static bool policy_blocked;static unsigned policy_calls;
 static bool handle_action(gesture_action_t action){(void)action;policy_calls++;return policy_blocked;}
 bool page_32_innovation_request_back(void){return false;}
+bool page_01_main_quick_request_back(void){return false;}
 lv_nav_back_result_t lv_nav_button_request_back(void){esc_calls++;return nav_result;}
 static void (*queued)(void*);
 static void *queued_data;

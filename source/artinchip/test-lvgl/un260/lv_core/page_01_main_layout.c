@@ -1,7 +1,6 @@
 #include "page_01_main_layout.h"
 #include <stdlib.h>
 #include <string.h>
-#include "un260/gesture/gesture_service.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_system/ui_state_runtime.h"
 #include "un260/app_service/app_command_runtime.h"
@@ -25,7 +24,6 @@ static struct {
     int group, source, target, action;
 } editor;
 
-static bool raw_pointer(lv_indev_t *,lv_event_code_t,const lv_point_t *,uint8_t);
 
 static bool descendant(lv_obj_t *object, lv_obj_t *parent)
 {
@@ -164,7 +162,7 @@ static void release_action(int action)
     }
 }
 
-static bool raw_pointer(lv_indev_t *indev,lv_event_code_t event,const lv_point_t *point,uint8_t count)
+bool page_01_main_layout_pointer(lv_indev_t *indev,lv_event_code_t event,const lv_point_t *point,uint8_t count)
 {
     bool was_down=editor.down;
     bool released=event==LV_EVENT_RELEASED || count==0;
@@ -292,17 +290,17 @@ void page_01_main_layout_set_enabled(bool enabled)
 }
 bool page_01_main_layout_is_enabled(void)
 { return edit_feature_enabled; }
+bool page_01_main_layout_is_editing(void)
+{ return editor.editing || editor.drain; }
 void page_01_main_layout_suspend(void)
 {
     if (!editor.root) return;
     finish(false);editor.enabled=false;
-    gesture_service_clear_pointer_policy(UI_PAGE_MAIN);
 }
 void page_01_main_layout_resume(void)
 {
     if (!editor.root) return;
     editor.enabled=true;editor.down=false;editor.drain=false;
-    gesture_service_set_pointer_policy(UI_PAGE_MAIN,raw_pointer);
 }
 void page_01_main_layout_detach(void)
 {

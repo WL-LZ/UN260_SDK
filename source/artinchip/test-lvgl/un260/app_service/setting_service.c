@@ -1,4 +1,5 @@
 #include "un260/app_service/setting_service.h"
+#include "un260/app_service/work_mode_service.h"
 #include "un260/protocol/protocol_send.h"
 #include "un260/protocol/mode_codec.h"
 #include "un260/protocol/protocol_request.h"
@@ -26,8 +27,6 @@ static setting_basic_request_slot_t g_add_request =
 static setting_basic_request_slot_t g_fo_request =
     SETTING_BASIC_REQUEST_SLOT_INITIALIZER;
 static setting_basic_request_slot_t g_speed_request =
-    SETTING_BASIC_REQUEST_SLOT_INITIALIZER;
-static setting_basic_request_slot_t g_work_request =
     SETTING_BASIC_REQUEST_SLOT_INITIALIZER;
 static setting_basic_request_slot_t g_beep_request =
     SETTING_BASIC_REQUEST_SLOT_INITIALIZER;
@@ -393,16 +392,7 @@ bool setting_service_take_speed_result(uint8_t *target)
 
 bool setting_service_request_work_mode(uint8_t target)
 {
-    uint8_t work_cmd;
-
-    work_cmd = (target == 1) ? 0x00 : 0x01;
-    return setting_basic_request_begin(&g_work_request, 0x38,
-                                       &work_cmd, 1, target);
-}
-
-bool setting_service_take_work_mode_result(uint8_t *target)
-{
-    return setting_basic_request_take_result(&g_work_request, target);
+    return work_mode_service_request(target);
 }
 
 bool setting_service_request_beep(bool target)
@@ -435,7 +425,6 @@ uint32_t setting_service_take_basic_timeouts(void)
     if (setting_basic_request_take_timeout(&g_add_request)) timeouts |= SETTING_REQUEST_TIMEOUT_ADD;
     if (setting_basic_request_take_timeout(&g_fo_request)) timeouts |= SETTING_REQUEST_TIMEOUT_FO_MODE;
     if (setting_basic_request_take_timeout(&g_speed_request)) timeouts |= SETTING_REQUEST_TIMEOUT_SPEED;
-    if (setting_basic_request_take_timeout(&g_work_request)) timeouts |= SETTING_REQUEST_TIMEOUT_WORK_MODE;
     if (setting_basic_request_take_timeout(&g_beep_request)) timeouts |= SETTING_REQUEST_TIMEOUT_BEEP;
     return timeouts;
 }
@@ -612,7 +601,6 @@ void setting_service_cancel_all(void)
     setting_basic_request_cancel(&g_add_request);
     setting_basic_request_cancel(&g_fo_request);
     setting_basic_request_cancel(&g_speed_request);
-    setting_basic_request_cancel(&g_work_request);
     setting_basic_request_cancel(&g_beep_request);
 
     protocol_request_finish(&g_batch_request.request);

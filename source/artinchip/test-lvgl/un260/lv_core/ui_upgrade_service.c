@@ -14,6 +14,7 @@
 #include <stdint.h>
 
 #include "un260/storage/usb_storage.h"
+#include "un260/app_service/upgrade_session.h"
 
 #define UI_UPGRADE_BUNDLE_FILE_PATH    USB_STORAGE_MOUNT_POINT "/update/UN260_UPDATE.upk"
 #define UI_UPGRADE_DELTA_FILE_PATH     USB_STORAGE_MOUNT_POINT "/update/UN260_UPDATE_DELTA.upk"
@@ -391,30 +392,45 @@ static void ui_upgrade_service_update_child_state(void)
     if (ret == 0) return;
     if (ret < 0) {
         g_ui_upgrade_service.child_pid = -1;
-        if (!g_ui_upgrade_service.status.finished) {
-            g_ui_upgrade_service.running = false;
-            g_ui_upgrade_service.finished = true;
-            g_ui_upgrade_service.success = false;
-            ui_upgrade_service_set_status(false, true, false, 12,
-                                          UI_UPGRADE_STAGE_FAIL,
-                                          "Upgrade process monitoring failed",
-                                          "Unable to determine the upgrade process result.");
-        }
+        /* Even a success status file cannot prove the writer has exited.
+         * Replace it with the unknown observation; retain the shared lease. */
+        g_ui_upgrade_service.running = false;
+        g_ui_upgrade_service.finished = true;
+        g_ui_upgrade_service.success = false;
+        ui_upgrade_service_set_status(false, true, false,
+                                      g_ui_upgrade_service.status.progress,
+                                      UI_UPGRADE_STAGE_FAIL,
+                                      "Update result unknown",
+                                      "The updater process result could not be confirmed. Keep power connected.");
         return;
     }
 
     g_ui_upgrade_service.child_pid = -1;
+    /* A status file alone can precede the updater process exit. Keep the
+     * shared lease until waitpid proves that the writer has stopped. */
+    upgrade_session_end(UPGRADE_SESSION_UI);
     if (!g_ui_upgrade_service.status.finished) {
         ui_upgrade_service_load_status_file();
     }
     g_ui_upgrade_service.running = false;
     g_ui_upgrade_service.finished = true;
 
+    bool exited_ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
     if (g_ui_upgrade_service.status.finished) {
+        /* Never let an early success file override a failed/signalled writer.
+         * An explicit failure file remains authoritative even on exit code 0. */
+        if (g_ui_upgrade_service.status.success && !exited_ok) {
+            g_ui_upgrade_service.success = false;
+            ui_upgrade_service_set_status(false, true, false,
+                                          g_ui_upgrade_service.status.progress,
+                                          UI_UPGRADE_STAGE_FAIL,
+                                          "Updater exited with an error",
+                                          "The updater did not finish successfully. Check the update result before retrying.");
+        }
         return;
     }
 
-    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+    if (exited_ok) {
         g_ui_upgrade_service.success = true;
         ui_upgrade_service_set_status(false, true, true, 100,
                                       UI_UPGRADE_STAGE_SUCCESS,
@@ -483,7 +499,8 @@ ui_upgrade_start_result_t ui_upgrade_service_start(void)
     pid_t pid;
 
     if (g_ui_upgrade_service.running ||
-        g_ui_upgrade_service.child_pid > 0) {
+        g_ui_upgrade_service.child_pid > 0 ||
+        upgrade_session_owner() != UPGRADE_SESSION_NONE) {
         return UI_UPGRADE_START_BUSY;
     }
     if (!ui_upgrade_service_file_exists(UI_UPGRADE_SCRIPT_PATH)) {
@@ -503,8 +520,12 @@ ui_upgrade_start_result_t ui_upgrade_service_start(void)
         return UI_UPGRADE_START_STATUS_CLEANUP_FAILED;
     }
 
+    if (!upgrade_session_begin(UPGRADE_SESSION_UI)) return UI_UPGRADE_START_BUSY;
     pid = fork();
-    if (pid < 0) return UI_UPGRADE_START_FORK_FAILED;
+    if (pid < 0) {
+        upgrade_session_end(UPGRADE_SESSION_UI);
+        return UI_UPGRADE_START_FORK_FAILED;
+    }
 
     if (pid == 0) {
         char bundle_hash[17] = {0};

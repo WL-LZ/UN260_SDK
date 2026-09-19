@@ -11,6 +11,7 @@
 #include "un260/lv_core/page_01_main_detail.c"
 #include "un260/lv_core/page_01_main.c"
 #include "un260/lv_core/page_01_main_layout.c"
+#include "un260/lv_core/page_01_main_quick.c"
 #include "test_main_view_support.h"
 #include "un260/gesture/gesture_service.h"
 #include "un260/counting/counting_multi.h"
@@ -215,7 +216,7 @@ static void test_main(void)
     tap(1120,32);assert(s_detail_section==PAGE_01_DETAIL_SECTION_C && pushes==opened);
     tap(850,42);assert(s_detail_section==PAGE_01_DETAIL_SECTION_B && pushes==opened);
     tap(1220,32);assert(callbacks[CB_MENU]==2); /* Upper Menu area is not swallowed by PULL DOWN. */
-    pointer(1120,32,true);pointer(1120,44,true);pointer(1120,44,false);assert(pushes==opened);
+    pointer(1120,32,true);pointer(1120,44,true);pointer(1120,44,false);tick(200);assert(pushes==opened);
     click_object(s_detail_btn_b);assert(s_detail_section==PAGE_01_DETAIL_SECTION_B && pushes==opened);
     assert(lv_obj_is_visible(detail_view->section[1].empty));
     render();write_bmp("main-empty-serial");
@@ -578,8 +579,10 @@ static void test_list_initial_font(void)
 }
 #include "test_main_layout_cases.h"
 #include "test_main_footer_layout_cases.h"
+#include "test_main_quick_cases.h"
 int main(void)
 {
+    setvbuf(stdout,NULL,_IONBF,0);
     assert(sizeof(lv_coord_t)==2);lv_init();
     static lv_color_t pixels[1280*40];static lv_disp_draw_buf_t buffer;
     lv_disp_draw_buf_init(&buffer,pixels,NULL,1280*40);
@@ -598,19 +601,20 @@ int main(void)
     test_list_initial_font();test_main();test_lifecycle();test_multi_expanded();
     test_main_layout();
     test_main_footer_layout();
+    test_main_quick();
     unsigned test_timer_count = timers();
     for(unsigned cycle = 0; cycle < 3; ++cycle) {
         ui_page_36_display_test_create(lv_scr_act());
-        lv_obj_t *first = test_page;
+        lv_obj_t *first = test_frame.root;
         ui_page_36_display_test_create(lv_scr_act());
-        assert(first == test_page);
+        assert(first == test_frame.root);
         render();
-        assert(framebuffer[230 * 1280 + 530].full == lv_color_hex(0xF6F1ED).full);
-        assert(framebuffer[152 * 1280 + 1250].full == lv_color_hex(0xFFFFFF).full);
+        assert(framebuffer[230 * 1280 + 530].full == lv_color_hex(0xF8FAFB).full);
+        assert(framebuffer[160 * 1280 + 1220].full == lv_color_hex(0xFFFFFF).full);
         if(cycle == 0) write_bmp("display-test");
         ui_page_36_display_test_destroy();
         ui_page_36_display_test_destroy();
-        assert(test_page == NULL && timers() == test_timer_count);
+        assert(test_frame.root == NULL && timers() == test_timer_count);
     }
     counting_data_clear_serials(counting_data_mutable());counting_data_clear_errors(counting_data_mutable());
     lv_indev_delete(indev);lv_img_decoder_delete(decoder);lv_deinit();host_external_assets_release();

@@ -1,280 +1,99 @@
+#define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "page_21_set_language.h"
-#include "un260/lv_core/lv_page_manager.h"
-#include "un260/lv_core/settings_detail_ui.h"
+#include "lv_page_manager.h"
+#include "settings_detail_ui.h"
+#include "un260/lv_components/lv_settings.h"
 #include "un260/lv_system/ui_lang.h"
 #include "un260/lv_system/ui_text.h"
-
-#include <stddef.h>
+#include "un260/gesture/gesture_service.h"
 #include <stdint.h>
-
-#define LANGUAGE_ITEM_H 62
-#define LANGUAGE_ITEM_GAP 10
-
-typedef struct {
-    language_t lang;
-    const char* code;
-    ui_text_id_t name_text;
-    ui_text_id_t region_text;
-    ui_text_id_t sample_text;
-} language_option_t;
-
-typedef struct {
-    lv_obj_t* card;
-    lv_obj_t* check;
-} language_item_t;
-
-static const language_option_t g_language_options[] = {
-    { LANGUAGE_EN, "EN", UI_TEXT_SETTINGS_LANGUAGE_ENGLISH,
-      UI_TEXT_SETTINGS_LANGUAGE_REGION_US, UI_TEXT_SETTINGS_LANGUAGE_SAMPLE_READY },
-};
-#define LANGUAGE_OPTION_COUNT (sizeof(g_language_options) / sizeof(g_language_options[0]))
-
-static lv_obj_t* language_page = NULL;
-static lv_obj_t* status_label = NULL;
-static lv_obj_t* list_area = NULL;
-static lv_obj_t* summary_code_label = NULL;
-static lv_obj_t* preview_code_label = NULL;
-static lv_obj_t* preview_name_label = NULL;
-static lv_obj_t* preview_sample_label = NULL;
-static language_item_t g_language_items[LANGUAGE_OPTION_COUNT] = { 0 };
-
-static const language_option_t* language_find_option(language_t lang)
-{
-    for (size_t i = 0; i < LANGUAGE_OPTION_COUNT; i++) {
-        if (g_language_options[i].lang == lang) {
-            return &g_language_options[i];
-        }
-    }
-
-    return &g_language_options[0];
+#include <string.h>
+/* Add only languages with verified resources, never preview-only translations. */
+static const struct {language_t id;const char *code,*name;} options[]={{LANGUAGE_EN,"EN","English"}};
+static lv_settings_frame_t language_frame;
+static language_t language_original,language_draft;
+static lv_obj_t *language_save,*language_preview;
+static lv_obj_t *language_rows[sizeof(options)/sizeof(options[0])];
+static lv_obj_t *language_checks[sizeof(options)/sizeof(options[0])];
+static bool language_home;
+static bool language_dirty(void){return language_original!=language_draft;}
+static void language_refresh(void){
+ const char *name="Unavailable";
+ for(unsigned i=0;i<sizeof(options)/sizeof(options[0]);i++){
+  bool selected=language_draft==options[i].id;
+  lv_obj_set_style_bg_color(language_rows[i],lv_color_hex(selected?0xEDF4FF:0xF3F6F8),0);
+  lv_obj_set_style_border_color(language_rows[i],lv_color_hex(selected?0x8CACDA:0xE3E9ED),0);
+  if(selected){lv_obj_clear_flag(language_checks[i],LV_OBJ_FLAG_HIDDEN);name=options[i].name;}
+  else lv_obj_add_flag(language_checks[i],LV_OBJ_FLAG_HIDDEN);
+ }
+ if(language_dirty())lv_obj_clear_state(language_save,LV_STATE_DISABLED);else lv_obj_add_state(language_save,LV_STATE_DISABLED);
+ lv_label_set_text(language_frame.message,language_dirty()?"Unsaved changes":"No changes");
+ lv_label_set_text(language_preview,name);
 }
-
-static void language_refresh_view(void)
-{
-    language_t current = ui_lang_get();
-    const language_option_t* current_option = language_find_option(current);
-    const char* current_name = ui_text_get(current_option->name_text);
-
-    for (size_t i = 0; i < LANGUAGE_OPTION_COUNT; i++) {
-        bool selected = (current == g_language_options[i].lang);
-        settings_detail_set_select_box_checked(g_language_items[i].check, selected);
-        settings_detail_set_select_box_active(g_language_items[i].check, selected);
-
-        if (g_language_items[i].card) {
-            lv_obj_set_style_bg_color(g_language_items[i].card,
-                                      selected ? lv_color_hex(0xE3FAFD) : lv_color_hex(0xFFFFFF),
-                                      0);
-            lv_obj_set_style_border_color(g_language_items[i].card,
-                                          selected ? lv_color_hex(0x0878C8) : lv_color_hex(0xDDE6EF),
-                                          0);
-            lv_obj_set_style_border_width(g_language_items[i].card, selected ? 2 : 1, 0);
-        }
-    }
-
-    if (status_label) {
-        lv_label_set_text_fmt(status_label,
-                              ui_text_get(UI_TEXT_SETTINGS_LANGUAGE_ACTIVE_FMT),
-                              current_name);
-    }
-    if (summary_code_label) lv_label_set_text(summary_code_label, current_option->code);
-    if (preview_code_label) lv_label_set_text(preview_code_label, current_option->code);
-    if (preview_name_label) lv_label_set_text(preview_name_label, current_name);
-    if (preview_sample_label) {
-        lv_label_set_text(preview_sample_label, ui_text_get(current_option->sample_text));
-    }
+static void language_leave(void *data){
+ (void)data;
+ if(language_home){ui_manager_clear_stack();ui_manager_switch(UI_PAGE_MAIN);}else ui_manager_pop_page();
 }
-
-static void language_esc_cb(lv_event_t* e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    ui_manager_pop_page();
+static void language_back(lv_event_t *e){
+ (void)e;language_home=false;
+ if(language_dirty())settings_detail_dialog_show("Discard changes?","Your changes have not been applied.","Discard","Keep editing",language_leave,NULL,NULL);
+ else language_leave(NULL);
 }
-
-static void language_option_cb(lv_event_t* e)
-{
-    language_t lang;
-
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-
-    lang = (language_t)(uintptr_t)lv_event_get_user_data(e);
-    ui_lang_set(lang);
-    /* Cached pages retain their label objects. Rebuild them lazily after a
-     * language change so hidden pages cannot resume with stale text. */
-    ui_manager_invalidate_all_page_caches();
-    language_refresh_view();
+static bool language_gesture(gesture_action_t action){
+ if(settings_detail_overlay_is_open())return true;
+ if(action!=GESTURE_ACTION_HOME||!language_dirty())return false;
+ language_home=true;settings_detail_dialog_show("Discard changes?","Your changes have not been applied.","Discard","Keep editing",language_leave,NULL,NULL);return true;
 }
-
-static lv_obj_t* language_create_card(lv_obj_t* parent, lv_coord_t x, lv_coord_t y,
-                                      lv_coord_t w, lv_coord_t h)
-{
-    lv_obj_t* card = settings_detail_create_card(parent, x, y, w, h);
-    lv_obj_set_style_shadow_width(card, 10, 0);
-    lv_obj_set_style_shadow_opa(card, LV_OPA_10, 0);
-    return card;
+static void language_cancel(lv_event_t *e){(void)e;language_home=false;language_leave(NULL);}
+static void language_apply(lv_event_t *e){
+ (void)e;if(!language_dirty())return;
+ ui_lang_set(language_draft);ui_manager_invalidate_all_page_caches();language_home=false;language_leave(NULL);
 }
-
-static void language_create_option(lv_obj_t* parent, size_t index,
-                                   const language_option_t* option)
-{
-    lv_coord_t y = (lv_coord_t)(index * (LANGUAGE_ITEM_H + LANGUAGE_ITEM_GAP));
-    lv_obj_t* item = lv_obj_create(parent);
-    lv_obj_remove_style_all(item);
-    lv_obj_set_pos(item, 0, y);
-    lv_obj_set_size(item, 682, LANGUAGE_ITEM_H);
-    lv_obj_set_style_bg_color(item, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_bg_opa(item, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(item, 1, 0);
-    lv_obj_set_style_border_color(item, lv_color_hex(0xDDE6EF), 0);
-    lv_obj_set_style_radius(item, 6, 0);
-    lv_obj_clear_flag(item, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(item, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(item, language_option_cb, LV_EVENT_CLICKED,
-                        (void*)(uintptr_t)option->lang);
-
-    lv_obj_t* code = lv_obj_create(item);
-    lv_obj_remove_style_all(code);
-    lv_obj_set_pos(code, 20, 14);
-    lv_obj_set_size(code, 40, 34);
-    lv_obj_set_style_bg_color(code, lv_color_hex(0xF6FBFF), 0);
-    lv_obj_set_style_bg_opa(code, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(code, 1, 0);
-    lv_obj_set_style_border_color(code, lv_color_hex(0xDDEBFF), 0);
-    lv_obj_set_style_radius(code, 5, 0);
-    lv_obj_clear_flag(code, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_t* code_label = settings_detail_create_label(code, option->code,
-                                                        &lv_font_instrument_sans_medium_14,
-                                                        lv_color_hex(0x0878C8), 0, 0);
-    lv_obj_center(code_label);
-
-    settings_detail_create_label(item, ui_text_get(option->name_text), &lv_font_instrument_sans_medium_18,
-                                 lv_color_hex(0x0D3440), 82, 15);
-    settings_detail_create_label(item, ui_text_get(option->region_text), &lv_font_instrument_sans_medium_14,
-                                 lv_color_hex(0x5686A5), 196, 18);
-
-    g_language_items[index].card = item;
-    g_language_items[index].check = settings_detail_create_select_box(item, 630, 16, 30,
-                                                                      language_option_cb,
-                                                                      (void*)(uintptr_t)option->lang);
+static void language_choice(lv_event_t *e){
+ unsigned n=(unsigned)(uintptr_t)lv_event_get_user_data(e);
+ if(n>=sizeof(options)/sizeof(options[0]))return;
+ language_draft=options[n].id;
+ language_refresh();
 }
-
-static void language_create_list(lv_obj_t* parent)
-{
-    list_area = lv_obj_create(parent);
-    lv_obj_remove_style_all(list_area);
-    lv_obj_set_pos(list_area, 24, 88);
-    lv_obj_set_size(list_area, 682, 188);
-    lv_obj_set_style_bg_opa(list_area, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(list_area, 0, 0);
-    lv_obj_set_scroll_dir(list_area, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(list_area, LV_SCROLLBAR_MODE_OFF);
-
-    for (size_t i = 0; i < LANGUAGE_OPTION_COUNT; i++) {
-        language_create_option(list_area, i, &g_language_options[i]);
-    }
+void ui_page_21_set_language_create(lv_obj_t *parent){
+ if(language_frame.root)return;
+ language_original=language_draft=ui_lang_get();language_home=false;
+ const lv_settings_header_t h={.title="Language",.subtitle="Device / Settings",.icon="Languages-active",.back=language_back};
+ language_frame=lv_settings_frame_create(parent,&h);
+ lv_obj_t *body=language_frame.body;
+ lv_settings_label(body,"Interface language",20,12,&lv_font_instrument_sans_semibold_14,0x536B79);
+ lv_obj_t *list=lv_settings_grid(body,17,40,610,184);lv_obj_set_flex_flow(list,LV_FLEX_FLOW_COLUMN);
+ for(unsigned i=0;i<sizeof(options)/sizeof(options[0]);i++){
+  lv_obj_t *b=lv_settings_button(list,0,0,590,76,"",false,language_choice,(void*)(uintptr_t)i);
+  language_rows[i]=b;
+  lv_obj_set_style_bg_color(b,lv_color_hex(0xEDF4FF),0);lv_obj_set_style_border_width(b,1,0);
+  lv_obj_set_style_border_color(b,lv_color_hex(0x8CACDA),0);lv_obj_set_style_radius(b,13,0);
+  lv_obj_t *code=lv_settings_box(b,18,16,44,44,0xFFFFFF);lv_obj_set_style_radius(code,10,0);
+  lv_obj_t *label=lv_settings_label(code,options[i].code,0,0,&lv_font_instrument_sans_semibold_18,0x155CBA);lv_obj_center(label);
+  lv_settings_label(b,options[i].name,78,25,&lv_font_instrument_sans_semibold_22,0x174F9D);
+  language_checks[i]=lv_settings_icon(b,"Check-active",548,26);
+ }
+ lv_settings_box(body,644,12,1,212,0xE3E9ED);
+ lv_settings_label(body,"Preview",666,12,&lv_font_instrument_sans_semibold_14,0x536B79);
+ lv_obj_t *sample=lv_settings_box(body,666,42,544,151,0xF5F7F9);lv_obj_set_style_radius(sample,13,0);
+ lv_settings_icon(sample,"Settings",18,14);
+ lv_settings_label(sample,"Device",52,14,&lv_font_instrument_sans_semibold_20,0x1D2B34);
+ lv_settings_box(sample,18,52,508,1,0xE3E9ED);
+ lv_settings_label(sample,"Language",18,66,&lv_font_instrument_sans_medium_16,0x1D2B34);
+ language_preview=lv_settings_label(sample,"English",390,66,&lv_font_instrument_sans_medium_16,0x536B79);
+ lv_settings_box(sample,18,101,508,1,0xE3E9ED);
+ lv_settings_label(sample,"Date & time",18,115,&lv_font_instrument_sans_medium_16,0x1D2B34);
+ lv_settings_label(sample,"24-hour",390,115,&lv_font_instrument_sans_medium_16,0x536B79);
+ lv_settings_label(body,"The interface changes after Save.",666,207,&lv_font_instrument_sans_medium_12,0x536B79);
+ lv_label_set_text(language_frame.message,"No changes");
+ lv_settings_button(language_frame.footer,976,0,116,44,"Cancel",false,language_cancel,NULL);
+ language_save=lv_settings_button(language_frame.footer,1102,0,130,44,"Save",true,language_apply,NULL);
+ language_refresh();
+ gesture_service_set_page_policy(UI_PAGE_LANGUAGE_SETTING,NULL,language_gesture);
 }
-
-static void language_create_panel(lv_obj_t* parent)
-{
-    lv_obj_t* card = language_create_card(parent, 38, 18, 730, 306);
-
-    lv_obj_t* badge = lv_obj_create(card);
-    lv_obj_remove_style_all(badge);
-    lv_obj_set_pos(badge, 24, 22);
-    lv_obj_set_size(badge, 46, 46);
-    lv_obj_set_style_bg_color(badge, lv_color_hex(0xE3FAFD), 0);
-    lv_obj_set_style_bg_opa(badge, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(badge, 1, 0);
-    lv_obj_set_style_border_color(badge, lv_color_hex(0xB9EEF6), 0);
-    lv_obj_set_style_radius(badge, 8, 0);
-    lv_obj_clear_flag(badge, LV_OBJ_FLAG_SCROLLABLE);
-
-    summary_code_label = settings_detail_create_label(badge, "", &lv_font_instrument_sans_medium_18,
-                                                      lv_color_hex(0x0878C8), 0, 0);
-    lv_obj_center(summary_code_label);
-
-    settings_detail_create_label(card, ui_text_get(UI_TEXT_SETTINGS_LANGUAGE_DISPLAY),
-                                 &lv_font_instrument_sans_medium_20, lv_color_hex(0x0D3440), 88, 22);
-    settings_detail_create_label(card, ui_text_get(UI_TEXT_SETTINGS_LANGUAGE_SUBTITLE),
-                                 &lv_font_instrument_sans_medium_14, lv_color_hex(0x5686A5), 90, 52);
-
-    status_label = settings_detail_create_label(card, "", &lv_font_instrument_sans_medium_14,
-                                                lv_color_hex(0x0878C8), 520, 42);
-
-    language_create_list(card);
-}
-
-static void language_create_preview(lv_obj_t* parent)
-{
-    lv_obj_t* card = settings_detail_create_card(parent, 820, 18, 370, 306);
-    lv_obj_set_style_shadow_width(card, 8, 0);
-
-    lv_obj_t* header = lv_obj_create(card);
-    lv_obj_remove_style_all(header);
-    lv_obj_set_pos(header, 0, 0);
-    lv_obj_set_size(header, 370, 42);
-    lv_obj_set_style_bg_color(header, lv_color_hex(0x08C5D6), 0);
-    lv_obj_set_style_bg_opa(header, LV_OPA_COVER, 0);
-    lv_obj_clear_flag(header, LV_OBJ_FLAG_SCROLLABLE);
-
-    settings_detail_create_label(header, ui_text_get(UI_TEXT_SETTINGS_LANGUAGE_PREVIEW),
-                                 &lv_font_instrument_sans_medium_18,
-                                 lv_color_hex(0xFFFFFF), 150, 12);
-
-    lv_obj_t* code_box = lv_obj_create(card);
-    lv_obj_remove_style_all(code_box);
-    lv_obj_set_pos(code_box, 112, 70);
-    lv_obj_set_size(code_box, 146, 96);
-    lv_obj_set_style_bg_color(code_box, lv_color_hex(0x0878C8), 0);
-    lv_obj_set_style_bg_opa(code_box, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(code_box, 8, 0);
-    lv_obj_clear_flag(code_box, LV_OBJ_FLAG_SCROLLABLE);
-
-    preview_code_label = settings_detail_create_label(code_box, "", &lv_font_instrument_sans_medium_40,
-                                                      lv_color_hex(0xFFFFFF), 0, 0);
-    lv_obj_center(preview_code_label);
-
-    preview_name_label = settings_detail_create_label(card, "", &lv_font_instrument_sans_medium_24,
-                                                      lv_color_hex(0x0D3440), 0, 190);
-    lv_obj_set_width(preview_name_label, 370);
-    lv_obj_set_style_text_align(preview_name_label, LV_TEXT_ALIGN_CENTER, 0);
-
-    preview_sample_label = settings_detail_create_label(card, "", &lv_font_instrument_sans_medium_16,
-                                                        lv_color_hex(0x0878C8), 0, 226);
-    lv_obj_set_width(preview_sample_label, 370);
-    lv_obj_set_style_text_align(preview_sample_label, LV_TEXT_ALIGN_CENTER, 0);
-}
-
-void ui_page_21_set_language_create(lv_obj_t* parent)
-{
-    lv_obj_t* content = NULL;
-
-    if (language_page) return;
-
-    language_page = settings_detail_create_page(parent,
-                                                ui_text_get(UI_TEXT_SETTINGS_LANGUAGE_TITLE),
-                                                language_esc_cb, &content);
-
-    language_create_panel(content);
-    language_create_preview(content);
-    language_refresh_view();
-}
-
-void ui_page_21_set_language_destroy(void)
-{
-    if (language_page && lv_obj_is_valid(language_page)) {
-        lv_obj_del(language_page);
-    }
-
-    language_page = NULL;
-    status_label = NULL;
-    list_area = NULL;
-    summary_code_label = NULL;
-    preview_code_label = NULL;
-    preview_name_label = NULL;
-    preview_sample_label = NULL;
-    for (size_t i = 0; i < LANGUAGE_OPTION_COUNT; i++) {
-        g_language_items[i].card = NULL;
-        g_language_items[i].check = NULL;
-    }
+void ui_page_21_set_language_destroy(void){
+ gesture_service_clear_page_policy(UI_PAGE_LANGUAGE_SETTING);settings_detail_dialog_hide();
+ if(language_frame.root)lv_obj_del(language_frame.root);
+ memset(&language_frame,0,sizeof(language_frame));language_save=language_preview=NULL;
+ memset(language_rows,0,sizeof(language_rows));memset(language_checks,0,sizeof(language_checks));
 }

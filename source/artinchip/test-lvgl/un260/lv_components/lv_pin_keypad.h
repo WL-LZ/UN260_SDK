@@ -33,7 +33,7 @@ typedef struct {
     lv_obj_t *prompt;
     lv_obj_t *dots[LV_PIN_DIGITS];
     lv_obj_t *digits[LV_PIN_DIGITS];
-    lv_obj_t *eye;
+    lv_obj_t *eye; /* Show/Hide text action; retained field name for callers. */
     lv_obj_t *cursor;
     lv_obj_t *status;
     lv_obj_t *keys[12];

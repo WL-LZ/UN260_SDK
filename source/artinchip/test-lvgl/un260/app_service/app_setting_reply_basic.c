@@ -3,6 +3,7 @@
 #include <stdbool.h>
 
 #include "un260/app_service/setting_service.h"
+#include "un260/app_service/work_mode_service.h"
 #include "un260/lv_components/lv_components.h"
 #include "un260/lv_components/lv_fault_popup.h"
 #include "un260/lv_components/smart_island.h"
@@ -300,57 +301,12 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
     }
 
     case 0x38:
-    {
-        if (len < 5) break;
-
-        if (len == 7 && buf[4] == 0x02) {
-            uint8_t mode = buf[5];
-            if (mode == 0x00) {
-                machine_state_confirm_work_mode(1);
-            } else if (mode == 0x01) {
-                machine_state_confirm_work_mode(0);
-            }
-            (void)setting_service_take_work_mode_result(NULL);
+        if (work_mode_service_handle_reply(buf, len)) {
             page_01_bottom_a_refresh_work(false);
-            uart_debug_printf("0x38 BOOT mode=0x%02X\n", mode);
-            smart_island_refresh_summary();
-            break;
-        }
-
-        uint8_t res = buf[4];
-        if (res == 0x00) {
-            uint8_t target_mode = 0;
-            if (!setting_service_take_work_mode_result(&target_mode)) {
-                uart_debug_printf("0x38 MANUAL OK ignored: no pending request\n");
-                break;
-            }
-            machine_state_confirm_work_mode(target_mode);
-            page_01_bottom_a_refresh_work(true);
             page_03_update_menu_button_states_refresh();
-            uart_debug_printf("0x38 MANUAL OK\n");
             smart_island_refresh_summary();
-        } else if (res == 0x01) {
-            uint8_t target_mode = 0;
-            if (!setting_service_take_work_mode_result(&target_mode)) {
-                uart_debug_printf("0x38 AUTO OK ignored: no pending request\n");
-                break;
-            }
-            machine_state_confirm_work_mode(target_mode);
-            page_01_bottom_a_refresh_work(true);
-            page_03_update_menu_button_states_refresh();
-            uart_debug_printf("0x38 AUTO OK\n");
-            smart_island_refresh_summary();
-        } else {
-            if (!setting_service_take_work_mode_result(NULL)) {
-                uart_debug_printf("0x38 RES=0x%02X ignored: no pending request\n", res);
-                break;
-            }
-            uart_debug_printf("0x38 RES=0x%02X\n", res);
-            show_start_fault_popup(0x02, 0x06);
-            page_03_update_menu_button_states_refresh();
         }
         break;
-    }
 
     default:
         break;

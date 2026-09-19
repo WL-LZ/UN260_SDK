@@ -15,6 +15,11 @@ static gesture_pointer_policy_t host_pointer_policy;
 static ui_main_layout_t host_saved_layout;
 static bool host_layout_initialized,host_save_fails;
 static unsigned host_layout_saves;
+static bool host_gestures=true,host_gesture_save_fails,host_standby_busy;
+bool gesture_service_enabled(void) { return host_gestures; }
+bool gesture_service_set_enabled(bool enabled)
+{ if(host_gesture_save_fails)return false;host_gestures=enabled;return true; }
+bool standby_store_busy(void) { return host_standby_busy; }
 void gesture_service_set_pointer_policy(uint32_t owner,gesture_pointer_policy_t cb)
 { (void)owner;host_pointer_policy=cb; }
 void gesture_service_clear_pointer_policy(uint32_t owner)

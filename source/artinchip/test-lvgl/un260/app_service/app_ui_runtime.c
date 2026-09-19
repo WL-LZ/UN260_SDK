@@ -3,6 +3,7 @@
 #include "un260/storage/standby_store.h"
 
 #include "un260/app_service/app_setting_runtime.h"
+#include "un260/app_service/work_mode_service.h"
 #include "un260/diagnostic/diagnostic.h"
 #include "un260/lv_components/lv_components.h"
 #include "un260/lv_components/lv_debug_overlay.h"
@@ -26,6 +27,7 @@ static uint32_t g_upgrade_detect_tick;
 
 void app_ui_runtime_init(void)
 {
+    work_mode_service_init();
     lv_debug_overlay_init();
     lv_debug_overlay_set_enabled(user_cfg_performance_monitor_enabled());
 }

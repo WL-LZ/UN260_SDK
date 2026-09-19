@@ -91,6 +91,8 @@ add_executable(${PROJECT_NAME} main.c
 	lv_port_indev.c
 	lv_port_disp.c
     un260/lv_components/lv_components.c
+    un260/lv_components/lv_settings.c
+    un260/lv_core/settings_catalog.c
     un260/lv_components/lv_fault_popup.c
     un260/lv_components/lv_loading_orbit.c
     un260/lv_components/lv_print_toast.c
@@ -119,6 +121,9 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_core/page_02_list_data.c
     un260/lv_core/page_02_list_search.c
     un260/app_service/setting_service.c
+    un260/app_service/work_mode_service.c
+    un260/app_service/upgrade_session.c
+    un260/storage/work_mode_store.c
     un260/lv_system/app_clock.c
     un260/app_service/app_startup_trace.c
     un260/app_service/app_startup_runtime.c
@@ -189,6 +194,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_core/lv_page_manager.c
     un260/lv_core/page_01_main.c
     un260/lv_core/page_01_main_layout.c
+    un260/lv_core/page_01_main_quick.c
     un260/lv_system/ui_main_layout.c
     un260/lv_core/page_01_main_detail.c
     un260/lv_core/page_02_list.c

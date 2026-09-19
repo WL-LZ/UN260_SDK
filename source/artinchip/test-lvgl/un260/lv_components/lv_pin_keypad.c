@@ -3,7 +3,7 @@
 
 #include <string.h>
 
-#define PIN_IDLE_STATUS "When finished, press CONFIRM."
+#define PIN_IDLE_STATUS ""
 
 static const unsigned pin_keys[12] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 11};
 
@@ -47,7 +47,7 @@ static void pin_refresh(lv_pin_keypad_t *keypad)
     for (unsigned i = 0; i < LV_PIN_DIGITS; ++i) {
         bool visible_digit = keypad->digits_visible && i < n;
         lv_obj_set_style_bg_color(keypad->dots[i],
-            lv_color_hex(i < n ? 0x000000 : 0xD9E0E3), 0);
+            lv_color_hex(i < n ? 0x1D2B34 : 0xB9C5CD), 0);
         if (visible_digit) {
             char digit[2] = {keypad->input.value[i], '\0'};
             lv_label_set_text(keypad->digits[i], digit);
@@ -61,7 +61,7 @@ static void pin_refresh(lv_pin_keypad_t *keypad)
         }
     }
     lv_damped_button_set_text(keypad->eye,
-        keypad->digits_visible ? LV_SYMBOL_EYE_OPEN : LV_SYMBOL_EYE_CLOSE);
+        keypad->digits_visible ? "Hide" : "Show");
     keypad->cursor_on = true;
     lv_obj_set_style_bg_opa(keypad->cursor, LV_OPA_COVER, 0);
     if (n == LV_PIN_DIGITS) {
@@ -178,74 +178,83 @@ bool lv_pin_keypad_create(lv_pin_keypad_t *keypad, lv_obj_t *parent,
     if (keypad->root && lv_obj_is_valid(keypad->root)) return true;
     memset(keypad, 0, sizeof(*keypad));
     lv_obj_t *card = pin_shape(parent, x, y, LV_PIN_KEYPAD_WIDTH,
-                                LV_PIN_KEYPAD_HEIGHT, 0xFFFFFF, 5);
+                                LV_PIN_KEYPAD_HEIGHT, 0xFFFFFF, 16);
     keypad->root = card;
+    /* Blank areas inside the keyboard are not outside-dismiss targets. */
+    lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_border_width(card, 1, 0);
-    lv_obj_set_style_border_color(card, lv_color_hex(0xE4E8EA), 0);
+    lv_obj_set_style_border_color(card, lv_color_hex(0xE3E9ED), 0);
     lv_obj_add_event_cb(card, pin_delete_event, LV_EVENT_DELETE, keypad);
     lv_obj_add_flag(card, LV_OBJ_FLAG_HIDDEN);
-    keypad->eyebrow = pin_label(card, "", &lv_font_instrument_sans_medium_12,
-                                 0x87969C, 32, 30);
-    lv_obj_set_style_text_letter_space(keypad->eyebrow, 2, 0);
-    keypad->title = pin_label(card, "", &lv_font_instrument_sans_bold_24,
-                               0x30464F, 32, 67);
-    lv_obj_set_width(keypad->title, 360);
+    keypad->eyebrow = pin_label(card, "", &lv_font_instrument_sans_medium_14,
+                                 0x586B78, 24, 20);
+    keypad->title = pin_label(card, "", &lv_font_instrument_sans_semibold_28,
+                               0x1D2B34, 24, 48);
+    lv_obj_set_width(keypad->title, 376);
     keypad->prompt = pin_label(card, "", &lv_font_instrument_sans_medium_14,
-                                0x87969C, 32, 110);
-    lv_obj_set_width(keypad->prompt, 360);
+                                0x586B78, 24, 92);
+    lv_obj_set_width(keypad->prompt, 376);
     for (unsigned i = 0; i < LV_PIN_DIGITS; ++i) {
-        keypad->dots[i] = pin_shape(card, 48 + i * 64, 176, 12, 12,
-                                     0xD9E0E3, LV_RADIUS_CIRCLE);
-        keypad->digits[i] = pin_label(card, "", &lv_font_instrument_sans_medium_24,
-                                       0x000000, 36 + i * 64, 165);
-        lv_obj_set_size(keypad->digits[i], 36, 32);
+        keypad->dots[i] = pin_shape(card, 48 + i * 64, 166, 12, 12,
+                                     0xB9C5CD, LV_RADIUS_CIRCLE);
+        keypad->digits[i] = pin_label(card, "", &lv_font_instrument_sans_medium_28,
+                                       0x1D2B34, 36 + i * 64, 152);
+        lv_obj_set_size(keypad->digits[i], 36, 36);
         lv_obj_set_style_text_align(keypad->digits[i], LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_add_flag(keypad->digits[i], LV_OBJ_FLAG_HIDDEN);
     }
     const lv_damped_button_style_t eye_style = {
-        .normal_color = 0xFFFFFF, .text_color = 0x8A959D, .radius = 8
+        .normal_color = 0xF1F4F5, .pressed_color = 0xE2E9EE,
+        .text_color = 0x586B78, .disabled_color = 0xF1F4F5,
+        .disabled_text_color = 0x586B78, .radius = 10
     };
-    keypad->eye = lv_damped_button_create(card, &eye_style, LV_SYMBOL_EYE_CLOSE,
-                                          &lv_font_montserrat_20);
-    /* Small gray icon above/right of the fourth slot, with a larger hit box. */
-    lv_obj_set_pos(keypad->eye, 266, 140);
-    lv_obj_set_size(keypad->eye, 44, 36);
+    keypad->eye = lv_damped_button_create(card, &eye_style, "Show",
+                                          &lv_font_instrument_sans_medium_16);
+    lv_damped_button_set_exact_palette(keypad->eye, lv_color_hex(0xF1F4F5), lv_color_hex(0xE2E9EE));
+    lv_obj_set_pos(keypad->eye, 288, 148);
+    lv_obj_set_size(keypad->eye, 104, 48);
     lv_obj_set_style_shadow_width(keypad->eye, 0, 0);
     lv_obj_add_event_cb(keypad->eye, pin_visibility_event, LV_EVENT_CLICKED, keypad);
-    keypad->cursor = pin_shape(card, 44, 205, 20, 2, 0xA9B8BF, 0);
+    keypad->cursor = pin_shape(card, 44, 196, 20, 2, 0x1462CC, 0);
     keypad->status = pin_label(card, PIN_IDLE_STATUS,
-        &lv_font_instrument_sans_medium_14, 0x87969C, 32, 235);
-    lv_obj_set_width(keypad->status, 360);
-    pin_shape(card, 32, 273, 328, 1, 0xE6EAEC, 0);
-    pin_label(card, "PIN VERIFICATION", &lv_font_instrument_sans_medium_12,
-               0x87969C, 32, 288);
+        &lv_font_instrument_sans_medium_14, 0x586B78, 24, 220);
+    lv_obj_set_width(keypad->status, 368);
     const lv_damped_button_style_t cancel_style = {
-        .normal_color = 0xFFFFFF, .text_color = 0x87969C, .radius = 0
+        .normal_color = 0xF1F4F5, .pressed_color = 0xE2E9EE,
+        .text_color = 0x1D2B34, .disabled_color = 0xF1F4F5,
+        .disabled_text_color = 0x586B78, .radius = 10
     };
-    keypad->cancel = lv_damped_button_create(card, &cancel_style, "ESC Cancel",
-                                              &lv_font_instrument_sans_medium_12);
-    lv_obj_set_pos(keypad->cancel, 278, 277);
-    lv_obj_set_size(keypad->cancel, 102, 36);
+    keypad->cancel = lv_damped_button_create(card, &cancel_style, "Cancel",
+                                              &lv_font_instrument_sans_medium_16);
+    lv_damped_button_set_exact_palette(keypad->cancel, lv_color_hex(0xF1F4F5), lv_color_hex(0xE2E9EE));
+    lv_obj_set_pos(keypad->cancel, 24, 260);
+    lv_obj_set_size(keypad->cancel, 368, 44);
     lv_obj_set_style_shadow_width(keypad->cancel, 0, 0);
     lv_obj_add_event_cb(keypad->cancel, pin_cancel_event, LV_EVENT_CLICKED, keypad);
     for (unsigned i = 0; i < 12; ++i) {
         unsigned key = pin_keys[i];
         char digit[2] = {(char)('0' + key), 0};
         lv_damped_button_style_t style = {
-            .normal_color = key == 11 ? 0x088DA7 : 0xF7F8F8,
-            .text_color = key == 11 ? 0xFFFFFF : 0x30464F,
-            .disabled_color = 0xE6EAEC, .disabled_text_color = 0x87969C, .radius = 0
+            .normal_color = key == 11 ? 0x1462CC : 0xF1F4F5,
+            .pressed_color = key == 11 ? 0x1054B0 : 0xE2E9EE,
+            .text_color = key == 11 ? 0xFFFFFF : 0x1D2B34,
+            .disabled_color = 0xE3E9ED, .disabled_text_color = 0x586B78, .radius = 12
         };
         lv_obj_t *button = lv_damped_button_create(card, &style,
-            key == 10 ? LV_SYMBOL_BACKSPACE : key == 11 ? "CONFIRM" : digit,
-            key == 10 ? &lv_font_montserrat_20 : key == 11 ?
-                &lv_font_instrument_sans_medium_16 : &lv_font_instrument_sans_medium_24);
+            key == 10 ? "" : key == 11 ? "Confirm" : digit,
+            key == 11 ? &lv_font_instrument_sans_medium_16 : &lv_font_instrument_sans_medium_28);
+        lv_damped_button_set_exact_palette(button, lv_color_hex(style.normal_color), lv_color_hex(style.pressed_color));
         keypad->keys[i] = button;
-        lv_obj_set_pos(button, 416 + (i % 3) * 226, 24 + (i / 3) * 68);
-        lv_obj_set_size(button, 226, 68);
-        lv_obj_set_style_border_width(button, 1, 0);
-        lv_obj_set_style_border_color(button, lv_color_hex(0xE8ECEE), 0);
+        lv_obj_set_pos(button, 424 + (i % 3) * 228, 16 + (i / 3) * 76);
+        lv_obj_set_size(button, 216, 64);
+        lv_obj_set_style_border_width(button, 0, 0);
         lv_obj_set_style_shadow_width(button, 0, 0);
+        if (key == 10) {
+            lv_obj_t *icon = lv_img_create(button);
+            lv_img_set_src(icon, LVGL_DIR "popup_icons/backspace.png");
+            lv_obj_center(icon);
+            lv_obj_clear_flag(icon, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+        }
         lv_obj_add_event_cb(button, pin_key_event, LV_EVENT_CLICKED, keypad);
     }
     keypad->blink = lv_timer_create(pin_blink, 500, keypad);

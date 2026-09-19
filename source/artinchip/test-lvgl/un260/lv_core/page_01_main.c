@@ -2,6 +2,8 @@
 #include "un260/lv_core/page_01_main.h"
 #include "page_01_multi.h"
 #include "page_01_main_layout.h"
+#include "page_01_main_quick.h"
+#include "un260/gesture/gesture_service.h"
 #include "un260/lv_core/page_01_main_detail.h"
 #include "un260/lv_components/lv_loading_orbit.h"
 #include "un260/app_service/app_command_runtime.h"
@@ -32,7 +34,6 @@
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/ui_export_data.h"
 #include "un260/lv_system/ui_state_runtime.h"
-#include "un260/innovation/page_32_innovation.h"
 #include "un260/lv_system/app_clock.h"
 #include "aic_ui/perf_stats.h"
 #include <stdint.h>
@@ -1100,26 +1101,23 @@ void page_01_main_detail_refresh_rows_only(void)
     if (!s_multi_layout) page_01_main_detail_refresh(s_detail_section);
 }
 
-static void page_01_top_strip_tap(const lv_point_t *point)
+static bool s_quick_owns_pointer;
+static bool page_01_main_pointer(lv_indev_t *indev,lv_event_code_t event,const lv_point_t *point,uint8_t count)
 {
-    if (!point || !page_01_main_is_visible() || ui_manager_is_transitioning()) return;
-    lv_obj_t *targets[] = {page_01_main_find_obj("menu_btn"),
-        page_01_main_find_obj("start_btn"),page_01_main_find_obj("esc_btn"),
-        s_detail_btn_a, s_detail_btn_b, s_detail_btn_c};
-    lv_area_t area;
-    /* The raised tabs now partly overlap the transparent pull-down hot zone.
-     * Route an ordinary tap to the visible control before the card fallback. */
-    for (unsigned i = 0; i < sizeof(targets) / sizeof(targets[0]); ++i) {
-        lv_obj_t *target = targets[i];
-        if (!target || !lv_obj_is_visible(target)) continue;
-        lv_obj_get_coords(target, &area);
-        if (point->x >= area.x1 && point->x <= area.x2 &&
-            point->y >= area.y1 && point->y <= area.y2) {
-            lv_event_send(target, LV_EVENT_CLICKED, NULL);
-            return;
-        }
+    if(!s_quick_owns_pointer && page_01_main_layout_is_editing()) {
+        /* The layout editor owns this contact; discard the drawer's pending
+         * top-strip press so it cannot resume a stale drag after Done. */
+        page_01_main_quick_pointer(indev,LV_EVENT_PRESS_LOST,point,0);
+        return page_01_main_layout_pointer(indev,event,point,count);
     }
-    /* MULTI header taps never navigate to the unrelated single-currency List. */
+    bool consumed=page_01_main_quick_pointer(indev,event,point,count);
+    bool quick_open=page_01_main_quick_is_open();
+    if(quick_open!=s_quick_owns_pointer) {
+        s_quick_owns_pointer=quick_open;
+        if(quick_open)page_01_main_layout_suspend();else page_01_main_layout_resume();
+    }
+    if(consumed || quick_open)return consumed;
+    return page_01_main_layout_pointer(indev,event,point,count);
 }
 
 static void page_01_apply_customer_layout(const ui_main_layout_t *layout)
@@ -1195,20 +1193,23 @@ void ui_main_create(lv_obj_t *parent)
     smart_island_create(main_page);
     smart_island_register_action_cb(page_01_smart_island_action_cb);
     smart_island_refresh_time();
-    page_32_innovation_handle_attach(main_page);
-    page_32_innovation_handle_set_tap_handler(page_01_top_strip_tap);
+    page_01_main_quick_attach(main_page);
     lv_obj_t *layout_items[]={page_01_main_find_obj("mode_btn"),
         page_01_main_find_obj("setting_btn"),page_01_main_find_obj("list_btn"),
         page_01_main_find_obj("print_btn"),page_01_main_find_obj("menu_btn"),
         page_01_main_find_obj("start_btn"),page_01_main_find_obj("esc_btn"),
         s_summary_card,s_detail_card,s_bottom_area_a,s_bottom_area_c};
     page_01_main_layout_attach(main_page,layout_items,page_01_apply_customer_layout);
+    s_quick_owns_pointer=false;
+    gesture_service_set_pointer_policy(UI_PAGE_MAIN,page_01_main_pointer);
     s_main_dirty = 0;
     page_01_main_snapshot_capture();
 }
 
 void ui_main_destroy(void)
 {
+    gesture_service_clear_pointer_policy(UI_PAGE_MAIN);
+    page_01_main_quick_detach();s_quick_owns_pointer=false;
     page_01_main_layout_detach();
     page_01_bottom_animations_stop();
     if (s_time_timer) { lv_timer_del(s_time_timer); s_time_timer = NULL; }
@@ -1224,7 +1225,6 @@ void ui_main_destroy(void)
         page_01_detail_section_btn_destroy_all();
         page_01_bottom_bg_destroy_all();
         smart_island_destroy();
-        page_32_innovation_handle_detach();
         lv_obj_del(main_page);
     }
     main_page = NULL;
@@ -1306,6 +1306,8 @@ void page_01_main_refresh_totals(int total_pcs, const char *amount_text)
 void page_01_main_suspend(void)
 {
     if (!page_01_main_is_created()) return;
+    gesture_service_clear_pointer_policy(UI_PAGE_MAIN);
+    page_01_main_quick_suspend();s_quick_owns_pointer=false;
     page_01_main_layout_suspend();
     pause_counting_sim();
     smart_island_set_suspended(true);
@@ -1321,6 +1323,7 @@ bool page_01_main_resume(void)
 {
     if (!page_01_main_is_created()) return false;
     page_01_main_layout_resume();
+    gesture_service_set_pointer_policy(UI_PAGE_MAIN,page_01_main_pointer);
     const uint64_t started_us = perf_profile_is_enabled() ? app_clock_monotonic_us() : 0;
     page_01_main_detect_snapshot_changes();
     const uint32_t dirty = s_main_dirty;

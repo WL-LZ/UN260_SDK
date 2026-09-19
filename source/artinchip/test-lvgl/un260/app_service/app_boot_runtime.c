@@ -40,7 +40,6 @@ static const ui_page_t g_boot_prewarm_pages[] = {
     UI_PAGE_HISTORY,
     UI_PAGE_SETTING,
     UI_PAGE_PURE,
-    UI_PAGE_INNOVATION_CENTER,
     /* Currency should precede MAIN when its controller-provided catalog is
      * ready.  The scheduler below skips a temporarily unavailable page and
      * retries it later, so this dependency can never block MAIN prewarm. */

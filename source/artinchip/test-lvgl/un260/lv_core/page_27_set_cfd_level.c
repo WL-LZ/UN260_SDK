@@ -1,439 +1,234 @@
 #include "page_27_set_cfd_level.h"
-#include "un260/lv_core/lv_page_manager.h"
+#define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "un260/lv_core/settings_detail_ui.h"
+#include "un260/lv_components/lv_settings.h"
+#include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/user_cfg.h"
 #include "un260/currency/currency_state.h"
 #include "un260/cfd/cfd.h"
-
-#include <stdbool.h>
-#include <stddef.h>
+#include "un260/gesture/gesture_service.h"
 #include <stdint.h>
 #include <string.h>
 
-#define CFD_CELL_COUNT (CFD_SCENE_COUNT * CFD_ITEM_COUNT)
-
-typedef struct {
-    lv_obj_t* card;
-    lv_obj_t* check;
-} cfd_scene_item_t;
-
-static const ui_text_id_t g_cfd_scene_texts[CFD_SCENE_COUNT] = {
-    UI_TEXT_SETTINGS_CFD_LEVEL_CUSTOM1,
-    UI_TEXT_SETTINGS_CFD_LEVEL_CUSTOM2,
-    UI_TEXT_SETTINGS_CFD_LEVEL_CUSTOM3,
+static lv_settings_frame_t frame;
+static lv_obj_t *profiles[CFD_SCENE_COUNT], *cells[CFD_SCENE_COUNT][CFD_ITEM_COUNT];
+static lv_obj_t *values[CFD_SCENE_COUNT][CFD_ITEM_COUNT], *currency_label, *save_button, *retry_button;
+static cfd_state_value_t original, draft;
+static uint8_t selected_scene, original_scene;
+static bool ready, saving, leave_home;
+static const ui_text_id_t profile_names[] = {
+    UI_TEXT_SETTINGS_CFD_LEVEL_CUSTOM1, UI_TEXT_SETTINGS_CFD_LEVEL_CUSTOM2,
+    UI_TEXT_SETTINGS_CFD_LEVEL_CUSTOM3
 };
+static const char *channel_names[] = { "UV", "MG", "MT", "IR" };
 
-static lv_obj_t* cfd_level_page = NULL;
-static lv_obj_t* currency_label = NULL;
-static lv_obj_t* level_cells[CFD_CELL_COUNT] = { NULL };
-static lv_obj_t* level_cell_labels[CFD_CELL_COUNT] = { NULL };
-static lv_obj_t* table_rows[CFD_SCENE_COUNT] = { NULL };
-static lv_obj_t* table_row_labels[CFD_SCENE_COUNT] = { NULL };
-static cfd_scene_item_t scene_items[CFD_SCENE_COUNT] = { 0 };
-static uint8_t selected_scene = 0;
-static cfd_state_value_t cfd_draft;
-static bool cfd_draft_valid = false;
-
-static uint8_t cfd_normalize_level(uint8_t level)
+static bool dirty(void)
 {
-    if (level < CFD_LEVEL_MIN) return CFD_LEVEL_MIN;
-    if (level > CFD_LEVEL_MAX) return CFD_LEVEL_MAX;
-    return level;
+    return ready && (selected_scene != original_scene ||
+        memcmp(draft.levels, original.levels, sizeof(draft.levels)) != 0);
 }
 
-static uint8_t cfd_cell_index(uint8_t scene, uint8_t item)
+static void refresh(void)
 {
-    return (uint8_t)(scene * CFD_ITEM_COUNT + item);
-}
-
-static lv_color_t cfd_level_color(uint8_t level)
-{
-    static const uint32_t colors[CFD_LEVEL_MAX] = {
-        0x24B47E, 0x64B95A, 0xF59D2A, 0xF06A2A, 0xF04444,
-    };
-
-    level = cfd_normalize_level(level);
-    return lv_color_hex(colors[level - 1]);
-}
-
-static void cfd_refresh_view(void)
-{
-    const cfd_state_value_t* config;
-
-    if (!cfd_draft_valid) {
-        cfd_state_get(&cfd_draft);
-        cfd_draft_valid = true;
-    }
-    config = &cfd_draft;
-    if (currency_label) {
-        lv_label_set_text(currency_label, config->currency);
-    }
-
-    for (uint8_t scene = 0; scene < CFD_SCENE_COUNT; scene++) {
-        bool selected = (scene == selected_scene);
-
-        settings_detail_set_select_box_checked(scene_items[scene].check, selected);
-        settings_detail_set_select_box_active(scene_items[scene].check, selected);
-
-        if (scene_items[scene].card) {
-            lv_obj_set_style_bg_color(scene_items[scene].card,
-                                      selected ? lv_color_hex(0xF2FBFF) : lv_color_hex(0xFFFFFF),
-                                      0);
-            lv_obj_set_style_border_color(scene_items[scene].card,
-                                          selected ? lv_color_hex(0x0878C8) : lv_color_hex(0xDDE6EF),
-                                          0);
-        }
-
-        if (table_rows[scene]) {
-            lv_obj_set_style_bg_color(table_rows[scene],
-                                      selected ? lv_color_hex(0xE3F4FF) : lv_color_hex(0xFFFFFF),
-                                      0);
-        }
-
-        if (table_row_labels[scene]) {
-            lv_obj_set_style_text_color(table_row_labels[scene],
-                                        selected ? lv_color_hex(0x075E9C) : lv_color_hex(0x0D3440),
-                                        0);
+    if (!frame.root) return;
+    bool busy = cfd_service_busy();
+    for (unsigned scene = 0; scene < CFD_SCENE_COUNT; ++scene) {
+        if (scene == selected_scene) lv_obj_add_state(profiles[scene], LV_STATE_CHECKED);
+        else lv_obj_clear_state(profiles[scene], LV_STATE_CHECKED);
+        if (!ready || busy) lv_obj_add_state(profiles[scene], LV_STATE_DISABLED);
+        else lv_obj_clear_state(profiles[scene], LV_STATE_DISABLED);
+        for (unsigned item = 0; item < CFD_ITEM_COUNT; ++item) {
+            if (ready) lv_label_set_text_fmt(values[scene][item], "%u", draft.levels[scene][item]);
+            else lv_label_set_text(values[scene][item], "--");
+            if (scene == selected_scene) lv_obj_add_state(cells[scene][item], LV_STATE_CHECKED);
+            else lv_obj_clear_state(cells[scene][item], LV_STATE_CHECKED);
+            if (!ready || busy) lv_obj_add_state(cells[scene][item], LV_STATE_DISABLED);
+            else lv_obj_clear_state(cells[scene][item], LV_STATE_DISABLED);
         }
     }
-
-    for (uint8_t scene = 0; scene < CFD_SCENE_COUNT; scene++) {
-        for (uint8_t item = 0; item < CFD_ITEM_COUNT; item++) {
-            uint8_t index = cfd_cell_index(scene, item);
-            uint8_t level = cfd_normalize_level(config->levels[scene][item]);
-            bool selected = (scene == selected_scene);
-            lv_color_t color = cfd_level_color(level);
-
-            if (level_cell_labels[index]) {
-                lv_label_set_text_fmt(level_cell_labels[index], "%u", (unsigned)level);
-                lv_obj_set_style_text_color(level_cell_labels[index],
-                                            selected ? lv_color_hex(0xFFFFFF) : color,
-                                            0);
-            }
-
-            if (level_cells[index]) {
-                lv_obj_set_style_bg_color(level_cells[index],
-                                          selected ? color : lv_color_hex(0xF8FAFC),
-                                          0);
-                lv_obj_set_style_border_color(level_cells[index],
-                                              selected ? color : lv_color_hex(0xDDE6EF),
-                                              0);
-            }
-        }
-    }
+    if (!dirty() || busy) lv_obj_add_state(save_button, LV_STATE_DISABLED);
+    else lv_obj_clear_state(save_button, LV_STATE_DISABLED);
+    if (saving) lv_obj_add_state(frame.back, LV_STATE_DISABLED);
+    else lv_obj_clear_state(frame.back, LV_STATE_DISABLED);
+    if (ready || busy) lv_obj_add_flag(retry_button, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_clear_flag(retry_button, LV_OBJ_FLAG_HIDDEN);
 }
 
-static bool cfd_query(void)
+static void query(void)
 {
-    char query_currency[4];
-
-    currency_state_get_active_code(query_currency);
-    return cfd_service_request_query(query_currency);
+    char code[4];
+    currency_state_get_active_code(code);
+    ready = false;
+    lv_label_set_text_fmt(currency_label, "%s / Profiles", code);
+    bool sent = cfd_service_request_query(code);
+    lv_label_set_text(frame.message, sent ? "Reading levels from controller..." :
+        "Could not read levels. Retry to enable editing.");
+    refresh();
 }
 
-static bool cfd_send_update(void)
+static void retry(lv_event_t *event)
 {
-    return cfd_draft_valid &&
-           cfd_service_request_update(&cfd_draft, selected_scene);
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && !cfd_service_busy()) query();
 }
 
-static void cfd_esc_cb(lv_event_t* e)
+static void leave(void *user_data)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    if (cfd_service_busy()) return;
-    ui_manager_pop_page();
+    (void)user_data;
+    if (leave_home) { ui_manager_clear_stack(); ui_manager_switch(UI_PAGE_MAIN); }
+    else ui_manager_pop_page();
 }
 
-static void cfd_scene_cb(lv_event_t* e)
+static void ask_leave(bool home)
 {
-    uint8_t scene;
+    if (saving) return;
+    leave_home = home;
+    if (dirty()) settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING,
+        "Discard changes?", "Your levels have not been applied.",
+        "Discard", "Keep editing", leave, NULL, NULL);
+    else leave(NULL);
+}
 
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+static void back(lv_event_t *event)
+{
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) ask_leave(false);
+}
 
-    scene = (uint8_t)(uintptr_t)lv_event_get_user_data(e);
+static bool gesture(gesture_action_t action)
+{
+    if (!frame.root || !lv_obj_is_visible(frame.root)) return false;
+    if (saving || settings_detail_overlay_is_open()) return true;
+    if (action == GESTURE_ACTION_HOME && dirty()) { ask_leave(true); return true; }
+    return false;
+}
+
+static void profile(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED || !ready || cfd_service_busy()) return;
+    selected_scene = (uint8_t)(uintptr_t)lv_event_get_user_data(event);
+    refresh();
+    lv_label_set_text(frame.message, dirty() ? "Unsaved changes." : "Select a profile; tap its channel level to cycle 1-5.");
+}
+
+static void cell(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED || !ready || cfd_service_busy()) return;
+    unsigned key = (unsigned)(uintptr_t)lv_event_get_user_data(event);
+    unsigned scene = key / CFD_ITEM_COUNT, item = key % CFD_ITEM_COUNT;
     if (scene >= CFD_SCENE_COUNT) return;
-
-    selected_scene = scene;
-    cfd_refresh_view();
+    if (selected_scene != scene) selected_scene = scene;
+    else {
+        uint8_t level = draft.levels[scene][item];
+        draft.levels[scene][item] = level >= CFD_LEVEL_MAX ? CFD_LEVEL_MIN : level + 1;
+    }
+    refresh();
+    lv_label_set_text(frame.message, dirty() ? "Unsaved changes." : "Select a profile; tap its channel level to cycle 1-5.");
 }
 
-static void cfd_level_cell_cb(lv_event_t* e)
+static void save(lv_event_t *event)
 {
-    uint8_t index;
-    uint8_t scene;
-    uint8_t item;
-    uint8_t level;
-
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    if (cfd_service_busy()) return;
-
-    index = (uint8_t)(uintptr_t)lv_event_get_user_data(e);
-    scene = (uint8_t)(index / CFD_ITEM_COUNT);
-    item = (uint8_t)(index % CFD_ITEM_COUNT);
-    if (scene >= CFD_SCENE_COUNT || item >= CFD_ITEM_COUNT) return;
-
-    if (scene != selected_scene) {
-        selected_scene = scene;
-        cfd_refresh_view();
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED || !dirty() || cfd_service_busy()) return;
+    if (!cfd_service_request_update(&draft, selected_scene)) {
+        lv_label_set_text(frame.message, "Could not send levels. Your changes are kept.");
         return;
     }
-
-    if (!cfd_draft_valid) return;
-    level = cfd_normalize_level(cfd_draft.levels[scene][item]);
-    level = (uint8_t)(level >= CFD_LEVEL_MAX ? CFD_LEVEL_MIN : level + 1);
-    cfd_draft.levels[scene][item] = level;
-    cfd_refresh_view();
+    saving = true;
+    lv_label_set_text(frame.message, "Applying levels - waiting for controller.");
+    refresh();
 }
 
-static void cfd_update_cb(lv_event_t* e)
+void ui_page_27_set_cfd_level_create(lv_obj_t *parent)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    cfd_send_update();
-}
-
-static lv_obj_t* cfd_create_card(lv_obj_t* parent, lv_coord_t x, lv_coord_t y,
-                                 lv_coord_t w, lv_coord_t h)
-{
-    lv_obj_t* card = settings_detail_create_card(parent, x, y, w, h);
-    lv_obj_set_style_shadow_width(card, 10, 0);
-    lv_obj_set_style_shadow_opa(card, LV_OPA_10, 0);
-    return card;
-}
-
-static void cfd_create_scene_item(lv_obj_t* parent, uint8_t scene,
-                                  lv_coord_t x, lv_coord_t y)
-{
-    lv_obj_t* item = lv_obj_create(parent);
-
-    lv_obj_remove_style_all(item);
-    lv_obj_set_pos(item, x, y);
-    lv_obj_set_size(item, 286, 54);
-    lv_obj_set_style_bg_color(item, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_bg_opa(item, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(item, 2, 0);
-    lv_obj_set_style_border_color(item, lv_color_hex(0xDDE6EF), 0);
-    lv_obj_set_style_radius(item, 6, 0);
-    lv_obj_set_style_translate_y(item, 0, LV_STATE_PRESSED);
-    lv_obj_clear_flag(item, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(item, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(item, cfd_scene_cb, LV_EVENT_CLICKED, (void*)(uintptr_t)scene);
-
-    scene_items[scene].check = settings_detail_create_select_box(item, 20, 12, 30,
-                                                                 cfd_scene_cb,
-                                                                 (void*)(uintptr_t)scene);
-    lv_obj_set_style_translate_y(scene_items[scene].check, 0, LV_STATE_PRESSED);
-
-    settings_detail_create_label(item, ui_text_get(g_cfd_scene_texts[scene]),
-                                 &lv_font_instrument_sans_medium_18, lv_color_hex(0x0D3440), 70, 16);
-
-    scene_items[scene].card = item;
-}
-
-static void cfd_create_left_panel(lv_obj_t* parent)
-{
-    lv_obj_t* card = cfd_create_card(parent, 38, 18, 340, 306);
-
-    settings_detail_create_label(card, ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_CURRENCY),
-                                 &lv_font_instrument_sans_medium_18, lv_color_hex(0x5686A5), 26, 28);
-    currency_label = settings_detail_create_label(card, "", &lv_font_instrument_sans_medium_22,
-                                                  lv_color_hex(0x0D3440), 128, 27);
-
-    lv_obj_t* accent = lv_obj_create(card);
-    lv_obj_remove_style_all(accent);
-    lv_obj_set_pos(accent, 26, 66);
-    lv_obj_set_size(accent, 286, 7);
-    lv_obj_set_style_bg_color(accent, lv_color_hex(0x08C5D6), 0);
-    lv_obj_set_style_bg_opa(accent, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(accent, 4, 0);
-    lv_obj_clear_flag(accent, LV_OBJ_FLAG_SCROLLABLE);
-
-    for (uint8_t scene = 0; scene < CFD_SCENE_COUNT; scene++) {
-        cfd_create_scene_item(card, scene, 26, (lv_coord_t)(98 + scene * 58));
+    if (frame.root) return;
+    ready = false;
+    leave_home = false;
+    selected_scene = original_scene = 0;
+    cfd_state_get(&original);
+    draft = original;
+    lv_settings_header_t header = {
+        .title = ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_TITLE), .icon = "ShieldCheck", .back = back
+    };
+    frame = lv_settings_frame_create(parent, &header);
+    lv_obj_set_style_bg_opa(frame.body, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(frame.body, 0, 0);
+    currency_label = lv_settings_label(frame.body, "", 0, 12,
+        &lv_font_instrument_sans_medium_18, 0x1D2B34);
+    for (unsigned item = 0; item < CFD_ITEM_COUNT; ++item) {
+        lv_obj_t *label = lv_settings_label(frame.body, channel_names[item], 248 + item * 244, 16,
+            &lv_font_instrument_sans_medium_16, 0x586B78);
+        lv_obj_set_width(label, 224);
+        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     }
-}
-
-static lv_obj_t* cfd_create_table_label(lv_obj_t* parent, const char* text,
-                                        lv_coord_t x, lv_coord_t y,
-                                        lv_coord_t w)
-{
-    lv_obj_t* label = settings_detail_create_label(parent, text, &lv_font_instrument_sans_medium_14,
-                                                   lv_color_hex(0x5686A5), x, y);
-    lv_obj_set_width(label, w);
-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    return label;
-}
-
-static void cfd_create_level_cell(lv_obj_t* parent, uint8_t scene, uint8_t item,
-                                  lv_coord_t x, lv_coord_t y)
-{
-    uint8_t index = cfd_cell_index(scene, item);
-    lv_obj_t* cell = lv_obj_create(parent);
-
-    lv_obj_remove_style_all(cell);
-    lv_obj_set_pos(cell, x, y);
-    lv_obj_set_size(cell, 64, 38);
-    lv_obj_set_style_bg_color(cell, lv_color_hex(0xF8FAFC), 0);
-    lv_obj_set_style_bg_opa(cell, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(cell, 1, 0);
-    lv_obj_set_style_border_color(cell, lv_color_hex(0xDDE6EF), 0);
-    lv_obj_set_style_radius(cell, 6, 0);
-    lv_obj_set_style_translate_y(cell, 0, LV_STATE_PRESSED);
-    lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(cell, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(cell, cfd_level_cell_cb, LV_EVENT_CLICKED,
-                        (void*)(uintptr_t)index);
-
-    level_cell_labels[index] = settings_detail_create_label(cell, "", &lv_font_instrument_sans_medium_20,
-                                                            lv_color_hex(0x0878C8), 0, 0);
-    lv_obj_center(level_cell_labels[index]);
-    level_cells[index] = cell;
-}
-
-static void cfd_create_detail_panel(lv_obj_t* parent)
-{
-    lv_obj_t* card = cfd_create_card(parent, 406, 18, 784, 306);
-    lv_obj_t* line;
-
-    settings_detail_create_label(card, ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_DETAIL),
-                                 &lv_font_instrument_sans_medium_18, lv_color_hex(0x0D3440), 30, 20);
-
-    line = lv_obj_create(card);
-    lv_obj_remove_style_all(line);
-    lv_obj_set_pos(line, 30, 50);
-    lv_obj_set_size(line, 520, 2);
-    lv_obj_set_style_bg_color(line, lv_color_hex(0xE9EDF2), 0);
-    lv_obj_set_style_bg_opa(line, LV_OPA_COVER, 0);
-    lv_obj_clear_flag(line, LV_OBJ_FLAG_SCROLLABLE);
-
-    cfd_create_table_label(card, ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UV), 206, 72, 64);
-    cfd_create_table_label(card, ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_MG), 328, 72, 64);
-    cfd_create_table_label(card, ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_MT), 450, 72, 64);
-    cfd_create_table_label(card, ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_IR), 572, 72, 64);
-
-    for (uint8_t scene = 0; scene < CFD_SCENE_COUNT; scene++) {
-        lv_coord_t row_top = (lv_coord_t)(98 + scene * 58);
-        table_rows[scene] = lv_obj_create(card);
-        lv_obj_remove_style_all(table_rows[scene]);
-        lv_obj_set_pos(table_rows[scene], 24, row_top);
-        lv_obj_set_size(table_rows[scene], 710, 54);
-        lv_obj_set_style_bg_color(table_rows[scene], lv_color_hex(0xFFFFFF), 0);
-        lv_obj_set_style_bg_opa(table_rows[scene], LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(table_rows[scene], 6, 0);
-        lv_obj_clear_flag(table_rows[scene], LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_flag(table_rows[scene], LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_event_cb(table_rows[scene], cfd_scene_cb, LV_EVENT_CLICKED,
-                            (void*)(uintptr_t)scene);
-
-        table_row_labels[scene] = settings_detail_create_label(card,
-                                                               ui_text_get(g_cfd_scene_texts[scene]),
-                                                               &lv_font_instrument_sans_medium_16,
-                                                               lv_color_hex(0x0D3440),
-                                                               44, (lv_coord_t)(row_top + 17));
-        lv_obj_add_flag(table_row_labels[scene], LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_event_cb(table_row_labels[scene], cfd_scene_cb, LV_EVENT_CLICKED,
-                            (void*)(uintptr_t)scene);
-
-        for (uint8_t item = 0; item < CFD_ITEM_COUNT; item++) {
-            cfd_create_level_cell(card, scene, item,
-                                  (lv_coord_t)(206 + item * 122),
-                                  (lv_coord_t)(row_top + 8));
+    for (unsigned scene = 0; scene < CFD_SCENE_COUNT; ++scene) {
+        int y = 54 + scene * 62;
+        profiles[scene] = lv_settings_button(frame.body, 0, y, 220, 52,
+            ui_text_get(profile_names[scene]), false, profile, (void *)(uintptr_t)scene);
+        for (unsigned item = 0; item < CFD_ITEM_COUNT; ++item) {
+            cells[scene][item] = lv_settings_button(frame.body, 248 + item * 244, y, 224, 52,
+                "", false, cell, (void *)(uintptr_t)(scene * CFD_ITEM_COUNT + item));
+            values[scene][item] = lv_settings_label(cells[scene][item], "--", 0, 0,
+                &lv_font_instrument_sans_medium_18, 0x1D2B34);
+            lv_obj_center(values[scene][item]);
+            lv_obj_set_style_bg_color(cells[scene][item], lv_color_hex(0xFFFFFF), 0);
         }
     }
-
-    settings_detail_create_button(card, 624, 14, 128, 34,
-                                  ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE),
-                                  lv_color_hex(0x0878C8), cfd_update_cb, NULL);
-}
-
-void ui_page_27_set_cfd_level_create(lv_obj_t* parent)
-{
-    lv_obj_t* content = NULL;
-
-    if (cfd_level_page) return;
-
-    selected_scene = 0;
-    cfd_state_get(&cfd_draft);
-    cfd_draft_valid = true;
-
-    cfd_level_page = settings_detail_create_page(parent,
-                                                 ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_TITLE),
-                                                 cfd_esc_cb, &content);
-
-    cfd_create_left_panel(content);
-    cfd_create_detail_panel(content);
-    cfd_refresh_view();
-    cfd_query();
+    retry_button = lv_settings_button(frame.footer, 964, 0, 124, 46, "Retry", false, retry, NULL);
+    save_button = lv_settings_button(frame.footer, 1100, 0, 132, 46,
+        ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE), true, save, NULL);
+    gesture_service_set_page_policy(UI_PAGE_CFD_LEVEL_SETTING, NULL, gesture);
+    if (saving) {
+        lv_label_set_text(frame.message, "Waiting for controller.");
+        refresh();
+    } else query();
 }
 
 void ui_page_27_set_cfd_level_destroy(void)
 {
-    /* A read has no outstanding device-side mutation after leaving.
-     * Keep an update transaction alive until its ACK or real timeout. */
+    gesture_service_clear_page_policy(UI_PAGE_CFD_LEVEL_SETTING);
+    settings_detail_dialog_hide();
     cfd_service_cancel_query();
-    if (cfd_level_page && lv_obj_is_valid(cfd_level_page)) {
-        lv_obj_del(cfd_level_page);
-    }
-
-    cfd_level_page = NULL;
-    currency_label = NULL;
-    selected_scene = 0;
-    cfd_draft_valid = false;
-    memset(&cfd_draft, 0, sizeof(cfd_draft));
-
-    for (uint8_t i = 0; i < CFD_CELL_COUNT; i++) {
-        level_cells[i] = NULL;
-        level_cell_labels[i] = NULL;
-    }
-    for (uint8_t scene = 0; scene < CFD_SCENE_COUNT; scene++) {
-        table_rows[scene] = NULL;
-        table_row_labels[scene] = NULL;
-        scene_items[scene].card = NULL;
-        scene_items[scene].check = NULL;
-    }
+    /* A transmitted update remains owned by the service until reply/timeout. */
+    if (frame.root) lv_obj_del(frame.root);
+    memset(&frame, 0, sizeof(frame));
+    memset(profiles, 0, sizeof(profiles));
+    memset(cells, 0, sizeof(cells));
+    memset(values, 0, sizeof(values));
+    currency_label = save_button = retry_button = NULL;
+    ready = false;
 }
 
-void ui_page_27_set_cfd_level_on_info(const uint8_t* data, uint16_t len)
+void ui_page_27_set_cfd_level_on_info(const uint8_t *data, uint16_t len)
 {
-    uint16_t pos = 4;
-    cfd_state_value_t config;
-    char response_currency[4];
-
-    if (!data || len < 16) return;
-    response_currency[0] = (char)data[0];
-    response_currency[1] = (char)data[1];
-    response_currency[2] = (char)data[2];
-    response_currency[3] = '\0';
-    memset(&config, 0, sizeof(config));
-    memcpy(config.currency, response_currency, sizeof(config.currency));
-
-    for (uint8_t scene = 0; scene < CFD_SCENE_COUNT; scene++) {
-        for (uint8_t item = 0; item < CFD_ITEM_COUNT; item++) {
-            config.levels[scene][item] = cfd_normalize_level(data[pos++]);
+    if (!data || len < 16 || data[3] < 1 || data[3] > CFD_SCENE_COUNT) return;
+    cfd_state_value_t config = {0};
+    memcpy(config.currency, data, 3);
+    unsigned pos = 4;
+    for (unsigned scene = 0; scene < CFD_SCENE_COUNT; ++scene)
+        for (unsigned item = 0; item < CFD_ITEM_COUNT; ++item) {
+            uint8_t level = data[pos++];
+            if (level < CFD_LEVEL_MIN || level > CFD_LEVEL_MAX) return;
+            config.levels[scene][item] = level;
         }
-    }
-
-    if (!cfd_service_take_query_result(response_currency) &&
-        !cfd_service_take_update_result(&config)) {
-        return;
-    }
-
+    if (!cfd_service_take_query_result(config.currency) &&
+        !cfd_service_take_update_result(&config, (uint8_t)(data[3] - 1))) return;
     cfd_state_confirm(&config);
-
-    if (cfd_level_page) {
-        cfd_draft = config;
-        cfd_draft_valid = true;
-        if (data[3] >= 1 && data[3] <= CFD_SCENE_COUNT) {
-            selected_scene = (uint8_t)(data[3] - 1);
-        }
-        cfd_refresh_view();
-    }
+    saving = false;
+    if (!frame.root) return;
+    original = draft = config;
+    selected_scene = original_scene = data[3] - 1;
+    ready = true;
+    lv_label_set_text_fmt(currency_label, "%s / Profiles", config.currency);
+    refresh();
+    lv_label_set_text(frame.message, "Levels confirmed. Tap the selected profile's channel to cycle 1-5.");
 }
 
 void ui_page_27_set_cfd_level_on_request_failed(void)
 {
-    if (!cfd_level_page || !lv_obj_is_valid(cfd_level_page)) return;
-    cfd_state_get(&cfd_draft);
-    cfd_draft_valid = true;
-    cfd_refresh_view();
+    bool was_saving = saving;
+    saving = false;
+    if (!frame.root) return;
+    refresh();
+    lv_label_set_text(frame.message, was_saving ?
+        "No confirmation received. Your changes are kept; retry Update." :
+        "Could not read levels. Retry to enable editing.");
 }

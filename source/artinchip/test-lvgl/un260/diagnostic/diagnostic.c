@@ -70,20 +70,15 @@ void diagnostic_calibration_end_session(void)
 
 bool diagnostic_calibration_poll(uint32_t now_ms)
 {
-    if (!g_calibration_state.session_active ||
+    if (!g_calibration_state.session_active || g_calibration_state.timed_out ||
         (uint32_t)(now_ms - g_calibration_activity_ms) <
             DIAGNOSTIC_CALIBRATION_TIMEOUT_MS) {
         return false;
     }
 
-    if (g_calibration_state.target == CALIB_TARGET_CB) {
-        g_calibration_state.cb_state = CB_CALIB_IDLE;
-    } else {
-        g_calibration_state.cis_state = CIS_CALIB_IDLE;
-    }
-    g_calibration_state.session_active = false;
+    /* Missing feedback is not a physical stop. Retain the session/target so
+     * a late terminal frame can settle it and release temporary manual mode. */
     g_calibration_state.timed_out = true;
-    g_calibration_activity_ms = 0;
     return true;
 }
 
