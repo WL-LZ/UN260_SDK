@@ -13,6 +13,8 @@ typedef struct {
     int x, y, width, height, opacity;
     unsigned flags, events, children;
 } lv_obj_t;
+static lv_obj_t start_key,clear_key;
+static unsigned start_clicks,clear_clicks;
 typedef struct { lv_point_t point; } lv_indev_t;
 typedef struct { lv_event_code_t code; } lv_event_t;
 typedef struct { bool valid; } lv_timer_t;
@@ -108,7 +110,12 @@ static bool innovation_transition_animate(int y, uint32_t duration, lv_anim_read
 }
 static bool page_01_main_is_visible(void) { return main_visible; }
 static bool ui_manager_is_transitioning(void) { return manager_transitioning; }
-static lv_obj_t *page_01_main_find_obj(const char *name) { assert(strcmp(name, "menu_btn") == 0); return menu_object; }
+static lv_obj_t *page_01_main_find_obj(const char *name) {
+    if(!strcmp(name,"menu_btn"))return menu_object;
+    if(!strcmp(name,"start_btn"))return &start_key;
+    if(!strcmp(name,"esc_btn"))return &clear_key;
+    assert(false);return NULL;
+}
 static void lv_obj_get_coords(lv_obj_t *object, lv_area_t *area) {
     assert(lv_obj_is_valid(object));
     *area = (lv_area_t){ object->x, object->y, object->x + object->width - 1, object->y + object->height - 1 };
@@ -116,10 +123,11 @@ static void lv_obj_get_coords(lv_obj_t *object, lv_area_t *area) {
 static void lv_event_send(lv_obj_t *object, int event, void *data) {
     assert(event == LV_EVENT_CLICKED && data == NULL);
     if(object == &menu) { menu_clicks++; return; }
+    if(object == &start_key) { start_clicks++; return; }
+    if(object == &clear_key) { clear_clicks++; return; }
     for(unsigned i=0;i<3;++i) if(object==&tabs[i]) { tab_clicks[i]++; return; }
     assert(false);
 }
-static void ui_manager_push_page(int page) { assert(page == UI_PAGE_LIST); list_pushes++; }
 #include "main_top_gesture_under_test.h"
 
 static void fixture(void)
@@ -128,6 +136,8 @@ static void fixture(void)
     g_handle_touch = NULL; g_handle_tap_handler = NULL; g_preview_preload_timer = NULL;
     root = (lv_obj_t){ .valid = true, .width = 1280, .height = 400 };
     menu = (lv_obj_t){ .valid = true, .x = 1168, .y = 12, .width = 96, .height = 98 };
+    start_key=menu;start_key.y=123;clear_key=menu;clear_key.y=234;
+    start_clicks=clear_clicks=0;
     detail = (lv_obj_t){ .valid = true, .x = 602, .y = 12, .width = 554, .height = 320 };
     multi = (lv_obj_t){ .valid = true, .x = 108, .y = 12, .width = 1048, .height = 320 };
     surface = (lv_obj_t){ .valid = true, .y = -400 };
@@ -195,8 +205,12 @@ static void test_tap_routing(void)
     tap(1138, 32); assert(list_pushes == 0 && tab_clicks[2] == 1);
     s_multi_layout = true; s_detail_card = NULL;
     for(unsigned i=0;i<3;++i) lv_obj_add_flag(&tabs[i], LV_OBJ_FLAG_HIDDEN);
-    tap(1120, 32); assert(list_pushes == 1 && tab_clicks[2] == 1);
-    s_multi_card = NULL; tap(1120, 32); assert(list_pushes == 1);
+    tap(1120, 32); assert(list_pushes == 0 && tab_clicks[2] == 1);
+    s_multi_card = NULL; tap(1120, 32); assert(list_pushes == 0);
+    fixture();menu.y=123;start_key.y=12;tap(1220,32);
+    assert(start_clicks==1 && menu_clicks==0);
+    start_key.y=234;clear_key.y=12;tap(1220,32);
+    assert(clear_clicks==1 && menu_clicks==0);
     fixture(); tap(1160, 32); tap(1269, 32); tap(1220, 5); no_route();
     manager_transitioning = true; tap(1220, 32); no_route();
     manager_transitioning = false; main_visible = false; tap(1120, 32); no_route();

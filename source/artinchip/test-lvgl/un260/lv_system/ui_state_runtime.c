@@ -40,6 +40,7 @@ static void ui_state_set_defaults(void)
     s_ui_state.magic = UI_STATE_STORE_MAGIC;
     s_ui_state.version = UI_STATE_STORE_VERSION;
     s_ui_state.page01.detail_section = PAGE_01_DETAIL_SECTION_A;
+    ui_main_layout_default(&s_ui_state.page01.layout);
     s_ui_state.page07.view_mode = UI_STATE_CURR_VIEW_CARD;
     s_ui_state.page06.reserved06_enable = 1;
 }
@@ -110,6 +111,24 @@ void ui_state_save_page01_detail_section(void)
 {
     ui_state_ensure_loaded();
     ui_state_save_all();
+}
+
+void ui_state_main_layout_get(ui_main_layout_t *layout)
+{
+    ui_state_ensure_loaded();
+    *layout=s_ui_state.page01.layout;
+}
+
+bool ui_state_main_layout_save(const ui_main_layout_t *layout)
+{
+    ui_state_ensure_loaded();
+    ui_state_pull_common_runtime();
+    ui_persist_state_t next=s_ui_state;
+    next.page01.layout=*layout;
+    ui_main_layout_normalize(&next.page01.layout);
+    if (!ui_state_store_save(&next)) return false;
+    s_ui_state=next;
+    return true;
 }
 
 void ui_state_page07_get(ui_state_page07_t* state)

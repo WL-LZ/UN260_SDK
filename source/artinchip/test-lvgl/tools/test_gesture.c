@@ -14,6 +14,10 @@ static unsigned home, back, exported;
 static lv_nav_back_result_t nav_result;
 static unsigned esc_calls;
 static bool editor_active;
+static bool raw_owned;
+static unsigned raw_calls;
+static bool raw_policy(lv_indev_t *indev,lv_event_code_t event,const lv_point_t *p,uint8_t n)
+{ (void)indev;(void)event;(void)p;(void)n;++raw_calls;return raw_owned; }
 bool app_standby_runtime_touch(bool down){(void)down;return false;}
 static bool owns_single_drag(void){return editor_active;}
 static bool policy_blocked;static unsigned policy_calls;
@@ -64,6 +68,19 @@ static void release(void){sample(0,0,0,0);drain();page=UI_PAGE_MENU;}
 int main(void)
 {
     gesture_service_init();
+    gesture_service_set_pointer_policy(UI_PAGE_MAIN,raw_policy);
+    page=UI_PAGE_MAIN;raw_owned=true;
+    assert(sample(1,1200,120,0));
+    gesture_service_clear_pointer_policy(UI_PAGE_MAIN);page=UI_PAGE_MENU;
+    assert(sample(1,1250,100,0));assert(sample(0,0,0,0));
+    assert(!queued); /* Capture survives owner destruction, never leaks CLICKED. */
+    gesture_service_set_pointer_policy(UI_PAGE_MAIN,raw_policy);
+    unsigned raw_before=raw_calls;assert(!sample(1,400,100,0));release();
+    assert(raw_calls==raw_before); /* Hidden owner is ignored. */
+    page=UI_PAGE_MAIN;raw_owned=false;assert(!sample(1,500,100,0));
+    raw_owned=true;assert(sample(1,510,100,0));assert(sample(2,510,100,0));
+    assert(sample(0,0,0,0));assert(!queued);
+    gesture_service_clear_pointer_policy(UI_PAGE_MAIN);page=UI_PAGE_MENU;
     gesture_service_set_page_policy(UI_PAGE_STANDBY_SETTING,owns_single_drag,handle_action);
     page=UI_PAGE_STANDBY_SETTING;editor_active=true;
     assert(!sample(1,200,120,0));assert(!sample(2,200,140,0));assert(!queued);

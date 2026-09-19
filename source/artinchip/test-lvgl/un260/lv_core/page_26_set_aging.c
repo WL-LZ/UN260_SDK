@@ -317,7 +317,7 @@ void ui_page_26_set_aging_on_reply(uint8_t res)
             aging_refresh_view();
         }
         if (aging_page) {
-            settings_detail_dialog_show(ui_text_get(UI_TEXT_SETTINGS_AGING_COMPLETE_TITLE),
+            settings_detail_dialog_show_ex(SETTINGS_DIALOG_SUCCESS,ui_text_get(UI_TEXT_SETTINGS_AGING_COMPLETE_TITLE),
                                         ui_text_get(UI_TEXT_SETTINGS_AGING_COMPLETE_CONTENT),
                                         ui_text_get(UI_TEXT_SETTINGS_DIALOG_CONFIRM),
                                         NULL, NULL, NULL, NULL);
@@ -331,7 +331,7 @@ void ui_page_26_set_aging_on_reply(uint8_t res)
             aging_refresh_view();
         }
         if (aging_page) {
-            settings_detail_dialog_show(ui_text_get(UI_TEXT_SETTINGS_AGING_FAIL_TITLE),
+            settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING,ui_text_get(UI_TEXT_SETTINGS_AGING_FAIL_TITLE),
                                         ui_text_get(UI_TEXT_SETTINGS_AGING_FAIL_CONTENT),
                                         ui_text_get(UI_TEXT_SETTINGS_DIALOG_CONFIRM),
                                         NULL, NULL, NULL, NULL);

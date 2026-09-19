@@ -57,7 +57,7 @@ static void factory_start_cb(lv_event_t* e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
 
-    settings_detail_dialog_show(ui_text_get(UI_TEXT_SETTINGS_FACTORY_CONFIRM_TITLE),
+    settings_detail_dialog_show_ex(SETTINGS_DIALOG_DESTRUCTIVE,ui_text_get(UI_TEXT_SETTINGS_FACTORY_CONFIRM_TITLE),
                                 ui_text_get(UI_TEXT_SETTINGS_FACTORY_CONFIRM_CONTENT),
                                 ui_text_get(UI_TEXT_SETTINGS_DIALOG_CONFIRM),
                                 ui_text_get(UI_TEXT_SETTINGS_DIALOG_CANCEL),
@@ -272,14 +272,14 @@ void ui_page_30_set_factory_on_reply(uint8_t res)
     }
 
     if (res == 0x01) {
-        settings_detail_dialog_show(ui_text_get(UI_TEXT_SETTINGS_FACTORY_SUCCESS_TITLE),
+        settings_detail_dialog_show_ex(SETTINGS_DIALOG_SUCCESS,ui_text_get(UI_TEXT_SETTINGS_FACTORY_SUCCESS_TITLE),
                                     ui_text_get(UI_TEXT_SETTINGS_FACTORY_SUCCESS_CONTENT),
                                     ui_text_get(UI_TEXT_SETTINGS_DIALOG_CONFIRM),
                                     NULL, factory_confirm_reboot, NULL, NULL);
         return;
     }
 
-    settings_detail_dialog_show(ui_text_get(UI_TEXT_SETTINGS_FACTORY_FAIL_TITLE),
+    settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING,ui_text_get(UI_TEXT_SETTINGS_FACTORY_FAIL_TITLE),
                                 ui_text_get(UI_TEXT_SETTINGS_FACTORY_FAIL_CONTENT),
                                 ui_text_get(UI_TEXT_SETTINGS_DIALOG_CONFIRM),
                                 NULL, NULL, NULL, NULL);

@@ -15,6 +15,8 @@ void ui_state_save_pure_count_state(void);
 bool ui_state_pure_count_is_enabled(void);
 int ui_state_page01_detail_section_get(void);
 void ui_state_save_page01_detail_section(void);
+void ui_state_main_layout_get(ui_main_layout_t *layout);
+bool ui_state_main_layout_save(const ui_main_layout_t *layout);
 void ui_state_page07_get(ui_state_page07_t* state);
 void ui_state_save_page07(const ui_state_page07_t* state);
 

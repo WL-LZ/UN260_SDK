@@ -1,4 +1,6 @@
 #include "lv_modal_dialog.h"
+#include "lv_popup_style.h"
+#include "un260/lv_resources/lv_img_init.h"
 
 #include <string.h>
 
@@ -41,7 +43,7 @@ static void modal_set_button_colors(lv_obj_t *button, uint32_t color,
                                     uint32_t pressed_color)
 {
     if (!modal_obj_valid(button)) return;
-    lv_obj_set_style_bg_color(button, lv_color_hex(color), 0);
+    lv_damped_button_set_palette(button, lv_color_hex(color), lv_color_hex(pressed_color));
     lv_obj_set_style_border_color(button, lv_color_hex(color), 0);
     lv_obj_set_style_bg_color(button, lv_color_hex(pressed_color),
                               LV_STATE_PRESSED);
@@ -56,15 +58,15 @@ static void modal_create(lv_modal_dialog_t *dialog, lv_obj_t *parent,
         .disabled_color = 0xCCD3D8,
         .text_color = 0xFFFFFF,
         .disabled_text_color = 0x8A959E,
-        .radius = 14,
+        .radius = 12,
     };
     lv_damped_button_style_t secondary_style = {
         .normal_color = config->secondary_color,
         .pressed_color = 0x687680,
         .disabled_color = 0xCCD3D8,
-        .text_color = 0xFFFFFF,
+        .text_color = 0x1D2B34,
         .disabled_text_color = 0x8A959E,
-        .radius = 14,
+        .radius = 12,
     };
 
     dialog->parent = parent;
@@ -87,21 +89,25 @@ static void modal_create(lv_modal_dialog_t *dialog, lv_obj_t *parent,
     lv_obj_set_style_border_opa(dialog->panel, LV_OPA_COVER, 0);
     lv_obj_clear_flag(dialog->panel, LV_OBJ_FLAG_SCROLLABLE);
 
+    lv_popup_style(dialog->root, dialog->panel);
     dialog->accent = lv_obj_create(dialog->panel);
     lv_obj_remove_style_all(dialog->accent);
-    lv_obj_set_pos(dialog->accent, 28, 24);
-    lv_obj_set_size(dialog->accent, 8, 54);
+    lv_obj_set_pos(dialog->accent, 32, 28);
+    lv_obj_set_size(dialog->accent, 46, 46);
     lv_obj_set_style_bg_opa(dialog->accent, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(dialog->accent, 4, 0);
+    lv_obj_set_style_radius(dialog->accent, 14, 0);
+    lv_obj_t *icon = lv_img_create(dialog->accent);
+    lv_img_set_src(icon, LVGL_DIR "popup_icons/info.png");
+    lv_obj_center(icon);
 
     dialog->title = lv_label_create(dialog->panel);
-    lv_obj_set_pos(dialog->title, 54, 24);
-    lv_obj_set_style_text_color(dialog->title, lv_color_hex(0x26333E), 0);
+    lv_obj_set_pos(dialog->title, 92, 34);
+    lv_obj_set_style_text_color(dialog->title, lv_color_hex(0x1D2B34), 0);
 
     dialog->body = lv_label_create(dialog->panel);
-    lv_obj_set_pos(dialog->body, 54, 67);
+    lv_obj_set_pos(dialog->body, 32, 94);
     lv_label_set_long_mode(dialog->body, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_color(dialog->body, lv_color_hex(0x6A7885), 0);
+    lv_obj_set_style_text_color(dialog->body, lv_color_hex(0x586B77), 0);
 
     dialog->primary_button = lv_damped_button_create(dialog->panel,
         &primary_style, config->primary_text, config->button_font);
@@ -132,7 +138,7 @@ bool lv_modal_dialog_show(lv_modal_dialog_t *dialog,
     }
     if (!modal_obj_valid(dialog->root)) return false;
 
-    panel_width = config->panel_width > 0 ? config->panel_width : 700;
+    panel_width = config->panel_width > 0 ? config->panel_width : 620;
     panel_height = config->panel_height > 0 ? config->panel_height : 270;
     primary_width = config->primary_width > 0 ? config->primary_width : 190;
     secondary_width = config->secondary_width > 0 ? config->secondary_width : 220;
@@ -141,33 +147,33 @@ bool lv_modal_dialog_show(lv_modal_dialog_t *dialog,
 
     lv_obj_set_size(dialog->panel, panel_width, panel_height);
     lv_obj_center(dialog->panel);
-    lv_obj_set_style_bg_color(dialog->accent,
-                              lv_color_hex(config->accent_color), 0);
+    lv_obj_set_style_bg_color(dialog->accent, lv_color_hex(0xEAF2FC), 0);
     modal_set_button_colors(dialog->primary_button, config->primary_color,
                             config->primary_color == 0x3578F6 ? 0x2467DF :
                             config->primary_color == 0xE45454 ? 0xC84646 :
                             config->primary_color);
     modal_set_button_colors(dialog->secondary_button,
-                            config->secondary_color, 0x687680);
+                            0xF1F4F5, 0xD9E0E3);
     lv_obj_set_style_text_font(dialog->title, config->title_font, 0);
     lv_obj_set_style_text_font(dialog->body, config->body_font, 0);
-    lv_obj_set_size(dialog->body, panel_width - 95, panel_height - 150);
+    lv_obj_set_width(dialog->title, panel_width - 124);
+    lv_obj_set_size(dialog->body, panel_width - 64, panel_height - 174);
     modal_set_text(dialog->title, config->title);
     modal_set_text(dialog->body, config->body);
 
     lv_damped_button_set_text(dialog->primary_button, config->primary_text);
     lv_obj_set_size(dialog->primary_button, primary_width, 48);
     if (has_secondary) {
-        lv_coord_t gap = 22;
+        lv_coord_t gap = 12;
         lv_coord_t total = primary_width + secondary_width + gap;
         lv_obj_set_pos(dialog->secondary_button,
-                       (panel_width - total) / 2, button_y);
+                       panel_width - total - 32, button_y);
         lv_obj_set_size(dialog->secondary_button, secondary_width, 48);
         lv_damped_button_set_text(dialog->secondary_button,
                                   config->secondary_text);
         lv_obj_clear_flag(dialog->secondary_button, LV_OBJ_FLAG_HIDDEN);
         lv_obj_set_pos(dialog->primary_button,
-                       (panel_width - total) / 2 + secondary_width + gap,
+                       panel_width - primary_width - 32,
                        button_y);
     } else {
         lv_obj_add_flag(dialog->secondary_button, LV_OBJ_FLAG_HIDDEN);
@@ -200,7 +206,10 @@ void lv_modal_dialog_hide(lv_modal_dialog_t *dialog)
 void lv_modal_dialog_destroy(lv_modal_dialog_t *dialog)
 {
     if (dialog == NULL) return;
-    if (modal_obj_valid(dialog->root)) lv_obj_del(dialog->root);
+    if (modal_obj_valid(dialog->root)) {
+        lv_modal_dialog_hide(dialog);
+        lv_obj_del(dialog->root);
+    }
     memset(dialog, 0, sizeof(*dialog));
 }
 

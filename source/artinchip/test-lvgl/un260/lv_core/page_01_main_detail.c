@@ -415,6 +415,13 @@ void page_01_main_detail_destroy(void)
     lv_obj_del(detail_view->root);
 }
 
+void page_01_main_detail_set_position(lv_coord_t x, lv_coord_t y)
+{
+    if (!detail_view) return;
+    detail_view->tap.pressed=false;
+    lv_obj_set_pos(detail_view->root,x,y);
+}
+
 lv_obj_t *page_01_main_detail_scroll_obj(void)
 {
     return detail_view ? lv_recycled_list_object(detail_view->section[detail_view->active].list) : NULL;

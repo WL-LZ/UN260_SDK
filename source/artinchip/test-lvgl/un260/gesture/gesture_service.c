@@ -126,6 +126,15 @@ static void gesture_queue(void)
         g_runtime.fingers, g_runtime.side, g_pending);
     fflush(stdout);
 }
+static uint32_t g_pointer_owner;
+static gesture_pointer_policy_t g_pointer_policy;
+static bool g_pointer_captured;
+
+void gesture_service_set_pointer_policy(uint32_t owner, gesture_pointer_policy_t policy)
+{ g_pointer_owner=owner; g_pointer_policy=policy; }
+void gesture_service_clear_pointer_policy(uint32_t owner)
+{ if (g_pointer_owner==owner) g_pointer_policy=NULL; }
+
 static bool gesture_pointer_event(lv_indev_t *indev, lv_event_code_t event,
                                   const lv_point_t *point, uint8_t count, void *user_data)
 {
@@ -136,6 +145,18 @@ static bool gesture_pointer_event(lv_indev_t *indev, lv_event_code_t event,
         return true;
     }
     touch_feedback_sample(point, count);
+    if (!g_runtime.captured && (g_pointer_captured ||
+        (g_pointer_policy && g_pointer_owner==ui_manager_get_current_page()))) {
+        bool owned=g_pointer_captured;
+        if (g_pointer_policy && g_pointer_owner==ui_manager_get_current_page())
+            owned |= g_pointer_policy(indev,event,point,count);
+        if (owned) {
+            g_pointer_captured=event!=LV_EVENT_RELEASED && count!=0;
+            memset(&g_runtime,0,sizeof(g_runtime));
+            touch_feedback_edge_hint(0,0,0);
+            return true;
+        }
+    }
     if(event == LV_EVENT_RELEASED || count == 0) {
         bool captured = g_runtime.captured;
         touch_feedback_edge_hint(0, 0, 0);

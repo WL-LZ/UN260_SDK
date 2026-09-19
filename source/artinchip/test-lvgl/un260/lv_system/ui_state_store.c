@@ -46,6 +46,19 @@ static void ui_state_store_parse_line(ui_persist_state_t* state, const char* lin
         state->version = (unsigned int)strtoul(line + 8, NULL, 0);
     } else if (strncmp(line, "p01_detail_section=", 19) == 0) {
         state->page01.detail_section = atoi(line + 19);
+    } else if (strncmp(line, "p01_layout=", 11) == 0) {
+        unsigned v[8]; char tail;
+        if (sscanf(line+11,"%u,%u,%u,%u,%u,%u,%u,%u %c",
+                   &v[0],&v[1],&v[2],&v[3],&v[4],&v[5],&v[6],&v[7],&tail)==8) {
+            for (unsigned i=0;i<4;++i) state->page01.layout.left[i]=v[i]<4?v[i]:255;
+            for (unsigned i=0;i<3;++i) state->page01.layout.right[i]=v[i+4]<3?v[i+4]:255;
+            state->page01.layout.mirrored=v[7]<2?v[7]:0;
+            ui_main_layout_normalize(&state->page01.layout);
+        } else ui_main_layout_default(&state->page01.layout);
+    } else if (strncmp(line, "p01_layout_footer=", 18) == 0) {
+        unsigned value; char tail;
+        state->page01.layout.footer_swapped=
+            sscanf(line+18,"%u %c",&value,&tail)==1 && value==1;
     } else if (strncmp(line, "p07_view_mode=", 14) == 0) {
         state->page07.view_mode = atoi(line + 14);
     } else if (strncmp(line, "p07_fav_only=", 13) == 0) {
@@ -83,6 +96,7 @@ bool ui_state_store_load(ui_persist_state_t* state)
 
     if (!state) return false;
     loaded_state = *state;
+    ui_main_layout_default(&loaded_state.page01.layout);
     loaded_state.magic = 0;
     loaded_state.version = 0;
     fp = fopen(UI_STATE_STORE_PATH, "r");
@@ -184,6 +198,11 @@ bool ui_state_store_save(const ui_persist_state_t* state)
     fprintf(fp, "magic=%u\n", UI_STATE_STORE_MAGIC);
     fprintf(fp, "version=%u\n", UI_STATE_STORE_VERSION);
     fprintf(fp, "p01_detail_section=%d\n", state->page01.detail_section);
+    const ui_main_layout_t *layout=&state->page01.layout;
+    fprintf(fp,"p01_layout=%u,%u,%u,%u,%u,%u,%u,%u\n",
+            layout->left[0],layout->left[1],layout->left[2],layout->left[3],
+            layout->right[0],layout->right[1],layout->right[2],layout->mirrored);
+    fprintf(fp,"p01_layout_footer=%u\n",layout->footer_swapped);
     fprintf(fp, "p07_view_mode=%d\n", state->page07.view_mode);
     fprintf(fp, "p07_fav_only=%d\n", state->page07.fav_only);
     fprintf(fp, "p07_selected_abs_idx=%d\n", state->page07.selected_abs_idx);

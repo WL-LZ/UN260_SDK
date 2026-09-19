@@ -561,6 +561,11 @@ typedef enum {
     UI_TEXT_MULTI_DETAILS_ACTION,
     UI_TEXT_MULTI_CURRENCIES_FMT,
     UI_TEXT_HISTORY_MULTI_REJECT,
+    UI_TEXT_QUERY,
+    UI_TEXT_QUERY_SERIAL,
+    UI_TEXT_QUERY_DENOMINATION,
+    UI_TEXT_QUERY_DENOM_HINT,
+    UI_TEXT_QUERY_DENOM_RULE,
     UI_TEXT_PAGE_MAX,
 
     /* Internal lookup IDs, not protocol/persisted values. Keep room for page

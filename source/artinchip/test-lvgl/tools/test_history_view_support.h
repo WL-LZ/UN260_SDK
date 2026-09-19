@@ -4,6 +4,7 @@
 #include "un260/lv_core/page_19_history_search.h"
 void history_test_tick(unsigned ms);
 void history_test_render(void);
+void history_test_tap(int x, int y);
 void history_test_click_at(lv_obj_t *object, const char *file, unsigned line);
 #define history_test_click(object) history_test_click_at((object), __FILE__, __LINE__)
 lv_obj_t *history_test_button(lv_obj_t *parent, const char *text);

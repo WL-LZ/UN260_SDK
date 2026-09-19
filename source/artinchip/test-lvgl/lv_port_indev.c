@@ -174,6 +174,22 @@ void lv_port_indev_set_pointer_observer(lv_port_pointer_observer_t observer,
     g_pointer_observer_data = user_data;
 }
 
+void lv_port_indev_capture_pointer(lv_indev_t *indev)
+{
+    if (indev == NULL || indev != g_pointer_indev) return;
+    g_contact_captured = true;
+    /* lv_indev_get_obj_act() is NULL between LVGL input reads. The driver
+     * retains the actual target so stationary long-press timers can cancel it. */
+    lv_obj_t *cancelled = evdev_pressed_obj;
+    evdev_pressed_obj = NULL;
+    if (cancelled && lv_obj_is_valid(cancelled)) {
+        lv_event_send(cancelled, LV_EVENT_PRESS_LOST, indev);
+        if (lv_obj_is_valid(cancelled)) lv_obj_clear_state(cancelled, LV_STATE_PRESSED);
+    }
+    lv_indev_reset(indev, NULL);
+    lv_indev_wait_release(indev);
+}
+
 uint8_t lv_port_indev_touch_count(void)
 {
     return g_touch_count;
@@ -477,15 +493,7 @@ void evdev_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
             capture = g_pointer_observer(g_pointer_indev, event, &data->point,
                                          g_touch_count, g_pointer_observer_data);
         if(capture && !g_contact_captured) {
-            g_contact_captured = true;
-            lv_obj_t *cancelled = evdev_pressed_obj;
-            evdev_pressed_obj = NULL;
-            if(cancelled && lv_obj_is_valid(cancelled)) {
-                lv_event_send(cancelled, LV_EVENT_PRESS_LOST, g_pointer_indev);
-                if(lv_obj_is_valid(cancelled)) lv_obj_clear_state(cancelled, LV_STATE_PRESSED);
-            }
-            lv_indev_reset(g_pointer_indev, NULL);
-            lv_indev_wait_release(g_pointer_indev);
+            lv_port_indev_capture_pointer(g_pointer_indev);
         }
         g_raw_down = down;
         if(!down) g_contact_captured = false;

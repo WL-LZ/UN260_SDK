@@ -769,6 +769,7 @@ bool lv_dma_static_skin_attach(lv_dma_static_skin_t *skin,
     skin->border_opa = lv_obj_get_style_border_opa(source, LV_PART_MAIN);
     skin->outline_opa = lv_obj_get_style_outline_opa(source, LV_PART_MAIN);
     skin->shadow_opa = lv_obj_get_style_shadow_opa(source, LV_PART_MAIN);
+    skin->capture_ext_size = ext_size;
     skin->style_mutated = true;
 
     /* The object itself remains above the cached image, so hit-testing and
@@ -777,6 +778,18 @@ bool lv_dma_static_skin_attach(lv_dma_static_skin_t *skin,
     static_skin_set_live_visual(skin, false);
     lv_obj_add_event_cb(source, static_skin_event_cb, LV_EVENT_ALL, skin);
     return true;
+}
+
+void lv_dma_static_skin_sync_position(lv_dma_static_skin_t *skin)
+{
+    if (skin == NULL || skin->source == NULL || skin->image == NULL ||
+        !lv_obj_is_valid(skin->source) || !lv_obj_is_valid(skin->image)) return;
+
+    /* Retain the capture's padding: suppressing the live shadow may have
+     * changed source->ext_draw_size since the bitmap was created. */
+    lv_obj_set_pos(skin->image,
+        lv_obj_get_x(skin->source) - skin->capture_ext_size,
+        lv_obj_get_y(skin->source) - skin->capture_ext_size);
 }
 
 void lv_dma_static_skin_release(lv_dma_static_skin_t *skin)

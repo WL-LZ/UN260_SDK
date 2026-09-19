@@ -13,6 +13,13 @@ typedef enum {
 typedef void (*settings_detail_keyboard_cb_t)(const char* value, void* user_data);
 typedef void (*settings_detail_keyboard_close_cb_t)(void* user_data);
 typedef void (*settings_detail_dialog_cb_t)(void* user_data);
+typedef enum {
+    SETTINGS_DIALOG_INFO, SETTINGS_DIALOG_SUCCESS,
+    SETTINGS_DIALOG_WARNING, SETTINGS_DIALOG_DESTRUCTIVE
+} settings_detail_dialog_kind_t;
+bool settings_detail_dialog_show_ex(settings_detail_dialog_kind_t kind,
+    const char *title,const char *content,const char *confirm_text,const char *cancel_text,
+    settings_detail_dialog_cb_t confirm_cb,settings_detail_dialog_cb_t cancel_cb,void *user_data);
 
 lv_obj_t* settings_detail_create_page(lv_obj_t* parent, const char* title,
                                       lv_event_cb_t back_cb,

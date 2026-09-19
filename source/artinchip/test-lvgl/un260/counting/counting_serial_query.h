@@ -5,6 +5,8 @@
 #include "counting_data_types.h"
 #include "counting_serial_text.h"
 
+#define COUNTING_SERIAL_QUERY_MAX_DENOMS 30
+
 typedef enum {
     COUNTING_SERIAL_MATCH_CONTAINS = COUNTING_SERIAL_TEXT_CONTAINS,
     COUNTING_SERIAL_MATCH_EXACT = COUNTING_SERIAL_TEXT_EXACT,
@@ -16,10 +18,13 @@ typedef struct {
     char text[32];
     counting_serial_match_t match;
     bool exclude_text;
-    int denominations[COUNTING_DENOM_MAX_ITEMS];
+    int denominations[COUNTING_SERIAL_QUERY_MAX_DENOMS];
     uint8_t denomination_count;
     bool exclude_denominations;
     bool descending;
+    /* Optional exact face value. Empty means unrestricted, invalid/zero never
+     * matches. This is not a serial substring or a summed amount. */
+    char denomination_text[33];
 } counting_serial_query_t;
 
 typedef struct {
@@ -49,5 +54,9 @@ counting_serial_query_result_t counting_serial_query_build(
  * and at most capacity+1 scans, even with malformed distinct denominations. */
 size_t counting_serial_query_denominations(const counting_sim_t *data,
                                          int *out_values, size_t capacity);
+
+/* Digits only, overflow checked, leading zeroes allowed; unknown value 0 is
+ * excluded when searching a denomination. Empty input leaves rows unchanged. */
+bool counting_serial_denomination_matches(uint32_t value, const char *text);
 
 #endif

@@ -11,6 +11,7 @@ void page_01_main_detail_refresh(page_01_detail_section_t section);
 void page_01_main_detail_set_visible(bool visible);
 void page_01_main_detail_reset(void);
 void page_01_main_detail_destroy(void);
+void page_01_main_detail_set_position(lv_coord_t x, lv_coord_t y);
 lv_obj_t *page_01_main_detail_scroll_obj(void);
 /* Apply the same tap-versus-drag contract to Main's title/card blank area.
  * Do not bind ABC buttons. Non-clickable decorative children need no binding. */

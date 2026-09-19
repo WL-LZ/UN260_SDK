@@ -29,6 +29,13 @@ void gesture_service_init(void);
 void gesture_service_set_page_policy(uint32_t owner, bool (*owns_single_drag)(void),
                                      bool (*handle_action)(gesture_action_t));
 void gesture_service_clear_page_policy(uint32_t owner);
+/* Raw contact arbitration, independent of navigation policy. Returning true
+ * consumes the entire contact before LVGL can deliver CLICKED. Capture remains
+ * sticky through page teardown until all fingers have lifted. */
+typedef bool (*gesture_pointer_policy_t)(lv_indev_t *, lv_event_code_t,
+                                         const lv_point_t *, uint8_t);
+void gesture_service_set_pointer_policy(uint32_t owner, gesture_pointer_policy_t policy);
+void gesture_service_clear_pointer_policy(uint32_t owner);
 bool gesture_service_enabled(void);
 bool gesture_service_set_enabled(bool enabled);
 size_t gesture_service_definition_count(void);

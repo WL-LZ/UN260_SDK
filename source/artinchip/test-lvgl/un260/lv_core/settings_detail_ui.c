@@ -6,6 +6,8 @@
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_components/lv_nav_button.h"
+#include "un260/lv_components/lv_popup_style.h"
+#include "un260/lv_resources/lv_img_init.h"
 
 #include <string.h>
 
@@ -394,15 +396,22 @@ bool settings_detail_dialog_show(const char* title,
                                  settings_detail_dialog_cb_t cancel_cb,
                                  void* user_data)
 {
+    return settings_detail_dialog_show_ex(cancel_text ? SETTINGS_DIALOG_WARNING : SETTINGS_DIALOG_INFO,
+        title,content,confirm_text,cancel_text,confirm_cb,cancel_cb,user_data);
+}
+
+bool settings_detail_dialog_show_ex(settings_detail_dialog_kind_t kind,
+    const char *title,const char *content,const char *confirm_text,const char *cancel_text,
+    settings_detail_dialog_cb_t confirm_cb,settings_detail_dialog_cb_t cancel_cb,void *user_data)
+{
     lv_obj_t* parent = lv_scr_act();
     lv_obj_t* root;
     lv_obj_t* card;
-    lv_obj_t* accent;
     lv_obj_t* title_label;
     lv_obj_t* content_label;
     lv_obj_t* icon_box;
     lv_obj_t* icon_label;
-    lv_coord_t confirm_x = cancel_text ? 310 : 205;
+    lv_coord_t confirm_x = 434;
 
     settings_detail_dialog_hide();
 
@@ -417,7 +426,7 @@ bool settings_detail_dialog_show(const char* title,
 
     card = lv_obj_create(root);
     detail_style_plain(card);
-    lv_obj_set_size(card, 560, 236);
+    lv_obj_set_size(card, 620, 280);
     lv_obj_center(card);
     lv_obj_set_style_bg_color(card, detail_panel(), 0);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
@@ -427,56 +436,53 @@ bool settings_detail_dialog_show(const char* title,
     lv_obj_set_style_shadow_width(card, 24, 0);
     lv_obj_set_style_shadow_opa(card, LV_OPA_20, 0);
     lv_obj_set_style_shadow_ofs_y(card, 10, 0);
-
-    accent = lv_obj_create(card);
-    detail_style_plain(accent);
-    lv_obj_set_pos(accent, 28, 20);
-    lv_obj_set_size(accent, 104, 5);
-    lv_obj_set_style_bg_color(accent, detail_primary(), 0);
-    lv_obj_set_style_bg_opa(accent, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(accent, 3, 0);
+    lv_popup_style(root, card);
 
     icon_box = lv_obj_create(card);
     detail_style_plain(icon_box);
-    lv_obj_set_pos(icon_box, 34, 48);
-    lv_obj_set_size(icon_box, 58, 58);
-    lv_obj_set_style_bg_color(icon_box, detail_primary_2(), 0);
+    lv_obj_set_pos(icon_box, 32, 28);
+    lv_obj_set_size(icon_box, 46, 46);
+    lv_obj_set_style_bg_color(icon_box, lv_color_hex(kind==SETTINGS_DIALOG_SUCCESS ? 0xEAF3ED :
+        kind>=SETTINGS_DIALOG_WARNING ? 0xFCF2DF : 0xEAF2FC), 0);
     lv_obj_set_style_bg_opa(icon_box, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(icon_box, 8, 0);
+    lv_obj_set_style_radius(icon_box, 14, 0);
 
-    icon_label = settings_detail_create_label(icon_box, "!",
-                                              &lv_font_instrument_sans_medium_20,
-                                              detail_primary(), 0, 0);
+    icon_label = lv_img_create(icon_box);
+    lv_img_set_src(icon_label,kind==SETTINGS_DIALOG_SUCCESS ? LVGL_DIR "popup_icons/check.png" :
+        kind>=SETTINGS_DIALOG_WARNING ? LVGL_DIR "popup_icons/warn.png" : LVGL_DIR "popup_icons/info.png");
     lv_obj_center(icon_label);
 
     title_label = settings_detail_create_label(card, title ? title : "",
-                                               &lv_font_instrument_sans_medium_20,
-                                               detail_text(), 114, 46);
-    lv_obj_set_width(title_label, 400);
+                                               &lv_font_instrument_sans_semibold_28,
+                                               lv_color_hex(0x1D2B34), 92, 34);
+    lv_obj_set_width(title_label, 496);
     lv_label_set_long_mode(title_label, LV_LABEL_LONG_CLIP);
 
     content_label = settings_detail_create_label(card, content ? content : "",
                                                  &lv_font_instrument_sans_medium_16,
-                                                 detail_muted(), 114, 82);
-    lv_obj_set_width(content_label, 398);
+                                                 lv_color_hex(0x586B77), 32, 94);
+    lv_obj_set_width(content_label, 556);
     lv_label_set_long_mode(content_label, LV_LABEL_LONG_WRAP);
 
     if (cancel_text) {
-        settings_detail_create_button(card, 190, 172, 112, 40, cancel_text,
-                                      lv_color_hex(0x6B7A90),
-                                      settings_detail_dialog_cancel_cb, NULL);
+        lv_obj_t *cancel = settings_detail_create_button(card, 282, 208, 140, 46, cancel_text,
+                                      lv_color_hex(0xF1F4F5), settings_detail_dialog_cancel_cb, NULL);
+        lv_obj_set_style_text_color(lv_obj_get_child(cancel,0), lv_color_hex(0x1D2B34), 0);
+        lv_obj_set_style_radius(cancel,12,0);
+        lv_obj_set_style_shadow_width(cancel,0,0);
     }
 
-    settings_detail_create_button(card, confirm_x, 172, 154, 40,
+    lv_obj_t *confirm = settings_detail_create_button(card, confirm_x, 208, 154, 46,
                                   confirm_text ? confirm_text : "",
-                                  detail_primary(),
+                                  lv_color_hex(kind==SETTINGS_DIALOG_DESTRUCTIVE ? 0xB03838 : 0x1462CC),
                                   settings_detail_dialog_confirm_cb, NULL);
+    lv_obj_set_style_radius(confirm,12,0);
+    lv_obj_set_style_shadow_width(confirm,0,0);
 
     g_settings_dialog.root = root;
     g_settings_dialog.confirm_cb = confirm_cb;
     g_settings_dialog.cancel_cb = cancel_cb;
     g_settings_dialog.user_data = user_data;
-
     return true;
 }
 
@@ -663,11 +669,20 @@ static lv_obj_t* settings_keyboard_create_key(lv_obj_t* parent, int x, int y, in
     detail_style_plain(btn);
     lv_obj_set_pos(btn, x, y);
     lv_obj_set_size(btn, w, h);
-    lv_obj_set_style_bg_color(btn, bg, 0);
+    (void)bg;
+    lv_obj_set_style_bg_color(btn, lv_color_hex(0xF1F4F5), 0);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(btn, 1, 0);
-    lv_obj_set_style_border_color(btn, detail_line(), 0);
-    lv_obj_set_style_radius(btn, 4, 0);
+    lv_obj_set_style_border_color(btn, lv_color_hex(0xECF0F3), 0);
+    lv_obj_set_style_radius(btn, 12, 0);
+    if(h == 44) {
+        lv_obj_set_style_shadow_color(btn,lv_color_hex(0xAEBCC7),0);
+        lv_obj_set_style_shadow_width(btn,2,0);
+        lv_obj_set_style_shadow_ofs_y(btn,2,0);
+        lv_obj_set_style_shadow_opa(btn,LV_OPA_40,0);
+        if(strcmp(key,"BACK")==0 || strcmp(key,"CLEAR")==0)
+            lv_obj_set_style_bg_color(btn,lv_color_hex(0xDBE3E9),0);
+    }
     lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
     detail_add_press_style(btn, lv_color_hex(0xD8F4FF));
     lv_obj_add_event_cb(btn, settings_keyboard_key_cb, LV_EVENT_CLICKED, (void*)key);
@@ -675,9 +690,14 @@ static lv_obj_t* settings_keyboard_create_key(lv_obj_t* parent, int x, int y, in
     const lv_font_t* key_font =
         (text && (strcmp(text, LV_SYMBOL_BACKSPACE) == 0 || strcmp(text, LV_SYMBOL_UP) == 0))
             ? &lv_font_montserrat_20
-            : &lv_font_instrument_sans_medium_20;
-    lv_obj_t* label = settings_detail_create_label(btn, text, key_font,
-                                                   detail_text(), 0, 0);
+            : (h >= 60 && key[0]>='0' && key[0]<='9' ? &lv_font_instrument_sans_semibold_28 : &lv_font_instrument_sans_medium_20);
+    lv_obj_t* label = settings_detail_create_label(btn, strcmp(key,"BACK")==0 ? "" : text, key_font,
+                                                   lv_color_hex(0x1D2B34), 0, 0);
+    if(strcmp(key,"BACK")==0) {
+        lv_obj_t *image=lv_img_create(btn);
+        lv_img_set_src(image, LVGL_DIR "popup_icons/backspace.png");
+        lv_obj_center(image);
+    }
     lv_obj_center(label);
     if (key && key[0] >= 'A' && key[0] <= 'Z' && key[1] == '\0') {
         uint8_t idx = (uint8_t)(key[0] - 'A');
@@ -702,7 +722,7 @@ static void settings_keyboard_create_action(lv_obj_t* parent, int x, int y, int 
     lv_obj_set_style_bg_color(btn, bg, 0);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(btn, 0, 0);
-    lv_obj_set_style_radius(btn, 4, 0);
+    lv_obj_set_style_radius(btn, 12, 0);
     lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
     detail_add_press_style(btn, lv_color_darken(bg, 28));
     lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
@@ -710,9 +730,9 @@ static void settings_keyboard_create_action(lv_obj_t* parent, int x, int y, int 
     const lv_font_t* action_font =
         (text && strcmp(text, LV_SYMBOL_OK) == 0)
             ? &lv_font_montserrat_24
-            : &lv_font_instrument_sans_medium_24;
+            : &lv_font_instrument_sans_medium_16;
     lv_obj_t* label = settings_detail_create_label(btn, text, action_font,
-                                                   detail_panel(), 0, 0);
+                                                   cb == settings_keyboard_cancel_cb ? lv_color_hex(0x1D2B34) : detail_panel(), 0, 0);
     lv_obj_center(label);
 }
 
@@ -722,14 +742,14 @@ static void settings_keyboard_create_number_keys(lv_obj_t* parent)
         { "1", "2", "3" },
         { "4", "5", "6" },
         { "7", "8", "9" },
-        { "-", "0", "." },
+        { "CLEAR", "0", "BACK" },
     };
-    int key_w = 184;
-    int key_h = 39;
-    int gap_x = 24;
-    int gap_y = 8;
-    int start_x = 58;
-    int start_y = 10;
+    int key_w = 113;
+    int key_h = 64;
+    int gap_x = 10;
+    int gap_y = 10;
+    int start_x = 0;
+    int start_y = 0;
 
     for (int r = 0; r < 4; r++) {
         for (int c = 0; c < 3; c++) {
@@ -737,17 +757,19 @@ static void settings_keyboard_create_number_keys(lv_obj_t* parent)
                                          start_x + c * (key_w + gap_x),
                                          start_y + r * (key_h + gap_y),
                                          key_w, key_h,
-                                         keys[r][c], keys[r][c],
+                                         strcmp(keys[r][c],"CLEAR")==0 ? "Clear" : keys[r][c], keys[r][c],
                                          lv_color_hex(0xF8F9FB));
         }
     }
 
-    settings_keyboard_create_key(parent, 706, 104, 190, 39, LV_SYMBOL_BACKSPACE,
-                                 "BACK", lv_color_hex(0xF8F9FB));
-    settings_keyboard_create_action(parent, 706, 151, 190, 39, LV_SYMBOL_OK,
-                                    detail_primary(), settings_keyboard_commit_cb);
-    settings_keyboard_create_action(parent, 934, 151, 190, 39, "< BACK",
-                                    lv_color_hex(0x8792A8), settings_keyboard_cancel_cb);
+    lv_obj_t *card=lv_obj_get_parent(parent);
+    /* Keep the existing signed/decimal contract; validation belongs to field owners. */
+    settings_keyboard_create_key(card,30,204,80,46,"-","-",lv_color_hex(0xF1F4F5));
+    settings_keyboard_create_key(card,120,204,80,46,".",".",lv_color_hex(0xF1F4F5));
+    settings_keyboard_create_action(card,30,280,190,46,"Cancel",
+                                    lv_color_hex(0xF1F4F5),settings_keyboard_cancel_cb);
+    settings_keyboard_create_action(card,232,280,190,46,"Apply",
+                                    lv_color_hex(0x1462CC),settings_keyboard_commit_cb);
 }
 
 static void settings_keyboard_create_text_keys(lv_obj_t* parent)
@@ -756,42 +778,42 @@ static void settings_keyboard_create_text_keys(lv_obj_t* parent)
     static const char* row0[] = { "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P" };
     static const char* row1[] = { "A", "S", "D", "F", "G", "H", "J", "K", "L" };
     static const char* row2[] = { "Z", "X", "C", "V", "B", "N", "M" };
-    int key_w = 64;
-    int key_h = 31;
-    int gap = 6;
+    int key_w = 74;
+    int key_h = 44;
+    int gap = 7;
 
     for (int i = 0; i < 10; i++) {
-        settings_keyboard_create_key(parent, 40 + i * (key_w + gap), 8,
+        settings_keyboard_create_key(parent, 113 + i * (key_w + gap), 0,
                                      key_w, key_h, nums[i], nums[i],
                                      lv_color_hex(0xF8F9FB));
     }
     for (int i = 0; i < 10; i++) {
-        settings_keyboard_create_key(parent, 40 + i * (key_w + gap), 45,
+        settings_keyboard_create_key(parent, 113 + i * (key_w + gap), 51,
                                      key_w, key_h, row0[i], row0[i],
                                      lv_color_hex(0xF8F9FB));
     }
     for (int i = 0; i < 9; i++) {
-        settings_keyboard_create_key(parent, 75 + i * (key_w + gap), 82,
+        settings_keyboard_create_key(parent, 154 + i * (key_w + gap), 102,
                                      key_w, key_h, row1[i], row1[i],
                                      lv_color_hex(0xF8F9FB));
     }
     for (int i = 0; i < 7; i++) {
-        settings_keyboard_create_key(parent, 145 + i * (key_w + gap), 119,
+        settings_keyboard_create_key(parent, 106 + i * (key_w + gap), 153,
                                      key_w, key_h, row2[i], row2[i],
                                      lv_color_hex(0xF8F9FB));
     }
 
-    g_settings_keyboard.shift_btn = settings_keyboard_create_key(parent, 75, 119, 64, 31,
-                                                                LV_SYMBOL_UP, "SHIFT",
+    g_settings_keyboard.shift_btn = settings_keyboard_create_key(parent, 20, 153, 74, 44,
+                                                                "Aa", "SHIFT",
                                                                 lv_color_hex(0xF8F9FB));
-    settings_keyboard_create_key(parent, 260, 158, 330, 34, "SPACE", " ",
-                                 lv_color_hex(0xF8F9FB));
-    settings_keyboard_create_key(parent, 706, 82, 190, 34, LV_SYMBOL_BACKSPACE,
+    settings_keyboard_create_key(parent, 673, 153, 122, 44, "",
                                  "BACK", lv_color_hex(0xF8F9FB));
-    settings_keyboard_create_action(parent, 706, 158, 190, 34, LV_SYMBOL_OK,
-                                    detail_primary(), settings_keyboard_commit_cb);
-    settings_keyboard_create_action(parent, 934, 158, 190, 34, "< BACK",
-                                    lv_color_hex(0x8792A8), settings_keyboard_cancel_cb);
+    settings_keyboard_create_key(parent, 802, 153, 122, 44, "Clear", "CLEAR",lv_color_hex(0xF1F4F5));
+    lv_obj_t *card=lv_obj_get_parent(parent);
+    settings_keyboard_create_action(card, 824, 36, 186, 44, "Apply",
+                                    lv_color_hex(0x1462CC), settings_keyboard_commit_cb);
+    settings_keyboard_create_action(card, 682, 36, 130, 44, "Cancel",
+                                    lv_color_hex(0xF1F4F5), settings_keyboard_cancel_cb);
 }
 
 bool settings_detail_keyboard_show(const char* title,
@@ -840,62 +862,57 @@ bool settings_detail_keyboard_show_ex(const char* title,
 
     top = lv_obj_create(g_settings_keyboard.root);
     detail_style_plain(top);
-    lv_obj_set_pos(top, 0, 0);
-    lv_obj_set_size(top, SETTINGS_DETAIL_W, SETTINGS_DETAIL_H / 2);
+    bool numeric = mode != SETTINGS_DETAIL_KEYBOARD_TEXT;
+    lv_obj_set_pos(top, numeric ? 174 : 125, numeric ? 24 : 48);
+    lv_obj_set_size(top, numeric ? 932 : 1030, numeric ? 352 : 304);
     lv_obj_set_style_bg_opa(top, LV_OPA_TRANSP, 0);
     lv_obj_add_flag(top, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(top, settings_keyboard_commit_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(g_settings_keyboard.root, settings_keyboard_cancel_cb, LV_EVENT_CLICKED, NULL);
+    lv_popup_style(g_settings_keyboard.root,top);
+    if(!numeric) lv_obj_set_style_bg_color(top,lv_color_hex(0xE7EDF1),0);
 
     dialog = lv_obj_create(top);
     detail_style_plain(dialog);
-    lv_obj_set_pos(dialog, 280, 14);
-    lv_obj_set_size(dialog, 720, 134);
+    lv_obj_set_pos(dialog, numeric ? 30 : 20, numeric ? 26 : 10);
+    lv_obj_set_size(dialog, numeric ? 484 : 650, numeric ? 170 : 72);
     lv_obj_set_style_bg_color(dialog, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_bg_opa(dialog, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(dialog, 1, 0);
+    lv_obj_set_style_bg_opa(dialog, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(dialog, 0, 0);
     lv_obj_set_style_border_color(dialog, lv_color_hex(0xDDEBFF), 0);
     lv_obj_set_style_radius(dialog, 8, 0);
-    lv_obj_set_style_shadow_width(dialog, 22, 0);
+    lv_obj_set_style_shadow_width(dialog, 0, 0);
     lv_obj_set_style_shadow_opa(dialog, LV_OPA_30, 0);
     lv_obj_set_style_shadow_ofs_y(dialog, 8, 0);
 
-    lv_obj_t* accent = lv_obj_create(dialog);
-    detail_style_plain(accent);
-    lv_obj_set_pos(accent, 260, 11);
-    lv_obj_set_size(accent, 200, 4);
-    lv_obj_set_style_bg_color(accent, detail_primary(), 0);
-    lv_obj_set_style_bg_opa(accent, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(accent, 2, 0);
-
-    settings_detail_create_label(dialog, title ? title : "", &lv_font_instrument_sans_semibold_18,
-                                 detail_text(), 26, 18);
-
-    lv_obj_t* hint = settings_detail_create_label(dialog, LV_SYMBOL_EDIT, &lv_font_montserrat_18,
-                                                  detail_primary(), 666, 18);
-    lv_obj_set_style_text_color(hint, detail_primary(), 0);
+    settings_detail_create_label(dialog, title ? title : "", numeric ? &lv_font_instrument_sans_semibold_28 : &lv_font_instrument_sans_medium_16,
+                                 lv_color_hex(0x1D2B34), 0, 0);
 
     input_wrap = lv_obj_create(dialog);
     detail_style_plain(input_wrap);
-    lv_obj_set_pos(input_wrap, 24, 58);
-    lv_obj_set_size(input_wrap, 672, 54);
-    lv_obj_set_style_bg_color(input_wrap, lv_color_hex(0xF6FBFF), 0);
+    lv_obj_set_pos(input_wrap, 0, numeric ? 58 : 26);
+    lv_obj_set_size(input_wrap, numeric ? 440 : 650, numeric ? 78 : 44);
+    lv_obj_set_style_bg_color(input_wrap, lv_color_hex(0xF8FAFC), 0);
     lv_obj_set_style_bg_opa(input_wrap, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(input_wrap, 2, 0);
-    lv_obj_set_style_border_color(input_wrap, detail_select_border(), 0);
-    lv_obj_set_style_radius(input_wrap, 6, 0);
+    lv_obj_set_style_border_color(input_wrap, lv_color_hex(0x1462CC), 0);
+    lv_obj_set_style_radius(input_wrap, 13, 0);
 
     g_settings_keyboard.input_label = settings_detail_create_label(input_wrap, "", &lv_font_instrument_sans_medium_24,
                                                                   detail_text(), 14, 13);
-    lv_obj_set_size(g_settings_keyboard.input_label, 640, 32);
+    lv_obj_set_size(g_settings_keyboard.input_label, numeric ? 412 : 618, numeric ? 48 : 30);
+    if(!numeric) lv_obj_set_y(g_settings_keyboard.input_label,7);
+    if(numeric) lv_obj_set_style_text_font(g_settings_keyboard.input_label,&lv_font_instrument_sans_semibold_40,0);
+    lv_obj_set_style_text_color(g_settings_keyboard.input_label,lv_color_hex(0x1D2B34),0);
 
-    keyboard = lv_obj_create(g_settings_keyboard.root);
+    keyboard = lv_obj_create(top);
     detail_style_plain(keyboard);
-    lv_obj_set_pos(keyboard, 0, SETTINGS_DETAIL_H / 2);
-    lv_obj_set_size(keyboard, SETTINGS_DETAIL_W, SETTINGS_DETAIL_H / 2);
+    lv_obj_set_pos(keyboard, numeric ? 542 : 0, numeric ? 26 : 92);
+    lv_obj_set_size(keyboard, numeric ? 360 : 1030, numeric ? 300 : 197);
     lv_obj_set_style_bg_color(keyboard, detail_panel(), 0);
     lv_obj_set_style_bg_opa(keyboard, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(keyboard, 1, 0);
+    lv_obj_set_style_border_width(keyboard, 0, 0);
     lv_obj_set_style_border_color(keyboard, detail_line(), 0);
+    lv_obj_set_style_bg_opa(keyboard, LV_OPA_TRANSP, 0);
 
     g_settings_keyboard.confirm_cb = confirm_cb;
     g_settings_keyboard.close_cb = close_cb;

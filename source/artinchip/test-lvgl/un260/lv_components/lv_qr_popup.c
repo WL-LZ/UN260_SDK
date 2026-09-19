@@ -1,12 +1,13 @@
 #include "lv_qr_popup.h"
+#include "lv_popup_style.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_components/qrcodegen.h"
 #include "un260/lv_components/lv_damped_button.h"
 #include <stddef.h>
 #include <string.h>
 
-#define QR_POPUP_CARD_W          360
-#define QR_POPUP_CARD_H          336
+#define QR_POPUP_CARD_W          890
+#define QR_POPUP_CARD_H          320
 #define QR_POPUP_CODE_MAX_SIZE   220
 #define QR_POPUP_PADDING_MODULE  4
 
@@ -73,42 +74,43 @@ static void qr_popup_create(void) //创建二维码弹窗对象
     lv_obj_set_style_shadow_opa(g_qr_popup_card, LV_OPA_10, 0);
     lv_obj_set_style_shadow_width(g_qr_popup_card, 18, 0);
     lv_obj_set_style_shadow_ofs_y(g_qr_popup_card, 6, 0);
+    lv_obj_set_style_pad_all(g_qr_popup_card, 0, 0);
+    lv_popup_style(g_qr_popup_root, g_qr_popup_card);
+    lv_obj_add_event_cb(g_qr_popup_root, qr_popup_close_event_cb, LV_EVENT_CLICKED, NULL);
 
     g_qr_popup_title = lv_label_create(g_qr_popup_card);
-    lv_obj_set_width(g_qr_popup_title, 280);
-    lv_obj_align(g_qr_popup_title, LV_ALIGN_TOP_MID, 0, 18);
-    lv_obj_set_style_text_align(g_qr_popup_title, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(g_qr_popup_title, &lv_font_instrument_sans_semibold_22, 0);
-    lv_obj_set_style_text_color(g_qr_popup_title, lv_color_hex(0x111111), 0);
+    lv_obj_set_width(g_qr_popup_title, 510);
+    lv_obj_set_pos(g_qr_popup_title, 32, 38);
+    lv_obj_set_style_text_font(g_qr_popup_title, &lv_font_instrument_sans_semibold_28, 0);
+    lv_obj_set_style_text_color(g_qr_popup_title, lv_color_hex(0x1D2B34), 0);
 
-    g_qr_popup_desc = lv_label_create(g_qr_popup_root);
-    lv_obj_set_width(g_qr_popup_desc, QR_POPUP_CARD_W);
-    lv_obj_set_style_text_align(g_qr_popup_desc, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(g_qr_popup_desc, &lv_font_instrument_sans_medium_14, 0);
-    lv_obj_set_style_text_color(g_qr_popup_desc, lv_color_hex(0x666666), 0);
+    g_qr_popup_desc = lv_label_create(g_qr_popup_card);
+    lv_obj_set_width(g_qr_popup_desc, 490);
+    lv_obj_set_style_text_font(g_qr_popup_desc, &lv_font_instrument_sans_medium_16, 0);
+    lv_obj_set_style_text_color(g_qr_popup_desc, lv_color_hex(0x586B77), 0);
 
     g_qr_popup_canvas = lv_canvas_create(g_qr_popup_card);
     lv_obj_align(g_qr_popup_canvas, LV_ALIGN_CENTER, 0, 12);
 
     {
         lv_damped_button_style_t close_style = {
-            .normal_color = 0x111111,
-            .pressed_color = 0x303030,
+            .normal_color = 0xF1F4F5,
+            .pressed_color = 0xD9E0E3,
             .disabled_color = 0x8A8A8A,
-            .text_color = 0xFFFFFF,
+            .text_color = 0x1D2B34,
             .disabled_text_color = 0xD0D0D0,
             .radius = 12,
         };
         g_qr_popup_close_btn = lv_damped_button_create(g_qr_popup_card,
             &close_style, "", &lv_font_instrument_sans_bold_16);
     }
-    lv_obj_set_size(g_qr_popup_close_btn, 116, 38);
-    lv_obj_align(g_qr_popup_close_btn, LV_ALIGN_BOTTOM_MID, 0, -12);
+    lv_obj_set_size(g_qr_popup_close_btn, 140, 46);
+    lv_obj_set_pos(g_qr_popup_close_btn, 32, 246);
     lv_obj_add_event_cb(g_qr_popup_close_btn, qr_popup_close_event_cb, LV_EVENT_CLICKED, NULL);
 
     g_qr_popup_close_label = lv_damped_button_get_label(g_qr_popup_close_btn);
 
-    lv_obj_align_to(g_qr_popup_desc, g_qr_popup_close_btn, LV_ALIGN_OUT_BOTTOM_MID, 0, 5);
+    lv_obj_set_pos(g_qr_popup_desc, 32, 100);
 
     lv_obj_add_flag(g_qr_popup_root, LV_OBJ_FLAG_HIDDEN);
 }
@@ -148,7 +150,7 @@ static bool qr_popup_draw_code(const char* qr_text) //生成并绘制二维码�
     lv_canvas_set_buffer(g_qr_popup_canvas, g_qr_popup_buf, draw_size, draw_size, LV_IMG_CF_TRUE_COLOR);
     lv_canvas_fill_bg(g_qr_popup_canvas, lv_color_hex(0xFFFFFF), LV_OPA_COVER);
     lv_obj_set_size(g_qr_popup_canvas, draw_size, draw_size);
-    lv_obj_align(g_qr_popup_canvas, LV_ALIGN_CENTER, 0, 6);
+    lv_obj_align(g_qr_popup_canvas, LV_ALIGN_RIGHT_MID, -40, 0);
 
     lv_draw_rect_dsc_init(&rect_dsc);
     rect_dsc.bg_color = lv_color_hex(0x000000);

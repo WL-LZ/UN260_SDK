@@ -32,6 +32,7 @@ typedef struct {
     lv_opa_t border_opa;
     lv_opa_t outline_opa;
     lv_opa_t shadow_opa;
+    lv_coord_t capture_ext_size;
     bool style_mutated;
 } lv_dma_static_skin_t;
 
@@ -102,6 +103,10 @@ bool lv_dma_static_skin_attach(lv_dma_static_skin_t *skin,
                                lv_obj_t *source,
                                const char *cache_key);
 void lv_dma_static_skin_release(lv_dma_static_skin_t *skin);
+/* After a coordinate-only layout change, move the cached decoration with its
+ * live source. Call on the UI thread after layout; no recapture/allocation.
+ * Changes to geometry/visual styles still require release and attach. */
+void lv_dma_static_skin_sync_position(lv_dma_static_skin_t *skin);
 
 const lv_img_dsc_t *lv_dma_snapshot_image(const lv_dma_snapshot_t *snapshot);
 uint32_t lv_dma_snapshot_size(const lv_dma_snapshot_t *snapshot);

@@ -114,6 +114,7 @@ def main():
                      "un260/lv_components/lv_card_surface.c",
                      "un260/lv_components/lv_damped_button.c",
                      "un260/lv_components/lv_alnum_keyboard.c",
+                     "un260/lv_components/lv_popup_style.c",
                      "un260/lv_components/lv_nav_button.c",
                      "un260/lv_core/page_02_list_data.c",
                      "un260/lv_core/ui_frame_commit.c",

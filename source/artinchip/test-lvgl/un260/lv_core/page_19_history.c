@@ -1,5 +1,6 @@
 #include "un260/lv_resources/ui_page_background.h"
 #include "page_19_history.h"
+#include "un260/lv_components/lv_popup_style.h"
 #include "page_19_history_search.h"
 #include "lv_page_manager.h"
 #include "lv_port_indev.h"
@@ -832,22 +833,29 @@ static void show_confirmation(bool clear_total)
     if (!overlay) return;
     history->dialog=overlay;lv_obj_set_style_bg_opa(overlay,LV_OPA_40,0);
     lv_obj_add_flag(overlay,LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_t *card=surface(overlay,365,90,550,220,18,0xFFFFFF);
+    lv_obj_t *card=surface(overlay,330,60,620,280,22,0xFFFFFF);
     if (!card) goto failed;
-    lv_obj_t *title=label(card,26,20,498,32,&lv_font_instrument_sans_semibold_22,HISTORY_INK,LV_TEXT_ALIGN_LEFT);
-    lv_obj_t *body=label(card,26,64,498,74,&lv_font_instrument_sans_medium_16,HISTORY_BODY,LV_TEXT_ALIGN_LEFT);
+    lv_popup_style(overlay,card);
+    lv_obj_add_event_cb(overlay,confirmation_cancel,LV_EVENT_CLICKED,NULL);
+    lv_obj_t *badge=surface(card,32,28,46,46,14,0xFCF2DF);
+    lv_obj_t *icon=lv_img_create(badge);
+    lv_img_set_src(icon,LVGL_DIR "popup_icons/warn.png");lv_obj_center(icon);
+    lv_obj_t *title=label(card,92,34,496,38,&lv_font_instrument_sans_semibold_28,0x1D2B34,LV_TEXT_ALIGN_LEFT);
+    lv_obj_t *body=label(card,32,94,556,90,&lv_font_instrument_sans_medium_16,0x586B77,LV_TEXT_ALIGN_LEFT);
     if (!title || !body) goto failed;
     text_set(title,tr(clear_total ? UI_TEXT_HISTORY_CLEAR_TOTAL : UI_TEXT_HISTORY_DELETE_TITLE));
     lv_label_set_long_mode(body,LV_LABEL_LONG_WRAP);
     char text[200];snprintf(text,sizeof(text),tr(clear_total ? UI_TEXT_HISTORY_CLEAR_WARNING :
         UI_TEXT_HISTORY_DELETE_WARNING),(unsigned)history->confirmed_count);text_set(body,text);
-    lv_obj_t *cancel=lv_nav_button_create(card,26,156,234,44,confirmation_cancel,NULL);
-    lv_obj_t *confirm=button(card,290,156,234,44,tr(UI_TEXT_HISTORY_APPLY),confirmation_apply,NULL);
+    lv_obj_t *cancel=lv_nav_button_create(card,226,208,140,46,confirmation_cancel,NULL);
+    lv_obj_t *confirm=button(card,378,208,210,46,tr(UI_TEXT_HISTORY_APPLY),confirmation_apply,NULL);
     if (!cancel || !confirm) goto failed;
     lv_damped_button_set_text(cancel,tr(UI_TEXT_HISTORY_CANCEL));
-    lv_damped_button_set_palette(confirm,lv_color_hex(0xFDECEC),lv_color_hex(0xEFCFD0));
+    lv_damped_button_set_palette(confirm,lv_color_hex(0xB03838),lv_color_hex(0x922E2E));
+    lv_obj_set_style_text_color(lv_damped_button_get_label(confirm),lv_color_hex(0xFFFFFF),0);
     lv_damped_button_set_enabled(confirm,ui_history_data_can_accept());
-    lv_recycled_list_stop(history->list);history->tapping=false;return;
+    lv_recycled_list_stop(history->list);history->tapping=false;
+    return;
 failed:
     close_dialog();toast(tr(UI_TEXT_SERIAL_UNAVAILABLE));
 }

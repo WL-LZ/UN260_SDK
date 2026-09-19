@@ -1,6 +1,7 @@
 #include "un260/lv_resources/ui_page_background.h"
 #include "un260/lv_core/page_01_main.h"
 #include "page_01_multi.h"
+#include "page_01_main_layout.h"
 #include "un260/lv_core/page_01_main_detail.h"
 #include "un260/lv_components/lv_loading_orbit.h"
 #include "un260/app_service/app_command_runtime.h"
@@ -1103,6 +1104,7 @@ static void page_01_top_strip_tap(const lv_point_t *point)
 {
     if (!point || !page_01_main_is_visible() || ui_manager_is_transitioning()) return;
     lv_obj_t *targets[] = {page_01_main_find_obj("menu_btn"),
+        page_01_main_find_obj("start_btn"),page_01_main_find_obj("esc_btn"),
         s_detail_btn_a, s_detail_btn_b, s_detail_btn_c};
     lv_area_t area;
     /* The raised tabs now partly overlap the transparent pull-down hot zone.
@@ -1118,6 +1120,45 @@ static void page_01_top_strip_tap(const lv_point_t *point)
         }
     }
     /* MULTI header taps never navigate to the unrelated single-currency List. */
+}
+
+static void page_01_apply_customer_layout(const ui_main_layout_t *layout)
+{
+    static const char *const left[]={"mode_btn","setting_btn","list_btn","print_btn"};
+    static const char *const right[]={"menu_btn","start_btn","esc_btn"};
+    for (unsigned slot=0;slot<4;++slot)
+        lv_obj_set_pos(page_01_main_find_obj(left[layout->left[slot]]),16,12+82*slot);
+    for (unsigned slot=0;slot<3;++slot)
+        lv_obj_set_pos(page_01_main_find_obj(right[layout->right[slot]]),1168,12+111*slot);
+    const lv_coord_t detail_x=layout->mirrored?108:602;
+    lv_obj_set_x(s_summary_card,layout->mirrored?674:108);
+    lv_obj_set_x(s_detail_card,detail_x);
+    page_01_main_detail_set_position(detail_x+18,76);
+    lv_obj_set_x(s_detail_tray,detail_x+18);
+    lv_obj_set_x(s_detail_frame,detail_x+18);
+    lv_obj_set_x(s_detail_btn_a,detail_x+18);
+    lv_obj_set_x(s_detail_btn_b,detail_x+191);
+    lv_obj_set_x(s_detail_btn_c,detail_x+364);
+    /* Footer groups retain their own width, spacing and callbacks. Keep the
+     * original outer edges and leave the independent Smart Island in place. */
+    const lv_coord_t footer_a_x=layout->footer_swapped?814:10;
+    const lv_coord_t footer_c_x=layout->footer_swapped?10:799;
+    lv_obj_set_x(s_bottom_area_a,footer_a_x);
+    lv_obj_set_x(s_bottom_a_btn_mode,footer_a_x);
+    lv_obj_set_x(s_bottom_a_btn_add,footer_a_x+91);
+    lv_obj_set_x(s_bottom_a_btn_work,footer_a_x+195);
+    lv_obj_set_x(s_bottom_a_btn_fo,footer_a_x+314);
+    lv_obj_set_x(s_bottom_area_c,footer_c_x);
+    lv_obj_set_x(s_bottom_c_btn_batch,footer_c_x);
+    lv_obj_set_x(s_bottom_c_btn_speed,footer_c_x+216);
+    lv_obj_set_x(s_bottom_c_box_cfd,footer_c_x+335);
+    /* The cached skins are siblings, not children. Move them in the same UI
+     * transaction as their live controls; leave all content/style/actions as-is. */
+    lv_obj_update_layout(main_page);
+    for (unsigned i=0;i<3;++i) {
+        lv_dma_static_skin_sync_position(&s_main_action_skins[i]);
+        lv_dma_static_skin_sync_position(&s_main_detail_tab_skins[i]);
+    }
 }
 
 void ui_main_create(lv_obj_t *parent)
@@ -1156,12 +1197,19 @@ void ui_main_create(lv_obj_t *parent)
     smart_island_refresh_time();
     page_32_innovation_handle_attach(main_page);
     page_32_innovation_handle_set_tap_handler(page_01_top_strip_tap);
+    lv_obj_t *layout_items[]={page_01_main_find_obj("mode_btn"),
+        page_01_main_find_obj("setting_btn"),page_01_main_find_obj("list_btn"),
+        page_01_main_find_obj("print_btn"),page_01_main_find_obj("menu_btn"),
+        page_01_main_find_obj("start_btn"),page_01_main_find_obj("esc_btn"),
+        s_summary_card,s_detail_card,s_bottom_area_a,s_bottom_area_c};
+    page_01_main_layout_attach(main_page,layout_items,page_01_apply_customer_layout);
     s_main_dirty = 0;
     page_01_main_snapshot_capture();
 }
 
 void ui_main_destroy(void)
 {
+    page_01_main_layout_detach();
     page_01_bottom_animations_stop();
     if (s_time_timer) { lv_timer_del(s_time_timer); s_time_timer = NULL; }
     s_time_label = NULL;
@@ -1258,6 +1306,7 @@ void page_01_main_refresh_totals(int total_pcs, const char *amount_text)
 void page_01_main_suspend(void)
 {
     if (!page_01_main_is_created()) return;
+    page_01_main_layout_suspend();
     pause_counting_sim();
     smart_island_set_suspended(true);
     if (s_time_timer) lv_timer_pause(s_time_timer);
@@ -1271,6 +1320,7 @@ void page_01_main_suspend(void)
 bool page_01_main_resume(void)
 {
     if (!page_01_main_is_created()) return false;
+    page_01_main_layout_resume();
     const uint64_t started_us = perf_profile_is_enabled() ? app_clock_monotonic_us() : 0;
     page_01_main_detect_snapshot_changes();
     const uint32_t dirty = s_main_dirty;

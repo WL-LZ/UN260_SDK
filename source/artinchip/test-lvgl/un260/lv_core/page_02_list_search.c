@@ -9,6 +9,7 @@
 #include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_components/lv_nav_button.h"
 #include "un260/lv_components/lv_recycled_list.h"
+#include "un260/lv_components/lv_segmented_pair.h"
 #include "un260/lv_system/ui_text.h"
 #include <stdio.h>
 #include <string.h>
@@ -17,17 +18,20 @@
 #define SEARCH_BODY 0x4C606E
 #define SEARCH_MUTED 0x7A8D9B
 #define SEARCH_LINE 0xE7ECEF
-#define SEARCH_OPTIONS 30
+#define SEARCH_OPTIONS COUNTING_SERIAL_QUERY_MAX_DENOMS
 #define SEARCH_ROWS 6
 #define SEARCH_ROW_HEIGHT 32
 
 struct page_02_list_search {
     lv_obj_t *root, *scope, *input, *summary, *empty, *sort, *denom_title;
     lv_obj_t *contains, *exact, *starts, *ends, *exclude, *only, *except, *all;
+    lv_obj_t *modes[2], *match_title, *separator, *grid, *denom_hint;
     lv_obj_t *denom_buttons[SEARCH_OPTIONS];
     lv_recycled_list_t *list;
     lv_alnum_keyboard_t *keyboard;
     counting_serial_query_t query;
+    bool denomination_mode;
+    counting_serial_query_t denomination_query;
     counting_serial_query_result_t result;
     uint16_t slots[COUNTING_DATA_MAX_ITEMS];
     int denominations[SEARCH_OPTIONS];
@@ -89,11 +93,21 @@ static void search_selected(lv_obj_t *button,bool selected)
     lv_obj_set_style_border_color(button,lv_color_hex(selected ? 0xA8BAC6 : SEARCH_LINE),0);
     lv_obj_set_style_border_width(button,selected ? 1 : 0,0);
 }
-static int selected_denom(const page_02_list_search_t *s,int denomination)
+static int selected_denom(const counting_serial_query_t *query,int denomination)
 {
-    for (unsigned i=0;i<s->query.denomination_count;++i)
-        if (s->query.denominations[i]==denomination) return (int)i;
+    for (unsigned i=0;i<query->denomination_count;++i)
+        if (query->denominations[i]==denomination) return (int)i;
     return -1;
+}
+static void toggle_denom(counting_serial_query_t *query,int denomination)
+{
+    int selected=selected_denom(query,denomination);
+    if(selected>=0) {
+        for(unsigned j=(unsigned)selected+1;j<query->denomination_count;++j)
+            query->denominations[j-1]=query->denominations[j];
+        --query->denomination_count;
+    } else if(query->denomination_count<COUNTING_SERIAL_QUERY_MAX_DENOMS)
+        query->denominations[query->denomination_count++]=denomination;
 }
 static void search_request(page_02_list_search_t *s,bool reset)
 {
@@ -108,6 +122,18 @@ static void search_close_event(lv_event_t *e)
 }
 static void search_controls(page_02_list_search_t *s)
 {
+    bool numeric=s->denomination_mode;
+    lv_segmented_pair_select(s->modes,numeric);
+    lv_obj_t *serial_controls[]={s->match_title,s->contains,s->exact,s->starts,s->ends,s->exclude,s->separator,s->only,s->except};
+    for(unsigned i=0;i<sizeof(serial_controls)/sizeof(serial_controls[0]);++i) {
+        if(numeric)lv_obj_add_flag(serial_controls[i],LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_clear_flag(serial_controls[i],LV_OBJ_FLAG_HIDDEN);
+    }
+    if(numeric)lv_obj_clear_flag(s->denom_hint,LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(s->denom_hint,LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_y(s->denom_title,numeric?16:141);
+    lv_obj_set_y(s->all,numeric?12:135);
+    lv_obj_set_y(s->grid,numeric?96:210);lv_obj_set_height(s->grid,numeric?222:108);
     search_selected(s->contains,s->query.match==COUNTING_SERIAL_MATCH_CONTAINS);
     search_selected(s->exact,s->query.match==COUNTING_SERIAL_MATCH_EXACT);
     search_selected(s->starts,s->query.match==COUNTING_SERIAL_MATCH_PREFIX);
@@ -117,22 +143,44 @@ static void search_controls(page_02_list_search_t *s)
         UI_TEXT_SERIAL_EXCLUDE_ON : UI_TEXT_SERIAL_EXCLUDE_OFF));
     search_selected(s->only,!s->query.exclude_denominations);
     search_selected(s->except,s->query.exclude_denominations);
-    search_selected(s->all,s->query.denomination_count==0);
+    const counting_serial_query_t *active=numeric?&s->denomination_query:&s->query;
+    search_selected(s->all,active->denomination_count==0);
     for (size_t i=0;i<s->denomination_count;++i) {
-        bool selected=selected_denom(s,s->denominations[i])>=0;
+        bool selected=selected_denom(active,s->denominations[i])>=0;
         search_selected(s->denom_buttons[i],selected);
         lv_damped_button_set_enabled(s->denom_buttons[i],selected ||
-            s->query.denomination_count<COUNTING_DENOM_MAX_ITEMS);
+            active->denomination_count<COUNTING_SERIAL_QUERY_MAX_DENOMS);
+        lv_obj_set_pos(s->denom_buttons[i],numeric?(i%3)*126:(i%5)*76,numeric?(i/3)*52:(i/5)*40);
+        lv_obj_set_size(s->denom_buttons[i],numeric?118:68,numeric?44:34);
     }
     lv_damped_button_set_text(s->sort,ui_text_get(s->query.descending ?
         UI_TEXT_SERIAL_DESCENDING : UI_TEXT_SERIAL_ASCENDING));
-    lv_damped_button_set_text(s->input,s->query.text[0] ? s->query.text :
-        ui_text_get(UI_TEXT_SERIAL_INPUT_HINT));
+    char summary[256]="";size_t used=0;
+    if(numeric)for(size_t i=0;i<active->denomination_count;++i) {
+        int n=snprintf(summary+used,sizeof(summary)-used,"%s%d",used?", ":"",active->denominations[i]);
+        if(n<0 || (size_t)n>=sizeof(summary)-used)break;
+        used+=(size_t)n;
+    }
+    if(numeric)lv_obj_clear_flag(s->input,LV_OBJ_FLAG_CLICKABLE);
+    else lv_obj_add_flag(s->input,LV_OBJ_FLAG_CLICKABLE);
+    const char *input=numeric?summary:s->query.text;
+    lv_damped_button_set_text(s->input,input[0]?input:ui_text_get(numeric?UI_TEXT_QUERY_DENOM_HINT:UI_TEXT_SERIAL_INPUT_HINT));
 }
 static void search_filter_event(lv_event_t *e)
 {
     page_02_list_search_t *s=lv_event_get_user_data(e);
     lv_obj_t *target=lv_event_get_target(e);
+    if(target==s->modes[0]||target==s->modes[1]) {
+        s->denomination_mode=target==s->modes[1];
+        lv_recycled_list_stop(s->list);search_request(s,true);return;
+    }
+    if(s->denomination_mode&&target!=s->sort) {
+        if(target==s->all)s->denomination_query.denomination_count=0;
+        else for(size_t i=0;i<s->denomination_count;++i)if(target==s->denom_buttons[i]) {
+            toggle_denom(&s->denomination_query,s->denominations[i]);break;
+        }
+        search_request(s,true);return;
+    }
     if (target==s->contains) s->query.match=COUNTING_SERIAL_MATCH_CONTAINS;
     else if (target==s->exact) s->query.match=COUNTING_SERIAL_MATCH_EXACT;
     else if (target==s->starts) s->query.match=COUNTING_SERIAL_MATCH_PREFIX;
@@ -144,14 +192,7 @@ static void search_filter_event(lv_event_t *e)
     else if (target==s->sort) s->query.descending=!s->query.descending;
     else {
         for (size_t i=0;i<s->denomination_count;++i) if (target==s->denom_buttons[i]) {
-            int selected=selected_denom(s,s->denominations[i]);
-            if (selected>=0) {
-                for (unsigned j=(unsigned)selected+1;j<s->query.denomination_count;++j)
-                    s->query.denominations[j-1]=s->query.denominations[j];
-                --s->query.denomination_count;
-            } else if (s->query.denomination_count<COUNTING_DENOM_MAX_ITEMS) {
-                s->query.denominations[s->query.denomination_count++]=s->denominations[i];
-            }
+            toggle_denom(&s->query,s->denominations[i]);
             break;
         }
     }
@@ -160,14 +201,15 @@ static void search_filter_event(lv_event_t *e)
 static void search_reset_event(lv_event_t *e)
 {
     page_02_list_search_t *s=lv_event_get_user_data(e);
-    memset(&s->query,0,sizeof(s->query));search_request(s,true);
+    if(s->denomination_mode)s->denomination_query.denomination_count=0;
+    else memset(&s->query,0,sizeof(s->query));
+    search_request(s,true);
 }
 static void search_input_submit(const char *text,void *context)
 {
     page_02_list_search_t *s=context;
     snprintf(s->query.text,sizeof(s->query.text),"%s",text ? text : "");
-    counting_serial_text_trim(s->query.text,sizeof(s->query.text),
-                              s->query.text,strlen(s->query.text));
+    counting_serial_text_trim(s->query.text,sizeof(s->query.text),s->query.text,strlen(s->query.text));
     search_request(s,true);
 }
 static void search_input_cancel(void *context)
@@ -175,9 +217,10 @@ static void search_input_cancel(void *context)
 static void search_input_event(lv_event_t *e)
 {
     page_02_list_search_t *s=lv_event_get_user_data(e);
+    if(s->denomination_mode)return;
     if (!s->keyboard) {
         const lv_alnum_keyboard_config_t config={
-            .title=ui_text_get(UI_TEXT_SERIAL_KEYBOARD_TITLE),
+            .title=ui_text_get(UI_TEXT_QUERY_SERIAL),
             .placeholder=ui_text_get(UI_TEXT_SERIAL_INPUT_HINT),
             .apply_text=ui_text_get(UI_TEXT_SERIAL_SEARCH),
             .clear_text=ui_text_get(UI_TEXT_SERIAL_CLEAR),
@@ -269,7 +312,13 @@ static void search_commit(void *context,uint32_t flags)
         lv_label_set_text(s->denom_title,text);
         s->data_dirty=false;
     }
-    s->result=counting_serial_query_build(data,&s->query,s->slots,COUNTING_DATA_MAX_ITEMS);
+    /* Only the visible search mode contributes conditions. Never leave a
+     * hidden serial/exclusion filter active during an exact face-value search. */
+    counting_serial_query_t effective=s->query;
+    if(s->denomination_mode) {
+        effective=s->denomination_query;effective.descending=s->query.descending;
+    }
+    s->result=counting_serial_query_build(data,&effective,s->slots,COUNTING_DATA_MAX_ITEMS);
     search_controls(s);
     lv_recycled_list_refresh(s->list,s->result.written_count,s->reset_position);
     s->reset_position=false;
@@ -305,18 +354,25 @@ page_02_list_search_t *page_02_list_search_create(lv_obj_t *parent,
     }
     lv_obj_add_flag(s->root,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_clear_flag(s->root,LV_OBJ_FLAG_GESTURE_BUBBLE);
-    if (!search_label(s->root,22,17,236,30,&lv_font_instrument_sans_semibold_22,
-                      SEARCH_INK,ui_text_get(UI_TEXT_SERIAL_TITLE))) goto failed;
-    s->scope=search_label(s->root,280,22,866,26,&lv_font_instrument_sans_medium_14,
+    if (!search_label(s->root,22,17,130,30,&lv_font_instrument_sans_semibold_22,
+                      SEARCH_INK,ui_text_get(UI_TEXT_QUERY))) goto failed;
+    if(!lv_segmented_pair_create(s->root,154,10,298,42,false,ui_text_get(UI_TEXT_QUERY_SERIAL),
+        ui_text_get(UI_TEXT_QUERY_DENOMINATION),&lv_font_instrument_sans_medium_14,
+        search_filter_event,s,s->modes))goto failed;
+    s->scope=search_label(s->root,468,14,686,38,&lv_font_instrument_sans_medium_12,
                           SEARCH_MUTED,ui_text_get(UI_TEXT_SERIAL_SCOPE));
     lv_obj_t *back=lv_nav_button_create(s->root,1168,12,96,36,search_close_event,s);
     if (!s->scope || !back) goto failed;
+    lv_label_set_long_mode(s->scope,LV_LABEL_LONG_WRAP);
     lv_damped_button_set_text(back,ui_text_get(UI_TEXT_SERIAL_ESC));
     lv_obj_t *filters=search_surface(s->root,16,60,410,328,15,0xFFFFFF);
     lv_obj_t *results=search_surface(s->root,438,60,826,328,15,0xFFFFFF);
     if (!filters || !results) goto failed;
-    if (!search_label(filters,18,12,374,24,&lv_font_instrument_sans_semibold_14,
-                      SEARCH_BODY,ui_text_get(UI_TEXT_SERIAL_MATCH_MODE))) goto failed;
+    s->match_title=search_label(filters,18,12,374,24,&lv_font_instrument_sans_semibold_14,
+                      SEARCH_BODY,ui_text_get(UI_TEXT_SERIAL_MATCH_MODE));
+    s->denom_hint=search_label(filters,18,54,374,28,&lv_font_instrument_sans_medium_14,
+                      SEARCH_BODY,ui_text_get(UI_TEXT_QUERY_DENOM_RULE));
+    if (!s->match_title||!s->denom_hint) goto failed;
 #define FILTER(field,x,y,w,h,id) \
     s->field=search_button(filters,x,y,w,h,ui_text_get(id),search_filter_event,s); \
     if (!s->field) goto failed
@@ -325,7 +381,8 @@ page_02_list_search_t *page_02_list_search_create(lv_obj_t *parent,
     FILTER(starts,208,40,89,36,UI_TEXT_SERIAL_STARTS);
     FILTER(ends,303,40,89,36,UI_TEXT_SERIAL_ENDS);
     FILTER(exclude,18,84,374,34,UI_TEXT_SERIAL_EXCLUDE_OFF);
-    if (!search_surface(filters,18,130,374,1,0,SEARCH_LINE)) goto failed;
+    s->separator=search_surface(filters,18,130,374,1,0,SEARCH_LINE);
+    if (!s->separator) goto failed;
     s->denom_title=search_label(filters,18,141,264,24,&lv_font_instrument_sans_semibold_14,
                                SEARCH_BODY,ui_text_get(UI_TEXT_SERIAL_DENOMINATIONS));
     if (!s->denom_title) goto failed;
@@ -334,6 +391,7 @@ page_02_list_search_t *page_02_list_search_create(lv_obj_t *parent,
     FILTER(except,210,170,182,32,UI_TEXT_SERIAL_EXCEPT);
 #undef FILTER
     lv_obj_t *grid=search_surface(filters,18,210,374,108,0,0xFFFFFF);
+    s->grid=grid;
     if (!grid) goto failed;
     lv_obj_add_flag(grid,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scroll_dir(grid,LV_DIR_VER);lv_obj_set_scrollbar_mode(grid,LV_SCROLLBAR_MODE_AUTO);

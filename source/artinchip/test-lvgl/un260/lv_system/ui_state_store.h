@@ -2,6 +2,7 @@
 #define UI_STATE_STORE_H
 
 #include <stdbool.h>
+#include "ui_main_layout.h"
 
 #include "un260/lv_system/user_cfg.h"
 
@@ -27,6 +28,7 @@ typedef struct {
 
 typedef struct {
     int detail_section;
+    ui_main_layout_t layout;
 } ui_state_page01_t;
 
 typedef struct {

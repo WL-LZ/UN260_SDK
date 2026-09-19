@@ -16,6 +16,20 @@ from test_list_view import compiled_asset_sources
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPONENTS = [
+    "tools/test_search_modes.c",
+    "un260/lv_components/ui_multi_detail.c",
+    "un260/lv_core/page_02_list_search.c",
+    "un260/lv_components/ui_detail_reveal.c",
+    "un260/lv_components/lv_loading_orbit.c",
+    "un260/counting/counting_serial_query.c",
+    "un260/counting/counting_data_store.c",
+    "un260/lv_components/lv_popup_style.c",
+    "tools/test_popup_visibility.c",
+    "tools/test_popup_views.c",
+    "un260/lv_components/lv_modal_dialog.c",
+    "un260/lv_components/lv_qr_popup.c",
+    "un260/lv_components/qrcodegen.c",
+    "un260/lv_core/settings_detail_ui.c",
     "un260/font/scaled_font.c",
     "un260/font/lv_font_main_currency_32.c",
     "un260/currency/currency_metadata.c",
@@ -64,7 +78,10 @@ def main():
 #define LV_CONF_H
 #define LV_COLOR_DEPTH 32
 #define LV_MEM_SIZE (4U * 1024U * 1024U)
-#define LV_USE_LOG 0
+#define LV_USE_LOG 1
+#define LV_LOG_LEVEL LV_LOG_LEVEL_WARN
+#define LV_LOG_PRINTF 1
+#define LV_ASSERT_HANDLER __builtin_trap();
 #define LV_USE_SNAPSHOT 1
 #define LV_USE_GPU_AIC 0
 #define LV_USE_GPU_AIC_GE 0
@@ -72,6 +89,9 @@ def main():
 #define LV_USE_THEME_BASIC 0
 #define LV_USE_THEME_MONO 0
 #define LV_FONT_MONTSERRAT_20 1
+#define LV_FONT_MONTSERRAT_16 1
+#define LV_FONT_MONTSERRAT_18 1
+#define LV_FONT_MONTSERRAT_24 1
 #define LV_FONT_CUSTOM_DECLARE """ + " ".join(f"LV_FONT_DECLARE(lv_font_{f});" for f in fonts) + "\n#endif\n")
         port = (ROOT / "lv_port_indev.c").read_text(encoding="utf-8")
         helper = re.search(r"void lv_port_indev_set_drag_obj\(.*?\n\}", port, re.S)
@@ -81,9 +101,10 @@ def main():
         port_source.write_text('#include "lvgl/lvgl.h"\n' + helper.group() + "\n")
         sources = [ROOT / "tools/test_history_view.c", ROOT / "tools/test_history_search_view.c",
                    port_source, *assets,
-                   *(ROOT / p for p in COMPONENTS if p != "un260/lv_core/page_19_history_search.c"),
+                   *(ROOT / p for p in COMPONENTS if p not in {"un260/lv_core/page_19_history_search.c",
+                     "un260/lv_components/ui_multi_detail.c", "un260/lv_core/page_02_list_search.c"}),
                    *(ROOT / f"un260/font/lv_font_{f}.c" for f in fonts),
-                   *sorted((lvgl / "src").rglob("*.c"))]
+                   *sorted(p for p in (lvgl / "src").rglob("*.c") if p.name != "qrcodegen.c")]
         executable = work / "test-history-view"
         command = [compiler, "-std=c11", "-O1", "-g", "-Wall", "-Wextra",
                    "-DLV_DRV_CONF_H", '-DLVGL_DIR="L:/usr/local/share/lvgl_data/"',
@@ -104,7 +125,7 @@ def main():
         if args.output_dir:
             args.output_dir.mkdir(parents=True, exist_ok=True)
             environment["HISTORY_RASTER_OUTPUT"] = str(args.output_dir.resolve())
-        subprocess.run([str(executable)], env=environment, check=True, timeout=90)
+        subprocess.run([str(executable)], env=environment, check=True, timeout=240)
 
 
 if __name__ == "__main__":

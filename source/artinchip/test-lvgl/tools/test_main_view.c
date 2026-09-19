@@ -10,6 +10,7 @@
 #include "un260/lv_components/smart_island/smart_island_internal.h"
 #include "un260/lv_core/page_01_main_detail.c"
 #include "un260/lv_core/page_01_main.c"
+#include "un260/lv_core/page_01_main_layout.c"
 #include "test_main_view_support.h"
 #include "un260/gesture/gesture_service.h"
 #include "un260/counting/counting_multi.h"
@@ -84,10 +85,38 @@ static unsigned timers(void)
 { unsigned n=0;for(lv_timer_t *t=lv_timer_get_next(NULL);t;t=lv_timer_get_next(t))++n;return n; }
 static lv_point_t pointer_position;
 static lv_indev_state_t pointer_state;
+static bool pointer_frame_pending;
+static lv_obj_t *host_pressed_object;
+static lv_indev_t *g_pointer_indev;
+static bool g_contact_captured;
+#define evdev_pressed_obj host_pressed_object
+#include "actual_pointer_capture.h"
+#undef evdev_pressed_obj
+static void pointer_feedback(lv_indev_drv_t *driver,uint8_t event)
+{
+    (void)driver;
+    if (event==LV_EVENT_PRESSED) host_pressed_object=lv_indev_get_obj_act();
+    else if(event==LV_EVENT_RELEASED || event==LV_EVENT_PRESS_LOST) host_pressed_object=NULL;
+}
 static void pointer_read(lv_indev_drv_t *driver,lv_indev_data_t *data)
-{ (void)driver;data->point=pointer_position;data->state=pointer_state; }
+{
+    (void)driver;data->point=pointer_position;data->state=pointer_state;
+    static bool raw_down;
+    bool down=pointer_state==LV_INDEV_STATE_PRESSED;
+    if (pointer_frame_pending) {
+        pointer_frame_pending=false;
+        lv_indev_t *indev=lv_indev_get_next(NULL);
+        lv_event_code_t event=down?(raw_down?LV_EVENT_PRESSING:LV_EVENT_PRESSED):LV_EVENT_RELEASED;
+        bool owned=host_pointer_policy && host_pointer_policy(indev,event,&pointer_position,down?1:0);
+        if (owned && !g_contact_captured) lv_port_indev_capture_pointer(indev);
+        if (g_contact_captured) data->state=LV_INDEV_STATE_RELEASED;
+        if (!down) g_contact_captured=false;
+        raw_down=down;
+    }
+    if (g_contact_captured) data->state=LV_INDEV_STATE_RELEASED;
+}
 static void pointer(int x,int y,bool pressed)
-{ pointer_position=(lv_point_t){x,y};pointer_state=pressed?LV_INDEV_STATE_PRESSED:LV_INDEV_STATE_RELEASED;tick(40); }
+{ pointer_position=(lv_point_t){x,y};pointer_state=pressed?LV_INDEV_STATE_PRESSED:LV_INDEV_STATE_RELEASED;pointer_frame_pending=true;tick(40); }
 static void tap(int x,int y) { pointer(x,y,true);pointer(x,y,false); }
 static void click_object(lv_obj_t *object)
 { lv_area_t a;lv_obj_get_coords(object,&a);tap((a.x1+a.x2)/2,(a.y1+a.y2)/2); }
@@ -173,7 +202,7 @@ static void test_main(void)
     lv_obj_t *tabs[]={s_detail_btn_a,s_detail_btn_b,s_detail_btn_c};
     const char *titles[]={"REPORT","SERIAL","REJECT"};
     for(unsigned i=0;i<3;++i) {
-        click_object(tabs[i]);render();assert(pushes==opened);
+        click_object(tabs[i]);tick(300);render();assert(pushes==opened);
         for(unsigned j=0;j<3;++j)
             assert(lv_obj_get_style_bg_color(tabs[j],0).full==lv_color_hex(i==j?0xFFFFFF:0xE7EDF0).full);
         lv_obj_t *badge=lv_obj_get_child(tabs[i],0),*title=lv_obj_get_child(tabs[i],1);
@@ -459,7 +488,8 @@ static void test_multi_expanded(void)
     ui_multi_detail_select(compact,0,1);tick(80);write_bmp("restored-main-cny-serial");
     assert(!counting_multi_extra_busy());
     tap(900,308);tick(80);write_bmp("restored-main-search-keyboard");
-    tap(398,171);tap(1062,280);tick(80);
+    /* Search now reserves the left rail for Serial / Denomination. */
+    tap(624,164);tap(1042,107);tick(80);
     lv_obj_t *row=lv_obj_get_child(ui_multi_detail_scroll(compact),0);
     assert(!strcmp(lv_label_get_text(lv_obj_get_child(row,0)),"4"));
     write_bmp("restored-main-search-filtered");
@@ -546,6 +576,8 @@ static void test_list_initial_font(void)
     lv_obj_del(root);
     puts("PASS List first-frame fixed-width font fit, hidden prewarm, reentry and long-number fallback");
 }
+#include "test_main_layout_cases.h"
+#include "test_main_footer_layout_cases.h"
 int main(void)
 {
     assert(sizeof(lv_coord_t)==2);lv_init();
@@ -559,8 +591,13 @@ int main(void)
     lv_img_decoder_set_info_cb(decoder,host_image_info);lv_img_decoder_set_open_cb(decoder,host_image_open);
     lv_img_decoder_set_close_cb(decoder,host_image_close);
     static lv_indev_drv_t driver;lv_indev_drv_init(&driver);driver.type=LV_INDEV_TYPE_POINTER;driver.read_cb=pointer_read;
+    driver.feedback_cb=pointer_feedback;
     lv_indev_t *indev=lv_indev_drv_register(&driver);assert(indev);
+    g_pointer_indev=indev;
+    assert(page_01_main_layout_is_enabled()==(UI_MAIN_LAYOUT_EDIT_DEFAULT_ENABLED!=0));
     test_list_initial_font();test_main();test_lifecycle();test_multi_expanded();
+    test_main_layout();
+    test_main_footer_layout();
     unsigned test_timer_count = timers();
     for(unsigned cycle = 0; cycle < 3; ++cycle) {
         ui_page_36_display_test_create(lv_scr_act());

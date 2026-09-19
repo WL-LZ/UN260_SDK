@@ -1,6 +1,19 @@
 #include "counting_serial_query.h"
 #include "counting_data_store.h"
 
+bool counting_serial_denomination_matches(uint32_t value, const char *text)
+{
+    if (!text || !*text) return true;
+    uint32_t parsed = 0;
+    for (unsigned i = 0; ; ++i) {
+        if (i > 32) return false;
+        unsigned char c = (unsigned char)text[i];
+        if (!c) return parsed > 0 && value == parsed;
+        if (c < '0' || c > '9' || parsed > (UINT32_MAX - (c - '0')) / 10) return false;
+        parsed = parsed * 10 + (c - '0');
+    }
+}
+
 static bool denomination_matches(int value, const counting_serial_query_t *query,
                                  unsigned count)
 {
@@ -22,13 +35,15 @@ counting_serial_query_result_t counting_serial_query_build(
         while (text_length < sizeof(query->text) && query->text[text_length] != '\0')
             ++text_length;
         denomination_count = query->denomination_count;
-        if (denomination_count > COUNTING_DENOM_MAX_ITEMS)
-            denomination_count = COUNTING_DENOM_MAX_ITEMS;
+        if (denomination_count > COUNTING_SERIAL_QUERY_MAX_DENOMS)
+            denomination_count = COUNTING_SERIAL_QUERY_MAX_DENOMS;
     }
     for (int position = 0; position < limit; ++position) {
         int slot = query != NULL && query->descending ? limit - position - 1 : position;
         if (data->sn_str[slot] == NULL || data->denom_mix[slot] <= 0) continue;
         ++result.valid_count;
+        if (query && !counting_serial_denomination_matches((uint32_t)data->denom_mix[slot],
+                                                          query->denomination_text)) continue;
         if (text_length > 0 &&
             counting_serial_text_matches(data->sn_str[slot], query->text, text_length,
                 (counting_serial_text_match_t)query->match) == query->exclude_text)

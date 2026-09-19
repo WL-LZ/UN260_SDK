@@ -156,7 +156,7 @@ static void test_exclusion_combination_and_descending(void)
     query.exclude_denominations = false;
     expect_slots(&data, &query, (uint16_t[]){1, 4, 8, 16, 17}, 5);
     memset(query.denominations, 0, sizeof(query.denominations));
-    query.denominations[COUNTING_DENOM_MAX_ITEMS - 1] = 50;
+    query.denominations[COUNTING_SERIAL_QUERY_MAX_DENOMS - 1] = 50;
     query.denomination_count = UINT8_MAX;
     expect_slots(&data, &query, (uint16_t[]){3, 10}, 2);
 }
@@ -320,6 +320,27 @@ static void test_ten_thousand_slots_and_denomination_truncation(void)
 
 int main(void)
 {
+    assert(counting_serial_denomination_matches(50,"50"));
+    assert(counting_serial_denomination_matches(50,"00050"));
+    assert(!counting_serial_denomination_matches(500,"50"));
+    assert(!counting_serial_denomination_matches(0,"0"));
+    assert(counting_serial_denomination_matches(0,""));
+    assert(!counting_serial_denomination_matches(50,"A50"));
+    assert(!counting_serial_denomination_matches(50,"50.0"));
+    assert(!counting_serial_denomination_matches(50,"4294967346"));
+    assert(counting_serial_denomination_matches(UINT32_MAX,"4294967295"));
+    {
+        counting_sim_t data={0}; char *serials[15]; uint16_t slots[15];
+        data.sn_str=serials;data.sn_capacity=15;
+        for(unsigned i=0;i<15;++i){serials[i]="SAME50";data.denom_mix[i]=i<5?10:50;}
+        counting_serial_query_t query={0};strcpy(query.denomination_text,"50");
+        counting_serial_query_result_t result=counting_serial_query_build(&data,&query,slots,15);
+        assert(result.matched_count==10);
+        for(unsigned i=0;i<10;++i)assert(slots[i]==i+5);
+        strcpy(query.denomination_text,"5");result=counting_serial_query_build(&data,&query,slots,15);
+        assert(!result.matched_count);
+        puts("PASS denomination exact/overflow/leading zeroes and original NO 6..15 preserved");
+    }
     test_empty_and_invalid_inputs();
     test_sparse_empty_and_duplicate_serials();
     test_text_modes_and_ascii_identity();

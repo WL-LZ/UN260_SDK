@@ -1,5 +1,6 @@
 #include "un260/lv_resources/ui_page_background.h"
 #include "page_19_history_search.h"
+#include "un260/lv_components/lv_popup_style.h"
 #include "lv_port_indev.h"
 #include "un260/lv_components/lv_alnum_keyboard.h"
 #include "un260/lv_components/lv_damped_button.h"
@@ -391,7 +392,9 @@ static void editor_close(page_19_history_search_t *s)
     if (s->keyboard) { lv_alnum_keyboard_destroy(s->keyboard); s->keyboard = NULL; }
     lv_obj_t *editor = s->editor;
     s->editor = NULL;
-    if (editor) lv_obj_del(editor);
+    if (editor) {
+        lv_obj_del(editor);
+    }
     s->precision = s->year_button = s->editor_error = NULL;
     memset(s->wheels, 0, sizeof(s->wheels));
     memset(s->wheel_titles, 0, sizeof(s->wheel_titles));
@@ -555,10 +558,11 @@ static void open_editor(page_19_history_search_t *s, unsigned field)
 {
     editor_close(s);s->editing_field=field;
     s->editor=surface(s->root,0,0,1280,400,0xD8E2E8,0);
-    ui_page_background_apply(s->editor, UI_BACKGROUND_USER);
     if(!s->editor) return;
     lv_obj_add_flag(s->editor,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_t *card=surface(s->editor,160,16,960,368,0xFFFFFF,18);
+    if(card) lv_popup_style(s->editor,card);
+    lv_obj_add_event_cb(s->editor,editor_cancel,LV_EVENT_CLICKED,s);
     if(!card || !label(card,28,18,420,32,&lv_font_instrument_sans_semibold_22,SEARCH_INK,ui_text_get(field_title(field)))) goto failed;
     s->precision=lv_dropdown_create(card);
     if(!s->precision) goto failed;

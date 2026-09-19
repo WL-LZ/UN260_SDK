@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #define LV_ALNUM_KEYBOARD_MAX_TEXT 32
+#define LV_ALNUM_KEYBOARD_MAX_CHOICES 30
 
 typedef struct lv_alnum_keyboard lv_alnum_keyboard_t;
 typedef void (*lv_alnum_keyboard_submit_cb_t)(const char *text, void *context);
@@ -25,6 +26,11 @@ typedef struct {
     bool symbols;
     /* Opt-in search sheet; existing device-entry layouts remain unchanged. */
     bool modern;
+    /* Optional multi-choice alternate. Values and selection are supplied by
+     * the caller, never inferred from device state by this component. */
+    const char *choice_title;
+    const char *choice_hint;
+    const char *choice_empty;
 } lv_alnum_keyboard_config_t;
 
 /* Creates a hidden 1280x400 modal owned by parent. Labels are copied by LVGL;
@@ -40,6 +46,14 @@ lv_alnum_keyboard_t *lv_alnum_keyboard_create(lv_obj_t *parent,
  * changing the current value. Character keys append; they never replace it. */
 bool lv_alnum_keyboard_set_text(lv_alnum_keyboard_t *keyboard, const char *text);
 const char *lv_alnum_keyboard_get_text(const lv_alnum_keyboard_t *keyboard);
+void lv_alnum_keyboard_set_choice_mode(lv_alnum_keyboard_t *keyboard, bool choices);
+bool lv_alnum_keyboard_is_choice_mode(const lv_alnum_keyboard_t *keyboard);
+/* Copies unique positive options, preserving the requested selected values.
+ * Empty selection means no restriction. Setter is atomic on invalid input. */
+bool lv_alnum_keyboard_set_choices(lv_alnum_keyboard_t *keyboard,
+    const uint32_t *values, unsigned count, const uint32_t *selected, unsigned selected_count);
+unsigned lv_alnum_keyboard_get_choices(const lv_alnum_keyboard_t *keyboard,
+    uint32_t *selected, unsigned capacity);
 void lv_alnum_keyboard_show(lv_alnum_keyboard_t *keyboard);
 void lv_alnum_keyboard_hide(lv_alnum_keyboard_t *keyboard);
 bool lv_alnum_keyboard_is_visible(const lv_alnum_keyboard_t *keyboard);

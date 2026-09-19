@@ -108,6 +108,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_components/lv_capsule_pagination.c
     un260/lv_components/lv_damped_button.c
     un260/lv_components/lv_modal_dialog.c
+    un260/lv_components/lv_popup_style.c
     un260/lv_components/lv_content_pager.c
     un260/lv_components/lv_dma_snapshot_cache.c
     un260/lv_components/lv_card_surface.c
@@ -187,6 +188,8 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_core/lv_page_event.c
     un260/lv_core/lv_page_manager.c
     un260/lv_core/page_01_main.c
+    un260/lv_core/page_01_main_layout.c
+    un260/lv_system/ui_main_layout.c
     un260/lv_core/page_01_main_detail.c
     un260/lv_core/page_02_list.c
     un260/lv_core/page_03_menu.c

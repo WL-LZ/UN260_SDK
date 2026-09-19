@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render actual Main/detail/Smart Island with real production compiled images.
 
-Peripheral actions are captured, DMA skin uses its supported software fallback,
+Peripheral actions are captured, DMA skin presenter uses real software snapshots,
 and Innovation's real handle is extracted without its hardware workflow.
 This host test does not validate the board or controller protocol.
 """
@@ -33,6 +33,8 @@ def main():
     parser.add_argument("--lvgl-dir", required=True, type=Path)
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--sanitize", default="undefined", choices=("none", "undefined", "address,undefined"))
+    parser.add_argument("--skin-fallback", action="store_true", help="Exercise cache allocation failure")
+    parser.add_argument("--layout-default-disabled", action="store_true")
     parser.add_argument("--harness", type=Path, help="Optional focused harness using the same real LVGL build")
     parser.add_argument("--extra-source", action="append", default=[], type=Path)
     parser.add_argument("--wrap", action="append", default=[], help="Linker-wrapped function for fault injection")
@@ -45,9 +47,13 @@ def main():
                *[source.resolve() for source in args.extra_source], *compiled_asset_sources()]
     actual = [
         "un260/font/scaled_font.c",
+        "un260/lv_system/ui_main_layout.c",
+        "un260/counting/counting_serial_query.c",
+        "un260/counting/counting_serial_text.c",
         "un260/lv_core/page_01_multi.c", "un260/counting/counting_multi.c",
         "un260/counting/counting_multi_extra.c", "un260/lv_components/ui_multi_detail.c",
         "un260/lv_components/ui_detail_reveal.c", "un260/lv_components/lv_alnum_keyboard.c",
+        "un260/lv_components/lv_popup_style.c",
         "un260/lv_components/lv_recycled_list.c", "un260/lv_components/ui_scrollbar.c", "un260/lv_components/ui_list_window.c",
         "un260/lv_components/lv_damped_button.c", "un260/lv_components/lv_loading_orbit.c",
         "un260/lv_components/lv_capsule_pagination.c", "un260/lv_components/smart_island.c",
@@ -135,6 +141,7 @@ void host_external_assets_release(void) {
 #define LV_COLOR_DEPTH 32
 #define LV_MEM_SIZE (4U * 1024U * 1024U)
 #define LV_USE_LOG 0
+#define LV_USE_SNAPSHOT 1
 #define LV_USE_GPU_AIC 0
 #define LV_USE_GPU_AIC_GE 0
 #define LV_USE_THEME_DEFAULT 0
@@ -144,6 +151,7 @@ void host_external_assets_release(void) {
 #define LV_FONT_MONTSERRAT_20 1
 #define LV_FONT_CUSTOM_DECLARE """ + " ".join(f"LV_FONT_DECLARE({font});" for font in sorted(fonts)) + "\n#endif\n")
         port = (ROOT / "lv_port_indev.c").read_text(encoding="utf-8")
+        (work / "actual_pointer_capture.h").write_text(function(port, "lv_port_indev_capture_pointer") + '\n')
         platform = (ROOT / "un260/lv_system/platform_app.c").read_text(encoding="utf-8")
         images = (ROOT / "un260/lv_resources/lv_img_init.c").read_text(encoding="utf-8")
         list_page = (ROOT / "un260/lv_core/page_02_list.c").read_text(encoding="utf-8")
@@ -160,6 +168,11 @@ void host_external_assets_release(void) {
                           function(list_page, "text_set") + '\n' +
                           function(list_page, "number_set").replace('static void number_set', 'void host_list_number_set', 1) + '\n')
         sources.append(helper)
+        skin = (ROOT / "un260/lv_components/lv_dma_snapshot_cache.c").read_text(encoding="utf-8")
+        skin_presenter = work / "actual_skin_presenter.c"
+        skin_presenter.write_text('#include <string.h>\n#include "un260/lv_components/lv_dma_snapshot_cache.h"\n' +
+                                  skin[skin.index("static void static_skin_set_live_visual"):skin.index("const lv_img_dsc_t *lv_dma_snapshot_image")])
+        sources += [skin_presenter, ROOT / "tools/test_main_skin_backend.c"]
         innovation = (ROOT / "un260/innovation/page_32_innovation.c").read_text(encoding="utf-8")
         gesture_type = re.search(r"typedef struct \{[^}]*\} innovation_handle_gesture_t;", innovation)
         if not gesture_type: raise AssertionError("Actual Innovation gesture state missing")
@@ -202,6 +215,8 @@ void page_32_innovation_handle_detach(void) {
                    '-DLVGL_DIR="L:/usr/local/share/lvgl_data/"', f"-I{work}", f"-I{ROOT}",
                    f"-I{ROOT / 'aic_ui'}", f"-I{lvgl}", f"-DLV_CONF_PATH={conf}"]
         if args.sanitize != "none": command += [f"-fsanitize={args.sanitize}", "-fno-sanitize-recover=all"]
+        if args.skin_fallback: command += ["-DHOST_SKIN_FALLBACK=1"]
+        if args.layout_default_disabled: command += ["-DUI_MAIN_LAYOUT_EDIT_DEFAULT_ENABLED=0"]
         objects = [work / f"source-{index}.o" for index in range(len(sources))]
         def compile_source(item):
             source, output = item

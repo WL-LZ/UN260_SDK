@@ -189,10 +189,10 @@ static void action(lv_event_t*e){int id=(int)(intptr_t)lv_event_get_user_data(e)
  else if(id==64){if(standby_store_import())redraw=true;}
  else if(id==66){tab=5;redraw=true;}
  else if(id==94){layout()->auto_text^=1;redraw=true;}
- else if(id==67){settings_detail_dialog_show("Delete imported photo?","Layouts using this photo return to daily rotation.","Delete","Cancel",delete_photo,NULL,NULL);}
+ else if(id==67){settings_detail_dialog_show_ex(SETTINGS_DIALOG_DESTRUCTIVE,"Delete imported photo?","Layouts using this photo return to daily rotation.","Delete","Cancel",delete_photo,NULL,NULL);}
  else if(id==68||id==69){layout()->scheduled=id==68;redraw=true;}
  else if(id>=70&&id<70+STANDBY_PHOTO_COUNT){layout()->photo=id-70;layout()->scheduled=0;redraw=true;}
- else if(id==80){settings_detail_dialog_show("Restore this mode?","Reset all three layouts. Keep photos, timeout and the other mode.","Restore","Cancel",reset_mode,NULL,NULL);}
+ else if(id==80){settings_detail_dialog_show_ex(SETTINGS_DIALOG_DESTRUCTIVE,"Restore this mode?","Reset all three layouts. Keep photos, timeout and the other mode.","Restore","Cancel",reset_mode,NULL,NULL);}
  else if(id>=90&&id<=92){lv_obj_t*f=frame(&preview,selected);uint16_t*xy=position(layout(),selected);xy[0]=id==90?20:id==91?(1280-lv_obj_get_width(f))/2:1260-lv_obj_get_width(f);editor_apply();}
 }
 static void color_changed(lv_event_t*e){

@@ -8,8 +8,24 @@
  * detail projection, styling, hit tests, fonts and Smart Island remain real. */
 static unsigned callbacks[16], pushes, protocol_calls, persisted_tabs;
 static bool start_busy, prewarming, touch_enabled, fault_auto;
+static bool host_fault_pending,host_fault_showing,host_transitioning;
 static ui_page_t destination;
 static int saved_tab;
+static gesture_pointer_policy_t host_pointer_policy;
+static ui_main_layout_t host_saved_layout;
+static bool host_layout_initialized,host_save_fails;
+static unsigned host_layout_saves;
+void gesture_service_set_pointer_policy(uint32_t owner,gesture_pointer_policy_t cb)
+{ (void)owner;host_pointer_policy=cb; }
+void gesture_service_clear_pointer_policy(uint32_t owner)
+{ (void)owner;host_pointer_policy=NULL; }
+void ui_state_main_layout_get(ui_main_layout_t *layout)
+{
+    if (!host_layout_initialized) { ui_main_layout_default(&host_saved_layout);host_layout_initialized=true; }
+    *layout=host_saved_layout;
+}
+bool ui_state_main_layout_save(const ui_main_layout_t *layout)
+{ ++host_layout_saves;if(host_save_fails)return false;host_saved_layout=*layout;return true; }
 enum { CB_MODE, CB_SETTING, CB_LIST, CB_PRINT, CB_MENU, CB_START, CB_CLEAR,
        CB_CURRENCY, CB_BOTTOM_MODE, CB_ADD, CB_WORK, CB_FO, CB_BATCH, CB_SPEED };
 #define CAPTURE(name, id) void name(lv_event_t *e) { if(lv_event_get_code(e)==LV_EVENT_CLICKED) ++callbacks[id]; }
@@ -33,7 +49,7 @@ void ui_manager_push_page(ui_page_t page) { ++pushes; destination=page; }
 void ui_manager_switch(ui_page_t page) { destination=page; }
 ui_page_t ui_manager_get_current_page(void) { return UI_PAGE_MAIN; }
 bool ui_manager_is_prewarming_page(ui_page_t page) { (void)page; return prewarming; }
-bool ui_manager_is_transitioning(void) { return false; }
+bool ui_manager_is_transitioning(void) { return host_transitioning; }
 bool app_command_runtime_count_start_busy(void) { return start_busy; }
 bool protocol_send_is_ready(void) { return true; }
 int protocol_send(uint8_t cmd,const uint8_t *data,uint16_t count)
@@ -59,9 +75,6 @@ void perf_profile_report_event_us(const char *group,const char *name,uint32_t us
 { (void)group;(void)name;(void)us; }
 void perf_profile_watch_invalidation(const void *object,const char *name) { (void)object;(void)name; }
 void perf_profile_unwatch_invalidation(const void *object) { (void)object; }
-bool lv_dma_static_skin_attach(lv_dma_static_skin_t *skin,lv_obj_t *object,const char *key)
-{ (void)skin;(void)object;(void)key;return false; }
-void lv_dma_static_skin_release(lv_dma_static_skin_t *skin) { (void)skin; }
 void lv_print_toast_create(void) {}
 void lv_print_toast_show_with_config(const lv_print_toast_config_t *config) { (void)config; }
 lv_print_toast_config_t lv_print_toast_get_default_config(void)
@@ -69,9 +82,9 @@ lv_print_toast_config_t lv_print_toast_get_default_config(void)
 bool fault_popup_get_auto_enabled(void) { return fault_auto; }
 void fault_popup_set_auto_enabled(bool enabled) { fault_auto=enabled; }
 bool fault_popup_get_pending_fault(fault_source_t *source,uint8_t *type,uint8_t *code)
-{ (void)source;(void)type;(void)code;return false; }
+{ (void)source;(void)type;(void)code;return host_fault_pending; }
 bool fault_popup_show_pending_now(void) { return false; }
-bool fault_popup_is_showing(void) { return false; }
+bool fault_popup_is_showing(void) { return host_fault_showing; }
 void fault_popup_schedule_auto_confirm(void) {}
 void fault_popup_clear_pending(void) {}
 void fault_popup_reset_auto_retry(void) {}

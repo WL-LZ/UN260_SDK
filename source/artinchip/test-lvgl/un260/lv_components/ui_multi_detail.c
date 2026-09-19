@@ -4,6 +4,7 @@
 #include "lv_damped_button.h"
 #include "ui_detail_reveal.h"
 #include "un260/counting/counting_multi_extra.h"
+#include "un260/counting/counting_serial_query.h"
 #include "un260/currency/currency_metadata.h"
 #include "un260/lv_resources/lv_img_init.h"
 #include "un260/lv_system/ui_text.h"
@@ -32,7 +33,11 @@ struct ui_multi_detail {
     int selected,tab,width,height;
     uint32_t generation,revision,extra;
     unsigned indices[MULTI_SERIAL_MAX],count;
-    char queries[COUNTING_MULTI_MAX][33];
+    char query[33];
+    uint32_t denomination_query[LV_ALNUM_KEYBOARD_MAX_CHOICES];
+    uint8_t denomination_count;
+    int search_currency;
+    bool denomination_mode,keyboard_initialized;
     bool expanded,visible,pending,dirty;
 };
 static lv_obj_t *box(lv_obj_t *p,int x,int y,int w,int h,uint32_t color,int radius)
@@ -105,18 +110,59 @@ static multi_detail_status_t current_status(ui_multi_detail_t *v)
     return v->tab?counting_multi_serials(v->selected)->status:m->currencies[v->selected].status;
 }
 static bool available(multi_detail_status_t s){return s==MULTI_DETAIL_READY||s==MULTI_DETAIL_EMPTY;}
-static bool matched(ui_multi_detail_t *v,const char *s)
+static void search_reset_state(ui_multi_detail_t *v)
 {
-    char upper[21];snprintf(upper,sizeof(upper),"%s",s);
+    v->query[0]='\0';v->denomination_count=0;v->denomination_mode=false;
+    v->keyboard_initialized=false;
+}
+static bool matched(ui_multi_detail_t *v,const multi_serial_t *row)
+{
+    if(v->denomination_mode) {
+        unsigned count=v->denomination_count;
+        if(!count)return true;
+        for(unsigned i=0;i<count;++i)if(row->value==v->denomination_query[i])return true;
+        return false;
+    }
+    char upper[21];snprintf(upper,sizeof(upper),"%s",row->text);
     for(char *p=upper;*p;p++)*p=(char)toupper((unsigned char)*p);
-    return strstr(upper,v->queries[v->selected])!=NULL;
+    return strstr(upper,v->query)!=NULL;
 }
 static void search_submit(const char *s,void *ctx)
 {
-    ui_multi_detail_t *v=ctx;if(v->selected<0)return;
-    snprintf(v->queries[v->selected],sizeof(v->queries[0]),"%s",s);
-    for(char *p=v->queries[v->selected];*p;p++)*p=(char)toupper((unsigned char)*p);
+    ui_multi_detail_t *v=ctx;
+    const counting_multi_t *m=counting_multi_current();
+    if(!v->visible || v->selected<0 || v->selected>=m->count || v->generation!=m->generation || m->counting)return;
+    v->denomination_mode=lv_alnum_keyboard_is_choice_mode(v->keyboard);
+    v->denomination_count=lv_alnum_keyboard_get_choices(v->keyboard,
+        v->denomination_query,LV_ALNUM_KEYBOARD_MAX_CHOICES);
+    char *query=v->query;
+    snprintf(query,sizeof(v->query),"%s",s);
+    for(char *p=query;*p;p++)*p=(char)toupper((unsigned char)*p);
     v->dirty=true;lv_recycled_list_refresh(v->list,0,true);ui_multi_detail_refresh(v);
+}
+/* Available choices come only from this currency's directory / serial cache.
+ * Descending unique values; no denomination catalogue or currency inference. */
+static void search_choices(ui_multi_detail_t *v,bool preserve_draft)
+{
+    uint32_t values[LV_ALNUM_KEYBOARD_MAX_CHOICES],selected[LV_ALNUM_KEYBOARD_MAX_CHOICES];
+    const multi_currency_t *c=&counting_multi_current()->currencies[v->selected];
+    const multi_serial_cache_t *serials=counting_multi_serials(v->selected);
+    unsigned count=0;uint32_t previous=0;
+    while(count<LV_ALNUM_KEYBOARD_MAX_CHOICES) {
+        uint32_t next=0;
+        for(unsigned i=0;i<c->denom_count && i<COUNTING_MULTI_DENOMS;++i) {
+            uint32_t value=c->denom[i].value;
+            if(value>next && (!count || value<previous))next=value;
+        }
+        if(serials)for(unsigned i=0;i<serials->count && i<MULTI_SERIAL_MAX;++i) {
+            uint32_t value=serials->rows[i].value;
+            if(value>next && (!count || value<previous))next=value;
+        }
+        if(!next)break;
+        values[count++]=previous=next;
+    }
+    unsigned n=preserve_draft?lv_alnum_keyboard_get_choices(v->keyboard,selected,LV_ALNUM_KEYBOARD_MAX_CHOICES):v->denomination_count;
+    lv_alnum_keyboard_set_choices(v->keyboard,values,count,preserve_draft?selected:v->denomination_query,n);
 }
 void ui_multi_detail_search(ui_multi_detail_t *v)
 {
@@ -124,12 +170,22 @@ void ui_multi_detail_search(ui_multi_detail_t *v)
     if(v->selected<0){text(v->foot,ui_text_get(UI_TEXT_MULTI_SELECT_SEARCH));return;}
     if(v->tab!=1)ui_multi_detail_select(v,v->selected,1);
     if(!v->keyboard){
-        lv_alnum_keyboard_config_t cfg={0};cfg.title=ui_text_get(UI_TEXT_SERIAL_SEARCH);cfg.placeholder=ui_text_get(UI_TEXT_MULTI_SEARCH_HINT);
+        lv_alnum_keyboard_config_t cfg={0};cfg.title=ui_text_get(UI_TEXT_QUERY_SERIAL);cfg.placeholder=ui_text_get(UI_TEXT_MULTI_SEARCH_HINT);
+        cfg.choice_title=ui_text_get(UI_TEXT_QUERY_DENOMINATION);cfg.choice_hint=ui_text_get(UI_TEXT_QUERY_DENOM_HINT);
+        cfg.choice_empty=ui_text_get(UI_TEXT_MULTI_NO_RECORDS);
         cfg.apply_text=ui_text_get(UI_TEXT_MULTI_SEARCH_APPLY);cfg.clear_text=ui_text_get(UI_TEXT_MULTI_SEARCH_CLEAR);cfg.cancel_text=ui_text_get(UI_TEXT_MULTI_BACK);
         cfg.max_length=32;cfg.submit=search_submit;cfg.context=v;cfg.modern=true;
         v->keyboard=lv_alnum_keyboard_create(lv_obj_get_parent(v->root),&cfg);
     }
-    if(v->keyboard){lv_alnum_keyboard_set_text(v->keyboard,v->queries[v->selected]);lv_alnum_keyboard_show(v->keyboard);}
+    if(v->keyboard){
+        if(!v->keyboard_initialized) {
+            lv_alnum_keyboard_set_text(v->keyboard,v->query);
+            search_choices(v,false);
+            lv_alnum_keyboard_set_choice_mode(v->keyboard,v->denomination_mode);
+            v->keyboard_initialized=true;
+        } else search_choices(v,true);
+        lv_alnum_keyboard_show(v->keyboard);
+    }
 }
 static void search_cb(lv_event_t *e){ui_multi_detail_search(lv_event_get_user_data(e));}
 static void tab_cb(lv_event_t *e){ui_multi_detail_t *v=lv_event_get_user_data(e);ui_multi_detail_select(v,v->selected,lv_event_get_target(e)==v->tabs[1]);}
@@ -138,7 +194,7 @@ static void reject_cb(lv_event_t *e){ui_multi_detail_select(lv_event_get_user_da
 static void refresh_cb(lv_event_t *e)
 {
     ui_multi_detail_t *v=lv_event_get_user_data(e);if(v->selected==-1)return;
-    if(v->selected>=0)v->queries[v->selected][0]='\0';
+    if(v->selected>=0)search_reset_state(v);
     /* Reuse an in-flight reply; queue once if a different query owns the wire. */
     v->pending=current_status(v)!=MULTI_DETAIL_LOADING;
     v->dirty=true;ui_detail_reveal_begin(&v->reveal,true);ui_multi_detail_refresh(v);
@@ -205,7 +261,7 @@ ui_multi_detail_t *ui_multi_detail_create(lv_obj_t *parent,bool expanded,ui_mult
 {
     ui_multi_detail_t *v=lv_mem_alloc(sizeof(*v));if(!v)return NULL;memset(v,0,sizeof(*v));
     v->expanded=expanded;v->width=expanded?1140:1048;v->height=expanded?376:320;v->selected=-1;v->open=open;v->context=ctx;
-    v->generation=counting_multi_current()->generation;v->dirty=true;
+    v->generation=counting_multi_current()->generation;v->dirty=true;v->search_currency=-1;
     if(!scaled_font_init(&v->symbol_font,&lv_font_main_currency_32,56,v->symbol_pixels,sizeof(v->symbol_pixels))){lv_mem_free(v);return NULL;}
     v->root=box(parent,expanded?16:108,12,v->width,v->height,0xFFFFFF,16);if(!v->root){lv_mem_free(v);return NULL;}
     lv_obj_set_style_border_width(v->root,1,0);
@@ -280,6 +336,7 @@ ui_multi_detail_t *ui_multi_detail_create(lv_obj_t *parent,bool expanded,ui_mult
     if(!icon(v->search,10,7,LVGL_DIR"ui_icons/search_18.png"))goto failed;
     v->search_text=label(v->search,36,8,218,"",&lv_font_instrument_sans_medium_12,0x657F90);
     if(!v->search_text)goto failed;
+    lv_label_set_long_mode(v->search_text,LV_LABEL_LONG_DOT);
     if(!v->currency_name||!v->pcs_title||!v->amount_symbol||!v->count_label||!v->currency_line||!v->head_line||!v->foot_line)goto failed;
     if(!v->currency||!v->title||!v->subtitle||!v->pcs||!v->unit||!v->amount||!v->back||!v->reject||!v->reject_value||!v->headers[0]||!v->headers[1]||!v->headers[2]||!v->foot||!v->refresh||!v->search||!v->tabs[0]||!v->tabs[1])goto failed;
     v->timer=lv_timer_create(poll,30,v);if(!v->timer)goto failed;lv_timer_pause(v->timer);hide(v->root,true);return v;
@@ -299,6 +356,7 @@ void ui_multi_detail_select(ui_multi_detail_t *v,int index,int tab)
     if(!v||index < -2||index>=counting_multi_current()->count)return;
     if(app_command_runtime_count_start_busy())return;
     if(v->keyboard)lv_alnum_keyboard_hide(v->keyboard);
+    if(index>=0 && index!=v->search_currency){search_reset_state(v);v->search_currency=index;}
     v->selected=index;v->tab=tab==1;v->dirty=true;
     multi_detail_status_t status=current_status(v);
     v->pending=index!=-1&&!available(status)&&status!=MULTI_DETAIL_LOADING;
@@ -316,7 +374,7 @@ void ui_multi_detail_refresh(ui_multi_detail_t *v)
     if(!v||!v->visible)return;const counting_multi_t *m=counting_multi_current();
     uint32_t extra=counting_multi_extra_revision();
     if(v->generation!=m->generation||m->counting||v->selected>=m->count){
-        if(v->selected!=-1||v->generation!=m->generation){v->selected=-1;v->pending=false;v->dirty=true;memset(v->queries,0,sizeof(v->queries));ui_detail_reveal_cancel(&v->reveal);if(v->keyboard)lv_alnum_keyboard_hide(v->keyboard);}
+        if(v->selected!=-1||v->generation!=m->generation){v->selected=-1;v->pending=false;v->dirty=true;search_reset_state(v);v->search_currency=-1;ui_detail_reveal_cancel(&v->reveal);if(v->keyboard)lv_alnum_keyboard_hide(v->keyboard);}
         v->generation=m->generation;
     }
     if(v->pending&&!app_command_runtime_count_start_busy()&&!counting_multi_query_busy()&&!counting_multi_extra_busy()){
@@ -327,6 +385,7 @@ void ui_multi_detail_refresh(ui_multi_detail_t *v)
     multi_detail_status_t status=current_status(v);
     bool waiting=v->pending||status==MULTI_DETAIL_LOADING;
     if(!v->dirty&&v->revision==m->revision&&v->extra==extra){ui_detail_reveal_update(&v->reveal,!waiting);return;}
+    if(v->selected>=0 && lv_alnum_keyboard_is_visible(v->keyboard))search_choices(v,true);
     /* Layout can be resolved inside recycled-list projection. Invalidate the
      * whole changed panel, not only its rows, after header geometry settles. */
     ui_update_batch_t batch;
@@ -382,7 +441,7 @@ void ui_multi_detail_refresh(ui_multi_detail_t *v)
     v->count=overview?m->count:0;
     if(status==MULTI_DETAIL_READY&&!waiting){
         if(rejects_view)v->count=counting_multi_rejects()->count;
-        else if(c&&v->tab){const multi_serial_cache_t *s=counting_multi_serials(v->selected);for(unsigned i=0;i<s->count;i++)if(matched(v,s->rows[i].text))v->indices[v->count++]=i;}
+        else if(c&&v->tab){const multi_serial_cache_t *s=counting_multi_serials(v->selected);for(unsigned i=0;i<s->count;i++)if(matched(v,&s->rows[i]))v->indices[v->count++]=i;}
         else if(c)v->count=c->denom_count;
     }
     lv_recycled_list_refresh(v->list,v->count,false);hide(v->empty,v->count!=0);
@@ -390,15 +449,24 @@ void ui_multi_detail_refresh(ui_multi_detail_t *v)
     text(v->foot,ui_text_get(rejects_view?UI_TEXT_MULTI_GLOBAL_REJECT:overview?UI_TEXT_MULTI_SEPARATE:v->tab?UI_TEXT_MULTI_UNKNOWN_DENOM:UI_TEXT_MULTI_CACHED));
     if(c&&v->tab){
         text(v->foot,"");
-        const char *query=v->queries[v->selected];char caption[96];
-        bool filtered=*query!=0;
+        char caption[384];
+        bool filtered=v->denomination_mode?v->denomination_count>0:v->query[0]!=0;
         lv_damped_button_set_palette(v->search,lv_color_hex(filtered?0xE4F0FF:0xF3F6F8),lv_color_hex(0xD4E5F5));
         lv_obj_set_style_border_color(v->search,lv_color_hex(filtered?0x78ADEB:0xE7EDF0),0);
         lv_obj_set_style_text_color(v->search_text,lv_color_hex(filtered?0x176ACA:0x657F90),0);
-        if(*query)snprintf(caption,sizeof(caption),"%s",query);
-        else snprintf(caption,sizeof(caption),ui_text_get(UI_TEXT_MULTI_SEARCH_SERIAL_FMT),c->code);
+        if(!filtered)snprintf(caption,sizeof(caption),"%s",ui_text_get(UI_TEXT_QUERY));
+        else if(!v->denomination_mode)snprintf(caption,sizeof(caption),"%s",v->query);
+        else {
+            size_t used=0;caption[0]='\0';
+            /* Choices arrive in descending order; entry caption is ascending. */
+            for(unsigned i=v->denomination_count;i>0;--i) {
+                int n=snprintf(caption+used,sizeof(caption)-used,"%s%lu",used?",":"",(unsigned long)v->denomination_query[i-1]);
+                if(n<0 || (size_t)n>=sizeof(caption)-used)break;
+                used+=(size_t)n;
+            }
+        }
         text(v->search_text,caption);
-        if(*query&&available(status)){
+        if(filtered&&available(status)){
             snprintf(caption,sizeof(caption),ui_text_get(UI_TEXT_SERIAL_MATCH_COUNT),v->count,(unsigned)counting_multi_serials(v->selected)->count);
             text(v->foot,caption);
             if(!v->count)text(v->empty,ui_text_get(UI_TEXT_SERIAL_NO_MATCH));

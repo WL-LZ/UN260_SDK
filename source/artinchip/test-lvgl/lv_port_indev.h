@@ -29,6 +29,9 @@ typedef bool (*lv_port_pointer_observer_t)(lv_indev_t *indev,
 
 void lv_port_indev_set_pointer_observer(lv_port_pointer_observer_t observer,
                                         void *user_data);
+/* UI-thread capture from a timer as well as a raw-frame callback. Cancels the
+ * driver's actual pressed object and suppresses input until physical lift. */
+void lv_port_indev_capture_pointer(lv_indev_t *indev);
 uint8_t lv_port_indev_touch_count(void);
 uint8_t lv_port_indev_touch_points(lv_point_t *points, int32_t *ids, uint8_t capacity);
 

@@ -198,6 +198,12 @@ static void history_test_pointer(int x, int y, bool down)
     test_pointer_state = down ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
     history_test_tick(60);
 }
+void history_test_tap(int x, int y)
+{
+    lv_obj_update_layout(lv_scr_act());
+    history_test_pointer(x, y, true); history_test_pointer(x, y, false);
+    history_test_tick(220);
+}
 void history_test_click_at(lv_obj_t *object, const char *file, unsigned line)
 {
     lv_obj_update_layout(lv_scr_act());
@@ -745,6 +751,12 @@ int main(void)
     lv_indev_drv_t pointer; lv_indev_drv_init(&pointer);
     pointer.type = LV_INDEV_TYPE_POINTER; pointer.read_cb = test_pointer_read;
     assert(lv_indev_drv_register(&pointer));
+    extern void popup_test_visibility(void);
+    popup_test_visibility();
+    extern void popup_test_views(void);
+    popup_test_views();
+    extern void search_modes_test(void);
+    search_modes_test();
     unsigned baseline_timers = history_test_timers();
     history_test_fixtures(0);
     ui_page_19_history_create(lv_scr_act()); history_test_tick(100);
