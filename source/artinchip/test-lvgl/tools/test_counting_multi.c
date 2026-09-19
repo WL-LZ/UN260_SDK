@@ -45,7 +45,7 @@ int main(void){
  marker(0,4256);item(5,2,4257);marker(255,4258);
  counting_multi_prefetch(4508);counting_multi_prefetch(4509);assert(sends==before+2);
  assert(m->currencies[0].status==MULTI_DETAIL_READY&&m->currencies[1].status==MULTI_DETAIL_READY);
- counting_multi_begin(true);assert(m->currencies[0].status==MULTI_DETAIL_NONE);
+ counting_multi_begin(true);assert(m->currencies[0].status==MULTI_DETAIL_READY);
  counting_multi_prefetch(4020);assert(sends==before+2);live("CNY",15,3,0);global(0,0,2);
  counting_multi_prefetch(3771);counting_multi_prefetch(4021);assert(sends==before+3);
  counting_multi_reset();counting_multi_prefetch(4022);marker(255,4023);counting_multi_prefetch(4024);
@@ -81,6 +81,8 @@ int main(void){
  uint32_t group=m->group_generation;assert(m->add&&m->passes==1);
  counting_multi_begin(true);assert(m->group_generation==group&&m->passes==2);
  global(0,0,2);counting_multi_begin(false);
+ assert(m->group_generation==group&&m->passes==3&&m->count==1&&!m->add);
+ counting_multi_reset();counting_multi_begin(false);
  assert(m->group_generation!=group&&m->passes==1&&m->count==0);
  /* Captured CNY reply: live 15/3, then a complete all-zero catalog. */
  counting_multi_begin(false);live("CNY",15,3,1);global(0,0,1);global(0,0,2);

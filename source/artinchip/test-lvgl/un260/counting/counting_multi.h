@@ -27,6 +27,9 @@ const counting_multi_t *counting_multi_current(void);
 /* Most recent accepted currency summary in this pass; NULL before its first frame. */
 const multi_currency_t *counting_multi_latest(void);
 void counting_multi_reset(void);
+/* Retain per-currency snapshots and history group across passes, irrespective
+ * of ADD. reset() is the only batch boundary. New currency frames replace
+ * stored values; they never add a pass amount/quantity to an old value. */
 void counting_multi_begin(bool add);
 /* Validated 16-byte per-currency / 13-byte global 0E; totals are never added twice. */
 bool counting_multi_info(const uint8_t *frame, uint8_t len);

@@ -49,23 +49,28 @@ void counting_multi_reset(void)
 }
 void counting_multi_begin(bool add)
 {
+    if (!model.group_generation) counting_multi_reset();
     latest_index = -1;
     prefetch_pending = false;
     prefetch_settling = false;
     memset(prefetch_attempts, 0, sizeof(prefetch_attempts));
     memset(retry_after, 0, sizeof(retry_after));
-    if (!add) counting_multi_reset();
-    else {
+    /* A pass is not a new stacker batch. Only an explicit result reset
+     * (confirmed removal, CLEAR or currency change) closes the group.
+     * ADD is controller metadata, never permission to discard currencies. */
+    {
         model.generation++;
         if (query.busy) query.abandoned = true;
         for (unsigned i = 0; i < model.count; ++i) {
-            model.currencies[i].status = MULTI_DETAIL_NONE;
-            model.currencies[i].denom_count = 0;
+            /* Preserve verified details of currencies not updated this pass.
+             * An unfinished old request cannot own the next generation. */
+            if (model.currencies[i].status == MULTI_DETAIL_LOADING)
+                model.currencies[i].status = MULTI_DETAIL_NONE;
         }
     }
     model.counting = true;
     model.add = add;
-    model.passes++;
+    if (model.passes < UINT32_MAX) model.passes++;
     model.revision++;
 }
 bool counting_multi_info(const uint8_t *f, uint8_t len)
@@ -87,6 +92,7 @@ bool counting_multi_info(const uint8_t *f, uint8_t len)
         c->pcs = ((uint16_t)f[11] << 8) | f[12];
         latest_index = (int)index;
         c->status = MULTI_DETAIL_NONE;
+        c->denom_count = 0;
         model.total_pcs = 0;
         for (unsigned i = 0; i < model.count; ++i) model.total_pcs += model.currencies[i].pcs;
         model.reject = f[13];

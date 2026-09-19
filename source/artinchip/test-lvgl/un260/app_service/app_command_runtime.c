@@ -92,10 +92,36 @@ bool app_command_runtime_clear_counting_data(const char *reason)
     return true;
 }
 
+/* RX 0x51/6: controller confirms the genuine-note pocket was cleared.
+ * Never echo CLEAR: this is a notification, not a UI clear request. */
+static bool app_command_runtime_handle_stacker_clear(const uint8_t *buf, uint8_t len)
+{
+    if (!protocol_frame_is_valid(buf, len) || len != 6 ||
+        buf[3] != 0x51 || buf[4] != 0x01) return true;
+    if (!currency_state_multi_selected()) return true;
+    /* The controller must notify before START. Do not block the RX queue
+     * behind an out-of-order event, which would also block the end frame. */
+    if (g_counting_session.start_confirmed ||
+        g_counting_session.phase == COUNTING_SESSION_ACTIVE ||
+        counting_multi_current()->counting) {
+        uart_debug_printf("MULTI pocket clear ignored: received after START\n");
+        return true;
+    }
+    if (!app_counting_runtime_reset_session(&g_counting_session, "MULTI pocket clear"))
+        return false;
+    g_counting_detail_state.wait_sn_after_reject_end = false;
+    sim_reset_counting_result(counting_data_mutable());
+    counting_data_mark_multi_result(counting_data_mutable());
+    return true;
+}
+
 static bool app_command_runtime_dispatch(uint8_t cmd,
                                          uint8_t *buf,
                                          uint8_t len)
 {
+    /* Keep the transition ahead of generic reply side effects. Returning
+     * false retains this frame and holds the next START until history is safe. */
+    if (cmd == 0x51) return app_command_runtime_handle_stacker_clear(buf, len);
     /* Preflight BEFORE taking request results or invoking any dispatcher. A
      * retried frame therefore cannot duplicate protocol/UI side effects. */
     if (cmd == 0x0A && len >= 7 && buf[4] == 0x01 && buf[5] == 0x01 &&
