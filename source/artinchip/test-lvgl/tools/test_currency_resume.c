@@ -62,6 +62,7 @@ static unsigned lv_color_hex(unsigned value) { return value; }
 static void page07_curr_view_set_image_selected_style(lv_obj_t *obj) { assert(obj); }
 static void page07_curr_view_set_image_unselected_style(lv_obj_t *obj) { assert(obj); }
 static void curr_update_grid_fav_ui(int index) { assert(index >= 0); }
+static void page07_curr_overview_selection(void *ctx) { assert(ctx == &g_page07_curr); }
 static void curr_set_left_info_by_abs(int index) { left_index = index; }
 static void curr_refresh_left_buttons(void) {}
 static bool perf_profile_is_enabled(void) { return profile; }

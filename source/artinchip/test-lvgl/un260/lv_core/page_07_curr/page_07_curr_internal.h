@@ -56,6 +56,14 @@ typedef struct {
 } page07_curr_grid_item_t;
 
 typedef struct {
+    lv_obj_t *current_img;
+    lv_obj_t *current_code;
+    lv_obj_t *filter[2];
+    lv_obj_t *card_button;
+    lv_obj_t *back_button;
+} page07_curr_overview_refs_t;
+
+typedef struct {
     char favorite_codes[PAGE07_CURR_MAX_ITEMS][4];
     int favorite_count;
     int visible_indices[PAGE07_CURR_MAX_ITEMS];
@@ -91,6 +99,7 @@ typedef struct {
     lv_obj_t *thumb;
     lv_obj_t *grid_scroll;
     lv_obj_t *empty_label;
+    page07_curr_overview_refs_t overview;
 } page07_curr_object_refs_t;
 
 typedef struct {

@@ -39,6 +39,14 @@ void page_07_curr_apply_switch_result(const currency_switch_result_t *result);
 
 uint64_t app_clock_monotonic_ms(void) { return tick; }
 void uart_debug_printf(const char *format, ...) { (void)format; }
+/* Work-mode switching is outside this Currency request fixture. Fail if a
+ * currency path accidentally starts issuing that separate operation. */
+bool work_mode_service_request(uint8_t mode)
+{
+    (void)mode;
+    assert(!"Currency selection must not request a work-mode change");
+    return false;
+}
 int protocol_send(uint8_t cmd, const uint8_t *payload, uint16_t length)
 {
     assert(length <= sizeof(last_payload));

@@ -266,6 +266,11 @@ static struct {
     page07_curr_card_t cards[34];
 } g_page07_curr;
 static lv_obj_t *curr_page;
+static float track_viewport,track_content,track_offset;
+static void ui_scrollbar_update(lv_obj_t *bar,float viewport,float content,float offset) {
+    assert(bar==g_page07_curr.objects.thumb);
+    track_viewport=viewport;track_content=content;track_offset=offset;
+}
 static int g_curr_track_x=-1,g_curr_track_w=-1,g_curr_card_styled_visible_idx=-1,g_curr_cache_focus_idx=-1;
 static unsigned commits,favorite_toggles,refreshes;
 static int commit_index;
@@ -511,7 +516,8 @@ int main(void) {
     assert(renderers[2].y_writes+renderers[2].pos_writes==hidden_root_writes);
     assert(images[2].y_writes>visible_y_writes && images[2].y>0);
     assert(g_page07_curr.model.selected_abs_idx==3 && g_page07_curr.model.selected_visible_idx==3);
-    assert(thumb.x>0); /* thumb follows real fractional offset, not destination */
+    assert(track_viewport>0 && track_content>track_viewport && track_offset>0);
+    assert(track_offset==g_page07_curr.carousel.motion.position); /* Uses actual fractional offset. */
 
     /* Execute the production render state and shared card surface, not a
      * pre-painted mock: normal and focus must share the same inside border. */

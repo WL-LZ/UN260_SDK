@@ -46,8 +46,6 @@
 #define CURR_TRACK_BG            0xE4E7EB
 #define CURR_TRACK_FG            0x8D959F
 
-#define CURR_GRID_SELECTED_MARK_PATH    "L:/usr/local/share/lvgl_data/view_selected.png"
-
 #define CURR_BTN_W               70
 #define CURR_BTN_H               36
 #define CURR_BTN_Y               358
@@ -65,18 +63,21 @@
 #define CURR_LEFT_NO_X           39
 #define CURR_LEFT_NO_Y           300
 
-#define CURR_GRID_COLS           6
-#define CURR_GRID_CELL_W         158
-#define CURR_GRID_CELL_H         92
-#define CURR_GRID_ITEM_W         132
-#define CURR_GRID_START_X        8
-#define CURR_GRID_START_Y        10
-#define CURR_GRID_ROW_STEP       92
-#define CURR_GRID_TEXT_BOTTOM    -4
-#define CURR_GRID_GROUP_OFS_X    25
-#define CURR_GRID_FLAG_Y         (-6)
-#define CURR_GRID_FAV_X          -3
-#define CURR_GRID_FAV_Y          -2
+/* VIEW is an independent full-width workspace, not the Card right pane. */
+#define CURR_GRID_COLS           8
+#define CURR_GRID_CELL_W         152
+#define CURR_GRID_CELL_H         66
+#define CURR_GRID_ITEM_W         144
+#define CURR_GRID_START_X        10
+#define CURR_GRID_START_Y        6
+#define CURR_GRID_ROW_STEP       72
+#define CURR_GRID_VIEWPORT_X     24
+#define CURR_GRID_VIEWPORT_Y     78
+#define CURR_GRID_VIEWPORT_W     1232
+#define CURR_GRID_VIEWPORT_H     294
+#define CURR_GRID_FLAG_W         34
+#define CURR_GRID_FAV_X          104
+#define CURR_GRID_FAV_Y          3
 
 #define CURR_FAV_BTN_IN_CARD_X   139
 #define CURR_FAV_BTN_IN_CARD_Y   13

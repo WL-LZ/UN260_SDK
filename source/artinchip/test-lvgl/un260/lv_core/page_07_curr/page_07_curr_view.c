@@ -16,7 +16,7 @@ void page07_curr_view_set_image_unselected_style(lv_obj_t* img)
 {
     lv_obj_set_style_img_recolor(img, lv_color_hex(CURR_IMG_UNSEL), 0);
     lv_obj_set_style_img_recolor_opa(img, LV_OPA_0, 0);
-    lv_obj_set_style_img_opa(img, LV_OPA_40, 0);
+    lv_obj_set_style_img_opa(img, LV_OPA_COVER, 0);
 }
 
 void page07_curr_view_set_image_selected_style(lv_obj_t* img)
