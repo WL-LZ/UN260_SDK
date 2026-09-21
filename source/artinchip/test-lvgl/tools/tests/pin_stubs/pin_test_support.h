@@ -69,10 +69,12 @@ static unsigned visibility_save_count;
 static char saved_password[5] = "1111";
 static char toast_text[160];
 static const lv_font_t lv_font_instrument_sans_medium_12 = 12;
+static const lv_font_t lv_font_instrument_sans_medium_13 = 13;
 static const lv_font_t lv_font_instrument_sans_medium_14 = 14;
 static const lv_font_t lv_font_instrument_sans_medium_16 = 16;
 static const lv_font_t lv_font_instrument_sans_medium_18 = 18;
 static const lv_font_t lv_font_instrument_sans_medium_24 = 24;
+static const lv_font_t lv_font_instrument_sans_medium_26 = 26;
 static const lv_font_t lv_font_instrument_sans_medium_28 = 28;
 static const lv_font_t lv_font_instrument_sans_semibold_28 = 28;
 static const lv_font_t lv_font_instrument_sans_semibold_24 = 24;
@@ -128,6 +130,8 @@ PIN_STYLE_STUB(lv_obj_set_style_text_letter_space, int)
 PIN_STYLE_STUB(lv_obj_set_style_text_align, int)
 PIN_STYLE_STUB(lv_obj_set_style_shadow_width, int)
 PIN_STYLE_STUB(lv_obj_set_style_shadow_opa, int)
+PIN_STYLE_STUB(lv_obj_set_style_shadow_color, uint32_t)
+PIN_STYLE_STUB(lv_obj_set_style_shadow_ofs_y, int)
 PIN_STYLE_STUB(lv_obj_set_style_translate_y, int)
 static inline void lv_obj_clear_flag(lv_obj_t *obj, int flags) {obj->flags &= ~flags;}
 static inline void lv_obj_add_flag(lv_obj_t *obj, int flags) {obj->flags |= flags;}

@@ -17,11 +17,16 @@ typedef struct {
     const char *eyebrow;
     const char *title;
     const char *prompt;
+    /* Optional side-panel content; strings/assets must outlive the visible keypad. */
+    const char *leading_icon;
+    const char *footnote_icon;
+    const char *footnote;
+    const char *idle_status;
     lv_pin_keypad_confirm_cb_t confirm_cb;
     lv_pin_keypad_cancel_cb_t cancel_cb;
     void *user_data;
     bool digits_visible;
-    bool auto_confirm; /* Login only: four digits submit; bottom-right is Clear. */
+    bool auto_confirm; /* Four digits submit; replaces Confirm with Clear. */
     bool compact; /* 850 x 364 side panel; stable dots without a blinking cursor. */
     lv_pin_keypad_visibility_cb_t save_visibility;
 } lv_pin_keypad_config_t;
@@ -40,6 +45,11 @@ typedef struct {
     lv_obj_t *status;
     lv_obj_t *keys[12];
     lv_obj_t *cancel;
+    lv_obj_t *leading_icon;
+    lv_obj_t *footnote_icon;
+    lv_obj_t *footnote;
+    lv_obj_t *close_icon;
+    lv_obj_t *backspace_icon;
     lv_timer_t *blink;
     lv_pin_input_t input;
     lv_pin_keypad_confirm_cb_t confirm_cb;
@@ -49,6 +59,8 @@ typedef struct {
     bool digits_visible;
     bool auto_confirm;
     bool compact;
+    bool error;
+    const char *idle_status;
     lv_pin_keypad_visibility_cb_t save_visibility;
 } lv_pin_keypad_t;
 
@@ -58,6 +70,7 @@ bool lv_pin_keypad_show(lv_pin_keypad_t *keypad,
                         const lv_pin_keypad_config_t *config,
                         const char *initial_value);
 void lv_pin_keypad_set_status(lv_pin_keypad_t *keypad, const char *text);
+void lv_pin_keypad_set_error(lv_pin_keypad_t *keypad, const char *text);
 void lv_pin_keypad_clear(lv_pin_keypad_t *keypad);
 /* Hiding discards draft PIN/callbacks and pauses its timer; show starts fresh. */
 void lv_pin_keypad_hide(lv_pin_keypad_t *keypad);

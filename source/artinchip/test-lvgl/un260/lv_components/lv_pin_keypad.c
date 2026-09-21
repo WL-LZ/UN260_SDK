@@ -47,10 +47,12 @@ static void pin_refresh(lv_pin_keypad_t *keypad)
     size_t n = keypad->input.length;
     for (unsigned i = 0; i < LV_PIN_DIGITS; ++i) {
         bool visible_digit = keypad->digits_visible && i < n;
-        lv_obj_set_style_bg_color(keypad->dots[i],
-            lv_color_hex(i < n ? 0x1D2B34 : keypad->compact ? 0xFFFFFF : 0xB9C5CD), 0);
+        lv_obj_set_style_bg_color(keypad->dots[i], lv_color_hex(keypad->compact ?
+            (keypad->error ? 0xF8E9E9 : i < n ? 0x20313B : 0xFFFFFF) :
+            (i < n ? 0x1D2B34 : 0xB9C5CD)), 0);
         lv_obj_set_style_border_width(keypad->dots[i],keypad->compact?2:0,0);
-        lv_obj_set_style_border_color(keypad->dots[i],lv_color_hex(i<n?0x1D2B34:0xCAD6DF),0);
+        lv_obj_set_style_border_color(keypad->dots[i],lv_color_hex(
+            keypad->error ? 0xBE6C6D : i < n ? 0x20313B : 0xCAD6DF),0);
         if (visible_digit) {
             char digit[2] = {keypad->input.value[i], '\0'};
             lv_label_set_text(keypad->digits[i], digit);
@@ -95,8 +97,23 @@ static void pin_blink(lv_timer_t *timer)
 
 void lv_pin_keypad_set_status(lv_pin_keypad_t *keypad, const char *text)
 {
-    if (keypad && keypad->root && lv_obj_is_valid(keypad->root))
-        lv_label_set_text(keypad->status, text ? text : PIN_IDLE_STATUS);
+    if (!keypad || !keypad->root || !lv_obj_is_valid(keypad->root)) return;
+    bool was_error = keypad->error;
+    keypad->error = false;
+    lv_label_set_text(keypad->status, text ? text :
+        keypad->idle_status ? keypad->idle_status : PIN_IDLE_STATUS);
+    lv_obj_set_style_text_color(keypad->status,
+        lv_color_hex(keypad->compact ? 0x647B89 : 0x586B78), 0);
+    if (was_error) pin_refresh(keypad);
+}
+
+void lv_pin_keypad_set_error(lv_pin_keypad_t *keypad, const char *text)
+{
+    lv_pin_keypad_set_status(keypad, text);
+    if (!keypad || !keypad->root || !lv_obj_is_valid(keypad->root)) return;
+    keypad->error = true;
+    lv_obj_set_style_text_color(keypad->status, lv_color_hex(0xB23E40), 0);
+    pin_refresh(keypad);
 }
 
 void lv_pin_keypad_clear(lv_pin_keypad_t *keypad)
@@ -189,25 +206,77 @@ static void pin_apply_layout(lv_pin_keypad_t *keypad, bool compact)
     keypad->compact=compact;
     lv_obj_set_size(keypad->root,compact?850:LV_PIN_KEYPAD_WIDTH,
                     compact?364:LV_PIN_KEYPAD_HEIGHT);
-    lv_obj_set_pos(keypad->eyebrow,compact?34:24,compact?28:20);
-    lv_obj_set_pos(keypad->title,compact?34:24,compact?64:48);
-    lv_obj_set_pos(keypad->prompt,compact?34:24,compact?108:92);
+    lv_obj_set_style_bg_color(keypad->root,lv_color_hex(compact?0xFBFCFD:0xFFFFFF),0);
+    lv_obj_set_style_radius(keypad->root,compact?22:16,0);
+    lv_obj_set_style_border_color(keypad->root,lv_color_hex(compact?0xFFFFFF:0xE3E9ED),0);
+    lv_obj_set_style_shadow_width(keypad->root,compact?50:0,0);
+    lv_obj_set_style_shadow_color(keypad->root,lv_color_hex(0x263F4F),0);
+    lv_obj_set_style_shadow_opa(keypad->root,32,0);
+    lv_obj_set_style_shadow_ofs_y(keypad->root,compact?20:0,0);
+    if(compact){
+        lv_obj_add_flag(keypad->eyebrow,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(keypad->eye,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(keypad->close_icon,LV_OBJ_FLAG_HIDDEN);
+    }else{
+        lv_obj_clear_flag(keypad->eyebrow,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(keypad->eye,LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(keypad->close_icon,LV_OBJ_FLAG_HIDDEN);
+    }
+    /* Content coordinates exclude the root's 1px border. Rounded from the
+     * original 850x364 CSS grid, rather than scaling the legacy wide keypad. */
+    lv_obj_set_pos(keypad->title,compact?34:24,compact?72:48);
+    lv_obj_set_style_text_letter_space(keypad->title,compact?-1:0,0);
+    lv_obj_set_style_text_color(keypad->title,lv_color_hex(compact?0x20313B:0x1D2B34),0);
+    lv_obj_set_pos(keypad->prompt,compact?34:24,compact?114:92);
+    lv_obj_set_style_text_color(keypad->prompt,lv_color_hex(compact?0x647B89:0x586B78),0);
     for(unsigned i=0;i<LV_PIN_DIGITS;i++){
-        lv_obj_set_pos(keypad->dots[i],compact?34+i*35:48+i*64,compact?164:166);
-        lv_obj_set_size(keypad->dots[i],compact?18:12,compact?18:12);
+        lv_obj_set_pos(keypad->dots[i],compact?34+i*34:48+i*64,compact?166:166);
+        lv_obj_set_size(keypad->dots[i],compact?19:12,compact?19:12);
         lv_obj_set_pos(keypad->digits[i],compact?25+i*35:36+i*64,compact?151:152);
     }
     lv_obj_set_pos(keypad->eye,compact?210:288,compact?149:148);
     lv_obj_set_size(keypad->eye,compact?90:104,48);
-    lv_obj_set_pos(keypad->status,compact?34:24,compact?216:220);
-    lv_obj_set_pos(keypad->cancel,compact?728:24,compact?14:260);
-    lv_obj_set_size(keypad->cancel,compact?96:368,compact?40:44);
-    lv_damped_button_set_text(keypad->cancel,compact?"Close":"Cancel");
+    lv_obj_set_pos(keypad->status,compact?34:24,compact?204:220);
+    lv_obj_set_width(keypad->status,compact?340:368);
+    lv_obj_set_style_text_font(keypad->status,compact?
+        &lv_font_instrument_sans_medium_13:&lv_font_instrument_sans_medium_14,0);
+    lv_obj_set_pos(keypad->cancel,compact?791:24,compact?14:260);
+    lv_obj_set_size(keypad->cancel,compact?40:368,compact?36:44);
+    lv_damped_button_set_text(keypad->cancel,compact?"":"Cancel");
+    lv_damped_button_set_exact_palette(keypad->cancel,
+        lv_color_hex(compact?0xFBFCFD:LV_SETTINGS_CONTROL_SURFACE),
+        lv_color_hex(compact?0xE2E9EE:LV_SETTINGS_CONTROL_PRESSED));
+    lv_obj_center(keypad->close_icon);
+    lv_img_set_src(keypad->backspace_icon,compact?
+        LVGL_DIR "pin_icons/erase.png":LVGL_DIR "popup_icons/backspace.png");
+    static const lv_coord_t col_x[3]={486,601,715};
+    static const lv_coord_t col_w[3]={107,107,107};
+    static const lv_coord_t row_y[4]={55,128,201,273};
+    static const lv_coord_t row_h[4]={65,65,64,65};
     for(unsigned i=0;i<12;i++){
-        lv_obj_set_pos(keypad->keys[i],compact?488+(i%3)*108:424+(i%3)*228,
-                       compact?64+(i/3)*70:16+(i/3)*76);
-        lv_obj_set_size(keypad->keys[i],compact?100:216,compact?62:64);
+        /* Keep key identity/callbacks stable; the side panel orders Clear,0,erase. */
+        unsigned slot=compact&&keypad->auto_confirm?(i==9?11:i==11?9:i):i;
+        lv_coord_t col=(lv_coord_t)(slot%3),row=(lv_coord_t)(slot/3);
+        bool utility=compact&&(i==9||i==11);
+        lv_obj_t *button=keypad->keys[i];
+        lv_obj_set_pos(button,compact?col_x[col]:424+col*228,
+                       compact?row_y[row]:16+row*76);
+        lv_obj_set_size(button,compact?col_w[col]:216,compact?row_h[row]:64);
+        lv_damped_button_set_exact_palette(button,lv_color_hex(compact?
+            (utility?0xFBFCFD:0xF0F3F5):i==11&&!keypad->auto_confirm?
+            LV_SETTINGS_PRIMARY:LV_SETTINGS_CONTROL_SURFACE),lv_color_hex(compact?
+            0xE2E9EE:i==11&&!keypad->auto_confirm?
+            LV_SETTINGS_PRIMARY_PRESSED:LV_SETTINGS_CONTROL_PRESSED));
+        lv_obj_set_style_border_width(button,compact&&!utility?1:0,0);
+        lv_obj_set_style_border_color(button,lv_color_hex(0xE9EDF0),0);
+        lv_obj_t *label=lv_damped_button_get_label(button);
+        lv_obj_set_style_text_font(label,compact?(utility?
+            &lv_font_instrument_sans_medium_14:&lv_font_instrument_sans_medium_26):
+            i==11?&lv_font_instrument_sans_medium_16:&lv_font_instrument_sans_medium_28,0);
+        lv_obj_set_style_text_color(label,lv_color_hex(compact?(utility?0x647B89:0x20313B):
+            i==11&&!keypad->auto_confirm?0xFFFFFF:LV_SETTINGS_ACTION_TEXT),0);
     }
+    lv_obj_center(keypad->backspace_icon);
 }
 
 bool lv_pin_keypad_create(lv_pin_keypad_t *keypad, lv_obj_t *parent,
@@ -233,6 +302,14 @@ bool lv_pin_keypad_create(lv_pin_keypad_t *keypad, lv_obj_t *parent,
     keypad->prompt = pin_label(card, "", &lv_font_instrument_sans_medium_14,
                                 0x586B78, 24, 92);
     lv_obj_set_width(keypad->prompt, 376);
+    keypad->leading_icon=lv_img_create(card);
+    lv_obj_set_pos(keypad->leading_icon,34,30);
+    lv_obj_clear_flag(keypad->leading_icon,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
+    keypad->footnote_icon=lv_img_create(card);
+    lv_obj_set_pos(keypad->footnote_icon,34,314);
+    lv_obj_clear_flag(keypad->footnote_icon,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
+    keypad->footnote=pin_label(card,"",&lv_font_instrument_sans_medium_12,0x647B89,59,314);
+    lv_obj_set_width(keypad->footnote,355);
     for (unsigned i = 0; i < LV_PIN_DIGITS; ++i) {
         keypad->dots[i] = pin_shape(card, 48 + i * 64, 166, 12, 12,
                                      0xB9C5CD, LV_RADIUS_CIRCLE);
@@ -270,6 +347,10 @@ bool lv_pin_keypad_create(lv_pin_keypad_t *keypad, lv_obj_t *parent,
     lv_obj_set_size(keypad->cancel, 368, 44);
     lv_obj_set_style_shadow_width(keypad->cancel, 0, 0);
     lv_obj_add_event_cb(keypad->cancel, pin_cancel_event, LV_EVENT_CLICKED, keypad);
+    keypad->close_icon=lv_img_create(keypad->cancel);
+    lv_img_set_src(keypad->close_icon,LVGL_DIR "pin_icons/close.png");
+    lv_obj_clear_flag(keypad->close_icon,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(keypad->close_icon,LV_OBJ_FLAG_HIDDEN);
     for (unsigned i = 0; i < 12; ++i) {
         unsigned key = pin_keys[i];
         char digit[2] = {(char)('0' + key), 0};
@@ -290,6 +371,7 @@ bool lv_pin_keypad_create(lv_pin_keypad_t *keypad, lv_obj_t *parent,
         lv_obj_set_style_shadow_width(button, 0, 0);
         if (key == 10) {
             lv_obj_t *icon = lv_img_create(button);
+            keypad->backspace_icon=icon;
             lv_img_set_src(icon, LVGL_DIR "popup_icons/backspace.png");
             lv_obj_center(icon);
             lv_obj_clear_flag(icon, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
@@ -314,15 +396,20 @@ bool lv_pin_keypad_show(lv_pin_keypad_t *keypad,
     keypad->confirm_cb = config->confirm_cb;
     keypad->cancel_cb = config->cancel_cb;
     keypad->user_data = config->user_data;
-    keypad->digits_visible = config->digits_visible;
+    keypad->digits_visible = !config->compact && config->digits_visible;
     keypad->auto_confirm = config->auto_confirm;
+    keypad->idle_status = config->idle_status;
+    if(config->compact&&config->leading_icon){
+        lv_img_set_src(keypad->leading_icon,config->leading_icon);
+        lv_obj_clear_flag(keypad->leading_icon,LV_OBJ_FLAG_HIDDEN);
+    }else lv_obj_add_flag(keypad->leading_icon,LV_OBJ_FLAG_HIDDEN);
+    if(config->compact&&config->footnote_icon){
+        lv_img_set_src(keypad->footnote_icon,config->footnote_icon);
+        lv_obj_clear_flag(keypad->footnote_icon,LV_OBJ_FLAG_HIDDEN);
+    }else lv_obj_add_flag(keypad->footnote_icon,LV_OBJ_FLAG_HIDDEN);
+    lv_label_set_text(keypad->footnote,config->compact&&config->footnote?config->footnote:"");
     pin_apply_layout(keypad,config->compact);
     lv_damped_button_set_text(keypad->keys[11],config->auto_confirm?"Clear":"Confirm");
-    lv_damped_button_set_exact_palette(keypad->keys[11],
-        lv_color_hex(config->auto_confirm?LV_SETTINGS_CONTROL_SURFACE:LV_SETTINGS_PRIMARY),
-        lv_color_hex(config->auto_confirm?LV_SETTINGS_CONTROL_PRESSED:LV_SETTINGS_PRIMARY_PRESSED));
-    lv_obj_set_style_text_color(lv_damped_button_get_label(keypad->keys[11]),
-        lv_color_hex(config->auto_confirm?LV_SETTINGS_ACTION_TEXT:0xFFFFFF),0);
     keypad->save_visibility = config->save_visibility;
     lv_obj_clear_flag(keypad->root, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(keypad->root);
@@ -347,6 +434,7 @@ void lv_pin_keypad_hide(lv_pin_keypad_t *keypad)
     keypad->cancel_cb = NULL;
     keypad->user_data = NULL;
     keypad->save_visibility = NULL;
+    keypad->idle_status = NULL;
 }
 
 void lv_pin_keypad_destroy(lv_pin_keypad_t *keypad)

@@ -30,7 +30,7 @@ static void password_confirm(const char *pin, void *user_data)
         return;
     }
     lv_pin_keypad_clear(&g_password_page.keypad);
-    lv_pin_keypad_set_status(&g_password_page.keypad, "Incorrect PIN. Please try again.");
+    lv_pin_keypad_set_error(&g_password_page.keypad, "Incorrect password. Try again.");
 }
 
 static void password_outside_cb(lv_event_t *event)
@@ -49,26 +49,25 @@ static void password_deleted_cb(lv_event_t *event)
 static void password_show_keypad(void)
 {
     const lv_pin_keypad_config_t config = {
-        .eyebrow = "UN260 / SETTINGS",
         .title = "Settings access",
         .prompt = "Enter your 4-digit password.",
+        .leading_icon = LVGL_DIR "pin_icons/lock.png",
+        .footnote_icon = LVGL_DIR "pin_icons/shield.png",
+        .footnote = "For authorized configuration and service.",
+        .idle_status = "Opens automatically when the code is correct.",
         .confirm_cb = password_confirm,
         .cancel_cb = password_cancel,
-        .digits_visible = user_cfg_password_visibility_enabled(),
-        .save_visibility = user_cfg_password_visibility_save,
         .auto_confirm = true,
         .compact = true,
     };
     lv_pin_keypad_show(&g_password_page.keypad, &config, "");
-    lv_pin_keypad_set_status(&g_password_page.keypad,
-        "Opens automatically when the code is correct.");
 }
 
 void ui_page_05_set_password_create(lv_obj_t *parent)
 {
     if (g_password_page.page && lv_obj_is_valid(g_password_page.page)) return;
-    g_password_page.page=lv_settings_box(parent,0,0,1280,400,0x17232E);
-    lv_obj_set_style_bg_opa(g_password_page.page,LV_OPA_30,0);
+    g_password_page.page=lv_settings_box(parent,0,0,1280,400,0x20313B);
+    lv_obj_set_style_bg_opa(g_password_page.page,0x26,0);
     lv_obj_add_flag(g_password_page.page,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(g_password_page.page,password_outside_cb,LV_EVENT_CLICKED,NULL);
     lv_obj_add_event_cb(g_password_page.page, password_deleted_cb,

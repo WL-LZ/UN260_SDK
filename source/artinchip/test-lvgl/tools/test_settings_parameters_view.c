@@ -254,6 +254,16 @@ static void password_page_test(void)
     lv_obj_t *panel=lv_obj_get_parent(find_label(lv_layer_top(),"Settings access"));
     assert(lv_obj_get_width(panel)==850&&lv_obj_get_height(panel)==364);
     assert(lv_obj_get_style_opa(panel,0)==LV_OPA_COVER);
+    assert(lv_obj_get_x(panel)==412&&lv_obj_get_y(panel)==18);
+    assert(lv_color_to32(lv_obj_get_style_bg_color(panel,0))==lv_color_to32(lv_color_hex(0xFBFCFD)));
+    lv_obj_t *show=find_label(lv_layer_top(),"Show");
+    assert((!show||!lv_obj_is_visible(show))&&!find_label(lv_layer_top(),"Close"));
+    assert(find_label(lv_layer_top(),"For authorized configuration and service."));
+    lv_obj_t *one=lv_obj_get_parent(find_label(lv_layer_top(),"1"));
+    lv_obj_t *clear=lv_obj_get_parent(find_label(lv_layer_top(),"Clear"));
+    assert(lv_obj_get_width(one)==107&&lv_obj_get_height(one)==65);
+    assert(lv_obj_get_x(one)==486&&lv_obj_get_y(one)==55);
+    assert(lv_obj_get_x(clear)==486&&lv_obj_get_y(clear)==273);
     static lv_color_t stable[810*320];
     for(int y=0;y<320;y++)memcpy(stable+y*810,pixels+(y+38)*1280+432,810*sizeof(lv_color_t));
     lv_obj_t *behind=lv_label_create(lv_scr_act());lv_obj_set_pos(behind,430,280);
@@ -265,13 +275,28 @@ static void password_page_test(void)
     lv_obj_del(behind);
     unsigned before=pops;pointer_tap(25,200);
     assert(!ui_page_05_set_password_is_open()&&pops==before);
+    ui_page_05_set_password_open();advance(20);
+    pointer_tap(952,106);pointer_tap(1067,106); /* 1,2 */
+    snapshot("login-partial");
+    pointer_tap(1179,324); /* Right-hand outline backspace. */
+    pointer_tap(952,324); /* Left-hand Clear. */
+    snapshot("login-cleared");
+    for(unsigned i=0;i<4;i++)pointer_tap(1067,324);
+    lv_obj_t *error=find_label(lv_layer_top(),"Incorrect password. Try again.");
+    assert(error&&lv_obj_is_visible(error));
+    assert(lv_color_to32(lv_obj_get_style_text_color(error,0))==lv_color_to32(lv_color_hex(0xB23E40)));
+    snapshot("login-error");
+    pointer_tap(952,106);
+    assert(find_label(lv_layer_top(),"Opens automatically when the code is correct."));
+    pointer_tap(1224,51); /* Original top-right x, not a Close text button. */
+    assert(!ui_page_05_set_password_is_open()&&pops==before);
     for(unsigned i=0;i<20;i++){
         ui_page_05_set_password_open();advance(20);
         assert(ui_page_05_set_password_request_back());
         advance(200);assert(!ui_page_05_set_password_is_open());
     }
     ui_page_05_set_password_destroy();ui_page_20_set_print_destroy();
-    puts("PASS real LVGL login: compact geometry, opaque surface, 4s stable pixels over background updates, outside dismissal, auto-confirm and repeated lifecycle");
+    puts("PASS real LVGL login: first-concept geometry/colors/labels, opaque surface, 4s stable pixels, Clear/backspace/x/outside dismissal and repeated lifecycle");
     ui_page_29_set_password_create(lv_scr_act());snapshot("password");click("Current password");
     snapshot("password-keypad");
     click("9");click("9");click("9");click("9");click("Confirm");

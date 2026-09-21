@@ -154,6 +154,17 @@ static void test_component(void)
     lv_obj_clear_flag(parent,LV_OBJ_FLAG_HIDDEN);
     lv_pin_keypad_show(&keypad, &config, "1");
     assert(!keypad.blink->paused);
+    config.compact=true;config.auto_confirm=true;
+    lv_pin_keypad_show(&keypad,&config,"1");
+    assert(keypad.blink->paused&&keypad.keys[11]->x==486);
+    assert(lv_obj_has_flag(keypad.eye,LV_OBJ_FLAG_HIDDEN));
+    config.compact=false;config.auto_confirm=false;
+    lv_pin_keypad_show(&keypad,&config,"1");
+    assert(!keypad.blink->paused&&keypad.root->w==1120);
+    assert(keypad.keys[11]->x==880&&keypad.keys[11]->w==216);
+    assert(keypad.keys[11]->color==LV_SETTINGS_PRIMARY);
+    assert(!strcmp(keypad.keys[11]->text,"Confirm"));
+    assert(!lv_obj_has_flag(keypad.eye,LV_OBJ_FLAG_HIDDEN));
     lv_obj_del(parent);
     assert(!keypad.root && !keypad.blink);
     assert_empty(&keypad);
@@ -179,22 +190,34 @@ static void test_login_page(void)
     assert(g_password_page.keypad.blink->paused);
     assert(lv_obj_has_flag(g_password_page.keypad.cursor,LV_OBJ_FLAG_HIDDEN));
     for(unsigned i=0;i<12;i++){
-        assert(g_password_page.keypad.keys[i]->w==100&&g_password_page.keypad.keys[i]->h==62);
-        assert(g_password_page.keypad.keys[i]->x==488+(int)(i%3)*108);
-        assert(g_password_page.keypad.keys[i]->y==64+(int)(i/3)*70);
-        assert(g_password_page.keypad.keys[i]->x+100<850);
-        assert(g_password_page.keypad.keys[i]->y+62<364);
+        unsigned slot=i==9?11:i==11?9:i;
+        static const int x[]={486,601,715},y[]={55,128,201,273},h[]={65,65,64,65};
+        assert(g_password_page.keypad.keys[i]->w==107&&g_password_page.keypad.keys[i]->h==h[slot/3]);
+        assert(g_password_page.keypad.keys[i]->x==x[slot%3]);
+        assert(g_password_page.keypad.keys[i]->y==y[slot/3]);
+        assert(g_password_page.keypad.keys[i]->color==((i==9||i==11)?0xFBFCFD:0xF0F3F5));
+        assert(g_password_page.keypad.keys[i]->pressed_color==0xE2E9EE);
     }
-    assert(g_password_page.keypad.cancel->x==728&&g_password_page.keypad.cancel->y==14);
-    assert(g_password_page.keypad.cancel->w==96&&g_password_page.keypad.cancel->h==40);
-    assert(!strcmp(g_password_page.keypad.cancel->text,"Close"));
-    assert(strstr(g_password_page.keypad.keys[9]->children[0]->text,"popup_icons/backspace.png"));
+    assert(g_password_page.keypad.cancel->x==791&&g_password_page.keypad.cancel->y==14);
+    assert(g_password_page.keypad.cancel->w==40&&g_password_page.keypad.cancel->h==36);
+    assert(!g_password_page.keypad.cancel->text[0]);
+    assert(strstr(g_password_page.keypad.close_icon->text,"pin_icons/close.png"));
+    assert(strstr(g_password_page.keypad.backspace_icon->text,"pin_icons/erase.png"));
+    assert(lv_obj_has_flag(g_password_page.keypad.eye,LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_has_flag(g_password_page.keypad.eyebrow,LV_OBJ_FLAG_HIDDEN));
+    assert(strstr(g_password_page.keypad.leading_icon->text,"pin_icons/lock.png"));
+    assert(strstr(g_password_page.keypad.footnote->text,"For authorized configuration"));
     assert(!strcmp(g_password_page.keypad.keys[10]->text,"0"));
     assert(!strcmp(g_password_page.keypad.keys[11]->text,"Clear"));
     type_pin(&g_password_page.keypad,"0000");
     assert(switched_page == -1);
     assert_empty(&g_password_page.keypad);
-    assert(strstr(g_password_page.keypad.status->text,"Incorrect PIN"));
+    assert(strstr(g_password_page.keypad.status->text,"Incorrect password"));
+    assert(g_password_page.keypad.error);
+    press_key(&g_password_page.keypad,1);
+    assert(!g_password_page.keypad.error&&strstr(g_password_page.keypad.status->text,"Opens automatically"));
+    press_key(&g_password_page.keypad,10);
+    assert_empty(&g_password_page.keypad);
     type_pin(&g_password_page.keypad,"1111");
     assert(switched_page == UI_PAGE_SETTING);
     assert_empty(&g_password_page.keypad);
@@ -284,12 +307,12 @@ static void test_visibility(void)
     lv_pin_keypad_destroy(&keypad);
     lv_obj_del(parent);
 
-    /* Both page integrations read the shared preference on every open. */
+    /* First-concept login always masks; the full change-PIN editor keeps its preference. */
     parent=lv_obj_create(NULL);
     ui_page_05_set_password_create(parent);
-    assert(g_password_page.keypad.digits_visible);
-    click(g_password_page.keypad.eye);
-    assert(!saved_visibility);
+    assert(!g_password_page.keypad.digits_visible);
+    assert(lv_obj_has_flag(g_password_page.keypad.eye,LV_OBJ_FLAG_HIDDEN));
+    assert(saved_visibility);
     ui_page_05_set_password_destroy();
     ui_page_29_set_password_create(parent);
     for (unsigned i=0; i<PASSWORD_FIELD_COUNT; ++i) {
@@ -306,7 +329,7 @@ static void test_visibility(void)
     assert(!save_count);
     ui_page_29_set_password_destroy();
     ui_page_05_set_password_create(parent);
-    assert(g_password_page.keypad.digits_visible==saved_visibility);
+    assert(!g_password_page.keypad.digits_visible);
     ui_page_05_set_password_destroy();
     lv_obj_del(parent);
     saved_visibility=false;

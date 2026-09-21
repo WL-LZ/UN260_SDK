@@ -348,12 +348,14 @@ add_executable(${PROJECT_NAME} main.c
     un260/font/lv_font_instrument_sans_bold_48.c
     un260/font/lv_font_instrument_sans_medium_10.c
     un260/font/lv_font_instrument_sans_medium_12.c
+    un260/font/lv_font_instrument_sans_medium_13.c
     un260/font/lv_font_instrument_sans_medium_14.c
     un260/font/lv_font_instrument_sans_medium_16.c
     un260/font/lv_font_instrument_sans_medium_18.c
     un260/font/lv_font_instrument_sans_medium_20.c
     un260/font/lv_font_instrument_sans_medium_22.c
     un260/font/lv_font_instrument_sans_medium_24.c
+    un260/font/lv_font_instrument_sans_medium_26.c
     un260/font/lv_font_instrument_sans_medium_28.c
     un260/font/lv_font_instrument_sans_medium_30.c
     un260/font/lv_font_instrument_sans_medium_32.c

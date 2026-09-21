@@ -108,12 +108,14 @@ LV_FONT_DECLARE(lv_font_instrument_sans_bold_44); \
 LV_FONT_DECLARE(lv_font_instrument_sans_bold_48); \
 LV_FONT_DECLARE(lv_font_instrument_sans_medium_10); \
 LV_FONT_DECLARE(lv_font_instrument_sans_medium_12); \
+LV_FONT_DECLARE(lv_font_instrument_sans_medium_13); \
 LV_FONT_DECLARE(lv_font_instrument_sans_medium_14); \
 LV_FONT_DECLARE(lv_font_instrument_sans_medium_16); \
 LV_FONT_DECLARE(lv_font_instrument_sans_medium_18); \
 LV_FONT_DECLARE(lv_font_instrument_sans_medium_20); \
 LV_FONT_DECLARE(lv_font_instrument_sans_medium_22); \
 LV_FONT_DECLARE(lv_font_instrument_sans_medium_24); \
+LV_FONT_DECLARE(lv_font_instrument_sans_medium_26); \
 LV_FONT_DECLARE(lv_font_instrument_sans_medium_28); \
 LV_FONT_DECLARE(lv_font_instrument_sans_medium_30); \
 LV_FONT_DECLARE(lv_font_instrument_sans_medium_32); \
