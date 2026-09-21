@@ -20,7 +20,8 @@ static void quick_test_clear_backdrop_raster(void)
         qc_position(-280+70*i);quick_assert_clear_backdrop();render();
         assert(!memcmp(underlay,framebuffer+280*1280,sizeof(underlay)));
         /* Removing dimming must not fade the sheet's text or surface. */
-        if(i)assert(framebuffer[0].full==lv_color_hex(0xF6F8FA).full);
+        /* Inner border is visible at the edge; sample untouched sheet fill. */
+        if(i)assert(framebuffer[10*1280+10].full==lv_color_hex(0xF6F8FA).full);
         char name[40];snprintf(name,sizeof(name),"quick-progress-%03d",25*i);write_bmp(name);
     }
     for(int i=4;i>=0;--i) {
@@ -72,6 +73,10 @@ static void test_main_quick(void)
     assert(!strcmp(lv_label_get_text(quick.versions[0]),"Not received"));
     assert(!strcmp(lv_label_get_text(quick.versions[2]),"1.0.0"));
     assert(lv_obj_get_style_border_width(quick.sheet,0)==0);assert_labels(quick.sheet);
+    lv_obj_t *inner_outline=lv_obj_get_child(quick.sheet,-1);
+    assert(lv_obj_get_style_border_width(inner_outline,0)==2);
+    assert(lv_obj_get_style_bg_opa(inner_outline,0)==LV_OPA_TRANSP);
+    assert(!lv_obj_has_flag(inner_outline,LV_OBJ_FLAG_CLICKABLE));
     assert(lv_obj_get_width(quick.sheet)==1280 && lv_obj_get_x(quick.sheet)==0 && lv_obj_get_y(quick.sheet)==0);
     assert(framebuffer[0].full==lv_color_hex(0xF6F8FA).full && framebuffer[1279].full==lv_color_hex(0xF6F8FA).full);
     write_bmp("quick-controls-unavailable");

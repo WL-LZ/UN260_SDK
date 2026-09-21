@@ -2,6 +2,9 @@
 #define LV_SETTINGS_H
 #include "lvgl/lvgl.h"
 
+/* Neutral interactive surface; selection and press feedback remain separate. */
+#define LV_SETTINGS_CONTROL_SURFACE 0xF7F7F7
+
 /* Presentation only. Owners provide strings, actions and confirmed values. */
 typedef struct {
     const char *title, *subtitle, *icon;
@@ -16,6 +19,8 @@ typedef struct {
     /* Optional output; owner may refresh a value without depending on child order.
      * Pass value="" to reserve a live value label. NULL omits that field. */
     lv_obj_t **value_label;
+    /* Full-width grouped row; default preserves independent card callers. */
+    bool grouped;
 } lv_settings_item_t;
 typedef struct {
     lv_obj_t *root, *body, *footer, *back, *message;
@@ -29,12 +34,25 @@ lv_obj_t *lv_settings_button(lv_obj_t *, int x, int y, int w, int h,
 /* Settings-only Back palette. Navigation marker and gesture semantics retained. */
 lv_obj_t *lv_settings_back(lv_obj_t *, int x, int y, int w, int h,
                            lv_event_cb_t, void *);
+/* Shared gray base / white selection. Pending input never changes selection paint. */
+lv_obj_t *lv_settings_segment_base(lv_obj_t *, int x, int y, int w, int h);
+lv_obj_t *lv_settings_segment(lv_obj_t *, unsigned index, unsigned count,
+                            const char *, lv_event_cb_t, void *);
 /* Same surface language, available to function-specific detail compositions. */
 lv_obj_t *lv_settings_panel(lv_obj_t *, int x, int y, int w, int h);
 lv_obj_t *lv_settings_header(lv_obj_t *, int x, int y, int w,
                              const lv_settings_header_t *);
 lv_settings_frame_t lv_settings_frame_create(lv_obj_t *, const lv_settings_header_t *);
+/* Standard frame action bar, or NULL for a custom page. */
+lv_obj_t *lv_settings_actions(lv_obj_t *root);
 /* Two-column native flex layout. Adding/deleting/hiding cards reflows automatically. */
 lv_obj_t *lv_settings_grid(lv_obj_t *, int x, int y, int w, int h);
 lv_obj_t *lv_settings_item(lv_obj_t *grid, const lv_settings_item_t *);
+lv_obj_t *lv_settings_list(lv_obj_t *, int x, int y, int w, int h);
+lv_obj_t *lv_settings_group(lv_obj_t *list);
+/* Call after changing row visibility; deletion/layout changes also refresh edges. */
+void lv_settings_group_refresh(lv_obj_t *group);
+/* A separated detail row reserves 8px above/below its control, plus its rule. */
+lv_obj_t *lv_settings_control_row(lv_obj_t *, int x, int y, int w,
+                                 int control_height, bool separator);
 #endif

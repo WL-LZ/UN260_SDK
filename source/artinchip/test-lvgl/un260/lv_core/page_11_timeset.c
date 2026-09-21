@@ -5,12 +5,14 @@
 #include "un260/lv_components/lv_settings.h"
 #include "un260/lv_system/machine_time.h"
 #include "un260/gesture/gesture_service.h"
+#include "lv_port_indev.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 static lv_settings_frame_t time_frame;
 static machine_time_value_t time_original,time_draft;
-static lv_obj_t *time_values[6],*time_steps[6][2],*time_preview,*date_preview,*time_save;
+static lv_obj_t *time_wheels[6],*time_preview,*date_preview,*time_save;
+static unsigned wheel_days;
 static bool time_home;
 static const char *field_names[]={"Year","Month","Day","Hour","Minute","Second"};
 static unsigned field_value(unsigned field){
@@ -29,26 +31,30 @@ static unsigned field_limit(unsigned field,bool upper){
  if(field==2){machine_time_value_t end=time_draft;end.day=31;machine_time_normalize(&end);return end.day;}
  return field==3?23:59;
 }
+static void time_options(unsigned field){
+ char options[512];size_t used=0;
+ unsigned first=field_limit(field,false),last=field_limit(field,true);
+ for(unsigned n=first;n<=last;n++)
+  used+=(size_t)snprintf(options+used,sizeof(options)-used,field?"%02u%s":"%04u%s",n,n==last?"":"\n");
+ lv_roller_set_options(time_wheels[field],options,LV_ROLLER_MODE_NORMAL);
+}
 static void time_refresh(void){
  char s[64];
- for(unsigned i=0;i<6;i++){
-  snprintf(s,sizeof(s),i?"%02u":"%04u",field_value(i));lv_label_set_text(time_values[i],s);
-  for(unsigned j=0;j<2;j++){
-   bool limit=field_value(i)==field_limit(i,j==0);
-   if(limit)lv_obj_add_state(time_steps[i][j],LV_STATE_DISABLED);else lv_obj_clear_state(time_steps[i][j],LV_STATE_DISABLED);
-  }
+ if(wheel_days!=field_limit(2,true)){
+  wheel_days=field_limit(2,true);time_options(2);
  }
+ for(unsigned i=0;i<6;i++)
+  if(lv_roller_get_selected(time_wheels[i])!=field_value(i)-field_limit(i,false))
+   lv_roller_set_selected(time_wheels[i],field_value(i)-field_limit(i,false),LV_ANIM_OFF);
  snprintf(s,sizeof(s),"%02u:%02u:%02u",time_draft.hour,time_draft.minute,time_draft.second);lv_label_set_text(time_preview,s);
  snprintf(s,sizeof(s),"%04u / %02u / %02u",time_draft.year,time_draft.month,time_draft.day);lv_label_set_text(date_preview,s);
  lv_label_set_text(time_frame.message,time_dirty()?"Unsaved changes":"No changes");
  if(time_dirty())lv_obj_clear_state(time_save,LV_STATE_DISABLED);else lv_obj_add_state(time_save,LV_STATE_DISABLED);
 }
-static void time_step(lv_event_t *e){
- unsigned key=(unsigned)(uintptr_t)lv_event_get_user_data(e),field=key/2;bool up=key%2==0;
+static void time_wheel_changed(lv_event_t *e){
+ unsigned field=(unsigned)(uintptr_t)lv_event_get_user_data(e);
  if(field>=6)return;
- unsigned value=field_value(field);
- if(value==field_limit(field,up))return;
- value=up?value+1:value-1;
+ unsigned value=lv_roller_get_selected(lv_event_get_target(e))+field_limit(field,false);
  switch(field){case 0:time_draft.year=value;break;case 1:time_draft.month=value;break;
  case 2:time_draft.day=value;break;case 3:time_draft.hour=value;break;
  case 4:time_draft.minute=value;break;default:time_draft.second=value;}
@@ -88,29 +94,37 @@ void ui_page_11_timeset_create(lv_obj_t *parent){
  for(unsigned i=0;i<6;i++){
   int x=i<3?20+i*132:450+(i-3)*114,w=i<3?122:104;
   lv_settings_label(body,field_names[i],x,40,&lv_font_instrument_sans_medium_14,0x536B79);
-  lv_obj_t *stack=lv_settings_box(body,x,63,w,144,0xF3F6F8);lv_obj_set_style_radius(stack,12,0);
-  lv_obj_set_style_border_width(stack,1,0);lv_obj_set_style_border_color(stack,lv_color_hex(0xDFE7ED),0);
-  time_steps[i][0]=lv_settings_button(stack,0,0,w,44,"+",false,time_step,(void*)(uintptr_t)(i*2));
-  lv_obj_set_style_bg_color(time_steps[i][0],lv_color_hex(0xF3F6F8),0);
-  lv_obj_t *value=lv_settings_box(stack,0,44,w,56,0xFFFFFF);
-  time_values[i]=lv_settings_label(value,"",0,0,i?&lv_font_instrument_sans_semibold_32:&lv_font_instrument_sans_semibold_28,0x1D2B34);
-  lv_obj_set_width(time_values[i],w);lv_obj_set_style_text_align(time_values[i],LV_TEXT_ALIGN_CENTER,0);lv_obj_align(time_values[i],LV_ALIGN_CENTER,0,0);
-  time_steps[i][1]=lv_settings_button(stack,0,100,w,44,"-",false,time_step,(void*)(uintptr_t)(i*2+1));
-  lv_obj_set_style_bg_color(time_steps[i][1],lv_color_hex(0xF3F6F8),0);
+  lv_obj_t *wheel=time_wheels[i]=lv_roller_create(body);
+  lv_obj_remove_style_all(wheel);lv_obj_set_pos(wheel,x,64);lv_obj_set_width(wheel,w);
+  lv_obj_set_style_bg_color(wheel,lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),0);
+  lv_obj_set_style_bg_opa(wheel,LV_OPA_COVER,0);lv_obj_set_style_radius(wheel,12,0);
+  lv_obj_set_style_text_font(wheel,&lv_font_instrument_sans_medium_22,0);
+  lv_obj_set_style_text_color(wheel,lv_color_hex(0x82939F),0);
+  lv_obj_set_style_text_line_space(wheel,22,0);
+  lv_obj_set_style_text_align(wheel,LV_TEXT_ALIGN_CENTER,0);
+  lv_obj_set_style_text_align(wheel,LV_TEXT_ALIGN_CENTER,LV_PART_SELECTED);
+  lv_obj_set_style_bg_color(wheel,lv_color_hex(0xFFFFFF),LV_PART_SELECTED);
+  lv_obj_set_style_bg_opa(wheel,LV_OPA_COVER,LV_PART_SELECTED);
+  lv_obj_set_style_text_color(wheel,lv_color_hex(0x1D2B34),LV_PART_SELECTED);
+  lv_obj_set_style_text_font(wheel,&lv_font_instrument_sans_semibold_22,LV_PART_SELECTED);
+  lv_obj_set_style_anim_time(wheel,120,0);
+  time_options(i);lv_roller_set_visible_row_count(wheel,3);
+  lv_port_indev_set_drag_obj(wheel,true);
+  lv_obj_add_event_cb(wheel,time_wheel_changed,LV_EVENT_VALUE_CHANGED,(void*)(uintptr_t)i);
  }
  lv_settings_label(body,"Preview",834,12,&lv_font_instrument_sans_semibold_14,0x536B79);
  lv_obj_t *preview=lv_settings_box(body,834,42,376,151,0xF5F7F9);lv_obj_set_style_radius(preview,13,0);
  lv_settings_label(preview,"24-hour",18,14,&lv_font_instrument_sans_medium_14,0x536B79);
  time_preview=lv_settings_label(preview,"",18,43,&lv_font_instrument_sans_semibold_40,0x1D2B34);
  date_preview=lv_settings_label(preview,"",18,104,&lv_font_instrument_sans_medium_18,0x536B79);
- lv_settings_label(body,"Changes apply after Save.",834,207,&lv_font_instrument_sans_medium_12,0x536B79);
+ lv_settings_label(body,"Scroll to adjust. Save to apply.",834,207,&lv_font_instrument_sans_medium_12,0x536B79);
  lv_settings_button(time_frame.footer,976,0,116,44,"Cancel",false,time_cancel,NULL);
  time_save=lv_settings_button(time_frame.footer,1102,0,130,44,"Save",true,time_apply,NULL);
- time_refresh();gesture_service_set_page_policy(UI_PAGE_TIMESET,NULL,time_gesture);
+ wheel_days=field_limit(2,true);time_refresh();gesture_service_set_page_policy(UI_PAGE_TIMESET,NULL,time_gesture);
 }
 void ui_page_11_timeset_destroy(void){
  gesture_service_clear_page_policy(UI_PAGE_TIMESET);settings_detail_dialog_hide();
  if(time_frame.root)lv_obj_del(time_frame.root);
- memset(&time_frame,0,sizeof(time_frame));memset(time_values,0,sizeof(time_values));memset(time_steps,0,sizeof(time_steps));
+ memset(&time_frame,0,sizeof(time_frame));memset(time_wheels,0,sizeof(time_wheels));wheel_days=0;
  time_preview=date_preview=time_save=NULL;
 }

@@ -60,7 +60,6 @@ void app_ui_runtime_poll(uint32_t now_ms)
     app_setting_runtime_poll(now_ms);
     if (diagnostic_calibration_poll(now_ms)) {
         cis_calib_ui_refresh();
-        show_communication_error_popup();
     }
     if (ui_page_28_get_image_poll(now_ms)) {
         stream_timed_out = true;

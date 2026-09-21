@@ -27,14 +27,16 @@ fonts=sorted(set(re.findall(r'\blv_font_(?:instrument_sans|manrope)_[a-zA-Z0-9_]
 with tempfile.TemporaryDirectory(prefix='un260-settings-view-') as temp:
     work=Path(temp);(work/'lvgl').mkdir();(work/'lvgl/lvgl.h').write_text(f'#include "{lvgl}/lvgl.h"\n')
     (work/'lv_drv_conf.h').write_text('/* Driver configuration is not used by this renderer. */\n')
-    (work/'actual_diagnostic_pointer.h').write_text(function((root/'lv_port_indev.c').read_text(),'lv_port_indev_set_drag_obj'))
+    (work/'actual_diagnostic_pointer.h').write_text(function((root/'lv_port_indev.c').read_text(),'lv_port_indev_set_drag_obj')+'\n'+function((root/'un260/lv_core/settings_detail_ui.c').read_text(),'settings_detail_add_run'))
     conf=work/'lv_conf.h';conf.write_text('#ifndef LV_CONF_H\n#define LV_CONF_H\n#define LV_COLOR_DEPTH 32\n#define LV_MEM_SIZE (16U*1024U*1024U)\n#define LV_USE_THEME_DEFAULT 0\n#define LV_USE_LOG 0\n#define LV_FONT_MONTSERRAT_18 1\n#define LV_FONT_CUSTOM_DECLARE '+' '.join(f'LV_FONT_DECLARE({f});' for f in fonts)+'\n#endif\n')
-    sources=[*compiled_asset_sources(),root/'tools/test_settings_diagnostics_view.c',*[root/p for p in pages],root/'un260/lv_components/lv_settings.c',
+    # Optional old Debug translation unit for deterministic before/after crash reproduction.
+    page_sources=[Path(os.environ['UN260_TEST_DEBUG_SOURCE']) if p.endswith('/page_10_debug.c') and os.environ.get('UN260_TEST_DEBUG_SOURCE') else root/p for p in pages]
+    sources=[*compiled_asset_sources(),root/'tools/test_settings_diagnostics_view.c',*page_sources,root/'un260/lv_components/lv_settings.c',
       root/'un260/lv_components/lv_nav_button.c',root/'un260/lv_components/lv_damped_button.c',
-      root/'un260/diagnostic/diagnostic.c',root/'un260/protocol/protocol_frame.c',
+      root/'un260/diagnostic/diagnostic.c',root/'un260/app_service/motor_test_service.c',root/'un260/protocol/protocol_frame.c',
       *[root/'un260/font'/f'{f}.c' for f in fonts],*lvgl.joinpath('src').rglob('*.c')]
     common=['gcc','-DLVGL_DIR="L:/usr/local/share/lvgl_data/"','-DLV_DRV_CONF_H','-std=gnu11','-O1','-g','-Wall','-Wextra',
-      '-fsanitize=address,undefined','-fno-sanitize-recover=all',f'-I{work}',f'-I{root}',f'-I{lvgl}',f'-DLV_CONF_PATH={conf}']
+      '-fsanitize=address,undefined','-fno-sanitize-recover=all',f'-I{work}',f'-I{root}',f'-I{root}/un260/lv_core',f'-I{lvgl}',f'-DLV_CONF_PATH={conf}']
     objects=[work/f'{i}.o' for i in range(len(sources))]
     def build(pair):subprocess.run([*common,'-c',str(pair[0]),'-o',str(pair[1])],check=True)
     with ThreadPoolExecutor(max_workers=4) as pool:list(pool.map(build,zip(sources,objects)))

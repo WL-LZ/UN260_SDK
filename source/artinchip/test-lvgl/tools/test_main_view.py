@@ -83,6 +83,7 @@ def main():
         sources.append(path)
     with tempfile.TemporaryDirectory(prefix="un260-main-view-") as tmp:
         work = Path(tmp)
+        (work/'lv_drv_conf.h').write_text('/* Host rendering: no physical driver. */\n')
         # Firmware keeps large PNGs outside the binary and decodes into the DMA
         # pool, not LVGL's 4 MiB object heap. Decode those same pixels on the host
         # into a separate malloc-backed cache; never substitute a mock picture.

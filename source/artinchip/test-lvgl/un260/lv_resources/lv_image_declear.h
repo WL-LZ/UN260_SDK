@@ -32,7 +32,6 @@ extern "C" {
  LV_IMG_DECLARE(page_03_ok_icon);
 
  //page_set_passage
- LV_IMG_DECLARE(page_05_set_password_bg_img);
 
  //page_curr_page
  LV_IMG_DECLARE(page_07_currency_bg_img);

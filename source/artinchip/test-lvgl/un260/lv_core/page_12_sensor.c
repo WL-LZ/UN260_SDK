@@ -69,7 +69,7 @@ static void sensor_refresh_view(void)
         now - sensor_page.last_received_ms > 2000 ?
         "No recent response. Readings shown are the last received values." :
         "Live readings. Values are not a pass / fail assessment.";
-    if (!work_mode_service_diagnostic_ready()) message=work_mode_service_status_text();
+    /* Receiving voltages is read-only and independent of the RUN mode lease. */
     if (strcmp(lv_label_get_text(sensor_page.frame.message),message))
         lv_label_set_text(sensor_page.frame.message,message);
 }
@@ -85,6 +85,7 @@ void ui_page_12_sensor_create(lv_obj_t *parent)
     if (sensor_page.frame.root) return;
     lv_settings_header_t header = {"Sensors", "Maintenance / Live voltage", "Wrench", sensor_esc_cb, NULL};
     sensor_page.frame = lv_settings_frame_create(parent, &header);
+    settings_detail_add_run(sensor_page.frame.root);
     lv_obj_set_style_bg_opa(sensor_page.frame.body, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(sensor_page.frame.body, 0, 0);
     /* Six columns keep all eleven readings visible without tiny controls. */

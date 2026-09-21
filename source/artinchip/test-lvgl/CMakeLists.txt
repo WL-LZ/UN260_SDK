@@ -122,6 +122,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_core/page_02_list_search.c
     un260/app_service/setting_service.c
     un260/app_service/work_mode_service.c
+    un260/app_service/motor_test_service.c
     un260/app_service/upgrade_session.c
     un260/storage/work_mode_store.c
     un260/lv_system/app_clock.c
@@ -392,7 +393,6 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_resources/page_03_del_icon.c
     un260/lv_resources/page_03_menu_bg_img.c
     un260/lv_resources/page_03_ok_icon.c
-    un260/lv_resources/page_05_set_password_bg_img.c
     un260/lv_resources/page_07_currency_bg_img.c
     #img_curr
     un260/lv_resources/lv_curr/CURR_CNY.c

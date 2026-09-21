@@ -37,7 +37,7 @@ void ui_manager_clear_stack(void){ui_page_06_settings_reset_navigation();}
 void ui_manager_invalidate_all_page_caches(void){}
 void ui_page_cis_calib_select(bool white){white_selected=white;}
 uint32_t app_clock_uptime_ms(void){return lv_tick_get();}
-bool app_command_runtime_request_count_start(void){sends++;return true;}
+bool app_command_runtime_request_diagnostic_run(void){sends++;return true;}
 bool settings_detail_send_command(uint8_t cmd,const uint8_t *sub,uint16_t len){assert(len==1);sends++;last_command=cmd;last_sub=sub[0];return true;}
 bool settings_detail_overlay_is_open(void){return overlay;}
 void settings_detail_dialog_hide(void){overlay=false;discard=NULL;}
@@ -69,7 +69,33 @@ static void catalog_test(void){size_t n;const settings_node_t*c=settings_catalog
  settings_node_t t[]={{"root",NULL,"Root",NULL,NULL,SETTINGS_CATEGORY,0},{"group","root","Group",NULL,NULL,SETTINGS_DIRECTORY,0},{"third","group","Third",NULL,NULL,SETTINGS_DIRECTORY,0},{"leaf","third","Leaf",NULL,NULL,SETTINGS_DETAIL,1}};
  assert(settings_catalog_validate(t,4));t[2].parent="third";assert(!settings_catalog_validate(t,4));t[2].parent="missing";assert(!settings_catalog_validate(t,4));t[2].parent="group";t[3].id="root";assert(!settings_catalog_validate(t,4));t[3].id="leaf";t[3].kind=SETTINGS_DIRECTORY;assert(!settings_catalog_validate(t,4));
  puts("PASS catalog: 26 details, unique IDs, parent validation, cycle/depth guards and third-level support");}
+static void grouped_test(void){
+ lv_obj_t *list=lv_settings_list(lv_scr_act(),240,84,1016,274),*group=lv_settings_group(list);
+ lv_obj_t *rows[7];
+ for(unsigned i=0;i<7;i++){
+  lv_settings_item_t c={.title="Setting",.hint=i%2?"Optional explanation":NULL,.value="",.grouped=true,.activate=card_clicked};
+  rows[i]=lv_settings_item(group,&c);
+ }
+ lv_obj_update_layout(list);assert(lv_obj_get_scroll_bottom(list)>0);
+ unsigned clicks_before=card_clicks;
+ pointer_feed(420,300,LV_INDEV_STATE_PRESSED);
+ for(int y=290;y>=150;y-=14)pointer_feed(420,y,LV_INDEV_STATE_PRESSED);
+ pointer_feed(420,150,LV_INDEV_STATE_RELEASED);
+ assert(lv_obj_get_scroll_y(list)>30&&card_clicks==clicks_before);
+ lv_obj_scroll_to_y(list,0,LV_ANIM_OFF);
+ lv_obj_del(rows[0]);lv_obj_update_layout(list);
+ assert(lv_obj_get_y(rows[1])==0);
+ lv_obj_add_flag(rows[6],LV_OBJ_FLAG_HIDDEN);lv_settings_group_refresh(group);lv_obj_update_layout(list);
+ assert(lv_obj_get_style_border_width(rows[5],0)==0);
+ assert(lv_obj_get_style_border_width(rows[4],0)==1);
+ for(unsigned i=1;i<6;i++)lv_obj_add_flag(rows[i],LV_OBJ_FLAG_HIDDEN);
+ lv_settings_group_refresh(group);assert(lv_obj_has_flag(group,LV_OBJ_FLAG_HIDDEN));
+ lv_obj_clear_flag(rows[1],LV_OBJ_FLAG_HIDDEN);lv_settings_group_refresh(group);lv_obj_update_layout(list);
+ assert(!lv_obj_has_flag(group,LV_OBJ_FLAG_HIDDEN));assert(lv_obj_get_style_border_width(rows[1],0)==0);
+ lv_obj_del(list);puts("PASS grouped rows: seven items, delete, hide, last rule, empty group and restore");
+}
 static void grid_test(void){
+ grouped_test();
  lv_obj_t *test=lv_settings_box(lv_scr_act(),0,0,1280,400,0xF1F4F5),*g=lv_settings_grid(test,240,84,1016,274);lv_obj_t *cards[11];
  for(unsigned i=0;i<11;i++){lv_settings_item_t c={.title="Language",.value="English",.hint=i%2?"Optional helper text":NULL,.activate=card_clicked};cards[i]=lv_settings_item(g,&c);}
  lv_obj_update_layout(g);assert(lv_obj_get_scroll_bottom(g)>0);lv_coord_t x=lv_obj_get_x(cards[0]),y=lv_obj_get_y(cards[0]);lv_obj_del(cards[0]);lv_obj_update_layout(g);assert(lv_obj_get_x(cards[1])==x&&lv_obj_get_y(cards[1])==y);
@@ -104,30 +130,30 @@ static void grid_test(void){
  assert(card_clicks==1);lv_obj_del(plain);
  puts("PASS flex: delete/hide reflow, centred rows, actual driver feedback slow/fast drag matrix, ordinary slide-out cancellation");}
 static void directory_test(void){
- ui_page_06_settings_create(lv_scr_act());assert(lv_obj_get_child_cnt(grid)==5);snapshot("device");assert(sends==0);
- assert(label_find(sidebar,"Back to count"));assert(!strcmp(lv_label_get_text(count_label),"5 settings"));
+ ui_page_06_settings_create(lv_scr_act());assert(lv_obj_get_child_cnt(grid)==2);snapshot("device");assert(sends==0);
+ assert(label_find(sidebar,"Back to count"));assert(strstr(lv_label_get_text(count_label),"5 settings"));
  machine_running=true;settings_poll(NULL);assert(!strcmp(lv_label_get_text(status_label),"Running"));machine_running=false;
  boot_stage=BOOT_STAGE_FAIL;settings_poll(NULL);assert(!strcmp(lv_label_get_text(status_label),"Attention"));boot_stage=BOOT_STAGE_DONE;settings_poll(NULL);
  lv_obj_t *brightness_value=value_labels[find("brightness")-catalog];assert(!strcmp(lv_label_get_text(brightness_value),"75%"));
  ui_page_06_settings_suspend();light_level=60;ui_page_06_settings_refresh_data(UI_DATA_TOPIC_DEVICE_VERSION);
  assert(!strcmp(lv_label_get_text(brightness_value),"75%"));ui_page_06_settings_resume();assert(!strcmp(lv_label_get_text(brightness_value),"60%"));light_level=75;
- click_label(sidebar,"Maintenance");assert(scope_is("maintenance"));assert(lv_obj_get_child_cnt(grid)==8);snapshot("maintenance");
- click_label(grid,"Calibration");assert(scope_is("calibration"));assert(lv_obj_get_child_cnt(grid)==2);snapshot("calibration");assert(sends==0);
+ click_label(sidebar,"Maintenance");assert(scope_is("maintenance"));assert(lv_obj_get_child_cnt(grid)==4);snapshot("maintenance");
+ click_label(grid,"Calibration");assert(scope_is("calibration"));assert(lv_obj_get_child_cnt(grid)==1);snapshot("calibration");assert(sends==0);
  click_label(grid,"White balance");assert(white_selected&&requested==UI_PAGE_CIS_CALIB&&sends==0);assert(ui_page_06_settings_resume());assert(scope_is("calibration"));assert(page_06_settings_back_sub_page());assert(scope_is("maintenance"));
  click_label(sidebar,"Counting");snapshot("counting");click_label(sidebar,"Data");snapshot("data");click_label(grid,"Upgrade");snapshot("upgrade");assert(page_06_settings_back_sub_page());
  click_label(grid,"Data collection");assert(!sidebar&&!grid&&dc_btn_all&&diagnostic_scope);
  assert(lv_obj_has_state(dc_btn_start,LV_STATE_DISABLED)&&lv_obj_has_state(dc_btn_disable,LV_STATE_DISABLED));
  snapshot("collection");assert(sends==0);
- diagnostic_ready=false;click_label(view,"All notes");assert(sends==0);diagnostic_ready=true;
+ diagnostic_ready=false;click_label(view,"All notes");assert(sends==1);diagnostic_ready=true;
  click_label(view,"All notes");assert(last_command==0xC0&&last_sub==1&&sends==1);data_collection_request_cancel();
  data_collection_state_select_mode(DATA_COLLECT_MODE_ALL,"All-note collection confirmed");page_06_data_collection_refresh();
  assert(!lv_obj_has_state(dc_btn_start,LV_STATE_DISABLED)&&!lv_obj_has_flag(dc_check_all,LV_OBJ_FLAG_HIDDEN));snapshot("collection-confirmed");
  machine_running=true;page_06_data_collection_refresh();assert(lv_obj_has_state(dc_btn_start,LV_STATE_DISABLED));
- click_label(view,"Start");assert(sends==1);machine_running=false;
+ click_label(view,"RUN");assert(sends==1);machine_running=false;
  data_collection_state_exit("Select a collection mode");assert(page_06_settings_back_sub_page()&&!diagnostic_scope);
  click_label(sidebar,"About & security");snapshot("about");
  for(unsigned i=0;i<lv_obj_get_child_cnt(grid);i++){
-  lv_obj_t *card=lv_obj_get_child(grid,i),*arrow=lv_obj_get_child(card,-1);lv_area_t ca,ar;
+  lv_obj_t *card=lv_obj_get_child(lv_obj_get_child(grid,i),0),*arrow=lv_obj_get_child(card,-1);lv_area_t ca,ar;
   lv_obj_get_coords(card,&ca);lv_obj_get_coords(arrow,&ar);
   assert(ar.x2<ca.x2&&ar.x1>ca.x1&&lv_obj_get_width(arrow)>0);
  }
@@ -138,9 +164,15 @@ static void directory_test(void){
 static void details_test(void){
  machine_time_value_t before={2024,1,31,23,59,58},now;machine_time_confirm(&before);
  ui_page_11_timeset_create(lv_scr_act());snapshot("date-time");lv_obj_update_layout(time_frame.root);assert(lv_obj_get_x(lv_obj_get_parent(time_frame.back))+lv_obj_get_x(time_frame.back)>1100);assert(lv_obj_get_height(time_frame.back)>=44);
- machine_time_tick();machine_time_get(&now);assert(now.second==59);lv_event_send(time_steps[1][0],LV_EVENT_CLICKED,NULL);assert(time_draft.month==2&&time_draft.day==29);machine_time_get(&now);assert(now.month==1);snapshot("date-time-draft");
+ pointer_feed(640,208,LV_INDEV_STATE_PRESSED);
+ for(int y=218;y<=268;y+=10)pointer_feed(640,y,LV_INDEV_STATE_PRESSED);
+ pointer_feed(640,268,LV_INDEV_STATE_RELEASED);
+ for(unsigned n=0;n<20;n++){lv_tick_inc(20);lv_timer_handler();}
+ assert(time_draft.minute<59);
+ lv_roller_set_selected(time_wheels[4],59,LV_ANIM_OFF);lv_event_send(time_wheels[4],LV_EVENT_VALUE_CHANGED,NULL);
+ machine_time_tick();machine_time_get(&now);assert(now.second==59);lv_roller_set_selected(time_wheels[1],1,LV_ANIM_OFF);lv_event_send(time_wheels[1],LV_EVENT_VALUE_CHANGED,NULL);assert(time_draft.month==2&&time_draft.day==29);machine_time_get(&now);assert(now.month==1);snapshot("date-time-draft");
  assert(policy(GESTURE_ACTION_HOME)&&discard);settings_detail_dialog_hide();unsigned old=pops;time_back(NULL);assert(discard&&pops==old);settings_detail_dialog_hide();time_cancel(NULL);assert(pops==old+1);ui_page_11_timeset_destroy();machine_time_get(&now);assert(now.month==1&&!policy);
- ui_page_11_timeset_create(lv_scr_act());lv_event_send(time_steps[1][0],LV_EVENT_CLICKED,NULL);lv_event_send(time_steps[0][0],LV_EVENT_CLICKED,NULL);assert(time_draft.year==2025&&time_draft.day==28);time_apply(NULL);machine_time_get(&now);assert(now.year==2025&&now.month==2&&now.day==28);ui_page_11_timeset_destroy();
+ ui_page_11_timeset_create(lv_scr_act());lv_roller_set_selected(time_wheels[1],1,LV_ANIM_OFF);lv_event_send(time_wheels[1],LV_EVENT_VALUE_CHANGED,NULL);lv_roller_set_selected(time_wheels[0],25,LV_ANIM_OFF);lv_event_send(time_wheels[0],LV_EVENT_VALUE_CHANGED,NULL);assert(time_draft.year==2025&&time_draft.day==28);time_apply(NULL);machine_time_get(&now);assert(now.year==2025&&now.month==2&&now.day==28);ui_page_11_timeset_destroy();
  ui_page_21_set_language_create(lv_scr_act());snapshot("language");assert(lv_obj_has_state(language_save,LV_STATE_DISABLED));assert(!language_dirty());language_cancel(NULL);ui_page_21_set_language_destroy();
  for(unsigned i=0;i<8;i++){ui_page_11_timeset_create(lv_scr_act());ui_page_11_timeset_destroy();ui_page_21_set_language_create(lv_scr_act());ui_page_21_set_language_destroy();}
  puts("PASS full-screen details, right Back, live clock while editing, draft/cancel/Save, leap clamp, dirty Home and lifecycle");}

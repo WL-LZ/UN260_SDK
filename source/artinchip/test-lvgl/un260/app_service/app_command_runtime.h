@@ -5,6 +5,10 @@
 #include <stdint.h>
 
 bool app_command_runtime_request_count_start(void);
+/* NULL means ordinary manual RUN is currently safe in a diagnostic scope. */
+const char *app_command_runtime_diagnostic_run_blocker(void);
+const char *app_command_runtime_calibration_blocker(void);
+bool app_command_runtime_request_diagnostic_run(void);
 /* Pending command or a controller-confirmed counting session. */
 bool app_command_runtime_count_start_busy(void);
 bool app_command_runtime_clear_counting_data(const char *reason);

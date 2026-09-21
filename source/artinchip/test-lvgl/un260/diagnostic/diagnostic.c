@@ -71,8 +71,8 @@ void diagnostic_calibration_end_session(void)
 bool diagnostic_calibration_poll(uint32_t now_ms)
 {
     if (!g_calibration_state.session_active || g_calibration_state.timed_out ||
-        (uint32_t)(now_ms - g_calibration_activity_ms) <
-            DIAGNOSTIC_CALIBRATION_TIMEOUT_MS) {
+        (int32_t)(now_ms - g_calibration_activity_ms) <
+            (int32_t)DIAGNOSTIC_CALIBRATION_TIMEOUT_MS) {
         return false;
     }
 

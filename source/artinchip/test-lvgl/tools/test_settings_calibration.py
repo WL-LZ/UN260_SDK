@@ -54,6 +54,7 @@ static bool settings_detail_send_command(uint8_t cmd,const uint8_t *sub,uint16_t
     assert(len==1&&sub[0]==1);sent_cmd=cmd;sends++;return send_ok;
 }
 bool work_mode_service_diagnostic_ready(void){return gate;}
+const char *app_command_runtime_calibration_blocker(void){return gate?NULL:"Waiting for manual mode";}
 void work_mode_service_hold_operation(uint32_t owner,bool active){
     if(active)holds|=owner;else holds&=~owner;
 }
@@ -103,7 +104,7 @@ static void test_targets_and_callbacks(void){
         cis_start(&click);assert(sends==before+1);
         assert(!diagnostic_calibration_begin(white?CALIB_TARGET_CIS:CALIB_TARGET_CB,now_ms));
         unsigned before_pops=pops;cis_back(&other);cis_back(&click);
-        assert(pops==before_pops&&!leave_confirm);
+        assert(pops==before_pops&&leave_confirm);leave_confirm=NULL;
         assert(calibration_gesture(GESTURE_ACTION_HOME));
         assert(calibration_gesture(GESTURE_ACTION_EXIT_PAGE));
         assert(!calibration_gesture(GESTURE_ACTION_OTHER));

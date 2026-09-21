@@ -17,6 +17,7 @@ pages = ['20_set_print', '22_set_double_note', '23_set_flap', '24_set_reject_poc
          '25_set_serial_number', '27_set_cfd_level', '29_set_password', '30_set_factory',
          '33_set_brightness', '36_display_test']
 parts = [f'un260/lv_core/page_{name}.c' for name in pages]
+parts += ['un260/lv_components/lv_loading_orbit.c']
 parts += ['un260/lv_components/lv_settings.c', 'un260/lv_components/lv_nav_button.c',
           'un260/lv_components/lv_damped_button.c', 'un260/lv_components/lv_pin_keypad.c',
           'un260/lv_components/lv_pin_input.c', 'un260/lv_system/ui_text_page.c',
@@ -32,6 +33,7 @@ with tempfile.TemporaryDirectory(prefix='un260-settings-parameters-') as temp:
     work = Path(temp)
     (work / 'lvgl').mkdir()
     (work / 'lvgl/lvgl.h').write_text(f'#include "{lvgl}/lvgl.h"\n')
+    (work / 'lv_drv_conf.h').write_text('/* Host rendering: no physical driver. */\n')
     conf = work / 'lv_conf.h'
     conf.write_text('#ifndef LV_CONF_H\n#define LV_CONF_H\n#define LV_COLOR_DEPTH 32\n'
                     '#define LV_MEM_SIZE (16U*1024U*1024U)\n#define LV_USE_THEME_DEFAULT 0\n'

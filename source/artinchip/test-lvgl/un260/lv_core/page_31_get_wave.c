@@ -137,10 +137,10 @@ static void wave_refresh_sources(void)
 
         if (source_items[i].card) {
             lv_obj_set_style_bg_color(source_items[i].card,
-                                      selected ? lv_color_hex(0xFFFFFF) : lv_color_hex(0xF1F4F5),
+                                      selected ? lv_color_hex(0xFFFFFF) : lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),
                                       0);
             lv_obj_set_style_border_color(source_items[i].card,
-                                          selected ? lv_color_hex(0xC5D8ED) : lv_color_hex(0xF1F4F5),
+                                          selected ? lv_color_hex(0xC5D8ED) : lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),
                                           0);
         }
 
@@ -294,6 +294,7 @@ void ui_page_31_get_wave_create(lv_obj_t *parent)
     if (wave_page) return;
     lv_settings_header_t header={"Waveform","Maintenance / Magnetic and UV channels","Layers",wave_esc_cb,NULL};
     wave_frame=lv_settings_frame_create(parent,&header);wave_page=wave_frame.root;
+    settings_detail_add_run(wave_page);
     lv_obj_set_style_bg_opa(wave_frame.body,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(wave_frame.body,0,0);
     lv_obj_t *sources=lv_settings_box(wave_frame.body,0,0,410,242,0xF1F4F5);

@@ -25,6 +25,7 @@ parts=['un260/lv_core/page_06_settings.c','un260/lv_core/page_11_timeset.c','un2
 fonts=sorted(set(re.findall(r'\blv_font_(?:instrument_sans|manrope)_[a-zA-Z0-9_]+',''.join((root/p).read_text() for p in parts))))
 with tempfile.TemporaryDirectory(prefix='un260-settings-view-') as temp:
     work=Path(temp);(work/'lvgl').mkdir();(work/'lvgl/lvgl.h').write_text(f'#include "{lvgl}/lvgl.h"\n')
+    (work/'lv_drv_conf.h').write_text('/* Host rendering: no physical driver. */\n')
     port=(root/'lv_port_indev.c').read_text()
     (work/'actual_settings_pointer.h').write_text(function(port,'evdev_feedback')+'\n'+function(port,'lv_port_indev_set_drag_obj'))
     conf=work/'lv_conf.h';conf.write_text('#ifndef LV_CONF_H\n#define LV_CONF_H\n#define LV_COLOR_DEPTH 32\n#define LV_MEM_SIZE (16U*1024U*1024U)\n#define LV_USE_THEME_DEFAULT 0\n#define LV_USE_LOG 0\n#define LV_FONT_MONTSERRAT_18 1\n#define LV_FONT_CUSTOM_DECLARE '+' '.join(f'LV_FONT_DECLARE({f});' for f in fonts)+'\n#endif\n')

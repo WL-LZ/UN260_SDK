@@ -7,6 +7,8 @@ typedef struct {
     const char *id, *parent, *title, *hint, *icon;
     settings_node_kind_t kind;
     int page;
+    /* Visual group within parent; NULL gives an independent group. */
+    const char *group;
 } settings_node_t;
 /* Immutable definitions must outlive the view; array order is display order, never identity. */
 const settings_node_t *settings_catalog(size_t *count);

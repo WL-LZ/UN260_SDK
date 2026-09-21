@@ -160,10 +160,10 @@ static void image_refresh_sources(void)
 
         if (source_items[i].card) {
             lv_obj_set_style_bg_color(source_items[i].card,
-                                      selected ? lv_color_hex(0xFFFFFF) : lv_color_hex(0xF1F4F5),
+                                      selected ? lv_color_hex(0xFFFFFF) : lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),
                                       0);
             lv_obj_set_style_border_color(source_items[i].card,
-                                          selected ? lv_color_hex(0xC5D8ED) : lv_color_hex(0xF1F4F5),
+                                          selected ? lv_color_hex(0xC5D8ED) : lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),
                                           0);
         }
 
@@ -427,6 +427,7 @@ void ui_page_28_get_image_create(lv_obj_t *parent)
     if (image_page) return;
     lv_settings_header_t header={"Image capture","Maintenance / Optical channels","Layers",image_esc_cb,NULL};
     image_frame=lv_settings_frame_create(parent,&header);
+    settings_detail_add_run(image_frame.root);
     image_page=image_frame.root;
     lv_obj_set_style_bg_opa(image_frame.body,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(image_frame.body,0,0);

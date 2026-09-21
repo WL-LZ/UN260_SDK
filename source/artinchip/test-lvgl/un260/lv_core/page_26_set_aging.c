@@ -100,6 +100,7 @@ void ui_page_26_set_aging_create(lv_obj_t *parent)
     if (aging_frame.root) return;
     lv_settings_header_t header={"Aging test","Maintenance / Endurance procedure","Wrench",aging_back,NULL};
     aging_frame=lv_settings_frame_create(parent,&header);
+    settings_detail_add_run(aging_frame.root);
     lv_obj_set_style_bg_opa(aging_frame.body,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(aging_frame.body,0,0);
     lv_obj_t *prepare=lv_settings_box(aging_frame.body,0,0,632,242,0xFFFFFF);

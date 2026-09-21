@@ -35,7 +35,7 @@ def function(source, name):
 reply_path = 'un260/app_service/app_setting_reply_detail.c'
 reply = (args.baseline / reply_path).read_text() if args.baseline else read(reply_path)
 cfd = read('un260/lv_core/page_27_set_cfd_level.c')
-motor = read('un260/lv_core/page_17_motor_test.c')
+motor = read('un260/app_service/motor_test_service.c')
 settings = read('un260/lv_core/page_06_settings.c')
 assert 'ui_page_27_set_cfd_level_query' not in settings
 assert 'query();' in function(cfd, 'ui_page_27_set_cfd_level_create')
@@ -142,9 +142,12 @@ static lv_obj_t object;
 static struct { lv_obj_t *root, *message; } frame;
 static lv_obj_t *currency_label, *save_button, *retry_button;
 static lv_obj_t *profiles[CFD_SCENE_COUNT];
-static lv_obj_t *cells[CFD_SCENE_COUNT][CFD_ITEM_COUNT], *values[CFD_SCENE_COUNT][CFD_ITEM_COUNT];
+static lv_obj_t *cells[CFD_ITEM_COUNT][CFD_LEVEL_MAX];
 static unsigned selected_scene, original_scene, cfd_refreshes, deletes;
 static bool ready, saving;
+static lv_obj_t *loading, *loading_text, *loading_orbit;
+static void *loading_timer;
+static void lv_timer_del(void *timer) { (void)timer; }
 static cfd_state_value_t original, draft;
 #define UI_PAGE_CFD_LEVEL_SETTING 27
 static void gesture_service_clear_page_policy(unsigned page) { (void)page; }
@@ -186,113 +189,81 @@ static void test_cfd(void) {
     puts("PASS CFD: captured reply, currency mismatch, close/read cancellation, reopen, hidden ACK, write timeout retained");
 }
 '''
-code += re.search(r'typedef struct \{[\s\S]*?\} motor_item_t;', motor).group()
-code += re.search(r'static motor_item_t motors\[\] = \{[\s\S]*?\n\};', motor).group()
 code += r'''
 #include "un260/app_service/work_mode_service.h"
-typedef int lv_timer_t;
-typedef int lv_event_t;
-typedef struct { lv_obj_t *root, *message; } lv_settings_frame_t;
-static lv_settings_frame_t motor_frame;
-static lv_timer_t *motor_timer;
-#define LV_EVENT_CLICKED 1
-#define LV_STATE_DISABLED 1
-static bool motor_gate=true, motor_send_ok=true;
+#include "un260/app_service/motor_test_service.h"
+static bool motor_gate=true;
 static uint32_t motor_holds;
-static unsigned motor_commands[3], mode_retry_refreshes;
-static uint8_t motor_payloads[3][2];
-static char motor_statuses[3][48];
-static int lv_event_get_code(lv_event_t *e) { return *e; }
-static const char *lv_label_get_text(lv_obj_t *p) { (void)p; return ""; }
-static void lv_obj_add_state(lv_obj_t *p,unsigned state) { (void)p;(void)state; }
-static void lv_obj_clear_state(lv_obj_t *p,unsigned state) { (void)p;(void)state; }
-static void lv_timer_del(lv_timer_t *timer) { (void)timer; }
-static lv_obj_t *mode_retry_button;
-static void mode_retry_refresh(void) { mode_retry_refreshes++; }
-static uint32_t app_clock_uptime_ms(void) { return (uint32_t)now_ms; }
+uint32_t app_clock_uptime_ms(void) { return (uint32_t)now_ms; }
 bool work_mode_service_diagnostic_ready(void) { return motor_gate; }
-const char *work_mode_service_status_text(void) { return "Waiting for manual mode"; }
-void work_mode_service_hold_operation(uint32_t owner,bool active) {
-    if(active)motor_holds|=owner;else motor_holds&=~owner;
+void work_mode_service_hold_operation(uint32_t owner,bool hold) {
+    if(hold)motor_holds|=owner;else motor_holds&=~owner;
 }
-static void motor_status(motor_item_t *item,const char *text,uint32_t color) {
-    (void)color;snprintf(motor_statuses[item-motors],48,"%s",text);
-}
-static bool settings_detail_send_command(uint8_t cmd,const uint8_t *data,uint16_t len) {
-    assert(cmd>=0x52&&cmd<=0x54&&len==2);
-    motor_commands[cmd-0x52]++;
-    memcpy(motor_payloads[cmd-0x52],data,2);
-    return motor_send_ok;
-}
-void ui_page_17_motor_test_destroy(void);
-static void ui_manager_pop_page(void) { ui_page_17_motor_test_destroy(); }
-'''
-for name in ('motor_request','ui_page_17_motor_test_on_reply','motor_tick',
-             'motor_back','ui_page_17_motor_test_destroy'):
-    code += function(motor,name)
-code += r'''
+static void motor_poll(void) { now_ms+=81;motor_test_service_poll((uint32_t)now_ms); }
 static void test_motor(void) {
-    ui_page_17_motor_test_destroy();assert(!motor_commands[0]);
-    motor_frame.root=motor_frame.message=&object;
-    for(unsigned i=0;i<3;i++)motors[i].run_button=&object;
-    motor_gate=false;motor_request(&motors[0],true);assert(!motor_commands[0]);
-    motor_gate=true;motor_send_ok=false;motor_request(&motors[0],true);
-    assert(!motor_holds&&!motors[0].pending&&!strcmp(motor_statuses[0],"Could not send"));
-    motor_send_ok=true;
-    /* Start must wait for accepted ACK; no duplicate start while pending/running. */
-    motor_request(&motors[0],true);
-    assert(motors[0].pending&&motor_holds==2&&!motors[0].accepted_run);
-    assert(motor_payloads[0][0]==1&&motor_payloads[0][1]==1);
-    unsigned sent=motor_commands[0];motor_request(&motors[0],true);assert(motor_commands[0]==sent);
-    ui_page_17_motor_test_on_reply(0x52,9);assert(motors[0].pending);
-    ui_page_17_motor_test_on_reply(0x52,1);assert(motors[0].accepted_run&&!motors[0].pending);
-    motor_request(&motors[0],true);assert(motor_commands[0]==sent);
-    /* A rejected stop is not stopped; retry and late ACK remain valid. */
-    motor_request(&motors[0],false);
-    assert(motor_payloads[0][0]==0&&motor_payloads[0][1]==0);
-    ui_page_17_motor_test_on_reply(0x52,2);
-    assert(motors[0].accepted_run&&(motor_holds&2)&&!motors[0].pending);
-    motor_request(&motors[0],false);now_ms+=5001;motor_tick(NULL);
-    assert(motors[0].pending&&motors[0].accepted_run&&(motor_holds&2));
-    assert(!strcmp(motor_statuses[0],"No acknowledgement"));
-    ui_page_17_motor_test_on_reply(0x52,1);
-    assert(!motors[0].pending&&!motors[0].accepted_run&&!(motor_holds&2));
-    /* Rejected start safely releases only its own operation hold. */
-    motor_request(&motors[1],true);ui_page_17_motor_test_on_reply(0x53,2);
-    assert(!motors[1].accepted_run&&!(motor_holds&4));
-    /* Start superseded by Stop: old ACK cannot confirm the new Stop. */
-    motor_request(&motors[2],true);motor_request(&motors[2],false);
-    assert(motor_payloads[2][0]==1&&motor_payloads[2][1]==2&&motors[2].stale_acks==1);
-    ui_page_17_motor_test_on_reply(0x54,7);assert(motors[2].stale_acks==1);
-    ui_page_17_motor_test_on_reply(0x54,1);assert(motors[2].pending&&(motor_holds&8));
-    now_ms+=5001;motor_tick(NULL);assert(motors[2].pending&&(motor_holds&8));
-    ui_page_17_motor_test_on_reply(0x54,1);assert(!motors[2].pending&&!(motor_holds&8));
-    /* Both Back and direct destruction send stop once; reply still settles after destruction. */
-    lv_event_t event=0;motor_back(&event);assert(motor_frame.root);
-    event=LV_EVENT_CLICKED;motor_back(&event);assert(!motor_frame.root);
-    unsigned counts[3];memcpy(counts,motor_commands,sizeof(counts));
-    ui_page_17_motor_test_destroy();assert(!memcmp(counts,motor_commands,sizeof(counts)));
+    send_result=7;
+    motor_gate=false;assert(!motor_test_service_request(0,true));motor_gate=true;
+    send_result=-1;assert(motor_test_service_request(0,true));motor_poll();
+    assert(motor_test_service_get(0).phase==MOTOR_SEND_FAILED&&!motor_holds);
+    send_result=7;
+    for(unsigned i=0;i<3;i++)assert(motor_test_service_request(i,true));
+    unsigned before=sends;motor_poll();assert(sends==before+1&&last_cmd==0x52&&motor_holds==2);
+    motor_poll();assert(sends==before+1); /* one in flight across all motors */
+    motor_test_service_on_reply(0x53,1);assert(motor_test_service_get(0).pending);
+    motor_test_service_on_reply(0x52,9);assert(motor_test_service_get(0).pending);
     for(unsigned i=0;i<3;i++) {
-        assert(motors[i].pending&&(motor_holds&(2U<<i)));
+        assert(last_cmd==0x52+i&&last_payload[0]==1&&last_payload[1]==1);
+        motor_test_service_on_reply(0x52+i,1);assert(motor_test_service_get(i).running);
+        motor_poll();
+    }
+    assert(motor_holds==14);
+    before=sends;motor_test_service_stop_all();motor_test_service_stop_all();assert(sends==before);
+    for(unsigned i=0;i<3;i++){
+        motor_poll();assert(last_cmd==0x52+i&&sends==before+i+1);
+        assert(last_payload[0]==(i==2?1:0)&&last_payload[1]==(i==2?2:0));
         uint8_t frame[]={0xFD,0xDF,6,(uint8_t)(0x52+i),1,0};
         auxiliary_reply_result_t r=auxiliary_reply_dispatch(frame[3],frame,6);
-        assert(r.kind==AUXILIARY_REPLY_MOTOR_ACK&&r.value==1);
-        ui_page_17_motor_test_on_reply(frame[3],r.value);
-        assert(!motors[i].pending);
+        assert(r.kind==AUXILIARY_REPLY_MOTOR_ACK);
+        motor_test_service_on_reply(frame[3],r.value);
+        assert(!motor_test_service_get(i).running&&!motor_test_service_get(i).pending);
         assert(auxiliary_reply_dispatch(frame[3],frame,5).kind==AUXILIARY_REPLY_INVALID);
-        assert(auxiliary_reply_dispatch(frame[3],frame,7).kind==AUXILIARY_REPLY_INVALID);
     }
-    assert(!motor_holds&&mode_retry_refreshes==2);
-    puts("PASS motor: manual gate, send failure, start/stop ACK, reject, timeout retains hold, superseded ACK, hidden late ACK, teardown");
+    assert(!motor_holds&&!motor_test_service_busy());
+    motor_test_service_stop_all();motor_poll();assert(sends==before+3);
+    /* Reject stop, timeout and retry never fabricate a stopped motor. */
+    assert(motor_test_service_request(2,true));motor_poll();motor_test_service_on_reply(0x54,1);
+    assert(motor_test_service_request(2,false));motor_poll();motor_test_service_on_reply(0x54,2);
+    assert(motor_test_service_get(2).running&&motor_holds==8);
+    assert(motor_test_service_request(2,false));motor_poll();now_ms+=5001;motor_test_service_poll(now_ms);
+    assert(motor_test_service_get(2).phase==MOTOR_UNCONFIRMED&&motor_holds==8);
+    assert(motor_test_service_request(2,false));assert(last_payload[1]==2);
+    motor_test_service_on_reply(0x54,1);assert(!motor_holds);
+    /* Exit while Start is unconfirmed: wait its ACK before issuing Stop. */
+    assert(motor_test_service_request(0,true));motor_poll();before=sends;
+    motor_test_service_stop_all();motor_poll();assert(sends==before);
+    motor_test_service_on_reply(0x52,1);motor_poll();assert(sends==before+1&&last_payload[0]==0);
+    motor_test_service_on_reply(0x52,1);assert(!motor_holds);
+    /* Cancel starts still in the queue on exit. */
+    assert(motor_test_service_request(1,true));before=sends;
+    motor_test_service_stop_all();motor_poll();assert(sends==before&&!motor_test_service_busy());
+    /* Lost Start ACK on exit still sends physical Stop after the deadline.
+     * The first ambiguous reply cannot release the operation hold. */
+    assert(motor_test_service_request(0,true));motor_poll();motor_test_service_stop_all();
+    now_ms+=5001;motor_test_service_poll(now_ms);assert(last_cmd==0x52&&last_payload[0]==0);
+    motor_test_service_on_reply(0x52,1);assert(motor_test_service_get(0).pending&&motor_holds==2);
+    now_ms+=5001;motor_test_service_poll(now_ms);assert(motor_test_service_request(0,false));
+    motor_test_service_on_reply(0x52,1);assert(!motor_test_service_busy()&&!motor_holds);
+    puts("PASS motor service: global serialization, captured payloads, hidden ACKs, failure, reject, timeout, retry, queued cancellation");
 }
-int main(void) { test_print(); test_cfd(); test_motor(); return 0; }
+int main(void) { test_print();test_cfd();test_motor();return 0; }
 '''
 
 with tempfile.TemporaryDirectory(prefix='un260-settings-communication-') as directory:
     work = Path(directory)
     (work/'test.c').write_text('#define EXPECT_BASELINE '+str(int(bool(args.baseline)))+'\n'+code)
     sources = ['un260/print/print_config.c', 'un260/cfd/cfd.c',
-               'un260/protocol/protocol_request.c', 'un260/protocol/auxiliary_reply.c']
+               'un260/protocol/protocol_request.c', 'un260/protocol/auxiliary_reply.c',
+               'un260/app_service/motor_test_service.c']
     for opt in ('-O0','-O2'):
         binary = work/'test'
         subprocess.run(['cc','-std=c11',opt,'-Wall','-Wextra','-Werror',

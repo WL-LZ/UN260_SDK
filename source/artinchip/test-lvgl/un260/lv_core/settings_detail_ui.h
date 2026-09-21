@@ -56,6 +56,8 @@ bool settings_detail_dialog_show(const char* title,
                                  void* user_data);
 void settings_detail_dialog_hide(void);
 bool settings_detail_overlay_is_open(void);
+/* Diagnostic page shortcut; owned by its parent. No calibration command is sent. */
+void settings_detail_add_run(lv_obj_t *page);
 bool settings_detail_keyboard_show(const char* title,
                                    const char* init_value,
                                    uint16_t max_len,

@@ -17,6 +17,7 @@
 #include "un260/lv_core/page_33_set_brightness.h"
 #include "un260/lv_core/page_36_display_test.h"
 #include "un260/lv_components/lv_nav_button.h"
+#include "un260/lv_components/lv_settings.h"
 #include "un260/lv_components/lv_print_toast.h"
 #include "un260/gesture/gesture_service.h"
 #include "un260/lv_system/ui_text.h"
@@ -103,8 +104,9 @@ static lv_res_t info(lv_img_decoder_t *d,const void *src,lv_img_header_t *h)
   memset(h,0,sizeof(*h));h->w=a->width;h->h=a->height;h->cf=LV_IMG_CF_TRUE_COLOR_ALPHA;return LV_RES_OK; }
 static lv_res_t image_open(lv_img_decoder_t *d,lv_img_decoder_dsc_t *s)
 { if(info(d,s->src,&s->header)!=LV_RES_OK)return LV_RES_INV;s->img_data=test_page_asset_find(s->src)->pixels;return LV_RES_OK; }
+#include "test_settings_toolbar.h"
 static void snapshot(const char *name)
-{ lv_obj_update_layout(lv_scr_act());lv_obj_invalidate(lv_scr_act());lv_refr_now(NULL);
+{ lv_obj_update_layout(lv_scr_act());assert_settings_toolbars(lv_scr_act());lv_obj_invalidate(lv_scr_act());lv_refr_now(NULL);
   char path[512];snprintf(path,sizeof(path),"%s/%s.bgra",getenv("OUT"),name);FILE *f=fopen(path,"wb");assert(f);assert(fwrite(pixels,4,1280*400,f)==1280*400);fclose(f); }
 static lv_obj_t *find_label(lv_obj_t *o,const char *text)
 { if(lv_obj_check_type(o,&lv_label_class)&&!strcmp(lv_label_get_text(o),text))return o;
@@ -121,7 +123,8 @@ static void immediate_pages(void)
 {
     setting_value_result_t result={.target=3,.previous=2,.success=false};
     ui_page_22_set_double_note_create(lv_scr_act());snapshot("double");
-    click(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3));assert(last_command==0x31&&last_payload[0]==3);
+    lv_color_t checked=lv_obj_get_style_bg_color(button(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_2)),0);
+    click(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3));assert(lv_obj_get_style_bg_color(button(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_2)),0).full==checked.full);assert(last_command==0x31&&last_payload[0]==3);
     assert(find_label(lv_scr_act(),"Confirmed level: 2"));snapshot("double-pending");
     ui_page_22_set_double_note_on_reply(&result);assert(find_label(lv_scr_act(),"Confirmed level: 2"));
     click(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3));double_level=3;result.success=true;
@@ -140,20 +143,71 @@ static void immediate_pages(void)
 
 static void print_page_test(void)
 {
-    ui_page_20_set_print_create(lv_scr_act());snapshot("print");click(ui_text_get(UI_TEXT_SETTINGS_PRINT_CONTENT_SN));
-    assert(last_command==0x41&&last_payload[0]==1);print_config_request_result_t result;
+    unsigned before=sends;
+    ui_page_20_set_print_create(lv_scr_act());snapshot("print");
+    lv_obj_t *receipt_body=lv_obj_get_parent(find_label(lv_scr_act(),"COUNT REPORT"));
+    lv_obj_t *paper=lv_obj_get_parent(receipt_body);
+    click("2");lv_obj_update_layout(lv_scr_act());
+    assert(lv_obj_get_y(receipt_body)==16&&lv_obj_get_height(paper)==192);
+    snapshot("print-top-spacing");
+    lv_obj_t *rows=lv_obj_get_parent(find_label(lv_scr_act(),ui_text_get(UI_TEXT_SETTINGS_PRINT_SPACE_BOTTOM)));
+    lv_obj_t *bottom_input=NULL,*bottom_base=NULL;
+    for(unsigned i=0;i<lv_obj_get_child_cnt(rows);i++){
+        lv_obj_t *o=lv_obj_get_child(rows,i);
+        if(lv_obj_get_x(o)==646)bottom_input=o;
+        if(lv_obj_get_x(o)==350)bottom_base=o;
+    }
+    assert(bottom_input&&bottom_base);
+    lv_obj_t *two=find_label(bottom_base,"2");assert(two);
+    lv_event_send(lv_obj_get_parent(two),LV_EVENT_CLICKED,NULL);
+    lv_obj_update_layout(lv_scr_act());
+    assert(lv_obj_get_y(receipt_body)==16&&lv_obj_get_height(paper)==208);
+    snapshot("print-both-spacing");
+    lv_event_send(bottom_input,LV_EVENT_CLICKED,NULL);assert(keyboard_confirm);
+    keyboard_confirm("99",keyboard_data);settings_detail_keyboard_hide();
+    lv_obj_update_layout(lv_scr_act());
+    assert(lv_obj_get_height(paper)==216&&lv_obj_get_y(receipt_body)>0);
+    assert(find_label(lv_scr_act(),"Example / blank spacing scaled"));
+    snapshot("print-large-spacing");click("Cancel");lv_obj_update_layout(lv_scr_act());
+    assert(lv_obj_get_height(paper)==176&&lv_obj_get_y(receipt_body)==0&&sends==before);
+    puts("PASS receipt top/bottom preset and keyboard preview, bounded large margins, Cancel rollback, no draft sends");
+    click("Serial");
+    click("Not set");assert(keyboard_confirm);keyboard_confirm("UNION",keyboard_data);settings_detail_keyboard_hide();
+    click("2");assert(sends==before);snapshot("print-draft");click("Save");
+    assert(last_command==0x41&&last_payload[0]==2&&last_payload[1]==1);
+    print_config_request_result_t result;
     assert(print_config_take_status_reply(1,&result));ui_page_20_set_print_on_reply(&result);
-    assert(lv_obj_has_state(button(ui_text_get(UI_TEXT_SETTINGS_PRINT_CONTENT_SN)),LV_STATE_CHECKED));
-    ui_page_20_set_print_destroy();puts("PASS print controller-confirmed content selection");
+    assert(last_payload[0]==3&&last_payload[1]==1&&last_payload[2]==2);
+    assert(print_config_take_status_reply(0,&result));ui_page_20_set_print_on_reply(&result);
+    print_config_value_t actual;print_config_get(&actual);assert(!strcmp(actual.head1,"UNION")&&actual.space_top==0&&actual.content==1);
+    snapshot("print-partial-save");click("Save");assert(last_payload[0]==3);
+    assert(print_config_take_status_reply(1,&result));ui_page_20_set_print_on_reply(&result);
+    assert(last_payload[0]==1);
+    assert(print_config_take_status_reply(1,&result));ui_page_20_set_print_on_reply(&result);
+    print_config_get(&actual);assert(actual.space_top==2&&actual.content==2);
+    assert(lv_obj_has_state(button("Save"),LV_STATE_DISABLED));
+    click("Summary");click("Cancel");
+    assert(lv_obj_has_state(button("Serial"),LV_STATE_CHECKED));
+    ui_page_20_set_print_destroy();
+    puts("PASS print draft isolation, serialized Save, partial failure retry and Cancel");
 }
 
 static void cfd_page_test(void)
 {
     uint8_t reply[16]={'C','N','Y',1,3,3,3,3,3,3,3,3,3,3,3,3};
-    send_ok=false;ui_page_27_set_cfd_level_create(lv_scr_act());assert(lv_obj_has_state(button("--"),LV_STATE_DISABLED));
+    send_ok=false;ui_page_27_set_cfd_level_create(lv_scr_act());assert(lv_obj_has_state(button("1"),LV_STATE_DISABLED));
     snapshot("cfd-query-failed");send_ok=true;click("Retry");assert(last_command==0x45&&last_payload[0]==1);
-    ui_page_27_set_cfd_level_on_info(reply,sizeof(reply));snapshot("cfd");
-    click("3");assert(find_label(lv_scr_act(),"4"));assert(gesture_policy&&gesture_policy(GESTURE_ACTION_HOME)&&overlay);
+    ui_page_27_set_cfd_level_on_info(reply,sizeof(reply));
+    assert(find_label(lv_scr_act(),"Reading detection levels"));advance(920);
+    assert(!find_label(lv_scr_act(),"Reading detection levels"));snapshot("cfd");
+    lv_obj_t *segment=lv_obj_get_parent(button("4"));
+    lv_obj_t *row=lv_obj_get_parent(segment);lv_obj_t *rows=lv_obj_get_parent(row);
+    lv_area_t control_area,row_area;lv_obj_get_coords(segment,&control_area);lv_obj_get_coords(row,&row_area);
+    assert(control_area.y1-row_area.y1>=8&&row_area.y2-control_area.y2>=8);
+    assert(lv_obj_get_scroll_bottom(rows)<=2);
+    lv_obj_scroll_to_y(rows,999,LV_ANIM_OFF);snapshot("cfd-bottom");
+    lv_obj_scroll_to_y(rows,0,LV_ANIM_OFF);
+    click("4");assert(lv_obj_has_state(button("4"),LV_STATE_CHECKED));assert(gesture_policy&&gesture_policy(GESTURE_ACTION_HOME)&&overlay);
     settings_detail_dialog_hide();click(ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE));assert(last_payload[0]==2);
     assert(lv_nav_button_request_back()==LV_NAV_BACK_BLOCKED);assert(gesture_policy(GESTURE_ACTION_HOME));
     advance(800);assert(cfd_service_take_update_timeout());ui_page_27_set_cfd_level_on_request_failed();
@@ -167,14 +221,20 @@ static void cfd_page_test(void)
 
 static void password_page_test(void)
 {
-    ui_page_29_set_password_create(lv_scr_act());snapshot("password");click("New password");snapshot("password-keypad");
-    click("0");click("0");click("2");click("2");click("Show");snapshot("password-keypad-visible");
-    assert(find_label(lv_scr_act(),"Hide"));
-    pointer_tap(102,284);assert(lv_obj_is_visible(find_label(lv_scr_act(),"Confirm")));
-    pointer_tap(48,180);assert(!lv_obj_is_visible(find_label(lv_scr_act(),"Confirm")));
-    click("New password");assert(find_label(lv_scr_act(),"Show"));
-    assert(gesture_policy&&gesture_policy(GESTURE_ACTION_HOME));assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);
+    ui_page_29_set_password_create(lv_scr_act());snapshot("password");click("Current password");
+    snapshot("password-keypad");
+    click("9");click("9");click("9");click("9");click("Confirm");
+    assert(find_label(lv_scr_act(),"Incorrect current PIN. Try again."));
+    click("Cancel");click("Current password");
+    for(unsigned i=0;i<4;i++){char key[2]={password[i],0};click(key);}click("Confirm");
+    assert(find_label(lv_scr_act(),"New password"));
+    click("0");click("0");click("2");click("2");click("Confirm");
+    click("0");click("0");click("2");click("3");click("Confirm");
+    assert(find_label(lv_scr_act(),"PINs do not match. Re-enter the new PIN."));
+    click("Cancel");click("Confirm password");click("0");click("0");click("2");click("2");click("Confirm");
+    assert(strcmp(password,"0022"));click("Save");assert(!strcmp(password,"0022"));
     ui_page_29_set_password_destroy();assert(!gesture_policy);
+    puts("PASS PIN wizard: wrong old PIN blocked, staged progression, mismatch blocked, Save only");
 }
 
 static void brightness_test(void)
@@ -206,6 +266,13 @@ int main(void)
     lv_disp_drv_t driver;lv_disp_drv_init(&driver);driver.hor_res=1280;driver.ver_res=400;driver.draw_buf=&db;driver.flush_cb=flush;lv_disp_drv_register(&driver);
     lv_img_decoder_t *decoder=lv_img_decoder_create();lv_img_decoder_set_info_cb(decoder,info);lv_img_decoder_set_open_cb(decoder,image_open);
     lv_indev_drv_t input;lv_indev_drv_init(&input);input.type=LV_INDEV_TYPE_POINTER;input.read_cb=pointer_read;lv_indev_drv_register(&input);
+    lv_obj_t *palette=lv_settings_segment_base(lv_scr_act(),0,0,240,48);
+    lv_obj_t *choice=lv_settings_segment(palette,0,2,"Palette",NULL,NULL);
+    assert(lv_color_to32(lv_obj_get_style_bg_color(palette,0))==lv_color_to32(lv_color_hex(0xF7F7F7)));
+    assert(lv_color_to32(lv_obj_get_style_bg_color(choice,0))==lv_color_to32(lv_color_hex(0xF7F7F7)));
+    lv_obj_add_state(choice,LV_STATE_CHECKED|LV_STATE_DISABLED);
+    assert(lv_color_to32(lv_obj_get_style_bg_color(choice,0))==lv_color_to32(lv_color_hex(0xFFFFFF)));
+    lv_obj_del(palette);
     immediate_pages();print_page_test();cfd_page_test();password_page_test();brightness_test();
     ui_page_36_display_test_create(lv_scr_act());snapshot("display-test");ui_page_36_display_test_destroy();factory_test();
     puts("PASS 10 ordinary settings actual-LVGL host renders and state transitions (not board verification)");return 0;

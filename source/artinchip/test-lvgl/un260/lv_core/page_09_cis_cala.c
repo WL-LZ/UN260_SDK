@@ -6,6 +6,7 @@
 #include "un260/lv_system/app_clock.h"
 #include "un260/diagnostic/diagnostic.h"
 #include "un260/app_service/work_mode_service.h"
+#include "un260/app_service/app_command_runtime.h"
 #include "un260/gesture/gesture_service.h"
 #include <string.h>
 
@@ -49,7 +50,7 @@ static bool calibration_gesture(gesture_action_t action)
     if (action != GESTURE_ACTION_HOME && action != GESTURE_ACTION_EXIT_PAGE) return false;
     diagnostic_calibration_get_snapshot(&state);
     if (state.cis_state != CIS_CALIB_RUNNING && state.cb_state != CB_CALIB_RUNNING) return false;
-    if (state.timed_out) calibration_leave_warning(action==GESTURE_ACTION_HOME);
+    calibration_leave_warning(action==GESTURE_ACTION_HOME);
     return true;
 }
 static void calibration_text(lv_obj_t *label,const char *text)
@@ -78,7 +79,7 @@ static void cis_back(lv_event_t *e)
     /* No cancellation command exists. A timed-out session can be left explicitly,
      * without claiming that the controller stopped or releasing Manual mode. */
     if (state.cis_state == CIS_CALIB_RUNNING || state.cb_state == CB_CALIB_RUNNING) {
-        if (state.timed_out) calibration_leave_warning(false);
+        calibration_leave_warning(false);
         return;
     }
     ui_manager_pop_page();
@@ -92,6 +93,8 @@ static void cis_start(lv_event_t *e)
     diagnostic_calibration_get_snapshot(&state);
     if (state.cis_state == CIS_CALIB_RUNNING || state.cb_state == CB_CALIB_RUNNING) return;
     if (!work_mode_service_diagnostic_ready()) return;
+    const char *blocker=app_command_runtime_calibration_blocker();
+    if(blocker){lv_label_set_text(status_detail,blocker);return;}
     send_failed = false;
     if (!diagnostic_calibration_begin(selected_white_balance ? CALIB_TARGET_CB : CALIB_TARGET_CIS,
                                       app_clock_uptime_ms())) return;
@@ -126,18 +129,19 @@ void ui_page_cis_calib_create(lv_obj_t *parent)
     };
     frame = lv_settings_frame_create(parent, &header);
     cis_page = frame.root;
+    if(selected_white_balance)settings_detail_add_run(cis_page);
     lv_obj_set_style_bg_opa(frame.body, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(frame.body, 0, 0);
     lv_obj_t *prepare = lv_settings_box(frame.body, 0, 0, 680, 242, 0xFFFFFF);
     lv_obj_set_style_radius(prepare, 14, 0);
     lv_settings_label(prepare, "Before you begin", 24, 20,
                       &lv_font_instrument_sans_medium_18, 0x1D2B34);
-    preparation_row(prepare, 62, "1", "Prepare the transport path",
-                    "Remove banknotes and check that the path is clear.");
-    preparation_row(prepare, 119, "2", "Place the calibration material",
-                    "Use the material specified for this service procedure.");
-    preparation_row(prepare, 176, "3", "Start when ready",
-                    "Keep the material in place until the controller responds.");
+    preparation_row(prepare, 62, "1", selected_white_balance?"Place banknotes in the hopper":"Place the CIS bar",
+                    selected_white_balance?"Prepare the notes for white balance.":"Place the CIS bar manually in the upper note path.");
+    preparation_row(prepare, 119, "2", selected_white_balance?"Press RUN":"Press Start",
+                    selected_white_balance?"Run the notes before starting calibration.":"No banknote run is required for CIS calibration.");
+    preparation_row(prepare, 176, "3", selected_white_balance?"Press Start, then wait":"Wait for the result",
+                    "The machine performs calibration and reports the result.");
 
     lv_obj_t *state = lv_settings_box(frame.body, 696, 0, 536, 242, 0xF1F4F5);
     lv_obj_set_style_radius(state, 14, 0);
@@ -197,15 +201,19 @@ void cis_calib_ui_refresh(void)
                  "Check the infrared channel and calibration material, then retry.";
         color = 0xB63B32;
     }
+    const char *blocker=running?NULL:app_command_runtime_calibration_blocker();
+    if(blocker){
+        title=work_mode_service_diagnostic_ready()?"Waiting for the machine":"Preparing manual mode";
+        detail=blocker;color=0xA35B12;
+    }
     calibration_text(status_title, title);
     lv_obj_set_style_text_color(status_title, lv_color_hex(color), 0);
     calibration_text(status_detail, detail);
     if (running) {
         lv_obj_add_state(start_button, LV_STATE_DISABLED);
-        if (state.timed_out) lv_obj_clear_state(frame.back, LV_STATE_DISABLED);
-        else lv_obj_add_state(frame.back, LV_STATE_DISABLED);
+        lv_obj_clear_state(frame.back, LV_STATE_DISABLED);
     } else {
-        if (work_mode_service_diagnostic_ready()) lv_obj_clear_state(start_button, LV_STATE_DISABLED);
+        if (!blocker) lv_obj_clear_state(start_button, LV_STATE_DISABLED);
         else lv_obj_add_state(start_button, LV_STATE_DISABLED);
         lv_obj_clear_state(frame.back, LV_STATE_DISABLED);
     }

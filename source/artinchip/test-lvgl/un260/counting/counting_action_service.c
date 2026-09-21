@@ -5,6 +5,7 @@
 #include "un260/protocol/protocol_send.h"
 
 #define COUNTING_ACTION_TIMEOUT_MS 1000U
+#define COUNTING_START_TIMEOUT_MS 5000U
 #define COUNTING_START_CMD         0x0A
 #define COUNTING_CLEAR_CMD         0x3B
 #define COUNTING_ACTION_REQUEST    0x01
@@ -12,7 +13,7 @@
 #define COUNTING_CLEAR_REPLY_LEN   6U
 
 static protocol_request_t g_start_request =
-    PROTOCOL_REQUEST_INITIALIZER(COUNTING_ACTION_TIMEOUT_MS);
+    PROTOCOL_REQUEST_INITIALIZER(COUNTING_START_TIMEOUT_MS);
 static protocol_request_t g_clear_request =
     PROTOCOL_REQUEST_INITIALIZER(COUNTING_ACTION_TIMEOUT_MS);
 

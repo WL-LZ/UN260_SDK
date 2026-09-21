@@ -7,8 +7,23 @@
 #include "un260/lv_components/lv_nav_button.h"
 #include "un260/lv_components/lv_popup_style.h"
 #include "un260/lv_resources/lv_img_init.h"
+#include "un260/lv_components/lv_settings.h"
+#include "un260/app_service/app_command_runtime.h"
 
 #include <string.h>
+
+static void settings_run_clicked(lv_event_t *e)
+{
+    (void)e;
+    const char *reason=app_command_runtime_diagnostic_run_blocker();
+    if(!reason&&app_command_runtime_request_diagnostic_run())return;
+    settings_detail_dialog_show("Cannot run",reason?reason:"The command could not be sent. Please try again.","OK",NULL,NULL,NULL,NULL);
+}
+void settings_detail_add_run(lv_obj_t *page)
+{
+    lv_obj_t *actions=lv_settings_actions(page);
+    lv_settings_button(actions?actions:page,actions?0:1038,actions?0:21,110,46,"RUN",true,settings_run_clicked,NULL);
+}
 
 lv_color_t settings_theme_color_hex(uint32_t color)
 {

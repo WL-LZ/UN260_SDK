@@ -10,7 +10,7 @@
 #include "un260/lv_core/page_09_cis_cala.h"
 #include "un260/lv_core/page_14_main_upgrade.h"
 #include "un260/lv_core/page_15_image_upgrade.h"
-#include "un260/lv_core/page_17_motor_test.h"
+#include "motor_test_service.h"
 #include "work_mode_service.h"
 #include "un260/lv_core/page_28_get_image.h"
 #include "un260/lv_core/page_31_get_wave.h"
@@ -75,7 +75,7 @@ static void handle_auxiliary_reply(uint8_t cmd, const uint8_t *buf, uint8_t len)
         uart_debug_printf("0x3C unknown len=%d\n", reply.frame_len);
         break;
     case AUXILIARY_REPLY_MOTOR_ACK:
-        ui_page_17_motor_test_on_reply(cmd,reply.value);
+        motor_test_service_on_reply(cmd,reply.value);
         uart_debug_printf("0x%02X motor test ack: res=0x%02X\n", cmd, reply.value);
         break;
     case AUXILIARY_REPLY_CLEAR_DATA_ACK:

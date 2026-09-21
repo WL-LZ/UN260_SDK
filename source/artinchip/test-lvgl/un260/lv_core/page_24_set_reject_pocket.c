@@ -42,7 +42,7 @@ static void request_capacity(uint8_t capacity)
         return;
     }
     pending = true;
-    lv_label_set_text_fmt(frame.message, "Applying %u - waiting for controller.", (unsigned)capacity);
+    /* Keep the footer stable during short ACK round trips; selection is locked. */
     refresh();
 }
 
@@ -91,20 +91,20 @@ void ui_page_24_set_reject_pocket_create(lv_obj_t *parent)
     frame = lv_settings_frame_create(parent, &header);
     lv_obj_set_style_bg_opa(frame.body, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(frame.body, 0, 0);
-    lv_settings_label(frame.body, "Confirmed capacity", 0, 12,
+    lv_obj_t *row=lv_settings_panel(frame.body,0,0,1232,208);
+    lv_settings_label(row, "Reject pocket capacity", 24, 22,
         &lv_font_instrument_sans_medium_18, 0x1D2B34);
-    confirmed = lv_settings_label(frame.body, "", 0, 52,
-        &lv_font_instrument_sans_semibold_28, 0x1D2B34);
-    value_button = lv_settings_button(frame.body, 0, 114, 288, 52, "Enter capacity", false, edit, NULL);
-    lv_settings_label(frame.body, "Quick selection", 352, 12,
-        &lv_font_instrument_sans_medium_18, 0x1D2B34);
+    lv_settings_label(row,"Select a preset or enter a custom capacity.",24,54,&lv_font_instrument_sans_medium_14,0x586B78);
+    confirmed = lv_settings_label(row, "", 776, 26,
+        &lv_font_instrument_sans_semibold_22, 0x1D2B34);
+    value_button = lv_settings_button(row, 976, 19, 228, 52, "Enter capacity", false, edit, NULL);
+    lv_settings_box(row,24,90,1180,1,0xE8EDF0);
+    lv_settings_label(row,"Quick selection",24,128,&lv_font_instrument_sans_medium_16,0x536B79);
+    lv_obj_t *base=lv_settings_segment_base(row,270,114,934,52);
     for (unsigned i = 0; i < 8; ++i) {
         char text[8];
         lv_snprintf(text, sizeof(text), "%u", 30 + i * 10);
-        presets[i] = lv_settings_button(frame.body, 352 + (int)(i % 4) * 224,
-            54 + (int)(i / 4) * 72, 208, 60, text, false, choose,
-            (void *)(uintptr_t)(30 + i * 10));
-        lv_obj_set_style_bg_color(presets[i], lv_color_hex(0xFFFFFF), 0);
+        presets[i] = lv_settings_segment(base,i,8,text,choose,(void *)(uintptr_t)(30+i*10));
     }
     lv_label_set_text(frame.message, pending ? "Waiting for controller." : "Select a capacity to apply.");
     refresh();
@@ -132,6 +132,7 @@ void ui_page_24_set_reject_pocket_on_reply(const setting_value_result_t *result)
     if (!result) return;
     pending = false;
     refresh();
-    if (frame.message) lv_label_set_text(frame.message, result->success ? "Capacity confirmed." :
-        result->timeout ? "No confirmation received. Previous capacity retained." : "Change rejected. Previous capacity retained.");
+    const char *message=result->success ? "Capacity confirmed." :
+        result->timeout ? "No confirmation received. Previous capacity retained." : "Change rejected. Previous capacity retained.";
+    if(frame.message&&strcmp(lv_label_get_text(frame.message),message))lv_label_set_text(frame.message,message);
 }

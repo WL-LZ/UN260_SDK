@@ -67,25 +67,9 @@ static const char *kb_hex_map[] = {
 };
 
 /* ---------- 自动添加空格逻辑 ---------- */
-static void ta_auto_space_event_cb(lv_event_t* e) {
-    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
-
-    lv_obj_t* ta = lv_event_get_target(e);
-    const char* txt = lv_textarea_get_text(ta);
-    int len = strlen(txt);
-
-    // 如果长度小于前缀，直接恢复前缀
-    if (len < 6) { // "FD DF " 长度为6
-        lv_textarea_set_text(ta, "FD DF ");
-        lv_textarea_set_cursor_pos(ta, LV_TEXTAREA_CURSOR_LAST);
-        return;
-    }
-
-    // 每输入2个HEX字符自动加空格（从第6位开始）
-    if (len > 6 && txt[len - 1] != ' ' && ((len - 6) % 3) == 2) {
-        lv_textarea_add_char(ta, ' ');
-    }
-}
+/* Format once per key, never from textarea VALUE_CHANGED. With accepted_chars,
+ * LVGL set_text emits that event while rebuilding individual characters; a
+ * prefix-restoring handler recursively calls set_text on the partial value. */
 
 /* ---------- HEX键盘按键事件 ---------- */
 static void kb_hex_event_cb(lv_event_t* e) {
@@ -113,8 +97,16 @@ static void kb_hex_event_cb(lv_event_t* e) {
             lv_textarea_set_cursor_pos(g_debug_page.input, LV_TEXTAREA_CURSOR_LAST);
         }
     } else {
-        lv_textarea_add_text(g_debug_page.input, txt);
+        char input[192];
+        snprintf(input, sizeof(input), "%s", lv_textarea_get_text(g_debug_page.input));
+        size_t length = strlen(input);
+        if (length < 6 || length >= sizeof(input)-2 || strlen(txt)!=1) return;
+        input[length++] = txt[0];
+        if ((length-6)%3 == 2) input[length++] = ' ';
+        input[length] = '\0';
+        lv_textarea_set_text(g_debug_page.input,input);
     }
+    lv_textarea_set_cursor_pos(g_debug_page.input,LV_TEXTAREA_CURSOR_LAST);
 }
 
 /* ---------- 追加日志（带颜色） ---------- */
@@ -424,7 +416,7 @@ static void debug_tab(lv_event_t *e)
         lv_obj_clear_flag(export_button,LV_OBJ_FLAG_HIDDEN);
     }
     for(unsigned i=0;i<2;i++)
-        lv_obj_set_style_bg_color(debug_tabs[i],lv_color_hex((i==1)==tools?0xFFFFFF:0xE8EDEF),0);
+        lv_obj_set_style_bg_color(debug_tabs[i],lv_color_hex((i==1)==tools?0xFFFFFF:LV_SETTINGS_CONTROL_SURFACE),0);
 }
 static void debug_tick(lv_timer_t *timer)
 {
@@ -446,14 +438,15 @@ void ui_page_10_debug_create(void)
     debug_page_context_reset();lv_debug_overlay_init();
     lv_settings_header_t header={"Debug","About & security / Service tools",NULL,page_10_back_btn_event_cb,NULL};
     debug_frame=lv_settings_frame_create(lv_scr_act(),&header);page_debug=debug_frame.root;
+    settings_detail_add_run(page_debug);
     lv_obj_set_style_bg_opa(debug_frame.body,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(debug_frame.body,0,0);
-    lv_obj_t *tabs=lv_settings_box(page_debug,657,22,390,46,0xE8EDEF);
+    lv_obj_t *tabs=lv_settings_box(page_debug,632,22,390,46,LV_SETTINGS_CONTROL_SURFACE);
     lv_obj_set_style_radius(tabs,12,0);
     debug_tabs[0]=lv_settings_button(tabs,3,3,226,40,"Communication",false,debug_tab,(void *)0);
     debug_tabs[1]=lv_settings_button(tabs,229,3,158,40,"Tools",false,debug_tab,(void *)1);
     lv_obj_set_style_bg_color(debug_tabs[0],lv_color_white(),0);
-    lv_obj_set_style_bg_color(debug_tabs[1],lv_color_hex(0xE8EDEF),0);
+    lv_obj_set_style_bg_color(debug_tabs[1],lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),0);
 
     communication_view=lv_settings_box(debug_frame.body,0,0,1232,242,0);
     lv_obj_set_style_bg_opa(communication_view,LV_OPA_TRANSP,0);
@@ -467,13 +460,12 @@ void ui_page_10_debug_create(void)
     lv_textarea_set_text(g_debug_page.input,"FD DF ");
     lv_obj_set_style_text_font(g_debug_page.input,&lv_font_instrument_sans_medium_18,0);
     lv_obj_set_style_text_color(g_debug_page.input,lv_color_hex(0x1D2B34),0);
-    lv_obj_set_style_bg_color(g_debug_page.input,lv_color_hex(0xF8FAFB),0);
+    lv_obj_set_style_bg_color(g_debug_page.input,lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),0);
     lv_obj_set_style_border_width(g_debug_page.input,1,0);
     lv_obj_set_style_border_color(g_debug_page.input,lv_color_hex(0xC7D7E8),0);
     lv_obj_set_style_radius(g_debug_page.input,10,0);
     lv_obj_set_style_pad_all(g_debug_page.input,12,0);
     lv_obj_set_size(g_debug_page.input,454,48);
-    lv_obj_add_event_cb(g_debug_page.input,ta_auto_space_event_cb,LV_EVENT_VALUE_CHANGED,NULL);
     send_button=lv_settings_button(input_panel,480,14,136,48,"Send",true,btn_send_event_cb,NULL);
     g_debug_page.keyboard=lv_btnmatrix_create(input_panel);
     lv_btnmatrix_set_map(g_debug_page.keyboard,kb_hex_map);
@@ -483,7 +475,7 @@ void ui_page_10_debug_create(void)
     lv_obj_set_style_pad_row(g_debug_page.keyboard,8,0);
     lv_obj_set_style_pad_column(g_debug_page.keyboard,8,0);
     lv_obj_set_style_radius(g_debug_page.keyboard,9,LV_PART_ITEMS);
-    lv_obj_set_style_bg_color(g_debug_page.keyboard,lv_color_hex(0xF1F4F5),LV_PART_ITEMS);
+    lv_obj_set_style_bg_color(g_debug_page.keyboard,lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),LV_PART_ITEMS);
     lv_obj_set_style_bg_opa(g_debug_page.keyboard,255,LV_PART_ITEMS);
     lv_obj_set_style_bg_color(g_debug_page.keyboard,lv_color_hex(0xE2E9EE),LV_PART_ITEMS|LV_STATE_PRESSED);
     lv_obj_set_style_text_color(g_debug_page.keyboard,lv_color_hex(0x1D2B34),LV_PART_ITEMS);

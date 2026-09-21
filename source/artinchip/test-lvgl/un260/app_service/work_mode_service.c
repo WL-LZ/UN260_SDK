@@ -6,7 +6,7 @@
 #include "un260/protocol/protocol_send.h"
 #include "un260/storage/work_mode_store.h"
 
-#define REQUEST_TIMEOUT_MS 800U
+#define REQUEST_TIMEOUT_MS 5000U
 #define LATE_REPLY_GUARD_MS 800U
 
 typedef enum { REQUEST_NONE, REQUEST_USER, REQUEST_MANUAL, REQUEST_RESTORE } request_kind_t;
@@ -16,7 +16,7 @@ static struct {
     bool deferred_sync, failure_event, controller_seen, retry_manual;
     uint8_t actual, sync_mode, target;
     uint32_t operations, request_tick, guard_tick;
-    bool guard_active;
+    bool guard_active, late_request;
     request_kind_t request;
     failure_t failure;
     work_mode_phase_t phase;
@@ -53,6 +53,7 @@ static bool send_mode(uint8_t target, request_kind_t kind, uint32_t now)
         return false;
     }
     state.target = target;
+    state.late_request = false;
     state.request = kind;
     state.retry_manual = false;
     state.request_tick = now;
@@ -99,6 +100,13 @@ void work_mode_service_set_diagnostic(bool active)
     work_mode_service_init();
     if (state.diagnostic == active) return;
     state.diagnostic = active;
+    /* Recover a temporary manual request on a fresh entry, rather than
+     * inheriting an old page's transport failure as a permanent UI lock. */
+    if (active && (state.failure == FAILURE_TIMEOUT || state.failure == FAILURE_SEND))
+        work_mode_service_retry();
+    if (active && state.loaded && state.controller_seen && state.record.preferred_valid &&
+        !state.actual_valid && state.request == REQUEST_NONE && state.failure == FAILURE_NONE)
+        state.retry_manual = true;
     /* Leaving is an explicit request to recover the saved preference. An
      * earlier temporary request may still complete, so never cancel it here. */
     if (!active && state.record.restore_pending &&
@@ -168,9 +176,21 @@ bool work_mode_service_handle_reply(const uint8_t *frame, uint8_t length)
         } else synchronize(mode);
         return true;
     }
-    if (state.request == REQUEST_NONE) return false;
+    if (state.request == REQUEST_NONE) {
+        /* A late matching echo still establishes the actual mode. No new
+         * request is inferred and the saved user preference is retained. */
+        uint8_t actual = frame[4] == 0 ? WORK_MODE_MANUAL : WORK_MODE_AUTO;
+        if (!state.late_request || state.failure != FAILURE_TIMEOUT ||
+            frame[4] > 1 || actual != state.target) return false;
+        confirm_actual(actual);
+        state.failure = FAILURE_NONE;
+        state.failure_event = false;
+        state.late_request = false;
+        return true;
+    }
     uint32_t now = app_clock_uptime_ms();
-    if ((uint32_t)(now - state.request_tick) >= REQUEST_TIMEOUT_MS) return false;
+    if ((uint32_t)(now - state.request_tick) >= REQUEST_TIMEOUT_MS &&
+        state.request != REQUEST_MANUAL) return false;
     if (frame[4] > 1) {
         state.request = REQUEST_NONE;
         state.actual_valid = false;
@@ -219,7 +239,8 @@ void work_mode_service_poll(uint32_t now, bool machine_busy)
     state.busy = machine_busy;
     poll_store();
     if (state.request != REQUEST_NONE &&
-        (uint32_t)(now - state.request_tick) >= REQUEST_TIMEOUT_MS) {
+        (int32_t)(now - state.request_tick) >= (int32_t)REQUEST_TIMEOUT_MS) {
+        state.late_request = state.request == REQUEST_MANUAL;
         state.request = REQUEST_NONE;
         state.actual_valid = false;
         state.guard_active = true;

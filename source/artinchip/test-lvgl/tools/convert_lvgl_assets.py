@@ -15,7 +15,9 @@ VERSION = 2
 # Keep flash-friendly compressed backgrounds/cards external. Never allow a
 # resource import to silently turn the executable into a framebuffer archive.
 MAX_ICON_SIDE = 64
-MAX_EMBEDDED_BYTES = 256 * 1024
+# 24 additional 24px settings glyphs need 55,296 raw bytes. Keep a bounded
+# 320 KiB budget so they use the same compiled path, never per-frame decoding.
+MAX_EMBEDDED_BYTES = 320 * 1024
 ROOT = Path(__file__).resolve().parents[1]
 
 def sha(data):

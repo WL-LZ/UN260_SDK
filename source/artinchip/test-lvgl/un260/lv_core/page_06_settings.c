@@ -93,12 +93,12 @@ static void create_sidebar(void){
  lv_settings_label(sidebar,"UN260",153,27,&lv_font_instrument_sans_medium_12,0x586B78);
  const settings_node_t *selected=category();
  lv_obj_t *selected_button=NULL;
- lv_obj_t *list=lv_settings_grid(sidebar,8,60,200,270);
+ lv_obj_t *list=lv_settings_grid(sidebar,4,56,208,314);
  lv_obj_set_flex_flow(list,LV_FLEX_FLOW_COLUMN);
- lv_obj_set_style_pad_all(list,0,0);lv_obj_set_style_pad_row(list,4,0);
+ lv_obj_set_style_pad_all(list,4,0);lv_obj_set_style_pad_row(list,4,0);
  for(size_t i=0;i<catalog_count;i++)if(catalog[i].kind==SETTINGS_CATEGORY){
   bool active=selected==catalog+i;
-  lv_obj_t *b=lv_settings_button(list,0,0,200,49,"",false,activate,(void*)(catalog+i));
+  lv_obj_t *b=lv_settings_button(list,0,0,200,47,"",false,activate,(void*)(catalog+i));
   lv_obj_set_style_bg_color(b,lv_color_hex(active?0xFFFFFF:0xF7F9FB),0);
   if(catalog[i].icon){
    char icon[48];snprintf(icon,sizeof(icon),"%s%s",catalog[i].icon,active?"-active":"");
@@ -107,13 +107,21 @@ static void create_sidebar(void){
   int title_x=catalog[i].icon?48:16;
   lv_obj_t *title=lv_settings_label(b,catalog[i].title,title_x,15,&lv_font_instrument_sans_medium_16,active?0x1462CC:0x1D2B34);
   lv_obj_set_width(title,192-title_x);lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
-  if(active){selected_button=b;lv_obj_t *rail=lv_settings_box(b,0,13,3,22,0x1462CC);lv_obj_set_style_radius(rail,2,0);}
+  if(active){
+   selected_button=b;
+   lv_obj_set_style_shadow_width(b,8,0);lv_obj_set_style_shadow_opa(b,LV_OPA_10,0);
+   lv_obj_set_style_shadow_color(b,lv_color_hex(0x536B79),0);lv_obj_set_style_shadow_ofs_y(b,2,0);
+   lv_obj_t *rail=lv_settings_box(b,0,13,3,22,0x1462CC);lv_obj_set_style_radius(rail,2,0);
+  }
  }
  if(selected_button)lv_obj_scroll_to_view(selected_button,LV_ANIM_OFF);
- lv_obj_t *home=lv_settings_back(sidebar,8,331,200,44,home_event_cb,NULL);
- /* This bottom shortcut is intentionally separate from hierarchy Back at right. */
+ lv_obj_t *home=lv_settings_back(list,0,0,200,47,home_event_cb,NULL);
  lv_obj_t *home_text=lv_obj_get_child(home,0);
  lv_label_set_text(home_text,"Back to count");
+ lv_obj_set_width(home_text,144);lv_obj_set_style_text_align(home_text,LV_TEXT_ALIGN_LEFT,0);
+ lv_obj_align(home_text,LV_ALIGN_LEFT_MID,48,0);
+ lv_obj_t *home_icon=lv_obj_get_child(home,1);
+ if(home_icon)lv_obj_align(home_icon,LV_ALIGN_LEFT_MID,15,0);
 }
 static void value_for(const settings_node_t *n,char *out,size_t cap){
  out[0]=0;
@@ -224,7 +232,7 @@ void page_06_data_collection_refresh(void)
     bool busy=app_command_runtime_count_start_busy();
     lv_obj_t *actions[]={dc_btn_all,dc_btn_false,dc_btn_start,dc_btn_disable};
     for(unsigned i=0;i<4;i++){
-        bool enabled=!request_pending&&!busy&&(i==3||ready)&&
+        bool enabled=!request_pending&&!busy&&(i!=2||ready)&&
                      (i<2||mode!=DATA_COLLECT_MODE_NONE);
         if(enabled)lv_obj_clear_state(actions[i],LV_STATE_DISABLED);
         else lv_obj_add_state(actions[i],LV_STATE_DISABLED);
@@ -275,7 +283,7 @@ static void data_collect_mode_btn_event_cb(lv_event_t* e)
     uint8_t sub = (uint8_t)(uintptr_t)lv_event_get_user_data(e);
     data_collect_mode_t mode;
     const char* status = NULL;
-    if(!work_mode_service_diagnostic_ready()||data_collection_request_pending()||app_command_runtime_count_start_busy())return;
+    if(data_collection_request_pending()||app_command_runtime_count_start_busy())return;
 
     if (sub == 0x01) {
         mode = DATA_COLLECT_MODE_ALL;
@@ -311,7 +319,7 @@ static void data_collect_start_btn_event_cb(lv_event_t* e)
         return;
     }
 
-    if (app_command_runtime_request_count_start()) {
+    if (app_command_runtime_request_diagnostic_run()) {
         data_collection_state_reset_pcs();
         data_collection_state_set_status("Counting command sent. Waiting for controller reply...");
         page_06_data_collection_refresh();
@@ -399,7 +407,7 @@ static void create_data_collection_page_content(lv_settings_frame_t *frame)
     lv_obj_set_width(dc_status_label,744);
     lv_label_set_long_mode(dc_status_label, LV_LABEL_LONG_WRAP);
     dc_btn_disable=lv_settings_button(frame->footer,898,0,164,44,"End collection",false,data_collect_disable_btn_event_cb,NULL);
-    dc_btn_start=lv_settings_button(frame->footer,1076,0,156,44,"Start",true,data_collect_start_btn_event_cb,NULL);
+    dc_btn_start=lv_settings_button(frame->footer,1076,0,156,44,"RUN",true,data_collect_start_btn_event_cb,NULL);
     dc_btn_retry=lv_settings_button(frame->footer,756,0,128,44,"Retry",false,data_collection_retry,NULL);
     lv_obj_add_flag(dc_btn_retry,LV_OBJ_FLAG_HIDDEN);
     dc_gate_label=frame->message;
@@ -417,7 +425,8 @@ static void refresh_directory_status(void){
  if(fault_popup_get_pending_fault(NULL,NULL,NULL)||boot_service_get_stage()==BOOT_STAGE_FAIL||
     mode.phase==WORK_MODE_FAILED||calibration.timed_out){text="Attention";color=0xA66517;}
  else if(upgrade_session_owner()!=UPGRADE_SESSION_NONE){text="Updating";color=0x1462CC;}
- else if(app_command_runtime_count_start_busy()||machine_state_aging_running()||calibration.session_active||mode.phase==WORK_MODE_WAITING_IDLE){text="Running";color=0x1462CC;}
+ else if(app_command_runtime_count_start_busy()||machine_state_aging_running()||calibration.session_active){text="Running";color=0x1462CC;}
+ else if(mode.phase==WORK_MODE_WAITING_IDLE){text="Awaiting stop";color=0xA66517;}
  else if(mode.pending||mode.restore_pending){text="Mode pending";color=0x586B78;}
  else if(!protocol_send_is_ready()){text="No link";color=0xA66517;}
  else if(boot_service_handshake_state()!=HANDSHAKE_OK){text="Connecting";color=0x586B78;}
@@ -429,7 +438,12 @@ static void refresh_directory_status(void){
 static void refresh_directory_count(void){
  if(!grid||!count_label)return;
  unsigned visible=0;
- for(uint32_t i=0;i<lv_obj_get_child_cnt(grid);i++)if(!lv_obj_has_flag(lv_obj_get_child(grid,i),LV_OBJ_FLAG_HIDDEN))visible++;
+ for(uint32_t i=0;i<lv_obj_get_child_cnt(grid);i++){
+  lv_obj_t *group=lv_obj_get_child(grid,i);
+  if(lv_obj_has_flag(group,LV_OBJ_FLAG_HIDDEN))continue;
+  for(uint32_t j=0;j<lv_obj_get_child_cnt(group);j++)
+   if(!lv_obj_has_flag(lv_obj_get_child(group,j),LV_OBJ_FLAG_HIDDEN))visible++;
+ }
  char text[80];bool more=lv_obj_get_scroll_bottom(grid)>2,above=lv_obj_get_scroll_y(grid)>2;
  snprintf(text,sizeof(text),"%u %s%s",visible,visible==1?"setting":"settings",more?"  /  Swipe for more":above?"  /  Swipe to return":"");
  if(strcmp(lv_label_get_text(count_label),text))lv_label_set_text(count_label,text);
@@ -469,12 +483,18 @@ static void render(void){
  lv_obj_t *badge=lv_settings_panel(header,744,7,150,38);lv_obj_set_style_radius(badge,19,0);
  status_dot=lv_settings_box(badge,14,15,8,8,0x586B78);lv_obj_set_style_radius(status_dot,4,0);
  status_label=lv_settings_label(badge,"Connecting",31,10,&lv_font_instrument_sans_medium_16,0x586B78);
- grid=lv_settings_grid(view,253,84,1006,274);
+ grid=lv_settings_list(view,253,84,1006,274);
+ lv_obj_t *groups[SETTINGS_NODE_MAX]={0};
  for(size_t i=0;i<catalog_count;i++)if(catalog[i].parent&&!strcmp(catalog[i].parent,scope->id)){
   const settings_node_t *n=catalog+i;char value[48];value_for(n,value,sizeof(value));
-  lv_settings_item_t cfg={.title=n->title,.hint=n->hint,.value=value[0]?value:NULL,.icon=n->icon,
+  lv_obj_t *group=NULL;
+  if(n->group)for(size_t j=0;j<i;j++)if(groups[j]&&catalog[j].parent&&
+    !strcmp(catalog[j].parent,n->parent)&&catalog[j].group&&!strcmp(catalog[j].group,n->group)){group=groups[j];break;}
+  if(!group)group=lv_settings_group(grid);
+  groups[i]=group;
+  lv_settings_item_t cfg={.title=n->title,.hint=n->hint,.value=value,.icon=n->icon,.grouped=true,
    .activate=activate,.user_data=(void*)n,.value_label=&value_labels[i]};
-  lv_settings_item(grid,&cfg);
+  lv_settings_item(group,&cfg);
  }
  count_label=lv_settings_label(view,"",256,369,&lv_font_instrument_sans_medium_14,0x586B78);
  if(scope_is("calibration"))lv_settings_label(view,"Select a calibration to prepare it.",754,369,&lv_font_instrument_sans_medium_14,0x586B78);

@@ -189,6 +189,12 @@ static void qc_build(void)
     lv_obj_add_event_cb(close,qc_action,LV_EVENT_CLICKED,(void *)3);
     quick.message=qc_label(quick.sheet,24,235,1170,"",&lv_font_instrument_sans_medium_14,0x946215);
     lv_obj_t *grip=qc_box(quick.sheet,598,263,52,4,0xBBC9D3,2);lv_obj_clear_flag(grip,LV_OBJ_FLAG_CLICKABLE);
+    /* Inner outline belongs to the captured sheet, never to the outside shield. */
+    lv_obj_t *outline=qc_box(quick.sheet,-16,0,SHEET_W,SHEET_H,0xF6F8FA,22);
+    lv_obj_set_style_bg_opa(outline,LV_OPA_TRANSP,0);
+    lv_obj_set_style_border_width(outline,2,0);
+    lv_obj_set_style_border_color(outline,lv_color_hex(0xDFE7ED),0);
+    lv_obj_clear_flag(outline,LV_OBJ_FLAG_CLICKABLE);
     quick.dirty=true;qc_refresh();
 }
 static void qc_position(int y)

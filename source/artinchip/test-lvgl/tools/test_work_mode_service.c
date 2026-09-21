@@ -101,17 +101,35 @@ static void test_journal_precedes_command(void)
 }
 static void test_ack_matching_timeout_retry(void)
 {
+    reset((work_mode_record_t){0});sync_mode(WORK_MODE_AUTO);flush();
+    work_mode_service_set_diagnostic(true);flush();
+    work_mode_service_poll(state.request_tick-1,false);
+    assert(state.failure==FAILURE_NONE&&state.request==REQUEST_MANUAL);
+    fake_now+=1550;poll(false);assert(state.request==REQUEST_MANUAL);
+    assert(ack(WORK_MODE_MANUAL));flush();assert(work_mode_service_diagnostic_ready());
+    reset((work_mode_record_t){0});sync_mode(WORK_MODE_AUTO);flush();
+    work_mode_service_set_diagnostic(true);flush();fake_now+=REQUEST_TIMEOUT_MS+1;
+    assert(ack(WORK_MODE_MANUAL));flush();assert(work_mode_service_diagnostic_ready());
     reset((work_mode_record_t){0}); sync_mode(WORK_MODE_AUTO); flush();
     work_mode_service_set_diagnostic(true); flush();
     assert(!ack(WORK_MODE_AUTO) && state.request == REQUEST_MANUAL);
     fake_now += REQUEST_TIMEOUT_MS; poll(false);
     assert(state.failure == FAILURE_TIMEOUT && !state.actual_valid);
-    assert(!ack(WORK_MODE_MANUAL));
+    assert(ack(WORK_MODE_MANUAL));poll(false);
+    assert(work_mode_service_diagnostic_ready());
+    reset((work_mode_record_t){0});sync_mode(WORK_MODE_AUTO);flush();
+    work_mode_service_set_diagnostic(true);flush();
+    fake_now+=REQUEST_TIMEOUT_MS;poll(false);
     work_mode_service_retry(); poll(false);
     assert(sent == 1); /* Late-reply quarantine still active. */
     fake_now += LATE_REPLY_GUARD_MS; poll(false);
     assert(sent == 2 && ack(WORK_MODE_MANUAL)); poll(false);
     assert(work_mode_service_diagnostic_ready());
+    reset((work_mode_record_t){0});sync_mode(WORK_MODE_AUTO);flush();
+    work_mode_service_set_diagnostic(true);flush();fake_now+=REQUEST_TIMEOUT_MS;poll(false);
+    work_mode_service_set_diagnostic(false);work_mode_service_set_diagnostic(true);
+    fake_now+=LATE_REPLY_GUARD_MS;flush();
+    assert(sent==2&&ack(WORK_MODE_MANUAL));flush();assert(work_mode_service_diagnostic_ready());
 }
 static void test_rapid_navigation(void)
 {
