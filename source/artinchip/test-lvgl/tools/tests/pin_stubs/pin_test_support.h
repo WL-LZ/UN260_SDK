@@ -16,11 +16,14 @@
 #define LV_OPA_COVER 255
 #define LV_OPA_TRANSP 0
 #define LV_OPA_10 25
+#define LV_OPA_30 76
+typedef uint8_t lv_opa_t;
 #define LV_RADIUS_CIRCLE 32767
 #define LV_OBJ_FLAG_CLICKABLE 1
 #define LV_OBJ_FLAG_SCROLLABLE 2
 #define LV_OBJ_FLAG_HIDDEN 4
 #define LV_STATE_PRESSED 1
+#define LV_STATE_DISABLED 2
 #define LV_SYMBOL_BACKSPACE "BACKSPACE"
 #define LV_SYMBOL_EYE_OPEN "EYE_OPEN"
 #define LV_SYMBOL_EYE_CLOSE "EYE_CLOSE"
@@ -44,7 +47,7 @@ struct lv_obj_t {
     lv_obj_t *parent;
     lv_obj_t *children[64];
     unsigned child_count;
-    int flags, x, y, w, h, opacity;
+    int flags, state, x, y, w, h, opacity;
     uint32_t color, pressed_color;
     char text[160];
     lv_event_cb_t click_cb, delete_cb;
@@ -72,6 +75,7 @@ static const lv_font_t lv_font_instrument_sans_medium_18 = 18;
 static const lv_font_t lv_font_instrument_sans_medium_24 = 24;
 static const lv_font_t lv_font_instrument_sans_medium_28 = 28;
 static const lv_font_t lv_font_instrument_sans_semibold_28 = 28;
+static const lv_font_t lv_font_instrument_sans_semibold_24 = 24;
 static const lv_font_t lv_font_instrument_sans_bold_24 = 24;
 static const lv_font_t lv_font_montserrat_20 = 20;
 
@@ -104,6 +108,16 @@ static inline void lv_obj_set_x(lv_obj_t *obj, int x) {obj->x=x;}
 static inline uint32_t lv_color_hex(uint32_t color) {return color;}
 static inline void lv_obj_set_style_bg_color(lv_obj_t *obj, uint32_t c, int s) {LV_UNUSED(s); obj->color=c;}
 static inline void lv_obj_set_style_bg_opa(lv_obj_t *obj, int o, int s) {LV_UNUSED(s); obj->opacity=o;}
+static inline void lv_obj_set_style_opa(lv_obj_t *obj, int o, int s) {LV_UNUSED(s); obj->opacity=o;}
+typedef struct {void *var;void (*exec)(void *,int32_t);int end;} lv_anim_t;
+static inline void lv_anim_init(lv_anim_t *a){memset(a,0,sizeof(*a));}
+static inline void lv_anim_set_var(lv_anim_t *a,void *v){a->var=v;}
+static inline void lv_anim_set_exec_cb(lv_anim_t *a,void (*cb)(void *,int32_t)){a->exec=cb;}
+static inline void lv_anim_set_values(lv_anim_t *a,int from,int to){LV_UNUSED(from);a->end=to;}
+static inline void lv_anim_set_time(lv_anim_t *a,unsigned ms){LV_UNUSED(a);assert(ms==100);}
+static inline void lv_anim_start(lv_anim_t *a){a->exec(a->var,a->end);}
+static inline void lv_anim_del(void *v,void (*cb)(void *,int32_t)){LV_UNUSED(v);LV_UNUSED(cb);}
+static inline lv_obj_t *lv_layer_top(void){return NULL;}
 #define PIN_STYLE_STUB(name, type) static inline void name(lv_obj_t *o, type v, int s) {assert(lv_obj_is_valid(o)); LV_UNUSED(v); LV_UNUSED(s);}
 PIN_STYLE_STUB(lv_obj_set_style_radius, int)
 PIN_STYLE_STUB(lv_obj_set_style_border_width, int)
@@ -117,6 +131,8 @@ PIN_STYLE_STUB(lv_obj_set_style_shadow_opa, int)
 PIN_STYLE_STUB(lv_obj_set_style_translate_y, int)
 static inline void lv_obj_clear_flag(lv_obj_t *obj, int flags) {obj->flags &= ~flags;}
 static inline void lv_obj_add_flag(lv_obj_t *obj, int flags) {obj->flags |= flags;}
+static inline void lv_obj_add_state(lv_obj_t *obj, int state) {obj->state |= state;}
+static inline void lv_obj_clear_state(lv_obj_t *obj, int state) {obj->state &= ~state;}
 static inline bool lv_obj_has_flag(const lv_obj_t *obj, int flags) {return (obj->flags & flags) != 0;}
 static inline bool lv_obj_is_visible(const lv_obj_t *obj)
 {
@@ -124,6 +140,7 @@ static inline bool lv_obj_is_visible(const lv_obj_t *obj)
     return true;
 }
 static inline void lv_obj_move_foreground(lv_obj_t *obj) {assert(lv_obj_is_valid(obj));}
+static inline void lv_obj_update_layout(lv_obj_t *obj) {assert(lv_obj_is_valid(obj));}
 static inline void lv_label_set_text(lv_obj_t *obj, const char *text) {snprintf(obj->text, sizeof(obj->text), "%s", text);}
 static inline void lv_obj_add_event_cb(lv_obj_t *obj, lv_event_cb_t cb, int code, void *data)
 {
@@ -172,6 +189,8 @@ static inline void lv_timer_reset(lv_timer_t *timer) {assert(timer);}
 static inline void ui_manager_switch(int page) {switched_page=page;}
 static inline void ui_manager_pop_page(void) {++pop_count;}
 static inline void ui_manager_clear_stack(void) {}
+static inline bool ui_manager_suspend_to_home(void){ui_manager_switch(UI_PAGE_MAIN);return true;}
+static inline void settings_detail_action_block(lv_obj_t *obj,const char *reason){LV_UNUSED(reason);lv_obj_clear_state(obj,LV_STATE_DISABLED);}
 static inline const char *ui_text_get(int id) {return id == UI_TEXT_PASSWORD_LOGIN_TITLE ? "SECURE ACCESS" : "Change password";}
 static inline const char *user_cfg_password_get(void) {return saved_password;}
 static inline bool user_cfg_password_visibility_enabled(void) {return saved_visibility;}
@@ -224,6 +243,8 @@ typedef struct { const char *title, *subtitle, *icon; lv_event_cb_t back; void *
 typedef struct { lv_obj_t *root, *body, *footer, *back, *message; } lv_settings_frame_t;
 static inline lv_obj_t *lv_settings_label(lv_obj_t *parent,const char *text,int x,int y,const lv_font_t *font,uint32_t color)
 { return settings_detail_create_label(parent,text,font,color,x,y); }
+static inline lv_obj_t *lv_settings_box(lv_obj_t *p,int x,int y,int w,int h,uint32_t color)
+{lv_obj_t *o=settings_detail_create_card(p,x,y,w,h);o->color=color;return o;}
 static inline lv_obj_t *lv_settings_button(lv_obj_t *parent,int x,int y,int w,int h,const char *text,bool primary,lv_event_cb_t cb,void *data)
 { LV_UNUSED(primary); return settings_detail_create_button(parent,x,y,w,h,text,0,cb,data); }
 static inline lv_settings_frame_t lv_settings_frame_create(lv_obj_t *parent,const lv_settings_header_t *header)
@@ -236,7 +257,7 @@ static inline lv_settings_frame_t lv_settings_frame_create(lv_obj_t *parent,cons
     frame.message=lv_settings_label(frame.footer,"",0,14,&lv_font_instrument_sans_medium_14,0);
     return frame;
 }
-typedef enum { GESTURE_ACTION_EXIT_PAGE, GESTURE_ACTION_HOME, GESTURE_ACTION_EXPORT } gesture_action_t;
+typedef enum { GESTURE_ACTION_EXIT_PAGE, GESTURE_ACTION_HOME, GESTURE_ACTION_RETURN } gesture_action_t;
 static bool (*pin_gesture_policy)(gesture_action_t);
 static inline void gesture_service_set_page_policy(uint32_t owner,bool (*drag)(void),bool (*handler)(gesture_action_t))
 { LV_UNUSED(owner); LV_UNUSED(drag); pin_gesture_policy=handler; }

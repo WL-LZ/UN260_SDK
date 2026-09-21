@@ -50,6 +50,7 @@ capture = block(port, port.index("if(capture && !g_contact_captured)"))
 production = "\n".join([
     function(port, "lv_port_indev_set_drag_obj"),
     function(port, "evdev_feedback"),
+    function(port, "lv_port_indev_capture_pointer"),
     function(page, "innovation_transition_cancel_async"),
     function(page, "innovation_transition_open_ready"),
     function(page, "innovation_transition_cancel_ready"),
@@ -69,17 +70,19 @@ stub = r'''
 #define LV_OBJ_FLAG_USER_4 1U
 #define LV_OBJ_FLAG_PRESS_LOCK 2U
 #define LV_OBJ_FLAG_CLICKABLE 4U
+#define LV_OBJ_FLAG_SCROLLABLE 8U
 #define LV_STATE_PRESSED 1U
 #define LV_INDEV_TYPE_POINTER 1
 #define LV_ABS(x) ((x) < 0 ? -(x) : (x))
+#define LV_MAX(a,b) ((a)>(b)?(a):(b))
 #define LV_RES_OK 0
 typedef int lv_coord_t;
 typedef int lv_event_code_t;
-enum {LV_EVENT_PRESSED=1, LV_EVENT_PRESSING, LV_EVENT_RELEASED, LV_EVENT_PRESS_LOST};
+enum {LV_EVENT_PRESSED=1, LV_EVENT_PRESSING, LV_EVENT_RELEASED, LV_EVENT_PRESS_LOST,LV_EVENT_SCROLL_BEGIN,LV_EVENT_CANCEL};
 typedef struct {int x, y;} lv_point_t;
 typedef struct {unsigned flags, state; int y; bool valid, hidden;} lv_obj_t;
 typedef struct {lv_point_t point; int type;} lv_indev_t;
-typedef struct {int unused;} lv_indev_drv_t;
+typedef struct {int scroll_limit;} lv_indev_drv_t;
 typedef struct {lv_event_code_t code;} lv_event_t;
 typedef struct {int unused;} lv_anim_t;
 typedef void (*lv_anim_ready_cb_t)(lv_anim_t *);
@@ -97,6 +100,8 @@ static struct {lv_obj_t *image;} g_transition_snapshot;
 static bool g_page_transitioning, g_transition_snapshot_valid;
 static bool evdev_press_cancelled, g_contact_captured;
 static lv_obj_t *evdev_pressed_obj, *active_object;
+static lv_point_t evdev_press_point;
+static bool evdev_visual_cancelled;
 static lv_obj_t handle, surface, live_root;
 static lv_indev_t pointer, *active_indev, *g_pointer_indev;
 static uint32_t tick;
@@ -114,6 +119,11 @@ static bool lv_obj_is_valid(lv_obj_t *o) {return o && o->valid;}
 static void lv_obj_add_flag(lv_obj_t *o,unsigned flags) {o->flags |= flags;}
 static void lv_obj_clear_flag(lv_obj_t *o,unsigned flags) {o->flags &= ~flags;}
 static bool lv_obj_has_flag(lv_obj_t *o,unsigned flag) {return (o->flags & flag) != 0;}
+static lv_obj_t *lv_obj_get_parent(lv_obj_t *o) {(void)o;return NULL;}
+static int lv_obj_get_scroll_top(lv_obj_t *o) {(void)o;return 0;}
+static int lv_obj_get_scroll_bottom(lv_obj_t *o) {(void)o;return 0;}
+static int lv_obj_get_scroll_left(lv_obj_t *o) {(void)o;return 0;}
+static int lv_obj_get_scroll_right(lv_obj_t *o) {(void)o;return 0;}
 static void lv_obj_clear_state(lv_obj_t *o,unsigned state) {o->state &= ~state;}
 static lv_indev_t *lv_indev_get_act(void) {return active_indev;}
 static int lv_indev_get_type(lv_indev_t *i) {return i->type;}

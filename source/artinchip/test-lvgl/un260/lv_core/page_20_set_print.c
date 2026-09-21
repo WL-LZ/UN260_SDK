@@ -151,7 +151,7 @@ static bool print_send_space(uint8_t index, uint8_t lines,
 static void print_leave(void *data)
 {
     (void)data;
-    if(print_leave_home){ui_manager_clear_stack();ui_manager_switch(UI_PAGE_MAIN);}else ui_manager_pop_page();
+    if(print_leave_home){ui_manager_suspend_to_home();}else ui_manager_pop_page();
 }
 static void print_ask_leave(bool home)
 {
@@ -346,12 +346,12 @@ static void print_refresh_view(void)
     for(unsigned row=0;row<2;row++)for(unsigned i=0;i<3;i++)if(space_presets[row][i]){
         lv_obj_t *o=space_presets[row][i];
         if((row?config.space_bottom:config.space_top)==i)lv_obj_add_state(o,LV_STATE_CHECKED);else lv_obj_clear_state(o,LV_STATE_CHECKED);
-        if(print_pending)lv_obj_add_state(o,LV_STATE_DISABLED);else lv_obj_clear_state(o,LV_STATE_DISABLED);
+        if(print_pending)settings_detail_action_block(o, print_pending || print_saving ? "Wait for the current print settings request to finish." : "No changes to save.");else settings_detail_action_block(o, NULL);
     }
     if(print_save_button){
-        if(print_pending||print_saving||!print_dirty())lv_obj_add_state(print_save_button,LV_STATE_DISABLED);else lv_obj_clear_state(print_save_button,LV_STATE_DISABLED);
-        if(print_pending||print_saving)lv_obj_add_state(print_cancel_button,LV_STATE_DISABLED);else lv_obj_clear_state(print_cancel_button,LV_STATE_DISABLED);
-        if(print_pending||print_saving)lv_obj_add_state(print_frame.back,LV_STATE_DISABLED);else lv_obj_clear_state(print_frame.back,LV_STATE_DISABLED);
+        if(print_pending||print_saving||!print_dirty())settings_detail_action_block(print_save_button, print_pending || print_saving ? "Wait for the current print settings request to finish." : "No changes to save.");else settings_detail_action_block(print_save_button, NULL);
+        if(print_pending||print_saving)settings_detail_action_block(print_cancel_button, print_pending || print_saving ? "Wait for the current print settings request to finish." : "No changes to save.");else settings_detail_action_block(print_cancel_button, NULL);
+        if(print_pending||print_saving)settings_detail_action_block(print_frame.back, print_pending || print_saving ? "Wait for the current print settings request to finish." : "No changes to save.");else settings_detail_action_block(print_frame.back, NULL);
         if(!print_pending&&!print_saving)lv_label_set_text(print_frame.message,print_dirty()?"Unsaved changes. Scroll for more options.":"5 settings. Scroll for more options.");
     }
     if (value_space_top) lv_label_set_text_fmt(value_space_top, "%u", (unsigned)config.space_top);
@@ -362,13 +362,13 @@ static void print_refresh_view(void)
         if (!content_boxes[i]) continue;
         if (config.content == i + 1) lv_obj_add_state(content_boxes[i], LV_STATE_CHECKED);
         else lv_obj_clear_state(content_boxes[i], LV_STATE_CHECKED);
-        if (print_pending) lv_obj_add_state(content_boxes[i], LV_STATE_DISABLED);
-        else lv_obj_clear_state(content_boxes[i], LV_STATE_DISABLED);
+        if (print_pending) settings_detail_action_block(content_boxes[i], print_pending || print_saving ? "Wait for the current print settings request to finish." : "No changes to save.");
+        else settings_detail_action_block(content_boxes[i], NULL);
     }
     for (unsigned i = 0; i < 4; ++i) {
         if (!field_boxes[i]) continue;
-        if (print_pending) lv_obj_add_state(field_boxes[i], LV_STATE_DISABLED);
-        else lv_obj_clear_state(field_boxes[i], LV_STATE_DISABLED);
+        if (print_pending) settings_detail_action_block(field_boxes[i], print_pending || print_saving ? "Wait for the current print settings request to finish." : "No changes to save.");
+        else settings_detail_action_block(field_boxes[i], NULL);
     }
 }
 

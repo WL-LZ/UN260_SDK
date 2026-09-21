@@ -13,7 +13,7 @@ root = Path(__file__).resolve().parents[1]
 lvgl = root.parents[1] / 'third-party/lvgl-8.3.2'
 out = Path(sys.argv[1]).resolve()
 out.mkdir(parents=True, exist_ok=True)
-pages = ['20_set_print', '22_set_double_note', '23_set_flap', '24_set_reject_pocket',
+pages = ['05_set_password', '20_set_print', '22_set_double_note', '23_set_flap', '24_set_reject_pocket',
          '25_set_serial_number', '27_set_cfd_level', '29_set_password', '30_set_factory',
          '33_set_brightness', '36_display_test']
 parts = [f'un260/lv_core/page_{name}.c' for name in pages]

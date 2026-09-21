@@ -423,8 +423,8 @@ static void debug_tick(lv_timer_t *timer)
     (void)timer;
     mode_retry_refresh();
     bool ready=work_mode_service_diagnostic_ready();
-    if(ready)lv_obj_clear_state(send_button,LV_STATE_DISABLED);
-    else lv_obj_add_state(send_button,LV_STATE_DISABLED);
+    if(ready)settings_detail_action_block(send_button, NULL);
+    else settings_detail_action_block(send_button, work_mode_service_status_text());
     const char *message=ready?"HEX commands are sent directly to the controller.":work_mode_service_status_text();
     if(strcmp(lv_label_get_text(debug_frame.message),message))lv_label_set_text(debug_frame.message,message);
 }

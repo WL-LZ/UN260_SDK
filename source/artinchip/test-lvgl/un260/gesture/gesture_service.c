@@ -7,9 +7,9 @@
 #include "un260/innovation/page_32_innovation.h"
 #include "un260/lv_core/page_01_main_quick.h"
 #include "un260/lv_core/page_06_settings.h"
+#include "un260/lv_core/page_05_set_password.h"
 #include "un260/lv_components/lv_nav_button.h"
 #include "un260/lv_system/user_cfg.h"
-#include "un260/lv_system/ui_export_data.h"
 #include "un260/lv_drivers/uart_io.h"
 #include <stdio.h>
 #include <string.h>
@@ -54,7 +54,7 @@ static bool page_policy_active(void)
 }
 static const gesture_definition_t g_definitions[] = {
     {1, false, GESTURE_ACTION_EXIT_PAGE, UI_TEXT_GESTURE_EXIT_TITLE, UI_TEXT_GESTURE_EXIT_BODY},
-    {2, false, GESTURE_ACTION_EXPORT, UI_TEXT_GESTURE_HOME_TITLE, UI_TEXT_GESTURE_HOME_BODY},
+    {2, false, GESTURE_ACTION_RETURN, UI_TEXT_GESTURE_HOME_TITLE, UI_TEXT_GESTURE_HOME_BODY},
     {2, false, GESTURE_ACTION_HOME, UI_TEXT_GESTURE_HOME_TITLE, UI_TEXT_GESTURE_HOME_BODY},
 };
 static bool gesture_page_is_safe(ui_page_t page)
@@ -69,8 +69,10 @@ static bool gesture_action_allowed(ui_page_t page, gesture_action_t action)
 {
     if(action == GESTURE_ACTION_EXIT_PAGE)
         return page != UI_PAGE_BOOT_ANIM && page != UI_PAGE_BOOT;
-    /* Global HOME/export must not bypass a maintenance page's ESC cleanup. */
-    return gesture_page_is_safe(page);
+    /* Maintenance pages keep their own in-progress/unsaved guards. Motor's
+     * destroy path serializes its stop commands before releasing Manual mode. */
+    return gesture_page_is_safe(page)||page_policy_active()||
+           page==UI_PAGE_MOTOR_TEST||page==UI_PAGE_UPGRADE;
 }
 static void gesture_navigate_async(void *user_data)
 {
@@ -79,14 +81,13 @@ static void gesture_navigate_async(void *user_data)
     uint32_t started = lv_tick_get();
     g_pending = false;
     if(!gesture_service_enabled() || page != g_pending_origin || !gesture_action_allowed(page, action)) return;
+    if(ui_page_05_set_password_request_back())return;
     if(page_policy_active() && g_page_policy.handle_action && g_page_policy.handle_action(action)) return;
     if(action == GESTURE_ACTION_HOME) {
         if(page == UI_PAGE_MAIN) return;
-        ui_manager_clear_stack();
-        ui_manager_switch(UI_PAGE_MAIN);
-    } else if(action == GESTURE_ACTION_EXPORT) {
-        /* Reuse the existing USB export validation, filenames and error UI. */
-        ui_export_data_request();
+        ui_manager_suspend_to_home();
+    } else if(action == GESTURE_ACTION_RETURN) {
+        ui_manager_restore_from_home();
     } else if(page_01_main_quick_request_back() || page_32_innovation_request_back()) {
         return;
     } else if(page != UI_PAGE_MAIN) {
@@ -123,7 +124,7 @@ static void gesture_queue(void)
     g_pending = lv_async_call(gesture_navigate_async, data) == LV_RES_OK;
     printf("GESTURE action=%s fingers=%u edge=%d queued=%d\n",
         g_runtime.action == GESTURE_ACTION_HOME ? "HOME" :
-        g_runtime.action == GESTURE_ACTION_EXPORT ? "EXPORT" : "BACK",
+        g_runtime.action == GESTURE_ACTION_RETURN ? "RETURN" : "BACK",
         g_runtime.fingers, g_runtime.side, g_pending);
     fflush(stdout);
 }
@@ -146,7 +147,7 @@ static bool gesture_pointer_event(lv_indev_t *indev, lv_event_code_t event,
         return true;
     }
     touch_feedback_sample(point, count);
-    if (!g_runtime.captured && (g_pointer_captured ||
+    if (!ui_page_05_set_password_is_open()&&!g_runtime.captured && (g_pointer_captured ||
         (g_pointer_policy && g_pointer_owner==ui_manager_get_current_page()))) {
         bool owned=g_pointer_captured;
         if (g_pointer_policy && g_pointer_owner==ui_manager_get_current_page())
@@ -167,7 +168,7 @@ static bool gesture_pointer_event(lv_indev_t *indev, lv_event_code_t event,
     }
     /* A page may own a single drag, but a second contact transfers ownership
      * to the global recognizer. Never drop captured/releasing sequences. */
-    if(count==1 && !g_runtime.captured && page_policy_active() &&
+    if(count==1 && !g_runtime.captured && !ui_page_05_set_password_is_open()&&page_policy_active() &&
        g_page_policy.owns_single_drag && g_page_policy.owns_single_drag()) {
         memset(&g_runtime,0,sizeof(g_runtime));
         return false;
@@ -175,7 +176,7 @@ static bool gesture_pointer_event(lv_indev_t *indev, lv_event_code_t event,
     if(!gesture_service_enabled() || !point ||
        !gesture_action_allowed(ui_manager_get_current_page(), GESTURE_ACTION_EXIT_PAGE) ||
        gesture_guide_is_open()) return g_runtime.captured;
-    if(count > 1 && !gesture_page_is_safe(ui_manager_get_current_page())) {
+    if(count > 1 && !gesture_action_allowed(ui_manager_get_current_page(),GESTURE_ACTION_HOME)) {
         g_runtime.cancelled = true;
         g_runtime.triggered = false;
         touch_feedback_edge_hint(0, 0, 0);
@@ -249,7 +250,7 @@ static bool gesture_pointer_event(lv_indev_t *indev, lv_event_code_t event,
         int fx = points[i].x - g_runtime.contacts[j].x;
         if(abs(fy) < 48 || (fy < 0) != (dy < 0) || abs(fy)*2 < abs(fx)*3) return true;
     }
-    g_runtime.action = dy < 0 ? GESTURE_ACTION_EXPORT : GESTURE_ACTION_HOME;
+    g_runtime.action = dy < 0 ? GESTURE_ACTION_RETURN : GESTURE_ACTION_HOME;
     g_runtime.triggered = true;
     return true;
 }

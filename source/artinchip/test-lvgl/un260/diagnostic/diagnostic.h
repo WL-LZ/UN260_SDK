@@ -20,7 +20,8 @@ typedef enum {
     CB_CALIB_IDLE = 0,
     CB_CALIB_RUNNING,
     CB_CALIB_SUCCESS,
-    CB_CALIB_FAIL_IR
+    CB_CALIB_FAIL_IR,
+    CB_CALIB_FAIL_FEED
 } cb_calib_state_t;
 
 typedef enum {
@@ -34,6 +35,9 @@ typedef struct {
     calib_target_t target;
     bool session_active;
     bool timed_out;
+    bool feed_started;
+    uint8_t feed_error_type;
+    uint8_t feed_error_code;
 } calibration_state_snapshot_t;
 
 typedef struct {
@@ -63,6 +67,10 @@ void diagnostic_calibration_get_snapshot(calibration_state_snapshot_t *snapshot)
 bool diagnostic_calibration_begin(calib_target_t target, uint32_t now_ms);
 void diagnostic_calibration_end_session(void);
 bool diagnostic_calibration_poll(uint32_t now_ms);
+bool diagnostic_calibration_allows_feed(void);
+void diagnostic_calibration_feed_started(void);
+/* A rejected start is a terminal feed failure, not an in-flight calibration. */
+bool diagnostic_calibration_feed_failed(uint8_t type, uint8_t code);
 
 diagnostic_reply_result_t diagnostic_reply_dispatch(
     uint8_t cmd, const uint8_t *buf, uint8_t len, uint32_t now_ms,

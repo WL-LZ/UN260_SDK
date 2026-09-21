@@ -21,6 +21,8 @@ typedef struct {
     lv_pin_keypad_cancel_cb_t cancel_cb;
     void *user_data;
     bool digits_visible;
+    bool auto_confirm; /* Login only: four digits submit; bottom-right is Clear. */
+    bool compact; /* 850 x 364 side panel; stable dots without a blinking cursor. */
     lv_pin_keypad_visibility_cb_t save_visibility;
 } lv_pin_keypad_config_t;
 
@@ -45,6 +47,8 @@ typedef struct {
     void *user_data;
     bool cursor_on;
     bool digits_visible;
+    bool auto_confirm;
+    bool compact;
     lv_pin_keypad_visibility_cb_t save_visibility;
 } lv_pin_keypad_t;
 

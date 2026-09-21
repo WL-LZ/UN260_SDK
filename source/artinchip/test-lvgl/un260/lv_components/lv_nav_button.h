@@ -12,4 +12,6 @@ typedef enum {
 } lv_nav_back_result_t;
 /* Reuse the visible page's ESC action, including its busy guards and cleanup. */
 lv_nav_back_result_t lv_nav_button_request_back(void);
+/* Existing modal Cancel buttons may participate in the same Back route. */
+void lv_nav_button_mark_back(lv_obj_t *button);
 #endif

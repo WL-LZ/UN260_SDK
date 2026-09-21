@@ -36,6 +36,8 @@ static ui_page_manager_context_t g_page_manager = {
     .current = UI_PAGE_INVALID,
     .stack_top = -1,
 };
+static ui_page_manager_context_t g_home_bookmark;
+static bool g_home_bookmark_valid,g_temporary_home,g_restoring_home;
 
 static bool g_page_cache_ready[UI_PAGE_COUNT];
 static ui_data_topic_t g_page_data_dirty[UI_PAGE_COUNT];
@@ -50,11 +52,21 @@ static void ui_manager_reset_navigation_sessions(void);
 static void ui_manager_history_on_commit(ui_page_t page)
 {
     if(page != UI_PAGE_MAIN) return;
-    ui_manager_reset_navigation_sessions();
+    if(!g_temporary_home){
+        g_home_bookmark_valid=false;
+        ui_manager_reset_navigation_sessions();
+    }
     int depth = g_page_manager.stack_top + 1;
     g_page_manager.stack_top = -1;
     if(depth > 0) uart_debug_printf("NAV_ROOT from=%u dropped=%d\n",
                                     (unsigned)g_page_manager.current, depth);
+}
+static void ui_manager_navigation_on_leave(ui_page_t from,ui_page_t to)
+{
+    if(from==UI_PAGE_MAIN&&to!=UI_PAGE_MAIN&&g_home_bookmark_valid&&!g_restoring_home){
+        g_home_bookmark_valid=false;
+        ui_manager_reset_navigation_sessions();
+    }
 }
 
 typedef void (*ui_page_create_fn_t)(lv_obj_t *parent);
@@ -233,16 +245,6 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .reset_navigation = ui_page_06_settings_reset_navigation,
         .static_images = g_page_settings_static_images,
         .static_image_count = UI_ARRAY_SIZE(g_page_settings_static_images),
-    },
-    [UI_PAGE_SET_PASSAGE] = {
-        .create = ui_page_05_set_password_create,
-        .destroy = ui_page_05_set_password_destroy,
-        .resume = ui_page_05_set_password_resume,
-        .suspend = ui_page_05_set_password_suspend,
-        /* Password is intentionally retained only after first use.  It is
-         * not in the boot prewarm queue, so low-frequency functionality does
-         * not increase startup latency; suspend clears all sensitive input. */
-        .cache_policy = UI_PAGE_RETAINED,
     },
     [UI_PAGE_CURR] = {
         .create = ui_page_07_curr_create,
@@ -484,6 +486,8 @@ static void ui_manager_update_diagnostic_scope(ui_page_t page)
 
 static void ui_manager_notify_page_switch(ui_page_t from, ui_page_t to)
 {
+    ui_page_05_set_password_suspend();
+    ui_manager_navigation_on_leave(from,to);
     static const page_switch_notify_rule_t rules[] = {
         { UI_PAGE_MAIN, UI_PAGE_LIST, 0x40, 0x01 },
         { UI_PAGE_LIST, UI_PAGE_MAIN, 0x40, 0x00 },
@@ -499,6 +503,9 @@ static void ui_manager_notify_page_switch(ui_page_t from, ui_page_t to)
 
 void ui_manager_switch(ui_page_t page)
 {
+    /* Legacy route now opens a modal without disturbing the visible page or
+     * its history. The PIN is never a resumable navigation destination. */
+    if(page==UI_PAGE_SET_PASSAGE){ui_page_05_set_password_open();return;}
     ui_page_t from = g_page_manager.current;
     perf_profile_page_switch_sample_t sample = {
         .started_us = 0,
@@ -578,6 +585,7 @@ void ui_manager_switch(ui_page_t page)
 void ui_manager_init(void) {
     // 初始化堆栈
     g_page_manager.stack_top = -1;
+    g_home_bookmark_valid=g_temporary_home=g_restoring_home=false;
     memset(g_page_cache_ready, 0, sizeof(g_page_cache_ready));
     memset(g_page_data_dirty, 0, sizeof(g_page_data_dirty));
     g_page_switch_committing = false;
@@ -735,6 +743,35 @@ bool ui_manager_pop_page(void)
 void ui_manager_clear_stack(void)
 {
     g_page_manager.stack_top = -1;
+    g_home_bookmark_valid=false;
+}
+
+bool ui_manager_suspend_to_home(void)
+{
+    if(g_page_switch_committing||g_page_manager.current==UI_PAGE_MAIN||
+       !ui_manager_page_is_registered(g_page_manager.current))return false;
+    ui_page_manager_context_t saved=g_page_manager;
+    g_temporary_home=true;
+    ui_manager_switch(UI_PAGE_MAIN);
+    g_temporary_home=false;
+    if(g_page_manager.current!=UI_PAGE_MAIN)return false;
+    g_home_bookmark=saved;
+    g_home_bookmark_valid=true;
+    return true;
+}
+bool ui_manager_restore_from_home(void)
+{
+    if(g_page_switch_committing||g_page_manager.current!=UI_PAGE_MAIN||
+       !g_home_bookmark_valid||!ui_manager_page_is_registered(g_home_bookmark.current))return false;
+    ui_page_manager_context_t saved=g_page_manager;
+    g_restoring_home=true;
+    memcpy(g_page_manager.stack,g_home_bookmark.stack,sizeof(g_page_manager.stack));
+    g_page_manager.stack_top=g_home_bookmark.stack_top;
+    ui_manager_switch(g_home_bookmark.current);
+    g_restoring_home=false;
+    if(g_page_manager.current==UI_PAGE_MAIN){g_page_manager=saved;return false;}
+    g_home_bookmark_valid=false;
+    return true;
 }
 
 bool ui_manager_invalidate_page_cache(ui_page_t page)

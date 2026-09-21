@@ -28,8 +28,8 @@ static void refresh(void)
         bool selected = position == positions[i];
         if (selected) lv_obj_add_state(options[i], LV_STATE_CHECKED);
         else lv_obj_clear_state(options[i], LV_STATE_CHECKED);
-        if (pending) lv_obj_add_state(options[i], LV_STATE_DISABLED);
-        else lv_obj_clear_state(options[i], LV_STATE_DISABLED);
+        if (pending) settings_detail_action_block(options[i], "Wait for the current flap movement to be confirmed.");
+        else settings_detail_action_block(options[i], NULL);
     }
 }
 

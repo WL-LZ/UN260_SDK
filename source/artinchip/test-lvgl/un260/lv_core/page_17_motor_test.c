@@ -14,10 +14,15 @@ static const char *names[]={"Level 1 motor","Level 2 motor","Impeller motor"};
 static const char *hints[]={"First transport stage","Second transport stage","Stacker transport"};
 static const char *phase_text[]={"Stopped","Queued","Starting","Running","Stopping",
     "Awaiting acknowledgement","Command rejected","Could not send"};
+static void motor_tick(lv_timer_t *timer);
 static void request(lv_event_t *e)
 {
     unsigned key=(uintptr_t)lv_event_get_user_data(e);
-    (void)motor_test_service_request(key/2,key%2==0);
+    if(!motor_test_service_request(key/2,key%2==0))
+        settings_detail_dialog_show("Command not accepted",
+            work_mode_service_diagnostic_ready()?"Wait for the current motor request or check the controller connection.":work_mode_service_status_text(),
+            "OK",NULL,NULL,NULL,NULL);
+    motor_tick(NULL);
 }
 static void retry(lv_event_t *e){(void)e;work_mode_service_retry();}
 static void back(lv_event_t *e){(void)e;ui_manager_pop_page();}
@@ -32,8 +37,8 @@ static void motor_tick(lv_timer_t *timer)
         const char *text=phase_text[s.phase];
         if(strcmp(lv_label_get_text(status[i]),text))lv_label_set_text(status[i],text);
         lv_obj_set_style_text_color(status[i],lv_color_hex(s.phase>=MOTOR_UNCONFIRMED?0xA35B12:s.running?0x1462CC:0x586B78),0);
-        if(s.pending||s.queued||s.running||!work_mode_service_diagnostic_ready())lv_obj_add_state(forward[i],LV_STATE_DISABLED);
-        else lv_obj_clear_state(forward[i],LV_STATE_DISABLED);
+        if(s.pending||s.queued||s.running||!work_mode_service_diagnostic_ready())settings_detail_action_block(forward[i], !work_mode_service_diagnostic_ready() ? work_mode_service_status_text() : s.running ? "This motor is already running." : "Wait for the current motor command to finish.");
+        else settings_detail_action_block(forward[i], NULL);
     }
     const char *text=work_mode_service_diagnostic_ready()?"Stops are confirmed one at a time. Keep the path clear.":work_mode_service_status_text();
     if(strcmp(lv_label_get_text(motor_frame.message),text))lv_label_set_text(motor_frame.message,text);

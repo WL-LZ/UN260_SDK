@@ -23,11 +23,11 @@ static void refresh(void)
     for (unsigned i = 0; i < 8; ++i) {
         if (capacity == 30 + i * 10) lv_obj_add_state(presets[i], LV_STATE_CHECKED);
         else lv_obj_clear_state(presets[i], LV_STATE_CHECKED);
-        if (pending) lv_obj_add_state(presets[i], LV_STATE_DISABLED);
-        else lv_obj_clear_state(presets[i], LV_STATE_DISABLED);
+        if (pending) settings_detail_action_block(presets[i], "Wait for the controller to confirm the current capacity.");
+        else settings_detail_action_block(presets[i], NULL);
     }
-    if (pending) lv_obj_add_state(value_button, LV_STATE_DISABLED);
-    else lv_obj_clear_state(value_button, LV_STATE_DISABLED);
+    if (pending) settings_detail_action_block(value_button, "Wait for the controller to confirm the current capacity.");
+    else settings_detail_action_block(value_button, NULL);
 }
 
 static void request_capacity(uint8_t capacity)

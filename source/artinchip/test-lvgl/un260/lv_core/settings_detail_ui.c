@@ -9,15 +9,36 @@
 #include "un260/lv_resources/lv_img_init.h"
 #include "un260/lv_components/lv_settings.h"
 #include "un260/app_service/app_command_runtime.h"
+#include "un260/app_service/work_mode_service.h"
 
 #include <string.h>
+
+static void prepare_manual(void *unused)
+{
+    (void)unused;work_mode_service_retry();
+}
+static void action_explain(const char *reason)
+{
+    work_mode_snapshot_t mode;work_mode_service_get_snapshot(&mode);
+    if(mode.phase==WORK_MODE_FAILED&&!strcmp(reason,work_mode_service_status_text())){
+        settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING,"Manual mode not confirmed",
+            "Live sensor readings are independent of work mode. Prepare Manual mode before running or calibrating the machine.",
+            "Prepare Manual","Cancel",prepare_manual,NULL,NULL);
+        return;
+    }
+    settings_detail_dialog_show_ex(SETTINGS_DIALOG_INFO,"Please note",reason,"OK",NULL,NULL,NULL,NULL);
+}
+void settings_detail_action_block(lv_obj_t *button,const char *reason)
+{
+    lv_settings_action_block(button,reason,action_explain);
+}
 
 static void settings_run_clicked(lv_event_t *e)
 {
     (void)e;
     const char *reason=app_command_runtime_diagnostic_run_blocker();
     if(!reason&&app_command_runtime_request_diagnostic_run())return;
-    settings_detail_dialog_show("Cannot run",reason?reason:"The command could not be sent. Please try again.","OK",NULL,NULL,NULL,NULL);
+    action_explain(reason?reason:"The command could not be sent. Please try again.");
 }
 void settings_detail_add_run(lv_obj_t *page)
 {
@@ -28,8 +49,8 @@ void settings_detail_add_run(lv_obj_t *page)
 lv_color_t settings_theme_color_hex(uint32_t color)
 {
     switch (color) {
-    /* Primary accents -> #2e85ff and its darker/lighter variants. */
-    case 0x08C5D6: return lv_color_hex(0x2E85FF);
+    /* Legacy accents; actionable controls use lv_settings_action_style. */
+    case 0x08C5D6: return lv_color_hex(0x1559B7);
     case 0x0878C8: return lv_color_hex(0x1F6FE5);
     case 0x075E9C:
     case 0x0466AD: return lv_color_hex(0x185BC2);
@@ -235,7 +256,7 @@ lv_obj_t* settings_detail_create_page_ex(lv_obj_t* parent, const char* title,
     lv_obj_set_style_bg_color(bottom_line, detail_line(), 0);
     lv_obj_set_style_bg_opa(bottom_line, LV_OPA_COVER, 0);
 
-    lv_obj_t* esc = lv_nav_button_create(header, 1156, 5, 92, 44, back_cb, NULL);
+    lv_obj_t* esc = lv_settings_back(header, 1156, 5, 92, 44, back_cb, NULL);
     lv_obj_set_style_shadow_width(esc, 0, 0);
     if (out_back_btn) {
         *out_back_btn = esc;
@@ -285,19 +306,23 @@ lv_obj_t* settings_detail_create_button(lv_obj_t* parent, lv_coord_t x, lv_coord
     lv_obj_set_style_bg_color(btn, bg, 0);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(btn, 0, 0);
-    lv_obj_set_style_radius(btn, 4, 0);
-    lv_obj_set_style_shadow_width(btn, 10, 0);
-    lv_obj_set_style_shadow_opa(btn, LV_OPA_20, 0);
-    lv_obj_set_style_shadow_ofs_y(btn, 4, 0);
+    lv_obj_set_style_radius(btn, 11, 0);
+    lv_obj_set_style_shadow_width(btn, 0, 0);
     lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
-    detail_add_press_style(btn, lv_color_darken(bg, 28));
+    /* Legacy detail callers still provide a color. Preserve its action class,
+       then share the same high-contrast states as new settings components. */
+    bool neutral=lv_color_brightness(bg)>200;
+    lv_damped_button_register(btn,bg,lv_color_darken(bg,20));
+    lv_settings_action_style(btn,neutral?LV_SETTINGS_ACTION_SECONDARY:LV_SETTINGS_ACTION_PRIMARY);
 
+    lv_settings_action_guard_init(btn);
     if (cb) {
         lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, user_data);
     }
 
-    lv_obj_t* label = settings_detail_create_label(btn, text, &lv_font_instrument_sans_bold_16,
-                                                   detail_panel(), 0, 0);
+    lv_obj_t* label = lv_label_create(btn);
+    lv_label_set_text(label,text);
+    lv_obj_set_style_text_font(label,&lv_font_instrument_sans_medium_16,0);
     lv_obj_center(label);
     return btn;
 }
@@ -320,6 +345,7 @@ lv_obj_t* settings_detail_create_select_box(lv_obj_t* parent,
     lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);
     detail_add_press_style(box, lv_color_hex(0xD8F4FF));
 
+    lv_settings_action_guard_init(box);
     if (cb) {
         lv_obj_add_event_cb(box, cb, LV_EVENT_CLICKED, user_data);
     }
@@ -479,6 +505,8 @@ bool settings_detail_dialog_show_ex(settings_detail_dialog_kind_t kind,
                                   confirm_text ? confirm_text : "",
                                   lv_color_hex(kind==SETTINGS_DIALOG_DESTRUCTIVE ? 0xB03838 : 0x1462CC),
                                   settings_detail_dialog_confirm_cb, NULL);
+    lv_settings_action_style(confirm,kind==SETTINGS_DIALOG_DESTRUCTIVE ?
+        LV_SETTINGS_ACTION_DESTRUCTIVE : LV_SETTINGS_ACTION_PRIMARY);
     lv_obj_set_style_radius(confirm,12,0);
     lv_obj_set_style_shadow_width(confirm,0,0);
 
@@ -673,7 +701,7 @@ static lv_obj_t* settings_keyboard_create_key(lv_obj_t* parent, int x, int y, in
     lv_obj_set_pos(btn, x, y);
     lv_obj_set_size(btn, w, h);
     (void)bg;
-    lv_obj_set_style_bg_color(btn, lv_color_hex(0xF1F4F5), 0);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(LV_SETTINGS_CONTROL_SURFACE), 0);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(btn, 1, 0);
     lv_obj_set_style_border_color(btn, lv_color_hex(0xECF0F3), 0);
@@ -683,11 +711,10 @@ static lv_obj_t* settings_keyboard_create_key(lv_obj_t* parent, int x, int y, in
         lv_obj_set_style_shadow_width(btn,2,0);
         lv_obj_set_style_shadow_ofs_y(btn,2,0);
         lv_obj_set_style_shadow_opa(btn,LV_OPA_40,0);
-        if(strcmp(key,"BACK")==0 || strcmp(key,"CLEAR")==0)
-            lv_obj_set_style_bg_color(btn,lv_color_hex(0xDBE3E9),0);
     }
     lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
-    detail_add_press_style(btn, lv_color_hex(0xD8F4FF));
+    detail_add_press_style(btn, lv_color_hex(0xE2E9EE));
+    lv_settings_action_style(btn,LV_SETTINGS_ACTION_SECONDARY);
     lv_obj_add_event_cb(btn, settings_keyboard_key_cb, LV_EVENT_CLICKED, (void*)key);
 
     const lv_font_t* key_font =
@@ -728,6 +755,8 @@ static void settings_keyboard_create_action(lv_obj_t* parent, int x, int y, int 
     lv_obj_set_style_radius(btn, 12, 0);
     lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
     detail_add_press_style(btn, lv_color_darken(bg, 28));
+    lv_settings_action_style(btn,cb==settings_keyboard_cancel_cb ?
+        LV_SETTINGS_ACTION_SECONDARY : LV_SETTINGS_ACTION_PRIMARY);
     lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
 
     const lv_font_t* action_font =

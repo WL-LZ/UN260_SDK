@@ -58,6 +58,8 @@ void settings_detail_dialog_hide(void);
 bool settings_detail_overlay_is_open(void);
 /* Diagnostic page shortcut; owned by its parent. No calibration command is sent. */
 void settings_detail_add_run(lv_obj_t *page);
+/* reason must remain valid until cleared or the button is deleted. */
+void settings_detail_action_block(lv_obj_t *button, const char *reason);
 bool settings_detail_keyboard_show(const char* title,
                                    const char* init_value,
                                    uint16_t max_len,
@@ -75,7 +77,8 @@ bool settings_detail_keyboard_show_ex(const char* title,
 void settings_detail_keyboard_hide(void);
 
 /*
- * Keep the complete settings flow on one #2e85ff-based blue palette. Settings pages
+ * Translate legacy settings colors. New actions use lv_settings_action_style.
+ * Settings pages
  * include this header, so existing LVGL colors are translated consistently
  * without duplicating theme constants in every sub-page.
  */

@@ -5,7 +5,7 @@ import re, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
 source=(root/'un260/app_service/app_command_runtime.c').read_text()
 def function(name):
-    match=re.search(r'^(?:const char \*|bool )'+name+r'\([^;]*?\)\n\{.*?^\}',source,re.M|re.S)
+    match=re.search(r'^(?:static )?(?:const char \*|bool )'+name+r'\([^;]*?\)\n\{.*?^\}',source,re.M|re.S)
     assert match,name
     return match.group()
 code=r'''
@@ -18,7 +18,11 @@ code=r'''
 typedef int boot_stage_t;
 #define UPGRADE_SESSION_NONE 0
 typedef struct {bool session_active;} calibration_state_snapshot_t;
-static bool mode=true,link=true,fault,busy,calibration,motor,aging;
+static bool mode=true,link=true,fault,busy,calibration,motor,aging,feed;
+#define UI_PAGE_CIS_CALIB 9
+static int page=1;
+int ui_manager_get_current_page(void){return page;}
+bool diagnostic_calibration_allows_feed(void){return feed;}
 static int boot=3,upgrade,starts;
 bool work_mode_service_diagnostic_ready(void){return mode;}
 const char *work_mode_service_status_text(void){return "Manual mode not confirmed";}
@@ -33,7 +37,7 @@ bool machine_state_aging_running(void){return aging;}
 bool motor_test_service_busy(void){return motor;}
 bool app_command_runtime_request_count_start(void){starts++;return true;}
 '''
-code+=function('app_command_runtime_calibration_blocker')+'\n'+function('app_command_runtime_diagnostic_run_blocker')+'\n'+function('app_command_runtime_request_diagnostic_run')
+code+=function('diagnostic_operation_blocker')+'\n'+function('app_command_runtime_calibration_blocker')+'\n'+function('app_command_runtime_diagnostic_run_blocker')+'\n'+function('app_command_runtime_request_diagnostic_run')
 code+=r'''
 int main(void){
  assert(app_command_runtime_request_diagnostic_run()&&starts==1);
@@ -46,6 +50,12 @@ int main(void){
  assert(starts==1&&app_command_runtime_request_diagnostic_run()&&starts==2);
  boot=BOOT_STAGE_FAIL;assert(app_command_runtime_request_diagnostic_run()&&starts==3);
  fault=true;assert(!app_command_runtime_calibration_blocker());assert(app_command_runtime_diagnostic_run_blocker());
+ fault=false;calibration=true;feed=true;
+ assert(app_command_runtime_diagnostic_run_blocker()); /* another diagnostic page */
+ page=UI_PAGE_CIS_CALIB;assert(!app_command_runtime_diagnostic_run_blocker());
+ assert(app_command_runtime_calibration_blocker()); /* a second Start remains rejected */
+ busy=true;assert(app_command_runtime_diagnostic_run_blocker());busy=false;
+ feed=false;assert(app_command_runtime_diagnostic_run_blocker());
  puts("PASS diagnostic RUN: mode, link, boot, upgrade, fault, count, calibration, motor and aging gates");
 }
 '''

@@ -20,11 +20,11 @@ static void update_controls(void)
 {
     if (!frame.root) return;
     if (pending || reboot_required) {
-        lv_obj_add_state(reset_button, LV_STATE_DISABLED);
-        lv_obj_add_state(frame.back, LV_STATE_DISABLED);
+        settings_detail_action_block(reset_button, reboot_required ? "Restart the device to complete the reset." : "Reset is in progress. Keep power connected.");
+        settings_detail_action_block(frame.back, reboot_required ? "Restart the device to complete the reset." : "Reset is in progress. Keep power connected.");
     } else {
-        lv_obj_clear_state(reset_button, LV_STATE_DISABLED);
-        lv_obj_clear_state(frame.back, LV_STATE_DISABLED);
+        settings_detail_action_block(reset_button, NULL);
+        settings_detail_action_block(frame.back, NULL);
     }
 }
 
@@ -129,8 +129,7 @@ void ui_page_30_set_factory_create(lv_obj_t *parent)
     lv_label_set_long_mode(description, LV_LABEL_LONG_WRAP);
     reset_button = lv_settings_button(action, 24, 172, 436, 46,
         ui_text_get(UI_TEXT_SETTINGS_FACTORY_START), true, start, NULL);
-    lv_obj_set_style_bg_color(reset_button, lv_color_hex(0xA93D36), 0);
-    lv_obj_set_style_bg_color(reset_button, lv_color_hex(0x92342E), LV_STATE_PRESSED);
+    lv_settings_action_style(reset_button, LV_SETTINGS_ACTION_DESTRUCTIVE);
     lv_obj_set_width(frame.message, 940);
     lv_label_set_text(frame.message, pending ? "Waiting for controller." : "No changes are made until you confirm the reset.");
     update_controls();

@@ -25,7 +25,7 @@ static const settings_node_t nodes[]={
  {"image","maintenance","Image capture","Inspect sensor images","EntryImage",SETTINGS_DETAIL,UI_PAGE_IMAGE_GET,"inspection"},
  {"wave","maintenance","Waveform","Magnetic and UV signals","EntryWave",SETTINGS_DETAIL,UI_PAGE_WAVE_GET,"inspection"},
  {"aging","maintenance","Aging test","Continuous hardware test","EntryAging",SETTINGS_DETAIL,UI_PAGE_AGING_SETTING,"tests"},
- {"display","maintenance","Display test","Color and grayscale checks","EntryDisplay",SETTINGS_DETAIL,UI_PAGE_DISPLAY_TEST,"tests"},
+ {"display","maintenance","Color calibration","Display reference and adjustment","EntryDisplay",SETTINGS_DETAIL,UI_PAGE_DISPLAY_TEST,"tests"},
  {"collection","data","Data collection","All data or error reports","EntryCollect",SETTINGS_DETAIL,UI_PAGE_SETTING,"collection"},
  {"upgrade","data","Upgrade","Controller, image board and UI","EntryUpgrade",SETTINGS_DIRECTORY,0,"updates"},
  {"mainUpdate","upgrade","Controller","Main-board software","EntryBoard",SETTINGS_DETAIL,UI_PAGE_MAIN_UPGRADE,"updates"},

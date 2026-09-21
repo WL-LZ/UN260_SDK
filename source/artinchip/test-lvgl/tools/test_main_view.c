@@ -377,7 +377,7 @@ static void test_main(void)
     assert(strcmp(lv_label_get_text(lv_obj_get_child(lv_obj_get_child(page_01_multi_scroll(),0),0)),"100")!=0);
     assert(!counting_multi_query_busy());
     write_bmp("multi-usd-detail-scrolled");
-    assert(multi_policy && !multi_policy(GESTURE_ACTION_EXPORT));
+    assert(multi_policy && !multi_policy(GESTURE_ACTION_RETURN));
     assert(multi_policy(GESTURE_ACTION_HOME));render();write_bmp("multi-back");
     assert(!multi_policy(GESTURE_ACTION_EXIT_PAGE));
     smart_island_notify_warning("A long diagnostic message that must scroll without layout jumping during normal refresh");

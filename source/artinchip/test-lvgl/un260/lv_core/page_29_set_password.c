@@ -48,8 +48,8 @@ static const char *const field_prompts[PASSWORD_FIELD_COUNT] = {
 static void password_setting_refresh_fields(void)
 {
     if(password_save_button){
-        if(lv_pin_input_is_complete(field_text[PASSWORD_FIELD_CONFIRM]))lv_obj_clear_state(password_save_button,LV_STATE_DISABLED);
-        else lv_obj_add_state(password_save_button,LV_STATE_DISABLED);
+        if(lv_pin_input_is_complete(field_text[PASSWORD_FIELD_CONFIRM]))settings_detail_action_block(password_save_button, NULL);
+        else settings_detail_action_block(password_save_button, "Verify the current PIN, then enter and confirm your new PIN.");
     }
     for (uint8_t i = 0; i < PASSWORD_FIELD_COUNT; i++) {
         bool active = (i == active_field);
@@ -208,7 +208,7 @@ static bool password_dirty(void)
 static void password_leave(void *data)
 {
     (void)data;
-    if (password_leave_home) { ui_manager_clear_stack(); ui_manager_switch(UI_PAGE_MAIN); }
+    if (password_leave_home) { ui_manager_suspend_to_home(); }
     else ui_manager_pop_page();
 }
 

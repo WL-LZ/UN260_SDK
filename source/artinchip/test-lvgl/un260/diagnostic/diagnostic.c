@@ -47,6 +47,9 @@ bool diagnostic_calibration_begin(calib_target_t target, uint32_t now_ms)
     g_calibration_state.session_active = true;
     g_calibration_state.timed_out = false;
     g_calibration_activity_ms = now_ms;
+    g_calibration_state.feed_started = false;
+    g_calibration_state.feed_error_type = 0;
+    g_calibration_state.feed_error_code = 0;
     if (target == CALIB_TARGET_CB) {
         g_calibration_state.cb_state = CB_CALIB_RUNNING;
     } else {
@@ -66,6 +69,31 @@ void diagnostic_calibration_end_session(void)
     g_calibration_state.session_active = false;
     g_calibration_state.timed_out = false;
     g_calibration_activity_ms = 0;
+}
+
+bool diagnostic_calibration_allows_feed(void)
+{
+    return g_calibration_state.session_active &&
+           g_calibration_state.target == CALIB_TARGET_CB &&
+           !g_calibration_state.feed_started;
+}
+
+void diagnostic_calibration_feed_started(void)
+{
+    if (g_calibration_state.session_active && g_calibration_state.target == CALIB_TARGET_CB)
+        g_calibration_state.feed_started = true;
+}
+
+bool diagnostic_calibration_feed_failed(uint8_t type, uint8_t code)
+{
+    if (!diagnostic_calibration_allows_feed() || (type != 1 && type != 2)) return false;
+    g_calibration_state.cb_state = CB_CALIB_FAIL_FEED;
+    g_calibration_state.feed_error_type = type;
+    g_calibration_state.feed_error_code = code;
+    g_calibration_state.session_active = false;
+    g_calibration_state.timed_out = false;
+    g_calibration_activity_ms = 0;
+    return true;
 }
 
 bool diagnostic_calibration_poll(uint32_t now_ms)

@@ -1,9 +1,19 @@
 #ifndef LV_SETTINGS_H
 #define LV_SETTINGS_H
 #include "lvgl/lvgl.h"
-
-/* Neutral interactive surface; selection and press feedback remain separate. */
-#define LV_SETTINGS_CONTROL_SURFACE 0xF7F7F7
+#include "lv_settings_palette.h"
+/* Install before the action callback. A blocked action remains touchable and
+ * delegates its explanation to the owning UI layer. NULL reason clears it. */
+void lv_settings_action_guard_init(lv_obj_t *button);
+void lv_settings_action_block(lv_obj_t *button, const char *reason,
+                             void (*explain)(const char *));
+const char *lv_settings_action_block_reason(lv_obj_t *button);
+typedef enum {
+    LV_SETTINGS_ACTION_SECONDARY, LV_SETTINGS_ACTION_PRIMARY,
+    LV_SETTINGS_ACTION_DESTRUCTIVE
+} lv_settings_action_role_t;
+/* Semantic action colors, including pressed/disabled states. */
+void lv_settings_action_style(lv_obj_t *button, lv_settings_action_role_t role);
 
 /* Presentation only. Owners provide strings, actions and confirmed values. */
 typedef struct {
@@ -43,6 +53,8 @@ lv_obj_t *lv_settings_panel(lv_obj_t *, int x, int y, int w, int h);
 lv_obj_t *lv_settings_header(lv_obj_t *, int x, int y, int w,
                              const lv_settings_header_t *);
 lv_settings_frame_t lv_settings_frame_create(lv_obj_t *, const lv_settings_header_t *);
+/* Covers the current body size, including after later layout changes. */
+lv_obj_t *lv_settings_body_overlay(lv_obj_t *body);
 /* Standard frame action bar, or NULL for a custom page. */
 lv_obj_t *lv_settings_actions(lv_obj_t *root);
 /* Two-column native flex layout. Adding/deleting/hiding cards reflows automatically. */

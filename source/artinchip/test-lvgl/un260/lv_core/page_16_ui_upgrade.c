@@ -97,10 +97,10 @@ static void render(void)
         page.detected.package_hash_status == UI_UPGRADE_PACKAGE_HASH_MATCH ? "Same as installed" :
         page.detected.package_hash_status == UI_UPGRADE_PACKAGE_HASH_DIFFERENT ? "Update available" :
         page.detected.package_hash_status == UI_UPGRADE_PACKAGE_HASH_ERROR ? "Cannot verify" : "Not verified");
-    if (running || page.blocked || !package_ready()) lv_obj_add_state(page.start, LV_STATE_DISABLED);
-    else lv_obj_clear_state(page.start, LV_STATE_DISABLED);
-    if (running) lv_obj_add_state(page.frame.back, LV_STATE_DISABLED);
-    else lv_obj_clear_state(page.frame.back, LV_STATE_DISABLED);
+    if (running || page.blocked || !package_ready()) settings_detail_action_block(page.start, running ? "The update is in progress. Keep power connected." : page.blocked ? "Resolve the update error before starting another update." : "Insert a USB drive containing a valid update package.");
+    else settings_detail_action_block(page.start, NULL);
+    if (running) settings_detail_action_block(page.frame.back, running ? "The update is in progress. Keep power connected." : page.blocked ? "Resolve the update error before starting another update." : "Insert a USB drive containing a valid update package.");
+    else settings_detail_action_block(page.frame.back, NULL);
     lv_label_set_text(page.frame.message, page.uncertain ?
         "Update result unknown. Keep power connected." : running ?
         "Keep power connected. Do not remove the USB drive." :
@@ -180,7 +180,7 @@ static void refresh(lv_timer_t *timer)
 static void leave_page(void *unused)
 {
     (void)unused;
-    if (page.home_requested) { ui_manager_clear_stack(); ui_manager_switch(UI_PAGE_MAIN); }
+    if (page.home_requested) { ui_manager_suspend_to_home(); }
     else ui_manager_pop_page();
 }
 

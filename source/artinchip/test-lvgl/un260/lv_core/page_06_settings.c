@@ -8,14 +8,9 @@
 #include "page_09_cis_cala.h"
 #include "un260/lv_components/lv_settings.h"
 #include "un260/lv_components/lv_nav_button.h"
-#include "un260/lv_components/lv_fault_popup.h"
 #include "un260/lv_resources/ui_page_background.h"
 #include "un260/app_service/app_command_runtime.h"
 #include "un260/app_service/work_mode_service.h"
-#include "un260/app_service/upgrade_session.h"
-#include "un260/diagnostic/diagnostic.h"
-#include "un260/boot/boot_service.h"
-#include "un260/protocol/protocol_send.h"
 #include "un260/lv_system/app_clock.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/ui_lang.h"
@@ -28,7 +23,7 @@
 #include <stdint.h>
 #include <string.h>
 #define SETTINGS_NODE_MAX 96
-static lv_obj_t *settings_page,*sidebar,*view,*grid,*status_label,*status_dot,*count_label;
+static lv_obj_t *settings_page,*sidebar,*view,*grid,*count_label;
 static lv_timer_t *settings_timer;
 static const settings_node_t *catalog,*scope;
 static size_t catalog_count;
@@ -99,6 +94,7 @@ static void create_sidebar(void){
  for(size_t i=0;i<catalog_count;i++)if(catalog[i].kind==SETTINGS_CATEGORY){
   bool active=selected==catalog+i;
   lv_obj_t *b=lv_settings_button(list,0,0,200,47,"",false,activate,(void*)(catalog+i));
+  lv_obj_set_style_border_width(b,0,0);
   lv_obj_set_style_bg_color(b,lv_color_hex(active?0xFFFFFF:0xF7F9FB),0);
   if(catalog[i].icon){
    char icon[48];snprintf(icon,sizeof(icon),"%s%s",catalog[i].icon,active?"-active":"");
@@ -116,6 +112,7 @@ static void create_sidebar(void){
  }
  if(selected_button)lv_obj_scroll_to_view(selected_button,LV_ANIM_OFF);
  lv_obj_t *home=lv_settings_back(list,0,0,200,47,home_event_cb,NULL);
+ lv_obj_set_style_border_width(home,0,0);
  lv_obj_t *home_text=lv_obj_get_child(home,0);
  lv_label_set_text(home_text,"Back to count");
  lv_obj_set_width(home_text,144);lv_obj_set_style_text_align(home_text,LV_TEXT_ALIGN_LEFT,0);
@@ -234,8 +231,8 @@ void page_06_data_collection_refresh(void)
     for(unsigned i=0;i<4;i++){
         bool enabled=!request_pending&&!busy&&(i!=2||ready)&&
                      (i<2||mode!=DATA_COLLECT_MODE_NONE);
-        if(enabled)lv_obj_clear_state(actions[i],LV_STATE_DISABLED);
-        else lv_obj_add_state(actions[i],LV_STATE_DISABLED);
+        if(enabled)settings_detail_action_block(actions[i], NULL);
+        else settings_detail_action_block(actions[i], request_pending ? "Wait for the current collection request to finish." : busy ? "Stop counting before changing collection." : !ready ? work_mode_service_status_text() : "Select All notes or Rejected notes first.");
     }
     work_mode_snapshot_t gate;
     work_mode_service_get_snapshot(&gate);
@@ -358,6 +355,7 @@ static lv_obj_t* create_dc_mode_button(lv_obj_t* parent, lv_coord_t x, lv_coord_
     lv_obj_set_pos(btn, x, y);
     lv_obj_set_size(btn, 380, 62);
     lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
+    lv_settings_action_guard_init(btn);
     lv_obj_add_event_cb(btn, data_collect_mode_btn_event_cb, LV_EVENT_CLICKED, (void*)(uintptr_t)sub);
 
     lv_obj_set_style_bg_color(btn,lv_color_hex(0xE2E9EE),LV_STATE_PRESSED);
@@ -417,24 +415,6 @@ static void create_data_collection_page_content(lv_settings_frame_t *frame)
 }
 
 
-static void refresh_directory_status(void){
- if(!status_label)return;
- const char *text;uint32_t color;
- work_mode_snapshot_t mode;work_mode_service_get_snapshot(&mode);
- calibration_state_snapshot_t calibration;diagnostic_calibration_get_snapshot(&calibration);
- if(fault_popup_get_pending_fault(NULL,NULL,NULL)||boot_service_get_stage()==BOOT_STAGE_FAIL||
-    mode.phase==WORK_MODE_FAILED||calibration.timed_out){text="Attention";color=0xA66517;}
- else if(upgrade_session_owner()!=UPGRADE_SESSION_NONE){text="Updating";color=0x1462CC;}
- else if(app_command_runtime_count_start_busy()||machine_state_aging_running()||calibration.session_active){text="Running";color=0x1462CC;}
- else if(mode.phase==WORK_MODE_WAITING_IDLE){text="Awaiting stop";color=0xA66517;}
- else if(mode.pending||mode.restore_pending){text="Mode pending";color=0x586B78;}
- else if(!protocol_send_is_ready()){text="No link";color=0xA66517;}
- else if(boot_service_handshake_state()!=HANDSHAKE_OK){text="Connecting";color=0x586B78;}
- else if(boot_service_get_stage()!=BOOT_STAGE_DONE){text="Self-check";color=0x1462CC;}
- else{text="Ready";color=0x29704D;}
- if(strcmp(lv_label_get_text(status_label),text))lv_label_set_text(status_label,text);
- if(status_dot)lv_obj_set_style_bg_color(status_dot,lv_color_hex(color),0);
-}
 static void refresh_directory_count(void){
  if(!grid||!count_label)return;
  unsigned visible=0;
@@ -450,14 +430,14 @@ static void refresh_directory_count(void){
 }
 static void settings_poll(lv_timer_t *timer){
  (void)timer;if(!settings_page_is_visible())return;
- refresh_directory_status();refresh_directory_count();refresh_values();
+ refresh_directory_count();refresh_values();
  if(scope_is("collection"))page_06_data_collection_refresh();
 }
 static void render(void){
  if(!settings_page||!scope)return;
  if(ui_manager_get_current_page()==UI_PAGE_SETTING)
   work_mode_service_set_diagnostic(scope_is("collection"));
- grid=sidebar=status_label=status_dot=count_label=NULL;reset_detail_refs();
+ grid=sidebar=count_label=NULL;reset_detail_refs();
  if(view)lv_obj_del(view);
  if(scope->kind==SETTINGS_DETAIL){
   lv_settings_header_t h={.title=scope->title,.subtitle="Settings",.back=back_event_cb};
@@ -476,13 +456,7 @@ static void render(void){
  const settings_node_t *cat=category();
  const char *subtitle=scope->kind==SETTINGS_CATEGORY?scope->hint:cat->title;
  lv_settings_header_t h={.title=scope->title,.subtitle=subtitle,.back=back_event_cb};
- lv_obj_t *back=lv_settings_header(view,256,18,1000,&h);
- lv_obj_t *header=lv_obj_get_parent(back);
- /* Reserve a status capsule before right-hand Back, never overlay title text. */
- lv_obj_set_width(lv_obj_get_child(header,0),680);
- lv_obj_t *badge=lv_settings_panel(header,744,7,150,38);lv_obj_set_style_radius(badge,19,0);
- status_dot=lv_settings_box(badge,14,15,8,8,0x586B78);lv_obj_set_style_radius(status_dot,4,0);
- status_label=lv_settings_label(badge,"Connecting",31,10,&lv_font_instrument_sans_medium_16,0x586B78);
+ lv_settings_header(view,256,18,1000,&h);
  grid=lv_settings_list(view,253,84,1006,274);
  lv_obj_t *groups[SETTINGS_NODE_MAX]={0};
  for(size_t i=0;i<catalog_count;i++)if(catalog[i].parent&&!strcmp(catalog[i].parent,scope->id)){
@@ -499,7 +473,7 @@ static void render(void){
  count_label=lv_settings_label(view,"",256,369,&lv_font_instrument_sans_medium_14,0x586B78);
  if(scope_is("calibration"))lv_settings_label(view,"Select a calibration to prepare it.",754,369,&lv_font_instrument_sans_medium_14,0x586B78);
  lv_obj_update_layout(grid);lv_obj_scroll_to_y(grid,scroll_positions[scope-catalog],LV_ANIM_OFF);
- refresh_directory_count();refresh_directory_status();
+ refresh_directory_count();
 }
 void ui_page_06_settings_create(lv_obj_t *parent){
  if(settings_page)return;
@@ -532,7 +506,7 @@ void ui_page_06_settings_destroy(void){
  if(settings_page)lv_obj_del(settings_page);
  if(settings_timer)lv_timer_del(settings_timer);
  settings_timer=NULL;
- settings_page=sidebar=view=grid=status_label=status_dot=count_label=NULL;reset_detail_refs();
+ settings_page=sidebar=view=grid=count_label=NULL;reset_detail_refs();
 }
 bool page_06_settings_is_collection(void){return scope_is("collection");}
 bool page_06_settings_switch_menu(page_06_settings_menu_t menu){

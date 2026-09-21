@@ -73,6 +73,9 @@ void ui_manager_push_page(ui_page_t page); // 页面堆栈：进入新页面
 bool ui_manager_adopt_precreated_page(ui_page_t page); // 接管已创建页面，避免过渡结束后重复创建
 bool ui_manager_pop_page(void); // 页面堆栈：返回上一页
 void ui_manager_clear_stack(void); // 清空页面堆栈
+/* Paired two-finger Home/Return. Normal navigation invalidates the bookmark. */
+bool ui_manager_suspend_to_home(void);
+bool ui_manager_restore_from_home(void);
 bool ui_manager_invalidate_page_cache(ui_page_t page); // 主动释放非活动缓存页
 void ui_manager_invalidate_all_page_caches(void); // 释放所有非活动缓存页
 /* Returns true when the retained page is ready (already cached or created and

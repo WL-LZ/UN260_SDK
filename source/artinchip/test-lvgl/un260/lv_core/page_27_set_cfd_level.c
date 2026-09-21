@@ -18,7 +18,7 @@ static lv_obj_t *currency_label, *save_button, *retry_button;
 static cfd_state_value_t original, draft;
 static uint8_t selected_scene, original_scene;
 static bool ready, saving, leave_home;
-static lv_obj_t *loading, *loading_text, *loading_orbit;
+static lv_obj_t *loading, *loading_text, *loading_orbit, *rows;
 static lv_timer_t *loading_timer;
 static bool loading_cycle_done;
 static void refresh(void);
@@ -44,25 +44,27 @@ static void refresh(void)
     bool busy = cfd_service_busy();
     if(loading && ready && loading_cycle_done){
         lv_obj_del(loading);loading=loading_text=loading_orbit=NULL;
+        lv_obj_clear_flag(rows,LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(frame.message,"Levels confirmed. Select a channel level to edit.");
     }else if(loading && !busy && !ready){
         if(loading_orbit){lv_obj_del(loading_orbit);loading_orbit=NULL;}
-        lv_label_set_text(loading_text,"Levels unavailable. Tap Retry below.");
+        lv_label_set_text(loading_text,"Levels unavailable. Use Retry at the top.");
     }
     for (unsigned scene = 0; scene < CFD_SCENE_COUNT; ++scene) {
         if (scene == selected_scene) lv_obj_add_state(profiles[scene], LV_STATE_CHECKED);
         else lv_obj_clear_state(profiles[scene], LV_STATE_CHECKED);
-        if (!ready || busy) lv_obj_add_state(profiles[scene], LV_STATE_DISABLED);
-        else lv_obj_clear_state(profiles[scene], LV_STATE_DISABLED);
+        if (!ready || busy || loading) settings_detail_action_block(profiles[scene], busy || saving ? "Wait for the current controller request to finish." : !ready || loading ? "Detection levels have not finished loading." : "No changes to update.");
+        else settings_detail_action_block(profiles[scene], NULL);
     }
     for(unsigned item=0;item<CFD_ITEM_COUNT;item++)for(unsigned level=0;level<CFD_LEVEL_MAX;level++){
         lv_obj_t *o=cells[item][level];
         if(ready&&draft.levels[selected_scene][item]==level+1)lv_obj_add_state(o,LV_STATE_CHECKED);else lv_obj_clear_state(o,LV_STATE_CHECKED);
-        if(!ready||busy)lv_obj_add_state(o,LV_STATE_DISABLED);else lv_obj_clear_state(o,LV_STATE_DISABLED);
+        if(!ready||busy||loading)settings_detail_action_block(o, busy || saving ? "Wait for the current controller request to finish." : !ready || loading ? "Detection levels have not finished loading." : "No changes to update.");else settings_detail_action_block(o, NULL);
     }
-    if (!dirty() || busy) lv_obj_add_state(save_button, LV_STATE_DISABLED);
-    else lv_obj_clear_state(save_button, LV_STATE_DISABLED);
-    if (saving) lv_obj_add_state(frame.back, LV_STATE_DISABLED);
-    else lv_obj_clear_state(frame.back, LV_STATE_DISABLED);
+    if (!dirty() || busy) settings_detail_action_block(save_button, busy || saving ? "Wait for the current controller request to finish." : !ready || loading ? "Detection levels have not finished loading." : "No changes to update.");
+    else settings_detail_action_block(save_button, NULL);
+    if (saving) settings_detail_action_block(frame.back, busy || saving ? "Wait for the current controller request to finish." : !ready || loading ? "Detection levels have not finished loading." : "No changes to update.");
+    else settings_detail_action_block(frame.back, NULL);
     if (ready || busy) lv_obj_add_flag(retry_button, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_clear_flag(retry_button, LV_OBJ_FLAG_HIDDEN);
 }
@@ -74,13 +76,15 @@ static void query(void)
     ready = false;
     if(loading_timer){lv_timer_del(loading_timer);loading_timer=NULL;}
     if(loading)lv_obj_del(loading);
-    loading=lv_settings_panel(frame.body,0,0,1232,242);
-    lv_obj_add_flag(loading,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(rows,LV_OBJ_FLAG_HIDDEN);
+    loading=lv_settings_body_overlay(frame.body);
     loading_orbit=lv_loading_orbit_create_sized(loading,48);
-    lv_obj_set_pos(loading_orbit,592,65);
+    lv_obj_align(loading_orbit,LV_ALIGN_CENTER,0,-24);
     loading_text=lv_settings_label(loading,"Reading detection levels",0,137,&lv_font_instrument_sans_medium_18,0x536B79);
-    lv_obj_set_width(loading_text,1232);lv_obj_set_style_text_align(loading_text,LV_TEXT_ALIGN_CENTER,0);
+    lv_obj_set_width(loading_text,lv_pct(100));lv_obj_set_style_text_align(loading_text,LV_TEXT_ALIGN_CENTER,0);
+    lv_obj_align(loading_text,LV_ALIGN_CENTER,0,36);
     loading_cycle_done=false;loading_timer=lv_timer_create(loading_done,900,NULL);
+    if(!loading_timer)loading_cycle_done=true;
     lv_label_set_text_fmt(currency_label, "%s / Profiles", code);
     bool sent = cfd_service_request_query(code);
     lv_label_set_text(frame.message, sent ? "Reading levels from controller..." :
@@ -96,7 +100,7 @@ static void retry(lv_event_t *event)
 static void leave(void *user_data)
 {
     (void)user_data;
-    if (leave_home) { ui_manager_clear_stack(); ui_manager_switch(UI_PAGE_MAIN); }
+    if (leave_home) { ui_manager_suspend_to_home(); }
     else ui_manager_pop_page();
 }
 
@@ -125,7 +129,7 @@ static bool gesture(gesture_action_t action)
 
 static void profile(lv_event_t *event)
 {
-    if (lv_event_get_code(event) != LV_EVENT_CLICKED || !ready || cfd_service_busy()) return;
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED || !ready || loading || cfd_service_busy()) return;
     selected_scene = (uint8_t)(uintptr_t)lv_event_get_user_data(event);
     refresh();
     lv_label_set_text(frame.message, dirty() ? "Unsaved changes." : "Choose a profile, then select each channel level.");
@@ -133,7 +137,7 @@ static void profile(lv_event_t *event)
 
 static void cell(lv_event_t *event)
 {
-    if (lv_event_get_code(event) != LV_EVENT_CLICKED || !ready || cfd_service_busy()) return;
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED || !ready || loading || cfd_service_busy()) return;
     unsigned key = (unsigned)(uintptr_t)lv_event_get_user_data(event);
     unsigned item=key/CFD_LEVEL_MAX,level=key%CFD_LEVEL_MAX+1;
     if(item>=CFD_ITEM_COUNT)return;
@@ -166,7 +170,7 @@ void ui_page_27_set_cfd_level_create(lv_obj_t *parent)
         .title = ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_TITLE), .icon = "ShieldCheck", .back = back
     };
     frame = lv_settings_frame_create(parent, &header);
-    lv_obj_t *rows=lv_settings_list(frame.body,0,0,1230,298);
+    rows=lv_settings_list(frame.body,0,0,1230,298);
     lv_obj_set_style_pad_all(rows,0,0);
     lv_obj_set_style_pad_right(rows,12,0);
     lv_obj_set_style_pad_row(rows,0,0);
@@ -210,7 +214,7 @@ void ui_page_27_set_cfd_level_destroy(void)
     memset(cells, 0, sizeof(cells));
     currency_label = save_button = retry_button = NULL;
     ready = false;
-    loading=loading_text=loading_orbit=NULL;
+    loading=loading_text=loading_orbit=rows=NULL;
 }
 
 void ui_page_27_set_cfd_level_on_info(const uint8_t *data, uint16_t len)
@@ -235,7 +239,7 @@ void ui_page_27_set_cfd_level_on_info(const uint8_t *data, uint16_t len)
     ready = true;
     lv_label_set_text_fmt(currency_label, "%s / Profiles", config.currency);
     refresh();
-    lv_label_set_text(frame.message, "Levels confirmed. Select a channel level to edit.");
+    if(!loading)lv_label_set_text(frame.message, "Levels confirmed. Select a channel level to edit.");
 }
 
 void ui_page_27_set_cfd_level_on_request_failed(void)

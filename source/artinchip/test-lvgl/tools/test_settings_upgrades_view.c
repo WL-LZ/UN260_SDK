@@ -10,6 +10,7 @@
 #include "un260/lv_core/ui_upgrade_service.h"
 #include "un260/lv_core/settings_detail_ui.h"
 #include "un260/lv_core/lv_page_manager.h"
+#include "test_settings_actions.h"
 #include "un260/gesture/gesture_service.h"
 #include "un260/app_service/upgrade_session.h"
 #include "tools/test_page_background_asset.h"
@@ -104,7 +105,7 @@ static void remote_update_tests(void) {
     transport_ready=false;click("Start update");assert(sends==0);transport_ready=true;
     send_ok=false;click("Start update");assert(sends==1);send_ok=true;
     click("Start update");assert(sent_cmd==0xA1&&sends==2&&policy(GESTURE_ACTION_HOME));
-    assert(lv_obj_has_state(button("Back"),LV_STATE_DISABLED));
+    assert(action_blocked(button("Back")));
     click("Start update");click("Back");assert(sends==2&&pops==0);
     tick(19000);ui_page_14_main_upgrade_on_reply(0xA1,2);tick(19000);
     assert(!find(lv_scr_act(),"Result not received"));snapshot("controller-installing");
@@ -120,7 +121,7 @@ static void remote_update_tests(void) {
     click("Start update");assert(starts==0);ui_page_16_ui_upgrade_destroy();
     ui_page_14_main_upgrade_on_reply(0xA1,3);assert(upgrade_session_owner()==UPGRADE_SESSION_NONE);
     ui_page_14_main_upgrade_create(lv_scr_act());assert(find(lv_scr_act(),"Update complete"));
-    assert(!lv_obj_has_state(button("Start update"),LV_STATE_DISABLED));snapshot("controller-complete");
+    assert(!action_blocked(button("Start update")));snapshot("controller-complete");
     click("Start update");ui_page_14_main_upgrade_on_reply(0xA1,0xF2);
     assert(find(lv_scr_act(),"Update not completed"));snapshot("controller-file-mismatch");
     assert(upgrade_session_owner()==UPGRADE_SESSION_NONE);
@@ -135,7 +136,7 @@ static void remote_update_tests(void) {
     puts("PASS remote upgrade ACKs, 20s/40s refresh, duplicate guard, unknown-result leave, hidden late result and lifecycle");
 }
 static void ui_update_tests(void) {
-    ui_page_16_ui_upgrade_create(lv_scr_act());snapshot("ui-no-usb");assert(lv_obj_has_state(button("Start update"),LV_STATE_DISABLED));
+    ui_page_16_ui_upgrade_create(lv_scr_act());snapshot("ui-no-usb");assert(action_blocked(button("Start update")));
     click("Start update");assert(!starts);
     detected=(ui_upgrade_detect_info_t){true,true,true,UI_UPGRADE_PACKAGE_HASH_DIFFERENT};
     tick(1100);snapshot("ui-ready");

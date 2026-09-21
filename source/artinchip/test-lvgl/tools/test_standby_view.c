@@ -13,6 +13,7 @@ void gesture_service_set_page_policy(uint32_t owner,bool(*drag)(void),bool(*acti
 void gesture_service_clear_page_policy(uint32_t owner){assert(owner==UI_PAGE_STANDBY_SETTING);registered_drag=NULL;registered_action=NULL;}
 void ui_manager_clear_stack(void){}
 void ui_manager_switch(ui_page_t p);
+bool ui_manager_suspend_to_home(void){ui_manager_switch(UI_PAGE_MAIN);return true;}
 
 void lv_port_indev_set_drag_obj(lv_obj_t*o,bool enable){if(enable)lv_obj_add_flag(o,LV_OBJ_FLAG_USER_4|LV_OBJ_FLAG_PRESS_LOCK);else lv_obj_clear_flag(o,LV_OBJ_FLAG_USER_4|LV_OBJ_FLAG_PRESS_LOCK);}
 void standby_defaults(standby_config_t*c){memset(c,0,sizeof(*c));c->version=2;c->minutes=5;const uint32_t palette[]={0x14232D,0xEDF1EC,0x30243C};for(int m=0;m<2;m++)for(int i=0;i<3;i++){c->layout[m][i]=(standby_layout_t){.x=44+i*328,.y=64,.date_x=44+i*328,.date_y=230,.dial_x=i?75:830,.dial_y=50,.auto_text=1,.text_color=m?0xFFFFFF:0x304957,.color=palette[i],.date_bits=14,.greeting=1,.scheduled=1,.photo=1};}}
@@ -85,8 +86,8 @@ static void policy_test(void){
  assert(registered_action(GESTURE_ACTION_HOME)&&confirm_cb);
  assert(draft.minutes==saved.minutes+1); /* Keep editing changes no state. */
  current_page=UI_PAGE_STANDBY_SETTING;confirm_cb(NULL);assert(current_page==UI_PAGE_MAIN);
- assert(!registered_action(GESTURE_ACTION_EXPORT)); /* Export never discards draft. */
- overlay=true;assert(registered_action(GESTURE_ACTION_HOME));assert(registered_action(GESTURE_ACTION_EXPORT));overlay=false;
+ assert(!registered_action(GESTURE_ACTION_RETURN)); /* Export never discards draft. */
+ overlay=true;assert(registered_action(GESTURE_ACTION_HOME));assert(registered_action(GESTURE_ACTION_RETURN));overlay=false;
  store_busy=true;assert(registered_action(GESTURE_ACTION_HOME));store_busy=false;
  draft=old;puts("PASS page policy registration, dirty Home confirmation, export, modal/busy guards");
 }

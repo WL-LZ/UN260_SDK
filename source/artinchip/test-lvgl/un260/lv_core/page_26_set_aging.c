@@ -86,10 +86,10 @@ static void aging_refresh(void)
     if(strcmp(lv_label_get_text(aging_title),title))lv_label_set_text(aging_title,title);
     lv_obj_set_style_text_color(aging_title,lv_color_hex(color),0);
     if(strcmp(lv_label_get_text(aging_detail),detail))lv_label_set_text(aging_detail,detail);
-    if (running || start_pending || aging_view == AGING_VIEW_TIMEOUT || !work_mode_service_diagnostic_ready()) lv_obj_add_state(aging_button,LV_STATE_DISABLED);
-    else lv_obj_clear_state(aging_button,LV_STATE_DISABLED);
-    if (running || start_pending) lv_obj_add_state(aging_frame.back,LV_STATE_DISABLED);
-    else lv_obj_clear_state(aging_frame.back,LV_STATE_DISABLED);
+    if (running || start_pending || aging_view == AGING_VIEW_TIMEOUT || !work_mode_service_diagnostic_ready()) settings_detail_action_block(aging_button, !work_mode_service_diagnostic_ready() ? work_mode_service_status_text() : running || start_pending ? "The test is in progress. Wait for its completion." : "The test result is not confirmed. Check the machine before starting another test.");
+    else settings_detail_action_block(aging_button, NULL);
+    if (running || start_pending) settings_detail_action_block(aging_frame.back, !work_mode_service_diagnostic_ready() ? work_mode_service_status_text() : running || start_pending ? "The test is in progress. Wait for its completion." : "The test result is not confirmed. Check the machine before starting another test.");
+    else settings_detail_action_block(aging_frame.back, NULL);
     const char *message=!work_mode_service_diagnostic_ready() ? work_mode_service_status_text() :
         "A controller acknowledgement is not a completion report.";
     if(strcmp(lv_label_get_text(aging_frame.message),message))lv_label_set_text(aging_frame.message,message);

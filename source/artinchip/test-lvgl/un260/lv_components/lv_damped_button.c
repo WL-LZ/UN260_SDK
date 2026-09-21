@@ -100,10 +100,15 @@ static void lv_damped_button_feedback_event_cb(lv_event_t *event)
                                           LV_DAMPED_BUTTON_PRESS_MS, 0);
         break;
     case LV_EVENT_RELEASED:
-    case LV_EVENT_PRESS_LOST:
         lv_damped_button_color_anim_start(ctx, ctx->normal_color,
                                           LV_DAMPED_BUTTON_RELEASE_MS,
                                           LV_DAMPED_BUTTON_RELEASE_DELAY);
+        break;
+    case LV_EVENT_CANCEL:
+    case LV_EVENT_PRESS_LOST:
+        /* Dragging is not a completed tap: remove feedback immediately. */
+        lv_anim_del(ctx, lv_damped_button_color_anim_cb);
+        lv_damped_button_color_apply(ctx, ctx->normal_color);
         break;
     case LV_EVENT_DELETE:
         {

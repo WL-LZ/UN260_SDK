@@ -11,7 +11,7 @@
 typedef enum {
     GESTURE_ACTION_EXIT_PAGE = 0,
     GESTURE_ACTION_HOME,
-    GESTURE_ACTION_EXPORT
+    GESTURE_ACTION_RETURN
 } gesture_action_t;
 
 typedef struct {

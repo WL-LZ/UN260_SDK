@@ -43,10 +43,10 @@ static void paint(upgrade_page_runtime_t *runtime)
         lv_obj_t *label = lv_obj_get_child(runtime->steps[i], 0);
         lv_obj_set_style_text_color(label, lv_color_hex(active ? 0x1462CC : 0x586B78), 0);
     }
-    if (runtime->waiting || runtime->timed_out || runtime->blocked) lv_obj_add_state(runtime->start, LV_STATE_DISABLED);
-    else lv_obj_clear_state(runtime->start, LV_STATE_DISABLED);
-    if (runtime->waiting && !runtime->timed_out) lv_obj_add_state(runtime->back, LV_STATE_DISABLED);
-    else lv_obj_clear_state(runtime->back, LV_STATE_DISABLED);
+    if (runtime->waiting || runtime->timed_out || runtime->blocked) settings_detail_action_block(runtime->start, runtime->waiting ? "The update is in progress. Keep power connected." : runtime->timed_out ? "The update result is unknown. Check the controller before starting another update." : "Resolve the update error before starting another update.");
+    else settings_detail_action_block(runtime->start, NULL);
+    if (runtime->waiting && !runtime->timed_out) settings_detail_action_block(runtime->back, runtime->waiting ? "The update is in progress. Keep power connected." : runtime->timed_out ? "The update result is unknown. Check the controller before starting another update." : "Resolve the update error before starting another update.");
+    else settings_detail_action_block(runtime->back, NULL);
     lv_label_set_text(runtime->message, runtime->timed_out ?
         "Keep power connected. Leaving this page does not stop the update." :
         success ? "The update file has been kept." : "Keep power connected. Do not remove the update media.");
@@ -123,8 +123,7 @@ static void leave(void *data)
 {
     upgrade_page_runtime_t *runtime = data;
     if (runtime->home_requested) {
-        ui_manager_clear_stack();
-        ui_manager_switch(UI_PAGE_MAIN);
+        ui_manager_suspend_to_home();
     } else ui_manager_pop_page();
 }
 

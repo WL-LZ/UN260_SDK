@@ -33,7 +33,7 @@ static bool send_failed;
 static void calibration_leave(void *data)
 {
     (void)data;
-    if (leave_home) { ui_manager_clear_stack(); ui_manager_switch(UI_PAGE_MAIN); }
+    if (leave_home) { ui_manager_suspend_to_home(); }
     else ui_manager_pop_page();
 }
 static void calibration_leave_warning(bool home)
@@ -138,10 +138,10 @@ void ui_page_cis_calib_create(lv_obj_t *parent)
                       &lv_font_instrument_sans_medium_18, 0x1D2B34);
     preparation_row(prepare, 62, "1", selected_white_balance?"Place banknotes in the hopper":"Place the CIS bar",
                     selected_white_balance?"Prepare the notes for white balance.":"Place the CIS bar manually in the upper note path.");
-    preparation_row(prepare, 119, "2", selected_white_balance?"Press RUN":"Press Start",
-                    selected_white_balance?"Run the notes before starting calibration.":"No banknote run is required for CIS calibration.");
-    preparation_row(prepare, 176, "3", selected_white_balance?"Press Start, then wait":"Wait for the result",
-                    "The machine performs calibration and reports the result.");
+    preparation_row(prepare, 119, "2", "Press Start",
+                    selected_white_balance?"Send the white balance command before feeding notes.":"No banknote run is required for CIS calibration.");
+    preparation_row(prepare, 176, "3", selected_white_balance?"Press RUN, then wait":"Wait for the result",
+                    selected_white_balance?"If feeding has not started, press RUN once.":"The machine calibrates and reports the result.");
 
     lv_obj_t *state = lv_settings_box(frame.body, 696, 0, 536, 242, 0xF1F4F5);
     lv_obj_set_style_radius(state, 14, 0);
@@ -180,8 +180,10 @@ void cis_calib_ui_refresh(void)
                  "Back lets you leave without stopping the calibration.";
         color = 0xA35B12;
     } else if (running) {
-        title = "Calibration in progress";
-        detail = "Waiting for the controller. Keep the path clear and do not power off.";
+        bool needs_feed=selected_white_balance&&!state.feed_started;
+        title = needs_feed?"Ready to feed notes":"Calibration in progress";
+        detail = needs_feed?"The command has been sent. Press RUN if the notes have not started feeding.":
+                           "Waiting for the controller. Keep the path clear and do not power off.";
         color = 0x1462CC;
     } else if (send_failed) {
         title = "Could not start";
@@ -191,6 +193,12 @@ void cis_calib_ui_refresh(void)
         title = "Calibration complete";
         detail = "The controller confirmed the result. You can return to settings.";
         color = 0x247650;
+    } else if (selected_white_balance && state.cb_state == CB_CALIB_FAIL_FEED) {
+        title = "Feeding did not start";
+        detail = state.feed_error_type==1&&state.feed_error_code==2?
+            "No banknotes detected. Place a note in the hopper, then press Start again.":
+            "Resolve the reported feed error, then press Start again.";
+        color = 0xB63B32;
     } else if ((!selected_white_balance && state.cis_state >= CIS_CALIB_FAIL_UPPER) ||
                (selected_white_balance && state.cb_state == CB_CALIB_FAIL_IR)) {
         title = "Calibration not completed";
@@ -209,14 +217,8 @@ void cis_calib_ui_refresh(void)
     calibration_text(status_title, title);
     lv_obj_set_style_text_color(status_title, lv_color_hex(color), 0);
     calibration_text(status_detail, detail);
-    if (running) {
-        lv_obj_add_state(start_button, LV_STATE_DISABLED);
-        lv_obj_clear_state(frame.back, LV_STATE_DISABLED);
-    } else {
-        if (!blocker) lv_obj_clear_state(start_button, LV_STATE_DISABLED);
-        else lv_obj_add_state(start_button, LV_STATE_DISABLED);
-        lv_obj_clear_state(frame.back, LV_STATE_DISABLED);
-    }
+    settings_detail_action_block(start_button,running?"Calibration is already in progress.":blocker);
+    settings_detail_action_block(frame.back,NULL);
     calibration_text(frame.message, !work_mode_service_diagnostic_ready() ? work_mode_service_status_text() :
                       running ? "Calibration is controlled by the machine." :
                       "Calibration starts only when you press Start.");

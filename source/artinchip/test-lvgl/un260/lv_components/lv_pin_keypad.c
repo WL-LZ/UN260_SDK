@@ -1,5 +1,6 @@
 #include "lv_pin_keypad.h"
 #include "lv_damped_button.h"
+#include "lv_settings_palette.h"
 
 #include <string.h>
 
@@ -47,7 +48,9 @@ static void pin_refresh(lv_pin_keypad_t *keypad)
     for (unsigned i = 0; i < LV_PIN_DIGITS; ++i) {
         bool visible_digit = keypad->digits_visible && i < n;
         lv_obj_set_style_bg_color(keypad->dots[i],
-            lv_color_hex(i < n ? 0x1D2B34 : 0xB9C5CD), 0);
+            lv_color_hex(i < n ? 0x1D2B34 : keypad->compact ? 0xFFFFFF : 0xB9C5CD), 0);
+        lv_obj_set_style_border_width(keypad->dots[i],keypad->compact?2:0,0);
+        lv_obj_set_style_border_color(keypad->dots[i],lv_color_hex(i<n?0x1D2B34:0xCAD6DF),0);
         if (visible_digit) {
             char digit[2] = {keypad->input.value[i], '\0'};
             lv_label_set_text(keypad->digits[i], digit);
@@ -64,7 +67,7 @@ static void pin_refresh(lv_pin_keypad_t *keypad)
         keypad->digits_visible ? "Hide" : "Show");
     keypad->cursor_on = true;
     lv_obj_set_style_bg_opa(keypad->cursor, LV_OPA_COVER, 0);
-    if (n == LV_PIN_DIGITS) {
+    if (keypad->compact || n == LV_PIN_DIGITS) {
         lv_obj_add_flag(keypad->cursor, LV_OBJ_FLAG_HIDDEN);
         if (keypad->blink) lv_timer_pause(keypad->blink);
     } else {
@@ -132,6 +135,7 @@ static void pin_key_event(lv_event_t *event)
         }
     }
     if (key == 11) {
+        if(keypad->auto_confirm){lv_pin_keypad_clear(keypad);lv_pin_keypad_set_status(keypad,NULL);return;}
         if (!lv_pin_input_is_complete(keypad->input.value)) {
             lv_pin_keypad_set_status(keypad, "Enter exactly 4 digits.");
             return;
@@ -152,6 +156,15 @@ static void pin_key_event(lv_event_t *event)
     else return;
     lv_pin_keypad_set_status(keypad, NULL);
     pin_refresh(keypad);
+    if(keypad->auto_confirm&&keypad->input.length==LV_PIN_DIGITS&&keypad->confirm_cb){
+        char value[LV_PIN_DIGITS+1];
+        lv_pin_keypad_confirm_cb_t callback=keypad->confirm_cb;
+        void *user_data=keypad->user_data;
+        memcpy(value,keypad->input.value,sizeof(value));
+        callback(value,user_data);
+        memset(value,0,sizeof(value));
+        /* Do not access keypad after callback: it may have been destroyed. */
+    }
 }
 
 static void pin_cancel_event(lv_event_t *event)
@@ -169,6 +182,32 @@ static void pin_delete_event(lv_event_t *event)
         lv_event_get_target(event) != keypad->root) return;
     if (keypad->blink) lv_timer_del(keypad->blink);
     memset(keypad, 0, sizeof(*keypad));
+}
+
+static void pin_apply_layout(lv_pin_keypad_t *keypad, bool compact)
+{
+    keypad->compact=compact;
+    lv_obj_set_size(keypad->root,compact?850:LV_PIN_KEYPAD_WIDTH,
+                    compact?364:LV_PIN_KEYPAD_HEIGHT);
+    lv_obj_set_pos(keypad->eyebrow,compact?34:24,compact?28:20);
+    lv_obj_set_pos(keypad->title,compact?34:24,compact?64:48);
+    lv_obj_set_pos(keypad->prompt,compact?34:24,compact?108:92);
+    for(unsigned i=0;i<LV_PIN_DIGITS;i++){
+        lv_obj_set_pos(keypad->dots[i],compact?34+i*35:48+i*64,compact?164:166);
+        lv_obj_set_size(keypad->dots[i],compact?18:12,compact?18:12);
+        lv_obj_set_pos(keypad->digits[i],compact?25+i*35:36+i*64,compact?151:152);
+    }
+    lv_obj_set_pos(keypad->eye,compact?210:288,compact?149:148);
+    lv_obj_set_size(keypad->eye,compact?90:104,48);
+    lv_obj_set_pos(keypad->status,compact?34:24,compact?216:220);
+    lv_obj_set_pos(keypad->cancel,compact?728:24,compact?14:260);
+    lv_obj_set_size(keypad->cancel,compact?96:368,compact?40:44);
+    lv_damped_button_set_text(keypad->cancel,compact?"Close":"Cancel");
+    for(unsigned i=0;i<12;i++){
+        lv_obj_set_pos(keypad->keys[i],compact?488+(i%3)*108:424+(i%3)*228,
+                       compact?64+(i/3)*70:16+(i/3)*76);
+        lv_obj_set_size(keypad->keys[i],compact?100:216,compact?62:64);
+    }
 }
 
 bool lv_pin_keypad_create(lv_pin_keypad_t *keypad, lv_obj_t *parent,
@@ -204,13 +243,13 @@ bool lv_pin_keypad_create(lv_pin_keypad_t *keypad, lv_obj_t *parent,
         lv_obj_add_flag(keypad->digits[i], LV_OBJ_FLAG_HIDDEN);
     }
     const lv_damped_button_style_t eye_style = {
-        .normal_color = 0xF1F4F5, .pressed_color = 0xE2E9EE,
-        .text_color = 0x586B78, .disabled_color = 0xF1F4F5,
-        .disabled_text_color = 0x586B78, .radius = 10
+        .normal_color = LV_SETTINGS_CONTROL_SURFACE, .pressed_color = LV_SETTINGS_CONTROL_PRESSED,
+        .text_color = LV_SETTINGS_ACTION_TEXT, .disabled_color = LV_SETTINGS_DISABLED_SURFACE,
+        .disabled_text_color = LV_SETTINGS_DISABLED_TEXT, .radius = 10
     };
     keypad->eye = lv_damped_button_create(card, &eye_style, "Show",
                                           &lv_font_instrument_sans_medium_16);
-    lv_damped_button_set_exact_palette(keypad->eye, lv_color_hex(0xF1F4F5), lv_color_hex(0xE2E9EE));
+    lv_damped_button_set_exact_palette(keypad->eye, lv_color_hex(eye_style.normal_color), lv_color_hex(eye_style.pressed_color));
     lv_obj_set_pos(keypad->eye, 288, 148);
     lv_obj_set_size(keypad->eye, 104, 48);
     lv_obj_set_style_shadow_width(keypad->eye, 0, 0);
@@ -220,13 +259,13 @@ bool lv_pin_keypad_create(lv_pin_keypad_t *keypad, lv_obj_t *parent,
         &lv_font_instrument_sans_medium_14, 0x586B78, 24, 220);
     lv_obj_set_width(keypad->status, 368);
     const lv_damped_button_style_t cancel_style = {
-        .normal_color = 0xF1F4F5, .pressed_color = 0xE2E9EE,
-        .text_color = 0x1D2B34, .disabled_color = 0xF1F4F5,
-        .disabled_text_color = 0x586B78, .radius = 10
+        .normal_color = LV_SETTINGS_CONTROL_SURFACE, .pressed_color = LV_SETTINGS_CONTROL_PRESSED,
+        .text_color = LV_SETTINGS_ACTION_TEXT, .disabled_color = LV_SETTINGS_DISABLED_SURFACE,
+        .disabled_text_color = LV_SETTINGS_DISABLED_TEXT, .radius = 10
     };
     keypad->cancel = lv_damped_button_create(card, &cancel_style, "Cancel",
                                               &lv_font_instrument_sans_medium_16);
-    lv_damped_button_set_exact_palette(keypad->cancel, lv_color_hex(0xF1F4F5), lv_color_hex(0xE2E9EE));
+    lv_damped_button_set_exact_palette(keypad->cancel, lv_color_hex(cancel_style.normal_color), lv_color_hex(cancel_style.pressed_color));
     lv_obj_set_pos(keypad->cancel, 24, 260);
     lv_obj_set_size(keypad->cancel, 368, 44);
     lv_obj_set_style_shadow_width(keypad->cancel, 0, 0);
@@ -235,10 +274,10 @@ bool lv_pin_keypad_create(lv_pin_keypad_t *keypad, lv_obj_t *parent,
         unsigned key = pin_keys[i];
         char digit[2] = {(char)('0' + key), 0};
         lv_damped_button_style_t style = {
-            .normal_color = key == 11 ? 0x1462CC : 0xF1F4F5,
-            .pressed_color = key == 11 ? 0x1054B0 : 0xE2E9EE,
-            .text_color = key == 11 ? 0xFFFFFF : 0x1D2B34,
-            .disabled_color = 0xE3E9ED, .disabled_text_color = 0x586B78, .radius = 12
+            .normal_color = key == 11 ? LV_SETTINGS_PRIMARY : LV_SETTINGS_CONTROL_SURFACE,
+            .pressed_color = key == 11 ? LV_SETTINGS_PRIMARY_PRESSED : LV_SETTINGS_CONTROL_PRESSED,
+            .text_color = key == 11 ? 0xFFFFFF : LV_SETTINGS_ACTION_TEXT,
+            .disabled_color = LV_SETTINGS_DISABLED_SURFACE, .disabled_text_color = LV_SETTINGS_DISABLED_TEXT, .radius = 12
         };
         lv_obj_t *button = lv_damped_button_create(card, &style,
             key == 10 ? "" : key == 11 ? "Confirm" : digit,
@@ -276,9 +315,20 @@ bool lv_pin_keypad_show(lv_pin_keypad_t *keypad,
     keypad->cancel_cb = config->cancel_cb;
     keypad->user_data = config->user_data;
     keypad->digits_visible = config->digits_visible;
+    keypad->auto_confirm = config->auto_confirm;
+    pin_apply_layout(keypad,config->compact);
+    lv_damped_button_set_text(keypad->keys[11],config->auto_confirm?"Clear":"Confirm");
+    lv_damped_button_set_exact_palette(keypad->keys[11],
+        lv_color_hex(config->auto_confirm?LV_SETTINGS_CONTROL_SURFACE:LV_SETTINGS_PRIMARY),
+        lv_color_hex(config->auto_confirm?LV_SETTINGS_CONTROL_PRESSED:LV_SETTINGS_PRIMARY_PRESSED));
+    lv_obj_set_style_text_color(lv_damped_button_get_label(keypad->keys[11]),
+        lv_color_hex(config->auto_confirm?LV_SETTINGS_ACTION_TEXT:0xFFFFFF),0);
     keypad->save_visibility = config->save_visibility;
     lv_obj_clear_flag(keypad->root, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(keypad->root);
+    /* A freshly-created modal on layer_top has not been laid out yet. Resolve
+     * it before visibility-based input/blink checks, not on the next frame. */
+    lv_obj_update_layout(keypad->root);
     if (config->cancel_cb) lv_obj_clear_flag(keypad->cancel, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_add_flag(keypad->cancel, LV_OBJ_FLAG_HIDDEN);
     lv_pin_keypad_set_status(keypad, NULL);

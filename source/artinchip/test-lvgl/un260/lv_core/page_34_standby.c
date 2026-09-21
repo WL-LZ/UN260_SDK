@@ -158,7 +158,7 @@ static void toggle(lv_obj_t*p,int x,int y,int w,const char*t,int id,bool on){lv_
 static void queue_save(void){if(standby_store_save(&draft)){saving=true;redraw=true;}else if(note){lv_label_set_text(note,"Could not start saving. Please try again.");lv_obj_clear_flag(note,LV_OBJ_FLAG_HIDDEN);}}
 static void discard(void*u){(void)u;draft=*standby_config();tab=0;redraw=true;}
 static bool owns_single_drag(void){return tab==4||standby_store_busy()||settings_detail_overlay_is_open();}
-static void discard_to_home(void*u){(void)u;ui_manager_clear_stack();ui_manager_switch(UI_PAGE_MAIN);}
+static void discard_to_home(void*u){(void)u;ui_manager_suspend_to_home();}
 static bool handle_gesture(gesture_action_t action){
  if(standby_store_busy()||settings_detail_overlay_is_open())return true;
  if(action==GESTURE_ACTION_EXIT_PAGE)return ui_page_34_standby_request_back();
@@ -172,7 +172,7 @@ static void reset_mode(void*u){(void)u;standby_config_t d;standby_defaults(&d);m
 static void delete_photo(void*u){(void)u;unsigned photo=layout()->photo;if(standby_store_delete(photo)){for(unsigned m=0;m<2;m++)for(unsigned i=0;i<3;i++)if(draft.layout[m][i].photo==photo){draft.layout[m][i].photo=1;draft.layout[m][i].scheduled=1;}redraw=true;}}
 static void timeout_input(const char*s,void*u){(void)u;char*end;long v=strtol(s,&end,10);if(!*s||*end||v<1||v>1440){settings_detail_dialog_show("Invalid duration","Enter 1 to 1440 minutes. Choose Never separately.","OK",NULL,NULL,NULL,NULL);return;}draft.minutes=v;redraw=true;}
 static void hex_input(const char*s,void*u){(void)u;if(*s=='#')s++;bool digits=true;for(const char*t=s;*t;t++)if(!isxdigit((unsigned char)*t))digits=false;char*end;unsigned long v=strtoul(s,&end,16);if(!digits||strlen(s)!=6||*end||v>0xFFFFFF){settings_detail_dialog_show("Invalid colour","Enter exactly six hexadecimal digits, e.g. EAF0F3.","OK",NULL,NULL,NULL,NULL);return;}if(tab==5){if(draft.mode&&layout()->auto_text)return;layout()->text_color=v;}else layout()->color=v;redraw=true;}
-static void action(lv_event_t*e){int id=(int)(intptr_t)lv_event_get_user_data(e);if(standby_store_busy())return;
+static void action(lv_event_t*e){int id=(int)(intptr_t)lv_event_get_user_data(e);if(standby_store_busy()){settings_detail_dialog_show("Please wait","A file operation is in progress.","OK",NULL,NULL,NULL,NULL);return;}
  if(id==1)ui_page_34_standby_request_back();
  else if(id==2)queue_save();
  else if(id==3){ui_manager_push_page(UI_PAGE_STANDBY);}
@@ -185,7 +185,7 @@ static void action(lv_event_t*e){int id=(int)(intptr_t)lv_event_get_user_data(e)
  else if(id==57){layout()->hour12^=1;redraw=true;}
  else if(id==58){layout()->greeting^=1;redraw=true;}
  else if(id>=60&&id<=62){layout()->color=colors[id-60];redraw=true;}
- else if(id==63){if(tab==5&&draft.mode&&layout()->auto_text)return;char hex[8];snprintf(hex,sizeof(hex),"%06X",tab==5?layout()->text_color:layout()->color);settings_detail_keyboard_show("HEX colour",hex,7,SETTINGS_DETAIL_KEYBOARD_TEXT,hex_input,NULL);}
+ else if(id==63){if(tab==5&&draft.mode&&layout()->auto_text){settings_detail_dialog_show("Automatic colour","Turn off Automatic black / white to edit your custom colour.","OK",NULL,NULL,NULL,NULL);return;}char hex[8];snprintf(hex,sizeof(hex),"%06X",tab==5?layout()->text_color:layout()->color);settings_detail_keyboard_show("HEX colour",hex,7,SETTINGS_DETAIL_KEYBOARD_TEXT,hex_input,NULL);}
  else if(id==64){if(standby_store_import())redraw=true;}
  else if(id==66){tab=5;redraw=true;}
  else if(id==94){layout()->auto_text^=1;redraw=true;}
@@ -229,7 +229,7 @@ static void render(void){lv_obj_clean(page);memset(&preview,0,sizeof(preview));m
  }else if(tab==5){
   bool locked=draft.mode&&p->auto_text;uint32_t color=locked?text_ink(&draft,p):p->text_color;
   if(draft.mode)toggle(body,0,0,676,"Automatic black / white",94,p->auto_text);else label(body,"CUSTOM TEXT COLOUR",0,12,&lv_font_instrument_sans_medium_14,0x293B44);
-  lv_obj_t*enter=button(body,0,64,198,"Enter HEX",63,false);if(locked){lv_obj_add_state(enter,LV_STATE_DISABLED);lv_obj_set_style_text_color(lv_obj_get_child(enter,0),lv_color_hex(0xA8B6C2),0);}
+  button(body,0,64,198,"Enter HEX",63,false);
   char h[10];snprintf(h,sizeof(h),"#%06X",color);hex_label=label(body,h,228,74,&lv_font_instrument_sans_medium_22,0x405F72);
   label(body,locked?"Turn off Automatic to use your saved custom colour.":"Time, date and greeting share this colour in this layout.",0,119,&lv_font_instrument_sans_medium_12,0x667F90);
   rgb_controls(body,156,color,locked);

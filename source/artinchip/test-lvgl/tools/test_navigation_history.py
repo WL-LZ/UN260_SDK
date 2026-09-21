@@ -27,9 +27,12 @@ code=r'''
 #include "un260/lv_core/lv_page_manager.h"
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 #define UI_PAGE_STACK_CAPACITY 10
 #define UI_PAGE_INVALID ((ui_page_t)-1)
-static struct { ui_page_t current,stack[10];int stack_top; } g_page_manager={.current=UI_PAGE_MAIN,.stack_top=-1};
+typedef struct { ui_page_t current,stack[10];int stack_top; } ui_page_manager_context_t;
+static ui_page_manager_context_t g_page_manager={.current=UI_PAGE_MAIN,.stack_top=-1},g_home_bookmark;
+static bool g_home_bookmark_valid,g_temporary_home,g_restoring_home;
 static bool g_page_switch_committing;
 static unsigned session_resets;
 static void ui_manager_reset_navigation_sessions(void){session_resets++;}
@@ -40,11 +43,12 @@ static bool ui_manager_page_is_registered(ui_page_t p){return p>=0 && p<UI_PAGE_
 code=code.replace('#define uart_debug_printf(...) ((void)0)',
                   'static void uart_debug_printf(const char *fmt,...){(void)fmt;}')
 code+=function('ui_manager_history_on_commit')
+code+=function('ui_manager_navigation_on_leave')
 code+=r'''
 void ui_manager_switch(ui_page_t p){if(g_page_switch_committing || !ui_manager_page_is_registered(p))return;
-ui_manager_history_on_commit(p);g_page_manager.current=p;}
+ui_manager_navigation_on_leave(g_page_manager.current,p);ui_manager_history_on_commit(p);g_page_manager.current=p;}
 '''
-for name in ('ui_manager_push_page','ui_manager_pop_page','ui_manager_clear_stack'):
+for name in ('ui_manager_push_page','ui_manager_pop_page','ui_manager_clear_stack','ui_manager_suspend_to_home','ui_manager_restore_from_home'):
     code+=function(name)
 code+=r'''
 int main(void){
@@ -53,6 +57,30 @@ int main(void){
     assert(g_page_manager.stack_top==0);
     ui_manager_push_page(UI_PAGE_MAIN); /* protect even old callers */
     assert(g_page_manager.current==UI_PAGE_MAIN && g_page_manager.stack_top==-1);
+    /* A temporary Home owns an independent full chain, not a Main push. */
+    ui_manager_switch(UI_PAGE_SETTING);ui_manager_push_page(UI_PAGE_PRINT_SETTING);
+    ui_manager_push_page(UI_PAGE_BRIGHTNESS_SETTING);
+    unsigned before_suspend=session_resets;
+    assert(ui_manager_suspend_to_home());
+    assert(g_page_manager.current==UI_PAGE_MAIN&&g_page_manager.stack_top==-1);
+    assert(session_resets==before_suspend&&g_home_bookmark_valid);
+    assert(!ui_manager_suspend_to_home()); /* Repeated down keeps bookmark. */
+    assert(ui_manager_restore_from_home());
+    assert(g_page_manager.current==UI_PAGE_BRIGHTNESS_SETTING&&g_page_manager.stack_top==1);
+    assert(session_resets==before_suspend&&!g_home_bookmark_valid);
+    assert(ui_manager_pop_page()&&g_page_manager.current==UI_PAGE_PRINT_SETTING);
+    assert(ui_manager_pop_page()&&g_page_manager.current==UI_PAGE_SETTING);
+    assert(ui_manager_pop_page()&&g_page_manager.current==UI_PAGE_MAIN);
+    assert(!ui_manager_restore_from_home()); /* Ordinary Back is not undoable. */
+    ui_manager_push_page(UI_PAGE_SETTING);assert(ui_manager_suspend_to_home());
+    ui_manager_push_page(UI_PAGE_MENU);assert(!g_home_bookmark_valid);
+    ui_manager_switch(UI_PAGE_MAIN);assert(!ui_manager_restore_from_home());
+    for(unsigned i=0;i<20;i++){
+        ui_manager_push_page(UI_PAGE_SETTING);ui_manager_push_page(UI_PAGE_CFD_LEVEL_SETTING);
+        assert(ui_manager_suspend_to_home());assert(ui_manager_restore_from_home());
+        assert(g_page_manager.stack_top==1);ui_manager_switch(UI_PAGE_MAIN);
+    }
+    puts("PASS temporary Home/Return: full chain, local session, normal ESC, unrelated navigation, repeated lifecycle");
     ui_manager_switch(UI_PAGE_SET_PASSAGE);ui_manager_switch(UI_PAGE_SETTING);
     unsigned before_back=session_resets;
     ui_manager_push_page(UI_PAGE_PRINT_SETTING);

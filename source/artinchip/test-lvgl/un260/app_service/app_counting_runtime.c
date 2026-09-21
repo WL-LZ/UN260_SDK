@@ -31,6 +31,7 @@
 #include "un260/lv_core/page_01_main.h"
 #include "un260/lv_core/page_02_list.h"
 #include "un260/lv_core/page_06_settings.h"
+#include "un260/lv_core/page_09_cis_cala.h"
 #include "un260/lv_core/page_19_history.h"
 #include "un260/lv_core/page_31_get_wave.h"
 #include "un260/lv_drivers/lv_drivers.h"
@@ -116,6 +117,7 @@ static bool app_counting_runtime_main_page_active(void)
 
 static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t len)
 {
+    diagnostic_calibration_feed_started();
     const bool previous_multi = counting_data_current()->multi_currency_result;
     currency_state_begin_count_session();
     if (currency_state_multi_selected()) {
@@ -182,6 +184,14 @@ static void app_counting_runtime_on_start_failure(uint8_t type, uint8_t code)
 {
     char status[160];
     const char *description;
+
+    if (diagnostic_calibration_feed_failed(type, code)) {
+        work_mode_service_hold_operation(WORK_MODE_OPERATION_CALIBRATION, false);
+        cis_calib_ui_refresh();
+        /* No-note belongs to the calibration page, not an invisible Main
+         * fault. Mechanical/path failures still use the normal fault flow. */
+        if (type == 1 && code == 2) return;
+    }
 
     if (type == 0x01 && code == 0x02) {
         description = "No banknotes detected";

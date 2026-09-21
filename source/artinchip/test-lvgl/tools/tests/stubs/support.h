@@ -29,6 +29,8 @@ void ui_manager_clear_stack(void);
 void ui_manager_switch(ui_page_t);
 void ui_manager_push_page(ui_page_t);
 bool ui_manager_pop_page(void);
+bool ui_manager_suspend_to_home(void);
+bool ui_manager_restore_from_home(void);
 bool page_06_settings_back_sub_page(void);
 bool user_cfg_gesture_enabled(void);
 bool user_cfg_gesture_save(bool);

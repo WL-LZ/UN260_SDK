@@ -4,6 +4,11 @@
 #include "un260/lv_system/user_cfg.h"
 /* Lifetime-bound marker: no registry of pointers to deleted/cached pages. */
 static void nav_back_marker(lv_event_t *event) { LV_UNUSED(event); }
+void lv_nav_button_mark_back(lv_obj_t *button)
+{
+    if(button&&!lv_obj_get_event_user_data(button,nav_back_marker))
+        lv_obj_add_event_cb(button,nav_back_marker,LV_EVENT_DELETE,button);
+}
 
 static lv_obj_t *nav_back_find(lv_obj_t *root)
 {
@@ -45,7 +50,7 @@ lv_obj_t *lv_nav_button_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
     if(h < 60 && w >= 90) ui_button_icon(button, UI_ICON("back_18"), false);
     if(cb) {
         lv_obj_add_event_cb(button, cb, LV_EVENT_CLICKED, user_data);
-        lv_obj_add_event_cb(button, nav_back_marker, LV_EVENT_DELETE, button);
+        lv_nav_button_mark_back(button);
     }
     return button;
 }

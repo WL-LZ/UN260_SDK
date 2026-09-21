@@ -46,7 +46,7 @@ static lv_timer_t timer_object,*status_timer;
 static bool selected_white_balance,send_ok=true,gate=true,leave_home,send_failed;
 static uint8_t sent_cmd;
 static uint32_t now_ms=100,holds;
-static unsigned sends,pops,homes,clears,refreshes,deleted,timers_deleted,policy_clears;
+static unsigned sends,pops,homes,refreshes,deleted,timers_deleted,policy_clears;
 static void (*leave_confirm)(void *);
 static int lv_event_get_code(lv_event_t *e){return *e;}
 static uint32_t app_clock_uptime_ms(void){return now_ms;}
@@ -60,8 +60,7 @@ void work_mode_service_hold_operation(uint32_t owner,bool active){
 }
 static void cis_calib_ui_refresh(void){refreshes++;}
 static void ui_manager_pop_page(void){pops++;}
-static void ui_manager_clear_stack(void){clears++;}
-static void ui_manager_switch(unsigned page){assert(page==UI_PAGE_MAIN);homes++;}
+static bool ui_manager_suspend_to_home(void){homes++;return true;}
 static void lv_label_set_text(lv_obj_t *label,const char *text){assert(label&&text&&*text);}
 static void lv_obj_del(lv_obj_t *page){assert(page==&object);deleted++;}
 static void lv_timer_del(lv_timer_t *timer){assert(timer==&timer_object);timers_deleted++;}
@@ -156,7 +155,7 @@ static void test_send_timeout_and_late_reply(void){
     unsigned before_pops=pops;cis_back(&click);assert(pops==before_pops&&leave_confirm);
     leave_confirm(NULL);assert(pops==before_pops+1);settings_detail_dialog_hide();
     assert(calibration_gesture(GESTURE_ACTION_HOME)&&leave_confirm);
-    leave_confirm(NULL);assert(homes==1&&clears==1);
+    leave_confirm(NULL);assert(homes==1);
     ui_page_cis_calib_destroy();
     diagnostic_calibration_get_snapshot(&state);
     assert(state.session_active&&state.timed_out&&state.cb_state==CB_CALIB_RUNNING&&(holds&1));

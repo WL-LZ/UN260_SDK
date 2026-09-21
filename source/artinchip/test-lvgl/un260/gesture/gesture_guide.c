@@ -162,15 +162,15 @@ void gesture_guide_show(void)
         lv_obj_t *page = lv_content_pager_get_page(pager, (uint8_t)i);
         lv_obj_t *label;
         guide_add_motion(page, definition);
-        label = guide_label(page, definition->action == GESTURE_ACTION_EXIT_PAGE ? "EDGE BACK" : definition->action == GESTURE_ACTION_EXPORT ? "EXPORT DATA" : "HOME",
+        label = guide_label(page, definition->action == GESTURE_ACTION_EXIT_PAGE ? "EDGE BACK" : definition->action == GESTURE_ACTION_RETURN ? "RETURN TO PAGE" : "HOME",
                             &lv_font_instrument_sans_bold_18, 0x24313D);
         lv_obj_set_pos(label, 310, 28);
         lv_obj_set_width(label, 400);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
         label = guide_label(page, definition->action == GESTURE_ACTION_EXIT_PAGE ?
                             "Swipe inward from either side edge, then release to go back." :
-                            definition->action == GESTURE_ACTION_EXPORT ?
-                            "Swipe up with two fingers to export current counting data to USB." :
+                            definition->action == GESTURE_ACTION_RETURN ?
+                            "After swiping down to Main, swipe up with two fingers to reopen your previous page." :
                             "Swipe down with two fingers to return to Main.",
                             &lv_font_instrument_sans_medium_14, 0x66737E);
         lv_obj_set_pos(label, 310, 70);

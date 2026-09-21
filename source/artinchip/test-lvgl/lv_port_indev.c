@@ -46,6 +46,8 @@ int evdev_button;
 int evdev_key_val;
 static bool evdev_press_cancelled;
 static lv_obj_t *evdev_pressed_obj;
+static lv_point_t evdev_press_point;
+static bool evdev_visual_cancelled;
 static lv_port_pointer_observer_t g_pointer_observer;
 static void *g_pointer_observer_data;
 static uint8_t g_touch_count;
@@ -145,15 +147,43 @@ static void evdev_feedback(lv_indev_drv_t *drv, uint8_t event_code)
 {
     lv_indev_t *indev = lv_indev_get_act();
 
-    LV_UNUSED(drv);
     if(indev == NULL || lv_indev_get_type(indev) != LV_INDEV_TYPE_POINTER)
         return;
 
     if(event_code == LV_EVENT_PRESSED) {
         evdev_pressed_obj = lv_indev_get_obj_act();
+        lv_indev_get_point(indev,&evdev_press_point);
+        evdev_visual_cancelled=false;
         if(evdev_pressed_obj != NULL &&
            !lv_obj_has_flag(evdev_pressed_obj, LV_OBJ_FLAG_USER_4))
             lv_obj_clear_flag(evdev_pressed_obj, LV_OBJ_FLAG_PRESS_LOCK);
+    } else if((event_code == LV_EVENT_SCROLL_BEGIN || event_code == LV_EVENT_PRESSING) &&
+              evdev_pressed_obj != NULL && !evdev_visual_cancelled) {
+        /* Cancel only the visual press. PRESS_LOST resets input ownership and
+         * would interrupt the very scroll that has just started. CANCEL leaves
+         * the native scroll/roller/slider contact and release path intact. */
+        lv_obj_t *pressed = evdev_pressed_obj;
+        if(lv_obj_is_valid(pressed)) {
+            bool dragging=event_code==LV_EVENT_SCROLL_BEGIN;
+            if(!dragging){
+                lv_point_t point;lv_indev_get_point(indev,&point);
+                int threshold=LV_MAX(8,drv?drv->scroll_limit:10);
+                bool moved=LV_ABS(point.x-evdev_press_point.x)>threshold||
+                           LV_ABS(point.y-evdev_press_point.y)>threshold;
+                bool drag_owner=lv_obj_has_flag(pressed,LV_OBJ_FLAG_USER_4);
+                for(lv_obj_t *parent=pressed;moved&&parent&&!drag_owner;parent=lv_obj_get_parent(parent)){
+                    drag_owner=lv_obj_has_flag(parent,LV_OBJ_FLAG_SCROLLABLE)&&
+                        (lv_obj_get_scroll_top(parent)>0||lv_obj_get_scroll_bottom(parent)>0||
+                         lv_obj_get_scroll_left(parent)>0||lv_obj_get_scroll_right(parent)>0);
+                }
+                dragging=moved&&drag_owner;
+            }
+            if(dragging){
+                evdev_visual_cancelled=true;
+                lv_obj_clear_state(pressed, LV_STATE_PRESSED);
+                lv_event_send(pressed, LV_EVENT_CANCEL, indev);
+            }
+        }
     } else if(event_code == LV_EVENT_PRESS_LOST && evdev_pressed_obj != NULL) {
         // 滑出后取消本次按压，松手前不转移到其他对象
         evdev_press_cancelled = true;

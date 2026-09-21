@@ -57,20 +57,26 @@ static bool app_command_runtime_main_page_active(void)
            page_01_main_is_created();
 }
 
-const char *app_command_runtime_calibration_blocker(void)
+static const char *diagnostic_operation_blocker(bool allow_calibration_feed)
 {
     if(!work_mode_service_diagnostic_ready())return work_mode_service_status_text();
     if(!protocol_send_is_ready())return "Controller connection is unavailable.";
     if(upgrade_session_owner()!=UPGRADE_SESSION_NONE)return "Wait for the update to finish.";
     if(app_command_runtime_count_start_busy())return "A count is already in progress.";
     calibration_state_snapshot_t calibration;diagnostic_calibration_get_snapshot(&calibration);
-    if(calibration.session_active)return "Wait for calibration to finish.";
+    if(calibration.session_active &&
+       !(allow_calibration_feed && diagnostic_calibration_allows_feed()))
+        return "Wait for calibration to finish.";
     if(machine_state_aging_running()||motor_test_service_busy())return "Stop the motor test before running banknotes.";
     return NULL;
 }
+const char *app_command_runtime_calibration_blocker(void)
+{
+    return diagnostic_operation_blocker(false);
+}
 const char *app_command_runtime_diagnostic_run_blocker(void)
 {
-    const char *reason=app_command_runtime_calibration_blocker();
+    const char *reason=diagnostic_operation_blocker(ui_manager_get_current_page()==UI_PAGE_CIS_CALIB);
     if(reason)return reason;
     /* Failed self-test enters service recovery; calibration itself must not
      * depend on ordinary count-ready sensors (the CIS bar occupies the path). */

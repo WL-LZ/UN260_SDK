@@ -26,13 +26,13 @@ static void language_refresh(void){
   if(selected){lv_obj_clear_flag(language_checks[i],LV_OBJ_FLAG_HIDDEN);name=options[i].name;}
   else lv_obj_add_flag(language_checks[i],LV_OBJ_FLAG_HIDDEN);
  }
- if(language_dirty())lv_obj_clear_state(language_save,LV_STATE_DISABLED);else lv_obj_add_state(language_save,LV_STATE_DISABLED);
+ if(language_dirty())settings_detail_action_block(language_save, NULL);else settings_detail_action_block(language_save, "No changes to save.");
  lv_label_set_text(language_frame.message,language_dirty()?"Unsaved changes":"No changes");
  lv_label_set_text(language_preview,name);
 }
 static void language_leave(void *data){
  (void)data;
- if(language_home){ui_manager_clear_stack();ui_manager_switch(UI_PAGE_MAIN);}else ui_manager_pop_page();
+ if(language_home){ui_manager_suspend_to_home();}else ui_manager_pop_page();
 }
 static void language_back(lv_event_t *e){
  (void)e;language_home=false;

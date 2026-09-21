@@ -10,7 +10,10 @@ static ui_page_t page = UI_PAGE_MENU;
 static lv_point_t points[3];
 static int32_t ids[3];
 static uint8_t fingers;
-static unsigned home, back, exported;
+static unsigned home, back, returned;
+static bool password_modal;
+bool ui_page_05_set_password_is_open(void){return password_modal;}
+bool ui_page_05_set_password_request_back(void){bool open=password_modal;password_modal=false;return open;}
 static lv_nav_back_result_t nav_result;
 static unsigned esc_calls;
 static bool editor_active;
@@ -46,7 +49,9 @@ ui_page_t ui_manager_get_current_page(void){return page;}
 void ui_manager_clear_stack(void){}
 void ui_manager_switch(ui_page_t p){if(p==UI_PAGE_MAIN)home++;page=p;}
 void ui_manager_push_page(ui_page_t p){page=p;}
-bool ui_export_data_request(void){exported++;return true;}
+/* Count dispatches here; full chain restoration is tested by navigation_history. */
+bool ui_manager_restore_from_home(void){returned++;return true;}
+bool ui_manager_suspend_to_home(void){ui_manager_switch(UI_PAGE_MAIN);return true;}
 void touch_feedback_edge_hint(int side,int distance,int y){LV_UNUSED(distance);LV_UNUSED(y);if(!side && hint_enabled)hint_returning=true;}
 bool touch_feedback_edge_hint_is_returning(void){return hint_returning;}
 bool ui_manager_pop_page(void){back++;return true;}
@@ -89,23 +94,23 @@ int main(void)
     assert(!sample(2,100,300,0)); release();
     assert(gesture_service_set_enabled(true));
     assert(!sample(1,100,300,0)); assert(!sample(1,100,100,0)); release();
-    assert(!home && !exported && !back);
+    assert(!home && !returned && !back);
     sample(2,100,300,0); sample(2,100,200,0);
-    assert(!queued && !exported); release(); assert(exported==1);
+    assert(!queued && !returned); release(); assert(returned==1);
     sample(2,100,100,0); sample(2,100,200,0); release(); assert(home==1);
-    sample(3,100,300,0); sample(3,100,200,0); release(); assert(home==1 && exported==1);
-    sample(3,100,300,0); sample(2,100,300,0); sample(2,100,180,0); release(); assert(exported==1);
-    sample(2,100,300,0); sample(2,100,200,5); release(); assert(exported==1);
-    sample(2,100,300,0); sample(2,250,210,0); release(); assert(exported==1);
-    sample(2,100,300,0); tick+=1900; sample(2,100,200,0); release(); assert(exported==1);
+    sample(3,100,300,0); sample(3,100,200,0); release(); assert(home==1 && returned==1);
+    sample(3,100,300,0); sample(2,100,300,0); sample(2,100,180,0); release(); assert(returned==1);
+    sample(2,100,300,0); sample(2,100,200,5); release(); assert(returned==1);
+    sample(2,100,300,0); sample(2,250,210,0); release(); assert(returned==1);
+    sample(2,100,300,0); tick+=1900; sample(2,100,200,0); release(); assert(returned==1);
     page=UI_PAGE_UI_UPGRADE; assert(!sample(2,100,300,0)); assert(!sample(2,100,100,0)); release();
     sample(2,100,300,0);
     points[0].y=160; points[1].y=300; tick+=100;
     lv_point_t middle={120,230};
-    observer(NULL,LV_EVENT_PRESSING,&middle,2,NULL); release(); assert(exported==1);
+    observer(NULL,LV_EVENT_PRESSING,&middle,2,NULL); release(); assert(returned==1);
     sample(2,100,300,0); sample(2,100,200,0); sample(0,0,0,0);
-    page=UI_PAGE_SETTING; drain(); assert(exported==1); release();
-    sample(4,100,300,0); sample(4,100,100,0); release(); assert(exported==1);
+    page=UI_PAGE_SETTING; drain(); assert(returned==1); release();
+    sample(4,100,300,0); sample(4,100,100,0); release(); assert(returned==1);
     /* Edge taps remain clicks; centre swipes never become edge navigation. */
     assert(!sample(1,5,200,0)); release(); assert(!back);
     assert(!sample(1,5,200,0)); assert(sample(1,110,200,0)); release(); assert(back==1);
@@ -114,12 +119,12 @@ int main(void)
     sample(1,5,200,0); sample(1,130,200,0); sample(1,20,200,0); release(); assert(back==2);
     sample(1,5,100,0); sample(1,7,230,0); release(); assert(back==2);
     /* Late third finger cancels a recognized two-finger action before release. */
-    sample(2,100,300,0); sample(2,100,200,0); sample(3,100,180,0); release(); assert(exported==1);
+    sample(2,100,300,0); sample(2,100,200,0); sample(3,100,180,0); release(); assert(returned==1);
     /* Staggered release still produces exactly one action. */
-    sample(2,100,300,0); sample(2,100,200,0); sample(1,100,200,0); release(); assert(exported==2);
+    sample(2,100,300,0); sample(2,100,200,0); sample(1,100,200,0); release(); assert(returned==2);
     /* A lifted and re-added finger cancels, even after the threshold. */
     sample(2,100,300,0); sample(2,100,200,0); sample(1,100,200,0);
-    sample(2,100,180,0); release(); assert(exported==2);
+    sample(2,100,180,0); release(); assert(returned==2);
     /* Navigation runs on the first async turn while the edge is still returning. */
     hint_enabled=true; page=UI_PAGE_INNOVATION_CENTER;
     unsigned previous_back=back;
@@ -156,25 +161,33 @@ int main(void)
     /* Every page can own a single drag without disabling global multi-touch. */
     gesture_service_set_enabled(true);
     for(int editor=0;editor<2;editor++) {
-        editor_active=editor;page=UI_PAGE_STANDBY_SETTING;unsigned e=exported,h=home;
+        editor_active=editor;page=UI_PAGE_STANDBY_SETTING;unsigned e=returned,h=home;
         assert(!sample(1,200,200,0));
         assert(sample(2,200,240,0));assert(sample(2,200,120,0));
-        sample(1,200,120,0);release();assert(exported==e+1);
+        sample(1,200,120,0);release();assert(returned==e+1);
         page=UI_PAGE_STANDBY_SETTING;
         sample(2,200,100,0);sample(2,200,220,0);release();assert(home==h+1);
     }
     /* Dirty/modal/busy policy is checked at dispatch, not by disabling recognition. */
-    page=UI_PAGE_STANDBY_SETTING;unsigned e=exported,h=home;
+    page=UI_PAGE_STANDBY_SETTING;unsigned e=returned,h=home;
     sample(2,200,100,0);sample(2,200,220,0);sample(0,0,0,0);
     policy_blocked=true;drain();assert(home==h);
-    sample(2,200,240,0);sample(2,200,120,0);release();assert(exported==e);
+    sample(2,200,240,0);sample(2,200,120,0);release();assert(returned==e);
     policy_blocked=false;
     /* Hidden owner must not affect another page, even when its policy blocks. */
     policy_blocked=true;page=UI_PAGE_MENU;
-    sample(2,200,240,0);sample(2,200,120,0);release();assert(exported==e+1);
+    sample(2,200,240,0);sample(2,200,120,0);release();assert(returned==e+1);
     gesture_service_clear_page_policy(UI_PAGE_STANDBY_SETTING);
     page=UI_PAGE_STANDBY_SETTING;unsigned calls_before=policy_calls;
     sample(2,200,100,0);sample(2,200,220,0);release();
     assert(home==h+1&&policy_calls==calls_before);
+    /* Modal touches bypass the underlying Main quick-control pointer policy. */
+    page=UI_PAGE_MAIN;password_modal=true;raw_owned=true;
+    gesture_service_set_pointer_policy(UI_PAGE_MAIN,raw_policy);
+    raw_before=raw_calls;assert(!sample(1,500,120,0));release();
+    assert(raw_calls==raw_before&&password_modal);
+    page=UI_PAGE_MAIN;unsigned returns_before=returned;
+    sample(2,300,250,0);sample(2,300,100,0);release();
+    assert(!password_modal&&returned==returns_before);
     puts("gesture: PASS (navigation without waiting for hint, cancellation, multi-touch and safety)");
 }

@@ -5,8 +5,10 @@
 #include <string.h>
 #include "lvgl/lvgl.h"
 #include "un260/lv_core/lv_page_manager.h"
+#include "test_settings_actions.h"
 #include "un260/lv_core/settings_detail_ui.h"
 #include "un260/lv_core/page_20_set_print.h"
+#include "un260/lv_core/page_05_set_password.h"
 #include "un260/lv_core/page_22_set_double_note.h"
 #include "un260/lv_core/page_23_set_flap.h"
 #include "un260/lv_core/page_24_set_reject_pocket.h"
@@ -27,6 +29,7 @@
 #include "tools/test_page_background_asset.h"
 
 static unsigned sends, pops, reboots;
+static ui_page_t pushed_page;
 static bool send_ok = true, persist_ok = true, backlight_ok = true, overlay;
 static uint8_t last_command, last_payload[32], double_level = 2, flap = 1, reject_capacity = 50;
 static int brightness = 50;
@@ -56,6 +59,7 @@ void setting_service_clear_reject_pocket_max_request(void) {}
 bool setting_service_request_factory_reset(void) { uint8_t value=1; return settings_detail_send_command(0x44,&value,1); }
 void currency_state_get_active_code(char out[4]) { memcpy(out,"CNY",4); }
 bool ui_manager_pop_page(void) { pops++; return true; }
+void ui_manager_push_page(ui_page_t page) { pushed_page=page; }
 void ui_manager_switch(ui_page_t page) { (void)page; pops++; }
 void ui_manager_clear_stack(void) {}
 void ui_upgrade_service_reboot(void) { reboots++; }
@@ -126,6 +130,10 @@ static void immediate_pages(void)
     lv_color_t checked=lv_obj_get_style_bg_color(button(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_2)),0);
     click(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3));assert(lv_obj_get_style_bg_color(button(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_2)),0).full==checked.full);assert(last_command==0x31&&last_payload[0]==3);
     assert(find_label(lv_scr_act(),"Confirmed level: 2"));snapshot("double-pending");
+    unsigned sent_before=sends,notice_before=action_notices;
+    assert(action_blocked(button(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3))));
+    click(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3));
+    assert(sends==sent_before&&action_notices==notice_before+1&&strstr(action_notice,"confirm"));
     ui_page_22_set_double_note_on_reply(&result);assert(find_label(lv_scr_act(),"Confirmed level: 2"));
     click(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3));double_level=3;result.success=true;
     ui_page_22_set_double_note_on_reply(&result);assert(find_label(lv_scr_act(),"Confirmed level: 3"));ui_page_22_set_double_note_destroy();
@@ -185,7 +193,7 @@ static void print_page_test(void)
     assert(last_payload[0]==1);
     assert(print_config_take_status_reply(1,&result));ui_page_20_set_print_on_reply(&result);
     print_config_get(&actual);assert(actual.space_top==2&&actual.content==2);
-    assert(lv_obj_has_state(button("Save"),LV_STATE_DISABLED));
+    assert(action_blocked(button("Save")));
     click("Summary");click("Cancel");
     assert(lv_obj_has_state(button("Serial"),LV_STATE_CHECKED));
     ui_page_20_set_print_destroy();
@@ -195,10 +203,23 @@ static void print_page_test(void)
 static void cfd_page_test(void)
 {
     uint8_t reply[16]={'C','N','Y',1,3,3,3,3,3,3,3,3,3,3,3,3};
-    send_ok=false;ui_page_27_set_cfd_level_create(lv_scr_act());assert(lv_obj_has_state(button("1"),LV_STATE_DISABLED));
+    send_ok=false;ui_page_27_set_cfd_level_create(lv_scr_act());assert(action_blocked(button("1")));
     snapshot("cfd-query-failed");send_ok=true;click("Retry");assert(last_command==0x45&&last_payload[0]==1);
+    assert(!lv_obj_is_visible(find_label(lv_scr_act(),"IR")));
+    snapshot("cfd-loading");
+    lv_obj_t *cover=lv_obj_get_parent(find_label(lv_scr_act(),"Reading detection levels"));
+    lv_obj_t *body=lv_obj_get_parent(cover);
+    assert(lv_obj_get_width(cover)==lv_obj_get_content_width(body));
+    assert(lv_obj_get_height(cover)==lv_obj_get_content_height(body));
+    lv_obj_set_height(body,312);lv_obj_update_layout(body);
+    assert(lv_obj_get_height(cover)==lv_obj_get_content_height(body));
+    lv_obj_set_height(body,300);lv_obj_update_layout(body);
     ui_page_27_set_cfd_level_on_info(reply,sizeof(reply));
+    assert(!lv_obj_is_visible(find_label(lv_scr_act(),"IR")));
+    assert(!find_label(lv_scr_act(),"Levels confirmed. Select a channel level to edit."));
+    snapshot("cfd-ack-animation");
     assert(find_label(lv_scr_act(),"Reading detection levels"));advance(920);
+    assert(lv_obj_is_visible(find_label(lv_scr_act(),"IR")));
     assert(!find_label(lv_scr_act(),"Reading detection levels"));snapshot("cfd");
     lv_obj_t *segment=lv_obj_get_parent(button("4"));
     lv_obj_t *row=lv_obj_get_parent(segment);lv_obj_t *rows=lv_obj_get_parent(row);
@@ -209,18 +230,48 @@ static void cfd_page_test(void)
     lv_obj_scroll_to_y(rows,0,LV_ANIM_OFF);
     click("4");assert(lv_obj_has_state(button("4"),LV_STATE_CHECKED));assert(gesture_policy&&gesture_policy(GESTURE_ACTION_HOME)&&overlay);
     settings_detail_dialog_hide();click(ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE));assert(last_payload[0]==2);
-    assert(lv_nav_button_request_back()==LV_NAV_BACK_BLOCKED);assert(gesture_policy(GESTURE_ACTION_HOME));
+    unsigned notices_before=action_notices,pops_before=pops;
+    assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);
+    assert(action_notices==notices_before+1&&pops==pops_before);assert(gesture_policy(GESTURE_ACTION_HOME));
     advance(800);assert(cfd_service_take_update_timeout());ui_page_27_set_cfd_level_on_request_failed();
     assert(find_label(lv_scr_act(),"4"));snapshot("cfd-save-failed");click(ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE));
     reply[4]=4;reply[3]=2;ui_page_27_set_cfd_level_on_info(reply,sizeof(reply));assert(cfd_service_busy());
     reply[3]=1;ui_page_27_set_cfd_level_on_info(reply,sizeof(reply));assert(!cfd_service_busy());
-    assert(lv_obj_has_state(button(ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE)),LV_STATE_DISABLED));
+    assert(action_blocked(button(ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE))));
     ui_page_27_set_cfd_level_destroy();assert(!gesture_policy);ui_page_27_set_cfd_level_on_info(reply,sizeof(reply));
     puts("PASS CFD query gate, draft retention, Home/Back guard, timeout retry, wrong profile rejection and valid echo");
 }
 
 static void password_page_test(void)
 {
+    /* Modal over an existing real page. Outside taps cannot reach its fields. */
+    ui_page_20_set_print_create(lv_scr_act());
+    ui_page_05_set_password_open();
+    assert(ui_page_05_set_password_is_open());
+    advance(120);snapshot("login-modal");
+    assert(find_label(lv_layer_top(),"Settings access"));
+    assert(find_label(lv_layer_top(),"Clear")&&!find_label(lv_layer_top(),"Confirm"));
+    lv_obj_t *panel=lv_obj_get_parent(find_label(lv_layer_top(),"Settings access"));
+    assert(lv_obj_get_width(panel)==850&&lv_obj_get_height(panel)==364);
+    assert(lv_obj_get_style_opa(panel,0)==LV_OPA_COVER);
+    static lv_color_t stable[810*320];
+    for(int y=0;y<320;y++)memcpy(stable+y*810,pixels+(y+38)*1280+432,810*sizeof(lv_color_t));
+    lv_obj_t *behind=lv_label_create(lv_scr_act());lv_obj_set_pos(behind,430,280);
+    for(unsigned i=0;i<8;i++){
+        lv_label_set_text(behind,i%2?"Changing underneath":"Background content");
+        advance(500); /* Includes the old cursor's period and background invalidation. */
+        for(int y=0;y<320;y++)assert(!memcmp(stable+y*810,pixels+(y+38)*1280+432,810*sizeof(lv_color_t)));
+    }
+    lv_obj_del(behind);
+    unsigned before=pops;pointer_tap(25,200);
+    assert(!ui_page_05_set_password_is_open()&&pops==before);
+    for(unsigned i=0;i<20;i++){
+        ui_page_05_set_password_open();advance(20);
+        assert(ui_page_05_set_password_request_back());
+        advance(200);assert(!ui_page_05_set_password_is_open());
+    }
+    ui_page_05_set_password_destroy();ui_page_20_set_print_destroy();
+    puts("PASS real LVGL login: compact geometry, opaque surface, 4s stable pixels over background updates, outside dismissal, auto-confirm and repeated lifecycle");
     ui_page_29_set_password_create(lv_scr_act());snapshot("password");click("Current password");
     snapshot("password-keypad");
     click("9");click("9");click("9");click("9");click("Confirm");
@@ -252,12 +303,32 @@ static void brightness_test(void)
 
 static void factory_test(void)
 {
-    ui_page_30_set_factory_create(lv_scr_act());snapshot("factory");click(ui_text_get(UI_TEXT_SETTINGS_FACTORY_START));
-    assert(overlay);accept();assert(last_command==0x44);assert(lv_nav_button_request_back()==LV_NAV_BACK_BLOCKED);
+    ui_page_30_set_factory_create(lv_scr_act());snapshot("factory");
+    assert(lv_color_to32(lv_obj_get_style_bg_color(button(ui_text_get(UI_TEXT_SETTINGS_FACTORY_START)),0))==lv_color_to32(lv_color_hex(0xB42332)));
+    click(ui_text_get(UI_TEXT_SETTINGS_FACTORY_START));
+    assert(overlay);accept();assert(last_command==0x44);
+    unsigned notices_before=action_notices,pops_before=pops;
+    assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);
+    assert(action_notices==notices_before+1&&pops==pops_before);
     assert(gesture_policy(GESTURE_ACTION_HOME));ui_page_30_set_factory_on_reply(0);settings_detail_dialog_hide();
     click(ui_text_get(UI_TEXT_SETTINGS_FACTORY_START));accept();ui_page_30_set_factory_on_reply(1);accept();
     assert(last_command==0x3B&&reboots==0);ui_page_30_set_factory_destroy();advance(1001);assert(reboots==1);
     puts("PASS reset explicit confirmation, pending navigation lock, failure retry, success-only restart");
+}
+
+static void color_calibration_test(void)
+{
+    ui_page_36_display_test_create(lv_scr_act());snapshot("color-gray");
+    assert(find_label(lv_scr_act(),"Not enabled for the current UI output.\nThese references do not alter color output."));
+    click("2  Near white");snapshot("color-white");click("3  Color");snapshot("color-rgb");
+    click("4  Interface");snapshot("color-interface");
+    click("Adjust");assert(pushed_page==UI_PAGE_BRIGHTNESS_SETTING);
+    brightness=60;advance(501);assert(find_label(lv_scr_act(),"60%"));
+    ui_page_36_display_test_destroy();advance(1000);
+    backlight_ok=false;ui_page_36_display_test_create(lv_scr_act());
+    assert(action_blocked(button("Adjust")));snapshot("color-unavailable");
+    ui_page_36_display_test_destroy();backlight_ok=true;advance(1000);
+    puts("PASS color references, shared brightness route, refreshed value, unavailable driver and timer teardown");
 }
 
 int main(void)
@@ -273,7 +344,17 @@ int main(void)
     lv_obj_add_state(choice,LV_STATE_CHECKED|LV_STATE_DISABLED);
     assert(lv_color_to32(lv_obj_get_style_bg_color(choice,0))==lv_color_to32(lv_color_hex(0xFFFFFF)));
     lv_obj_del(palette);
+    palette=lv_settings_button(lv_scr_act(),0,0,140,48,"Action",true,NULL,NULL);
+    assert(lv_color_to32(lv_obj_get_style_bg_color(palette,0))==lv_color_to32(lv_color_hex(0x1559B7)));
+    assert(lv_color_to32(lv_obj_get_style_text_color(lv_obj_get_child(palette,0),0))==lv_color_to32(lv_color_hex(0xFFFFFF)));
+    lv_obj_add_state(palette,LV_STATE_DISABLED);
+    assert(lv_color_to32(lv_obj_get_style_text_color(lv_obj_get_child(palette,0),0))==lv_color_to32(lv_color_hex(0x64717C)));
+    lv_obj_clear_state(palette,LV_STATE_DISABLED);lv_settings_action_style(palette,LV_SETTINGS_ACTION_SECONDARY);
+    assert(lv_color_to32(lv_obj_get_style_bg_color(palette,0))==lv_color_to32(lv_color_hex(0xF7F7F7)));
+    lv_obj_add_state(palette,LV_STATE_PRESSED);
+    assert(lv_color_to32(lv_obj_get_style_bg_color(palette,0))==lv_color_to32(lv_color_hex(0xE2E9EE)));
+    lv_obj_del(palette);
     immediate_pages();print_page_test();cfd_page_test();password_page_test();brightness_test();
-    ui_page_36_display_test_create(lv_scr_act());snapshot("display-test");ui_page_36_display_test_destroy();factory_test();
+    color_calibration_test();factory_test();
     puts("PASS 10 ordinary settings actual-LVGL host renders and state transitions (not board verification)");return 0;
 }

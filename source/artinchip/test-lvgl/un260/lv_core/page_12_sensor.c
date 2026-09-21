@@ -5,23 +5,9 @@
 #include "un260/lv_components/lv_settings.h"
 #include "un260/lv_system/app_clock.h"
 #include "un260/diagnostic/diagnostic.h"
-#include "un260/app_service/work_mode_service.h"
 #include <string.h>
 
 #define SENSOR_QUERY_PERIOD_MS 300
-static lv_obj_t *mode_retry_button;
-static void mode_retry_clicked(lv_event_t *e)
-{
-    if (lv_event_get_code(e) == LV_EVENT_CLICKED) work_mode_service_retry();
-}
-static void mode_retry_refresh(void)
-{
-    if (!mode_retry_button) return;
-    work_mode_snapshot_t mode;
-    work_mode_service_get_snapshot(&mode);
-    if (mode.phase == WORK_MODE_FAILED) lv_obj_clear_flag(mode_retry_button, LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_add_flag(mode_retry_button, LV_OBJ_FLAG_HIDDEN);
-}
 
 static struct {
     lv_settings_frame_t frame;
@@ -40,7 +26,6 @@ static void sensor_esc_cb(lv_event_t *e)
 }
 static void sensor_refresh_view(void)
 {
-    mode_retry_refresh();
     sensor_voltage_snapshot_t snapshot;
     sensor_state_get_snapshot(&snapshot);
     uint32_t now = app_clock_uptime_ms();
@@ -103,8 +88,6 @@ void ui_page_12_sensor_create(lv_obj_t *parent)
     lv_settings_label(summary, "RECEIVING", 18, 17, &lv_font_instrument_sans_medium_14, 0x586B78);
     sensor_page.received = lv_settings_label(summary, "0 / 11 channels", 18, 57,
                                               &lv_font_instrument_sans_medium_18, 0x1D2B34);
-    mode_retry_button=lv_settings_button(sensor_page.frame.footer,1050,0,182,46,"Retry",false,mode_retry_clicked,NULL);
-    lv_obj_add_flag(mode_retry_button,LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_width(sensor_page.frame.message,1030);
     sensor_page.last_update = 0;
     sensor_page.last_received_ms = 0;
@@ -117,5 +100,4 @@ void ui_page_12_sensor_destroy(void)
     if (sensor_page.timer) lv_timer_del(sensor_page.timer);
     if (sensor_page.frame.root) lv_obj_del(sensor_page.frame.root);
     memset(&sensor_page, 0, sizeof(sensor_page));
-    mode_retry_button=NULL;
 }

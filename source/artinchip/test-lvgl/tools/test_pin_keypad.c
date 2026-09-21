@@ -21,9 +21,11 @@ void lv_damped_button_set_text(lv_obj_t *button, const char *text)
 }
 void lv_damped_button_set_exact_palette(lv_obj_t *button, lv_color_t normal, lv_color_t pressed)
 {
-    assert(normal == button->color);
+    button->color=normal;
     button->pressed_color = pressed;
 }
+lv_obj_t *lv_damped_button_get_label(lv_obj_t *button){return button;}
+void lv_nav_button_mark_back(lv_obj_t *button){assert(lv_obj_is_valid(button));}
 
 #include "../un260/lv_components/lv_pin_keypad.c"
 #include "../un260/lv_core/page_05_set_password.c"
@@ -119,7 +121,7 @@ static void test_component(void)
         assert(keypad.keys[i]->w == 216 && keypad.keys[i]->h == 64);
         assert(keypad.keys[i]->x == 424 + (int)(i % 3) * 228);
         assert(keypad.keys[i]->y == 16 + (int)(i / 3) * 76);
-        assert(keypad.keys[i]->pressed_color == (pin_keys[i] == 11 ? 0x1054B0 : 0xE2E9EE));
+        assert(keypad.keys[i]->pressed_color == (pin_keys[i] == 11 ? LV_SETTINGS_PRIMARY_PRESSED : LV_SETTINGS_CONTROL_PRESSED));
     }
     assert(strstr(keypad.keys[9]->children[0]->text,"popup_icons/backspace.png"));
     assert(!strcmp(keypad.keys[11]->text,"Confirm"));
@@ -170,27 +172,51 @@ static void test_login_page(void)
 {
     lv_obj_t *screen=lv_obj_create(NULL);
     ui_page_05_set_password_create(screen);
+    assert(g_password_page.keypad.auto_confirm);
+    assert(g_password_page.keypad.compact);
+    assert(g_password_page.keypad.root->x==412&&g_password_page.keypad.root->y==18);
+    assert(g_password_page.keypad.root->w==850&&g_password_page.keypad.root->h==364);
+    assert(g_password_page.keypad.blink->paused);
+    assert(lv_obj_has_flag(g_password_page.keypad.cursor,LV_OBJ_FLAG_HIDDEN));
+    for(unsigned i=0;i<12;i++){
+        assert(g_password_page.keypad.keys[i]->w==100&&g_password_page.keypad.keys[i]->h==62);
+        assert(g_password_page.keypad.keys[i]->x==488+(int)(i%3)*108);
+        assert(g_password_page.keypad.keys[i]->y==64+(int)(i/3)*70);
+        assert(g_password_page.keypad.keys[i]->x+100<850);
+        assert(g_password_page.keypad.keys[i]->y+62<364);
+    }
+    assert(g_password_page.keypad.cancel->x==728&&g_password_page.keypad.cancel->y==14);
+    assert(g_password_page.keypad.cancel->w==96&&g_password_page.keypad.cancel->h==40);
+    assert(!strcmp(g_password_page.keypad.cancel->text,"Close"));
+    assert(strstr(g_password_page.keypad.keys[9]->children[0]->text,"popup_icons/backspace.png"));
+    assert(!strcmp(g_password_page.keypad.keys[10]->text,"0"));
+    assert(!strcmp(g_password_page.keypad.keys[11]->text,"Clear"));
     type_pin(&g_password_page.keypad,"0000");
-    press_key(&g_password_page.keypad,11);
     assert(switched_page == -1);
     assert_empty(&g_password_page.keypad);
     assert(strstr(g_password_page.keypad.status->text,"Incorrect PIN"));
     type_pin(&g_password_page.keypad,"1111");
-    press_key(&g_password_page.keypad,11);
     assert(switched_page == UI_PAGE_SETTING);
     assert_empty(&g_password_page.keypad);
     assert(g_password_page.keypad.blink->paused);
     ui_page_05_set_password_suspend();
     assert(ui_page_05_set_password_resume());
     assert_empty(&g_password_page.keypad);
-    assert(strcmp(g_password_page.keypad.status->text,PIN_IDLE_STATUS)==0);
+    assert(strstr(g_password_page.keypad.status->text,"Opens automatically"));
     type_pin(&g_password_page.keypad,"12");
     ui_page_05_set_password_suspend();
     assert_empty(&g_password_page.keypad);
     assert(g_password_page.keypad.blink->paused);
     ui_page_05_set_password_resume();
-    click(g_password_page.page->children[0]);
-    assert(switched_page == UI_PAGE_MAIN);
+    type_pin(&g_password_page.keypad,"12");
+    press_key(&g_password_page.keypad,11);assert_empty(&g_password_page.keypad);
+    type_pin(&g_password_page.keypad,"45");
+    click(g_password_page.page); /* Outside cancels, never navigates/commits. */
+    assert(switched_page == UI_PAGE_SETTING&&!ui_page_05_set_password_is_open());
+    assert_empty(&g_password_page.keypad);
+    ui_page_05_set_password_resume();
+    assert(ui_page_05_set_password_request_back());
+    assert(!ui_page_05_set_password_request_back());
     ui_page_05_set_password_destroy();
     assert(!g_password_page.page && !g_password_page.keypad.blink);
     ui_page_05_set_password_create(screen);
@@ -268,13 +294,15 @@ static void test_visibility(void)
     ui_page_29_set_password_create(parent);
     for (unsigned i=0; i<PASSWORD_FIELD_COUNT; ++i) {
         bool before=saved_visibility;
-        click(field_cards[i]);
+        if(!lv_pin_keypad_is_visible(&password_setting_keypad))click(field_cards[i]);
+        assert(active_field==(password_field_t)i);
         assert(password_setting_keypad.digits_visible == before);
         click(password_setting_keypad.eye);
         assert(saved_visibility != before);
-        click(password_setting_keypad.cancel);
-        assert(!lv_pin_keypad_is_visible(&password_setting_keypad));
+        type_pin(&password_setting_keypad,i==0?"1111":"0022");
+        press_key(&password_setting_keypad,11);
     }
+    assert(!lv_pin_keypad_is_visible(&password_setting_keypad));
     assert(!save_count);
     ui_page_29_set_password_destroy();
     ui_page_05_set_password_create(parent);
@@ -286,16 +314,17 @@ static void test_visibility(void)
 
 static void enter_field(password_field_t field, const char *pin)
 {
-    click(field_cards[field]);
+    if(!lv_pin_keypad_is_visible(&password_setting_keypad))click(field_cards[field]);
+    assert(active_field==field);
     assert(lv_pin_keypad_is_visible(&password_setting_keypad));
     assert(lv_obj_has_flag(password_setting_form,LV_OBJ_FLAG_HIDDEN));
     assert(strcmp(password_setting_keypad.title->text,field_titles[field])==0);
     lv_pin_keypad_clear(&password_setting_keypad);
     type_pin(&password_setting_keypad,pin);
     press_key(&password_setting_keypad,11);
-    assert(!lv_pin_keypad_is_visible(&password_setting_keypad));
     assert_empty(&password_setting_keypad);
-    assert(!lv_obj_has_flag(password_setting_form,LV_OBJ_FLAG_HIDDEN));
+    assert(lv_pin_keypad_is_visible(&password_setting_keypad)==(field<PASSWORD_FIELD_CONFIRM));
+    assert(lv_obj_has_flag(password_setting_form,LV_OBJ_FLAG_HIDDEN)==(field<PASSWORD_FIELD_CONFIRM));
     assert(strcmp(field_text[field],pin)==0);
 }
 
@@ -309,8 +338,15 @@ static void test_change_password_page(void)
 {
     lv_obj_t *screen=lv_obj_create(NULL);
     ui_page_29_set_password_create(screen);
+    click(field_cards[PASSWORD_FIELD_CURRENT]);type_pin(&password_setting_keypad,"9999");
+    press_key(&password_setting_keypad,11);
+    assert(active_field==PASSWORD_FIELD_CURRENT&&!field_text[PASSWORD_FIELD_CURRENT][0]);
+    assert(strstr(password_setting_keypad.status->text,"Incorrect current PIN"));
     enter_field(PASSWORD_FIELD_CURRENT,"1111");
     enter_field(PASSWORD_FIELD_NEW,"0022");
+    type_pin(&password_setting_keypad,"0033");press_key(&password_setting_keypad,11);
+    assert(active_field==PASSWORD_FIELD_CONFIRM&&!field_text[PASSWORD_FIELD_CONFIRM][0]);
+    assert(strstr(password_setting_keypad.status->text,"do not match"));
     enter_field(PASSWORD_FIELD_CONFIRM,"0022");
     assert(save_count == 0); /* Field confirmation alone never changes auth. */
     assert(pin_gesture_policy && pin_gesture_policy(GESTURE_ACTION_HOME));
@@ -319,14 +355,14 @@ static void test_change_password_page(void)
     click(password_frame.back);
     assert(pin_overlay && pin_discard && pop_count == 0);
     settings_detail_dialog_hide();
-    click(field_cards[PASSWORD_FIELD_NEW]);
+    click(field_cards[PASSWORD_FIELD_CONFIRM]);
     press_key(&password_setting_keypad,10);
     press_key(&password_setting_keypad,3);
     click(password_frame.back);
     assert(pop_count == 0 && !lv_pin_keypad_is_visible(&password_setting_keypad));
-    assert(strcmp(field_text[PASSWORD_FIELD_NEW],"0022")==0);
+    assert(strcmp(field_text[PASSWORD_FIELD_CONFIRM],"0022")==0);
     assert_empty(&password_setting_keypad);
-    click(field_cards[PASSWORD_FIELD_NEW]);
+    click(field_cards[PASSWORD_FIELD_CONFIRM]);
     press_key(&password_setting_keypad,10);
     press_key(&password_setting_keypad,8);
     assert(lv_obj_has_flag(password_setting_keypad.root,LV_OBJ_FLAG_CLICKABLE));
@@ -339,15 +375,15 @@ static void test_change_password_page(void)
     assert_empty(&password_setting_keypad);
     assert(password_setting_keypad.blink->paused);
     assert(!lv_obj_has_flag(password_frame.footer,LV_OBJ_FLAG_HIDDEN));
-    enter_field(PASSWORD_FIELD_CURRENT,"1234");
+    strcpy(field_text[PASSWORD_FIELD_CURRENT],"1234");
     save_form(); assert(save_count == 0 && strstr(toast_text,"Incorrect current"));
-    enter_field(PASSWORD_FIELD_CURRENT,"1111");
-    enter_field(PASSWORD_FIELD_CONFIRM,"0033");
+    strcpy(field_text[PASSWORD_FIELD_CURRENT],"1111");
+    strcpy(field_text[PASSWORD_FIELD_CONFIRM],"0033");
     save_form(); assert(save_count == 0 && strstr(toast_text,"do not match"));
-    enter_field(PASSWORD_FIELD_CONFIRM,"0022");
+    strcpy(field_text[PASSWORD_FIELD_CONFIRM],"0022");
     strcpy(field_text[PASSWORD_FIELD_CURRENT],"12a4");
     save_form(); assert(save_count == 0 && strstr(toast_text,"exactly 4 digits"));
-    enter_field(PASSWORD_FIELD_CURRENT,"1111");
+    strcpy(field_text[PASSWORD_FIELD_CURRENT],"1111");
     save_success=false;
     save_form(); assert(save_count == 1 && strcmp(saved_password,"1111")==0);
     assert(strcmp(field_text[PASSWORD_FIELD_NEW],"0022")==0);
@@ -356,8 +392,7 @@ static void test_change_password_page(void)
     for (unsigned i=0;i<PASSWORD_FIELD_COUNT;++i) assert(!field_text[i][0]);
     assert(strcmp(toast_text,"Password saved")==0);
     click(password_frame.back); assert(pop_count == 1);
-    enter_field(PASSWORD_FIELD_NEW,"3456");
-    click(field_cards[PASSWORD_FIELD_CURRENT]);
+    enter_field(PASSWORD_FIELD_CURRENT,"0022");
     type_pin(&password_setting_keypad,"00");
     lv_obj_del(screen);
     assert(!password_setting_page && !password_setting_keypad.root && !password_setting_keypad.blink);

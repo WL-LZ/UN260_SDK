@@ -49,7 +49,7 @@ static void time_refresh(void){
  snprintf(s,sizeof(s),"%02u:%02u:%02u",time_draft.hour,time_draft.minute,time_draft.second);lv_label_set_text(time_preview,s);
  snprintf(s,sizeof(s),"%04u / %02u / %02u",time_draft.year,time_draft.month,time_draft.day);lv_label_set_text(date_preview,s);
  lv_label_set_text(time_frame.message,time_dirty()?"Unsaved changes":"No changes");
- if(time_dirty())lv_obj_clear_state(time_save,LV_STATE_DISABLED);else lv_obj_add_state(time_save,LV_STATE_DISABLED);
+ if(time_dirty())settings_detail_action_block(time_save, NULL);else settings_detail_action_block(time_save, "No changes to save.");
 }
 static void time_wheel_changed(lv_event_t *e){
  unsigned field=(unsigned)(uintptr_t)lv_event_get_user_data(e);
@@ -62,7 +62,7 @@ static void time_wheel_changed(lv_event_t *e){
 }
 static void time_leave(void *data){
  (void)data;
- if(time_home){ui_manager_clear_stack();ui_manager_switch(UI_PAGE_MAIN);}else ui_manager_pop_page();
+ if(time_home){ui_manager_suspend_to_home();}else ui_manager_pop_page();
 }
 static void time_back(lv_event_t *e){
  (void)e;time_home=false;

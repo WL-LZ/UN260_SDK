@@ -13,6 +13,7 @@
 #include "un260/lv_core/page_31_get_wave.h"
 #include "un260/lv_core/settings_detail_ui.h"
 #include "un260/lv_core/lv_page_manager.h"
+#include "test_settings_actions.h"
 #include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/ui_export_data.h"
@@ -130,14 +131,14 @@ static void debug_test(void){
 static void failure_retry_test(void){
  gate=true;send_ok=false;
  ui_page_cis_calib_select(false);ui_page_cis_calib_create(lv_scr_act());click("Start");tick(220);assert(label_find(lv_scr_act(),"Could not start"));gate=false;tick(220);click("Retry");snapshot("cis-mode-retry");ui_page_cis_calib_destroy();
- gate=true;ui_page_12_sensor_create(lv_scr_act());snapshot("sensors-send-failed");assert(label_find(lv_scr_act(),"Could not send query. Retrying the controller connection."));gate=false;tick(320);click("Retry");ui_page_12_sensor_destroy();
+ gate=true;ui_page_12_sensor_create(lv_scr_act());snapshot("sensors-send-failed");assert(label_find(lv_scr_act(),"Could not send query. Retrying the controller connection."));gate=false;tick(320);assert(!label_find(lv_scr_act(),"Retry"));ui_page_12_sensor_destroy();
  ui_page_17_motor_test_create(lv_scr_act());click("Retry mode");ui_page_17_motor_test_destroy();
  gate=true;ui_page_26_set_aging_create(lv_scr_act());click("Start test");confirm(NULL);assert(label_find(lv_scr_act(),"Could not send"));gate=false;tick(220);click("Retry");ui_page_26_set_aging_destroy();
  gate=true;ui_page_28_get_image_create(lv_scr_act());click("Capture");snapshot("image-send-failed");assert(label_find(lv_scr_act(),"Could not send capture request. Try again."));gate=false;ui_page_28_get_image_poll(lv_tick_get());click("Retry");gate=true;ui_page_28_get_image_poll(lv_tick_get());assert(label_find(lv_scr_act(),"Could not send capture request. Try again."));ui_page_28_get_image_destroy();
  ui_page_31_get_wave_create(lv_scr_act());click("Capture");snapshot("wave-send-failed");assert(label_find(lv_scr_act(),"Could not send capture request. Try again."));gate=false;ui_page_31_get_wave_poll(lv_tick_get());click("Retry");ui_page_31_get_wave_destroy();
- ui_page_10_debug_create();click("Retry");ui_page_10_debug_destroy();assert(retries==7);
+ ui_page_10_debug_create();click("Retry");ui_page_10_debug_destroy();assert(retries==6);
  gate=true;send_ok=true;ui_page_26_set_aging_create(lv_scr_act());click("Start test");confirm(NULL);ui_page_26_set_aging_on_timeout();unsigned before=sends;click("Start test");assert(sends==before&&(holds&16));snapshot("aging-timeout");ui_page_26_set_aging_destroy();ui_page_26_set_aging_on_reply(2);assert(!(holds&16));
- puts("PASS seven mode retry controls, persistent send failures, unknown aging result prevents restart");
+ puts("PASS mode recovery, Sensor has no unrelated Retry, send failures and unknown aging result guard");
 }
 int main(void){
  lv_init();lv_disp_draw_buf_t db;lv_disp_draw_buf_init(&db,buffer,NULL,1280*40);lv_disp_drv_t dd;lv_disp_drv_init(&dd);dd.hor_res=1280;dd.ver_res=400;dd.draw_buf=&db;dd.flush_cb=flush;lv_disp_drv_register(&dd);
