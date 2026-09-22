@@ -60,6 +60,7 @@ int uart_config(int fd, int baud, int dataBit, char parity, int stopBit)
     switch (baud) {
         case 9600: speed = B9600; break;
         case 115200: speed = B115200; break;
+        case 500000: speed = B500000; break;
         case 921600: speed = B921600; break;
         default: return -1;
     }

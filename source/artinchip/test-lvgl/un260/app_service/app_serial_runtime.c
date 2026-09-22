@@ -12,7 +12,9 @@
 #define APP_UART_CONTROLLER_DEVICE "/dev/ttyS4"
 #define APP_UART_BRIDGE_DEVICE     "/dev/ttyS5"
 #define APP_UART_LOG_DEVICE        "/dev/ttyS6"
-#define APP_UART_BAUD              115200
+#define APP_UART_CONTROLLER_BAUD   500000
+#define APP_UART_BRIDGE_BAUD       115200
+#define APP_UART_LOG_BAUD          115200
 
 static int fd4 = -1;
 static int fd5 = -1;
@@ -82,9 +84,9 @@ bool app_serial_runtime_start(void)
         return false;
     }
 
-    if (uart_config(fd4, APP_UART_BAUD, 8, 'N', 1) < 0 ||
-        uart_config(fd5, APP_UART_BAUD, 8, 'N', 1) < 0 ||
-        uart_config(fd6, APP_UART_BAUD, 8, 'N', 1) < 0) {
+    if (uart_config(fd4, APP_UART_CONTROLLER_BAUD, 8, 'N', 1) < 0 ||
+        uart_config(fd5, APP_UART_BRIDGE_BAUD, 8, 'N', 1) < 0 ||
+        uart_config(fd6, APP_UART_LOG_BAUD, 8, 'N', 1) < 0) {
         printf("UART配置失败\n");
         app_serial_runtime_stop();
         return false;
