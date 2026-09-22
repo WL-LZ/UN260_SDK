@@ -56,11 +56,13 @@ typedef struct {
 } page07_curr_grid_item_t;
 
 typedef struct {
-    lv_obj_t *current_img;
     lv_obj_t *current_code;
+    lv_obj_t *position;
     lv_obj_t *filter[2];
     lv_obj_t *card_button;
     lv_obj_t *back_button;
+    _lv_img_cache_entry_t *atlas_pin;
+    int visible_range_key;
 } page07_curr_overview_refs_t;
 
 typedef struct {

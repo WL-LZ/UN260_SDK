@@ -732,6 +732,8 @@ static void curr_apply_grid_selected_style(void)
 static void curr_set_mode_visible(void)
 {
     bool card = g_page07_curr.model.view_mode == PAGE07_CURR_VIEW_CARD;
+    page07_curr_overview_set_active(&g_page07_curr,
+        !card && curr_page && !lv_obj_has_flag(curr_page, LV_OBJ_FLAG_HIDDEN));
     if (card) {
         lv_obj_clear_flag(g_page07_curr.objects.left_panel, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(g_page07_curr.objects.right_area, LV_OBJ_FLAG_HIDDEN);
@@ -1224,6 +1226,8 @@ bool ui_page_07_curr_resume(void)
     /* A clean model snapshot says nothing about a retained browsing offset.
      * Restore focus before showing the page, even when selection is unchanged. */
     curr_focus_confirmed_selection_on_entry();
+    page07_curr_overview_set_active(&g_page07_curr,
+        g_page07_curr.model.view_mode == PAGE07_CURR_VIEW_GRID);
     lv_obj_clear_flag(curr_page, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(curr_page);
     page07_curr_carousel_enable(&g_page07_curr.carousel,
@@ -1249,6 +1253,7 @@ void ui_page_07_curr_suspend(void)
     }
 
     page07_curr_carousel_enable(&g_page07_curr.carousel, false);
+    page07_curr_overview_set_active(&g_page07_curr, false);
     /*
      * g_curr_page_snapshot describes what has actually been rendered, not
      * merely the latest model state.  A successful currency command can

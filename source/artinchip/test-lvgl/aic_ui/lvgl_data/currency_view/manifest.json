@@ -1,0 +1,272 @@
+{
+  "width": 768,
+  "height": 324,
+  "tile_width": 96,
+  "tile_height": 54,
+  "entries": [
+    {
+      "name": "CURR_AED.png",
+      "x": 0,
+      "y": 0,
+      "sha256": "8f301f2c412c50b2d36b0ad6b74d55a123f9720010db981b788d1e550b9a29d8"
+    },
+    {
+      "name": "CURR_AMD.png",
+      "x": 96,
+      "y": 0,
+      "sha256": "d72f23ccfcd1d71efcad4f9879650fbe5dea2ab28f4faafa75df74100f6abb09"
+    },
+    {
+      "name": "CURR_AUD.png",
+      "x": 192,
+      "y": 0,
+      "sha256": "7c6237a2ffd02c12e2560638994cbd2642692bca0333875a713f876628d1a35f"
+    },
+    {
+      "name": "CURR_AUTO.png",
+      "x": 288,
+      "y": 0,
+      "sha256": "5bd9222530ad061fb1f67e1028499b6f990ea88d2d6a1eafd8c5df4a7972aae6"
+    },
+    {
+      "name": "CURR_AZN.png",
+      "x": 384,
+      "y": 0,
+      "sha256": "b4ca1b84df4855d169c61bb498cd6c32c89d08f3664bd3d7ae32dcda2fab4c33"
+    },
+    {
+      "name": "CURR_CAD.png",
+      "x": 480,
+      "y": 0,
+      "sha256": "530b48bf545bac0b026ffe7bb0c11ebad25d24dc9331fc72d4ad0d0356bbfd53"
+    },
+    {
+      "name": "CURR_CHF.png",
+      "x": 576,
+      "y": 0,
+      "sha256": "d6c082a23571ec0e63056154b02e0aab071829fec5c9573b78bd7c845ae347fc"
+    },
+    {
+      "name": "CURR_CNY.png",
+      "x": 672,
+      "y": 0,
+      "sha256": "5c33400f627c41ae75453bdd11195cc32e84bccfe1f0f645fadc688e5e71e0b7"
+    },
+    {
+      "name": "CURR_DZD.png",
+      "x": 0,
+      "y": 54,
+      "sha256": "46882ea8f7442772a85c9fa92d349ed5a3ef6af8b14bb8e44b53aff99e7b7a04"
+    },
+    {
+      "name": "CURR_EGP.png",
+      "x": 96,
+      "y": 54,
+      "sha256": "cb2f4524a781a9c260bcb005eeed468ca4f4d6f85a8304d7f0da3214179fb1be"
+    },
+    {
+      "name": "CURR_EUR.png",
+      "x": 192,
+      "y": 54,
+      "sha256": "1d1808a72bef27d476ec13bef1505a7df1edfe7970f8125a080e163ba20783e6"
+    },
+    {
+      "name": "CURR_GBP.png",
+      "x": 288,
+      "y": 54,
+      "sha256": "c293b94df5ea902da0eb2765ca15d55b75e0ccb68f52b65a91da9b01edf29324"
+    },
+    {
+      "name": "CURR_HKD.png",
+      "x": 384,
+      "y": 54,
+      "sha256": "a0038560751dd5b8b8b56eede6f78870637a102a47e2f4b7917ee87b611931a8"
+    },
+    {
+      "name": "CURR_IDR.png",
+      "x": 480,
+      "y": 54,
+      "sha256": "3482a6dabce30e03ed6fcd1a94ec4855d0c65801e31e32e552bcd64e6742f394"
+    },
+    {
+      "name": "CURR_ILS.png",
+      "x": 576,
+      "y": 54,
+      "sha256": "2e34255a5c79fe5806957645cfbfc15dc1c0aeb1605cdf2e91e43ebc1fbad118"
+    },
+    {
+      "name": "CURR_INR.png",
+      "x": 672,
+      "y": 54,
+      "sha256": "1701cc400943019aaa76c5c0f6e19d4248c7bcd03024f708c3378afe2e9287e4"
+    },
+    {
+      "name": "CURR_IQD.png",
+      "x": 0,
+      "y": 108,
+      "sha256": "1bb5caaa85ecf2833263ce7f6eaa03792b0e4782c5ec0127f807023b8d18ffe5"
+    },
+    {
+      "name": "CURR_IRR.png",
+      "x": 96,
+      "y": 108,
+      "sha256": "4bc331a3976671f23a3e70a23d172c628fb473a4a245b74e024749f1ec21f9c6"
+    },
+    {
+      "name": "CURR_ISK.png",
+      "x": 192,
+      "y": 108,
+      "sha256": "b5f68822ec1403053b623676868950562e4b8fe5e638e8ddc8f4c0756ee79ab3"
+    },
+    {
+      "name": "CURR_JPY.png",
+      "x": 288,
+      "y": 108,
+      "sha256": "01a982fe4103699d4a99948966724bfee28be70fcc01397f5cafc9e2edda74a6"
+    },
+    {
+      "name": "CURR_KRW.png",
+      "x": 384,
+      "y": 108,
+      "sha256": "c3db7deee3361fc58aa04cdf4b43d83ee9931d8daa9d2dbf97ba58ac2c57f145"
+    },
+    {
+      "name": "CURR_LBP.png",
+      "x": 480,
+      "y": 108,
+      "sha256": "d9462a0fffaa0efae6e16f3525e01a0b606b787668d7d907dce7ba5330b54563"
+    },
+    {
+      "name": "CURR_MAD.png",
+      "x": 576,
+      "y": 108,
+      "sha256": "335e15c44fdd3ee8b841aec719a585a12a45b614e09c3a5d9e8885b6d17dcf93"
+    },
+    {
+      "name": "CURR_MOP.png",
+      "x": 672,
+      "y": 108,
+      "sha256": "e6210798c504de079aae0ca3a99f2bc5df6ca286d45d9a5dfc35b89a0cc4249e"
+    },
+    {
+      "name": "CURR_MUR.png",
+      "x": 0,
+      "y": 162,
+      "sha256": "9f0d7a024247a891ec028c5af4cd19b9ae30578fb2d4516fa562cc525d20117f"
+    },
+    {
+      "name": "CURR_MXN.png",
+      "x": 96,
+      "y": 162,
+      "sha256": "b36760e7bf07b8e976d97ede4a63312d139be72c7187cc8f45d087aca76db715"
+    },
+    {
+      "name": "CURR_OMR.png",
+      "x": 192,
+      "y": 162,
+      "sha256": "61c36d216e31a0a7791fc8d38f7f0087a7a5aba312915673cd177bbf5ec53ad3"
+    },
+    {
+      "name": "CURR_PHP.png",
+      "x": 288,
+      "y": 162,
+      "sha256": "4891cc88590de9d9e2f79b182579ce3aad7bd34c3d9f59790f9dc57181936554"
+    },
+    {
+      "name": "CURR_PKR.png",
+      "x": 384,
+      "y": 162,
+      "sha256": "2a5824b5281869cbf86e049e6b7d0f13c9cf75c341e13f9519a768fc08a6d2a9"
+    },
+    {
+      "name": "CURR_PLN.png",
+      "x": 480,
+      "y": 162,
+      "sha256": "cd29e1099e9476dbc507637c9afa85111819e3fc58a4b52280e6541e29162e0e"
+    },
+    {
+      "name": "CURR_QAR.png",
+      "x": 576,
+      "y": 162,
+      "sha256": "6825918d30533aaac042f31180f306799ddc75c69a04e4f054fa24df7b4e27a7"
+    },
+    {
+      "name": "CURR_RUB.png",
+      "x": 672,
+      "y": 162,
+      "sha256": "ce2f24512098d096c884fa289cd5c6f5ea4046eaf659c57105cb31ab3119af92"
+    },
+    {
+      "name": "CURR_SAR.png",
+      "x": 0,
+      "y": 216,
+      "sha256": "9f60832848df885cf0f54b7eb4138a2255aeb75326fb545532f7b96496170d31"
+    },
+    {
+      "name": "CURR_SGD.png",
+      "x": 96,
+      "y": 216,
+      "sha256": "73d67b486ee9b80d12b04232580b146f54c895208c765f3badca9ca63dcdd43a"
+    },
+    {
+      "name": "CURR_SOS.png",
+      "x": 192,
+      "y": 216,
+      "sha256": "539687ff52b55626e5d02bee33bd5c88d9fa9358f7fe48394a25c7caafa4ea09"
+    },
+    {
+      "name": "CURR_THB.png",
+      "x": 288,
+      "y": 216,
+      "sha256": "fe89d9ca897228ba533c32d80ebc804fcb31ed171a61cf9a79660289ed665827"
+    },
+    {
+      "name": "CURR_TJS.png",
+      "x": 384,
+      "y": 216,
+      "sha256": "1b14413e95c93450d7ec57e76785b276c586a597b441af86541e02bd48acc440"
+    },
+    {
+      "name": "CURR_TRY.png",
+      "x": 480,
+      "y": 216,
+      "sha256": "87e4b77492995ca0a4898740b01e842ca00e817d253b4fd5382c866ab99df5b0"
+    },
+    {
+      "name": "CURR_UAH.png",
+      "x": 576,
+      "y": 216,
+      "sha256": "046a236a57d0655d5700f52316ecd3ea45ed5b6347ad619588a3ff4d24990a32"
+    },
+    {
+      "name": "CURR_USD.png",
+      "x": 672,
+      "y": 216,
+      "sha256": "e9a6c71fc124353022cb09eb9e85f0f9575b86c82c580f26d8917cccac2876ca"
+    },
+    {
+      "name": "CURR_XAF.png",
+      "x": 0,
+      "y": 270,
+      "sha256": "d6ad333c9af93c319ce1e7dccb7afb53bef1deb73d14d2d8148c3b08a74226e4"
+    },
+    {
+      "name": "CURR_XOF.png",
+      "x": 96,
+      "y": 270,
+      "sha256": "0e9f046e91e3ff152b86ea9c40908a79a9aa84b59c641f53c29598649b9cb0ce"
+    },
+    {
+      "name": "CURR_ZAR.png",
+      "x": 192,
+      "y": 270,
+      "sha256": "8e7ebee2eac716f9eb7f054433ab112644895f79bba4a9bfb5cc6b761a520ecf"
+    },
+    {
+      "name": "multi_card.png",
+      "x": 288,
+      "y": 270,
+      "sha256": "f80ef0a37c2ec36d06b6c16869d65ca7d66519cdb8e662faa5bb3271e44ca0f2"
+    }
+  ]
+}

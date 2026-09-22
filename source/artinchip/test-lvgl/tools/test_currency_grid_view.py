@@ -7,11 +7,12 @@ from test_currency_modes import function
 root=Path(__file__).resolve().parents[1]
 lvgl=root.parents[1]/'third-party/lvgl-8.3.2'
 out=Path(sys.argv[1]).resolve();out.mkdir(parents=True,exist_ok=True)
+subprocess.run([sys.executable, str(root/'tools/gen_currency_view_atlas.py'), '--check'],check=True)
 with tempfile.TemporaryDirectory(prefix='un260-currency-grid-') as temp:
     work=Path(temp);(work/'lvgl').mkdir();(work/'lvgl/lvgl.h').write_text(f'#include "{lvgl}/lvgl.h"\n')
     (work/'lv_drv_conf.h').write_text('/* Host rendering only. */\n')
     fonts=['lv_font_instrument_sans_medium_12','lv_font_instrument_sans_medium_18','lv_font_instrument_sans_semibold_28']
-    conf=work/'lv_conf.h';conf.write_text('#ifndef LV_CONF_H\n#define LV_CONF_H\n#define LV_COLOR_DEPTH 32\n#define LV_MEM_SIZE (16U*1024U*1024U)\n#define LV_USE_THEME_DEFAULT 0\n#define LV_FONT_CUSTOM_DECLARE '+' '.join(f'LV_FONT_DECLARE({s});' for s in fonts)+'\n#endif\n')
+    conf=work/'lv_conf.h';conf.write_text('#ifndef LV_CONF_H\n#define LV_CONF_H\n#define LV_COLOR_DEPTH 32\n#define LV_MEM_SIZE (16U*1024U*1024U)\n#define LV_IMG_CACHE_DEF_SIZE 48\n#define LV_USE_THEME_DEFAULT 0\n#define LV_FONT_CUSTOM_DECLARE '+' '.join(f'LV_FONT_DECLARE({s});' for s in fonts)+'\n#endif\n')
     page=(root/'un260/lv_core/page_07_curr.c').read_text();port=(root/'lv_port_indev.c').read_text()
     image=(root/'un260/lv_resources/lv_img_init.c').read_text()
     currency=(root/'un260/currency/currency_state.c').read_text()
@@ -19,7 +20,7 @@ with tempfile.TemporaryDirectory(prefix='un260-currency-grid-') as temp:
     parts += [function(page,n) for n in ['curr_fav_press_feedback_cb','curr_build_grid_layer','curr_apply_grid_selected_style','curr_set_mode_visible']]
     (work/'grid_under_test.h').write_text('\n'.join(parts))
     entries=[]
-    for path in [*(root/'aic_ui/lvgl_data').glob('CURR_*.png'),root/'aic_ui/lvgl_data/main_icons/multi_card.png']:
+    for path in [*(root/'aic_ui/lvgl_data').glob('CURR_*.png'),root/'aic_ui/lvgl_data/main_icons/multi_card.png',root/'aic_ui/lvgl_data/currency_view/flags.png',root/'aic_ui/lvgl_data/main_icons/currencies_32.png']:
         bitmap=Image.open(path).convert('RGBA');target=work/(path.stem+'.bgra');target.write_bytes(bitmap.tobytes('raw','BGRA'))
         entries.append(f'{{"{path.name}","{target}",{bitmap.width},{bitmap.height}}}')
     (work/'grid_assets.h').write_text('typedef struct {const char *name,*path;unsigned w,h;} grid_asset_t;\nstatic grid_asset_t grid_assets[]={'+','.join(entries)+'};\n')

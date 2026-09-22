@@ -66,18 +66,19 @@
 /* VIEW is an independent full-width workspace, not the Card right pane. */
 #define CURR_GRID_COLS           8
 #define CURR_GRID_CELL_W         152
-#define CURR_GRID_CELL_H         66
+#define CURR_GRID_CELL_H         94
 #define CURR_GRID_ITEM_W         144
-#define CURR_GRID_START_X        10
-#define CURR_GRID_START_Y        6
-#define CURR_GRID_ROW_STEP       72
+#define CURR_GRID_START_X        0
+#define CURR_GRID_START_Y        0
+#define CURR_GRID_ROW_STEP       102
 #define CURR_GRID_VIEWPORT_X     24
-#define CURR_GRID_VIEWPORT_Y     78
+#define CURR_GRID_VIEWPORT_Y     76
 #define CURR_GRID_VIEWPORT_W     1232
-#define CURR_GRID_VIEWPORT_H     294
-#define CURR_GRID_FLAG_W         34
-#define CURR_GRID_FAV_X          104
-#define CURR_GRID_FAV_Y          3
+#define CURR_GRID_VIEWPORT_H     298
+#define CURR_GRID_FLAG_W         96
+#define CURR_GRID_FLAG_H         54
+#define CURR_GRID_FAV_X          109
+#define CURR_GRID_FAV_Y          62
 
 #define CURR_FAV_BTN_IN_CARD_X   139
 #define CURR_FAV_BTN_IN_CARD_Y   13

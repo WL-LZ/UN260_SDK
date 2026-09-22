@@ -35,6 +35,13 @@ if(NOT PAGE_BACKGROUND_RESULT EQUAL 0)
     message(FATAL_ERROR "Page background generation failed")
 endif()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_page_backgrounds.py")
+execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_currency_view_atlas.py
+                RESULT_VARIABLE CURRENCY_ATLAS_RESULT)
+if(NOT CURRENCY_ATLAS_RESULT EQUAL 0)
+    message(FATAL_ERROR "Currency VIEW atlas generation failed")
+endif()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_currency_view_atlas.py")
 execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/convert_lvgl_assets.py
                 RESULT_VARIABLE UN260_ASSET_RESULT)
 if(NOT UN260_ASSET_RESULT EQUAL 0)
