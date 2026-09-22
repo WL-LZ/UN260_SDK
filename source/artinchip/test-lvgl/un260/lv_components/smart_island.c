@@ -28,7 +28,6 @@ void smart_island_destroy(void)
     g_si_ctx.action.ignore_click_once = false;
     g_si_ctx.action.ignore_action_click_once = false;
     g_si_ctx.warning.marquee_running = false;
-    g_si_ctx.warning.marquee_step = 0;
     g_si_ctx.warning.text_width_compact = 0;
     g_si_ctx.warning.text_width_expand = 0;
     g_si_ctx.warning.resume_animation_pending = false;

@@ -14,6 +14,7 @@ typedef enum { FAILURE_NONE, FAILURE_LOAD, FAILURE_SAVE, FAILURE_SEND, FAILURE_R
 static struct {
     bool initialized, stopped, loaded, diagnostic, actual_valid, busy;
     bool deferred_sync, failure_event, controller_seen, retry_manual;
+    bool session_restore;
     uint8_t actual, sync_mode, target;
     uint32_t operations, request_tick, guard_tick;
     bool guard_active, late_request;
@@ -79,12 +80,21 @@ static void synchronize(uint8_t mode)
         state.guard_tick = app_clock_uptime_ms();
     }
     confirm_actual(mode);
+    /* 38 02 is the controller's boot configuration, not a restore ACK.
+     * A journal from a previous UI session must not override that fresh
+     * configuration (or start the feeder automatically after power-on).
+     * Keep recovery only for a diagnostic lease owned by this session. */
+    if (!state.session_restore && !state.diagnostic && !state.operations)
+        state.record.restore_pending = false;
     if (!state.record.restore_pending) {
         state.record.preferred_valid = true;
         state.record.preferred = mode;
     }
-    if (state.failure != FAILURE_LOAD && state.failure != FAILURE_SAVE)
+    if (state.failure != FAILURE_LOAD && state.failure != FAILURE_SAVE) {
         state.failure = FAILURE_NONE;
+        state.failure_event = false;
+        state.late_request = false;
+    }
 }
 
 void work_mode_service_init(void)
@@ -251,15 +261,19 @@ void work_mode_service_poll(uint32_t now, bool machine_busy)
     if (!state.loaded) { state.phase = WORK_MODE_SAVING; return; }
 
     if (state.diagnostic && state.record.preferred_valid &&
-        state.record.preferred == WORK_MODE_AUTO)
+        state.record.preferred == WORK_MODE_AUTO) {
         state.record.restore_pending = true;
+        state.session_restore = true;
+    }
 
     /* Completion, not a page close, clears the recovery journal. On re-entry
      * before a restore ACK, the lease still wins and requests MANUAL again. */
     if (!state.diagnostic && state.record.restore_pending && state.actual_valid &&
         state.request == REQUEST_NONE && !machine_busy && !state.operations &&
-        state.actual == state.record.preferred)
+        state.actual == state.record.preferred) {
         state.record.restore_pending = false;
+        state.session_restore = false;
+    }
 
     if (!work_mode_store_busy() && !records_equal(&state.record, &state.durable)) {
         if (!work_mode_store_begin_save(&state.record)) { fail(FAILURE_SAVE); return; }

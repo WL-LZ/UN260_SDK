@@ -153,17 +153,23 @@ static void test_crash_recovery_and_normal_boot(void)
     reset(disk_record); flush();
     assert(sent == 0 && state.phase == WORK_MODE_WAITING_SYNC);
     assert(sync_mode(WORK_MODE_MANUAL)); poll(true);
-    assert(sent == 0 && state.record.preferred == WORK_MODE_AUTO);
-    poll(false); assert(sent == 1 && wire_sent[0] == 1);
-    assert(ack(WORK_MODE_AUTO)); flush();
-    assert(!disk_record.restore_pending);
+    assert(sent == 0 && state.record.preferred == WORK_MODE_MANUAL);
+    flush(); fake_now += REQUEST_TIMEOUT_MS + 1; flush();
+    assert(sent == 0 && state.actual_valid && !work_mode_service_take_failure());
+    assert(!disk_record.restore_pending && disk_record.preferred == WORK_MODE_MANUAL);
+    /* The same boot frame may arrive before asynchronous storage completes. */
+    reset((work_mode_record_t){true, WORK_MODE_AUTO, true});
+    complete_io = false; assert(sync_mode(WORK_MODE_MANUAL)); poll(true);
+    assert(sent == 0); complete_io = true; flush();
+    fake_now += REQUEST_TIMEOUT_MS + 1; flush();
+    assert(sent == 0 && !disk_record.restore_pending && !work_mode_service_take_failure());
     /* With no recovery journal, a controller update becomes the new preference. */
     assert(sync_mode(WORK_MODE_MANUAL)); flush();
     assert(disk_record.preferred == WORK_MODE_MANUAL);
     work_mode_service_set_diagnostic(true); flush();
-    assert(sent == 1 && work_mode_service_diagnostic_ready());
+    assert(sent == 0 && work_mode_service_diagnostic_ready());
     work_mode_service_set_diagnostic(false); flush();
-    assert(sent == 1);
+    assert(sent == 0);
 }
 static void test_store_and_send_failures(void)
 {
@@ -182,6 +188,36 @@ static void test_store_and_send_failures(void)
     assert(!disk_record.restore_pending);
     reset((work_mode_record_t){0}); io_ok = false; poll(false);
     assert(state.failure == FAILURE_LOAD && sent == 0);
+}
+static void test_fresh_boot_sync(void)
+{
+    for (uint8_t mode = WORK_MODE_AUTO; mode <= WORK_MODE_MANUAL; ++mode) {
+        for (unsigned load_first = 0; load_first < 2; ++load_first) {
+            reset((work_mode_record_t){true, WORK_MODE_AUTO, true});
+            if (load_first) flush();
+            assert(sync_mode(mode)); poll(true); flush();
+            fake_now += REQUEST_TIMEOUT_MS + 1; flush();
+            assert(sent == 0 && state.actual_valid && confirmed == mode);
+            assert(state.record.preferred == mode && !disk_record.restore_pending);
+            assert(!work_mode_service_take_failure());
+        }
+    }
+    /* A genuine operation timeout still raises an event. A later authoritative
+     * boot synchronization resolves it without replaying the stale event. */
+    reset((work_mode_record_t){0});sync_mode(WORK_MODE_MANUAL);flush();
+    assert(work_mode_service_request(WORK_MODE_AUTO));
+    fake_now += REQUEST_TIMEOUT_MS;poll(false);
+    assert(state.failure == FAILURE_TIMEOUT && state.failure_event);
+    assert(sync_mode(WORK_MODE_MANUAL));flush();
+    assert(state.failure == FAILURE_NONE && !work_mode_service_take_failure());
+    /* In-session recovery is not an old on-disk journal. */
+    begin_auto_diagnostic();work_mode_service_set_diagnostic(false);
+    work_mode_service_hold_operation(WORK_MODE_OPERATION_MOTOR_MAIN, true);
+    assert(sync_mode(WORK_MODE_MANUAL));flush();
+    assert(state.record.preferred == WORK_MODE_AUTO && disk_record.restore_pending);
+    work_mode_service_hold_operation(WORK_MODE_OPERATION_MOTOR_MAIN, false);flush();
+    assert(sent == 2 && ack(WORK_MODE_AUTO));flush();
+    assert(!disk_record.restore_pending);
 }
 static void test_hardware_holds_and_user_preference(void)
 {
@@ -254,6 +290,7 @@ int main(void)
     test_ack_matching_timeout_retry();
     test_rapid_navigation();
     test_crash_recovery_and_normal_boot();
+    test_fresh_boot_sync();
     test_store_and_send_failures();
     test_hardware_holds_and_user_preference();
     test_controller_resync();

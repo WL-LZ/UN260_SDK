@@ -21,6 +21,7 @@ typedef struct {
     lv_obj_t *modal;
     lv_obj_t *dot;
     lv_obj_t *title;
+    lv_obj_t *title_clip;
     lv_obj_t *subtitle;
     lv_obj_t *time;
     lv_obj_t *badge;
@@ -49,6 +50,7 @@ typedef struct {
     lv_obj_t *action_track;
     lv_obj_t *page_indicator;
     lv_obj_t *expand_title;
+    lv_obj_t *expand_title_clip;
     lv_obj_t *expand_subtitle;
     lv_obj_t *expand_last;
     lv_obj_t *expand_divider;
@@ -105,7 +107,6 @@ typedef struct {
     smart_island_warning_level_t level;
     bool marquee_running;
     bool collapse_running;
-    uint8_t marquee_step;
     lv_coord_t text_width_compact;
     lv_coord_t text_width_expand;
     bool resume_animation_pending;

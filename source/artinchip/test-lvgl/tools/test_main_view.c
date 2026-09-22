@@ -25,7 +25,9 @@ void gesture_service_clear_page_policy(uint32_t owner) {(void)owner;multi_policy
 #include "un260/lv_components/lv_nav_button.c"
 static unsigned display_back_requests;
 bool ui_manager_pop_page(void) { ++display_back_requests; return true; }
+#ifndef HOST_ISLAND_ONLY
 #include "un260/lv_core/page_36_display_test.c"
+#endif
 
 static unsigned asset_opens;
 const un260_compiled_asset_t *host_external_asset_find(const char *path);
@@ -602,6 +604,7 @@ int main(void)
     test_main_layout();
     test_main_footer_layout();
     test_main_quick();
+#ifndef HOST_ISLAND_ONLY
     unsigned test_timer_count = timers();
     for(unsigned cycle = 0; cycle < 3; ++cycle) {
         ui_page_36_display_test_create(lv_scr_act());
@@ -616,6 +619,7 @@ int main(void)
         ui_page_36_display_test_destroy();
         assert(test_frame.root == NULL && timers() == test_timer_count);
     }
+#endif
     counting_data_clear_serials(counting_data_mutable());counting_data_clear_errors(counting_data_mutable());
     lv_indev_delete(indev);lv_img_decoder_delete(decoder);lv_deinit();host_external_assets_release();
     puts("PASS actual Main/detail/Smart Island raster and pointer dispatch, all modes, pending START, retained lifecycle; DMA/controller/Innovation navigation remain board tests");

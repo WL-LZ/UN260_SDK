@@ -291,6 +291,7 @@ static void smart_island_clear_object_refs(void)
     g_si_ctx.objects.modal = NULL;
     g_si_ctx.objects.dot = NULL;
     g_si_ctx.objects.title = NULL;
+    g_si_ctx.objects.title_clip = NULL;
     g_si_ctx.objects.subtitle = NULL;
     g_si_ctx.objects.time = NULL;
     g_si_ctx.objects.badge = NULL;
@@ -317,6 +318,7 @@ static void smart_island_clear_object_refs(void)
     g_si_ctx.objects.page_info = NULL;
     g_si_ctx.objects.page_action = NULL;
     g_si_ctx.objects.expand_title = NULL;
+    g_si_ctx.objects.expand_title_clip = NULL;
     g_si_ctx.objects.expand_subtitle = NULL;
     g_si_ctx.objects.expand_last = NULL;
     g_si_ctx.objects.expand_divider = NULL;
@@ -1503,7 +1505,9 @@ void smart_island_view_notice_expand(void)
         lv_anim_init(&animation);
         lv_anim_set_var(&animation, g_si_ctx.objects.title);
         lv_anim_set_exec_cb(&animation, smart_island_anim_translate_x_cb);
-        lv_anim_set_values(&animation, 0, 8);
+        /* Long warnings scroll inside their own fixed viewport. */
+        lv_anim_set_values(&animation, 0,
+            g_si_ctx.warning.text_width_compact > SMART_ISLAND_WIDTH - 36 - 14 ? 0 : 8);
         lv_anim_set_time(&animation, 260);
         lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
         lv_anim_start(&animation);
@@ -1676,7 +1680,11 @@ void smart_island_create(lv_obj_t *parent)
     lv_obj_set_style_radius(g_si_ctx.objects.dot, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_opa(g_si_ctx.objects.dot, LV_OPA_COVER, 0);
 
-    g_si_ctx.objects.title = lv_label_create(g_si_ctx.objects.root);
+    g_si_ctx.objects.title_clip = lv_obj_create(g_si_ctx.objects.root);
+    lv_obj_remove_style_all(g_si_ctx.objects.title_clip);
+    lv_obj_set_size(g_si_ctx.objects.title_clip, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(g_si_ctx.objects.title_clip, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    g_si_ctx.objects.title = lv_label_create(g_si_ctx.objects.title_clip);
     lv_label_set_text(g_si_ctx.objects.title, ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_READY_TITLE));
     lv_obj_set_width(g_si_ctx.objects.title, SMART_ISLAND_W - 36 - 14);
     lv_obj_set_pos(g_si_ctx.objects.title, 36, 13);
@@ -1876,7 +1884,11 @@ void smart_island_create(lv_obj_t *parent)
     lv_obj_set_size(g_si_ctx.objects.page_info, SMART_ISLAND_W, SMART_ISLAND_ACTION_EXPAND_H);
     smart_island_enable_gesture_on_obj(g_si_ctx.objects.page_info);
 
-    g_si_ctx.objects.expand_title = lv_label_create(g_si_ctx.objects.page_info);
+    g_si_ctx.objects.expand_title_clip = lv_obj_create(g_si_ctx.objects.page_info);
+    lv_obj_remove_style_all(g_si_ctx.objects.expand_title_clip);
+    lv_obj_set_size(g_si_ctx.objects.expand_title_clip, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(g_si_ctx.objects.expand_title_clip, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    g_si_ctx.objects.expand_title = lv_label_create(g_si_ctx.objects.expand_title_clip);
     lv_label_set_text(g_si_ctx.objects.expand_title, ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_EXPAND_TITLE));
     lv_label_set_long_mode(g_si_ctx.objects.expand_title, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(g_si_ctx.objects.expand_title, SMART_ISLAND_W - 24 - 12);

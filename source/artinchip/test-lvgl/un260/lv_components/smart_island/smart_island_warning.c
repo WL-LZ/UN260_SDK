@@ -5,13 +5,13 @@
 #include "lvgl/src/misc/lv_txt.h"
 #include <string.h>
 
-#define SMART_ISLAND_WARNING_MARQUEE_TIME   900U
-#define SMART_ISLAND_WARNING_MARQUEE_CYCLES 1U
+#define SMART_ISLAND_WARNING_SCROLL_SPEED  45U /* Pixels/second, independent of text length. */
+#define SMART_ISLAND_WARNING_START_HOLD    1000U
+#define SMART_ISLAND_WARNING_END_HOLD      1400U
 #define SMART_ISLAND_WARNING_FLASH_TIME     1000U
 
 static void smart_island_warning_apply_static_layout(void);
 static void smart_island_warning_marquee_start(void);
-static void smart_island_warning_marquee_run_step(void);
 static void smart_island_warning_finish_notice(void);
 static void smart_island_warning_finish_commit(void);
 
@@ -102,9 +102,16 @@ void smart_island_warning_stop(void)
         lv_obj_set_style_text_opa(g_si_ctx.objects.expand_title, LV_OPA_COVER, 0);
     }
 
+    if (g_si_ctx.objects.title_clip) {
+        lv_obj_set_x(g_si_ctx.objects.title_clip, 0);
+        lv_obj_set_width(g_si_ctx.objects.title_clip, LV_PCT(100));
+    }
+    if (g_si_ctx.objects.expand_title_clip) {
+        lv_obj_set_x(g_si_ctx.objects.expand_title_clip, 0);
+        lv_obj_set_width(g_si_ctx.objects.expand_title_clip, LV_PCT(100));
+    }
     g_si_ctx.warning.marquee_running = false;
     g_si_ctx.warning.collapse_running = false;
-    g_si_ctx.warning.marquee_step = 0;
     g_si_ctx.warning.text_width_compact = 0;
     g_si_ctx.warning.text_width_expand = 0;
     smart_island_reset_compact_header_position();
@@ -133,17 +140,6 @@ static void smart_island_warning_apply_static_layout(void)
         lv_obj_set_x(g_si_ctx.objects.expand_title, 20);
         lv_obj_set_y(g_si_ctx.objects.expand_title, 18);
     }
-}
-
-static void smart_island_warning_marquee_finish_cb(lv_anim_t *animation)
-{
-    LV_UNUSED(animation);
-    if (!g_si_ctx.warning.marquee_running) {
-        return;
-    }
-
-    g_si_ctx.warning.marquee_step++;
-    smart_island_warning_marquee_run_step();
 }
 
 static void smart_island_warning_flash_finish_cb(lv_anim_t *animation)
@@ -195,6 +191,44 @@ static void smart_island_warning_finish_commit(void)
     if (!pocket_confirmed) {
         fault_popup_schedule_auto_confirm();
     }
+}
+
+static void smart_island_warning_scroll_finish_cb(lv_anim_t *animation)
+{
+    LV_UNUSED(animation);
+    /* Keep the end of the sentence visible before returning to idle. */
+    lv_anim_t hold;
+    lv_anim_init(&hold);
+    lv_anim_set_var(&hold, g_si_ctx.objects.title);
+    lv_anim_set_exec_cb(&hold, smart_island_warning_anim_text_opa_cb);
+    lv_anim_set_values(&hold, LV_OPA_COVER, LV_OPA_COVER);
+    lv_anim_set_time(&hold, SMART_ISLAND_WARNING_END_HOLD);
+    lv_anim_set_ready_cb(&hold, smart_island_warning_flash_finish_cb);
+    if (!lv_anim_start(&hold)) smart_island_warning_finish_notice();
+}
+
+static lv_anim_t *smart_island_warning_scroll_label(lv_obj_t *label,
+    lv_obj_t *clip, lv_coord_t left, lv_coord_t visible, lv_coord_t text_width)
+{
+    if (!label || !lv_obj_is_valid(label)) return NULL;
+    /* Fixed viewport + full-width label: never clip the sentence before it
+     * scrolls, and never move text across the status dot. One owner controls
+     * this finite notice; LVGL's repeating label animation is not involved. */
+    lv_obj_set_x(clip, left);
+    lv_obj_set_width(clip, visible);
+    lv_obj_set_width(label, text_width);
+    lv_obj_set_x(label, 0);
+    if (text_width <= visible) return NULL;
+    lv_anim_t scroll;
+    lv_anim_init(&scroll);
+    lv_anim_set_var(&scroll, label);
+    lv_anim_set_exec_cb(&scroll, smart_island_warning_anim_x_cb);
+    lv_anim_set_values(&scroll, 0, visible - text_width);
+    lv_anim_set_time(&scroll, lv_anim_speed_to_time(SMART_ISLAND_WARNING_SCROLL_SPEED,
+                                                   0, text_width - visible));
+    lv_anim_set_delay(&scroll, SMART_ISLAND_WARNING_START_HOLD);
+    lv_anim_set_path_cb(&scroll, lv_anim_path_linear);
+    return lv_anim_start(&scroll);
 }
 
 static void smart_island_warning_marquee_start(void)
@@ -288,7 +322,6 @@ static void smart_island_warning_marquee_start(void)
     }
 
     g_si_ctx.warning.marquee_running = true;
-    g_si_ctx.warning.marquee_step = 0;
     lv_label_set_long_mode(g_si_ctx.objects.title, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(g_si_ctx.objects.title, compact_visible);
     lv_obj_set_x(g_si_ctx.objects.title, 36);
@@ -298,56 +331,14 @@ static void smart_island_warning_marquee_start(void)
         lv_obj_set_x(g_si_ctx.objects.expand_title, 32);
     }
 
-    smart_island_warning_marquee_run_step();
-}
-
-static void smart_island_warning_marquee_run_step(void)
-{
-    lv_anim_t animation;
-    lv_coord_t compact_visible = SMART_ISLAND_WIDTH - 36 - 14;
-    lv_coord_t expand_visible = SMART_ISLAND_WIDTH - 32 - 12;
-    lv_coord_t compact_left = (lv_coord_t)(36 - g_si_ctx.warning.text_width_compact);
-    lv_coord_t compact_right = (lv_coord_t)(36 + compact_visible);
-    lv_coord_t expand_left = (lv_coord_t)(32 - g_si_ctx.warning.text_width_expand);
-    lv_coord_t expand_right = (lv_coord_t)(32 + expand_visible);
-    bool left_to_right;
-    lv_coord_t from_x;
-    lv_coord_t to_x;
-
-    if (!g_si_ctx.warning.marquee_running) {
-        return;
-    }
-
-    if (g_si_ctx.warning.marquee_step >= SMART_ISLAND_WARNING_MARQUEE_CYCLES * 2U) {
-        smart_island_warning_finish_notice();
-        return;
-    }
-
-    left_to_right = ((g_si_ctx.warning.marquee_step % 2U) == 0U);
-    from_x = left_to_right ? compact_left : compact_right;
-    to_x = left_to_right ? compact_right : compact_left;
-
-    lv_anim_init(&animation);
-    lv_anim_set_var(&animation, g_si_ctx.objects.title);
-    lv_anim_set_exec_cb(&animation, smart_island_warning_anim_x_cb);
-    lv_anim_set_values(&animation, from_x, to_x);
-    lv_anim_set_time(&animation, SMART_ISLAND_WARNING_MARQUEE_TIME);
-    lv_anim_set_path_cb(&animation, lv_anim_path_linear);
-    lv_anim_set_ready_cb(&animation, smart_island_warning_marquee_finish_cb);
-    lv_anim_start(&animation);
-
-    if (g_si_ctx.objects.expand_title && lv_obj_is_valid(g_si_ctx.objects.expand_title) &&
-        g_si_ctx.warning.text_width_expand > expand_visible) {
-        from_x = left_to_right ? expand_left : expand_right;
-        to_x = left_to_right ? expand_right : expand_left;
-        lv_anim_init(&animation);
-        lv_anim_set_var(&animation, g_si_ctx.objects.expand_title);
-        lv_anim_set_exec_cb(&animation, smart_island_warning_anim_x_cb);
-        lv_anim_set_values(&animation, from_x, to_x);
-        lv_anim_set_time(&animation, SMART_ISLAND_WARNING_MARQUEE_TIME);
-        lv_anim_set_path_cb(&animation, lv_anim_path_linear);
-        lv_anim_start(&animation);
-    }
+    lv_anim_t *compact = smart_island_warning_scroll_label(g_si_ctx.objects.title,
+        g_si_ctx.objects.title_clip, 36, compact_visible, g_si_ctx.warning.text_width_compact);
+    lv_anim_t *expanded = smart_island_warning_scroll_label(g_si_ctx.objects.expand_title,
+        g_si_ctx.objects.expand_title_clip, 32, expand_visible, g_si_ctx.warning.text_width_expand);
+    lv_anim_t *last = compact;
+    if (expanded && (!last || expanded->time > last->time)) last = expanded;
+    if (last) lv_anim_set_ready_cb(last, smart_island_warning_scroll_finish_cb);
+    else smart_island_warning_scroll_finish_cb(NULL);
 }
 
 void smart_island_notify_warning_level(const char *warn_text,

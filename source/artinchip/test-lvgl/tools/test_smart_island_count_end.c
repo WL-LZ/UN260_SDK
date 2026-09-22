@@ -1,6 +1,7 @@
 /* Reuse the existing display/assets/peripheral harness; every island source
  * and app_counting_runtime_reset_session are compiled from production. */
 #include "lvgl/lvgl.h"
+#define HOST_ISLAND_ONLY
 #define main main_raster_entry_unused
 #include "test_main_view.c"
 #undef main
