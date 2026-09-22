@@ -50,6 +50,68 @@ static void quick_close_test(void)
     assert(page_01_main_quick_request_back());tick(200);assert(!quick.active && !quick.moving);
     quick_assert_clear_backdrop();assert(quick.y==-280);
 }
+static void quick_test_recovery(void)
+{
+    /* A held contact may leave Main before its RELEASE is delivered. Main's
+     * policy is detached while hidden, so its private state cannot rely on
+     * seeing that RELEASE. The first new contact on resume must work. */
+    pointer(640,8,true);
+    page_01_main_suspend();
+    pointer(640,8,false);
+    page_01_main_resume();
+    tap(640,8);tick(240);
+    bool recovered=quick.active;
+    printf("QUICK lifecycle first-contact recovery: %s\n",recovered?"PASS":"FAIL");
+    if(quick.active)quick_close_test();
+
+    /* The edge affordance means the top edge, not just the Menu rectangle.
+     * Exercise both otherwise-unreachable halves and a center non-grip start. */
+    const int xs[]={180,440,900};
+    bool full_edge=true;
+    for(unsigned i=0;i<sizeof(xs)/sizeof(xs[0]);++i) {
+        pointer(xs[i],8,true);pointer(xs[i],130,true);pointer(xs[i],130,false);tick(220);
+        bool opened=quick.active;
+        printf("QUICK top-edge x=%d: %s\n",xs[i],opened?"PASS":"FAIL");
+        full_edge&=opened;
+        if(opened)quick_close_test();
+    }
+    assert(recovered && full_edge);
+
+    /* Outside the small existing tap handle, the edge is only a candidate:
+     * short taps, sideways movement and content scrolling remain native. */
+    tap(440,8);assert(!quick.active && !quick.moving);
+    pointer(440,8,true);pointer(540,8,true);pointer(540,8,false);tick(220);
+    assert(!quick.active && !quick.moving);
+    pointer(180,64,true);pointer(180,180,true);pointer(180,180,false);tick(220);
+    assert(!quick.active && !quick.moving);
+
+    /* An already-open island owns its modal surface; the drawer cannot take
+     * that gesture, and closing the island restores the next fresh swipe. */
+    smart_island_open_info_page();tick(400);assert(smart_island_is_expanded());
+    pointer(180,8,true);pointer(180,130,true);pointer(180,130,false);tick(220);
+    assert(!quick.active && !quick.moving);
+    smart_island_close();tick(400);
+    pointer(180,8,true);pointer(180,130,true);pointer(180,130,false);tick(220);
+    assert(quick.active);quick_close_test();
+
+    /* A foreign modal still owns the edge even though its backdrop is
+     * transparent. Hidden/deleted blockers must release it immediately. */
+    lv_obj_t *modal=lv_obj_create(lv_layer_top());lv_obj_remove_style_all(modal);
+    lv_obj_set_size(modal,1280,400);lv_obj_add_flag(modal,LV_OBJ_FLAG_CLICKABLE);
+    pointer(900,8,true);pointer(900,130,true);pointer(900,130,false);tick(220);
+    assert(!quick.active && !quick.moving);
+    lv_obj_del(modal);
+    pointer(900,8,true);pointer(900,130,true);pointer(900,130,false);tick(220);
+    assert(quick.active);quick_close_test();
+
+    /* Resume during the same held contact must not turn PRESSING into a
+     * fresh edge pull. The following physical contact is accepted. */
+    pointer(640,8,true);page_01_main_suspend();page_01_main_resume();
+    pointer(640,140,true);pointer(640,140,false);tick(220);
+    assert(!quick.active && !quick.moving);
+    quick_open_test();quick_close_test();
+    puts("PASS quick recovery: first contact after hidden release, full top-edge intent, native horizontal/content gestures, island/modal ownership, held-contact resume");
+}
 static void test_main_quick(void)
 {
     extern unsigned host_quick_captures;
@@ -153,6 +215,7 @@ static void test_main_quick(void)
     assert(!quick.active && counting_data_current()->total_pcs==231);
     quick_open_test();page_01_main_suspend();tick(220);assert(!quick.active && !lv_obj_is_visible(quick.root));
     page_01_main_resume();quick_open_test();
+    quick_close_test();quick_test_recovery();quick_open_test();
     pointer(500,80,true);pointer(500,20,true);ui_main_destroy();pointer(500,20,false);tick(220);
     assert(!quick.main && !quick.root && !quick.timer && !host_pointer_policy);
     puts("PASS quick controls: standby-settings shortcut/press feedback/safety cancellation, original animated gesture guide on successful enable only, unchanged exposed Main pixels throughout open/reverse/close, transparent click shield, opaque sheet, clamped endpoints, whole-sheet snapshots, warm reuse, native taps, reverse/up/outside close, no click-through, switches/failure, real versions, standby guards, faults/count and teardown");

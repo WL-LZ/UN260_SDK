@@ -9,6 +9,7 @@
 #include "un260/gesture/gesture_guide.h"
 #include "un260/lv_components/lv_dma_snapshot_cache.h"
 #include "un260/lv_components/lv_fault_popup.h"
+#include "un260/lv_components/smart_island.h"
 #include "un260/lv_resources/lv_img_init.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/ui_lang.h"
@@ -48,6 +49,7 @@ static bool qc_safe(void)
     return quick.main && lv_obj_is_visible(quick.main) &&
         ui_manager_get_current_page()==UI_PAGE_MAIN && !ui_manager_is_transitioning() &&
         !app_command_runtime_count_start_busy() && !machine_state_aging_running() &&
+        !smart_island_is_expanded() &&
         !fault_popup_is_showing() && !fault_popup_get_pending_fault(NULL,NULL,NULL);
 }
 static bool qc_foreign_layer(const lv_point_t *point)
@@ -298,7 +300,14 @@ void page_01_main_quick_refresh_data(uint32_t topics)
     quick.dirty=true;
     if(quick.active && !quick.moving)qc_refresh();
 }
-void page_01_main_quick_suspend(void) { qc_close_now(); }
+void page_01_main_quick_suspend(void)
+{
+    qc_close_now();
+    /* Main's pointer policy is detached while hidden and cannot observe the
+     * release on the next page. The input service still drains any captured
+     * sequence; only forget this page's stale contact, never adopt PRESSING. */
+    quick.down=quick.drain=quick.tap_grab=false;
+}
 void page_01_main_quick_detach(void)
 {
     qc_close_now();
@@ -338,7 +347,8 @@ bool page_01_main_quick_pointer(lv_indev_t *indev,lv_event_code_t event,const lv
             qc_settle(false);quick.drain=true;return true;
         }
         quick.candidate=quick.active || quick.tap_grab ||
-            (!quick.active && point->y<44 && point->x>=1058 && point->x<1270);
+            (!quick.active && point->y>=0 &&
+             (point->y<24 || (point->y<44 && point->x>=1058 && point->x<1270)));
         quick.origin_y=quick.active?SHEET_Y:CLOSED_Y;
         if(quick.tap_grab)return true;
     }
