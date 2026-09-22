@@ -20,7 +20,8 @@
 #include "un260/app_service/work_mode_service.h"
 #include "un260/app_service/motor_test_service.h"
 #include "un260/lv_components/lv_settings.h"
-static void settings_run_clicked(lv_event_t *event){(void)event;}
+static unsigned run_clicks;
+static void settings_run_clicked(lv_event_t *event){(void)event;++run_clicks;}
 const char *app_command_runtime_diagnostic_run_blocker(void){return work_mode_service_diagnostic_ready()?NULL:work_mode_service_status_text();}
 const char *app_command_runtime_calibration_blocker(void){return app_command_runtime_diagnostic_run_blocker();}
 #include "un260/diagnostic/diagnostic.h"
@@ -73,7 +74,14 @@ static void flush(lv_disp_drv_t*d,const lv_area_t*a,lv_color_t*p){for(int y=a->y
 static lv_res_t info(lv_img_decoder_t*d,const void*src,lv_img_header_t*h){(void)d;if(lv_img_src_get_type(src)!=LV_IMG_SRC_FILE)return LV_RES_INV;const un260_compiled_asset_t*a=test_page_asset_find(src);if(!a){fprintf(stderr,"Missing asset: %s\n",(const char*)src);abort();}memset(h,0,sizeof(*h));h->w=a->width;h->h=a->height;h->cf=LV_IMG_CF_TRUE_COLOR_ALPHA;return LV_RES_OK;}
 static lv_res_t image_open(lv_img_decoder_t*d,lv_img_decoder_dsc_t*s){if(info(d,s->src,&s->header)!=LV_RES_OK)return LV_RES_INV;s->img_data=test_page_asset_find(s->src)->pixels;return LV_RES_OK;}
 #include "test_settings_toolbar.h"
-static void snapshot(const char*n){lv_obj_update_layout(lv_scr_act());assert_settings_toolbars(lv_scr_act());lv_obj_invalidate(lv_scr_act());lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/%s.bgra",getenv("OUT"),n);FILE*f=fopen(path,"wb");assert(f);assert(fwrite(pixels,4,1280*400,f)==1280*400);fclose(f);}
+static lv_obj_t *label_find(lv_obj_t *o,const char *text);
+static void click(const char *text);
+static void snapshot(const char*n){
+ bool keep_run=!strncmp(n,"sensors-",8)||!strncmp(n,"image-",6)||!strncmp(n,"wave-",5)||!strncmp(n,"debug-",6);
+ assert((label_find(lv_scr_act(),"RUN")!=NULL)==keep_run);
+ if(keep_run){unsigned before=run_clicks;click("RUN");assert(run_clicks==before+1);}
+ lv_obj_update_layout(lv_scr_act());assert_settings_toolbars(lv_scr_act());lv_obj_invalidate(lv_scr_act());lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/%s.bgra",getenv("OUT"),n);FILE*f=fopen(path,"wb");assert(f);assert(fwrite(pixels,4,1280*400,f)==1280*400);fclose(f);
+}
 static lv_obj_t *label_find(lv_obj_t *o,const char *text){if(lv_obj_check_type(o,&lv_label_class)&&!strcmp(lv_label_get_text(o),text))return o;for(unsigned i=0;i<lv_obj_get_child_cnt(o);i++){lv_obj_t*f=label_find(lv_obj_get_child(o,i),text);if(f)return f;}return NULL;}
 static void click(const char *text){lv_obj_t*l=label_find(lv_scr_act(),text);assert(l);while(l&&!lv_obj_has_flag(l,LV_OBJ_FLAG_CLICKABLE))l=lv_obj_get_parent(l);assert(l);assert(!lv_obj_has_flag(l,LV_OBJ_FLAG_HIDDEN));lv_event_send(l,LV_EVENT_CLICKED,NULL);}
 static void dump_labels(lv_obj_t *o){if(lv_obj_check_type(o,&lv_label_class))fprintf(stderr,"LABEL %s\n",lv_label_get_text(o));for(unsigned i=0;i<lv_obj_get_child_cnt(o);i++)dump_labels(lv_obj_get_child(o,i));}
@@ -114,8 +122,20 @@ static lv_obj_t *debug_find_type(lv_obj_t *o,const lv_obj_class_t *type){
  return NULL;
 }
 static void debug_key(lv_obj_t *kb,unsigned key){lv_btnmatrix_set_selected_btn(kb,key);lv_event_send(kb,LV_EVENT_VALUE_CHANGED,NULL);}
+static void debug_run_layout(void){
+ lv_obj_update_layout(lv_scr_act());
+ lv_obj_t *run=lv_obj_get_parent(label_find(lv_scr_act(),"RUN"));
+ lv_obj_t *tabs=lv_obj_get_parent(lv_obj_get_parent(label_find(lv_scr_act(),"Tools")));
+ lv_obj_t *back=lv_obj_get_parent(label_find(lv_scr_act(),"Back"));
+ assert(!lv_obj_has_state(run,LV_STATE_DISABLED)&&!lv_obj_has_flag(run,LV_OBJ_FLAG_HIDDEN));
+ lv_area_t tab_area,actions_area,back_area;
+ lv_obj_get_coords(tabs,&tab_area);lv_obj_get_coords(lv_obj_get_parent(run),&actions_area);lv_obj_get_coords(back,&back_area);
+ assert(tab_area.x2<actions_area.x1&&actions_area.x2<back_area.x1);
+ assert(tab_area.y1==actions_area.y1&&tab_area.y2==actions_area.y2);
+ unsigned before=run_clicks;click("RUN");assert(run_clicks==before+1);
+}
 static void debug_test(void){
- ui_page_10_debug_create();snapshot("debug-communication");
+ ui_page_10_debug_create();snapshot("debug-communication");debug_run_layout();
  lv_obj_t *kb=debug_find_type(lv_scr_act(),&lv_btnmatrix_class),*input=debug_find_type(lv_scr_act(),&lv_textarea_class);assert(kb&&input);
  for(unsigned i=0;i<700;i++)debug_key(kb,i%16);
  assert(strlen(lv_textarea_get_text(input))<=191&&!strncmp(lv_textarea_get_text(input),"FD DF ",6));
@@ -126,7 +146,7 @@ static void debug_test(void){
  puts("PASS Debug production HEX keyboard: long input, deletion, prefix and Clear without recursion");
  for(unsigned i=0;i<205;i++)debug_append_rx_log("FD DF 06 38 01 26");
  lv_obj_t *record=label_find(lv_scr_act(),"RX 0040: FD DF 06 38 01 26");assert(record);lv_obj_t *log=lv_obj_get_parent(record);lv_obj_scroll_to_y(log,100,LV_ANIM_OFF);lv_obj_update_layout(log);lv_area_t before,after;lv_obj_get_coords(record,&before);debug_append_rx_log("FD DF 06 38 01 26");lv_obj_get_coords(record,&after);assert(before.y1==after.y1);
- snapshot("debug-log");click("Tools");snapshot("debug-tools");click("Communication");click("Clear");ui_page_10_debug_destroy();assert(!debug_page_rx_log_is_active());tick(500);puts("PASS debug tabs, bounded log flex, retained scroll position, clear and lifecycle");
+ snapshot("debug-log");click("Tools");snapshot("debug-tools");debug_run_layout();click("Communication");click("Clear");ui_page_10_debug_destroy();assert(!debug_page_rx_log_is_active());tick(500);puts("PASS debug RUN on both tabs, non-overlapping toolbar, bounded log flex, retained scroll position, clear and lifecycle");
 }
 static void failure_retry_test(void){
  gate=true;send_ok=false;
@@ -136,7 +156,7 @@ static void failure_retry_test(void){
  gate=true;ui_page_26_set_aging_create(lv_scr_act());click("Start test");confirm(NULL);assert(label_find(lv_scr_act(),"Could not send"));gate=false;tick(220);click("Retry");ui_page_26_set_aging_destroy();
  gate=true;ui_page_28_get_image_create(lv_scr_act());click("Capture");snapshot("image-send-failed");assert(label_find(lv_scr_act(),"Could not send capture request. Try again."));gate=false;ui_page_28_get_image_poll(lv_tick_get());click("Retry");gate=true;ui_page_28_get_image_poll(lv_tick_get());assert(label_find(lv_scr_act(),"Could not send capture request. Try again."));ui_page_28_get_image_destroy();
  ui_page_31_get_wave_create(lv_scr_act());click("Capture");snapshot("wave-send-failed");assert(label_find(lv_scr_act(),"Could not send capture request. Try again."));gate=false;ui_page_31_get_wave_poll(lv_tick_get());click("Retry");ui_page_31_get_wave_destroy();
- ui_page_10_debug_create();click("Retry");ui_page_10_debug_destroy();assert(retries==6);
+ ui_page_10_debug_create();debug_run_layout();snapshot("debug-mode-retry");click("Retry");ui_page_10_debug_destroy();assert(retries==6);
  gate=true;send_ok=true;ui_page_26_set_aging_create(lv_scr_act());click("Start test");confirm(NULL);ui_page_26_set_aging_on_timeout();unsigned before=sends;click("Start test");assert(sends==before&&(holds&16));snapshot("aging-timeout");ui_page_26_set_aging_destroy();ui_page_26_set_aging_on_reply(2);assert(!(holds&16));
  puts("PASS mode recovery, Sensor has no unrelated Retry, send failures and unknown aging result guard");
 }

@@ -166,6 +166,8 @@ static void directory_test(void){
  assert(!action_blocked(dc_btn_start)&&!lv_obj_has_flag(dc_check_all,LV_OBJ_FLAG_HIDDEN));snapshot("collection-confirmed");
  machine_running=true;page_06_data_collection_refresh();assert(action_blocked(dc_btn_start));
  click_label(view,"RUN");assert(sends==1);machine_running=false;
+ page_06_data_collection_refresh();assert(label_find(view,"RUN")&&!action_blocked(dc_btn_start));
+ click_label(view,"RUN");assert(sends==2&&strstr(data_collection_state_status(),"Counting command sent"));snapshot("collection-run");
  data_collection_state_exit("Select a collection mode");assert(page_06_settings_back_sub_page()&&!diagnostic_scope);
  click_label(sidebar,"About & security");snapshot("about");
  for(unsigned i=0;i<lv_obj_get_child_cnt(grid);i++){

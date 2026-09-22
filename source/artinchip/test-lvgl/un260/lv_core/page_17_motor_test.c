@@ -48,7 +48,6 @@ void ui_page_17_motor_test_create(lv_obj_t *parent)
     if(motor_frame.root)return;
     lv_settings_header_t h={"Motor test","Maintenance / Transport controls","Wrench",back,NULL};
     motor_frame=lv_settings_frame_create(parent,&h);
-    settings_detail_add_run(motor_frame.root);
     for(unsigned i=0;i<3;i++){
         int y=12+i*74;
         lv_settings_label(motor_frame.body,names[i],24,y+5,&lv_font_instrument_sans_medium_20,0x1D2B34);

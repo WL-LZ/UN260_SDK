@@ -129,7 +129,6 @@ void ui_page_cis_calib_create(lv_obj_t *parent)
     };
     frame = lv_settings_frame_create(parent, &header);
     cis_page = frame.root;
-    if(selected_white_balance)settings_detail_add_run(cis_page);
     lv_obj_set_style_bg_opa(frame.body, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(frame.body, 0, 0);
     lv_obj_t *prepare = lv_settings_box(frame.body, 0, 0, 680, 242, 0xFFFFFF);
@@ -140,8 +139,8 @@ void ui_page_cis_calib_create(lv_obj_t *parent)
                     selected_white_balance?"Prepare the notes for white balance.":"Place the CIS bar manually in the upper note path.");
     preparation_row(prepare, 119, "2", "Press Start",
                     selected_white_balance?"Send the white balance command before feeding notes.":"No banknote run is required for CIS calibration.");
-    preparation_row(prepare, 176, "3", selected_white_balance?"Press RUN, then wait":"Wait for the result",
-                    selected_white_balance?"If feeding has not started, press RUN once.":"The machine calibrates and reports the result.");
+    preparation_row(prepare, 176, "3", "Wait for the result",
+                    "The machine calibrates and reports the result.");
 
     lv_obj_t *state = lv_settings_box(frame.body, 696, 0, 536, 242, 0xF1F4F5);
     lv_obj_set_style_radius(state, 14, 0);
@@ -181,8 +180,8 @@ void cis_calib_ui_refresh(void)
         color = 0xA35B12;
     } else if (running) {
         bool needs_feed=selected_white_balance&&!state.feed_started;
-        title = needs_feed?"Ready to feed notes":"Calibration in progress";
-        detail = needs_feed?"The command has been sent. Press RUN if the notes have not started feeding.":
+        title = needs_feed?"Waiting for note feeding":"Calibration in progress";
+        detail = needs_feed?"The calibration command has been sent. Waiting for the controller to feed notes.":
                            "Waiting for the controller. Keep the path clear and do not power off.";
         color = 0x1462CC;
     } else if (send_failed) {
