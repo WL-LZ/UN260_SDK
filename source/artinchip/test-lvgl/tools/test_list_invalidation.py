@@ -100,8 +100,8 @@ class ListInvalidationContracts(unittest.TestCase):
         self.assertIn("ui_frame_commit_defer(app_counting_visual_commit, NULL, 2U)", body)
         hooks = function(RUNTIME, "app_counting_runtime_handle_detail")
         self.assertIn("hooks.on_serial_item_changed = app_counting_runtime_on_serial_item_changed;", hooks)
-        for name in ("counting_sn_reply_handle", "counting_sn_push_handle"):
-            self.assertIn("counting_sn_notify_item(hooks);", function(DETAIL, name))
+        self.assertIn("counting_sn_notify_item(hooks);", function(DETAIL, "counting_sn_push_handle"))
+        self.assertNotIn("counting_sn_notify_item(hooks);", function(DETAIL, "counting_sn_reply_handle"))
 
     def test_partial_reject_and_summary_publish_without_navigation_or_reset(self):
         reject = function(RUNTIME, "app_counting_runtime_on_reject_report_changed")
@@ -133,16 +133,15 @@ class ListInvalidationContracts(unittest.TestCase):
         self.assertNotIn("page_02", DETAIL)
         self.assertNotIn("page_02", DENOM)
         serial = function(DETAIL, "counting_sn_reply_handle")
-        self.assert_before(serial, "counting_data_clear_serials(sim_data);", "hooks->on_serial_data_started")
-        self.assertIn("index = (int)sequence - 1;", serial)
-        self.assert_before(serial, "free(sim_data->sn_str[index]);", "sim_data->sn_str[index] = sn_copy;")
+        self.assertNotIn("counting_data_clear_serials(sim_data);", serial)
+        self.assertIn("counting_report_serial(", serial)
+        self.assert_before(serial, "result != COUNTING_REPORT_READY", "hooks->on_serial_report_ready")
         self.assertIn("hooks->on_serial_report_ready", serial)
         reject = function(DETAIL, "counting_reject_reply_handle")
         self.assertIn("if (sim_data->err_expected == 0)", reject)
-        self.assertIn("if (detail->wait_sn_after_reject_end && session &&", reject)
-        self.assertIn("session->phase != COUNTING_SESSION_ACTIVE", reject)
-        self.assertIn("protocol_send(0x0D, sn_req, 2);", reject)
-        self.assertIn("protocol_send(0x0C, &reject_cmd, 1);", function(DENOM, "counting_denom_handle_end"))
+        self.assertIn("counting_report_accept_reject(session)", reject)
+        self.assertIn("counting_report_reject_end(session", reject)
+        self.assertIn("counting_report_schedule(session", function(DENOM, "counting_denom_handle_end"))
 
     def test_ui_notifications_add_no_protocol_requests(self):
         for name in ("app_counting_runtime_refresh_compact", "app_counting_runtime_on_main_data_changed",

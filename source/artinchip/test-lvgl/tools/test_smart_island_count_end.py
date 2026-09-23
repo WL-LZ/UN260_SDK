@@ -36,6 +36,7 @@ bool counting_history_prepare_reset(counting_session_state_t *session,
     (void)session; (void)data; (void)tick; return reset_allowed;
 }
 void uart_debug_printf(const char *format, ...) { (void)format; }
+void counting_report_reset(void) {}
 ''' + function(runtime, "app_counting_runtime_reset_session") + "\n", encoding="utf-8")
         subprocess.run([sys.executable, str(ROOT / "tools/test_main_view.py"),
                         "--lvgl-dir", str(args.lvgl_dir.resolve()),

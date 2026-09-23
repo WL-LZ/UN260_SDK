@@ -165,6 +165,8 @@ static void smart_island_message_pulse_finish_cb(lv_anim_t *a)
 static void smart_island_result_collapse_finish_cb(lv_anim_t *a)
 {
     LV_UNUSED(a);
+    if (g_si_ctx.lifecycle.count_session_active ||
+        g_si_ctx.view.scene != SMART_ISLAND_SCENE_RESULT) return;
     g_si_ctx.view.anim_running = false;
     /* Keep COMPLETE visible for the whole damping motion.  READY is applied
      * only after geometry has settled, so the two scenes never overlap. */

@@ -177,6 +177,7 @@ static const counting_sim_t *history_runtime_test_current(void) { return runtime
 static uint32_t lv_tick_get(void) { return 0; }
 static void ui_count_end_anim_cancel(void) { reset_animation_calls++; }
 static void smart_island_notify_count_reset(void) { reset_island_calls++; }
+static void counting_report_reset(void) {}
 static void uart_debug_printf(const char *format, ...) { (void)format; }
 #define counting_data_current history_runtime_test_current
 #include "history_runtime_under_test.h"
@@ -341,6 +342,9 @@ static void exercise(void)
         session.history_record.amount = 10;
         assert(counting_history_try_commit(&session, &sim, now) == COUNTING_HISTORY_COMMIT_PENDING);
         assert(!session.history_record.valid);
+        /* A controller START must not wait for disk after the old snapshot
+         * has transferred ownership, even if UI admission is backpressured. */
+        assert(counting_history_prepare_start(&session, &sim, now));
         counting_history_session_start(NULL, 0);
         assert(!counting_history_discard_pending(&session));
     }

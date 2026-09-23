@@ -2,6 +2,11 @@
 #define UN260_UI_SCROLLBAR_H
 #include "lvgl/lvgl.h"
 
+/* Native vertical rails occupy the last 10 px. Reserve this full gutter in
+ * manually positioned content, including a gap between controls and rail. */
+#define UI_SCROLLBAR_GUTTER 20
+lv_coord_t ui_scrollbar_content_width(lv_obj_t *viewport);
+
 /* Install once after registering the display. New native scroll views inherit
  * the renderer. Custom physics keep ownership of motion and supply metrics. */
 void ui_scrollbar_init(lv_disp_t *display);

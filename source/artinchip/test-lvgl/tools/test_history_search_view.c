@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "test_history_view_support.h"
+#include "un260/lv_components/ui_selection_palette.h"
 #include "un260/lv_system/ui_lang.h"
 /* Separate translation unit keeps production page/search private helper names
  * independent while testing real search objects without firmware accessors. */
@@ -78,7 +79,28 @@ static void search_test_editors(void)
     strcpy(input.currency,"USD");
     test.owner=page_19_history_search_create(lv_scr_act(),&input,NULL,0,search_test_closed,&test);
     page_19_history_search_t *s=test.owner;assert(s);
+    history_test_control_feedback(s->tabs[0],LV_SETTINGS_CHOICE_SURFACE,LV_SETTINGS_CONTROL_PRESSED,LV_SETTINGS_PRIMARY);
+    history_test_control_feedback(history_test_button(s->root,ui_text_get(UI_TEXT_HISTORY_APPLY)),
+        LV_SETTINGS_PRIMARY,LV_SETTINGS_PRIMARY_PRESSED,0xFFFFFF);
+    lv_obj_t *fields[]={s->mode,s->currency,s->rejects};
+    for(unsigned i=0;i<3;++i) {
+        assert(!lv_obj_has_flag(fields[i],LV_OBJ_FLAG_SCROLLABLE));
+        assert(lv_obj_get_scrollbar_mode(fields[i])==LV_SCROLLBAR_MODE_OFF);
+        assert(lv_obj_get_child_cnt(fields[i])==0); /* Arrow cannot cause overflow. */
+    }
+    history_test_click(s->mode);assert(lv_dropdown_is_open(s->mode));
+    assert(lv_obj_get_style_bg_color(s->mode,0).full==lv_color_hex(UI_SELECTION_SURFACE).full);
+    assert(lv_obj_get_style_bg_color(lv_dropdown_get_list(s->mode),LV_PART_SELECTED).full==lv_color_hex(UI_SELECTION_SURFACE).full);
+    history_test_bmp("history-mode-options");
+    assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);
+    assert(test.owner==s && !lv_dropdown_is_open(s->mode));
+    history_test_click(s->mode);history_test_tap(640,370);
+    assert(test.owner==s && !lv_dropdown_is_open(s->mode) && !s->input.mode);
     history_test_click(s->fields[FIELD_FROM]);assert(s->editor && !s->keyboard);
+    history_test_click(s->precision);assert(lv_dropdown_is_open(s->precision));
+    history_test_bmp("history-precision-options");
+    assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);
+    assert(s->editor && !lv_dropdown_is_open(s->precision));
     assert(s->year_value==2026);
     for(unsigned i=0;i<3;++i) {
         assert(lv_obj_get_style_text_font(s->wheels[i],LV_PART_MAIN)==
@@ -185,6 +207,26 @@ static void search_test_capacity(void)
             for (size_t i = 0; i < counts[size]; ++i) search_test_currency(s, records[i].currency);
             search_test_currency(s, "ZZZ");
             assert(!strcmp(s->input.currency, "ZZZ"));
+            if(language==0 && size==1) {
+                history_test_click(s->tabs[1]);history_test_click(s->currency);
+                lv_obj_t *list=lv_dropdown_get_list(s->currency);
+                assert(lv_dropdown_is_open(s->currency));lv_obj_update_layout(list);
+                assert(lv_obj_get_width(list)==lv_obj_get_width(s->currency));
+                assert(lv_obj_get_scroll_dir(list)==LV_DIR_VER);
+                assert(lv_obj_get_scroll_right(list)<=0);
+                lv_area_t a;lv_obj_get_coords(list,&a);
+                assert(a.x1>=0 && a.x2<1280 && a.y1>=0 && a.y2<400);
+                history_test_bmp("history-currency-options-tail");
+                unsigned selected_index=lv_dropdown_get_selected(s->currency);
+                history_test_pointer(a.x1+60,a.y1+50,true);
+                history_test_pointer(a.x1+60,a.y1+150,true);
+                history_test_pointer(a.x1+60,a.y1+150,false);
+                history_test_tick(400);
+                assert(lv_dropdown_is_open(s->currency));
+                assert(lv_dropdown_get_selected(s->currency)==selected_index);
+                assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);
+                assert(test.owner==s && !lv_dropdown_is_open(s->currency));
+            }
             assert(lv_nav_button_request_back() == LV_NAV_BACK_HANDLED);
             assert(!test.owner && test.closed == 1 && test.applied == 0);
             history_test_tick(300);
@@ -286,7 +328,16 @@ void history_test_search_module(void)
     history_test_click(history_test_button(s->root, ui_text_get(UI_TEXT_HISTORY_APPLY)));
     assert(test.closed == 0 && s->active_tab == 1 && lv_label_get_text(s->error)[0]);
     search_test_input(s, FIELD_PCS, "4..10");
+    assert(!strcmp(lv_label_get_text(s->tab_counts[0]),"3"));
+    assert(!strcmp(lv_label_get_text(s->tab_counts[1]),"4"));
+    assert(lv_obj_has_flag(s->tab_counts[2],LV_OBJ_FLAG_HIDDEN));
     history_test_bmp("history-search-values");
+    history_test_click(s->currency);assert(lv_dropdown_is_open(s->currency));
+    history_test_bmp("history-currency-options");
+    lv_obj_t *currency_label=lv_obj_get_child(lv_dropdown_get_list(s->currency),0);
+    lv_area_t ca;lv_obj_get_coords(currency_label,&ca);
+    history_test_tap(ca.x1+20,ca.y1+44+10); /* EUR, actual pointer selection. */
+    assert(!lv_dropdown_is_open(s->currency) && !strcmp(s->input.currency,"EUR"));
     search_test_currency(s, "EUR");
     assert(!strcmp(s->input.currency, "EUR"));
     assert(!s->input.amount[0] && !s->input.denomination_count);
@@ -303,7 +354,12 @@ void history_test_search_module(void)
     history_test_click(s->matches[0]);
     search_test_dropdown(s->rejects, 2);
     assert(s->input.rejects == HISTORY_REJECT_CODE && s->input.reject_code == 0x15);
+    assert(!strcmp(lv_label_get_text(s->tab_counts[2]),"2"));
     history_test_bmp("history-search-serials");
+    history_test_click(s->rejects);assert(lv_dropdown_is_open(s->rejects));
+    history_test_bmp("history-reject-options");
+    assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);
+    assert(test.owner==s && !lv_dropdown_is_open(s->rejects));
     history_test_click(history_test_button(s->root, ui_text_get(UI_TEXT_HISTORY_APPLY)));
     assert(!test.owner && test.closed == 1 && test.applied == 1);
     assert(!strcmp(test.input.serial, "shared") && !strcmp(test.input.date_from, "2026"));

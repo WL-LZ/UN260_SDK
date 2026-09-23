@@ -188,7 +188,19 @@ void smart_island_restore_idle(void)
 {
     bool from_result = g_si_ctx.view.scene == SMART_ISLAND_SCENE_RESULT;
 
-    g_si_ctx.lifecycle.count_session_active = false;
+    /* Dismissing a notice is not a machine STOP. Only count_end/reset own
+     * count_session_active; a clear-fault reply during counting resumes it. */
+    if (g_si_ctx.lifecycle.count_session_active) {
+        smart_island_warning_stop();
+        smart_island_warning_fault_clear();
+        g_si_ctx.warning.text[0] = '\0';
+        g_si_ctx.warning.resume_counting = false;
+        g_si_ctx.warning.resume_animation_pending = false;
+        smart_island_set_scene(SMART_ISLAND_SCENE_COUNTING, NULL, NULL);
+        smart_island_set_visual(SMART_ISLAND_VISUAL_COMPACT, false);
+        smart_island_view_update_counting();
+        return;
+    }
     if (g_si_ctx.lifecycle.suspended) {
         g_si_ctx.warning.level = SMART_ISLAND_WARNING_LEVEL_WARNING;
         g_si_ctx.warning.text[0] = '\0';

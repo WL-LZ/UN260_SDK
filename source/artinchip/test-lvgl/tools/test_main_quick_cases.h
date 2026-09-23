@@ -186,8 +186,12 @@ static void test_main_quick(void)
     pointer(1220,20,true);pointer(1220,140,true);pointer(1220,140,false);tick(220);
     assert(quick.active && callbacks[CB_MENU]==menu+1);
     pointer(500,80,true);pointer(500,10,true);pointer(500,10,false);tick(200);assert(!quick.active);
-    quick_open_test();start_busy=true;tick(100);assert(!quick.active);tap(640,8);assert(!quick.active);start_busy=false;
-    quick_open_test();host_fault_pending=true;tick(100);assert(!quick.active);host_fault_pending=false;
+    quick_open_test();start_busy=true;tick(100);assert(quick.active);
+    quick_close_test();quick_open_test();quick_close_test();start_busy=false;
+    quick_open_test();host_fault_pending=true;tick(100);assert(quick.active);
+    quick_close_test();quick_open_test();
+    host_fault_showing=true;tick(100);assert(!quick.active);
+    host_fault_showing=false;host_fault_pending=false;
     /* Gear opens the existing settings page, never the standby preview. */
     quick_open_test();unsigned settings_nav=pushes;
     host_standby_busy=true;tap(838,137);assert(quick.active && pushes==settings_nav);

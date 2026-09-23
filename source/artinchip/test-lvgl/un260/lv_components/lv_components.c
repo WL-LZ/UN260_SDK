@@ -408,17 +408,11 @@ void batch_switch_set_last_on_num(uint8_t num)
 
 const char* get_system_error_desc(uint8_t code)
 {
-    switch (code) {
-    case 0x00: return "No Error";
-    case 0x01: return "Feeder Jam";
-    case 0x02: return "Upper passage Jam";
-    case 0x03: return "Lower passage Jam";
-    case 0x04: return "Reject Exit Jam";
-    case 0x05: return "Stacker Exit Jam";
-    case 0x06: return "Diverter Solenoid Fault";
-    case 0x07: return "Stacker Pocket Residual Note";
-    default:   return "Unknown Fault";
-    }
+    const char *known = machine_runtime_error_desc(code);
+    if (known) return known;
+    static char description[40];
+    snprintf(description, sizeof(description), "Controller fault 0x%02X", code);
+    return description;
 }
 
 static uint8_t g_sys_err_last_code = 0x00;

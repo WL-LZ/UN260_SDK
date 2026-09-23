@@ -18,5 +18,6 @@ with tempfile.TemporaryDirectory(prefix='un260-uart-test-') as tmp:
             subprocess.run([os.environ.get('CC', 'cc'), '-std=gnu11', opt, '-Wall', '-Wextra',
                             '-Werror', '-fsanitize=undefined', '-fno-sanitize-recover=all',
                             '-I' + str(root), *[str(root / p) for p in sources],
-                            '-lutil', '-o', exe], check=True)
+                            *(['-Wl,--wrap=ioctl'] if name == 'termios' else []),
+                            '-o', exe], check=True)
             subprocess.run([exe], check=True)

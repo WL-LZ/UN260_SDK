@@ -7,7 +7,6 @@
 #include "counting_data_types.h"
 
 typedef struct {
-    bool wait_sn_after_reject_end;
     /* Live 0B snapshots are published only at their end marker. */
     bool live_denom_started;
     bool live_denom_invalid;

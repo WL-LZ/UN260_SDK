@@ -6,8 +6,8 @@
 #include <string.h>
 
 #include "counting_denom_query_service.h"
+#include "counting_report_sync.h"
 #include "un260/lv_drivers/lv_drivers.h"
-#include "un260/protocol/protocol_send.h"
 #include "un260/lv_system/app_clock.h"
 
 static void counting_denom_record_history(const counting_denom_reply_hooks_t *hooks,
@@ -105,16 +105,19 @@ static counting_denom_reply_result_t counting_denom_handle_end(
             counting_denom_record_history(hooks, buf, len);
             return COUNTING_DENOM_REPLY_IGNORED;
         }
-        memcpy(sim_data->denom, detail->live_denom, sizeof(sim_data->denom));
-        sim_data->denom_number = detail->live_denom_number;
-        counting_denom_notify_main_data_changed(hooks);
+        bool changed = sim_data->denom_number != detail->live_denom_number ||
+            memcmp(sim_data->denom, detail->live_denom, sizeof(sim_data->denom));
+        if (changed) {
+            memcpy(sim_data->denom, detail->live_denom, sizeof(sim_data->denom));
+            sim_data->denom_number = detail->live_denom_number;
+            counting_denom_notify_main_data_changed(hooks);
+        }
         /* A snapshot that straddles the real stop still needs final queries. */
         if (session->phase == COUNTING_SESSION_ACTIVE) {
             counting_denom_record_history(hooks, buf, len);
-            detail->wait_sn_after_reject_end = false;
             return COUNTING_DENOM_REPLY_SESSION_END;
         }
-    } else if (session->phase == COUNTING_SESSION_ACTIVE && !detail->query_pending) {
+    } else if (!detail->query_pending) {
         /* Never publish an orphan terminator as a finished count. */
         return COUNTING_DENOM_REPLY_IGNORED;
     }
@@ -133,14 +136,7 @@ static counting_denom_reply_result_t counting_denom_handle_end(
         return COUNTING_DENOM_REPLY_QUERY_END;
     }
 
-    if (session->phase != COUNTING_SESSION_ACTIVE) {
-        uint8_t reject_cmd = 0x01;
-        protocol_send(0x0C, &reject_cmd, 1);
-    }
-    detail->wait_sn_after_reject_end = session->phase != COUNTING_SESSION_ACTIVE;
-    if (session->phase != COUNTING_SESSION_ACTIVE) {
-        counting_denom_notify_main_data_changed(hooks);
-    }
+    counting_report_schedule(session, app_clock_uptime_ms());
     return COUNTING_DENOM_REPLY_SESSION_END;
 }
 
@@ -237,7 +233,7 @@ counting_denom_reply_result_t counting_denom_reply_handle(
             detail->query_expired = false;
             detail->query_started = false;
         }
-        if (session->phase == COUNTING_SESSION_ACTIVE && !detail->query_pending) {
+        if (!detail->query_pending) {
             memset(detail->live_denom, 0, sizeof(detail->live_denom));
             detail->live_denom_number = 0;
             detail->live_denom_invalid = false;
@@ -246,10 +242,7 @@ counting_denom_reply_result_t counting_denom_reply_handle(
             return COUNTING_DENOM_REPLY_START;
         }
         detail->live_denom_started = false;
-        if (!counting_denom_query_mark_start(detail)) {
-            memset(sim_data->denom, 0, sizeof(sim_data->denom));
-            sim_data->denom_number = 0;
-        }
+        counting_denom_query_mark_start(detail);
         counting_denom_record_history(hooks, buf, len);
         uart_debug_printf("0x0B denom detail receive start\n");
         return COUNTING_DENOM_REPLY_START;
@@ -260,8 +253,7 @@ counting_denom_reply_result_t counting_denom_reply_handle(
                                          buf, len, hooks);
     }
 
-    if (session->phase == COUNTING_SESSION_ACTIVE &&
-        !detail->query_pending && !detail->live_denom_started)
+    if (!detail->query_pending && !detail->live_denom_started)
         return COUNTING_DENOM_REPLY_IGNORED;
     return counting_denom_handle_data(detail, sim_data, buf, len, hooks);
 }

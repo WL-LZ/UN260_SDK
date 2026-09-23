@@ -23,6 +23,7 @@
 #include "un260/boot/boot_service.h"
 #include "un260/counting/counting_action_service.h"
 #include "un260/counting/counting_history_service.h"
+#include "un260/counting/counting_report_sync.h"
 #include "un260/counting/counting_denom_query_service.h"
 #include "un260/counting/counting_session_state.h"
 #include "un260/currency/currency_state.h"
@@ -115,7 +116,6 @@ bool app_command_runtime_clear_counting_data(const char *reason)
     }
     app_setting_runtime_cancel_mode_clear();
     stop_counting_sim();
-    g_counting_detail_state.wait_sn_after_reject_end = false;
     sim_reset_counting_result(counting_data_mutable());
     currency_state_begin_count_session();
     page_01_curr_img_refre();
@@ -148,7 +148,6 @@ static bool app_command_runtime_handle_stacker_clear(const uint8_t *buf, uint8_t
     }
     if (!app_counting_runtime_reset_session(&g_counting_session, "MULTI pocket clear"))
         return false;
-    g_counting_detail_state.wait_sn_after_reject_end = false;
     sim_reset_counting_result(counting_data_mutable());
     counting_data_mark_multi_result(counting_data_mutable());
     return true;
@@ -170,6 +169,12 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
         (buf[4] == 0x01 || (buf[4] == 0x03 && len >= 9)) &&
         !counting_history_prepare_reset(&g_counting_session, counting_data_mutable(),
                                         app_clock_uptime_ms())) return false;
+    if (cmd == 0x0A && len >= 7 && buf[4] == 1 && buf[5] == 1) {
+        counting_report_begin(machine_state_add_enabled(), counting_data_mutable());
+        /* An interrupted denomination snapshot cannot straddle a new run. */
+        g_counting_detail_state.live_denom_started = false;
+    }
+    if (counting_report_discard_stale(cmd, buf, len)) return true;
     counting_action_handle_reply(cmd, buf, len);
 
     /* New 0x49/8 currency detection shares a command with 0x49/24 serials. */
@@ -313,6 +318,7 @@ uint32_t app_command_runtime_process_frames_budget(uint32_t budget_us)
 
 void app_command_runtime_poll(uint32_t now_ms)
 {
+    app_counting_runtime_poll_reports(&g_counting_session, now_ms);
     motor_test_service_poll(now_ms);
     boot_stage_t stage = boot_service_get_stage();
     uint32_t action_timeouts = counting_action_take_timeouts();

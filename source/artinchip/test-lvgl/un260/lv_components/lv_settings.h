@@ -14,6 +14,10 @@ typedef enum {
 } lv_settings_action_role_t;
 /* Semantic action colors, including pressed/disabled states. */
 void lv_settings_action_style(lv_obj_t *button, lv_settings_action_role_t role);
+/* Opt-in adapters for existing damped controls: presentation only, no action
+ * guards, navigation changes or new event handlers. */
+void lv_settings_damped_action_style(lv_obj_t *button, lv_settings_action_role_t role);
+void lv_settings_damped_choice_style(lv_obj_t *button, bool selected);
 
 /* Presentation only. Owners provide strings, actions and confirmed values. */
 typedef struct {

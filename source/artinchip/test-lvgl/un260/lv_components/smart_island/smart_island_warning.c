@@ -384,8 +384,7 @@ void smart_island_notify_warning_level(const char *warn_text,
     }
 
     g_si_ctx.warning.resume_counting =
-        g_si_ctx.lifecycle.count_session_active &&
-        g_si_ctx.view.scene == SMART_ISLAND_SCENE_COUNTING;
+        g_si_ctx.lifecycle.count_session_active;
     g_si_ctx.warning.level = level;
     lv_snprintf(g_si_ctx.warning.text, sizeof(g_si_ctx.warning.text), "%s",
                 next_warning_text);

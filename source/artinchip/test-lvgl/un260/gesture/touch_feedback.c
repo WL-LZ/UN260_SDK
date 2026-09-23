@@ -170,12 +170,14 @@ void touch_feedback_edge_hint(int side, int distance, int y)
     }
     g_edge_side = side;
     lv_obj_set_x(g_edge_hint, side > 0 ? 0 : lv_disp_get_hor_res(NULL) - EDGE_HINT_VIEW_WIDTH);
-    int offset = distance / 5;
-    if(offset < 0) offset = 0;
-    if(offset > 24) offset = 24;
+    /* Follow displacement from the first captured sample, instead of jumping
+     * to 24px then moving only one pixel for every five pixels of the finger. */
+    int extent = distance * 2 / 3;
+    if(extent < 0) extent = 0;
+    if(extent > EDGE_HINT_VIEW_WIDTH) extent = EDGE_HINT_VIEW_WIDTH;
     if(y < 40) y = 40;
     if(y > 360) y = 360;
-    edge_hint_apply_extent(g_edge_hint, 24 + offset);
+    edge_hint_apply_extent(g_edge_hint, extent);
     lv_obj_set_y(g_edge_hint, y - 36);
     lv_obj_clear_flag(g_edge_hint, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(g_edge_hint);

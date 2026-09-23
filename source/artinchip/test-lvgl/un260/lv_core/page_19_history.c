@@ -8,6 +8,7 @@
 #include "un260/lv_components/lv_card_surface.h"
 #include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_components/lv_nav_button.h"
+#include "un260/lv_components/lv_settings.h"
 #include "un260/lv_components/lv_recycled_list.h"
 #include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_system/ui_history_data.h"
@@ -22,13 +23,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define HISTORY_INK 0x17212A
-#define HISTORY_BODY 0x4C606E
-#define HISTORY_MUTED 0x7A8D9B
+#define HISTORY_INK 0x20303A
+#define HISTORY_BODY 0x405765
+#define HISTORY_MUTED 0x627C8D
 #define HISTORY_LINE 0xE7ECEF
 #define HISTORY_BG 0xD8E2E8
 #define HISTORY_ROWS 5
-#define HISTORY_ROW_HEIGHT 48
+#define HISTORY_ROW_HEIGHT 44
 #define DETAIL_ROWS 6
 #define DETAIL_ROW_HEIGHT 32
 _Static_assert(UI_TEXT_PAGE_MAX <= UI_TEXT_WIDGET_BASE, "Page text IDs overlap widget IDs");
@@ -42,7 +43,7 @@ typedef struct {
 typedef struct {
     lv_obj_t *root, *title, *subtitle, *summary, *notice, *lifetime, *lifetime_title;
     lv_obj_t *reset_total, *actions[4], *list_panel, *empty, *range, *sort, *unknown;
-    lv_obj_t *dialog;
+    lv_obj_t *dialog, *metadata;
     lv_recycled_list_t *list;
     history_section_t sections[3];
     page_19_history_search_t *search;
@@ -59,7 +60,7 @@ typedef struct {
     lv_point_t press;
     bool detail_mode, selecting, reviewing_unknown, tapping, model_dirty, confirm_clear;
     language_t language;
-    lv_obj_t *multi_panel, *multi_header;
+    lv_obj_t *multi_panel;
     int multi_selected;
     int multi_built_selected;
     uint32_t multi_built_id;
@@ -120,13 +121,13 @@ static lv_obj_t *label(lv_obj_t *parent,int x,int y,int w,int h,
 static lv_obj_t *button(lv_obj_t *parent,int x,int y,int w,int h,const char *text,
                         lv_event_cb_t callback,void *context)
 {
-    const lv_damped_button_style_t style={0xFFFFFF,0xEBEBEB,0xF6F7F8,
-        HISTORY_BODY,0xAAB5BE,12};
+    const lv_damped_button_style_t style={LV_SETTINGS_CONTROL_SURFACE,LV_SETTINGS_CONTROL_PRESSED,
+        LV_SETTINGS_DISABLED_SURFACE,LV_SETTINGS_ACTION_TEXT,LV_SETTINGS_DISABLED_TEXT,12};
     lv_obj_t *obj=lv_damped_button_create(parent,&style,text,&lv_font_instrument_sans_semibold_14);
     if (!obj) return NULL;
     if (!lv_damped_button_get_label(obj)) {lv_obj_del(obj);return NULL;}
     lv_obj_set_pos(obj,x,y);lv_obj_set_size(obj,w,h);
-    lv_obj_set_style_border_width(obj,1,0);lv_obj_set_style_border_color(obj,lv_color_hex(HISTORY_LINE),0);
+    lv_settings_damped_action_style(obj,LV_SETTINGS_ACTION_SECONDARY);
     if (!lv_obj_add_event_cb(obj,callback,LV_EVENT_CLICKED,context)) {lv_obj_del(obj);return NULL;}
     return obj;
 }
@@ -222,17 +223,26 @@ static lv_obj_t *record_row_create(lv_obj_t *parent,lv_coord_t width,void *conte
     (void)context;
     lv_obj_t *row=surface(parent,0,0,width,HISTORY_ROW_HEIGHT,8,0xFFFFFF);
     if (!row) return NULL;
-    const int x[]={16,164,432,516,670,982},w[]={140,250,76,116,194,118};
+    const int x[]={16,136,432,600,798,1082},w[]={104,280,132,132,240,100};
     for (unsigned i=0;i<6;++i)
-        if (!label(row,x[i],14,w[i],25,i==0 ? &lv_font_instrument_sans_medium_14 :
+        if (!label(row,x[i],11,w[i],25,i==0 ? &lv_font_instrument_sans_medium_14 :
             &lv_font_instrument_sans_medium_18,i==5 ? HISTORY_MUTED : HISTORY_BODY,
             i==3 || i==4 || i==5 ? LV_TEXT_ALIGN_RIGHT : LV_TEXT_ALIGN_LEFT)) {
             lv_obj_del(row);return NULL;
         }
-    lv_obj_t *box=surface(row,16,14,20,20,4,0xFFFFFF);
+    lv_obj_t *box=surface(row,16,12,20,20,4,0xFFFFFF);
     if (!box) {lv_obj_del(row);return NULL;}
     lv_obj_set_style_border_width(box,1,0);
     lv_obj_set_style_border_color(box,lv_color_hex(HISTORY_MUTED),0);
+    static const lv_point_t check_points[]={{0,4},{4,8},{11,0}};
+    lv_obj_t *check=lv_line_create(box);
+    if(!check){lv_obj_del(row);return NULL;}
+    lv_line_set_points(check,check_points,3);
+    lv_obj_set_style_line_color(check,lv_color_hex(0xFFFFFF),0);
+    lv_obj_set_style_line_width(check,2,0);
+    lv_obj_set_style_line_rounded(check,true,0);
+    lv_obj_center(check);
+    lv_obj_clear_flag(check,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
     return row;
 }
 static void record_row_bind(lv_obj_t *row,uint32_t index,void *context)
@@ -241,13 +251,15 @@ static void record_row_bind(lv_obj_t *row,uint32_t index,void *context)
     uint32_t id=displayed_id(index);
     const ui_history_record_t *rec=record_find(id);
     bool selected=id_selected(id);
-    lv_obj_set_style_bg_color(row,lv_color_hex(selected ? 0xDCE6EC : index%2 ? 0xF4F6F7 : 0xFFFFFF),0);
-    lv_obj_set_style_bg_color(row,lv_damped_button_pressed_color(lv_color_hex(index%2 ? 0xF4F6F7 : 0xFFFFFF)),LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(row,lv_color_hex(selected ? LV_SETTINGS_CONTROL_SURFACE : index%2 ? 0xF4F6F7 : 0xFFFFFF),0);
+    lv_obj_set_style_bg_color(row,lv_color_hex(LV_SETTINGS_CONTROL_PRESSED),LV_STATE_PRESSED);
     lv_obj_t *box=lv_obj_get_child(row,6);
     show(box,history->selecting);
-    lv_obj_set_style_bg_color(box,lv_color_hex(selected ? 0x657F90 : 0xFFFFFF),0);
+    lv_obj_set_style_bg_color(box,lv_color_hex(selected ? LV_SETTINGS_PRIMARY : 0xFFFFFF),0);
+    lv_obj_set_style_border_color(box,lv_color_hex(selected ? LV_SETTINGS_PRIMARY : LV_SETTINGS_ACTION_DIVIDER),0);
+    show(lv_obj_get_child(box,0),selected);
     lv_obj_set_x(lv_obj_get_child(row,0),history->selecting ? 46 : 16);
-    lv_obj_set_width(lv_obj_get_child(row,0),history->selecting ? 110 : 140);
+    lv_obj_set_width(lv_obj_get_child(row,0),history->selecting ? 74 : 104);
     char text[96];
     /* Row numbering belongs to the displayed result set. Stable record IDs
      * remain untouched for detail, selection, deletion and export. */
@@ -378,8 +390,8 @@ static void detail_changed(const ui_list_window_t *window,void *context)
 static bool detail_create(void)
 {
     if (history->sections[0].panel) return true;
-    const int xs[]={16,388,830},ws[]={360,430,326};
-    const uint32_t colors[]={0x2BD900,0x0074F8,0xF85820};
+    const int xs[]={16,416,876},ws[]={388,448,388};
+    const uint32_t colors[]={0x537D72,0x326DB8,0x9A7046};
     const ui_text_id_t titles[]={UI_TEXT_LIST_DENOMINATIONS,UI_TEXT_LIST_SERIAL_NUMBERS,UI_TEXT_LIST_REJECT_ANALYSIS};
     const ui_text_id_t columns[][3]={{UI_TEXT_PAGE01_DETAIL_COL_DENOM,UI_TEXT_PAGE01_DETAIL_COL_PCS,UI_TEXT_PAGE01_DETAIL_COL_AMOUNT},
         {UI_TEXT_PAGE01_DETAIL_COL_NO,UI_TEXT_LIST_COL_SERIAL_NUMBER,UI_TEXT_PAGE01_DETAIL_COL_DENOM},
@@ -451,7 +463,7 @@ static void multi_render(void)
     if(history->multi_selected<0)scroll_y=history->multi_overview_scroll;
     history->multi_built_id=r->record_no;
     history->multi_built_selected=history->multi_selected;
-    history->multi_panel=surface(history->root,16,90,1140,298,15,0xFFFFFF);
+    history->multi_panel=surface(history->root,16,90,1248,298,15,0xFFFFFF);
     lv_obj_t *panel=history->multi_panel;
     if(!panel)return;
     scaled_font_init(&history->multi_symbol_font,&lv_font_main_currency_32,56,
@@ -459,49 +471,14 @@ static void multi_render(void)
     int selected=history->multi_selected;
     if(selected>=r->multi.count)selected=history->multi_selected=-1;
     const history_multi_currency_t *g=selected>=0?&r->multi.currencies[selected]:NULL;
-    if(history->multi_header)lv_obj_del(history->multi_header);
-    history->multi_header=surface(history->root,16,12,1140,66,15,0xFFFFFF);
-    if(history->multi_header) {
-        char title_text[128],subtitle[160],number[64];
-        snprintf(title_text,sizeof(title_text),"%s",g?g->code:tr(UI_TEXT_HISTORY_MULTI_TITLE));
-        char date[64];date_text(r,date,sizeof(date));
-        snprintf(subtitle,sizeof(subtitle),"#%u / %s",r->record_no,date);
-        if(r->multi.add) {
-            size_t len=strlen(subtitle);snprintf(subtitle+len,sizeof(subtitle)-len," / ");len=strlen(subtitle);
-            snprintf(subtitle+len,sizeof(subtitle)-len,tr(UI_TEXT_HISTORY_MULTI_ADD_FMT),r->multi.passes);
-        }
-        lv_obj_t *l=label(history->multi_header,24,9,640,29,&lv_font_instrument_sans_semibold_22,HISTORY_INK,LV_TEXT_ALIGN_LEFT);
-        text_set(l,title_text);
-        l=label(history->multi_header,24,40,650,22,&lv_font_instrument_sans_medium_12,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
-        text_set(l,subtitle);
-        const ui_text_id_t metrics[]={g?UI_TEXT_PAGE01_DETAIL_COL_PCS:UI_TEXT_HISTORY_PCS,
-            g?UI_TEXT_PAGE01_DETAIL_COL_AMOUNT:UI_TEXT_HISTORY_MULTI_REJECT};
-        for(unsigned i=0;i<2;i++) {
-            int mx=i?922:728;
-            l=label(history->multi_header,mx,7,194,20,&lv_font_instrument_sans_medium_12,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
-            if(g && i)snprintf(number,sizeof(number),"%s / %s",tr(metrics[i]),g->code);
-            else snprintf(number,sizeof(number),"%s",tr(metrics[i]));
-            text_set(l,number);
-            snprintf(number,sizeof(number),"%u",i?(g?g->amount:r->multi.rejects):(g?g->pcs:r->pcs));
-            l=label(history->multi_header,mx,29,180,31,&lv_font_instrument_sans_semibold_24,HISTORY_INK,LV_TEXT_ALIGN_LEFT);
-            text_set(l,number);
-            if(g && i && currency_metadata_symbol(g->code)) {
-                lv_point_t size;lv_txt_get_size(&size,number,&lv_font_instrument_sans_semibold_24,
-                    0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
-                lv_obj_t *unit=label(history->multi_header,mx+LV_MIN(size.x+8,150),34,42,26,
-                    &history->multi_symbol_font.font,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
-                text_set(unit,currency_metadata_symbol(g->code));
-            }
-        }
-    }
     const ui_text_id_t heads[]={g?UI_TEXT_PAGE01_DETAIL_COL_DENOM:UI_TEXT_HISTORY_CURRENCY,
         UI_TEXT_PAGE01_DETAIL_COL_PCS,UI_TEXT_PAGE01_DETAIL_COL_AMOUNT};
-    const int x[]={24,460,700};
+    const int x[]={24,492,796};
     for(unsigned i=0;i<3;i++) {
         lv_obj_t *l=label(panel,x[i],14,300,22,&lv_font_instrument_sans_medium_14,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
         text_set(l,tr(heads[i]));
     }
-    lv_obj_t *body=surface(panel,12,44,1116,208,0,0xFFFFFF);
+    lv_obj_t *body=surface(panel,12,44,1224,208,0,0xFFFFFF);
     if(!body)return;
     lv_port_indev_set_drag_obj(body,true);
     lv_obj_add_flag(body,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE|LV_OBJ_FLAG_EVENT_BUBBLE|LV_OBJ_FLAG_GESTURE_BUBBLE);
@@ -512,7 +489,7 @@ static void multi_render(void)
         lv_obj_t *l=label(body,32,62,1020,88,&lv_font_instrument_sans_medium_18,HISTORY_BODY,LV_TEXT_ALIGN_CENTER);
         lv_label_set_long_mode(l,LV_LABEL_LONG_WRAP);text_set(l,tr(UI_TEXT_HISTORY_MULTI_MISSING));
     } else for(unsigned i=0;i<(g?g->count:r->multi.count);i++) {
-        lv_obj_t *row=surface(body,0,i*46,1096,46,7,i%2?0xF4F6F7:0xFFFFFF);
+        lv_obj_t *row=surface(body,0,i*46,1204,46,7,i%2?0xF4F6F7:0xFFFFFF);
         if(!row)continue;
         char a[64],b[32],c[64];
         if(g) {
@@ -533,8 +510,9 @@ static void multi_render(void)
             }
             lv_obj_add_flag(row,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_GESTURE_BUBBLE);
             lv_damped_button_register(row,lv_color_hex(i%2?0xF4F6F7:0xFFFFFF),lv_color_hex(0xDFE8EE));
+            lv_damped_button_set_exact_palette(row,lv_color_hex(i%2?0xF4F6F7:0xFFFFFF),lv_color_hex(LV_SETTINGS_CONTROL_PRESSED));
             lv_obj_add_event_cb(row,multi_pick,LV_EVENT_CLICKED,(void *)(uintptr_t)i);
-            lv_obj_t *hint=label(row,920,14,166,22,&lv_font_instrument_sans_medium_14,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
+            lv_obj_t *hint=label(row,1030,14,166,22,&lv_font_instrument_sans_medium_14,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
             text_set(hint,tr(v->complete?UI_TEXT_HISTORY_RESULT_OPEN:UI_TEXT_HISTORY_PARTIAL));
         }
         const char *values[]={a,b,c};
@@ -571,7 +549,6 @@ static void show_record(uint32_t id)
     show(history->list_panel,false);
     bool multi=record_find(id)->multi.enabled;
     show(history->multi_panel,false);
-    show(history->multi_header,false);
     for (unsigned i=0;i<3;++i) {
         show(history->sections[i].panel,!multi);
         lv_recycled_list_refresh(history->sections[i].list,(uint32_t)section_count(i),true);
@@ -584,7 +561,6 @@ static void show_list_panels(void)
 {
     history->detail_mode=false;history->current_id=0;
     show(history->multi_panel,false);
-    show(history->multi_header,false);
     for (unsigned i=0;i<3;++i) {
         lv_recycled_list_stop(history->sections[i].list);show(history->sections[i].panel,false);
     }
@@ -612,10 +588,13 @@ static void refresh_header(void)
     lv_damped_button_set_text(history->unknown,text);
     storage_job_status_t status=ui_history_data_status();
     if (history->detail_mode) {
-        lv_obj_set_width(history->title,1096);
-        lv_obj_set_width(history->subtitle,440);
-        lv_obj_set_pos(history->summary,478,40);
-        lv_obj_set_width(history->summary,626);
+        lv_obj_set_width(history->title,700);
+        lv_obj_set_width(history->subtitle,700);
+        lv_obj_set_pos(history->metadata,16,68);
+        lv_obj_set_height(history->metadata,20);
+        lv_obj_set_style_bg_opa(history->metadata,LV_OPA_TRANSP,0);
+        lv_obj_set_pos(history->summary,6,0);
+        lv_obj_set_width(history->summary,1220);
         lv_obj_set_style_text_font(history->summary,&lv_font_instrument_sans_medium_12,0);
         const ui_history_record_t *rec=record_find(history->current_id);
         char date[64];date_text(rec,date,sizeof(date));
@@ -645,15 +624,18 @@ static void refresh_header(void)
             else snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_MULTI_TOTAL_FMT),rec->pcs,rec->multi.rejects);
             text_set(history->subtitle,text);
             if(rec->multi.add)snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_MULTI_ADD_FMT),rec->multi.passes);
-            else snprintf(text,sizeof(text),"%s",tr(UI_TEXT_HISTORY_MULTI_SNAPSHOT));
+            else text[0]='\0'; /* The table footer already explains snapshot scope. */
             text_set(history->summary,text);
         }
     } else {
-        lv_obj_set_width(history->title,312);
-        lv_obj_set_width(history->subtitle,312);
-        lv_obj_set_pos(history->summary,344,12);
-        lv_obj_set_width(history->summary,470);
-        lv_obj_set_style_text_font(history->summary,&lv_font_instrument_sans_semibold_22,0);
+        lv_obj_set_width(history->title,700);
+        lv_obj_set_width(history->subtitle,700);
+        lv_obj_set_pos(history->metadata,16,72);
+        lv_obj_set_height(history->metadata,38);
+        lv_obj_set_style_bg_opa(history->metadata,LV_OPA_COVER,0);
+        lv_obj_set_pos(history->summary,16,9);
+        lv_obj_set_width(history->summary,360);
+        lv_obj_set_style_text_font(history->summary,&lv_font_instrument_sans_semibold_16,0);
         text_set(history->title,tr(UI_TEXT_HISTORY_RECORDS));
         if (history->selecting) {
             snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_SELECTED_FMT),(unsigned)history->selected_count);
@@ -686,6 +668,12 @@ static void refresh_header(void)
             (history->selecting ? history->selected_count>0 : displayed_count()>0));
         lv_damped_button_set_enabled(history->actions[2],available &&
             (history->selecting ? history->selected_count>0 : displayed_count()>0));
+    }
+    for(unsigned i=0;i<3;++i) {
+        bool primary=!history->detail_mode && !history->selecting && i==0;
+        bool destructive=history->selecting && i==2;
+        lv_settings_damped_action_style(history->actions[i],primary?LV_SETTINGS_ACTION_PRIMARY:
+            destructive?LV_SETTINGS_ACTION_DESTRUCTIVE:LV_SETTINGS_ACTION_SECONDARY);
     }
     lv_damped_button_set_enabled(history->reset_total,available && ui_history_data_can_accept());
     lv_damped_button_set_text(history->sort,tr(history->input.oldest_first ? UI_TEXT_HISTORY_SORT_OLDEST : UI_TEXT_HISTORY_SORT_NEWEST));
@@ -851,8 +839,7 @@ static void show_confirmation(bool clear_total)
     lv_obj_t *confirm=button(card,378,208,210,46,tr(UI_TEXT_HISTORY_APPLY),confirmation_apply,NULL);
     if (!cancel || !confirm) goto failed;
     lv_damped_button_set_text(cancel,tr(UI_TEXT_HISTORY_CANCEL));
-    lv_damped_button_set_palette(confirm,lv_color_hex(0xB03838),lv_color_hex(0x922E2E));
-    lv_obj_set_style_text_color(lv_damped_button_get_label(confirm),lv_color_hex(0xFFFFFF),0);
+    lv_settings_damped_action_style(confirm,LV_SETTINGS_ACTION_DESTRUCTIVE);
     lv_damped_button_set_enabled(confirm,ui_history_data_can_accept());
     lv_recycled_list_stop(history->list);history->tapping=false;
     return;
@@ -925,44 +912,47 @@ void ui_page_19_history_create(lv_obj_t *parent)
     history->root=surface(parent ? parent : lv_scr_act(),0,0,1280,400,0,HISTORY_BG);
     ui_page_background_apply(history->root, UI_BACKGROUND_USER);
     if (!history->root) goto failed;
-    lv_obj_t *header=surface(history->root,16,12,1140,66,15,0xFFFFFF);
+    lv_obj_t *header=surface(history->root,22,12,710,54,0,0xFFFFFF);
     if (!header) goto failed;
-    history->title=label(header,22,10,780,30,&lv_font_instrument_sans_semibold_22,HISTORY_INK,LV_TEXT_ALIGN_LEFT);
-    history->subtitle=label(header,22,39,312,22,&lv_font_instrument_sans_medium_14,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
-    history->summary=label(header,344,12,470,28,&lv_font_instrument_sans_semibold_22,0x0074F8,LV_TEXT_ALIGN_LEFT);
-    history->notice=label(header,344,39,470,22,&lv_font_instrument_sans_medium_12,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
-    history->lifetime_title=label(header,830,10,182,20,&lv_font_instrument_sans_medium_12,HISTORY_MUTED,LV_TEXT_ALIGN_RIGHT);
-    history->lifetime=label(header,830,32,182,28,&lv_font_instrument_sans_semibold_22,0x0074F8,LV_TEXT_ALIGN_RIGHT);
-    history->reset_total=button(header,1030,14,96,38,tr(UI_TEXT_HISTORY_CLEAR_TOTAL),reset_event,NULL);
+    lv_obj_set_style_bg_opa(header,LV_OPA_TRANSP,0);
+    history->title=label(header,0,0,700,30,&lv_font_instrument_sans_semibold_24,HISTORY_INK,LV_TEXT_ALIGN_LEFT);
+    history->subtitle=label(header,0,32,700,22,&lv_font_instrument_sans_medium_12,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
+    history->metadata=surface(history->root,16,72,1248,38,10,0xFFFFFF);
+    if(!history->metadata)goto failed;
+    history->summary=label(history->metadata,16,9,360,28,&lv_font_instrument_sans_semibold_16,LV_SETTINGS_PRIMARY,LV_TEXT_ALIGN_LEFT);
+    history->notice=label(history->metadata,390,11,390,22,&lv_font_instrument_sans_medium_12,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
+    history->lifetime_title=label(history->metadata,792,11,204,20,&lv_font_instrument_sans_medium_12,HISTORY_MUTED,LV_TEXT_ALIGN_RIGHT);
+    history->lifetime=label(history->metadata,1008,8,106,28,&lv_font_instrument_sans_semibold_18,HISTORY_INK,LV_TEXT_ALIGN_RIGHT);
+    history->reset_total=button(history->metadata,1130,3,108,32,tr(UI_TEXT_HISTORY_CLEAR_TOTAL),reset_event,NULL);
     if (!history->title || !history->subtitle || !history->summary || !history->notice ||
         !history->lifetime_title || !history->lifetime || !history->reset_total) goto failed;
     lv_obj_set_style_text_font(lv_damped_button_get_label(history->reset_total),&lv_font_instrument_sans_semibold_12,0);
     for (unsigned i=0;i<4;++i) {
-        history->actions[i]= i==3 ? lv_nav_button_create(history->root,1168,12+96*i,96,88,action_event,(void *)(uintptr_t)i) :
-            button(history->root,1168,12+96*i,96,88,"",action_event,(void *)(uintptr_t)i);
+        const int x[]={736,868,992,1152},w[]={120,112,128,108};
+        history->actions[i]= i==3 ? lv_nav_button_create(history->root,x[i],16,w[i],42,action_event,(void *)(uintptr_t)i) :
+            button(history->root,x[i],16,w[i],42,"",action_event,(void *)(uintptr_t)i);
         if (!history->actions[i]) goto failed;
-        lv_damped_button_set_palette(history->actions[i],lv_color_hex(0xFFFFFF),lv_color_hex(0xEBEBEB));
+        lv_settings_damped_action_style(history->actions[i],LV_SETTINGS_ACTION_SECONDARY);
         lv_obj_set_style_radius(history->actions[i],12,0);
-        lv_obj_set_style_text_font(lv_damped_button_get_label(history->actions[i]),&lv_font_instrument_sans_semibold_12,0);
-        lv_obj_set_style_text_color(lv_damped_button_get_label(history->actions[i]),lv_color_hex(HISTORY_BODY),0);
-        lv_obj_set_style_text_color(lv_damped_button_get_label(history->actions[i]),lv_color_hex(0xAAB5BE),LV_STATE_DISABLED);
+        lv_obj_set_style_text_font(lv_damped_button_get_label(history->actions[i]),&lv_font_instrument_sans_medium_16,0);
     }
-    history->list_panel=surface(history->root,16,90,1140,298,15,0xFFFFFF);
+    if(!surface(history->root,1136,24,1,26,0,LV_SETTINGS_ACTION_DIVIDER))goto failed;
+    history->list_panel=surface(history->root,16,118,1248,270,16,0xFFFFFF);
     if (!history->list_panel) goto failed;
     const ui_text_id_t heads[]={UI_TEXT_PAGE01_DETAIL_COL_NO,UI_TEXT_HISTORY_DATE,UI_TEXT_HISTORY_CURRENCY,
         UI_TEXT_HISTORY_PCS,UI_TEXT_HISTORY_AMOUNT};
-    const int xs[]={28,176,444,528,682},ws[]={132,250,76,116,194};
+    const int xs[]={28,148,444,612,810},ws[]={104,280,132,132,240};
     for (unsigned i=0;i<5;++i) {
         lv_obj_t *head=label(history->list_panel,xs[i],11,ws[i],20,
             &lv_font_instrument_sans_medium_12,HISTORY_MUTED,i>=3 ? LV_TEXT_ALIGN_RIGHT : LV_TEXT_ALIGN_LEFT);
         if (!head) goto failed;
         text_set(head,tr(heads[i]));
     }
-    history->sort=button(history->list_panel,968,3,156,30,"",sort_event,NULL);
-    if (!history->sort || !surface(history->list_panel,12,35,1108,1,0,HISTORY_LINE)) goto failed;
-    history->range=label(history->list_panel,22,278,300,20,&lv_font_instrument_sans_medium_12,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
+    history->sort=button(history->list_panel,1080,3,152,30,"",sort_event,NULL);
+    if (!history->sort || !surface(history->list_panel,12,35,1220,1,0,HISTORY_LINE)) goto failed;
+    history->range=label(history->list_panel,22,256,300,14,&lv_font_instrument_sans_medium_10,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
     if (!history->range) goto failed;
-    const lv_recycled_list_config_t config={12,36,1128,HISTORY_ROWS,HISTORY_ROW_HEIGHT,
+    const lv_recycled_list_config_t config={12,36,1236,HISTORY_ROWS,HISTORY_ROW_HEIGHT,
         record_row_create,record_row_bind,list_changed,NULL};
     history->list=lv_recycled_list_create(history->list_panel,&config);
     if (!history->list) goto failed;
@@ -970,10 +960,9 @@ void ui_page_19_history_create(lv_obj_t *parent)
     lv_obj_t *viewport=lv_recycled_list_object(history->list);
     lv_port_indev_set_drag_obj(viewport,true);
     if (!lv_obj_add_event_cb(viewport,record_pointer,LV_EVENT_ALL,NULL)) goto failed;
-    history->empty=label(history->list_panel,60,133,1016,70,&lv_font_instrument_sans_medium_18,HISTORY_MUTED,LV_TEXT_ALIGN_CENTER);
-    history->unknown=button(header,830,11,296,44,tr(UI_TEXT_HISTORY_PARTIAL),unknown_event,NULL);
+    history->empty=label(history->list_panel,60,115,1128,70,&lv_font_instrument_sans_medium_18,HISTORY_MUTED,LV_TEXT_ALIGN_CENTER);
+    history->unknown=button(history->metadata,854,3,380,32,tr(UI_TEXT_HISTORY_PARTIAL),unknown_event,NULL);
     if (!history->empty || !history->unknown) goto failed;
-    lv_damped_button_set_palette(history->unknown,lv_color_hex(0xF4F6F7),lv_color_hex(0xDCE6EC));
     lv_label_set_long_mode(history->empty,LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_font(lv_damped_button_get_label(history->unknown),&lv_font_instrument_sans_medium_12,0);
     refresh_records(true);
@@ -999,7 +988,6 @@ bool ui_page_19_history_resume(void)
     /* A new visit starts at the history list; internal detail/back keeps filters. */
     history->detail_mode=false;history->current_id=0;history->selecting=false;
     show(history->multi_panel,false);
-    show(history->multi_header,false);
     history->selected_count=0;history->reviewing_unknown=false;
     memset(&history->input,0,sizeof(history->input));history->model_dirty=true;
     show(history->root,true);show(history->list_panel,true);

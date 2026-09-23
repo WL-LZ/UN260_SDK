@@ -1,4 +1,6 @@
 #include "counting_reject_sn_reply.h"
+#include "counting_report_sync.h"
+#include "un260/lv_system/app_clock.h"
 
 #include <ctype.h>
 #include <limits.h>
@@ -8,7 +10,6 @@
 
 #include "un260/counting/counting_data_store.h"
 #include "un260/lv_drivers/lv_drivers.h"
-#include "un260/protocol/protocol_send.h"
 
 static void counting_detail_record_history(
     const counting_reject_sn_reply_hooks_t *hooks,
@@ -40,7 +41,7 @@ static void counting_detail_notify_summary(
 
 static counting_detail_reply_result_t counting_reject_reply_handle(
     counting_detail_state_t *detail,
-    const counting_session_state_t *session,
+    counting_session_state_t *session,
     counting_sim_t *sim_data,
     const uint8_t *buf,
     uint8_t len,
@@ -49,13 +50,16 @@ static counting_detail_reply_result_t counting_reject_reply_handle(
     uint8_t err_code;
     uint8_t pcs;
 
-    if (detail == NULL || sim_data == NULL || buf == NULL || len < 7) {
+    if (detail == NULL || sim_data == NULL || buf == NULL || len != 7) {
         return COUNTING_DETAIL_REPLY_INVALID;
     }
+    if (!counting_report_accept_reject(session)) return COUNTING_DETAIL_REPLY_IGNORED;
+    counting_report_touch(app_clock_uptime_ms());
 
     err_code = buf[4];
     pcs = buf[5];
     if (err_code == 0x00 && pcs == 0x00) {
+        if (!counting_report_reject_start()) return COUNTING_DETAIL_REPLY_INVALID;
         counting_data_clear_errors(sim_data);
         /* Keep err_expected from 0x0E for the main-page reject count. */
         counting_detail_record_history(hooks, "0x0C", buf, len);
@@ -73,17 +77,16 @@ static counting_detail_reply_result_t counting_reject_reply_handle(
                     (unsigned int)counting_data_error_detail_count(sim_data),
                     (unsigned int)sim_data->err_expected);
         counting_detail_notify_summary(hooks, true);
-        if (detail->wait_sn_after_reject_end && session &&
-            session->phase != COUNTING_SESSION_ACTIVE) {
-            uint8_t sn_req[2] = {0x01, 0x01};
-            protocol_send(0x0D, sn_req, 2);
-            detail->wait_sn_after_reject_end = false;
+        if (counting_report_reject_end(session, sim_data, app_clock_uptime_ms()) ==
+            COUNTING_REPORT_REUSED) {
+            /* An unchanged empty ADD pass is not another counted report. */
+            session->history_record.valid = false;
+            session->history_record.end_seen = false;
         }
-        if (session && session->phase == COUNTING_SESSION_ACTIVE)
-            detail->wait_sn_after_reject_end = false;
         return COUNTING_DETAIL_REPLY_END;
     }
 
+    if (!counting_report_reject_started()) return COUNTING_DETAIL_REPLY_IGNORED;
     if (sim_data->err_expected == 0) {
         uart_debug_printf("0x0C detail ignored because err_expected=0\n");
         return COUNTING_DETAIL_REPLY_IGNORED;
@@ -110,163 +113,41 @@ static counting_detail_reply_result_t counting_reject_reply_handle(
     return COUNTING_DETAIL_REPLY_DATA;
 }
 
-static bool counting_sn_payload_is(const uint8_t *buf, int payload_end, uint8_t value)
-{
-    for (int i = 4; i < payload_end; i++) {
-        if (buf[i] != value) {
-            return false;
-        }
-    }
-    return true;
-}
-
 static void counting_sn_notify_item(
     const counting_reject_sn_reply_hooks_t *hooks)
 {
-    if (hooks != NULL && hooks->on_serial_item_changed != NULL) {
+    if (hooks && hooks->on_serial_item_changed)
         hooks->on_serial_item_changed(hooks->context);
-    }
 }
 
 static void counting_sn_notify_live(
     const counting_reject_sn_reply_hooks_t *hooks,
-    int denomination,
-    const char *serial_number)
+    int denomination, const char *serial_number)
 {
-    if (hooks != NULL && hooks->on_live_serial_received != NULL) {
-        hooks->on_live_serial_received(hooks->context,
-                                       denomination,
-                                       serial_number);
-    }
+    if (hooks && hooks->on_live_serial_received)
+        hooks->on_live_serial_received(hooks->context, denomination, serial_number);
 }
 
 static counting_detail_reply_result_t counting_sn_reply_handle(
-    counting_session_state_t *session,
-    counting_sim_t *sim_data,
-    const uint8_t *buf,
-    uint8_t len,
+    counting_session_state_t *session, counting_sim_t *sim_data,
+    const uint8_t *buf, uint8_t len,
     const counting_reject_sn_reply_hooks_t *hooks)
 {
-    int payload_len;
-    int payload_end;
-    uint8_t sequence;
-    int index;
-    int ascii_len;
-    char ascii_buf[32];
-    char *cursor;
-    int denom = 0;
-
-    if (session == NULL || sim_data == NULL || buf == NULL || len < 6) {
-        return COUNTING_DETAIL_REPLY_INVALID;
-    }
-
-    payload_len = len - 4;
-    if (payload_len < 2) {
-        return COUNTING_DETAIL_REPLY_INVALID;
-    }
-    payload_end = len - 1;
-
-    if (counting_sn_payload_is(buf, payload_end, 0x00)) {
-        counting_data_clear_serials(sim_data);
-        counting_detail_notify(hooks, hooks != NULL
-            ? hooks->on_serial_data_started : NULL);
+    if (!session || !sim_data || !buf) return COUNTING_DETAIL_REPLY_INVALID;
+    if (counting_report_accept_serial(session))
         counting_detail_record_history(hooks, "0x0D", buf, len);
-        return COUNTING_DETAIL_REPLY_START;
-    }
-
-    if (counting_sn_payload_is(buf, payload_end, 0xFF)) {
-        bool begin_end_anim = session->end_anim_wait_detail;
-
-        counting_detail_notify(hooks, hooks != NULL
-            ? hooks->on_serial_report_ready : NULL);
-        counting_detail_record_history(hooks, "0x0D", buf, len);
-        if (session->phase == COUNTING_SESSION_ACTIVE) {
-            counting_sn_notify_item(hooks);
-            return COUNTING_DETAIL_REPLY_END;
-        }
-        session->history_record.end_seen = true;
-        if (hooks != NULL && hooks->on_history_record_ready != NULL) {
-            hooks->on_history_record_ready(hooks->context);
-        }
-        if (session->end_anim_wait_detail) {
-            session->end_anim_wait_detail = false;
-        }
-        if (hooks != NULL && hooks->on_serial_ui_complete != NULL) {
-            hooks->on_serial_ui_complete(hooks->context, begin_end_anim);
-        }
-        if (hooks != NULL && hooks->on_detail_complete != NULL) {
-            hooks->on_detail_complete(hooks->context);
-        }
-        return COUNTING_DETAIL_REPLY_END;
-    }
-
-    sequence = buf[4];
-    if (sequence == 0x00 || sequence == 0xFF) {
-        return COUNTING_DETAIL_REPLY_IGNORED;
-    }
-    index = (int)sequence - 1;
-    if (index < 0 || index >= COUNTING_DATA_MAX_ITEMS) {
-        return COUNTING_DETAIL_REPLY_IGNORED;
-    }
-
-    ascii_len = payload_len - 2;
-    if (ascii_len <= 0) {
-        return COUNTING_DETAIL_REPLY_IGNORED;
-    }
-    counting_detail_record_history(hooks, "0x0D", buf, len);
-
-    if (ascii_len >= (int)sizeof(ascii_buf)) {
-        ascii_len = (int)sizeof(ascii_buf) - 1;
-    }
-    memcpy(ascii_buf, &buf[5], (size_t)ascii_len);
-    ascii_buf[ascii_len] = '\0';
-
-    while (ascii_len > 0 && ascii_buf[ascii_len - 1] == ' ') {
-        ascii_buf[--ascii_len] = '\0';
-    }
-    cursor = ascii_buf;
-    while (*cursor == ' ') {
-        cursor++;
-    }
-    if (*cursor == '\0') {
-        return COUNTING_DETAIL_REPLY_IGNORED;
-    }
-
-    while (*cursor != '\0' && isdigit((unsigned char)*cursor)) {
-        int digit = *cursor - '0';
-        if (denom > (INT_MAX - digit) / 10) {
-            return COUNTING_DETAIL_REPLY_IGNORED;
-        }
-        denom = denom * 10 + digit;
-        cursor++;
-    }
-    while (*cursor == ' ') {
-        cursor++;
-    }
-    if (*cursor == '\0') {
-        return COUNTING_DETAIL_REPLY_IGNORED;
-    }
-
-    if (!counting_data_ensure_serial_capacity(sim_data, index + 1)) {
-        uart_debug_printf("0x0D: SN capacity fail idx=%d\n", index);
-        return COUNTING_DETAIL_REPLY_MEMORY_ERROR;
-    }
-
-    {
-        size_t sn_len = strlen(cursor);
-        char *sn_copy = malloc(sn_len + 1);
-        if (sn_copy == NULL) {
-            uart_debug_printf("0x0D: SN malloc fail idx=%d\n", index);
-            return COUNTING_DETAIL_REPLY_MEMORY_ERROR;
-        }
-        memcpy(sn_copy, cursor, sn_len + 1);
-        free(sim_data->sn_str[index]);
-        sim_data->sn_str[index] = sn_copy;
-        sim_data->denom_mix[index] = denom;
-    }
-
-    counting_sn_notify_item(hooks);
-    return COUNTING_DETAIL_REPLY_DATA;
+    counting_report_result_t result = counting_report_serial(
+        session, sim_data, buf, len, app_clock_uptime_ms());
+    if (result == COUNTING_REPORT_FAILED) return COUNTING_DETAIL_REPLY_INVALID;
+    if (result != COUNTING_REPORT_READY) return COUNTING_DETAIL_REPLY_IGNORED;
+    counting_detail_notify(hooks, hooks ? hooks->on_serial_report_ready : NULL);
+    session->history_record.end_seen = true;
+    counting_detail_notify(hooks, hooks ? hooks->on_history_record_ready : NULL);
+    /* Report completion publishes data, never a machine start/stop event. */
+    if (hooks && hooks->on_serial_ui_complete)
+        hooks->on_serial_ui_complete(hooks->context, false);
+    counting_detail_notify(hooks, hooks ? hooks->on_detail_complete : NULL);
+    return COUNTING_DETAIL_REPLY_END;
 }
 
 static counting_detail_reply_result_t counting_sn_push_handle(
@@ -292,6 +173,8 @@ static counting_detail_reply_result_t counting_sn_push_handle(
         len != PUSH_FRAME_LEN) {
         return COUNTING_DETAIL_REPLY_INVALID;
     }
+    if (!session->start_confirmed || session->phase == COUNTING_SESSION_FINISHED_WAIT_START)
+        return COUNTING_DETAIL_REPLY_IGNORED;
 
     memcpy(denom_text, &buf[4], DENOM_FIELD_LEN);
     denom_text[DENOM_FIELD_LEN] = '\0';
@@ -318,12 +201,10 @@ static counting_detail_reply_result_t counting_sn_push_handle(
     while (serial_end > serial_start && serial_end[-1] == ' ') *--serial_end = '\0';
     if (*serial_start == '\0') return COUNTING_DETAIL_REPLY_IGNORED;
 
-    index = 0;
-    while (index < counting_data_serial_scan_limit(sim_data) &&
-           sim_data->sn_str[index] != NULL) {
-        index++;
-    }
-    if (index >= COUNTING_DATA_MAX_ITEMS ||
+    bool cleared;
+    index = counting_report_live_slot(sim_data, &cleared);
+    if (cleared) counting_detail_notify(hooks, hooks ? hooks->on_serial_data_started : NULL);
+    if (index < 0 || index >= COUNTING_DATA_MAX_ITEMS ||
         !counting_data_ensure_serial_capacity(sim_data, index + 1)) {
         return COUNTING_DETAIL_REPLY_MEMORY_ERROR;
     }
@@ -350,6 +231,8 @@ counting_detail_reply_result_t counting_reject_sn_reply_dispatch(
     uint8_t len,
     const counting_reject_sn_reply_hooks_t *hooks)
 {
+    if (buf && counting_report_discard_stale(cmd, buf, len))
+        return COUNTING_DETAIL_REPLY_IGNORED;
     switch (cmd) {
     case 0x0C:
         return counting_reject_reply_handle(detail, session, sim_data, buf, len, hooks);

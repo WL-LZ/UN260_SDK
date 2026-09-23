@@ -138,7 +138,13 @@ int main(void) {
     assert(g_edge_elapsed==32); /* No timer-only completion without a drawn frame. */
     touch_feedback_edge_hint(-1,100,200);
     assert(g_edge_timer->paused && !g_edge_returning && !g_edge_hint->hidden);
-    assert(g_edge_extent==44 && g_edge_hint->x==1280-48);
+    assert(g_edge_extent==48 && g_edge_hint->x==1280-48);
+    int previous=0;
+    for(int distance=14;distance<=72;distance++) {
+        touch_feedback_edge_hint(1,distance,200);
+        assert(g_edge_extent>=previous && g_edge_extent==distance*2/3);
+        previous=g_edge_extent;
+    }
     /* A single pixel of visible capsule must survive at BOTH display edges. */
     for(int extent=1;extent<=48;extent++) {
         unsigned char mask_left[72*48];

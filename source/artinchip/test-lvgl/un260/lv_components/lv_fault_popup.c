@@ -697,13 +697,17 @@ void fault_popup_report_start_no_note(void)
     }
 }
 
-void fault_popup_report_runtime_fault(uint8_t code)
+void fault_popup_record_runtime_notice(uint8_t code)
 {
     g_fault_pending.valid = true;
     g_fault_pending.type = FAULT_PENDING_RUNTIME_FAULT;
     g_fault_pending.fault_type = 0x00;
     g_fault_pending.code = code;
+}
 
+void fault_popup_report_runtime_fault(uint8_t code)
+{
+    fault_popup_record_runtime_notice(code);
     if (g_fault_popup_auto_enabled) {
         (void)fault_popup_show_pending_internal();
     }

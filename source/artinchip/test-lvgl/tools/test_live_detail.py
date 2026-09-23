@@ -8,6 +8,8 @@ code = r'''
 #include <stdlib.h>
 #include "un260/counting/counting_reject_sn_reply.h"
 #include "un260/counting/counting_data_store.h"
+#include "un260/counting/counting_report_sync.h"
+#define TEST_REAL_REPORT_SYNC
 #define main old_tests
 #include "tools/test_denom_stream.c"
 #undef main
@@ -20,7 +22,7 @@ static void detail_frame(unsigned cmd,unsigned value) {
  counting_reject_sn_reply_dispatch(cmd,&d,&s,&sim,b,len,&h);
 }
 int main(int argc,char **argv) {
- old_tests(1,argv);reset();s.phase=COUNTING_SESSION_ACTIVE;
+ old_tests(1,argv);reset();counting_report_begin(false,&sim);s.phase=COUNTING_SESSION_ACTIVE;
  sim.denom_number=1;sim.denom[0]=(denom_t){5,7,35};
  marker(0);row(100);assert(sim.denom[0].value==5 && sim.denom[0].pcs==7);
  marker(255);assert(sim.denom_number==1 && sim.denom[0].value==100 && rejects==0);
@@ -29,13 +31,13 @@ int main(int argc,char **argv) {
  marker(0);for(int i=1;i<=16;i++)row(i);marker(255);
  assert(sim.denom_number==1 && sim.denom[0].value==10);
  marker(255);assert(rejects==0);
- d.wait_sn_after_reject_end=true;detail_frame(0x0C,255);
- assert(serial_requests==0 && !d.wait_sn_after_reject_end);
+ detail_frame(0x0C,255);
+ assert(serial_requests==0);
  detail_frame(0x0D,255);assert(!s.history_record.end_seen && completed==0);
  marker(0);row(5);s.phase=COUNTING_SESSION_FINISHED_WAIT_START;marker(255);
- assert(rejects==1 && d.wait_sn_after_reject_end);
- detail_frame(0x0C,255);assert(serial_requests==1);
- detail_frame(0x0D,255);assert(completed==1 && s.history_record.end_seen);
+ assert(rejects==1);
+ detail_frame(0x0C,0);detail_frame(0x0C,255);assert(serial_requests==1);
+ detail_frame(0x0D,0);detail_frame(0x0D,255);assert(completed==1 && s.history_record.end_seen);
  if(argc==2) {
   reset();s.phase=COUNTING_SESSION_ACTIVE;serial_requests=0;completed=0;
   FILE*f=fopen(argv[1],"r");assert(f);char line[2048];unsigned frames=0,ends=0,truncated=0;
@@ -67,6 +69,6 @@ with tempfile.TemporaryDirectory(prefix='un260-live-detail-') as tmp:
     stub.write_text('void uart_debug_printf(const char *fmt, ...);\n')
     src=tmp/'test.c';src.write_text(code)
     exe=tmp/'test'
-    files=['counting_denom_reply.c','counting_denom_query_service.c','counting_reject_sn_reply.c','counting_data_store.c']
+    files=['counting_denom_reply.c','counting_denom_query_service.c','counting_reject_sn_reply.c','counting_data_store.c','counting_report_sync.c']
     subprocess.run(['cc','-std=c11','-g','-O1','-fsanitize=address,undefined','-fno-sanitize-recover=all','-I'+str(tmp),'-I'+str(root),str(src),*[str(root/'un260/counting'/f) for f in files],'-o',str(exe)],check=True)
     subprocess.run([str(exe),*sys.argv[1:]],check=True)

@@ -2,7 +2,7 @@
 """Real denomination parser + production boot-finish and session-reset bodies."""
 from pathlib import Path
 import subprocess, tempfile
-from test_main_top_gesture import function
+from test_main_view import function
 root=Path(__file__).resolve().parents[1]
 reset=function((root/'un260/app_service/app_counting_runtime.c').read_text(),'app_counting_runtime_reset_session')
 finish=function((root/'un260/app_service/app_boot_runtime.c').read_text(),'app_boot_runtime_finish')
@@ -20,6 +20,7 @@ static uint32_t lv_tick_get(void){return now;}
 static bool counting_history_prepare_reset(counting_session_state_t *session,const counting_sim_t *data,uint32_t tick){(void)session;(void)data;(void)tick;return reset_allowed;}
 static void ui_count_end_anim_cancel(void){}
 static void smart_island_notify_count_reset(void){}
+static void counting_report_reset(void){}
 static void app_boot_runtime_cancel_prewarm(void){}
 static void boot_selftest_list_finish(void){}
 static void ui_page_08_curr_start_handoff(void){}

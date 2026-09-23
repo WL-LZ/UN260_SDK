@@ -23,7 +23,7 @@ int uart_open(const char *device)
 int uart_config(int fd, int baud, int bits, char parity, int stop)
 {
     assert(fd == 4 + (int)configured++);
-    assert(baud == (fd == 4 ? 500000 : 115200));
+    assert(baud == (fd == 4 ? 512000 : 115200));
     assert(bits == 8 && parity == 'N' && stop == 1);
     return fd == fail_config_fd ? -1 : 0;
 }
@@ -76,6 +76,6 @@ int main(void)
     reset(); bridge_ok = false;
     assert(!app_serial_runtime_start() && closed == 3 && rx_stops == 1);
     reset();
-    puts("PASS serial runtime: ttyS4=500000, ttyS5/6=115200, restart and failure cleanup without silent baud fallback");
+    puts("PASS serial runtime: ttyS4 requests 512000, ttyS5/6=115200, restart and failure cleanup without silent baud fallback");
     return 0;
 }

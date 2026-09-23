@@ -5,6 +5,11 @@
 typedef struct { float viewport, content, offset; } metrics_t;
 static lv_theme_t scrollbar_theme;
 
+lv_coord_t ui_scrollbar_content_width(lv_obj_t *viewport)
+{
+    return viewport ? LV_MAX(0,lv_obj_get_content_width(viewport)-UI_SCROLLBAR_GUTTER) : 0;
+}
+
 bool ui_scrollbar_measure(int length,float viewport,float content,float position,
                           ui_scrollbar_geometry_t *out)
 {
@@ -75,8 +80,10 @@ static void native_event(lv_event_t *e)
     metrics_t vertical={height,height+y+lv_obj_get_scroll_bottom(obj),y};
     metrics_t horizontal={width,width+x+lv_obj_get_scroll_right(obj),x};
     lv_draw_ctx_t *ctx=lv_event_get_draw_ctx(e);
-    if(vertical.content>vertical.viewport){lv_area_t r={a.x2-9,a.y1+2,a.x2-2,a.y2-2};paint(ctx,r,&vertical);}
-    if(horizontal.content>horizontal.viewport){lv_area_t r={a.x1+2,a.y2-9,a.x2-2-(vertical.content>vertical.viewport?10:0),a.y2-2};paint(ctx,r,&horizontal);}
+    lv_dir_t direction=lv_obj_get_scroll_dir(obj);
+    bool has_vertical=(direction&LV_DIR_VER) && vertical.content>vertical.viewport;
+    if(has_vertical){lv_area_t r={a.x2-9,a.y1+2,a.x2-2,a.y2-2};paint(ctx,r,&vertical);}
+    if((direction&LV_DIR_HOR) && horizontal.content>horizontal.viewport){lv_area_t r={a.x1+2,a.y2-9,a.x2-2-(has_vertical?10:0),a.y2-2};paint(ctx,r,&horizontal);}
 }
 
 static void theme_apply(lv_theme_t *theme, lv_obj_t *obj)

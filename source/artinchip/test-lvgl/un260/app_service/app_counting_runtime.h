@@ -33,5 +33,7 @@ void app_counting_runtime_handle_detail_complete(
 void app_counting_runtime_poll_history(counting_session_state_t *session,
                                        const counting_sim_t *sim_data,
                                        uint32_t now_ms);
+void app_counting_runtime_poll_reports(const counting_session_state_t *session,
+                                       uint32_t now_ms);
 
 #endif

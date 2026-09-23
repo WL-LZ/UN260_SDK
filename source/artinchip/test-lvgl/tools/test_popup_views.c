@@ -4,12 +4,19 @@
 #include "un260/lv_components/lv_qr_popup.h"
 #include "un260/lv_components/lv_alnum_keyboard.h"
 #include "test_history_view_support.h"
+#include "un260/app_service/work_mode_service.h"
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
 bool protocol_send_is_ready(void) {return false;}
 int protocol_send(uint8_t c,const uint8_t *p,uint16_t n) {(void)c;(void)p;(void)n;return -1;}
 void page_06_settings_set_status(const char *t,lv_color_t c) {(void)t;(void)c;}
+/* Device-only services are never invoked by these real popup/view tests. */
+void work_mode_service_retry(void){assert(!"Unexpected hardware mode request");}
+void work_mode_service_get_snapshot(work_mode_snapshot_t *s){memset(s,0,sizeof(*s));}
+const char *work_mode_service_status_text(void){return "Unavailable in host test";}
+const char *app_command_runtime_diagnostic_run_blocker(void){return "No device attached";}
+bool app_command_runtime_request_diagnostic_run(void){assert(!"Unexpected motor request");return false;}
 static unsigned submitted,closed;
 static char value[65];
 static void input_done(const char *v,void *ctx) {(void)ctx;++submitted;strcpy(value,v);}

@@ -124,6 +124,14 @@ static void test_reset_lifecycle(void)
 
 static void test_end_lifecycle(void)
 {
+    for (uint8_t status=2; status<=5; ++status) {
+        start_session();
+        uint8_t end[13]={0xFD,0xDF,13,0x0E,0,0,0,0,0,0,0,status,0};
+        assert(counting_info_reply_handle(&session,counting_data_mutable(),end,sizeof(end),0).kind==COUNTING_INFO_REPLY_FINISHED);
+        assert(!session.start_confirmed && session.phase==COUNTING_SESSION_FINISHED_WAIT_START);
+        assert(counting_info_reply_handle(&session,counting_data_mutable(),end,sizeof(end),0).kind==COUNTING_INFO_REPLY_IGNORED);
+        smart_island_notify_count_end(NULL);assert_settled();
+    }
     for (unsigned timing=0;timing<7;++timing) {
         start_session();
         if(timing==1)smart_island_notify_warning("Pocket full");
@@ -154,6 +162,30 @@ static void test_end_lifecycle(void)
     finish_session();assert_settled();
 }
 
+static void test_notice_during_count(void)
+{
+    start_session();
+    smart_island_notify_warning("First notice");
+    smart_island_notify_warning("Second notice");
+    assert(g_si_ctx.warning.resume_counting);
+    tick(5000);
+    assert(g_si_ctx.lifecycle.count_session_active && g_si_ctx.view.scene==SMART_ISLAND_SCENE_COUNTING);
+    smart_island_notify_warning("Cleared fault");
+    smart_island_restore_idle();tick(400);
+    assert(g_si_ctx.lifecycle.count_session_active && g_si_ctx.view.scene==SMART_ISLAND_SCENE_COUNTING);
+    smart_island_notify_serial_number(50,"NEW123456789");
+    tick(300);
+    assert(g_si_ctx.lifecycle.count_session_active);
+    finish_session();assert_settled();
+    /* Late collapse/hold callbacks must never retire a newer count. */
+    const unsigned offsets[]={40,300,1250,1500};
+    for(unsigned i=0;i<sizeof(offsets)/sizeof(offsets[0]);++i) {
+        start_session();finish_session();tick(offsets[i]);start_session();tick(2000);
+        assert(g_si_ctx.lifecycle.count_session_active && g_si_ctx.view.scene==SMART_ISLAND_SCENE_COUNTING);
+        finish_session();assert_settled();
+    }
+}
+
 int main(void)
 {
     lv_init();
@@ -166,7 +198,7 @@ int main(void)
     lv_img_decoder_set_info_cb(decoder,host_image_info);lv_img_decoder_set_open_cb(decoder,host_image_open);
     lv_img_decoder_set_close_cb(decoder,host_image_close);
     fixture(false);assert(currency_state_confirm_active_code("USD"));ui_main_create(lv_scr_act());tick(400);
-    test_reset_lifecycle();test_end_lifecycle();
+    test_reset_lifecycle();test_end_lifecycle();test_notice_during_count();
     ui_main_destroy();
     counting_data_clear_serials(counting_data_mutable());counting_data_clear_errors(counting_data_mutable());
     lv_img_decoder_delete(decoder);lv_deinit();host_external_assets_release();

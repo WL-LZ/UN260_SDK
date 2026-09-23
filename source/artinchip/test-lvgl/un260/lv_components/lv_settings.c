@@ -91,6 +91,34 @@ void lv_settings_action_style(lv_obj_t *o,lv_settings_action_role_t role)
     lv_obj_set_style_border_color(o,lv_color_hex(0xD7DEE3),LV_STATE_DISABLED);
     lv_obj_set_style_opa(o,LV_OPA_COVER,LV_STATE_DISABLED);
 }
+void lv_settings_damped_action_style(lv_obj_t *o,lv_settings_action_role_t role)
+{
+    if(!o)return;
+    lv_settings_action_style(o,role);
+    /* Legacy damped labels had their own colors and a white pressed border;
+     * let them inherit the same semantic states as Settings controls. */
+    lv_obj_remove_local_style_prop(o,LV_STYLE_BORDER_COLOR,LV_STATE_PRESSED);
+    lv_obj_remove_local_style_prop(o,LV_STYLE_BORDER_OPA,LV_STATE_PRESSED);
+    lv_obj_set_style_border_opa(o,LV_OPA_COVER,0);
+    lv_obj_t *text=lv_damped_button_get_label(o);
+    if(text && lv_obj_check_type(text,&lv_label_class)){
+        lv_obj_remove_local_style_prop(text,LV_STYLE_TEXT_COLOR,0);
+        lv_obj_remove_local_style_prop(text,LV_STYLE_TEXT_COLOR,LV_STATE_DISABLED);
+    }
+}
+void lv_settings_damped_choice_style(lv_obj_t *o,bool selected)
+{
+    if(!o)return;
+    lv_settings_damped_action_style(o,LV_SETTINGS_ACTION_SECONDARY);
+    if(selected)lv_obj_add_state(o,LV_STATE_CHECKED);
+    else lv_obj_clear_state(o,LV_STATE_CHECKED);
+    lv_damped_button_set_exact_palette(o,
+        lv_color_hex(selected?LV_SETTINGS_CHOICE_SURFACE:LV_SETTINGS_CONTROL_SURFACE),
+        lv_color_hex(LV_SETTINGS_CONTROL_PRESSED));
+    lv_obj_set_style_text_color(o,lv_color_hex(selected?LV_SETTINGS_PRIMARY:LV_SETTINGS_ACTION_TEXT),0);
+    lv_obj_set_style_border_color(o,lv_color_hex(LV_SETTINGS_CHOICE_BORDER),0);
+    lv_obj_set_style_border_width(o,selected?1:0,0);
+}
 lv_obj_t *lv_settings_button(lv_obj_t *p,int x,int y,int w,int h,const char *s,
                             bool primary,lv_event_cb_t cb,void *data)
 {

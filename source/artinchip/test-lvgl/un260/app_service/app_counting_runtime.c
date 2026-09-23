@@ -19,6 +19,7 @@
 #include "un260/counting/counting_info_reply.h"
 #include "un260/counting/counting_reject_analysis_service.h"
 #include "un260/counting/counting_reject_sn_reply.h"
+#include "un260/counting/counting_report_sync.h"
 #include "un260/currency/currency_state.h"
 #include "un260/data_collection/data_collection.h"
 #include "un260/diagnostic/diagnostic.h"
@@ -229,9 +230,32 @@ static void app_counting_runtime_on_start_failure(uint8_t type, uint8_t code)
     page_06_data_collection_refresh();
 }
 
+static void app_counting_runtime_notice(const char *text)
+{
+    lv_print_toast_config_t config = lv_print_toast_get_default_config();
+    config.text = text;
+    config.x = 380; config.y = 342; config.w = 520; config.h = 46;
+    config.show_loader = false;
+    config.auto_hide_ms = 3500;
+    lv_print_toast_show_with_config(&config);
+}
+
+void app_counting_runtime_poll_reports(const counting_session_state_t *session,
+                                       uint32_t now_ms)
+{
+    counting_report_poll(session, now_ms);
+    if (counting_report_take_failure()) {
+        uart_debug_printf("Serial report incomplete; retained previous snapshot\n");
+        app_counting_runtime_notice("Serial records incomplete");
+    }
+}
+
 static void app_counting_runtime_on_runtime_fault(uint8_t code)
 {
+    static uint8_t last_notice;
+    static uint32_t last_notice_tick;
     if (code == 0x00) {
+        last_notice = 0;
         hide_fault_popup();
         fault_popup_clear_pending();
         fault_popup_reset_auto_retry();
@@ -240,6 +264,16 @@ static void app_counting_runtime_on_runtime_fault(uint8_t code)
         return;
     }
 
+    if (!machine_runtime_error_desc(code)) {
+        fault_popup_record_runtime_notice(code);
+        uart_debug_printf("0x0F unmapped controller code=0x%02X\n", code);
+        uint32_t now = app_clock_uptime_ms();
+        if (code != last_notice || (uint32_t)(now - last_notice_tick) >= 30000U) {
+            app_counting_runtime_notice(get_system_error_desc(code));
+            last_notice = code; last_notice_tick = now;
+        }
+        return;
+    }
     fault_popup_report_runtime_fault(code);
     uart_debug_printf("0x0F fault=0x%02X %s\n",
                       code, get_system_error_desc(code));
@@ -283,6 +317,7 @@ bool app_counting_runtime_reset_session(counting_session_state_t *session,
                           reason != NULL ? reason : "unknown");
         return false;
     }
+    counting_report_reset();
     counting_multi_reset();
     memset(session, 0, sizeof(*session));
     ui_count_end_anim_cancel();

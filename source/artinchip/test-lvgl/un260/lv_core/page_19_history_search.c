@@ -5,6 +5,9 @@
 #include "un260/lv_components/lv_alnum_keyboard.h"
 #include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_components/lv_nav_button.h"
+#include "un260/lv_components/lv_select_dropdown.h"
+#include "un260/lv_components/ui_scrollbar.h"
+#include "un260/lv_components/lv_settings.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/ui_history_data.h"
 #include "un260/lv_system/machine_time.h"
@@ -12,16 +15,16 @@
 #include <stdio.h>
 #include <string.h>
 
-#define SEARCH_INK 0x17212A
-#define SEARCH_BODY 0x4C606E
-#define SEARCH_MUTED 0x7A8D9B
+#define SEARCH_INK 0x20303A
+#define SEARCH_BODY 0x405765
+#define SEARCH_MUTED 0x627C8D
 #define SEARCH_LINE 0xE7ECEF
 #define SEARCH_MAX_CURRENCIES (UI_HISTORY_MAX_RECORDS * HISTORY_MULTI_CURRENCIES + 2U)
 #define SEARCH_MAX_DENOMS HISTORY_DETAIL_MAX_DENOMS
 enum { FIELD_FROM, FIELD_TO, FIELD_TIME, FIELD_AMOUNT, FIELD_PCS, FIELD_SERIAL, FIELD_COUNT };
 
 struct page_19_history_search {
-    lv_obj_t *root, *tabs[3], *panels[3], *fields[FIELD_COUNT], *error;
+    lv_obj_t *root, *tabs[3], *tab_counts[3], *panels[3], *fields[FIELD_COUNT], *error;
     lv_obj_t *currency, *rejects, *mode, *denom_title, *denom_empty, *denom_all;
     lv_obj_t *denom_buttons[SEARCH_MAX_DENOMS], *matches[4];
     lv_alnum_keyboard_t *keyboard;
@@ -80,7 +83,8 @@ static lv_obj_t *button(lv_obj_t *parent, int x, int y, int width, int height,
                         const char *text, lv_event_cb_t callback, void *context)
 {
     const lv_damped_button_style_t style = {
-        0xF4F6F7, 0xE0E3E5, 0xF7F8F9, SEARCH_BODY, 0xAAB5BE, 8
+        LV_SETTINGS_CONTROL_SURFACE, LV_SETTINGS_CONTROL_PRESSED, LV_SETTINGS_DISABLED_SURFACE,
+        LV_SETTINGS_ACTION_TEXT, LV_SETTINGS_DISABLED_TEXT, 12
     };
     lv_obj_t *o = lv_damped_button_create(parent, &style, text,
                                         &lv_font_instrument_sans_medium_18);
@@ -90,6 +94,7 @@ static lv_obj_t *button(lv_obj_t *parent, int x, int y, int width, int height,
         lv_obj_del(o); return NULL;
     }
     lv_obj_set_pos(o, x, y); lv_obj_set_size(o, width, height);
+    lv_settings_damped_action_style(o,LV_SETTINGS_ACTION_SECONDARY);
     lv_obj_t *text_label = lv_damped_button_get_label(o);
     lv_obj_set_width(text_label, width - 20);
     lv_label_set_long_mode(text_label, LV_LABEL_LONG_DOT);
@@ -99,15 +104,7 @@ static lv_obj_t *button(lv_obj_t *parent, int x, int y, int width, int height,
 
 static void selected(lv_obj_t *o, bool active)
 {
-    uint32_t color = active ? 0xEAF2FF : 0xF4F6F7;
-    if (active) lv_obj_add_state(o, LV_STATE_CHECKED);
-    else lv_obj_clear_state(o, LV_STATE_CHECKED);
-    lv_damped_button_set_palette(o, lv_color_hex(color), lv_color_hex(color));
-    lv_obj_set_style_border_width(o, active ? 1 : 0, 0);
-    lv_obj_set_style_border_color(o, lv_color_hex(0xB8D4FC), 0);
-    lv_obj_set_style_border_opa(o, active ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
-    lv_obj_t *text=lv_damped_button_get_label(o);
-    if(text) lv_obj_set_style_text_color(text,lv_color_hex(active ? 0x0074F8 : SEARCH_BODY),0);
+    lv_settings_damped_choice_style(o,active);
 }
 
 static char *field_value(page_19_history_search_t *s, unsigned field, size_t *size)
@@ -191,6 +188,9 @@ static void activate_tab(page_19_history_search_t *s, unsigned tab)
     s->active_tab = tab;
     for (unsigned i = 0; i < 3; ++i) {
         selected(s->tabs[i], i == tab);
+        lv_obj_set_style_border_side(s->tabs[i],LV_BORDER_SIDE_LEFT,0);
+        lv_obj_set_style_border_width(s->tabs[i],i==tab?3:0,0);
+        lv_obj_set_style_border_color(s->tabs[i],lv_color_hex(LV_SETTINGS_PRIMARY),0);
         if (i == tab) lv_obj_clear_flag(s->panels[i], LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(s->panels[i], LV_OBJ_FLAG_HIDDEN);
     }
@@ -338,49 +338,8 @@ static void dropdown_event(lv_event_t *event)
 static lv_obj_t *dropdown(lv_obj_t *parent, int x, int y, int width,
                           page_19_history_search_t *s)
 {
-    lv_obj_t *o = lv_dropdown_create(parent);
+    lv_obj_t *o = lv_select_dropdown_create(parent,x,y,width,46);
     if (!o) return NULL;
-    lv_obj_set_pos(o, x, y); lv_obj_set_size(o, width, 42);
-    lv_obj_set_style_bg_color(o, lv_color_hex(0xF4F6F7), 0);
-    lv_obj_set_style_bg_color(o, lv_color_hex(0xDCE6EC), LV_STATE_CHECKED);
-    lv_obj_set_style_bg_color(o, lv_color_hex(0xE0E3E5), LV_STATE_PRESSED);
-    lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
-    lv_obj_set_style_text_color(o, lv_color_hex(SEARCH_BODY), 0);
-    lv_obj_set_style_text_font(o, &lv_font_instrument_sans_medium_18, 0);
-    lv_obj_set_style_border_width(o, 0, 0); lv_obj_set_style_radius(o, 8, 0);
-    lv_obj_set_style_pad_top(o, 9, 0); lv_obj_set_style_pad_left(o, 14, 0);
-    lv_obj_set_style_pad_right(o, 32, 0);
-    lv_dropdown_set_symbol(o, NULL);
-    static const lv_point_t arrow_points[] = { {0, 0}, {5, 5}, {10, 0} };
-    lv_obj_t *arrow = lv_line_create(o);
-    if (!arrow) { lv_obj_del(o); return NULL; }
-    lv_line_set_points(arrow, arrow_points, 3);
-    lv_obj_set_style_line_color(arrow, lv_color_hex(SEARCH_MUTED), 0);
-    lv_obj_set_style_line_width(arrow, 2, 0);
-    lv_obj_set_style_line_rounded(arrow, true, 0);
-    lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, 18, 0);
-    lv_obj_clear_flag(arrow, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t *list = lv_dropdown_get_list(o);
-    if (list) {
-        lv_obj_set_style_text_font(list, &lv_font_instrument_sans_medium_18, 0);
-        lv_obj_set_style_text_color(list, lv_color_hex(SEARCH_BODY), 0);
-        lv_obj_set_style_bg_color(list, lv_color_hex(0xFFFFFF), 0);
-        lv_obj_set_style_bg_opa(list, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_color(list, lv_color_hex(0xC7D3DB), 0);
-        lv_obj_set_style_border_width(list, 1, 0);
-        lv_obj_set_style_radius(list, 8, 0);
-        lv_obj_set_style_pad_hor(list, 14, 0);
-        lv_obj_set_style_max_height(list, 210, 0);
-        lv_obj_set_style_max_width(list, width, 0);
-        lv_obj_set_style_pad_ver(list, 8, 0);
-        lv_obj_set_style_text_line_space(list, 16, 0);
-        lv_obj_set_style_bg_color(list, lv_color_hex(0xDCE6EC), LV_PART_SELECTED);
-        lv_obj_set_style_bg_opa(list, LV_OPA_COVER, LV_PART_SELECTED);
-        lv_obj_set_style_text_color(list, lv_color_hex(SEARCH_INK), LV_PART_SELECTED);
-        lv_obj_set_scroll_dir(list, LV_DIR_VER);
-        lv_obj_clear_flag(list, LV_OBJ_FLAG_SCROLL_CHAIN_VER | LV_OBJ_FLAG_SCROLL_CHAIN_HOR);
-        lv_port_indev_set_drag_obj(list, true);
-    }
     if (!lv_obj_add_event_cb(o, dropdown_event, LV_EVENT_VALUE_CHANGED, s)) {
         lv_obj_del(o); return NULL;
     }
@@ -564,29 +523,8 @@ static void open_editor(page_19_history_search_t *s, unsigned field)
     if(card) lv_popup_style(s->editor,card);
     lv_obj_add_event_cb(s->editor,editor_cancel,LV_EVENT_CLICKED,s);
     if(!card || !label(card,28,18,420,32,&lv_font_instrument_sans_semibold_22,SEARCH_INK,ui_text_get(field_title(field)))) goto failed;
-    s->precision=lv_dropdown_create(card);
+    s->precision=lv_select_dropdown_create(card,620,16,310,44);
     if(!s->precision) goto failed;
-    lv_obj_set_pos(s->precision,620,16);lv_obj_set_size(s->precision,310,44);
-    lv_obj_set_style_text_font(s->precision,&lv_font_instrument_sans_medium_18,0);
-    lv_obj_set_style_bg_color(s->precision,lv_color_hex(0xEAF2FF),0);
-    lv_obj_set_style_bg_opa(s->precision,LV_OPA_COVER,0);
-    lv_obj_set_style_text_color(s->precision,lv_color_hex(0x0074F8),0);
-    lv_obj_set_style_radius(s->precision,12,0);
-    lv_obj_set_style_pad_left(s->precision,16,0);
-    lv_obj_set_style_pad_right(s->precision,36,0);
-    lv_obj_set_style_pad_top(s->precision,10,0);
-    lv_dropdown_set_symbol(s->precision,NULL);
-    static const lv_point_t arrow_points[]={{0,0},{5,5},{10,0}};
-    lv_obj_t *arrow=lv_line_create(s->precision);
-    if(!arrow) goto failed;
-    lv_line_set_points(arrow,arrow_points,3);
-    lv_obj_set_style_line_color(arrow,lv_color_hex(0x0074F8),0);
-    lv_obj_set_style_line_width(arrow,2,0);
-    lv_obj_align(arrow,LV_ALIGN_RIGHT_MID,18,0);
-    lv_obj_clear_flag(arrow,LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_text_font(lv_dropdown_get_list(s->precision),&lv_font_instrument_sans_medium_18,0);
-    lv_obj_set_style_bg_opa(lv_dropdown_get_list(s->precision),LV_OPA_COVER,0);
-    lv_obj_set_style_bg_color(lv_dropdown_get_list(s->precision),lv_color_hex(0xFFFFFF),0);
     lv_dropdown_set_options(s->precision,ui_text_get(field<=FIELD_TO ? UI_TEXT_HISTORY_PRECISION_DATE :
         field==FIELD_TIME ? UI_TEXT_HISTORY_PRECISION_TIME : UI_TEXT_HISTORY_NUMBER_MODES));
     lv_obj_add_event_cb(s->precision,editor_changed,LV_EVENT_VALUE_CHANGED,s);
@@ -620,7 +558,7 @@ static void open_editor(page_19_history_search_t *s, unsigned field)
             /* Match both text layers: different metrics can shift the selected
              * overlay away from the actual option on long year wheels. */
             lv_obj_set_style_text_font(s->wheels[i],&lv_font_instrument_sans_medium_22,LV_PART_SELECTED);
-            lv_obj_set_style_bg_color(s->wheels[i],lv_color_hex(0xF4F6F7),0);
+            lv_obj_set_style_bg_color(s->wheels[i],lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),0);
             lv_obj_set_style_bg_opa(s->wheels[i],LV_OPA_COVER,0);
             lv_obj_set_style_text_color(s->wheels[i],lv_color_hex(SEARCH_MUTED),0);
             lv_obj_set_style_text_align(s->wheels[i],LV_TEXT_ALIGN_CENTER,0);
@@ -628,9 +566,9 @@ static void open_editor(page_19_history_search_t *s, unsigned field)
             lv_obj_set_style_text_line_space(s->wheels[i],18,0);
             lv_obj_set_style_text_line_space(s->wheels[i],18,LV_PART_SELECTED);
             lv_obj_set_style_radius(s->wheels[i],12,0);
-            lv_obj_set_style_bg_color(s->wheels[i],lv_color_hex(0xEAF2FF),LV_PART_SELECTED);
+            lv_obj_set_style_bg_color(s->wheels[i],lv_color_hex(LV_SETTINGS_CHOICE_SURFACE),LV_PART_SELECTED);
             lv_obj_set_style_bg_opa(s->wheels[i],LV_OPA_COVER,LV_PART_SELECTED);
-            lv_obj_set_style_text_color(s->wheels[i],lv_color_hex(0x0074F8),LV_PART_SELECTED);
+            lv_obj_set_style_text_color(s->wheels[i],lv_color_hex(LV_SETTINGS_PRIMARY),LV_PART_SELECTED);
             lv_roller_set_visible_row_count(s->wheels[i],3);
             lv_obj_set_pos(s->wheels[i],100+i*260,112);lv_obj_set_width(s->wheels[i],220);
             unsigned first=field==FIELD_TIME ? 0 : i==0 ? s->year_first : 1;
@@ -659,12 +597,13 @@ static void open_editor(page_19_history_search_t *s, unsigned field)
     }
     lv_dropdown_set_selected(s->precision,(uint16_t)precision);
     s->editor_error=label(card,28,250,904,32,&lv_font_instrument_sans_medium_16,0xF85820,"");
-    if(!s->editor_error || !lv_nav_button_create(card,28,306,180,44,editor_cancel,s) ||
+    lv_obj_t *back=lv_nav_button_create(card,28,306,180,44,editor_cancel,s);
+    if(back)lv_settings_damped_action_style(back,LV_SETTINGS_ACTION_SECONDARY);
+    if(!s->editor_error || !back ||
         !button(card,226,306,180,44,ui_text_get(UI_TEXT_SERIAL_ALL),editor_clear,s)) goto failed;
     lv_obj_t *apply=button(card,680,306,250,44,ui_text_get(UI_TEXT_HISTORY_APPLY),editor_apply,s);
     if(!apply) goto failed;
-    lv_damped_button_set_palette(apply,lv_color_hex(0x0074F8),lv_color_hex(0x005BCD));
-    lv_obj_set_style_text_color(lv_damped_button_get_label(apply),lv_color_hex(0xFFFFFF),0);
+    lv_settings_damped_action_style(apply,LV_SETTINGS_ACTION_PRIMARY);
     editor_visibility(s);return;
 failed:
     editor_close(s);lv_label_set_text(s->error,ui_text_get(UI_TEXT_SERIAL_UNAVAILABLE));
@@ -770,6 +709,16 @@ static const char *number_caption(const char *value, char *text, size_t size)
 static void refresh_controls(page_19_history_search_t *s)
 {
     lv_label_set_text(s->error, "");
+    const unsigned active[]={
+        !!s->input.date_from[0]+!!s->input.date_to[0]+!!s->input.time[0],
+        !!s->input.currency[0]+!!s->input.amount[0]+!!s->input.pcs[0]+!!s->input.denomination_count,
+        !!s->input.serial[0]+(s->input.rejects!=HISTORY_REJECT_ALL)
+    };
+    for(unsigned i=0;i<3;++i) {
+        lv_label_set_text_fmt(s->tab_counts[i],"%u",active[i]);
+        if(active[i])lv_obj_clear_flag(s->tab_counts[i],LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(s->tab_counts[i],LV_OBJ_FLAG_HIDDEN);
+    }
     for (unsigned field = 0; field < FIELD_COUNT; ++field) {
         size_t size;
         const char *value = field_value(s, field, &size);
@@ -835,75 +784,92 @@ page_19_history_search_t *page_19_history_search_create(lv_obj_t *parent,
     }
     lv_obj_add_flag(s->root, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_clear_flag(s->root, LV_OBJ_FLAG_GESTURE_BUBBLE);
-    if (!label(s->root, 22, 17, 800, 30, &lv_font_instrument_sans_semibold_22,
+    if (!label(s->root, 24, 19, 466, 32, &lv_font_instrument_sans_semibold_24,
                SEARCH_INK, ui_text_get(UI_TEXT_HISTORY_SEARCH_TITLE))) goto failed;
-    lv_obj_t *esc = lv_nav_button_create(s->root, 1168, 12, 96, 36, cancel_event, s);
+    lv_obj_t *esc = lv_nav_button_create(s->root, 1152, 16, 108, 42, cancel_event, s);
     if (!esc) goto failed;
-    lv_obj_set_style_text_font(lv_damped_button_get_label(esc),&lv_font_instrument_sans_medium_18,0);
-    lv_damped_button_set_text(esc, ui_text_get(UI_TEXT_SERIAL_ESC));
-    s->mode=dropdown(s->root,840,12,304,s);
+    lv_obj_set_style_text_font(lv_damped_button_get_label(esc),&lv_font_instrument_sans_medium_16,0);
+    lv_damped_button_set_text(esc, ui_text_get(UI_TEXT_HISTORY_BACK));
+    s->mode=dropdown(s->root,520,16,300,s);
     if(!s->mode)goto failed;
+    lv_obj_set_height(s->mode,42);
     lv_dropdown_set_options(s->mode,ui_text_get(UI_TEXT_HISTORY_MODE_OPTIONS));
-    if(!label(s->root,24,329,888,20,&lv_font_instrument_sans_medium_12,SEARCH_MUTED,
-        ui_text_get(UI_TEXT_HISTORY_MULTI_SCOPE)))goto failed;
+    lv_settings_damped_action_style(esc,LV_SETTINGS_ACTION_SECONDARY);
+    if(!surface(s->root,1136,24,1,26,LV_SETTINGS_ACTION_DIVIDER,0) ||
+       !surface(s->root,16,74,220,310,0xF7F9FB,16))goto failed;
     static const ui_text_id_t tab_names[] = { UI_TEXT_HISTORY_DATE, UI_TEXT_HISTORY_VALUES, UI_TEXT_HISTORY_SERIALS };
     for (unsigned i = 0; i < 3; ++i) {
-        s->tabs[i] = button(s->root, 16 + i * 420, 60, 408, 38, ui_text_get(tab_names[i]), tab_event, s);
-        s->panels[i] = surface(s->root, 16, 108, 1248, 222, 0xFFFFFF, 15);
+        s->tabs[i] = button(s->root, 26, 88 + i * 80, 200, 64, ui_text_get(tab_names[i]), tab_event, s);
+        s->panels[i] = surface(s->root, 252, 74, 1012, 310, 0xFFFFFF, 16);
         if (!s->tabs[i] || !s->panels[i]) goto failed;
+        lv_obj_t *caption=lv_damped_button_get_label(s->tabs[i]);
+        lv_obj_set_style_text_font(caption,&lv_font_instrument_sans_medium_16,0);
+        lv_obj_set_style_text_align(caption,LV_TEXT_ALIGN_LEFT,0);
+        lv_obj_set_width(caption,148);lv_obj_align(caption,LV_ALIGN_LEFT_MID,14,0);
+        s->tab_counts[i]=label(s->tabs[i],168,23,20,20,&lv_font_instrument_sans_medium_12,0xFFFFFF,"");
+        if(!s->tab_counts[i])goto failed;
+        lv_obj_set_style_text_align(s->tab_counts[i],LV_TEXT_ALIGN_CENTER,0);
+        lv_obj_set_style_pad_top(s->tab_counts[i],2,0);
+        lv_obj_set_style_bg_color(s->tab_counts[i],lv_color_hex(LV_SETTINGS_PRIMARY),0);
+        lv_obj_set_style_bg_opa(s->tab_counts[i],LV_OPA_COVER,0);
+        lv_obj_set_style_radius(s->tab_counts[i],10,0);
     }
     for (unsigned i = 0; i < 3; ++i) {
-        int x = 24 + i * 408;
-        if (!label(s->panels[0], x, 46, 384, 28, &lv_font_instrument_sans_medium_18,
+        int x = 24 + i * 328;
+        if (!label(s->panels[0], x, 40, 308, 28, &lv_font_instrument_sans_semibold_18,
                    SEARCH_BODY, ui_text_get(field_title(i)))) goto failed;
-        s->fields[i] = button(s->panels[0], x, 90, 384, 72, "", input_event, s);
+        s->fields[i] = button(s->panels[0], x, 88, 308, 76, "", input_event, s);
         if (!s->fields[i]) goto failed;
     }
-    s->currency = dropdown(s->panels[1], 20, 43, 278, s);
-    if (!s->currency || !label(s->panels[1], 20, 15, 278, 24,
+    s->currency = dropdown(s->panels[1], 24, 48, 250, s);
+    if (!s->currency || !label(s->panels[1], 24, 20, 250, 24,
             &lv_font_instrument_sans_semibold_14, SEARCH_BODY, ui_text_get(UI_TEXT_HISTORY_CURRENCY))) goto failed;
     for (unsigned i = 0; i < 2; ++i) {
         unsigned field = i == 0 ? FIELD_AMOUNT : FIELD_PCS;
-        int x = 318 + i * 454;
-        if (!label(s->panels[1], x, 15, 436, 24, &lv_font_instrument_sans_semibold_14,
+        int x = 294 + i * 352;
+        if (!label(s->panels[1], x, 20, 330, 24, &lv_font_instrument_sans_semibold_14,
                    SEARCH_BODY, ui_text_get(field_title(field)))) goto failed;
-        s->fields[field] = button(s->panels[1], x, 43, 436, 42, "", input_event, s);
+        s->fields[field] = button(s->panels[1], x, 48, 338, 46, "", input_event, s);
         if (!s->fields[field]) goto failed;
     }
-    s->denom_title = label(s->panels[1], 20, 99, 168, 24, &lv_font_instrument_sans_semibold_14, SEARCH_BODY, "");
-    s->denom_all = button(s->panels[1], 194, 94, 104, 30, ui_text_get(UI_TEXT_SERIAL_ALL), filter_event, s);
+    if(!surface(s->panels[1],24,112,964,1,SEARCH_LINE,0))goto failed;
+    s->denom_title = label(s->panels[1], 24, 132, 810, 24, &lv_font_instrument_sans_semibold_14, SEARCH_BODY, "");
+    s->denom_all = button(s->panels[1], 880, 124, 104, 34, ui_text_get(UI_TEXT_SERIAL_ALL), filter_event, s);
     if (!s->denom_title || !s->denom_all) goto failed;
-    lv_obj_t *grid = surface(s->panels[1], 20, 132, 1208, 78, 0xFFFFFF, 0);
+    lv_obj_t *grid = surface(s->panels[1], 24, 170, 964, 82, 0xFFFFFF, 0);
     if (!grid) goto failed;
     lv_obj_add_flag(grid, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scroll_dir(grid, LV_DIR_VER); lv_obj_set_scrollbar_mode(grid, LV_SCROLLBAR_MODE_AUTO);
     lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLL_CHAIN_VER | LV_OBJ_FLAG_SCROLL_CHAIN_HOR);
     lv_port_indev_set_drag_obj(grid, true);
+    lv_obj_update_layout(grid);
+    const int denom_width=(ui_scrollbar_content_width(grid)-9*8)/10;
     for (size_t i = 0; i < SEARCH_MAX_DENOMS; ++i) {
-        s->denom_buttons[i] = button(grid, (i % 12) * 100, (i / 12) * 39, 92, 33, "", filter_event, s);
+        s->denom_buttons[i] = button(grid, (i % 10) * (denom_width+8), (i / 10) * 42, denom_width, 36, "", filter_event, s);
         if (!s->denom_buttons[i]) goto failed;
     }
-    s->denom_empty = label(grid, 4, 18, 1180, 42, &lv_font_instrument_sans_medium_18, SEARCH_MUTED, "");
+    s->denom_empty = label(grid, 4, 18, 944, 42, &lv_font_instrument_sans_medium_18, SEARCH_MUTED, "");
     if (!s->denom_empty) goto failed;
-    if (!label(s->panels[2], 24, 15, 786, 24, &lv_font_instrument_sans_semibold_14,
+    if(!label(s->panels[1],24,260,964,20,&lv_font_instrument_sans_medium_12,SEARCH_MUTED,
+        ui_text_get(UI_TEXT_HISTORY_MULTI_SCOPE)))goto failed;
+    if (!label(s->panels[2], 24, 28, 600, 24, &lv_font_instrument_sans_semibold_16,
                SEARCH_BODY, ui_text_get(UI_TEXT_LIST_SERIAL_NUMBERS)) ||
-        !label(s->panels[2], 854, 15, 368, 24, &lv_font_instrument_sans_semibold_14,
+        !label(s->panels[2], 672, 28, 312, 24, &lv_font_instrument_sans_semibold_16,
                SEARCH_BODY, ui_text_get(UI_TEXT_HISTORY_REJECTS))) goto failed;
-    s->fields[FIELD_SERIAL] = button(s->panels[2], 24, 43, 804, 44, "", input_event, s);
-    s->rejects = dropdown(s->panels[2], 854, 43, 370, s);
+    s->fields[FIELD_SERIAL] = button(s->panels[2], 24, 66, 616, 60, "", input_event, s);
+    s->rejects = dropdown(s->panels[2], 672, 66, 312, s);
     if (!s->fields[FIELD_SERIAL] || !s->rejects) goto failed;
     static const ui_text_id_t modes[] = { UI_TEXT_SERIAL_CONTAINS, UI_TEXT_SERIAL_EXACT, UI_TEXT_SERIAL_STARTS, UI_TEXT_SERIAL_ENDS };
     for (unsigned i = 0; i < 4; ++i) {
-        s->matches[i] = button(s->panels[2], 24 + i * 204, 104, 192, 38,
+        s->matches[i] = button(s->panels[2], 24 + i * 156, 148, 148, 44,
                                ui_text_get(modes[i]), filter_event, s);
         if (!s->matches[i]) goto failed;
     }
-    s->error = label(s->root, 24, 348, 892, 43, &lv_font_instrument_sans_medium_14, 0xAC4C3D, "");
-    if (!s->error || !button(s->root, 936, 346, 146, 42, ui_text_get(UI_TEXT_SERIAL_RESET), reset_event, s)) goto failed;
-    lv_obj_t *apply=button(s->root, 1096, 346, 168, 42, ui_text_get(UI_TEXT_HISTORY_APPLY), apply_event, s);
+    s->error = label(s->root, 276, 356, 960, 24, &lv_font_instrument_sans_medium_14, 0xAC4C3D, "");
+    if (!s->error || !button(s->root, 836, 16, 132, 42, ui_text_get(UI_TEXT_SERIAL_RESET), reset_event, s)) goto failed;
+    lv_obj_t *apply=button(s->root, 980, 16, 140, 42, ui_text_get(UI_TEXT_HISTORY_APPLY), apply_event, s);
     if(!apply) goto failed;
-    lv_damped_button_set_palette(apply,lv_color_hex(0x0074F8),lv_color_hex(0x005BCD));
-    lv_obj_set_style_text_color(lv_damped_button_get_label(apply),lv_color_hex(0xFFFFFF),0);
+    lv_settings_damped_action_style(apply,LV_SETTINGS_ACTION_PRIMARY);
     if (!create_options(s)) goto failed;
     collect_denominations(s); refresh_controls(s); activate_tab(s, 0);
     lv_obj_move_foreground(s->root);

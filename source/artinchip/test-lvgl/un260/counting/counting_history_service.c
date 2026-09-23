@@ -360,6 +360,8 @@ bool counting_history_prepare_reset(counting_session_state_t *session,
 bool counting_history_prepare_start(counting_session_state_t *session,
     const counting_sim_t *sim_data, uint32_t now_ms)
 {
-    return counting_history_prepare_reset(session, sim_data, now_ms) &&
-           counting_history_can_start();
+    /* The controller has already started. Once the previous result is in
+     * owned bounded storage, a slow disk must not hold this START and every
+     * live frame behind it. Admission control still applies to UI requests. */
+    return counting_history_prepare_reset(session, sim_data, now_ms);
 }

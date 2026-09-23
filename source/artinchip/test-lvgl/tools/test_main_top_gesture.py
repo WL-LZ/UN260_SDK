@@ -24,4 +24,5 @@ assert 'ui_page_32_innovation_create' in manager  # retained, not deleted
 assert 'page_01_main_pointer' in main and 'page_01_main_quick_attach' in main
 assert 'page_01_main_quick_refresh_data' in manager
 subprocess.run([sys.executable,str(ROOT/'tools/test_main_view.py'),
-    '--lvgl-dir',str(args.lvgl_dir),'--sanitize','address,undefined'],check=True)
+    '--lvgl-dir',str(args.lvgl_dir),'--sanitize','address,undefined',
+    '--harness',str(ROOT/'tools/test_quick_navigation_view.c')],check=True)

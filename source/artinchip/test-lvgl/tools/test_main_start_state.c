@@ -11,7 +11,6 @@ enum { COUNTING_SESSION_IDLE, COUNTING_SESSION_ACTIVE, COUNTING_SESSION_FINISHED
 enum { SMART_ISLAND_WARNING_LEVEL_ERROR = 1 };
 static protocol_request_t g_start_request, g_clear_request;
 static counting_session_state_t g_counting_session;
-static struct { bool wait_sn_after_reject_end; } g_counting_detail_state;
 static counting_sim_t data;
 static bool reset_allowed, send_ok, observed_busy;
 static unsigned sequence, reset_projection_at, finish_start_at, begin_clear_at;
@@ -69,7 +68,6 @@ static void fixture(bool existing_clear, bool successful_send)
 {
     g_start_request.pending = true; g_clear_request.pending = existing_clear;
     g_counting_session = (counting_session_state_t){true, COUNTING_SESSION_ACTIVE};
-    g_counting_detail_state.wait_sn_after_reject_end = true;
     reset_allowed = true; send_ok = successful_send; observed_busy = true;
     sequence = reset_projection_at = finish_start_at = begin_clear_at = 0;
     send_at = finish_clear_at = refresh_at = refreshes = warnings = 0;
@@ -81,7 +79,7 @@ static void test_clear_projection(bool existing_clear, bool successful_send)
     assert(result == (!existing_clear && successful_send));
     assert(!g_start_request.pending && !g_counting_session.start_confirmed);
     assert(g_counting_session.phase == COUNTING_SESSION_IDLE);
-    assert(!g_counting_detail_state.wait_sn_after_reject_end && !warnings);
+    assert(!warnings);
     assert(reset_projection_at && finish_start_at > reset_projection_at);
     assert(begin_clear_at > finish_start_at);
     /* This is the regression: every CLEAR result must replace the stale busy

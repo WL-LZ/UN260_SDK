@@ -18,7 +18,6 @@ code = r'''
 #include "un260/counting/counting_data_types.h"
 #include "un260/protocol/protocol_frame.h"
 static counting_session_state_t g_counting_session;
-static struct {bool wait_sn_after_reject_end;} g_counting_detail_state;
 static counting_sim_t sim;
 static counting_multi_t model;
 static bool multi,save_ok=true;
@@ -55,10 +54,8 @@ int main(void){
  assert(app_command_runtime_handle_stacker_clear(frame,6));
  assert(warnings==3&&!resets&&sim.total_pcs==28);
  g_counting_session.phase=COUNTING_SESSION_FINISHED_WAIT_START;
- g_counting_detail_state.wait_sn_after_reject_end=true;
  assert(app_command_runtime_handle_stacker_clear(frame,6));
  assert(resets==1&&clears==1&&sim.total_pcs==0&&sim.multi_currency_result);
- assert(!g_counting_detail_state.wait_sn_after_reject_end);
  assert(app_command_runtime_handle_stacker_clear(frame,6));
  assert(sim.total_pcs==0&&sim.multi_currency_result);
  puts("PASS 0x51/6: length/value/mode guards, history backpressure, out-of-order guard, clear and duplicate notification");

@@ -192,7 +192,7 @@ void history_test_tick(unsigned ms)
 { for (unsigned i = 0; i < ms; i += 20) { lv_tick_inc(20); lv_timer_handler(); } }
 void history_test_render(void)
 { lv_obj_update_layout(lv_scr_act()); lv_obj_invalidate(lv_scr_act()); lv_refr_now(NULL); }
-static void history_test_pointer(int x, int y, bool down)
+void history_test_pointer(int x, int y, bool down)
 {
     test_pointer_point = (lv_point_t){x, y};
     test_pointer_state = down ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
@@ -372,6 +372,28 @@ static void history_test_list_and_detail(void)
     puts("PASS: real pointer scroll/tap/revision guard, stable sorting, one-result search stays list, detail/late rejects, back preserves filter/scroll and explicit exports");
 }
 
+void history_test_control_feedback(lv_obj_t *o,uint32_t normal,uint32_t pressed,uint32_t ink)
+{
+    assert(lv_damped_button_is_enabled(o));
+    lv_obj_t *text=lv_damped_button_get_label(o);
+    assert(lv_obj_get_style_bg_color(o,0).full==lv_color_hex(normal).full);
+    assert(lv_obj_get_style_text_color(text,0).full==lv_color_hex(ink).full);
+    for(unsigned cancel=0;cancel<2;++cancel){
+        lv_obj_add_state(o,LV_STATE_PRESSED);
+        lv_event_send(o,LV_EVENT_PRESSED,NULL);history_test_tick(120);
+        assert(lv_obj_get_style_bg_color(o,0).full==lv_color_hex(pressed).full);
+        lv_event_send(o,cancel?LV_EVENT_CANCEL:LV_EVENT_PRESS_LOST,NULL);
+        lv_obj_clear_state(o,LV_STATE_PRESSED);
+        assert(lv_obj_get_style_bg_color(o,0).full==lv_color_hex(normal).full);
+        history_test_tick(250);
+        assert(lv_obj_get_style_bg_color(o,0).full==lv_color_hex(normal).full);
+    }
+    lv_damped_button_set_enabled(o,false);
+    assert(lv_obj_get_style_bg_color(o,0).full==lv_color_hex(LV_SETTINGS_DISABLED_SURFACE).full);
+    assert(lv_obj_get_style_text_color(text,0).full==lv_color_hex(LV_SETTINGS_DISABLED_TEXT).full);
+    lv_damped_button_set_enabled(o,true);
+    assert(lv_obj_get_style_bg_color(o,0).full==lv_color_hex(normal).full);
+}
 static void history_test_selection_and_delete(void)
 {
     assert(history && !history->detail_mode && history->result.matched_count == 10);
@@ -397,6 +419,8 @@ static void history_test_selection_and_delete(void)
     assert(history_test_click_record(0) == 1000);
     assert(history_test_click_record(1) == 998);
     assert(history->selected_count == 2 && !history->detail_mode);
+    history_test_control_feedback(history->actions[2],LV_SETTINGS_DESTRUCTIVE,LV_SETTINGS_DESTRUCTIVE_PRESSED,0xFFFFFF);
+    history_test_bmp("history-selected");
     history_test_click(history->actions[1]);
     assert(test_exported_count == 2 && test_exported_ids[0] == 1000 && test_exported_ids[1] == 998);
     history_test_click(history->actions[2]); assert(history->dialog && history->confirmed_count == 2);
@@ -645,6 +669,7 @@ static void history_test_inertia_tap(unsigned baseline_timers)
     lv_obj_t *first=lv_obj_get_child(lv_recycled_list_object(history->list),0);
     history_test_pointer(x,viewport.y1+20,true);
     assert(lv_obj_has_state(first,LV_STATE_PRESSED));
+    assert(lv_obj_get_style_bg_color(first,0).full==lv_color_hex(LV_SETTINGS_CONTROL_PRESSED).full);
     history_test_pointer(x,viewport.y1+32,true);
     assert(!lv_obj_has_state(first,LV_STATE_PRESSED));
     history_test_pointer(x,viewport.y1+32,false);
@@ -688,6 +713,9 @@ static void history_test_multi(unsigned baseline)
     history_test_bmp("history-multi-list");
     show_record(r->record_no);history_test_tick(100);
     assert(lv_obj_is_visible(history->multi_panel));history_test_bmp("history-multi-overview");
+    /* MULTI uses the same header; no legacy overlay may cover its actions. */
+    history_test_click(history->actions[2]);
+    assert(test_exported_count==1 && test_exported_ids[0]==history->current_id);
     lv_obj_t *body=lv_obj_get_child(history->multi_panel,3);
     history_test_click(lv_obj_get_child(body,0));history_test_tick(100);
     assert(history->multi_selected==0);history_test_bmp("history-multi-usd");
@@ -763,9 +791,11 @@ int main(void)
     assert(history && !history->record_count && !history->result.matched_count);
     for(unsigned i=0;i<4;i++) {
         lv_obj_t *label=lv_damped_button_get_label(history->actions[i]);
-        assert(lv_obj_get_style_text_font(label,0)==&lv_font_instrument_sans_semibold_12);
-        if(!lv_obj_has_state(label,LV_STATE_DISABLED))
-            assert(lv_obj_get_style_text_color(label,0).full==lv_color_hex(HISTORY_BODY).full);
+        assert(lv_obj_get_style_text_font(label,0)==&lv_font_instrument_sans_medium_16);
+        assert(lv_obj_get_y(history->actions[i])==16);
+        assert(lv_obj_get_height(history->actions[i])==42);
+        if(!lv_obj_has_state(history->actions[i],LV_STATE_DISABLED))
+            assert(lv_obj_get_style_text_color(label,0).full==lv_color_hex(i==0?0xFFFFFF:LV_SETTINGS_ACTION_TEXT).full);
     }
     assert(lv_obj_is_visible(history->empty));
     history_test_bmp("history-empty");
@@ -773,6 +803,8 @@ int main(void)
     assert(history_test_timers() == baseline_timers);
     history_test_fixtures(20);
     ui_page_19_history_create(lv_scr_act()); history_test_tick(100);
+    history_test_control_feedback(history->actions[0],LV_SETTINGS_PRIMARY,LV_SETTINGS_PRIMARY_PRESSED,0xFFFFFF);
+    history_test_control_feedback(history->actions[3],LV_SETTINGS_CONTROL_SURFACE,LV_SETTINGS_CONTROL_PRESSED,LV_SETTINGS_ACTION_TEXT);
     history_test_bmp("history-full");
     history_test_list_and_detail();
     history_test_selection_and_delete();

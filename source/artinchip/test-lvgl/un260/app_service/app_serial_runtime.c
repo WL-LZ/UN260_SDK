@@ -12,7 +12,7 @@
 #define APP_UART_CONTROLLER_DEVICE "/dev/ttyS4"
 #define APP_UART_BRIDGE_DEVICE     "/dev/ttyS5"
 #define APP_UART_LOG_DEVICE        "/dev/ttyS6"
-#define APP_UART_CONTROLLER_BAUD   500000
+#define APP_UART_CONTROLLER_BAUD   512000
 #define APP_UART_BRIDGE_BAUD       115200
 #define APP_UART_LOG_BAUD          115200
 

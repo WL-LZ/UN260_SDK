@@ -125,6 +125,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_components/ui_list_window.c
     un260/lv_components/lv_recycled_list.c
     un260/lv_components/ui_scrollbar.c
+    un260/lv_components/lv_select_dropdown.c
     un260/lv_core/page_02_list_data.c
     un260/lv_core/page_02_list_search.c
     un260/app_service/setting_service.c
@@ -163,6 +164,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/counting/counting_reject_analysis_service.c
     un260/counting/counting_reject_reason.c
     un260/counting/counting_reject_sn_reply.c
+    un260/counting/counting_report_sync.c
     un260/innovation/multi_pass_verification.c
     un260/innovation/page_32_innovation.c
     un260/gesture/gesture_service.c

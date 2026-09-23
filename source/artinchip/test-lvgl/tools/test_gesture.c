@@ -189,5 +189,27 @@ int main(void)
     page=UI_PAGE_MAIN;unsigned returns_before=returned;
     sample(2,300,250,0);sample(2,300,100,0);release();
     assert(!password_modal&&returned==returns_before);
+    gesture_service_clear_pointer_policy(UI_PAGE_MAIN);page=UI_PAGE_MENU;
+    /* Edge zone tolerates the contact centroid being just inside the glass.
+     * Both sides accept a quick arc and a small natural recoil, not a tap. */
+    for(int side=0;side<2;side++) {
+        unsigned before=back;
+        int start=side?1244:35, direction=side?-1:1;
+        sample(1,start,180,0);
+        tick-=99;sample(1,start+direction*24,187,0);
+        tick-=99;sample(1,start+direction*80,245,0);
+        tick-=99;sample(1,start+direction*65,245,0);
+        release();assert(back==before+1);
+        sample(1,start,180,0);sample(1,start+direction*80,180,0);
+        sample(1,start+direction*30,180,0);release();assert(back==before+1);
+        sample(1,start,80,0);sample(1,start+direction*8,130,0);
+        sample(1,start+direction*90,130,0);release();assert(back==before+1);
+        sample(1,start,180,0);tick+=2400;
+        sample(1,start+direction*80,190,0);release();assert(back==before+2);
+    }
+    unsigned before=back;
+    sample(1,48,180,0);sample(1,160,180,0);release();assert(back==before);
+    /* Multiple queued SYN_REPORTs may be consumed at an identical UI tick. */
+    sample(1,10,180,0);tick-=100;sample(1,90,180,0);release();assert(back==before+1);
     puts("gesture: PASS (navigation without waiting for hint, cancellation, multi-touch and safety)");
 }

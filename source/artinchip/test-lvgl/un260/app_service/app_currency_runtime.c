@@ -71,7 +71,6 @@ void app_currency_runtime_handle_reply(counting_detail_state_t *detail_state,
         }
         page_07_curr_apply_switch_result(&reply.switch_result);
         uart_debug_printf("Set %s curr success\n", reply.active_code);
-        detail_state->wait_sn_after_reject_end = false;
         app_currency_runtime_expect_denom_refresh(detail_state);
     } else if (reply.kind == CURRENCY_REPLY_SWITCH_FAILURE) {
         page_07_curr_apply_switch_result(&reply.switch_result);
@@ -86,7 +85,6 @@ void app_currency_runtime_handle_reply(counting_detail_state_t *detail_state,
         ui_manager_publish_data_changed(UI_DATA_TOPIC_CURRENCY_CATALOG);
         if (!app_counting_runtime_reset_session(session, "boot currency sync")) return;
         sim_reset_for_currency(counting_data_mutable());
-        detail_state->wait_sn_after_reject_end = false;
         counting_denom_query_invalidate(detail_state);
         app_currency_runtime_expect_denom_refresh(detail_state);
     }

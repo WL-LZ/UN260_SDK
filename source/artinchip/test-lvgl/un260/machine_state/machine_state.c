@@ -43,6 +43,16 @@ void machine_state_get_snapshot(machine_state_snapshot_t *snapshot)
     if (snapshot != NULL) *snapshot = g_machine_state;
 }
 
+const char *machine_runtime_error_desc(uint8_t code)
+{
+    static const char *const descriptions[] = {
+        "No Error", "Feeder Jam", "Upper passage Jam", "Lower passage Jam",
+        "Reject Exit Jam", "Stacker Exit Jam", "Diverter Solenoid Fault",
+        "Stacker Pocket Residual Note"
+    };
+    return code < sizeof(descriptions) / sizeof(descriptions[0]) ? descriptions[code] : NULL;
+}
+
 void machine_state_confirm_mode(uint8_t mode)
 {
     g_machine_state.mode = mode;

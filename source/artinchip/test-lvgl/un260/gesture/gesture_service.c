@@ -15,6 +15,13 @@
 #include <string.h>
 #include <stdlib.h>
 
+/* Screen-space intent, independent of how many evdev reports LVGL drains in
+ * one tick. A 60ms minimum used to reject otherwise complete quick swipes. */
+#define EDGE_START_PX 40
+#define EDGE_CAPTURE_PX 14
+#define EDGE_ARM_PX 72
+#define EDGE_DISARM_PX 40
+
 typedef struct {
     bool started, captured, triggered, cancelled, releasing;
     uint8_t fingers;
@@ -194,10 +201,11 @@ static bool gesture_pointer_event(lv_indev_t *indev, lv_event_code_t event,
         g_runtime.tick = lv_tick_get();
         g_runtime.origin = ui_manager_get_current_page();
         g_runtime.fingers = 1;
-        g_runtime.side = point->x <= 24 ? 1 : point->x >= 1255 ? -1 : 0;
+        g_runtime.side = point->x < EDGE_START_PX ? 1 :
+                         point->x >= 1280 - EDGE_START_PX ? -1 : 0;
     }
     if(g_pending || g_runtime.origin != ui_manager_get_current_page() ||
-       lv_tick_elaps(g_runtime.tick) > 1800) {
+       (g_runtime.fingers == 2 && lv_tick_elaps(g_runtime.tick) > 1800)) {
         g_runtime.cancelled = true;
         touch_feedback_edge_hint(0, 0, 0);
         return g_runtime.captured;
@@ -226,14 +234,19 @@ static bool gesture_pointer_event(lv_indev_t *indev, lv_event_code_t event,
     if(count == 1) {
         if(!g_runtime.side) return false;
         int inward = dx * g_runtime.side;
-        if(abs(dy) > 64 || (abs(dy) > 18 && abs(dy) > abs(dx))) {
+        /* Decide direction before capture. Once captured, allow a natural
+         * diagonal arc; only clearly vertical motion cancels the sequence. */
+        if((!g_runtime.captured && abs(dy) > 18 && abs(dy) > abs(dx)) ||
+           (g_runtime.captured && abs(dy) > 48 && abs(dy) > abs(dx) * 2)) {
             g_runtime.cancelled = true;
             touch_feedback_edge_hint(0, 0, 0);
             return g_runtime.captured;
         }
-        if(inward < 18 && !g_runtime.captured) return false;
+        if(!g_runtime.captured &&
+           (inward < EDGE_CAPTURE_PX || inward * 4 < abs(dy) * 5)) return false;
         g_runtime.captured = true;
-        g_runtime.triggered = inward >= 96 && lv_tick_elaps(g_runtime.tick) >= 60;
+        if(inward >= EDGE_ARM_PX) g_runtime.triggered = true;
+        else if(inward < EDGE_DISARM_PX) g_runtime.triggered = false;
         g_runtime.action = GESTURE_ACTION_EXIT_PAGE;
         touch_feedback_edge_hint(g_runtime.side, inward, point->y);
         return true;

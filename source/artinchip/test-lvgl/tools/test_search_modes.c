@@ -67,7 +67,17 @@ static void test_list_modes(void)
     for(unsigned i=0;i<6;++i)data->denom[i].value=directory[i];
     data->total_pcs=15;
     page_02_list_search_t *s=page_02_list_search_create(lv_scr_act(),list_closed,NULL);assert(s);settle();
+    lv_obj_update_layout(s->grid);
+    for(size_t i=0;i<s->denomination_count;++i) {
+        assert(lv_obj_get_x(s->denom_buttons[i])+lv_obj_get_width(s->denom_buttons[i])<=ui_scrollbar_content_width(s->grid));
+        assert(lv_obj_get_y(s->denom_buttons[i])+lv_obj_get_height(s->denom_buttons[i])<=lv_obj_get_height(s->grid));
+    }
+    assert(lv_obj_get_scroll_bottom(s->grid)<=0); /* Six common values fit fully. */
     assert_pair(s->modes,false,0);
+    assert(lv_obj_get_style_bg_color(s->contains,0).full==lv_color_hex(LV_SETTINGS_CHOICE_SURFACE).full);
+    assert(lv_obj_get_style_border_opa(s->contains,0)==LV_OPA_COVER);
+    history_test_control_feedback(s->contains,LV_SETTINGS_CHOICE_SURFACE,LV_SETTINGS_CONTROL_PRESSED,LV_SETTINGS_PRIMARY);
+    history_test_control_feedback(s->exact,LV_SETTINGS_CONTROL_SURFACE,LV_SETTINGS_CONTROL_PRESSED,LV_SETTINGS_ACTION_TEXT);
     click(s->input);assert(lv_alnum_keyboard_set_text(s->keyboard,"SN0001"));apply();
     assert(s->result.matched_count==1&&s->slots[0]==0);
     click(s->exclude);assert(s->query.exclude_text);
@@ -92,6 +102,15 @@ static void test_list_modes(void)
     page_02_list_search_data_changed(s);settle();assert(s->result.matched_count==11&&s->slots[0]==15);
     located=UINT16_MAX;list_closed(s->slots[0],NULL);assert(located==15);
     for(unsigned i=0;i<12;++i){click(s->modes[0]);click(s->modes[1]);assert(s->result.matched_count==11);}
+    /* A long directory must scroll in a reserved lane, never over the keys. */
+    data->denom_number=COUNTING_DENOM_MAX_ITEMS;
+    for(unsigned i=0;i<COUNTING_DENOM_MAX_ITEMS;++i)data->denom[i].value=200+i;
+    page_02_list_search_data_changed(s);settle();click(s->modes[0]);
+    assert(lv_obj_get_scroll_bottom(s->grid)>0);
+    for(size_t i=0;i<s->denomination_count;++i)
+        assert(lv_obj_get_x(s->denom_buttons[i])+lv_obj_get_width(s->denom_buttons[i])<=ui_scrollbar_content_width(s->grid));
+    history_test_bmp("search-serial-scroll-gutter");
+    click(s->modes[1]);
     click(s->all);assert(s->result.matched_count==16);
     click(s->modes[0]);click(s->input);page_02_list_search_data_changed(s);
     assert(s->data_dirty);page_02_list_search_destroy(s);settle();assert(!ui_frame_commit_pending());

@@ -48,9 +48,13 @@ static bool qc_safe(void)
 {
     return quick.main && lv_obj_is_visible(quick.main) &&
         ui_manager_get_current_page()==UI_PAGE_MAIN && !ui_manager_is_transitioning() &&
-        !app_command_runtime_count_start_busy() && !machine_state_aging_running() &&
         !smart_island_is_expanded() &&
-        !fault_popup_is_showing() && !fault_popup_get_pending_fault(NULL,NULL,NULL);
+        !fault_popup_is_showing();
+}
+static bool qc_operation_safe(void)
+{
+    return !app_command_runtime_count_start_busy() && !machine_state_aging_running() &&
+        !fault_popup_get_pending_fault(NULL,NULL,NULL);
 }
 static bool qc_foreign_layer(const lv_point_t *point)
 {
@@ -99,6 +103,9 @@ static void qc_action(lv_event_t *event)
     if(quick.moving || !quick.active)return;
     unsigned id=(uintptr_t)lv_event_get_user_data(event);
     if(!qc_safe()) { qc_close_now();return; }
+    if((id == 2 || id == 4) && !qc_operation_safe()) {
+        qc_text(quick.message,qc_tr(UI_TEXT_QUICK_STANDBY_BUSY));return;
+    }
     if(id<2) {
         if(id==0)page_01_main_layout_set_enabled(!page_01_main_layout_is_enabled());
         else {
@@ -242,7 +249,7 @@ static void qc_animation_done(lv_anim_t *unused)
         if(quick.surface.image)lv_obj_add_flag(quick.surface.image,LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(quick.sheet,LV_OBJ_FLAG_HIDDEN);qc_refresh();
     } else {
-        qc_post_action_t action=qc_safe() && !qc_foreign_layer(&quick.point)?
+        qc_post_action_t action=qc_safe() && qc_operation_safe() && !qc_foreign_layer(&quick.point)?
             quick.after_close:QC_POST_NONE;
         qc_close_now();
         /* Do not layer the tutorial or a new page over the moving drawer.

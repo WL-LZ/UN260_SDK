@@ -15,6 +15,13 @@ int protocol_send(uint8_t cmd, const uint8_t *data, uint16_t len)
 static counting_detail_state_t d;
 static counting_session_state_t s;
 static counting_sim_t sim;
+#ifndef TEST_REAL_REPORT_SYNC
+/* These tests isolate denomination acquisition; report ownership is covered
+ * with production code in test_counting_report_sync and test_live_detail. */
+void counting_report_schedule(const counting_session_state_t *session,
+                             uint32_t tick)
+{ (void)session; (void)tick; }
+#endif
 static void marker(unsigned char fill)
 {
     uint8_t b[16] = {0xFD,0xDF,16,0x0B};

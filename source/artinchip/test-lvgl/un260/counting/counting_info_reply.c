@@ -153,7 +153,8 @@ counting_info_reply_result_t counting_info_reply_handle(counting_session_state_t
     if (status <= 0x01) {
         return counting_info_handle_live(session, sim_data, amount, qty, issue);
     }
-    if (status == 0x02) {
+    /* 03..05 are completed counts with full pockets, not live frames. */
+    if (status >= 0x02 && status <= 0x05) {
         return counting_info_handle_finished(session, sim_data, amount, qty, issue,
                                              history_total_notes_counted);
     }
