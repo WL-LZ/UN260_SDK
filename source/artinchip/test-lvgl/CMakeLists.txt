@@ -54,7 +54,9 @@ if(NOT MENU_ASSET_RESULT EQUAL 0)
 endif()
 file(GLOB_RECURSE UN260_ASSET_INPUTS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/aic_ui/lvgl_data/*")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${UN260_ASSET_INPUTS}
-             "${CMAKE_CURRENT_SOURCE_DIR}/tools/convert_lvgl_assets.py")
+             "${CMAKE_CURRENT_SOURCE_DIR}/tools/convert_lvgl_assets.py"
+             "${CMAKE_CURRENT_SOURCE_DIR}/tools/retired_assets.py"
+             "${CMAKE_CURRENT_SOURCE_DIR}/tools/retired_assets.json")
 include(${CMAKE_CURRENT_SOURCE_DIR}/aic_ui/generated_assets/assets.cmake)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_boot_d_assets.py"
@@ -494,5 +496,6 @@ if(DEFINED CMAKE_INSTALL_FULL_DATAROOTDIR)
 	install(DIRECTORY aic_ui/lvgl_data/
 		DESTINATION ${CMAKE_INSTALL_FULL_DATAROOTDIR}/lvgl_data
 		PATTERN "boot-light.bin" EXCLUDE
-        PATTERN "menu_icons" EXCLUDE)
+        PATTERN "menu_icons" EXCLUDE
+        ${UN260_RETIRED_ASSET_PATTERNS})
 endif() # CMAKE_INSTALL_FULL_DATAROOTDIR

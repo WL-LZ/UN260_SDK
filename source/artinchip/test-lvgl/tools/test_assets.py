@@ -10,9 +10,12 @@ import sys
 import tempfile
 from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location('converter', ROOT / 'tools/convert_lvgl_assets.py')
+converter = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(converter)
 dest = ROOT / 'aic_ui/generated_assets'
 manifest = json.loads((dest / 'manifest.json').read_text())
-assert manifest['total_raw_bytes'] <= 256 * 1024
+assert manifest['total_raw_bytes'] <= converter.MAX_EMBEDDED_BYTES
 assert all(max(e['width'], e['height']) <= 64 for e in manifest['entries'])
 assert all((ROOT / 'aic_ui/lvgl_data' / e['name']).is_file() for e in manifest['external'])
 for e in manifest['entries']:
@@ -27,11 +30,10 @@ for e in manifest['entries']:
     with Image.open(ROOT / 'aic_ui/lvgl_data' / e['name']) as original:
         assert decoded.tobytes() == original.convert('RGBA').tobytes(), e['name']
 print('assets: all %d images pixel-identical (including alpha)' % len(manifest['entries']))
-spec = importlib.util.spec_from_file_location('converter', ROOT / 'tools/convert_lvgl_assets.py')
-converter = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(converter)
 fixture = Path(tempfile.mkdtemp(prefix='un260-assets-test-'))
 converter.ROOT = fixture
+(fixture / 'tools').mkdir()
+(fixture / 'tools/retired_assets.json').write_text(json.dumps({'schema': 1, 'retired': []}))
 sys.argv = ['convert_lvgl_assets.py']
 source = fixture / 'aic_ui/lvgl_data'
 source.mkdir(parents=True)
@@ -79,13 +81,47 @@ assert not (out / 'a.png.c').exists()
 assert (source / 'a.png').exists()
 policy = json.loads((out / 'manifest.json').read_text())
 assert {e['name'] for e in policy['external']} == {'a.png', 'background.png'}
-for i in range(20):
+for i in range(converter.MAX_EMBEDDED_BYTES // (64 * 64 * 4) + 8):
     Image.new('RGB', (64, 64), (i, 2, 3)).save(source / ('icon%02d.png' % i))
 converter.main()
 policy = json.loads((out / 'manifest.json').read_text())
-assert policy['total_raw_bytes'] <= 256 * 1024
+assert policy['total_raw_bytes'] <= converter.MAX_EMBEDDED_BYTES
 assert any(e['reason'] == 'budget' for e in policy['external'])
 sys.argv = ['convert_lvgl_assets.py', '--check']
 converter.main()
+sys.argv = ['convert_lvgl_assets.py']
+(source / 'ui_icons').mkdir()
+retired = source / 'ui_icons/unused_18.png'
+Image.new('RGBA', (18, 18), (20, 40, 60, 255)).save(retired)
+original = retired.read_bytes()
+converter.main()
+(fixture / 'tools/retired_assets.json').write_text(json.dumps({'schema': 1, 'retired': [
+    {'name': 'ui_icons/unused_18.png', 'sha256': hashlib.sha256(original).hexdigest(),
+     'reference_token': 'unused_18'}]}))
+converter.main()
+policy = json.loads((out / 'manifest.json').read_text())
+assert all(e['name'] != 'ui_icons/unused_18.png' for e in policy['entries'] + policy['external'])
+assert not (out / 'ui_icons/unused_18.png.c').exists()
+assert retired.read_bytes() == original
+assert (source / 'background.png').exists()
+Image.new('RGBA', (18, 18), (1, 2, 3, 255)).save(retired)
+try:
+    converter.main()
+    raise AssertionError('Changed user image must not be silently retired')
+except RuntimeError as error:
+    assert 'Retired source changed' in str(error)
+retired.write_bytes(original)
+(fixture / 'un260').mkdir()
+reference = fixture / 'un260/page.c'
+reference.write_text('const char *icon = UI_ICON("unused_18");')
+try:
+    converter.main()
+    raise AssertionError('Reused icon must block retirement')
+except RuntimeError as error:
+    assert 'Retired icon referenced' in str(error)
+reference.unlink()
+sys.argv = ['convert_lvgl_assets.py', '--check']
+converter.main()
+print('assets: PASS retirement (exact hash, source retained, no user-picture deletion, future reuse guard)')
 print('assets: PASS (determinism, nested lookup, new image, stale generated removal, C byte order)')
 print('Test artifacts:', fixture)

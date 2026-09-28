@@ -1,0 +1,146 @@
+#!/bin/sh
+# Generated exact-path/hash allowlist. No user data, partitions or libraries.
+set -eu
+ROOT=/
+USB=/mnt/usb
+MOUNTS=/proc/mounts
+LOCK=/tmp/un260-resource-cleanup.lock
+BACKUP=$USB/UN260_RESOURCE_BACKUP_20260924
+MODE=${1:---check}
+REQUIRED_APP_SHA256=@APP_SHA256@
+case "$MODE" in --check|--apply|--restore) ;; *) echo 'Usage: sh UN260_RESOURCE_CLEANUP.sh [--check|--apply|--restore]' >&2; exit 2;; esac
+[ "$#" -le 1 ] || exit 2
+fail() { echo "ERROR: $*" >&2; exit 1; }
+digest() { sha256sum "$1" | awk '{print $1}'; }
+manifest() {
+    cat <<'UN260_REVIEWED_FILES'
+@MANIFEST@
+UN260_REVIEWED_FILES
+}
+safe_path() {
+    # Reject symlinks at EVERY component, including the USB mount and backup.
+    safe=$1
+    while [ "$safe" != / ] && [ "$safe" != . ]; do
+        [ ! -L "$safe" ] || return 1
+        safe=$(dirname "$safe")
+    done
+}
+check_usb() {
+    safe_path "$USB" || fail 'USB path is a symlink'
+    awk -v p="$USB" '$2==p && $1 ~ /^\/dev\// {found=1} END {exit !found}' "$MOUNTS" || fail 'USB is not mounted; refusing rootfs backup'
+    [ -d "$USB" ] || fail 'USB missing'
+}
+if [ "$MODE" != --check ]; then
+    [ "$(id -u)" = 0 ] || fail 'Run as root'
+    [ ! -e "$ROOT/var/lib/un260-updater/transaction" ] || fail 'Finish/recover the pending UI update first'
+    check_usb
+    safe_path "$BACKUP" || fail 'Unsafe backup path'
+    mkdir "$LOCK" || fail 'Cleanup is already running (or stale lock; inspect before retrying)'
+    trap 'rmdir "$LOCK" 2>/dev/null || :' 0
+    trap 'exit 1' 1 2 15
+fi
+
+if [ "$MODE" = --restore ]; then
+    [ -d "$BACKUP/files" ] || fail 'No resource backup found'
+    # Validate the complete available backup before any restore writes.
+    manifest | while IFS='|' read -r hash bytes mode rel; do
+        saved=$BACKUP/files/$rel
+        safe_path "$saved" && safe_path "$ROOT/$rel" || fail "Unsafe restore path: $rel"
+        [ -e "$saved" ] || continue
+        [ -f "$saved" ] && [ "$(digest "$saved")" = "$hash" ] || fail "Backup mismatch: $rel"
+        if [ -e "$ROOT/$rel" ]; then
+            [ -f "$ROOT/$rel" ] && [ "$(digest "$ROOT/$rel")" = "$hash" ] || fail "Refuse overwriting changed file: $rel"
+        fi
+    done
+    manifest | while IFS='|' read -r hash bytes mode rel; do
+        saved=$BACKUP/files/$rel
+        [ -f "$saved" ] || continue
+        [ ! -e "$ROOT/$rel" ] || continue
+        check_usb
+        safe_path "$saved" && safe_path "$ROOT/$rel" && safe_path "$ROOT/$rel.un260-resource-restore" || fail "Unsafe restore path: $rel"
+        [ ! -e "$ROOT/$rel.un260-resource-restore" ] || fail "Stale restore file: $rel"
+        mkdir -p "$(dirname "$ROOT/$rel")"
+        cp "$saved" "$ROOT/$rel.un260-resource-restore"
+        [ "$(digest "$ROOT/$rel.un260-resource-restore")" = "$hash" ] || fail "Restore verification failed: $rel"
+        chmod "$mode" "$ROOT/$rel.un260-resource-restore"
+        mv "$ROOT/$rel.un260-resource-restore" "$ROOT/$rel"
+        echo "RESTORED $rel"
+    done
+    sync
+    echo 'RESTORE COMPLETE; backup retained.'
+    df -k "$ROOT"
+    exit 0
+fi
+
+icon_cleanup=0
+if safe_path "$ROOT/usr/local/bin/test_lvgl" && [ -f "$ROOT/usr/local/bin/test_lvgl" ]; then
+    if [ "$(digest "$ROOT/usr/local/bin/test_lvgl")" = "$REQUIRED_APP_SHA256" ]; then icon_cleanup=1; fi
+fi
+if [ "$icon_cleanup" = 0 ]; then
+    echo 'Old/unknown application: SDK demos only. Retired UI icons remain until the matching new application is installed.'
+fi
+
+if [ "$MODE" = --apply ]; then
+    # Manifest is fixed in this reviewed script, never read from an editable USB list.
+    safe_path "$BACKUP/files" && safe_path "$BACKUP/plan.pending" || fail 'Unsafe backup metadata path'
+    [ ! -e "$BACKUP/plan.pending" ] || [ -f "$BACKUP/plan.pending" ] || fail 'Invalid backup metadata'
+    mkdir -p "$BACKUP/files"
+    required=$(manifest | awk -F'|' '{n+=int(($2+1023)/1024)+4} END {print n+2048}')
+    available=$(df -Pk "$USB" | awk 'NR==2 {print $4}')
+    case "$available" in ''|*[!0-9]*) fail 'Cannot read USB free space';; esac
+    [ "$available" -ge "$required" ] || fail 'Insufficient USB backup space'
+    : > "$BACKUP/plan.pending"
+fi
+manifest | while IFS='|' read -r hash bytes mode rel; do
+    case "$rel" in usr/local/share/lvgl_data/*) [ "$icon_cleanup" = 1 ] || continue;; esac
+    file=$ROOT/$rel
+    if ! safe_path "$file"; then echo "KEEP symlink: $rel"; continue; fi
+    [ -e "$file" ] || continue
+    if [ ! -f "$file" ] || [ "$(digest "$file")" != "$hash" ]; then
+        echo "KEEP unknown/modified: $rel"; continue
+    fi
+    echo "MATCH $bytes bytes $rel"
+    [ "$MODE" = --apply ] || continue
+    check_usb
+    saved=$BACKUP/files/$rel
+    safe_path "$saved" && safe_path "$saved.part" || fail "Unsafe backup file: $rel"
+    mkdir -p "$(dirname "$saved")"
+    if [ -e "$saved" ]; then
+        [ -f "$saved" ] && [ "$(digest "$saved")" = "$hash" ] || fail "Existing backup differs: $rel"
+    else
+        [ ! -e "$saved.part" ] || fail "Incomplete backup; inspect $saved.part before retrying"
+        cp "$file" "$saved.part"
+        [ "$(digest "$saved.part")" = "$hash" ] || fail "Backup verification failed: $rel"
+        mv "$saved.part" "$saved"
+    fi
+    printf '%s|%s|%s|%s\n' "$hash" "$bytes" "$mode" "$rel" >> "$BACKUP/plan.pending"
+done
+if [ "$MODE" = --check ]; then
+    echo 'CHECK ONLY: nothing removed. --apply backs up all matches before removal.'
+    df -k "$ROOT"
+    exit 0
+fi
+sync
+check_usb
+# Every eligible file has a durable verified USB backup before the first delete.
+if [ "$icon_cleanup" = 1 ]; then
+    safe_path "$ROOT/usr/local/bin/test_lvgl" && [ -f "$ROOT/usr/local/bin/test_lvgl" ] &&
+        [ "$(digest "$ROOT/usr/local/bin/test_lvgl")" = "$REQUIRED_APP_SHA256" ] || fail 'Application changed; keep UI icons'
+fi
+while IFS='|' read -r hash bytes mode rel; do
+    manifest | grep -F -x "$hash|$bytes|$mode|$rel" >/dev/null || fail 'Backup plan differs from the built-in allowlist'
+    case "$rel" in usr/local/share/lvgl_data/*)
+        [ "$icon_cleanup" = 1 ] || fail 'Keep UI icons for the old/unknown application';;
+    esac
+    check_usb
+    file=$ROOT/$rel
+    saved=$BACKUP/files/$rel
+    safe_path "$file" && safe_path "$saved" || fail "Path changed: $rel"
+    [ -f "$saved" ] && [ "$(digest "$saved")" = "$hash" ] || fail "Backup no longer valid: $rel"
+    [ -f "$file" ] && [ "$(digest "$file")" = "$hash" ] || fail "Source changed during cleanup: $rel"
+    rm "$file"
+    echo "REMOVED $rel"
+done < "$BACKUP/plan.pending"
+sync
+echo "CLEANUP COMPLETE. Recoverable backup: $BACKUP/files"
+df -k "$ROOT"
