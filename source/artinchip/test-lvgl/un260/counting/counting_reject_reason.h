@@ -4,5 +4,8 @@
 #include <stdint.h>
 
 const char *counting_reject_reason_get(uint8_t code);
+typedef struct { const char *title, *meaning, *causes, *action; } counting_reject_guide_t;
+/* Protocol-defined meaning; causes are possibilities, never a diagnosis. */
+const counting_reject_guide_t *counting_reject_guide_get(uint8_t code);
 
 #endif

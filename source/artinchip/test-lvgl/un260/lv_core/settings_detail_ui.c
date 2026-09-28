@@ -768,7 +768,7 @@ static void settings_keyboard_create_action(lv_obj_t* parent, int x, int y, int 
     lv_obj_center(label);
 }
 
-static void settings_keyboard_create_number_keys(lv_obj_t* parent)
+static void settings_keyboard_create_number_keys(lv_obj_t* parent, bool integer)
 {
     static const char* keys[4][3] = {
         { "1", "2", "3" },
@@ -776,25 +776,39 @@ static void settings_keyboard_create_number_keys(lv_obj_t* parent)
         { "7", "8", "9" },
         { "CLEAR", "0", "BACK" },
     };
-    int key_w = 113;
-    int key_h = 64;
-    int gap_x = 10;
-    int gap_y = 10;
+    int key_w = integer ? 107 : 113;
+    int key_h = integer ? 65 : 64;
+    int gap_x = integer ? 8 : 10;
+    int gap_y = integer ? 8 : 10;
     int start_x = 0;
     int start_y = 0;
 
     for (int r = 0; r < 4; r++) {
         for (int c = 0; c < 3; c++) {
-            settings_keyboard_create_key(parent,
+            lv_obj_t *key_button = settings_keyboard_create_key(parent,
                                          start_x + c * (key_w + gap_x),
                                          start_y + r * (key_h + gap_y),
                                          key_w, key_h,
                                          strcmp(keys[r][c],"CLEAR")==0 ? "Clear" : keys[r][c], keys[r][c],
                                          lv_color_hex(0xF8F9FB));
+            if(integer) {
+                bool utility = r == 3 && c != 1;
+                lv_damped_button_set_exact_palette(key_button, lv_color_hex(utility ? 0xFFFFFF : 0xF4F6F7), lv_color_hex(0xE2E9EE));
+                lv_obj_set_style_border_width(key_button, utility ? 0 : 1, 0);
+                lv_obj_set_style_text_font(lv_obj_get_child(key_button,0), utility ?
+                    &lv_font_instrument_sans_medium_16 : &lv_font_instrument_sans_medium_26, 0);
+                if(r == 3 && c == 2) lv_img_set_src(lv_obj_get_child(key_button,1), LVGL_DIR "pin_icons/erase.png");
+            }
         }
     }
 
     lv_obj_t *card=lv_obj_get_parent(parent);
+    if(integer) {
+        settings_keyboard_create_action(card,34,285,310,48,"Apply",lv_color_hex(0x1462CC),settings_keyboard_commit_cb);
+        lv_obj_t *close=settings_detail_create_button(card,792,14,36,36,"",lv_color_hex(0xFFFFFF),settings_keyboard_cancel_cb,NULL);
+        lv_obj_t *icon=lv_img_create(close);lv_img_set_src(icon,LVGL_DIR "pin_icons/close.png");lv_obj_center(icon);
+        return;
+    }
     /* Keep the existing signed/decimal contract; validation belongs to field owners. */
     settings_keyboard_create_key(card,30,204,80,46,"-","-",lv_color_hex(0xF1F4F5));
     settings_keyboard_create_key(card,120,204,80,46,".",".",lv_color_hex(0xF1F4F5));
@@ -895,8 +909,9 @@ bool settings_detail_keyboard_show_ex(const char* title,
     top = lv_obj_create(g_settings_keyboard.root);
     detail_style_plain(top);
     bool numeric = mode != SETTINGS_DETAIL_KEYBOARD_TEXT;
-    lv_obj_set_pos(top, numeric ? 174 : 125, numeric ? 24 : 48);
-    lv_obj_set_size(top, numeric ? 932 : 1030, numeric ? 352 : 304);
+    bool integer = mode == SETTINGS_DETAIL_KEYBOARD_UINT;
+    lv_obj_set_pos(top, integer ? 215 : numeric ? 174 : 125, integer ? 18 : numeric ? 24 : 48);
+    lv_obj_set_size(top, integer ? 850 : numeric ? 932 : 1030, integer ? 364 : numeric ? 352 : 304);
     lv_obj_set_style_bg_opa(top, LV_OPA_TRANSP, 0);
     lv_obj_add_flag(top, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(g_settings_keyboard.root, settings_keyboard_cancel_cb, LV_EVENT_CLICKED, NULL);
@@ -905,8 +920,8 @@ bool settings_detail_keyboard_show_ex(const char* title,
 
     dialog = lv_obj_create(top);
     detail_style_plain(dialog);
-    lv_obj_set_pos(dialog, numeric ? 30 : 20, numeric ? 26 : 10);
-    lv_obj_set_size(dialog, numeric ? 484 : 650, numeric ? 170 : 72);
+    lv_obj_set_pos(dialog, integer ? 34 : numeric ? 30 : 20, integer ? 60 : numeric ? 26 : 10);
+    lv_obj_set_size(dialog, integer ? 404 : numeric ? 484 : 650, numeric ? 170 : 72);
     lv_obj_set_style_bg_color(dialog, lv_color_hex(0xFFFFFF), 0);
     lv_obj_set_style_bg_opa(dialog, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(dialog, 0, 0);
@@ -922,7 +937,7 @@ bool settings_detail_keyboard_show_ex(const char* title,
     input_wrap = lv_obj_create(dialog);
     detail_style_plain(input_wrap);
     lv_obj_set_pos(input_wrap, 0, numeric ? 58 : 26);
-    lv_obj_set_size(input_wrap, numeric ? 440 : 650, numeric ? 78 : 44);
+    lv_obj_set_size(input_wrap, integer ? 360 : numeric ? 440 : 650, numeric ? 78 : 44);
     lv_obj_set_style_bg_color(input_wrap, lv_color_hex(0xF8FAFC), 0);
     lv_obj_set_style_bg_opa(input_wrap, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(input_wrap, 2, 0);
@@ -931,15 +946,15 @@ bool settings_detail_keyboard_show_ex(const char* title,
 
     g_settings_keyboard.input_label = settings_detail_create_label(input_wrap, "", &lv_font_instrument_sans_medium_24,
                                                                   detail_text(), 14, 13);
-    lv_obj_set_size(g_settings_keyboard.input_label, numeric ? 412 : 618, numeric ? 48 : 30);
+    lv_obj_set_size(g_settings_keyboard.input_label, integer ? 330 : numeric ? 412 : 618, numeric ? 48 : 30);
     if(!numeric) lv_obj_set_y(g_settings_keyboard.input_label,7);
     if(numeric) lv_obj_set_style_text_font(g_settings_keyboard.input_label,&lv_font_instrument_sans_semibold_40,0);
     lv_obj_set_style_text_color(g_settings_keyboard.input_label,lv_color_hex(0x1D2B34),0);
 
     keyboard = lv_obj_create(top);
     detail_style_plain(keyboard);
-    lv_obj_set_pos(keyboard, numeric ? 542 : 0, numeric ? 26 : 92);
-    lv_obj_set_size(keyboard, numeric ? 360 : 1030, numeric ? 300 : 197);
+    lv_obj_set_pos(keyboard, integer ? 486 : numeric ? 542 : 0, integer ? 55 : numeric ? 26 : 92);
+    lv_obj_set_size(keyboard, integer ? 336 : numeric ? 360 : 1030, numeric ? 300 : 197);
     lv_obj_set_style_bg_color(keyboard, detail_panel(), 0);
     lv_obj_set_style_bg_opa(keyboard, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(keyboard, 0, 0);
@@ -964,7 +979,7 @@ bool settings_detail_keyboard_show_ex(const char* title,
     if (mode == SETTINGS_DETAIL_KEYBOARD_TEXT) {
         settings_keyboard_create_text_keys(keyboard);
     } else {
-        settings_keyboard_create_number_keys(keyboard);
+        settings_keyboard_create_number_keys(keyboard,integer);
     }
 
     settings_keyboard_update_case();

@@ -4,6 +4,10 @@
 #include "lv_page_manager.h"
 #include "lv_port_indev.h"
 #include "un260/app_service/app_command_runtime.h"
+#include "un260/app_service/workspace_service.h"
+#include "un260/app_service/setting_service.h"
+#include "un260/lv_components/lv_quick_controls.h"
+#include "un260/lv_resources/ui_icons.h"
 #include "un260/device_info/device_info.h"
 #include "un260/gesture/gesture_service.h"
 #include "un260/gesture/gesture_guide.h"
@@ -25,7 +29,8 @@ typedef enum {
     QC_POST_NONE, QC_POST_STANDBY, QC_POST_STANDBY_SETTINGS, QC_POST_GESTURE_GUIDE
 } qc_post_action_t;
 static struct {
-    lv_obj_t *main,*root,*sheet,*grab,*switches[2],*thumbs[2],*states[2],*versions[3],*message;
+    lv_obj_t *main,*root,*sheet,*grab,*message;
+    lv_quick_controls_t controls;
     lv_dma_static_surface_t surface;
     lv_timer_t *timer;
     bool active,moving,opening,prepared,dirty,down,candidate,dragging,drain,tap_grab;
@@ -87,16 +92,8 @@ static void qc_icon(lv_obj_t *p,int x,int y,const char *path)
 static void qc_refresh(void)
 {
     if(!quick.sheet)return;
-    bool values[]={page_01_main_layout_is_enabled(),gesture_service_enabled()};
-    for(unsigned i=0;i<2;++i) {
-        lv_obj_set_style_bg_color(quick.switches[i],lv_color_hex(values[i]?0x1462CC:0xD9E1E6),0);
-        lv_obj_set_x(quick.thumbs[i],values[i]?33:3);
-        qc_text(quick.states[i],qc_tr(values[i]?UI_TEXT_QUICK_ON:UI_TEXT_QUICK_OFF));
-    }
-    const char *versions[]={device_info_is_valid()?device_info_main_app():NULL,
-        device_info_is_valid()?device_info_image_app():NULL,device_info_display_app()};
-    for(unsigned i=0;i<3;++i)
-        qc_text(quick.versions[i],versions[i] && *versions[i]?versions[i]:qc_tr(UI_TEXT_QUICK_UNAVAILABLE));
+    lv_quick_controls_state_t state={.layout=page_01_main_layout_is_enabled(),.gestures=gesture_service_enabled(),.versions={device_info_is_valid()?device_info_main_app():NULL,device_info_is_valid()?device_info_image_app():NULL,device_info_display_app()}};
+    if(lv_quick_controls_refresh(&quick.controls,state))quick.dirty=true;
 }
 static void qc_action(lv_event_t *event)
 {
@@ -123,12 +120,6 @@ static void qc_action(lv_event_t *event)
         qc_settle(false);
     } else qc_settle(false);
 }
-static lv_obj_t *qc_card(int x,int w)
-{
-    lv_obj_t *o=qc_box(quick.sheet,x,104,w,120,0xFFFFFF,16);
-    lv_obj_set_style_border_width(o,1,0);lv_obj_set_style_border_color(o,lv_color_hex(0xE9EFF3),0);
-    return o;
-}
 static void qc_build(void)
 {
     if(quick.root && quick.language!=ui_lang_get()) {
@@ -150,47 +141,7 @@ static void qc_build(void)
     lv_obj_clear_flag(cap,LV_OBJ_FLAG_CLICKABLE);
     qc_label(quick.sheet,24,18,700,qc_tr(UI_TEXT_QUICK_TITLE),&lv_font_instrument_sans_semibold_28,0x1D2B34);
     qc_label(quick.sheet,24,53,800,qc_tr(UI_TEXT_QUICK_SUBTITLE),&lv_font_instrument_sans_medium_14,0x586B77);
-    qc_label(quick.sheet,24,80,830,qc_tr(UI_TEXT_QUICK_PREFERENCES),&lv_font_instrument_sans_semibold_12,0x586B77);
-    qc_label(quick.sheet,892,80,324,qc_tr(UI_TEXT_QUICK_VERSIONS),&lv_font_instrument_sans_semibold_12,0x586B77);
-    const ui_text_id_t titles[]={UI_TEXT_QUICK_LAYOUT,UI_TEXT_QUICK_GESTURES};
-    const ui_text_id_t hints[]={UI_TEXT_QUICK_LAYOUT_HINT,UI_TEXT_QUICK_GESTURE_HINT};
-    const char *icons[]={LVGL_DIR "quick_icons/layout.png",LVGL_DIR "quick_icons/gesture.png"};
-    for(unsigned i=0;i<2;++i) {
-        lv_obj_t *tile=qc_card(24+298*i,286);
-        lv_obj_set_style_bg_color(tile,lv_color_hex(0xEDF2F6),LV_STATE_PRESSED);
-        lv_obj_add_event_cb(tile,qc_action,LV_EVENT_CLICKED,(void *)(uintptr_t)i);
-        qc_icon(tile,16,18,icons[i]);
-        qc_label(tile,54,16,138,qc_tr(titles[i]),&lv_font_instrument_sans_semibold_18,0x1D2B34);
-        quick.states[i]=qc_label(tile,54,43,135,"",&lv_font_instrument_sans_medium_14,0x586B77);
-        qc_label(tile,16,85,254,qc_tr(hints[i]),&lv_font_instrument_sans_medium_12,0x586B77);
-        quick.switches[i]=qc_box(tile,202,21,64,34,0x1462CC,17);
-        quick.thumbs[i]=qc_box(quick.switches[i],33,3,28,28,0xFFFFFF,14);
-        lv_obj_clear_flag(quick.switches[i],LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_clear_flag(quick.thumbs[i],LV_OBJ_FLAG_CLICKABLE);
-    }
-    lv_obj_t *standby=qc_card(620,240);
-    qc_icon(standby,16,18,LVGL_DIR "quick_icons/standby.png");
-    qc_label(standby,54,18,122,qc_tr(UI_TEXT_QUICK_STANDBY),&lv_font_instrument_sans_semibold_18,0x1D2B34);
-    qc_label(standby,16,46,156,qc_tr(UI_TEXT_QUICK_WAKE_HINT),&lv_font_instrument_sans_medium_12,0x586B77);
-    lv_obj_t *settings=qc_box(standby,180,10,44,44,0xEAF0F4,12);
-    lv_obj_set_style_border_width(settings,1,0);
-    lv_obj_set_style_border_color(settings,lv_color_hex(0xDCE5EC),0);
-    lv_obj_set_style_bg_color(settings,lv_color_hex(0xD7E5F6),LV_STATE_PRESSED);
-    lv_obj_set_style_border_color(settings,lv_color_hex(0xA8C6EB),LV_STATE_PRESSED);
-    qc_icon(settings,9,9,LVGL_DIR "quick_icons/settings.png");
-    lv_obj_add_event_cb(settings,qc_action,LV_EVENT_CLICKED,(void *)4);
-    lv_obj_t *enter=qc_box(standby,16,65,208,44,0xEAF1FB,12);
-    lv_obj_set_style_bg_color(enter,lv_color_hex(0xD7E5F6),LV_STATE_PRESSED);
-    lv_obj_add_event_cb(enter,qc_action,LV_EVENT_CLICKED,(void *)2);
-    lv_obj_t *enter_text=qc_label(enter,0,0,180,qc_tr(UI_TEXT_QUICK_ENTER),&lv_font_instrument_sans_semibold_16,0x1462CC);
-    lv_obj_set_style_text_align(enter_text,LV_TEXT_ALIGN_CENTER,0);lv_obj_center(enter_text);
-    lv_obj_t *line=qc_box(quick.sheet,878,80,1,144,0xDFE7ED,0);lv_obj_clear_flag(line,LV_OBJ_FLAG_CLICKABLE);
-    const ui_text_id_t version_titles[]={UI_TEXT_QUICK_CONTROLLER,UI_TEXT_QUICK_IMAGE,UI_TEXT_QUICK_UI};
-    for(unsigned i=0;i<3;++i) {
-        qc_label(quick.sheet,892,111+38*i,146,qc_tr(version_titles[i]),&lv_font_instrument_sans_medium_14,0x586B77);
-        quick.versions[i]=qc_label(quick.sheet,1038,108+38*i,180,"",&lv_font_instrument_sans_semibold_18,0x1D2B34);
-        lv_obj_set_style_text_align(quick.versions[i],LV_TEXT_ALIGN_RIGHT,0);
-    }
+    lv_quick_controls_create(&quick.controls,quick.sheet,24,80,qc_action);
     lv_obj_t *close=qc_box(quick.sheet,1090,18,132,44,0xEAF0F4,12);
     lv_obj_set_style_bg_color(close,lv_color_hex(0xDDE6ED),LV_STATE_PRESSED);
     qc_icon(close,15,13,LVGL_DIR "quick_icons/up.png");
@@ -337,6 +288,9 @@ bool page_01_main_quick_pointer(lv_indev_t *indev,lv_event_code_t event,const lv
     quick.down=!released;if(point)quick.point=*point;
     if(quick.drain) { if(released)quick.drain=false;return true; }
     bool visible=quick.active || quick.moving;
+    if(!visible && !workspace_service_quick_enabled()) {
+        quick.candidate=false;return false;
+    }
     if(!qc_safe() || (point && qc_foreign_layer(point))) {
         quick.candidate=false;
         if(visible) { qc_close_now();return true; }

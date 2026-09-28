@@ -37,13 +37,16 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
         runtime, "bool app_counting_runtime_reset_session("), encoding="utf-8")
     def compile_binary(output, overlay=None, store_path=state):
         includes = ["-I" + str(overlay)] if overlay else []
-        subprocess.run([compiler, "-std=c11", "-O1", "-g", "-Wall", "-Wextra", "-Werror",
+        subprocess.run([compiler, "-std=c11", "-O1", "-g", "-Wall", "-Wextra", "-Werror", "-Wno-misleading-indentation",
                         "-fno-omit-frame-pointer", "-fsanitize=" + args.sanitize,
                         "-no-pie", "-pthread", *includes, "-I" + str(ROOT), "-I" + str(work),
                         '-DUI_HISTORY_STORE_DIR="' + store_path.as_posix() + '"',
                         str(ROOT / "tools/test_history_storage.c"),
                         str(ROOT / "un260/storage/storage_worker.c"),
                         str(ROOT / "un260/counting/counting_history_service.c"),
+                        str(ROOT / "un260/counting/counting_cashbook.c"),
+                        str(ROOT / "un260/workspace/cashbook.c"),
+                        str(ROOT / "tools/test_cashbook_history_bridge.c"),
                         str(ROOT / "un260/counting/counting_data_store.c"),
                         "-Wl,--wrap=malloc", "-o", str(output)], check=True)
 

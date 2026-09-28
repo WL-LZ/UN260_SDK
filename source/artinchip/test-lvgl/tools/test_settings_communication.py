@@ -97,6 +97,7 @@ static void test_print(void) {
         return;
     }
     assert(print_replies==1 && last_print.success && !last_print.timeout);
+    assert(print_config_last_result()->success);
     print_config_get(&after); assert(after.content==2);
     now_ms+=1000; poll_print_timeout(); assert(popup_count==0);
     setting_reply_handle_print(captured,sizeof(captured)); assert(print_replies==1);
@@ -110,6 +111,7 @@ static void test_print(void) {
     print_config_get(&before); print_request(2,1);
     setting_reply_handle_print(failure,sizeof(failure));
     assert(!last_print.success && !last_print.timeout);
+    assert(!print_config_last_result()->success&&!print_config_last_result()->timeout);
     print_config_get(&after); assert(memcmp(&before,&after,sizeof(before))==0);
     now_ms+=1000; poll_print_timeout(); assert(popup_count==0);
     print_request(3,1); unsigned previous=print_replies;
@@ -123,6 +125,7 @@ static void test_print(void) {
     print_request(2,1); now_ms+=800;
     setting_reply_handle_print(captured,sizeof(captured)); poll_print_timeout();
     assert(popup_count==2 && last_print.timeout);
+    assert(print_config_last_result()->timeout);
     /* Explicit cancellation/shutdown and send failure leave no later popup. */
     print_request(2,1); print_config_cancel_request(); previous=print_replies;
     setting_reply_handle_print(captured,sizeof(captured)); assert(print_replies==previous);
@@ -136,6 +139,12 @@ static void test_print(void) {
     uint8_t boot[]={0xFD,0xDF,7,0x41,1,3,0};
     setting_reply_handle_print(boot,sizeof(boot)); assert(boot_replies==1);
     puts("PASS print: captured ACK, all subcommands, reject, malformed, timeout, late/duplicate/cancelled ACK, send failure, legacy routing");
+    print_config_get(&after);strcpy(after.head1,"UN260 COUNTER");
+    assert(print_config_request_field(PRINT_CONFIG_HEAD1,&after));
+    setting_reply_handle_print(captured,sizeof(captured));print_config_get(&before);assert(!strcmp(before.head1,"UN260 COUNTER"));
+    strcpy(after.head1,"bad\nheading");assert(!print_config_request_field(PRINT_CONFIG_HEAD1,&after));
+    after.content=99;assert(!print_config_request_field(PRINT_CONFIG_CONTENT,&after));
+    after.space_top=100;assert(!print_config_request_field(PRINT_CONFIG_TOP,&after));
 }
 typedef int lv_obj_t;
 static lv_obj_t object;
@@ -145,7 +154,7 @@ static lv_obj_t *profiles[CFD_SCENE_COUNT];
 static lv_obj_t *cells[CFD_ITEM_COUNT][CFD_LEVEL_MAX];
 static unsigned selected_scene, original_scene, cfd_refreshes, deletes;
 static bool ready, saving;
-static lv_obj_t *loading, *loading_text, *loading_orbit;
+static lv_obj_t *loading, *loading_text, *loading_orbit, *rows;
 static void *loading_timer;
 static void lv_timer_del(void *timer) { (void)timer; }
 static cfd_state_value_t original, draft;

@@ -24,6 +24,11 @@ void gesture_service_set_page_policy(uint32_t owner, bool (*drag)(void), bool (*
 void gesture_service_clear_page_policy(uint32_t owner) {(void)owner;multi_policy=NULL;}
 #include "un260/lv_components/lv_nav_button.c"
 static unsigned display_back_requests;
+bool backlight_service_probe(void) { return true; }
+int backlight_service_level(void) { return 60; }
+int backlight_service_max(void) { return 100; }
+void settings_detail_action_block(lv_obj_t *button,const char *reason)
+{ if(reason)lv_obj_add_state(button,LV_STATE_DISABLED);else lv_obj_clear_state(button,LV_STATE_DISABLED); }
 bool ui_manager_pop_page(void) { ++display_back_requests; return true; }
 #ifndef HOST_ISLAND_ONLY
 #include "un260/lv_core/page_36_display_test.c"
@@ -608,16 +613,24 @@ int main(void)
     unsigned test_timer_count = timers();
     for(unsigned cycle = 0; cycle < 3; ++cycle) {
         ui_page_36_display_test_create(lv_scr_act());
-        lv_obj_t *first = test_frame.root;
+        lv_obj_t *first = frame.root;
         ui_page_36_display_test_create(lv_scr_act());
-        assert(first == test_frame.root);
+        assert(first == frame.root);
         render();
-        assert(framebuffer[230 * 1280 + 530].full == lv_color_hex(0xF8FAFB).full);
-        assert(framebuffer[160 * 1280 + 1220].full == lv_color_hex(0xFFFFFF).full);
+        /* The current calibration page displays actual neutral reference patches. */
+        static const uint32_t reference[]={0x000000,0x101010,0x202020,0x404040,0x606060,0x808080,0xA0A0A0,0xC0C0C0,0xE0E0E0,0xFFFFFF};
+        for(unsigned patch=0;patch<10;patch++){
+            lv_area_t area;lv_obj_get_coords(lv_obj_get_child(patterns,1+patch*2),&area);
+            assert(framebuffer[((area.y1+area.y2)/2)*1280+(area.x1+area.x2)/2].full==lv_color_hex(reference[patch]).full);
+        }
+        /* Right-hand preview panel uses the current neutral settings surface. */
+        lv_obj_t *preview_panel=lv_obj_get_child(frame.body,2);
+        lv_area_t preview_area;lv_obj_get_coords(preview_panel,&preview_area);
+        assert(framebuffer[(preview_area.y1+105)*1280+preview_area.x2-12].full==lv_obj_get_style_bg_color(preview_panel,0).full);
         if(cycle == 0) write_bmp("display-test");
         ui_page_36_display_test_destroy();
         ui_page_36_display_test_destroy();
-        assert(test_frame.root == NULL && timers() == test_timer_count);
+        assert(frame.root == NULL && timers() == test_timer_count);
     }
 #endif
     counting_data_clear_serials(counting_data_mutable());counting_data_clear_errors(counting_data_mutable());

@@ -45,6 +45,9 @@ lv_obj_t *lv_settings_label(lv_obj_t *, const char *, int x, int y,
 lv_obj_t *lv_settings_icon(lv_obj_t *, const char *name, int x, int y);
 lv_obj_t *lv_settings_button(lv_obj_t *, int x, int y, int w, int h,
                              const char *, bool primary, lv_event_cb_t, void *);
+/* Controlled switch: paint confirmed state; activating never changes it implicitly. */
+lv_obj_t *lv_settings_toggle(lv_obj_t *, int x, int y, bool on, lv_event_cb_t, void *);
+void lv_settings_toggle_set(lv_obj_t *, bool on, bool animate);
 /* Settings-only Back palette. Navigation marker and gesture semantics retained. */
 lv_obj_t *lv_settings_back(lv_obj_t *, int x, int y, int w, int h,
                            lv_event_cb_t, void *);

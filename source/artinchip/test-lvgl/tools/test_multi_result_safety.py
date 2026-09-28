@@ -45,12 +45,12 @@ def main():
         (work / "multi_safety_under_test.inc").write_text("\n".join(parts), encoding="utf-8")
         binary = work / ("multi-safety.exe" if os.name == "nt" else "multi-safety")
         sources = ["tools/test_multi_result_safety.c", "un260/counting/counting_data_store.c",
-                   "un260/counting/counting_history_service.c", "un260/currency/currency_state.c",
+                   "un260/counting/counting_history_service.c", "un260/counting/counting_cashbook.c", "un260/workspace/cashbook.c", "tools/test_cashbook_history_bridge.c", "un260/currency/currency_state.c",
                    "un260/lv_system/ui_qr_data.c", "un260/counting/counting_reject_reason.c"]
         sources.append("un260/lv_core/page_02_list_data.c")
         for optimization in ("-O0", "-O2"):
             command = [os.environ.get("CC", "cc"), "-std=c11", optimization,
-                       "-Wall", "-Wextra", "-Werror", f"-I{ROOT}", f"-I{work}"]
+                       "-Wall", "-Wextra", "-Werror", "-Wno-misleading-indentation", f"-I{ROOT}", f"-I{work}"]
             if os.name != "nt":
                 command += ["-fsanitize=undefined", "-fno-sanitize-recover=all"]
             subprocess.run(command + [str(ROOT / path) for path in sources]

@@ -231,6 +231,14 @@ static void test_exit_special_and_grid(void)
 int main(void)
 {
     test_catalog_and_model();test_requests_replies_and_boot();test_exit_special_and_grid();
+    send_fails=false;unsigned before=sends;setting_batch_result_t batch;
+    assert(!setting_service_request_batch_number(200,false,200));
+    assert(!setting_service_request_batch_number(0,false,200));assert(sends==before);
+    assert(setting_service_request_batch_number(199,false,200));assert(last_cmd==6&&last_payload[0]==199);
+    assert(setting_service_batch_take_result(1,&batch)&&batch.target.enable&&batch.target.num==199);
+    assert(setting_service_request_batch_switch(false,200,true,199));assert(last_payload[0]==200);
+    assert(setting_service_batch_take_result(1,&batch)&&!batch.target.enable);
+    puts("PASS Batch wire boundary: 200 reserved for OFF, invalid enabled values send nothing, 199 and OFF round trip");
     puts("PASS AUT/MUL ordinary 0x03, ACK/failure/timeout/send failure, boot sync, independent work mode, lifecycle");
     return 0;
 }

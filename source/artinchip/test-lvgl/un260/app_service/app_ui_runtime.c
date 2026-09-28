@@ -1,9 +1,13 @@
 #include "app_ui_runtime.h"
+#include "app_auto_qr.h"
 #include "app_standby_runtime.h"
 #include "un260/storage/standby_store.h"
 
 #include "un260/app_service/app_setting_runtime.h"
 #include "un260/app_service/work_mode_service.h"
+#include "un260/app_service/workspace_service.h"
+#include "un260/storage/workspace_store.h"
+#include "un260/storage/cashbook_store.h"
 #include "un260/diagnostic/diagnostic.h"
 #include "un260/lv_components/lv_components.h"
 #include "un260/lv_components/lv_debug_overlay.h"
@@ -28,6 +32,8 @@ static uint32_t g_upgrade_detect_tick;
 void app_ui_runtime_init(void)
 {
     work_mode_service_init();
+    workspace_service_init();
+    cashbook_store_init();
     lv_debug_overlay_init();
     lv_debug_overlay_set_enabled(user_cfg_performance_monitor_enabled());
 }
@@ -37,7 +43,7 @@ static void app_ui_runtime_poll_upgrade(uint32_t now_ms)
     ui_upgrade_detect_info_t detect_info;
     ui_page_t current_page = ui_manager_get_current_page();
     /* Do not offer an upgrade while a photo/config transaction owns storage. */
-    if (standby_store_busy()) return;
+    if (standby_store_busy() || workspace_store_busy() || cashbook_store_busy()) return;
 
     if (current_page == UI_PAGE_BOOT_ANIM ||
         current_page == UI_PAGE_BOOT ||
@@ -58,6 +64,9 @@ void app_ui_runtime_poll(uint32_t now_ms)
     bool stream_timed_out = false;
 
     app_setting_runtime_poll(now_ms);
+    if(cashbook_store_poll()) ui_manager_publish_data_changed(UI_DATA_TOPIC_MACHINE_SETTINGS);
+    if (workspace_service_poll(now_ms))
+        ui_manager_publish_data_changed(UI_DATA_TOPIC_MACHINE_SETTINGS);
     if (diagnostic_calibration_poll(now_ms)) {
         cis_calib_ui_refresh();
     }
@@ -75,6 +84,7 @@ void app_ui_runtime_poll(uint32_t now_ms)
     }
     ui_screen_recording_indicator_poll();
     ui_count_end_anim_poll();
+    app_auto_qr_poll(now_ms);
     app_ui_runtime_poll_upgrade(now_ms);
     app_standby_runtime_poll(now_ms);
 }

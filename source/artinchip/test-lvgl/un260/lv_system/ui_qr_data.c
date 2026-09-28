@@ -3,6 +3,7 @@
 #include "un260/currency/currency_state.h"
 #include "un260/counting/counting_data_store.h"
 #include "un260/counting/counting_reject_reason.h"
+#include "un260/counting/counting_multi.h"
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -28,6 +29,29 @@ static bool ui_qr_data_append(char* buf, size_t buf_size, size_t* used,
 
     *used += (size_t)written;
     return true;
+}
+
+bool ui_qr_data_build_summary(char *buf,size_t capacity)
+{
+    if(!buf||!capacity)return false;
+    buf[0]=0;size_t used=0;
+    const counting_sim_t *data=counting_data_current();
+    if(data->multi_currency_result) {
+        const counting_multi_t *m=counting_multi_current();
+        if(m->counting||m->overflow||!m->count||m->count>COUNTING_MULTI_MAX||!m->total_pcs)return false;
+        uint32_t total=0;for(unsigned i=0;i<m->count;i++)total+=m->currencies[i].pcs;
+        if(total!=m->total_pcs)return false;
+        if(!ui_qr_data_append(buf,capacity,&used,"UN260 SUMMARY v1\nMode: MULTI\n"))return false;
+        for(unsigned i=0;i<m->count;i++){
+            const multi_currency_t *c=&m->currencies[i];
+            if(!ui_qr_data_append(buf,capacity,&used,"%s: %u.00 / %u notes\n",c->code,c->amount,c->pcs))return false;
+        }
+        return ui_qr_data_append(buf,capacity,&used,"Rejected: %u\nSummary only; no serial numbers.\n",m->reject)&&used<=2500;
+    }
+    if(!counting_data_monetary_result_supported(data)||data->total_pcs<=0)return false;
+    char currency[4];currency_state_get_effective_code(currency);
+    if(currency_state_is_special_code(currency)||!currency[0])return false;
+    return ui_qr_data_append(buf,capacity,&used,"UN260 SUMMARY v1\n%s: %.2f / %d notes\nRejected: %d\nSummary only; no serial numbers.\n",currency,data->total_amount,data->total_pcs,counting_data_reject_pcs_count(data))&&used<=2500;
 }
 
 bool ui_qr_data_is_ready(void) //判断当前是否有有效点钞数据
@@ -60,7 +84,7 @@ bool ui_qr_data_build(char* buf, size_t buf_size) //组装当前点钞结果二�
 
     buf[0] = '\0';
     machine_time_get(&now);
-    currency_state_get_active_code(curr_code);
+    currency_state_get_effective_code(curr_code);
     error_count = counting_data_error_detail_count(counting_data_current());
 
     if (!ui_qr_data_append(buf, buf_size, &used,

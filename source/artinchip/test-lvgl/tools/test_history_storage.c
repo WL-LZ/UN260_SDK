@@ -13,6 +13,11 @@
 #include <unistd.h>
 #include "un260/storage/storage_worker.h"
 #include "un260/counting/counting_multi.h"
+#include "un260/storage/workspace_store.h"
+static workspace_model_t operator_fixture={.active_id=42,.user_count=1,.users={{.id=42,.name="Alex"}}};
+bool workspace_store_ready(void){return true;}
+const workspace_model_t *workspace_store_get(void){return &operator_fixture;}
+const workspace_user_t *workspace_active(const workspace_model_t *m){return &m->users[0];}
 static counting_multi_t mock_multi;
 const counting_multi_t *counting_multi_current(void) { return &mock_multi; }
 void counting_multi_reset(void) { memset(&mock_multi,0,sizeof(mock_multi)); }
@@ -175,6 +180,7 @@ static unsigned reset_animation_calls;
 static unsigned reset_island_calls;
 static const counting_sim_t *history_runtime_test_current(void) { return runtime_sim; }
 static uint32_t lv_tick_get(void) { return 0; }
+static void app_auto_qr_cancel(void){}
 static void ui_count_end_anim_cancel(void) { reset_animation_calls++; }
 static void smart_island_notify_count_reset(void) { reset_island_calls++; }
 static void counting_report_reset(void) {}
@@ -223,6 +229,7 @@ static void wait_saved(storage_job_id_t id, uint32_t now)
 static void test_multi_history(void)
 {
     counting_session_state_t session={0};counting_sim_t sim={0};sim.multi_currency_result=true;
+    counting_history_session_start(NULL,0);
     uint32_t base=ui_history_total_notes_counted_get();
     unsigned count=ui_history_data_get()->record_count;
     mock_multi=(counting_multi_t){.generation=101,.group_generation=101,.passes=1,.count=2,.total_pcs=16,.reject=9};
@@ -241,11 +248,14 @@ static void test_multi_history(void)
     assert(s->records[0].record_no==id && s->records[0].multi.currencies[1].complete);
     assert(s->total_notes_counted==base+16 && s->record_count==count+1);
     mock_multi.generation++;mock_multi.passes=2;mock_multi.add=true;mock_multi.total_pcs=18;
+    operator_fixture.users[0].id=77;strcpy(operator_fixture.users[0].name,"Taylor");
+    counting_history_session_start(NULL,0);
     mock_multi.currencies[1].pcs=4;mock_multi.currencies[1].amount=20;
     mock_multi.currencies[1].status=MULTI_DETAIL_NONE;
     assert(counting_history_try_commit(&session,&sim,2)==COUNTING_HISTORY_COMMIT_PENDING);
     wait_saved(ui_history_last_commit_id(),2);counting_history_poll_commit(&session,&sim,2);
     assert(s->records[0].record_no==id && s->record_count==count+1 && s->total_notes_counted==base+18);
+    assert(s->records[0].operator_id==42&&!strcmp(s->records[0].operator_name,"Alex"));
     assert(!s->records[0].multi.currencies[1].complete);
     assert(ui_history_record_delete_records(&id,1));wait_saved(ui_history_last_commit_id(),3);
     mock_multi.currencies[1].status=MULTI_DETAIL_READY;mock_multi.currencies[1].denom[0].pcs=4;
@@ -256,6 +266,7 @@ static void test_multi_history(void)
     mock_multi.group_generation=mock_multi.generation=200;mock_multi.passes=1;
     assert(counting_history_try_commit(&session,&sim,5)==COUNTING_HISTORY_COMMIT_PENDING);
     wait_saved(ui_history_last_commit_id(),5);counting_history_poll_commit(&session,&sim,5);
+    assert(s->records[0].operator_id==77&&!strcmp(s->records[0].operator_name,"Taylor"));
     assert(storage_worker_shutdown());puts("PASS: MULTI summary, async detail, ADD replacement, lifetime delta, deletion wins");
 }
 
@@ -336,6 +347,12 @@ static void exercise(void)
     /* Count snapshots outlive new starts, input resets and queue saturation. */
     hold_worker(true);
     for (i = 0; i < 8; i++) {
+        operator_fixture.users[0].id=42+i;
+        snprintf(operator_fixture.users[0].name,sizeof(operator_fixture.users[0].name),"Operator %u",i);
+        counting_history_session_start(NULL,0);
+        /* Switching after START must not relabel a result waiting for disk. */
+        operator_fixture.users[0].id=999;
+        strcpy(operator_fixture.users[0].name,"Next operator");
         session.history_record.valid = true;
         session.history_record.end_seen = true;
         session.history_record.pcs = 1;
@@ -382,6 +399,18 @@ static void exercise(void)
     assert(i < 10000 && !session.history_record.valid);
     assert(ui_history_total_notes_counted_get() == 23);
     assert(ui_history_data_get()->record_count == (UI_HISTORY_MAX_RECORDS < 21 ? UI_HISTORY_MAX_RECORDS : 21));
+    {
+        const ui_history_store_t *records=ui_history_data_get();
+        unsigned attributed=0;
+        for(unsigned row=0;row<records->record_count;row++) {
+            const ui_history_record_t *r=&records->records[row];
+            if(r->operator_id>=42 && r->operator_id<50) {
+                char expected[25];snprintf(expected,sizeof(expected),"Operator %u",r->operator_id-42);
+                assert(!strcmp(r->operator_name,expected));attributed++;
+            }
+        }
+        assert(attributed==8);
+    }
     {
         ui_history_record_t untouched, before;
         storage_job_id_t old_job = ui_history_last_commit_id();
@@ -737,6 +766,7 @@ int main(int argc, char **argv)
         assert(ui_history_data_is_available() && r->multi.enabled && r->multi.count==2 && r->pcs==18);
         assert(!strcmp(r->multi.currencies[1].code,"CNY") && r->multi.currencies[1].complete);
         assert(r->multi.currencies[1].denoms[0].pcs==4 && r->multi.currencies[1].amount==20);
+        assert(r->operator_id==77&&!strcmp(r->operator_name,"Taylor"));
         assert(storage_worker_shutdown());puts("PASS: MULTI v3 groups and completeness survive fresh-process reload");
     }
     else if (strcmp(argv[1], "multi-history") == 0) test_multi_history();

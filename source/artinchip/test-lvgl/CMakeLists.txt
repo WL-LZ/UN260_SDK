@@ -47,6 +47,11 @@ execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/
 if(NOT UN260_ASSET_RESULT EQUAL 0)
     message(FATAL_ERROR "UN260 asset generation failed; install python3-pil on build host")
 endif()
+execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_menu_assets.py
+                RESULT_VARIABLE MENU_ASSET_RESULT)
+if(NOT MENU_ASSET_RESULT EQUAL 0)
+    message(FATAL_ERROR "Every Menu glyph must be embedded before omitting duplicate PNG payloads")
+endif()
 file(GLOB_RECURSE UN260_ASSET_INPUTS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/aic_ui/lvgl_data/*")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${UN260_ASSET_INPUTS}
              "${CMAKE_CURRENT_SOURCE_DIR}/tools/convert_lvgl_assets.py")
@@ -67,6 +72,14 @@ add_executable(${PROJECT_NAME} main.c
     un260/font/lv_font_standby_112.c
     un260/font/scaled_font.c
     un260/storage/standby_store.c
+    un260/storage/cashbook_store.c
+    un260/workspace/cashbook.c
+    un260/counting/counting_cashbook.c
+    un260/storage/workspace_store.c
+    un260/workspace/workspace_model.c
+    un260/app_service/workspace_service.c
+    un260/app_service/support_report.c
+    un260/app_service/app_auto_qr.c
     un260/app_service/app_standby_runtime.c
     un260/lv_core/page_34_standby.c
     un260/font/lv_font_open_runde_medium_24.c
@@ -99,6 +112,7 @@ add_executable(${PROJECT_NAME} main.c
 	lv_port_disp.c
     un260/lv_components/lv_components.c
     un260/lv_components/lv_settings.c
+    un260/lv_components/lv_quick_controls.c
     un260/lv_core/settings_catalog.c
     un260/lv_components/lv_fault_popup.c
     un260/lv_components/lv_loading_orbit.c
@@ -355,6 +369,20 @@ add_executable(${PROJECT_NAME} main.c
     un260/font/lv_font_instrument_sans_bold_42.c
     un260/font/lv_font_instrument_sans_bold_44.c
     un260/font/lv_font_instrument_sans_bold_48.c
+    un260/font/lv_font_instrument_sans_menumedium_14.c
+    un260/font/lv_font_instrument_sans_medium_15.c
+    un260/font/lv_font_instrument_sans_medium_17.c
+    un260/font/lv_font_instrument_sans_medium_19.c
+    un260/font/lv_font_instrument_sans_semibold_17.c
+    un260/font/lv_font_instrument_sans_semibold_19.c
+    un260/font/lv_font_instrument_sans_semibold_21.c
+    un260/font/lv_font_instrument_sans_semibold_25.c
+    un260/font/lv_font_instrument_sans_semibold_26.c
+    un260/font/lv_font_instrument_sans_semibold_29.c
+    un260/font/lv_font_instrument_sans_semibold_37.c
+    un260/font/lv_font_instrument_sans_semibold_50.c
+    un260/font/lv_font_instrument_sans_semibold_52.c
+    un260/font/lv_font_instrument_sans_semibold_55.c
     un260/font/lv_font_instrument_sans_medium_10.c
     un260/font/lv_font_instrument_sans_medium_12.c
     un260/font/lv_font_instrument_sans_medium_13.c
@@ -465,5 +493,6 @@ if(DEFINED CMAKE_INSTALL_FULL_DATAROOTDIR)
 		DESTINATION ${CMAKE_INSTALL_FULL_DATAROOTDIR}/lvgl_data/boot_theme_c/licenses)
 	install(DIRECTORY aic_ui/lvgl_data/
 		DESTINATION ${CMAKE_INSTALL_FULL_DATAROOTDIR}/lvgl_data
-		PATTERN "boot-light.bin" EXCLUDE)
+		PATTERN "boot-light.bin" EXCLUDE
+        PATTERN "menu_icons" EXCLUDE)
 endif() # CMAKE_INSTALL_FULL_DATAROOTDIR

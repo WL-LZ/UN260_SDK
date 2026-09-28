@@ -34,6 +34,10 @@ counting_history_commit_result_t counting_history_poll_commit(
 bool counting_history_discard_pending(counting_session_state_t *session);
 /* Backpressure for new starts: accepted records are never discarded to make room. */
 bool counting_history_can_start(void);
+bool counting_history_is_idle(void);
+/* New independent pending results may follow an archive; revisions of an
+ * included result must finish in the original period to avoid double counting. */
+bool counting_history_can_archive(void);
 /* Freeze pending count/details before any reset or controller-start transition.
  * False is backpressure: retain the frame AND all mutable session/detail data. */
 bool counting_history_prepare_reset(counting_session_state_t *session,

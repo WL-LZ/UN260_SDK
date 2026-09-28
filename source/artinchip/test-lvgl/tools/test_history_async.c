@@ -11,6 +11,10 @@
 #include "un260/lv_system/ui_history_data.h"
 #include "un260/counting/counting_history_service.h"
 #include "un260/counting/counting_multi.h"
+#include "un260/storage/workspace_store.h"
+bool workspace_store_ready(void){return false;}
+const workspace_model_t *workspace_store_get(void){return NULL;}
+const workspace_user_t *workspace_active(const workspace_model_t *m){(void)m;return NULL;}
 const counting_multi_t *counting_multi_current(void) { static const counting_multi_t empty={0};return &empty; }
 
 static pthread_t ui_thread;

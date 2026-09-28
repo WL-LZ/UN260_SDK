@@ -493,6 +493,8 @@ static void history_write_kv(FILE *fp, uint8_t slot_no, const ui_history_record_
 
     snprintf(prefix, sizeof(prefix), "slot%02u_", (unsigned)slot_no);
     history_write_multi(fp,prefix,&rec->multi);
+    fprintf(fp,"%soperator_id=%u\n",prefix,rec->operator_id);
+    history_write_escaped_field(fp,prefix,"operator_name",rec->operator_name);
     history_write_escaped_field(fp, prefix, "denom", rec->denom_text);
     history_write_escaped_field(fp, prefix, "sn", rec->sn_text);
     history_write_escaped_field(fp, prefix, "sn_detail", rec->sn_detail_text);
@@ -539,6 +541,8 @@ static int history_write_file(const char *path, const ui_history_record_t *rec, 
 
         snprintf(prefix, sizeof(prefix), "record%02d_", i);
         history_write_multi(fp,prefix,&item->multi);
+        fprintf(fp,"%soperator_id=%u\n",prefix,item->operator_id);
+        history_write_escaped_field(fp,prefix,"operator_name",item->operator_name);
         fprintf(fp, "%svalid=%d\n", prefix, item->valid ? 1 : 0);
         fprintf(fp, "%sselected=%d\n", prefix, item->selected ? 1 : 0);
         fprintf(fp, "%sslot_no=%u\n", prefix, (unsigned)item->slot_no);
@@ -760,6 +764,10 @@ static bool history_parse_key_value(ui_history_store_t *store, int record_index,
             return false;
         }
         rec->record_no = parsed;
+    } else if (strcmp(key, "operator_id") == 0) {
+        if(!history_parse_u32(value,&rec->operator_id))return false;
+    } else if (strcmp(key, "operator_name") == 0) {
+        history_unescape_text(rec->operator_name,sizeof(rec->operator_name),value);
     } else if (strcmp(key, "pcs") == 0) {
         if (!history_parse_u32(value, &rec->pcs)) {
             return false;

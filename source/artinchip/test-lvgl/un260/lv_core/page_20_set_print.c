@@ -99,49 +99,10 @@ static uint8_t print_parse_space(const char* value)
     return (uint8_t)v;
 }
 
-static bool print_send_content(print_content_t content,
-                               const print_config_value_t* target)
+static bool print_send_field(print_config_field_t field,const print_config_value_t *target)
 {
-    uint8_t payload[2] = { 0x01, (uint8_t)content };
-    if (!print_config_request(payload[0], payload, sizeof(payload), target)) {
-        print_set_status(ui_text_get(UI_TEXT_SETTINGS_UART_NOT_READY), lv_color_hex(0xC03A2B));
-        return false;
-    }
-    print_request_started();
-    return true;
-}
-
-static bool print_send_head(uint8_t index, const char* text,
-                            const print_config_value_t* target)
-{
-    uint8_t payload[2 + PRINT_HEAD_MAX_LEN];
-
-    payload[0] = 0x02;
-    payload[1] = index;
-    memset(&payload[2], ' ', PRINT_HEAD_MAX_LEN);
-
-    if (text) {
-        size_t len = strlen(text);
-        if (len > PRINT_HEAD_MAX_LEN) {
-            len = PRINT_HEAD_MAX_LEN;
-        }
-        memcpy(&payload[2], text, len);
-    }
-
-    if (!print_config_request(payload[0], payload, sizeof(payload), target)) {
-        print_set_status(ui_text_get(UI_TEXT_SETTINGS_UART_NOT_READY), lv_color_hex(0xC03A2B));
-        return false;
-    }
-    print_request_started();
-    return true;
-}
-
-static bool print_send_space(uint8_t index, uint8_t lines,
-                             const print_config_value_t* target)
-{
-    uint8_t payload[3] = { 0x03, index, lines };
-    if (!print_config_request(payload[0], payload, sizeof(payload), target)) {
-        print_set_status(ui_text_get(UI_TEXT_SETTINGS_UART_NOT_READY), lv_color_hex(0xC03A2B));
+    if(!print_config_request_field(field,target)){
+        print_set_status(ui_text_get(UI_TEXT_SETTINGS_UART_NOT_READY),lv_color_hex(0xC03A2B));
         return false;
     }
     print_request_started();
@@ -183,15 +144,15 @@ static void print_apply_next(void)
     print_config_value_t next;print_config_get(&next);
     bool sent=false;
     if(strcmp(next.head1,print_draft.head1)){
-        memcpy(next.head1,print_draft.head1,sizeof(next.head1));sent=print_send_head(1,next.head1,&next);
+        memcpy(next.head1,print_draft.head1,sizeof(next.head1));sent=print_send_field(PRINT_CONFIG_HEAD1,&next);
     }else if(strcmp(next.head2,print_draft.head2)){
-        memcpy(next.head2,print_draft.head2,sizeof(next.head2));sent=print_send_head(2,next.head2,&next);
+        memcpy(next.head2,print_draft.head2,sizeof(next.head2));sent=print_send_field(PRINT_CONFIG_HEAD2,&next);
     }else if(next.space_top!=print_draft.space_top){
-        next.space_top=print_draft.space_top;sent=print_send_space(1,next.space_top,&next);
+        next.space_top=print_draft.space_top;sent=print_send_field(PRINT_CONFIG_TOP,&next);
     }else if(next.space_bottom!=print_draft.space_bottom){
-        next.space_bottom=print_draft.space_bottom;sent=print_send_space(2,next.space_bottom,&next);
+        next.space_bottom=print_draft.space_bottom;sent=print_send_field(PRINT_CONFIG_BOTTOM,&next);
     }else if(next.content!=print_draft.content){
-        next.content=print_draft.content;sent=print_send_content(next.content,&next);
+        next.content=print_draft.content;sent=print_send_field(PRINT_CONFIG_CONTENT,&next);
     }else{
         print_saving=false;print_refresh_view();print_set_status("All changes confirmed.",lv_color_hex(0x29704D));return;
     }

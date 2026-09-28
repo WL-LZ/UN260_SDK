@@ -6,5 +6,7 @@
 
 bool ui_qr_data_is_ready(void); //当前是否有可导出的点钞数据
 bool ui_qr_data_build(char* buf, size_t buf_size); //组装二维码文本内容
+/* Bounded summary, no serial-number disclosure; MULTI never sums currencies. */
+bool ui_qr_data_build_summary(char *buf, size_t buf_size);
 
 #endif

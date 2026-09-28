@@ -1,5 +1,9 @@
 #ifndef TEST_MAIN_VIEW_SUPPORT_H
 #define TEST_MAIN_VIEW_SUPPORT_H
+static bool host_quick_enabled=true;
+bool workspace_service_quick_enabled(void){return host_quick_enabled;}
+bool workspace_service_set_quick_enabled(bool enabled){host_quick_enabled=enabled;return true;}
+bool setting_service_request_beep(bool enabled){machine_state_confirm_buzzer(enabled);return true;}
 #include "un260/gesture/touch_feedback.h"
 #include "un260/lv_system/ui_qr_data.h"
 #include "un260/lv_core/page_18_pure.h"

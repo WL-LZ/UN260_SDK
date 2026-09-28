@@ -18,6 +18,9 @@ typedef struct {
     uint8_t slot_no;
     /* Stable identity: deletion and ring replacement never renumber survivors. */
     uint32_t record_no;
+    /* Captured at the real START, never looked up from the current operator. */
+    uint32_t operator_id;
+    char operator_name[25];
     uint32_t pcs;
     uint32_t amount;
     char currency[4];

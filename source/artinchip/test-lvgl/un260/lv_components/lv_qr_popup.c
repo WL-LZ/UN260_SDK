@@ -20,6 +20,8 @@ static lv_obj_t* g_qr_popup_close_label = NULL;
 static lv_obj_t* g_qr_popup_canvas = NULL;
 static void* g_qr_popup_buf = NULL;
 static uint32_t g_qr_popup_buf_size = 0;
+static uint32_t g_qr_generation;
+uint32_t lv_qr_popup_generation(void){return lv_qr_popup_is_showing()?g_qr_generation:0;}
 
 static void qr_popup_close_event_cb(lv_event_t* e); //关闭二维码弹窗事件
 
@@ -211,6 +213,7 @@ bool lv_qr_popup_show(const char* qr_text) //显示二维码弹窗
     }
 
     lv_obj_clear_flag(g_qr_popup_root, LV_OBJ_FLAG_HIDDEN);
+    if(!++g_qr_generation)++g_qr_generation;
     lv_obj_move_foreground(g_qr_popup_root);
     return true;
 }

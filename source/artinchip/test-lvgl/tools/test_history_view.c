@@ -24,6 +24,7 @@ static bool test_available = true, test_accept = true, test_export_ok = true, te
 static storage_job_status_t test_status = STORAGE_JOB_SUCCEEDED;
 static storage_job_id_t test_commit_id = 1;
 static unsigned test_pops, test_deletes, test_exports, test_polls, test_selection_mutations;
+void ui_manager_push_page(ui_page_t page){assert(page==UI_PAGE_HISTORY);}
 static uint32_t test_deleted_ids[UI_HISTORY_MAX_RECORDS];
 static size_t test_deleted_count;
 static uint32_t test_exported_ids[UI_HISTORY_MAX_RECORDS];
@@ -816,6 +817,15 @@ int main(void)
     history_test_search_module();
     history_test_multi(baseline_timers);
     assert(history_test_timers() == baseline_timers);
+    history_test_fixtures(3);uint32_t requested=test_store.records[1].record_no;
+    ui_page_19_history_open_record(requested);ui_page_19_history_create(lv_scr_act());history_test_tick(100);
+    assert(history->detail_mode&&history->current_id==requested&&external_record);
+    unsigned before_pops=test_pops;history_test_click(history->actions[3]);assert(test_pops==before_pops+1);
+    ui_page_19_history_suspend();ui_lang_set(LANGUAGE_CN);
+    ui_page_19_history_open_record(requested);assert(ui_page_19_history_resume());history_test_tick(100);
+    assert(history->detail_mode&&history->current_id==requested&&external_record);
+    ui_page_19_history_destroy();ui_lang_set(LANGUAGE_EN);assert(history_test_timers()==baseline_timers);
+    puts("PASS Menu history deep-link: stable ID, caller Back, retained resume with language rebuild");
     puts("PASS: actual History LVGL empty/full smoke and timer ownership");
     return 0;
 }

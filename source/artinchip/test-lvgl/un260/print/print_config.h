@@ -22,6 +22,11 @@ typedef struct {
 
 void print_config_get(print_config_value_t *value);
 void print_config_confirm(const print_config_value_t *value);
+typedef enum {PRINT_CONFIG_CONTENT,PRINT_CONFIG_HEAD1,PRINT_CONFIG_HEAD2,PRINT_CONFIG_TOP,PRINT_CONFIG_BOTTOM} print_config_field_t;
+bool print_config_request_field(print_config_field_t field,const print_config_value_t *value);
+bool print_config_pending(void);
+/* Latest completed transaction; non-consuming so every visible client can report failure. */
+const print_config_request_result_t *print_config_last_result(void);
 bool print_config_request(uint8_t sub_command,
                           const uint8_t *payload,
                           uint16_t payload_len,

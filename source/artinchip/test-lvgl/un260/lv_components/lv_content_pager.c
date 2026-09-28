@@ -102,6 +102,7 @@ lv_obj_t *lv_content_pager_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
     if (page_count > 1) {
         indicator = lv_obj_create(context->root);
         lv_obj_remove_style_all(indicator);
+        lv_obj_clear_flag(indicator,LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_size(indicator, 20 + page_count * 14, 16);
         lv_obj_align(indicator, LV_ALIGN_BOTTOM_MID, 0, 0);
         lv_obj_set_style_bg_color(indicator, lv_color_hex(0x34414B), 0);
@@ -113,6 +114,7 @@ lv_obj_t *lv_content_pager_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
         for (i = 0; i < page_count; i++) {
             context->dots[i] = lv_obj_create(indicator);
             lv_obj_remove_style_all(context->dots[i]);
+            lv_obj_clear_flag(context->dots[i],LV_OBJ_FLAG_SCROLLABLE);
             lv_obj_set_size(context->dots[i], 6, 6);
             lv_obj_set_style_radius(context->dots[i], LV_RADIUS_CIRCLE, 0);
             lv_obj_set_style_bg_opa(context->dots[i], LV_OPA_COVER, 0);

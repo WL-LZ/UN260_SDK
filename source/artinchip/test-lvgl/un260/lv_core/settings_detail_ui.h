@@ -8,6 +8,7 @@
 typedef enum {
     SETTINGS_DETAIL_KEYBOARD_NUM = 0,
     SETTINGS_DETAIL_KEYBOARD_TEXT,
+    SETTINGS_DETAIL_KEYBOARD_UINT, /* Unsigned integer, PIN-layout number pad. */
 } settings_detail_keyboard_mode_t;
 
 typedef void (*settings_detail_keyboard_cb_t)(const char* value, void* user_data);

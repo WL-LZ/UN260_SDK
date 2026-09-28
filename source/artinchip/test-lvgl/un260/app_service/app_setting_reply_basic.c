@@ -90,11 +90,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                 uart_debug_printf("Set batch num success ignored: no pending request\n");
                 break;
             }
-            if (result.type == SETTING_BATCH_REQUEST_NUMBER) {
-                page_03_batch_set_result(true, &result);
-            } else if (result.type == SETTING_BATCH_REQUEST_SWITCH) {
-                batch_switch_on_0x06_result(true, &result);
-            }
+            page_03_batch_set_result(true, &result);
             uart_debug_printf("Set batch num success\n");
             smart_island_refresh_summary();
         }
@@ -105,11 +101,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                 uart_debug_printf("Set batch num fail ignored: no pending request\n");
                 break;
             }
-            if (result.type == SETTING_BATCH_REQUEST_NUMBER) {
-                page_03_batch_set_result(false, &result);
-            } else if (result.type == SETTING_BATCH_REQUEST_SWITCH) {
-                batch_switch_on_0x06_result(false, &result);
-            }
+            page_03_batch_set_result(false, &result);
             show_batch_set_fail_popup();
             uart_debug_printf("Set batch num fail\n");
         }
@@ -118,7 +110,6 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
             if (len < 7) break;
             machine_state_confirm_batch(buf[5] != 200, buf[5]);
             if (page_03_menu_is_visible()) {
-                set_batch_switch_state(machine_state_batch_enabled());
                 page_03_menu_refresh_batch_number();
             }
             page_01_batch_refre();
@@ -302,7 +293,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
 
     case 0x38:
         if (work_mode_service_handle_reply(buf, len)) {
-            page_01_bottom_a_refresh_work(false);
+            page_01_bottom_a_refresh_work(len >= 6 && buf[4] == 0x00);
             page_03_update_menu_button_states_refresh();
             smart_island_refresh_summary();
         }

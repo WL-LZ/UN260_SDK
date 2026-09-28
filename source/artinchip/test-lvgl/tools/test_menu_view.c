@@ -2,427 +2,318 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include "lvgl/lvgl.h"
-#include "un260/app_service/setting_service.h"
-#include "un260/currency/currency_state.h"
-#include "un260/lv_core/ui_frame_commit.h"
-/* Inspect the real page's private projection without firmware-only accessors. */
+#include "aic_ui/compiled_asset.h"
 #include "un260/lv_core/page_03_menu.c"
-
-/* Host boundaries. A successful request means queued, NEVER confirmed.
- * Tests explicitly deliver an ACK/result later. Transport retries/timeouts,
- * controller protocol semantics, DMA/GE, evdev and navigation remain board QA. */
-static bool accept_request = true;
-static unsigned requests[7], home_requests, main_refreshes;
-static unsigned request_value[7];
-static setting_batch_result_t pending_batch;
-static bool request(unsigned kind, unsigned value)
-{ ++requests[kind]; request_value[kind] = value; return accept_request; }
-bool setting_service_request_beep(bool value) { return request(0, value); }
-bool setting_service_request_speed(uint8_t value) { return request(1, value); }
-bool setting_service_request_add(bool value) { return request(2, value); }
-bool setting_service_request_fo_mode(uint8_t value) { return request(3, value); }
-bool setting_service_request_work_mode(uint8_t value) { return request(4, value); }
-bool setting_service_request_batch_number(uint8_t value, bool previous_enable, uint8_t previous_num)
+#include "un260/app_service/work_mode_service.h"
+#include "un260/app_service/app_auto_qr.h"
+#include "un260/lv_components/lv_fault_popup.h"
+static workspace_model_t model;
+static cashbook_t ledger;
+const cashbook_t *cashbook_store_view(void){return &ledger;}
+bool cashbook_store_view_archived(void){return false;}
+void cashbook_store_close_view(void){}
+unsigned cashbook_store_archives(const cashbook_archive_t **items){*items=NULL;return 0;}
+bool cashbook_store_scan_archives(void){return true;}
+bool cashbook_store_open_archive(uint32_t id){(void)id;return false;}
+bool cashbook_store_archive(void){return false;}
+bool cashbook_store_export(void){return true;}
+bool counting_history_is_idle(void){return true;}
+bool counting_history_can_archive(void){return true;}
+uint32_t counting_cashbook_verify_group(void){return 0;}
+void counting_cashbook_cancel_verify(void){}
+static standby_config_t standby_fixture={.version=2,.minutes=5};
+static int backlight=75;
+static counting_sim_t count_fixture={.total_pcs=85,.total_amount=425};
+static print_config_value_t print_fixture={.content=1};
+const counting_sim_t *counting_data_current(void){return &count_fixture;}
+int counting_data_error_detail_count(const counting_sim_t *s){(void)s;return 0;}
+bool counting_data_monetary_result_supported(const counting_sim_t *s){(void)s;return true;}
+void print_config_get(print_config_value_t *v){*v=print_fixture;}
+bool print_config_pending(void){return false;}
+const print_config_request_result_t *print_config_last_result(void){static print_config_request_result_t r={.success=true};return &r;}
+bool print_config_request_field(print_config_field_t f,const print_config_value_t *v){(void)f;print_fixture=*v;return true;}
+bool workspace_store_export_support(const char *r){return r&&*r;}
+bool device_info_is_valid(void){return true;}
+const char *device_info_fpga(void){return "1.2";}
+const char *device_info_main_boot(void){return "1.0";}
+const char *device_info_image_boot(void){return "1.1";}
+const cashbook_t *cashbook_store_get(void){return &ledger;}
+bool cashbook_store_ready(void){return true;}
+bool cashbook_store_busy(void){return false;}
+static bool record_success=true;
+bool cashbook_store_last_success(void){return record_success;}
+const char *cashbook_store_message(void){return "Records ready.";}
+bool cashbook_store_submit(const cashbook_command_t *c){char reason[160];return cashbook_apply(&ledger,c,reason,sizeof(reason));}
+bool counting_cashbook_arm_verify(uint32_t g){return g>0;}
+bool backlight_service_probe(void){return true;}
+int backlight_service_level(void){return backlight;}
+int backlight_service_max(void){return 100;}
+bool backlight_service_set(int level){backlight=level;return true;}
+bool backlight_service_save(void){return true;}
+const standby_config_t *standby_config(void){return &standby_fixture;}
+bool standby_store_save(const standby_config_t *v){standby_fixture=*v;return true;}
+void machine_time_get(machine_time_value_t *v){*v=(machine_time_value_t){2026,9,23,10,42,0};}
+void ui_page_19_history_open_record(uint32_t n){assert(n);}
+uint8_t machine_state_mode(void){return MODE_MDC;}
+uint8_t machine_state_reject_pocket_max(void){return 100;}
+bool setting_service_request_mode(uint8_t n){(void)n;return true;}
+bool setting_service_request_reject_pocket_max(uint8_t n,uint8_t p){(void)n;(void)p;return true;}
+static ui_history_store_t history_fixture;
+static unsigned revision,nav_count,printed;
+static ui_page_t current=UI_PAGE_MENU;
+static bool busy,gestures=true,layout=true;
+static bool auto_qr_blocked,auto_qr_waiting;
+bool ui_manager_is_transitioning(void){return false;}
+bool app_command_runtime_result_pending(void){return auto_qr_waiting;}
+bool fault_popup_is_showing(void){return auto_qr_blocked;}
+bool fault_popup_get_pending_fault(fault_source_t *s,uint8_t *t,uint8_t *c){(void)s;(void)t;(void)c;return false;}
+bool smart_island_is_expanded(void){return false;}
+bool page_01_main_quick_is_open(void){return false;}
+static machine_state_snapshot_t actual_state={.batch_enabled=true,.batch_num=50,.speed=1,.buzzer_enabled=true};
+const workspace_model_t *workspace_store_get(void){return &model;}
+bool workspace_store_ready(void){return true;}
+bool workspace_store_busy(void){return busy;}
+bool workspace_store_last_success(void){return true;}
+const char *workspace_store_message(void){return "Saved on this device.";}
+bool workspace_store_save(const workspace_model_t *m){if(busy||!workspace_model_valid(m))return false;model=*m;revision++;return true;}
+bool workspace_store_scan_usb(void){return true;}
+uint32_t workspace_store_usb_images(void){return 0;}
+bool workspace_store_import_avatar(unsigned i){(void)i;return false;}
+const workspace_avatar_t *workspace_store_avatar(void){static workspace_avatar_t a;return &a;}
+bool workspace_service_applying(void){return false;}
+void workspace_service_cancel_apply(void){}
+const char *workspace_service_apply_message(void){return "";}
+bool workspace_service_quick_enabled(void){return workspace_active(&model)->quick_enabled;}
+const char *workspace_service_switch_blocker(void){return busy?"Busy":NULL;}
+bool workspace_service_switch(uint32_t id){if(busy)return false;model.active_id=id;revision++;return true;}
+bool workspace_service_apply(const workspace_profile_t *p,uint32_t n){(void)p;(void)n;return false;}
+uint8_t machine_state_speed(void){return actual_state.speed;}
+uint8_t machine_state_work_mode(void){return actual_state.work_mode;}
+uint8_t machine_state_fo_mode(void){return actual_state.fo_mode;}
+bool machine_state_add_enabled(void){return actual_state.add_enabled;}
+bool machine_state_buzzer_enabled(void){return actual_state.buzzer_enabled;}
+bool machine_state_batch_enabled(void){return actual_state.batch_enabled;}
+uint8_t machine_state_batch_num(void){return actual_state.batch_num;}
+bool setting_service_request_speed(uint8_t n){actual_state.speed=n;return true;}
+bool setting_service_request_work_mode(uint8_t n){actual_state.work_mode=n;return true;}
+bool setting_service_request_fo_mode(uint8_t n){actual_state.fo_mode=n;return true;}
+bool setting_service_request_add(bool n){actual_state.add_enabled=n;return true;}
+bool setting_service_request_beep(bool n){actual_state.buzzer_enabled=n;return true;}
+bool setting_service_request_batch_switch(bool enabled,uint8_t n,bool e,uint8_t old){(void)e;(void)old;actual_state.batch_enabled=enabled;actual_state.batch_num=n;return true;}
+bool app_command_runtime_count_start_busy(void){return busy;}
+bool standby_store_busy(void){return false;}
+bool gesture_service_enabled(void){return gestures;}
+bool gesture_service_set_enabled(bool e){gestures=e;return true;}
+bool page_01_main_layout_is_enabled(void){return layout;}
+void page_01_main_layout_set_enabled(bool e){layout=e;}
+bool ui_manager_pop_page(void){nav_count++;current=UI_PAGE_MAIN;return true;}
+void ui_manager_push_page(ui_page_t page){nav_count++;current=page;}
+void ui_manager_switch(ui_page_t page){nav_count++;current=page;}
+ui_page_t ui_manager_get_current_page(void){return current;}
+void ui_page_05_set_password_open(void){nav_count++;}
+void page_01_print_btn_event_cb(lv_event_t *e){(void)e;printed++;}
+bool ui_qr_data_build_summary(char *b,size_t n){snprintf(b,n,"UN260 SUMMARY fixture");return true;}
+const ui_history_store_t *ui_history_data_get(void){return &history_fixture;}
+void currency_state_get_selected_code(char c[4]){memcpy(c,"CNY",4);}
+void currency_state_get_effective_code(char c[4]){memcpy(c,"CNY",4);}
+const char *currency_state_display_code(const char c[4]){return c;}
+const char *device_info_main_app(void){return "1.0";}
+const char *device_info_image_app(void){return "1.0";}
+const char *device_info_display_app(void){return "1.0";}
+bool protocol_send_is_ready(void){return false;}
+int protocol_send(uint8_t c,const uint8_t *p,uint16_t n){(void)c;(void)p;(void)n;return -1;}
+void page_06_settings_set_status(const char *s,lv_color_t c){(void)s;(void)c;}
+void work_mode_service_retry(void){}
+void work_mode_service_get_snapshot(work_mode_snapshot_t *s){memset(s,0,sizeof(*s));}
+const char *work_mode_service_status_text(void){return "Host test";}
+const char *app_command_runtime_diagnostic_run_blocker(void){return "Host test";}
+bool app_command_runtime_request_diagnostic_run(void){return false;}
+void perf_profile_watch_invalidation(const void *p,const char *n){(void)p;(void)n;}
+void perf_profile_unwatch_invalidation(const void *p){(void)p;}
+void uart_debug_printf(const char *s,...){(void)s;}
+bool user_cfg_touch_feedback_enabled(void){return true;}
+static lv_color_t framebuffer[1280*400],draw_buffer[1280*64];
+static lv_point_t point;static lv_indev_state_t down=LV_INDEV_STATE_RELEASED;
+uint32_t app_clock_uptime_ms(void){return lv_tick_get();}
+uint64_t app_clock_monotonic_us(void){return (uint64_t)lv_tick_get()*1000;}
+static void flush(lv_disp_drv_t *d,const lv_area_t *a,lv_color_t *p)
+{assert(a->x1>=0&&a->x2<1280&&a->y1>=0&&a->y2<400);for(int y=a->y1;y<=a->y2;y++)memcpy(framebuffer+y*1280+a->x1,p+(y-a->y1)*lv_area_get_width(a),lv_area_get_width(a)*4);lv_disp_flush_ready(d);}
+static void read_pointer(lv_indev_drv_t *d,lv_indev_data_t *p){(void)d;p->point=point;p->state=down;}
+static void tick(unsigned ms){for(unsigned i=0;i<ms;i+=20){lv_tick_inc(20);lv_timer_handler();}}
+static lv_obj_t *find(lv_obj_t *p,const char *s)
 {
-    pending_batch = (setting_batch_result_t){SETTING_BATCH_REQUEST_NUMBER,
-        {previous_enable, value}, {previous_enable, previous_num}};
-    return request(5, value);
+    if(!p||!lv_obj_is_visible(p))return NULL;
+    for(unsigned i=lv_obj_get_child_cnt(p);i>0;i--){lv_obj_t *r=find(lv_obj_get_child(p,i-1),s);if(r)return r;}
+    if(lv_obj_check_type(p,&lv_label_class)&&!strcmp(lv_label_get_text(p),s))return lv_obj_get_parent(p);return NULL;
 }
-bool setting_service_request_batch_switch(bool enabled, uint8_t value, bool previous_enable, uint8_t previous_num)
+static void click(const char *s)
 {
-    pending_batch = (setting_batch_result_t){SETTING_BATCH_REQUEST_SWITCH,
-        {enabled, value}, {previous_enable, previous_num}};
-    return request(6, value);
+    if(menu.notice_box){lv_obj_update_layout(menu.notice_box);lv_area_t toast;lv_obj_get_coords(menu.notice_box,&toast);point=(lv_point_t){(toast.x1+toast.x2)/2,(toast.y1+toast.y2)/2};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(120);assert(!menu.notice_box);}
+    lv_obj_update_layout(lv_scr_act());lv_obj_t *o=find(lv_scr_act(),s);if(!o)fprintf(stderr,"Missing button: %s\n",s);assert(o);
+    lv_area_t a;lv_obj_get_coords(o,&a);fprintf(stderr,"click %s @ %d,%d-%d,%d\n",s,a.x1,a.y1,a.x2,a.y2);assert(a.x1>=0&&a.x2<1280&&a.y1>=0&&a.y2<400);
+    point=(lv_point_t){(a.x1+a.x2)/2,(a.y1+a.y2)/2};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);
 }
-void ui_manager_switch(ui_page_t page) { assert(page == UI_PAGE_MAIN); ++home_requests; }
-void page_01_batch_refre(void) { ++main_refreshes; }
-bool perf_profile_is_enabled(void) { return false; }
-void perf_profile_report_event_us(const char *page, const char *event, uint32_t elapsed)
-{ (void)page; (void)event; (void)elapsed; }
-uint64_t app_clock_monotonic_us(void) { return (uint64_t)lv_tick_get() * 1000; }
-uint32_t app_clock_elapsed_us32(uint64_t begin, uint64_t end) { return (uint32_t)(end - begin); }
-bool lv_dma_static_surface_attach(lv_dma_static_surface_t *s, lv_obj_t *o, const char *key)
-{ (void)s; (void)o; (void)key; return false; }
-bool lv_dma_static_skin_attach(lv_dma_static_skin_t *s, lv_obj_t *o, const char *key)
-{ (void)s; (void)o; (void)key; return false; }
-void lv_dma_static_surface_release(lv_dma_static_surface_t *s) { memset(s, 0, sizeof(*s)); }
-void lv_dma_static_skin_release(lv_dma_static_skin_t *s) { memset(s, 0, sizeof(*s)); }
-
-static lv_color_t framebuffer[1280 * 400], draw_buffer[1280 * 40];
-static unsigned opened_assets;
-static lv_point_t pointer_point;
-static lv_indev_state_t pointer_state = LV_INDEV_STATE_RELEASED;
-static lv_indev_t *input_device;
-static void pointer_read(lv_indev_drv_t *driver, lv_indev_data_t *data)
-{ (void)driver; data->point = pointer_point; data->state = pointer_state; }
-static void flush(lv_disp_drv_t *driver, const lv_area_t *area, lv_color_t *pixels)
+static void check_header(void)
 {
-    assert(area->x1 >= 0 && area->x2 < 1280 && area->y1 >= 0 && area->y2 < 400);
-    int width = lv_area_get_width(area);
-    for (int y = area->y1; y <= area->y2; ++y)
-        memcpy(framebuffer + y * 1280 + area->x1, pixels + (y - area->y1) * width, width * sizeof(*pixels));
-    lv_disp_flush_ready(driver);
-}
-static void *fs_open(lv_fs_drv_t *driver, const char *path, lv_fs_mode_t mode)
-{
-    (void)driver;
-    assert(mode == LV_FS_MODE_RD);
-    const char *prefix = "/usr/local/share/lvgl_data/";
-    if (strncmp(path, prefix, strlen(prefix))) return NULL;
-    const char *relative = path + strlen(prefix);
-    assert(!strstr(relative, ".."));
-    char file[1024]; snprintf(file, sizeof(file), "%s/%s", getenv("MENU_ASSET_ROOT"), relative);
-    FILE *stream = fopen(file, "rb");
-    if (!stream) fprintf(stderr, "Missing actual Menu asset: %s\n", file);
-    else ++opened_assets;
-    return stream;
-}
-static lv_fs_res_t fs_close(lv_fs_drv_t *driver, void *file)
-{ (void)driver; return fclose(file) ? LV_FS_RES_FS_ERR : LV_FS_RES_OK; }
-static lv_fs_res_t fs_read(lv_fs_drv_t *driver, void *file, void *buffer, uint32_t count, uint32_t *read)
-{ (void)driver; *read = (uint32_t)fread(buffer, 1, count, file); return ferror(file) ? LV_FS_RES_FS_ERR : LV_FS_RES_OK; }
-static lv_fs_res_t fs_seek(lv_fs_drv_t *driver, void *file, uint32_t pos, lv_fs_whence_t from)
-{ (void)driver; return fseek(file, (long)pos, from == LV_FS_SEEK_SET ? SEEK_SET : from == LV_FS_SEEK_CUR ? SEEK_CUR : SEEK_END) ? LV_FS_RES_FS_ERR : LV_FS_RES_OK; }
-static lv_fs_res_t fs_tell(lv_fs_drv_t *driver, void *file, uint32_t *pos)
-{ (void)driver; long offset = ftell(file); if (offset < 0) return LV_FS_RES_FS_ERR; *pos = (uint32_t)offset; return LV_FS_RES_OK; }
-static void tick(unsigned ms)
-{ for (unsigned i = 0; i < ms; i += 20) { lv_tick_inc(20); lv_timer_handler(); } }
-static void render(void)
-{ lv_obj_update_layout(lv_scr_act()); lv_obj_invalidate(lv_scr_act()); lv_refr_now(NULL); }
-static void write_bmp(const char *name)
-{
-    render();
-    char path[1024]; snprintf(path, sizeof(path), "%s/%s.bmp", getenv("MENU_RASTER_OUTPUT"), name);
-    FILE *file = fopen(path, "wb"); assert(file);
-    uint8_t header[54] = {0};
-    uint32_t size = 54 + sizeof(framebuffer), offset = 54, dib = 40, width = 1280;
-    int32_t height = -400; uint16_t planes = 1, bits = 32;
-    header[0] = 'B'; header[1] = 'M'; memcpy(header + 2, &size, 4); memcpy(header + 10, &offset, 4);
-    memcpy(header + 14, &dib, 4); memcpy(header + 18, &width, 4); memcpy(header + 22, &height, 4);
-    memcpy(header + 26, &planes, 2); memcpy(header + 28, &bits, 2);
-    assert(fwrite(header, 1, sizeof(header), file) == sizeof(header));
-    assert(fwrite(framebuffer, 1, sizeof(framebuffer), file) == sizeof(framebuffer));
-    fclose(file);
-    printf("RASTER %s\n", path);
-}
-static unsigned timer_count(void)
-{ unsigned n = 0; for (lv_timer_t *t = lv_timer_get_next(NULL); t; t = lv_timer_get_next(t)) ++n; return n; }
-static lv_obj_t *named(const char *name)
-{ lv_obj_t *object = page_03_menu_find_obj(name); assert(object && lv_obj_is_valid(object)); return object; }
-static void tap(lv_obj_t *object)
-{
-    assert(object && lv_obj_is_visible(object));
-    lv_obj_update_layout(menu_page);
-    lv_area_t area; lv_obj_get_coords(object, &area);
-    pointer_point = (lv_point_t){(area.x1 + area.x2) / 2, (area.y1 + area.y2) / 2};
-    pointer_state = LV_INDEV_STATE_PRESSED; tick(80);
-    pointer_state = LV_INDEV_STATE_RELEASED; tick(280);
-}
-static void click(const char *name) { tap(named(name)); }
-static void digits(const char *text)
-{ for (; *text; ++text) { char name[] = "key_0"; name[4] = *text; click(name); } }
-static void edit_is(int value, bool present)
-{
-    int actual = -1; bool has_edit = page_03_batch_num_edit_value(&actual);
-    if (has_edit != present || (present && actual != value))
-        fprintf(stderr, "Edit expected %d/%d, actual %d/%d\n", present, value, has_edit, actual);
-    assert(has_edit == present); if (present) assert(actual == value);
-}
-static bool overlap(const lv_area_t *a, const lv_area_t *b)
-{ return a->x1 <= b->x2 && b->x1 <= a->x2 && a->y1 <= b->y2 && b->y1 <= a->y2; }
-static void check_layout(void)
-{
-    static const char *const names[] = {
-        "03_home_btn", "key_1", "key_2", "key_3", "key_4", "key_5", "key_6", "key_7",
-        "key_8", "key_9", "key_0", "key_del", "key_enter", "03_beep_off_btn", "03_beep_on_btn",
-        "03_speed_800_btn", "03_speed_1000_btn", "03_speed_1200_btn", "03_add_off_btn", "03_add_on_btn",
-        "03_fo_OFF_btn", "03_fo_F_btn", "03_fo_O_btn", "03_fo_FO_btn", "03_work_auto_btn", "03_work_manaul_btn"
-    };
-    lv_area_t areas[27];
-    lv_obj_update_layout(menu_page);
-    assert(sizeof(names) / sizeof(*names) == 26);
-    for (unsigned i = 0; i < 27; ++i) {
-        lv_obj_t *object = i == 26 ? get_batch_switch_container() : named(names[i]);
-        assert(object && lv_obj_is_visible(object) && lv_obj_has_flag(object, LV_OBJ_FLAG_CLICKABLE));
-        lv_obj_get_coords(object, &areas[i]);
-        if (areas[i].x1 < 0 || areas[i].x2 >= 1280 || areas[i].y1 < 0 || areas[i].y2 >= 400)
-            fprintf(stderr, "Control out of bounds: %s\n", i == 26 ? "batch switch" : names[i]);
-        assert(areas[i].x1 >= 0 && areas[i].x2 < 1280 && areas[i].y1 >= 0 && areas[i].y2 < 400);
-        for (unsigned j = 0; j < i; ++j) {
-            if (overlap(&areas[i], &areas[j])) fprintf(stderr, "Controls overlap: %u / %u\n", i, j);
-            assert(!overlap(&areas[i], &areas[j]));
-        }
-        for (unsigned j = 0; j < lv_obj_get_child_cnt(object); ++j) {
-            lv_obj_t *child = lv_obj_get_child(object, j);
-            if (!lv_obj_check_type(child, &lv_label_class) || !lv_obj_is_visible(child)) continue;
-            lv_point_t size;
-            lv_txt_get_size(&size, lv_label_get_text(child), lv_obj_get_style_text_font(child, 0),
-                lv_obj_get_style_text_letter_space(child, 0), 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-            assert(size.x <= lv_obj_get_width(object) && size.y <= lv_obj_get_height(object));
-        }
+    lv_obj_t *tray=lv_obj_get_parent(menu.nav[0]);lv_area_t t;
+    lv_obj_get_coords(tray,&t);
+    assert(lv_obj_get_style_border_width(tray,0)==0);
+    assert(lv_obj_get_style_bg_color(tray,0).full==lv_color_hex(0xE7EDF0).full);
+    for(unsigned i=0;i<6;i++){
+        lv_obj_t *v=menu.nav[i],*l=lv_obj_get_child(v,0),*im=lv_obj_get_child(v,1);
+        lv_area_t b,a,c;lv_obj_get_coords(v,&b);lv_obj_get_coords(im,&a);lv_obj_get_coords(l,&c);
+        assert(abs((a.x1-b.x1)-(b.x2-c.x2))<=1);
+        assert(c.x1-a.x2-1==8);
+        assert(abs((a.y1+a.y2)-(b.y1+b.y2))<=1);
+        assert(abs((c.y1+c.y2)-(b.y1+b.y2))<=1);
+        assert(lv_obj_get_style_border_width(v,0)==0&&lv_obj_get_style_shadow_width(v,0)==0);
+        assert(lv_obj_get_style_bg_color(v,0).full==lv_color_hex(menu.tab==i?0xFFFFFF:0xE7EDF0).full);
+    }
+    lv_area_t first,last;lv_obj_get_coords(menu.nav[0],&first);lv_obj_get_coords(menu.nav[5],&last);
+    assert(first.x1-t.x1==t.x2-last.x2&&first.x1-t.x1==4);
+    for(unsigned i=0;i<lv_obj_get_child_cnt(menu.root);i++){
+        lv_obj_t *v=lv_obj_get_child(menu.root,i);
+        if(!lv_obj_has_flag(v,LV_OBJ_FLAG_CLICKABLE)||lv_obj_get_y(v)!=14)continue;
+        assert(lv_obj_get_height(v)==44&&lv_obj_get_style_border_width(v,0)==0);
     }
 }
-static void test_batch(void)
+static void raster(const char *name)
 {
-    int saved = machine_state_batch_num();
-    edit_is(0, false); digits("00"); edit_is(0, true);
-    click("key_enter"); assert(request_value[5] == 200 && machine_state_batch_num() == saved);
-    edit_is(0, false); assert(g_batch_tip_label == NULL); write_bmp("menu-pending");
-    page_03_batch_set_result(false, &pending_batch); assert(machine_state_batch_num() == saved && !g_batch_tip_label);
-    digits("2019"); edit_is(200, true); assert(!strcmp(lv_label_get_text(g_batch_num_display), "200"));
-    write_bmp("menu-edit-200"); click("key_del"); edit_is(0, false);
-    digits("17"); accept_request = false; click("key_enter"); edit_is(17, true);
-    assert(machine_state_batch_num() == saved && !g_batch_tip_label);
-    accept_request = true; click("key_enter"); edit_is(0, false);
-    assert(request_value[5] == 17 && machine_state_batch_num() == saved);
-    page_03_batch_set_result(true, &pending_batch);
-    assert(machine_state_batch_num() == 17 && g_batch_tip_label);
-    assert(!strcmp(lv_label_get_text(named("03_batch_num_label")), "17"));
-    write_bmp("menu-ack"); tick(2200); assert(!g_batch_tip_label);
-    digits("1"); click("key_enter"); assert(request_value[5] == 5);
-    page_03_batch_set_result(false, &pending_batch);
-    digits("73"); click("key_enter");
-    ui_page_03_menu_suspend(); assert(!page_03_menu_is_visible());
-    page_03_batch_set_result(true, &pending_batch);
-    assert(machine_state_batch_num() == 73 && !g_batch_tip_label);
-    assert(!strcmp(lv_label_get_text(named("03_batch_num_label")), "17"));
-    assert(ui_page_03_menu_resume());
-    assert(!strcmp(lv_label_get_text(named("03_batch_num_label")), "73"));
-    edit_is(0, false); write_bmp("menu-resumed-ack");
-    tap(get_batch_switch_container());
-    assert(requests[6] == 1 && request_value[6] == 200 && machine_state_batch_enabled());
-    batch_switch_on_0x06_result(false, &pending_batch); assert(machine_state_batch_enabled());
+    if(page_03_menu_is_visible()){lv_obj_update_layout(menu.root);check_header();}
+    lv_obj_update_layout(lv_scr_act());lv_obj_invalidate(lv_scr_act());lv_refr_now(NULL);
+    const char *dir=getenv("MENU_OUTPUT");if(!dir)return;char path[512];snprintf(path,sizeof(path),"%s/%s.bgra",dir,name);
+    FILE *f=fopen(path,"wb");assert(f);assert(fwrite(framebuffer,1,sizeof(framebuffer),f)==sizeof(framebuffer));fclose(f);
 }
-static void test_functions(void)
+static lv_res_t asset_info(lv_img_decoder_t *decoder,const void *src,lv_img_header_t *h)
 {
-    const char *targets[] = {"03_beep_off_btn", "03_speed_1000_btn", "03_add_on_btn", "03_fo_FO_btn", "03_work_manaul_btn"};
-    machine_state_snapshot_t before, after;
-    machine_state_get_snapshot(&before);
-    lv_color_t colors[5];
-    for (unsigned i = 0; i < 5; ++i) {
-        colors[i] = lv_obj_get_style_bg_color(named(targets[i]), 0);
-        click(targets[i]); assert(requests[i] == 1);
-        assert(lv_obj_get_style_bg_color(named(targets[i]), 0).full == colors[i].full);
-    }
-    machine_state_get_snapshot(&after);
-    assert(before.buzzer_enabled == after.buzzer_enabled && before.speed == after.speed && before.add_enabled == after.add_enabled);
-    assert(before.fo_mode == after.fo_mode && before.work_mode == after.work_mode);
-    ui_page_03_menu_suspend();
-    /* This is the post-ACK model boundary, not a fabricated service success. */
-    machine_state_confirm_buzzer(false); machine_state_confirm_speed(1); machine_state_confirm_add(true);
-    machine_state_confirm_fo_mode(3); machine_state_confirm_work_mode(1);
-    page_03_update_menu_button_states_refresh();
-    for (unsigned i = 0; i < 5; ++i) assert(lv_obj_get_style_bg_color(named(targets[i]), 0).full == colors[i].full);
-    assert(ui_page_03_menu_resume()); tick(300);
-    for (unsigned i = 0; i < 5; ++i) {
-        assert(lv_obj_get_style_bg_color(named(targets[i]), 0).full != colors[i].full);
-        click(targets[i]); assert(requests[i] == 1); /* Already confirmed: no duplicate request. */
-    }
-    write_bmp("menu-functions-confirmed");
+    (void)decoder;if(lv_img_src_get_type(src)!=LV_IMG_SRC_FILE)return LV_RES_INV;
+    const un260_compiled_asset_t *a=un260_compiled_asset_find(src);if(!a){fprintf(stderr,"Missing image: %s\n",(const char *)src);abort();}
+    memset(h,0,sizeof(*h));h->w=a->width;h->h=a->height;h->cf=LV_IMG_CF_TRUE_COLOR_ALPHA;return LV_RES_OK;
 }
-static void label_geometry(lv_obj_t *label)
+static lv_res_t asset_open(lv_img_decoder_t *decoder,lv_img_decoder_dsc_t *d)
+{if(asset_info(decoder,d->src,&d->header)!=LV_RES_OK)return LV_RES_INV;d->img_data=un260_compiled_asset_find(d->src)->pixels;return LV_RES_OK;}
+static void asset_close(lv_img_decoder_t *decoder,lv_img_decoder_dsc_t *d){(void)decoder;(void)d;}
+static void seed_ledger(void)
 {
-    assert(label && lv_obj_is_visible(label));
-    lv_area_t area, parent;
-    lv_obj_get_coords(label, &area); lv_obj_get_coords(lv_obj_get_parent(label), &parent);
-    assert(area.x1 >= parent.x1 && area.x2 <= parent.x2 && area.y1 >= parent.y1 && area.y2 <= parent.y2);
-    lv_point_t size;
-    lv_txt_get_size(&size, lv_label_get_text(label), lv_obj_get_style_text_font(label, 0),
-        lv_obj_get_style_text_letter_space(label, 0), 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-    assert(size.x <= lv_obj_get_width(label) && size.y <= lv_obj_get_height(label));
-    const char *text = lv_label_get_text(label);
-    uint32_t offset = 0;
-    while (text[offset]) {
-        uint32_t codepoint = _lv_txt_encoded_next(text, &offset);
-        lv_font_glyph_dsc_t glyph;
-        bool found = lv_font_get_glyph_dsc(lv_obj_get_style_text_font(label, 0), &glyph, codepoint, 0);
-        if (!found || glyph.is_placeholder) fprintf(stderr, "Missing visible glyph U+%04lX in '%s'\n", (unsigned long)codepoint, text);
-        assert(found && !glyph.is_placeholder);
-    }
+    cashbook_command_t c={.operation=CASHBOOK_INGEST,.result={.source=1,.day=20260923,.hour=9,.minute=10,.operator_id=1,.operator_name="Alex Morgan",.pcs=100,.currencies=1,.complete=true,
+        .money={{.code="CNY",.pcs=100,.amount=10000}},.sample_count=4,.samples={11,22,33,44}}};
+    assert(cashbook_store_submit(&c));
+    cashbook_command_t confirm={.operation=CASHBOOK_CONFIRM,.group=1,.run=1};assert(cashbook_store_submit(&confirm));
+    c.result.source=2;c.result.minute=15;c.result.recount_group=1;assert(cashbook_store_submit(&c));
+    c.result.source=3;c.result.minute=20;assert(cashbook_store_submit(&c));
+    confirm.run=3;assert(cashbook_store_submit(&confirm));
+    c.result.source=4;c.result.recount_group=0;c.result.sample_count=0;c.result.pcs=12;c.result.money[0]=(cashbook_money_t){.code="USD",.pcs=12,.amount=240};assert(cashbook_store_submit(&c));
+    confirm.group=2;confirm.run=4;assert(cashbook_store_submit(&confirm));
+    c.result.source=5;c.result.pcs=85;c.result.money[0]=(cashbook_money_t){.code="CNY",.pcs=85,.amount=425};assert(cashbook_store_submit(&c));
 }
-static lv_obj_t *check_home_icon(void)
+static void test_auto_qr(void)
 {
-    lv_obj_t *home = named("03_home_btn");
-    lv_obj_t *caption = lv_damped_button_get_label(home);
-    assert(lv_obj_get_child_cnt(home) == 2 && lv_obj_get_child(home, 0) == caption);
-    assert(lv_obj_check_type(caption, &lv_label_class));
-    assert(!strcmp(lv_label_get_text(caption), ui_text_get(UI_TEXT_LIST_MAIN)));
-    label_geometry(caption);
-    lv_obj_t *icon = lv_obj_get_child(home, 1);
-    assert(lv_obj_check_type(icon, &lv_img_class));
-    assert(lv_obj_get_child_cnt(icon) == 0 && lv_obj_is_visible(icon));
-    assert(lv_obj_get_width(icon) == 27 && lv_obj_get_height(icon) == 27);
-    assert(!lv_obj_has_flag_any(icon, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
-    assert(lv_obj_get_style_bg_opa(icon, 0) == LV_OPA_TRANSP);
-    assert(lv_obj_get_x(home) == MENU_SIDE_X && lv_obj_get_y(home) == MENU_HOME_Y);
-    assert(lv_obj_get_width(home) == MENU_SIDE_WIDTH && lv_obj_get_height(home) == MENU_HOME_HEIGHT);
-    lv_area_t button_area, content_area, icon_area, caption_area;
-    lv_obj_get_coords(home, &button_area); lv_obj_get_coords(icon, &icon_area);
-    lv_obj_get_content_coords(home, &content_area);
-    lv_obj_get_coords(caption, &caption_area);
-    assert(icon_area.x1 >= button_area.x1 && icon_area.x2 <= button_area.x2);
-    assert(icon_area.y1 >= button_area.y1 && icon_area.y2 <= button_area.y2);
-    assert(abs(icon_area.x1 + icon_area.x2 - button_area.x1 - button_area.x2) <= 1);
-    assert(icon_area.y1 == content_area.y1 + 20);
-    assert(!overlap(&icon_area, &caption_area));
-    return icon;
+    current=UI_PAGE_MAIN;model.users[0].qr_after_count=true;model.active_id=1;
+    app_auto_qr_on_start();app_auto_qr_on_end(1000);app_auto_qr_poll(1300);assert(!lv_qr_popup_is_showing());
+    auto_qr_waiting=true;app_auto_qr_poll(1400);assert(!lv_qr_popup_is_showing());auto_qr_waiting=false;
+    auto_qr_blocked=true;app_auto_qr_poll(1500);assert(!lv_qr_popup_is_showing());auto_qr_blocked=false;
+    app_auto_qr_poll(1600);assert(lv_qr_popup_is_showing());raster("auto-qr");
+    app_auto_qr_on_start();assert(!lv_qr_popup_is_showing());
+    app_auto_qr_on_end(2000);app_auto_qr_poll(2400);assert(lv_qr_popup_is_showing());
+    lv_qr_popup_hide();assert(lv_qr_popup_show("MANUAL RESULT"));app_auto_qr_on_start();assert(lv_qr_popup_is_showing());
+    lv_qr_popup_hide();app_auto_qr_on_end(3000);current=UI_PAGE_MENU;app_auto_qr_poll(3400);current=UI_PAGE_MAIN;app_auto_qr_poll(3500);assert(!lv_qr_popup_is_showing());
+    app_auto_qr_on_start();app_auto_qr_on_end(4000);app_auto_qr_poll(8001);assert(!lv_qr_popup_is_showing());
+    app_auto_qr_cancel();puts("PASS auto QR: delay, pending result, fault, new count, manual ownership, page change and expiry");
 }
-static void test_home_icon(void)
-{
-    render();
-    lv_obj_t *icon = check_home_icon(), *home = named("03_home_btn");
-    lv_obj_t *caption = lv_damped_button_get_label(home);
-    lv_area_t area; lv_obj_get_coords(icon, &area);
-    uint32_t actual[27 * 27], signature = 0;
-    for (unsigned y = 0; y < 27; ++y) for (unsigned x = 0; x < 27; ++x) {
-        actual[y * 27 + x] = framebuffer[(area.y1 + y) * 1280 + area.x1 + x].full;
-        signature = signature * 33 + actual[y * 27 + x];
-    }
-    /* Keep the existing Menu button's gradient under both glyphs. Comparing
-     * against a white patch would test unrelated button-background styling. */
-    lv_obj_t *reference = lv_obj_create(home); assert(reference);
-    lv_obj_remove_style_all(reference);
-    lv_obj_set_pos(reference, lv_obj_get_x(icon), lv_obj_get_y(icon));
-    lv_obj_set_size(reference, 27, 27);
-    lv_obj_clear_flag(reference, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t *image=lv_img_create(reference);assert(image);
-    lv_img_set_src(image,LVGL_DIR "ui_icons/home_27.png");
-    lv_obj_add_flag(icon, LV_OBJ_FLAG_HIDDEN);
-    render();
-    for (unsigned y = 0; y < 27; ++y) for (unsigned x = 0; x < 27; ++x)
-        assert(actual[y * 27 + x] == framebuffer[(area.y1 + y) * 1280 + area.x1 + x].full);
-    lv_obj_del(reference); lv_obj_clear_flag(icon, LV_OBJ_FLAG_HIDDEN); render();
-    printf("HOME_GLYPH menu %08lx (standard raster 27x27 reference over Menu background)\n", (unsigned long)signature);
-
-    lv_area_t before, pressed, icon_before, icon_pressed, caption_before, caption_pressed;
-    lv_obj_get_coords(home, &before); lv_obj_get_coords(icon, &icon_before);
-    lv_obj_get_coords(caption, &caption_before);
-    unsigned calls = home_requests;
-    pointer_point = (lv_point_t){(area.x1 + area.x2) / 2, (area.y1 + area.y2) / 2};
-    pointer_state = LV_INDEV_STATE_PRESSED; tick(140); render();
-    assert(lv_obj_has_state(home, LV_STATE_PRESSED) && home_requests == calls);
-    lv_obj_get_coords(home, &pressed); lv_obj_get_coords(icon, &icon_pressed);
-    lv_obj_get_coords(caption, &caption_pressed);
-    assert(!memcmp(&before, &pressed, sizeof(before)));
-    assert(icon_pressed.x1 == icon_before.x1 && icon_pressed.y1 == icon_before.y1);
-    assert(caption_pressed.x1 == caption_before.x1 && caption_pressed.y1 == caption_before.y1);
-    assert(lv_obj_get_style_translate_y(icon, 0) == 0 && lv_obj_get_style_translate_y(caption, 0) == 0);
-    lv_indev_wait_release(input_device);
-    pointer_state = LV_INDEV_STATE_RELEASED; tick(300); render();
-    assert(home_requests == calls && !lv_obj_has_state(home, LV_STATE_PRESSED));
-    assert(lv_obj_get_style_translate_y(icon, 0) == 0 && lv_obj_get_style_translate_y(caption, 0) == 0);
-    check_home_icon();
-}
-static void test_press_lost(void)
-{
-    page_03_batch_num_edit_reset();
-    lv_area_t area; lv_obj_get_coords(named("key_1"), &area);
-    pointer_point = (lv_point_t){(area.x1 + area.x2) / 2, (area.y1 + area.y2) / 2};
-    pointer_state = LV_INDEV_STATE_PRESSED; tick(80);
-    /* Navigation/input ownership cancellation uses wait_release. Buttons retain
-     * the production PRESS_LOCK semantics; leaving their box is not redefined. */
-    lv_indev_wait_release(input_device);
-    pointer_state = LV_INDEV_STATE_RELEASED; tick(300);
-    edit_is(0, false);
-    assert(!lv_obj_has_state(named("key_1"), LV_STATE_PRESSED));
-    click("key_1"); edit_is(1, true); click("key_del"); edit_is(0, false);
-}
-#ifdef MENU_HOST_HAS_CONTEXT
-void menu_host_manager_select(bool visible);
-void menu_host_manager_reset_observation(void);
-unsigned menu_host_manager_calls(void);
-uint32_t menu_host_manager_topics(void);
-uint32_t menu_host_manager_dirty(void);
-void menu_host_manager_commit(void);
-static void context_is(const char *currency, const char *mode)
-{
-    assert(!strcmp(lv_label_get_text(g_page_03_context_currency), currency));
-    assert(!strcmp(lv_label_get_text(g_page_03_context_mode), mode));
-    lv_obj_update_layout(menu_page);
-    label_geometry(g_page_03_context_currency); label_geometry(g_page_03_context_mode);
-}
-static void test_context(unsigned initial_timers)
-{
-    assert(timer_count() == initial_timers); /* Static summary owns no polling. */
-    context_is("EUR", "MDC");
-    assert(currency_state_confirm_active_code("RUB")); machine_state_confirm_mode(MODE_SDC);
-    ui_page_03_menu_refresh_data(UI_DATA_TOPIC_COUNTING_RESULT); context_is("EUR", "MDC");
-    menu_host_manager_reset_observation(); ui_frame_commit_begin_batch();
-    ui_manager_publish_data_changed(UI_DATA_TOPIC_CURRENCY_CATALOG);
-    ui_manager_publish_data_changed(UI_DATA_TOPIC_CURRENCY_CATALOG | UI_DATA_TOPIC_MACHINE_SETTINGS);
-    context_is("EUR", "MDC"); assert(menu_host_manager_calls() == 0);
-    ui_frame_commit_end_batch(); ui_frame_commit_flush();
-    assert(menu_host_manager_calls() == 1);
-    assert(menu_host_manager_topics() == (UI_DATA_TOPIC_CURRENCY_CATALOG | UI_DATA_TOPIC_MACHINE_SETTINGS));
-    context_is("RUB", "SDC");
-    assert(currency_state_confirm_auto_selection());
-    assert(currency_state_confirm_detected_code("USD"));
-    machine_state_confirm_mode(MODE_CNT);
-    ui_page_03_menu_refresh_data(UI_DATA_TOPIC_CURRENCY_CATALOG | UI_DATA_TOPIC_MACHINE_SETTINGS);
-    context_is("AUTO", "CNT"); write_bmp("menu-context-auto-cnt");
-    machine_state_confirm_mode(255); ui_page_03_menu_refresh_data(UI_DATA_TOPIC_MACHINE_SETTINGS);
-    context_is("AUTO", ui_text_get(UI_TEXT_MENU_CONTEXT_UNKNOWN)); write_bmp("menu-context-unknown");
-    ui_page_03_menu_suspend();
-    menu_host_manager_select(false); menu_host_manager_reset_observation();
-    assert(currency_state_leave_auto_selection()); assert(currency_state_confirm_active_code("EUR"));
-    machine_state_confirm_mode(MODE_MDC); ui_page_03_menu_refresh_data(UI_DATA_TOPIC_MACHINE_SETTINGS);
-    ui_frame_commit_begin_batch();
-    ui_manager_publish_data_changed(UI_DATA_TOPIC_CURRENCY_CATALOG | UI_DATA_TOPIC_MACHINE_SETTINGS);
-    ui_frame_commit_end_batch(); ui_frame_commit_flush();
-    assert(menu_host_manager_calls() == 0);
-    assert(menu_host_manager_dirty() == (UI_DATA_TOPIC_CURRENCY_CATALOG | UI_DATA_TOPIC_MACHINE_SETTINGS));
-    assert(!strcmp(lv_label_get_text(g_page_03_context_currency), "AUTO"));
-    assert(!strcmp(lv_label_get_text(g_page_03_context_mode), ui_text_get(UI_TEXT_MENU_CONTEXT_UNKNOWN)));
-    assert(ui_page_03_menu_resume()); context_is("EUR", "MDC");
-    menu_host_manager_select(true); menu_host_manager_commit();
-    assert(menu_host_manager_calls() == 1 && menu_host_manager_dirty() == UI_DATA_TOPIC_NONE);
-    check_home_icon(); /* One line-drawn house + one caption, not two labels. */
-    render();
-    uint32_t first = 0, second = 0;
-    for (unsigned i = 0; i < 1280 * 400; ++i) first = first * 33 + framebuffer[i].full;
-    tick(800); render();
-    for (unsigned i = 0; i < 1280 * 400; ++i) second = second * 33 + framebuffer[i].full;
-    assert(first == second && timer_count() == initial_timers);
-}
-#endif
 int main(void)
 {
-    setvbuf(stdout, NULL, _IONBF, 0);
-    lv_init();
-    lv_disp_draw_buf_t buffer; lv_disp_draw_buf_init(&buffer, draw_buffer, NULL, 1280 * 40);
-    lv_disp_drv_t display; lv_disp_drv_init(&display); display.hor_res = 1280; display.ver_res = 400;
-    display.draw_buf = &buffer; display.flush_cb = flush; assert(lv_disp_drv_register(&display));
-    lv_fs_drv_t fs; lv_fs_drv_init(&fs); fs.letter = 'L'; fs.open_cb = fs_open; fs.close_cb = fs_close;
-    fs.read_cb = fs_read; fs.seek_cb = fs_seek; fs.tell_cb = fs_tell; lv_fs_drv_register(&fs);
-    lv_indev_drv_t input; lv_indev_drv_init(&input); input.type = LV_INDEV_TYPE_POINTER;
-    input.read_cb = pointer_read; input_device = lv_indev_drv_register(&input); assert(input_device);
-    currency_state_reset(); assert(currency_state_confirm_active_code("EUR"));
-    machine_state_confirm_batch(true, 100); machine_state_confirm_mode(MODE_MDC);
-    machine_state_confirm_buzzer(true); machine_state_confirm_speed(0); machine_state_confirm_add(false);
-    machine_state_confirm_fo_mode(0); machine_state_confirm_work_mode(0);
-    unsigned initial_timers = timer_count();
-    lv_obj_t *parent = lv_obj_create(lv_scr_act()); lv_obj_remove_style_all(parent); lv_obj_set_size(parent, 1280, 400);
-    ui_page_03_menu_create(parent); tick(300); assert(page_03_menu_is_created() && page_03_menu_is_visible());
-    write_bmp("menu-default");
-    if (strcmp(getenv("MENU_RENDER_ONLY"), "1")) {
-        check_layout(); test_home_icon(); test_batch(); test_functions(); test_press_lost(); check_layout();
-#ifdef MENU_HOST_HAS_CONTEXT
-        test_context(initial_timers);
-#endif
-        lv_obj_t *original = menu_page; ui_page_03_menu_create(parent); assert(menu_page == original);
-        click("03_home_btn"); assert(home_requests == 1);
-        for (unsigned i = 0; i < 5; ++i) {
-            ui_page_03_menu_suspend(); assert(ui_page_03_menu_resume());
-            lv_obj_update_layout(menu_page); check_home_icon();
-        }
-        ui_page_03_menu_suspend(); ui_page_03_menu_destroy(); ui_page_03_menu_destroy();
-        assert(!page_03_menu_is_created() && !ui_page_03_menu_resume());
-        assert(timer_count() == initial_timers && lv_obj_get_child_cnt(parent) == 0);
-        ui_page_03_menu_create(parent); tick(300); check_layout(); check_home_icon(); write_bmp("menu-rebuilt");
-        ui_page_03_menu_destroy(); assert(timer_count() == initial_timers);
-    } else ui_page_03_menu_destroy();
-    lv_obj_del(parent);
-    printf("PASS: real Menu/LVGL software raster; %u actual asset opens. Host stubs do not validate controller ACK, DMA or touch hardware.\n", opened_assets);
-    return 0;
+    cashbook_defaults(&ledger);workspace_defaults(&model);strcpy(model.users[0].name,"Alex Morgan");
+    seed_ledger();char report[8192];assert(support_report_build(report,sizeof(report)));
+    assert(strstr(report,"Confirmed settings")&&!strstr(report,"Alex Morgan")&&!strstr(report,"10000"));assert(!support_report_build(report,8));
+    workspace_profile_t p=model.users[0].profiles[0];strcpy(p.name,"Bundle preparation");p.batch_enabled=1;p.batch=100;assert(workspace_add_profile(&model,1,&p));
+    uint32_t uid;assert(workspace_add_user(&model,"Taylor",&uid));
+    history_fixture.record_count=1;history_fixture.records[0]=(ui_history_record_t){.valid=true,.record_no=1,.pcs=85,.amount=425,.currency="CNY",.year=2026,.month=9,.day=23,.hour=10,.minute=42};
+    lv_init();lv_disp_draw_buf_t buf;lv_disp_draw_buf_init(&buf,draw_buffer,NULL,1280*64);lv_disp_drv_t d;lv_disp_drv_init(&d);d.hor_res=1280;d.ver_res=400;d.flush_cb=flush;d.draw_buf=&buf;lv_disp_t *display=lv_disp_drv_register(&d);assert(display);ui_scrollbar_init(display);
+    lv_indev_drv_t in;lv_indev_drv_init(&in);in.type=LV_INDEV_TYPE_POINTER;in.read_cb=read_pointer;assert(lv_indev_drv_register(&in));
+    lv_img_decoder_t *decoder=lv_img_decoder_create();lv_img_decoder_set_info_cb(decoder,asset_info);lv_img_decoder_set_open_cb(decoder,asset_open);lv_img_decoder_set_close_cb(decoder,asset_close);
+    ui_page_03_menu_create(lv_scr_act());tick(200);raster("menu-overview");assert(!menu.notice_box);
+    click("Quick");assert(menu.quick);click("Close");assert(!menu.quick);
+    unsigned nav_before=nav_count;point=(lv_point_t){1233,37};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);assert(nav_count==nav_before+1);
+    nav_before=nav_count;point=(lv_point_t){47,37};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);assert(nav_count==nav_before+1&&current==UI_PAGE_MAIN);current=UI_PAGE_MENU;
+    nav_before=nav_count;assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);assert(nav_count==nav_before+1);current=UI_PAGE_MENU;
+    click("Count");assert(menu.tab==1);assert(find(menu.body,"Edit")&&find(menu.body,"Remove"));raster("menu-batch");click("Add slot");assert(menu.batch_dirty);assert(lv_obj_has_state(find(menu.body,"Use this preset"),LV_STATE_DISABLED));assert(find(menu.body,"Save"));click("Cancel");assert(!menu.batch_dirty);
+    menu.selected_batch=1;menu.dirty=true;tick(120);click("Edit");assert(settings_detail_overlay_is_open());raster("menu-batch-keypad");settings_detail_keyboard_hide();
+    click("Profiles");raster("menu-profiles");click("Delete");assert(settings_detail_overlay_is_open());raster("menu-delete-confirm");click("Cancel");assert(model.users[0].profile_count==2);
+    click("Delete");click("Delete");assert(model.users[0].profile_count==1);ui_page_03_menu_refresh_data(0);tick(100);assert(model.users[0].profile_count==1);assert(lv_obj_has_state(find(menu.body,"Delete"),LV_STATE_DISABLED));
+    click("Options");raster("menu-options");
+    while(model.users[0].profile_count<WORKSPACE_PROFILES){
+        workspace_profile_t extra=model.users[0].profiles[0];
+        snprintf(extra.name,sizeof(extra.name),"Profile %u",model.users[0].profile_count+1);
+        assert(workspace_add_profile(&model,model.active_id,&extra));
+    }
+    click("Profiles");assert(menu.task_scroll);
+    lv_obj_scroll_to_y(menu.task_scroll,500,LV_ANIM_OFF);tick(120);click("Profile 8");assert(menu.selected_profile==7&&lv_obj_get_scroll_y(menu.task_scroll)>200);raster("menu-profiles-scrolled");
+    click("Records");raster("menu-records");
+    menu.selected_group=1;menu.selected_run=2;menu.dirty=true;tick(120);raster("menu-recount-detail");
+    click("Count this result");click("Confirm");assert(ledger.groups[0].selected==2);click("Back to list");
+    click("Confirm singles");click("Confirm");assert(ledger.groups[2].confirmed);
+    click("Close day");click("Confirm");assert(ledger.close_count==1);click("Day closes");raster("menu-day-closes");
+    show_closed_day(1);tick(120);raster("menu-saved-close");click("Show saved totals QR");assert(lv_qr_popup_is_showing());raster("menu-saved-close-qr");lv_qr_popup_hide();click("Back to list");
+    click("History");raster("menu-history");assert(!find(menu.body,"Next"));click("Output");assert(!menu.notice_box);raster("menu-output");click("QR export");raster("menu-qr-export");
+    click("Preferences");assert(!find(menu.body,"Switch operator"));raster("menu-operators");click("New operator");assert(menu.user_edit);raster("menu-register");click("Enter a name");assert(settings_detail_overlay_is_open());raster("menu-name-keyboard");settings_detail_keyboard_hide();
+    name_submit("Jordan",NULL);tick(120);click("Import USB photo");ui_page_03_menu_refresh_data(0);tick(120);assert(menu.photo_sheet);raster("menu-usb-empty");
+    point=(lv_point_t){80,190};down=LV_INDEV_STATE_PRESSED;tick(40);down=LV_INDEV_STATE_RELEASED;tick(120);assert(!menu.photo_sheet);
+    click("Create operator");ui_page_03_menu_refresh_data(0);tick(100);assert(model.user_count==3&&!menu.user_edit);
+    click("Interaction");raster("menu-interaction");click("Try Quick controls");assert(menu.quick);assert(!menu.notice_box);raster("menu-quick");
+    lv_obj_t *quick_before=menu.quick;lv_obj_t *switch_before=menu.quick_switch[1];
+    gestures=!gestures;tick(120);assert(menu.quick==quick_before&&menu.quick_switch[1]==switch_before);
+    assert(lv_obj_has_state(switch_before,LV_STATE_CHECKED)==gestures);
+    assert(lv_obj_get_x(lv_obj_get_child(switch_before,0))==(gestures?25:3));
+    point=(lv_point_t){40,365};down=LV_INDEV_STATE_PRESSED;tick(40);down=LV_INDEV_STATE_RELEASED;tick(120);assert(!menu.quick);
+    click("Display & sound");raster("menu-display-sound");
+    click("Help");raster("menu-help-empty");click("All codes");raster("menu-help");click("Care");raster("menu-care");click("Device");raster("menu-device");ui_page_03_menu_suspend();assert(!page_03_menu_is_visible());assert(ui_page_03_menu_resume());assert(menu.tab==5);
+    cashbook_t *saved=malloc(sizeof(*saved));assert(saved);*saved=ledger;cashbook_defaults(&ledger);
+    menu.tab=2;menu.sub=0;menu.selected_group=menu.selected_close=0;menu.dirty=true;tick(120);
+    assert(lv_obj_has_state(find(menu.body,"Close day"),LV_STATE_DISABLED)&&!find(menu.body,"Confirm singles"));raster("menu-records-empty");
+    ledger=*saved;free(saved);
+    notify("Saved");assert(menu.notice_box);lv_obj_update_layout(menu.notice_box);lv_area_t toast_area;lv_obj_get_coords(menu.notice_box,&toast_area);assert(toast_area.y1==342&&toast_area.y2<400);
+    ui_page_03_menu_refresh_data(0);tick(3600);assert(!menu.notice_box);ui_page_03_menu_refresh_data(0);tick(120);assert(!menu.notice_box);
+    record_success=false;menu.record_wait=true;ui_page_03_menu_refresh_data(0);assert(settings_detail_overlay_is_open());tick(4000);assert(settings_detail_overlay_is_open());settings_detail_dialog_hide();record_success=true;
+    ui_page_03_menu_suspend();notify("Hidden update");assert(!menu.notice_box);assert(ui_page_03_menu_resume());
+    puts("PASS Menu hierarchy: centered borderless ABC-color header, aligned utility buttons, fixed OFF, guarded drafts, empty records, current operator status, no persistent footer, scoped transient feedback, in-place Quick refresh");
+    /* Full-page visual fixtures: not production sample data. */
+    ui_page_03_menu_destroy();workspace_defaults(&model);strcpy(model.users[0].name,"Local operator");assert(workspace_add_user(&model,"Alex",&uid));strcpy(model.users[1].employee_id,"A-002");
+    p=model.users[0].profiles[0];p.add=1;model.users[0].profiles[0]=p;strcpy(p.name,"Bundle preparation");p.batch_enabled=1;p.batch=100;assert(workspace_add_profile(&model,1,&p));
+    strcpy(p.name,"Careful verification");p.speed=0;p.work=1;p.batch_enabled=0;assert(workspace_add_profile(&model,1,&p));
+    cashbook_defaults(&ledger);
+    cashbook_command_t golden_day={.operation=CASHBOOK_SET_DAY,.day=20260924};assert(cashbook_store_submit(&golden_day));
+    cashbook_command_t golden={.operation=CASHBOOK_INGEST,.result={.source=30,.day=20260924,.hour=8,.minute=58,.operator_id=1,.operator_name="Foreign currency",.pcs=12,.currencies=1,.complete=true,.money={{.code="USD",.pcs=12,.amount=240}}}};
+    assert(cashbook_store_submit(&golden));cashbook_command_t accepted={.operation=CASHBOOK_CONFIRM,.group=1,.run=1};assert(cashbook_store_submit(&accepted));
+    golden.result.source=31;golden.result.hour=9;golden.result.minute=10;strcpy(golden.result.operator_name,"Opening balance");golden.result.pcs=100;golden.result.money[0]=(cashbook_money_t){.code="CNY",.pcs=100,.amount=10000};assert(cashbook_store_submit(&golden));accepted.group=2;accepted.run=2;assert(cashbook_store_submit(&accepted));
+    golden.result.source=32;golden.result.minute=31;strcpy(golden.result.operator_name,"Cash deposit");golden.result.pcs=60;golden.result.money[0].pcs=60;golden.result.money[0].amount=6000;assert(cashbook_store_submit(&golden));
+    golden.result.source=33;golden.result.minute=38;strcpy(golden.result.operator_name,"Counter 02");golden.result.pcs=137;golden.result.money[0].pcs=137;golden.result.money[0].amount=6850;assert(cashbook_store_submit(&golden));
+    golden.result.source=34;golden.result.minute=42;strcpy(golden.result.operator_name,"Morning count");golden.result.pcs=773;golden.result.money[0].pcs=773;golden.result.money[0].amount=7730;assert(cashbook_store_submit(&golden));
+    golden.result.recount_group=5;golden.result.source=35;golden.result.pcs=771;golden.result.money[0].pcs=771;golden.result.money[0].amount=7710;assert(cashbook_store_submit(&golden));
+    golden.result.source=36;golden.result.pcs=773;golden.result.money[0].pcs=773;golden.result.money[0].amount=7730;assert(cashbook_store_submit(&golden));
+    actual_state.add_enabled=true;actual_state.speed=0;actual_state.buzzer_enabled=true;gestures=true;backlight=75;
+    count_fixture.total_pcs=773;count_fixture.total_amount=7730;
+    current=UI_PAGE_MENU;ui_page_03_menu_create(lv_scr_act());tick(120);assert(business_day()==20260924);assert(find(menu.body,"Review 3 pending counts"));raster("studio-overview");
+    lv_obj_add_state(menu.nav[1],LV_STATE_FOCUS_KEY);raster("studio-focus");lv_obj_clear_state(menu.nav[1],LV_STATE_FOCUS_KEY);
+    const char *shots[][5]={{NULL},{"batch","profiles","options"},{"records","recounts","history","verify","day-closes"},{"print","qr"},{"operators","interaction","display"},{"reject","care","device"}};
+    for(unsigned tab=1;tab<6;tab++)for(unsigned sub=0;sub<subcounts[tab];sub++){
+        menu.tab=tab;menu.sub=sub;menu.selected_group=menu.selected_close=0;menu.record_pending=menu.verify_pick=false;menu.dirty=true;tick(100);
+        char filename[80];snprintf(filename,sizeof(filename),"studio-%s",shots[tab][sub]);raster(filename);
+        assert(lv_obj_get_y(menu.body)==76&&lv_obj_get_height(menu.body)==296);
+    }
+    menu.tab=5;menu.sub=0;menu.reject_all=true;
+    for(unsigned code=1;code<0x32;code++){menu.reject_code=code;menu.dirty=true;tick(100);
+        const counting_reject_guide_t *guide=counting_reject_guide_get(code);assert(guide&&*guide->title&&*guide->meaning&&*guide->causes&&*guide->action);
+        lv_obj_t *content=lv_obj_get_child(menu.body,1),*detail=lv_obj_get_child(content,-1);lv_obj_update_layout(detail);
+        for(unsigned i=0;i<lv_obj_get_child_cnt(detail);i++){lv_obj_t *child=lv_obj_get_child(detail,i);assert(lv_obj_get_y(child)+lv_obj_get_height(child)<=248);}
+        if(code==0x14||code==0x1e||code==0x2e){lv_obj_scroll_to_y(menu.task_scroll,(code-1)*58-90,LV_ANIM_OFF);char filename[64];snprintf(filename,sizeof(filename),"studio-reject-%02x",code);raster(filename);}
+    }
+    assert(strstr(counting_reject_guide_get(0x1e)->title,"denomination"));assert(strstr(counting_reject_guide_get(0x2e)->title,"Duplicate"));assert(strstr(counting_reject_guide_get(0xfe)->title,"Unknown"));
+    menu.tab=4;menu.sub=0;menu.selected_user=0;menu.dirty=true;tick(100);click("Edit details");name_submit("Local operator",NULL);name_submit("B-007",(void *)2);name_submit("Branch One",(void *)3);tick(100);click("Save details");ui_page_03_menu_refresh_data(0);tick(100);
+    assert(!strcmp(model.users[0].employee_id,"B-007")&&!strcmp(model.users[0].team,"Branch One"));raster("studio-operator-metadata");
+    puts("PASS Studio: all 17 pages, 49 defined reject codes, unknown fallback, 28px reserve, keyboard focus, operator metadata edit");
+    settings_detail_keyboard_show("Lifecycle check","10",3,SETTINGS_DETAIL_KEYBOARD_UINT,batch_submit,NULL);
+    assert(settings_detail_overlay_is_open());ui_page_03_menu_destroy();assert(!menu.root&&!settings_detail_overlay_is_open());
+    tick(200);test_auto_qr();puts("PASS native Menu: six tabs, real ledger decisions/close/QR, batch drafts/keypad, minimum-one delete, registration, outside-close, resume/destroy; 1280x400");return 0;
 }

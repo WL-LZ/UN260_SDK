@@ -1,4 +1,9 @@
 #include <assert.h>
+#include <stddef.h>
+#include "un260/storage/workspace_store.h"
+bool workspace_store_ready(void){return false;}
+const workspace_model_t *workspace_store_get(void){return NULL;}
+const workspace_user_t *workspace_active(const workspace_model_t *m){(void)m;return NULL;}
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdarg.h>
@@ -8,7 +13,8 @@
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/counting/counting_history_service.h"
 #include "un260/counting/counting_multi.h"
-const counting_multi_t *counting_multi_current(void) {static const counting_multi_t empty={0};return &empty;}
+static counting_multi_t multi_fixture;
+const counting_multi_t *counting_multi_current(void) {return &multi_fixture;}
 #include "un260/currency/currency_state.h"
 #include "un260/lv_system/ui_history_data.h"
 #include "un260/lv_system/ui_qr_data.h"
@@ -321,6 +327,17 @@ int main(void)
     smart_island_rebuild_scene_texts();
     assert(strcmp(g_si_ctx.text.info_summary, "CNY 5 pcs AMOUNT 50") == 0);
     smart_island_show_qr_popup(); assert(qr_shows == 1);
+    assert(ui_qr_data_build_summary(qr,sizeof(qr))&&strstr(qr,"CNY: 50.00 / 5 notes"));
+    assert(!ui_qr_data_build_summary(qr,8));
+    counting_data_mark_multi_result(sim);
+    multi_fixture=(counting_multi_t){.count=2,.total_pcs=15,.currencies={{.code="CNY",.pcs=10,.amount=100},{.code="USD",.pcs=5,.amount=50}}};
+    assert(ui_qr_data_build_summary(qr,sizeof(qr)));
+    assert(strstr(qr,"CNY: 100.00 / 10 notes")&&strstr(qr,"USD: 50.00 / 5 notes")&&!strstr(qr,"150.00"));
+    multi_fixture.total_pcs=16;assert(!ui_qr_data_build_summary(qr,sizeof(qr)));multi_fixture.total_pcs=15;
+    multi_fixture.counting=true;assert(!ui_qr_data_build_summary(qr,sizeof(qr)));multi_fixture.counting=false;
+    multi_fixture.overflow=true;assert(!ui_qr_data_build_summary(qr,sizeof(qr)));multi_fixture.overflow=false;
+    multi_fixture.count=33;assert(!ui_qr_data_build_summary(qr,sizeof(qr)));
+    puts("PASS QR summaries: bounded payload, separate currencies, no mixed-currency sum, incomplete/running/overflow guards");
     puts("PASS MULTI sticky scope, history/print/export/QR guards, List/Pure/island text, old snapshots and reset/start notices");
     return 0;
 }

@@ -70,6 +70,8 @@ typedef struct {
 } history_ctx_t;
 
 static history_ctx_t *history;
+static uint32_t requested_record;
+static bool external_record;
 static void refresh_records(bool reset);
 static void refresh_header(void);
 static void show_record(uint32_t id);
@@ -627,6 +629,10 @@ static void refresh_header(void)
             else text[0]='\0'; /* The table footer already explains snapshot scope. */
             text_set(history->summary,text);
         }
+        if(rec&&rec->operator_id) {
+            snprintf(text,sizeof(text),"%s  |  Operator: %s",lv_label_get_text(history->subtitle),rec->operator_name);
+            text_set(history->subtitle,text);
+        }
     } else {
         lv_obj_set_width(history->title,700);
         lv_obj_set_width(history->subtitle,700);
@@ -865,7 +871,8 @@ static void action_event(lv_event_t *event)
         else if (history->detail_mode && history->multi_panel && history->multi_selected>=0 &&
             record_find(history->current_id) && record_find(history->current_id)->multi.enabled) {
             history->multi_selected=-1;multi_render();refresh_header();
-        } else if (history->detail_mode) show_list();
+        } else if (history->detail_mode && external_record) {external_record=false;ui_manager_pop_page();}
+        else if (history->detail_mode) show_list();
         else if (history->selecting) {history->selecting=false;history->selected_count=0;refresh_records(false);}
         else ui_manager_pop_page();
         return;
@@ -901,6 +908,16 @@ static void action_event(lv_event_t *event)
             toast(tr(UI_TEXT_SERIAL_UNAVAILABLE));
     } else if (history->selecting) show_confirmation(false);
     else {history->selecting=true;history->selected_count=0;refresh_records(false);}
+}
+void ui_page_19_history_open_record(uint32_t record_no)
+{
+    requested_record=record_no;
+    ui_manager_push_page(UI_PAGE_HISTORY);
+}
+static void open_requested_record(void)
+{
+    if(requested_record){uint32_t id=requested_record;requested_record=0;external_record=true;show_record(id);}
+    else external_record=false;
 }
 void ui_page_19_history_create(lv_obj_t *parent)
 {
@@ -966,6 +983,7 @@ void ui_page_19_history_create(lv_obj_t *parent)
     lv_label_set_long_mode(history->empty,LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_font(lv_damped_button_get_label(history->unknown),&lv_font_instrument_sans_medium_12,0);
     refresh_records(true);
+    open_requested_record();
     return;
 failed:
     ui_page_19_history_destroy();
@@ -983,7 +1001,9 @@ bool ui_page_19_history_resume(void)
         lv_obj_t *parent=lv_obj_get_parent(history->root);
         ui_page_19_history_destroy();
         ui_page_19_history_create(parent);
-        if (!history || !history->root) return false;
+        /* Creation already consumes a requested stable record ID. Do not
+         * reset that detail immediately when language resources changed. */
+        return history && history->root;
     }
     /* A new visit starts at the history list; internal detail/back keeps filters. */
     history->detail_mode=false;history->current_id=0;history->selecting=false;
@@ -992,7 +1012,7 @@ bool ui_page_19_history_resume(void)
     memset(&history->input,0,sizeof(history->input));history->model_dirty=true;
     show(history->root,true);show(history->list_panel,true);
     for (unsigned i=0;i<3;++i) show(history->sections[i].panel,false);
-    lv_obj_move_foreground(history->root);refresh_records(true);return true;
+    lv_obj_move_foreground(history->root);refresh_records(true);open_requested_record();return true;
 }
 void ui_page_19_history_suspend(void)
 {

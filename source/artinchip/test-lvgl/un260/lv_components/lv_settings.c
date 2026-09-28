@@ -143,6 +143,33 @@ lv_obj_t *lv_settings_button(lv_obj_t *p,int x,int y,int w,int h,const char *s,
     }
     return o;
 }
+static void toggle_knob_x(void *knob,int32_t x){lv_obj_set_x(knob,(lv_coord_t)x);}
+void lv_settings_toggle_set(lv_obj_t *toggle, bool on, bool animate)
+{
+    if(!toggle)return;
+    lv_obj_t *knob=lv_obj_get_child(toggle,0);
+    lv_damped_button_set_exact_palette(toggle,lv_color_hex(on?0x2369C7:0xCDD7DD),
+        lv_color_hex(on?0x1957AC:0xB9C7CF));
+    if(on)lv_obj_add_state(toggle,LV_STATE_CHECKED);else lv_obj_clear_state(toggle,LV_STATE_CHECKED);
+    lv_anim_del(knob,NULL);
+    int target=on?lv_obj_get_style_width(toggle,0)-lv_obj_get_style_width(knob,0)-3:3;
+    if(animate&&lv_obj_get_x(knob)!=target){
+        lv_anim_t a;lv_anim_init(&a);lv_anim_set_var(&a,knob);
+        lv_anim_set_values(&a,lv_obj_get_x(knob),target);lv_anim_set_time(&a,160);
+        lv_anim_set_exec_cb(&a,toggle_knob_x);lv_anim_set_path_cb(&a,lv_anim_path_ease_out);lv_anim_start(&a);
+    }else lv_obj_set_x(knob,target);
+}
+lv_obj_t *lv_settings_toggle(lv_obj_t *parent,int x,int y,bool on,lv_event_cb_t cb,void *data)
+{
+    lv_obj_t *o=lv_settings_box(parent,x,y,54,30,0xCDD7DD);
+    lv_obj_set_style_radius(o,LV_RADIUS_CIRCLE,0);lv_obj_add_flag(o,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(o,7);
+    lv_obj_t *knob=lv_settings_box(o,3,3,24,24,0xFFFFFF);
+    lv_obj_set_style_radius(knob,LV_RADIUS_CIRCLE,0);
+    lv_settings_toggle_set(o,on,false);
+    if(cb)lv_obj_add_event_cb(o,cb,LV_EVENT_CLICKED,data);
+    return o;
+}
 lv_obj_t *lv_settings_segment_base(lv_obj_t *p,int x,int y,int w,int h)
 {
     lv_obj_t *o=lv_settings_box(p,x,y,w,h,LV_SETTINGS_CONTROL_SURFACE);

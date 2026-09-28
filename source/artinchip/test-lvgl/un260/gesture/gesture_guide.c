@@ -38,6 +38,7 @@ static void guide_add_motion(lv_obj_t *page, const gesture_definition_t *definit
 
     track = lv_obj_create(page);
     lv_obj_remove_style_all(track);
+    lv_obj_clear_flag(track,LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_pos(track, 78, 18);
     lv_obj_set_size(track, 200, 132);
     lv_obj_set_style_bg_color(track, lv_color_hex(0xEDF3FA), 0);
@@ -47,6 +48,7 @@ static void guide_add_motion(lv_obj_t *page, const gesture_definition_t *definit
         lv_anim_t anim;
         lv_obj_t *puck = lv_obj_create(track);
         lv_obj_remove_style_all(puck);
+        lv_obj_clear_flag(puck,LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_size(puck, 24, 24);
         lv_obj_set_pos(puck, 72 + i * 30, 92);
         lv_obj_set_style_radius(puck, LV_RADIUS_CIRCLE, 0);
@@ -135,6 +137,9 @@ void gesture_guide_show(void)
     gesture_guide_close(false);
     g_overlay = lv_obj_create(lv_layer_top());
     lv_obj_remove_style_all(g_overlay);
+    /* The entrance animation extends outside the screen; the shield is not a scroll view. */
+    lv_obj_clear_flag(g_overlay,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollbar_mode(g_overlay,LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_size(g_overlay, 1280, 400);
     lv_obj_set_style_bg_color(g_overlay, lv_color_hex(0x101820), 0);
     lv_obj_set_style_bg_opa(g_overlay, LV_OPA_50, 0);
@@ -142,6 +147,8 @@ void gesture_guide_show(void)
 
     g_panel = lv_obj_create(g_overlay);
     lv_obj_remove_style_all(g_panel);
+    lv_obj_clear_flag(g_panel,LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollbar_mode(g_panel,LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_pos(g_panel, 250, 410);
     lv_obj_set_size(g_panel, 780, 320);
     lv_obj_set_style_bg_color(g_panel, lv_color_hex(0xFFFFFF), 0);

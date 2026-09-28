@@ -8,6 +8,15 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
 ICONS = {
+ 'User': [('c',12,7,4),('p',4,22,4,18,6,14,18,14,20,18,20,22)],
+ 'Sliders': [('l',3,6,21,6),('l',3,18,21,18),('c',8,6,3),('c',16,18,3)],
+ 'Help': [('c',12,12,10),('p',8,8,9,5,14,5,16,7,16,9,12,12,12,14),('l',12,18,12,18)],
+ 'Brush': [('p',9,14,17,3,21,6,13,17),('p',9,14,13,17,11,21,3,21,6,18,6,16,9,14)],
+ 'Qr': [('r',2,2,9,9),('r',15,2,22,9),('r',2,15,9,22),('l',15,15,18,15),('p',22,14,22,18,17,18,17,22,22,22)],
+ 'Repeat': [('p',3,9,3,5,18,5,21,9),('p',17,9,21,9,21,5),('p',21,15,21,19,6,19,3,15),('p',7,15,3,15,3,19)],
+ 'Note': [('r',2,5,22,19),('c',12,12,3),('l',6,11,6,13),('l',18,11,18,13)],
+
+ 'Search': [('c',10,10,7),('l',15,15,22,22)],
  'Receipt': [('r',5,2,19,22),('l',8,7,16,7),('l',8,11,16,11),('l',8,15,12,15),('l',15,18,16,18)],
  'Standby': [('r',3,3,21,18),('l',8,22,16,22),('l',12,18,12,22),('c',15,8,2),('p',5,15,9,11,13,15,17,12,19,15)],
  'Reject': [('p',3,14,6,20,18,20,21,14),('l',3,14,8,14),('l',16,14,21,14),('p',12,3,12,14,9,11),('l',12,14,15,11)],
@@ -39,7 +48,11 @@ def main():
     svgdir=ROOT/'tools/settings_entry_icons'
     pngdir.mkdir(parents=True,exist_ok=True);svgdir.mkdir(parents=True,exist_ok=True)
     scale=6;stroke=1.7;ink=(83,107,121,255)
-    for name,shapes in ICONS.items():
+    import sys
+    selected=sys.argv[1:] or list(ICONS)
+    assert all(name in ICONS for name in selected)
+    for name in selected:
+        shapes=ICONS[name]
         im=Image.new('RGBA',(24*scale,24*scale));d=ImageDraw.Draw(im);svg=[]
         for kind,*v in shapes:
             coords=[a*scale for a in v]
@@ -62,5 +75,5 @@ def main():
                 svg.append('<polyline points="'+' '.join(f'{v[i]},{v[i+1]}' for i in range(0,len(v),2))+'"/>')
         im.resize((24,24),Image.Resampling.LANCZOS if hasattr(Image,'Resampling') else Image.LANCZOS).save(pngdir/f'Entry{name}.png')
         (svgdir/f'Entry{name}.svg').write_text('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="#536b79" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'+''.join(svg)+'</g></svg>\n')
-    print(f'Generated {len(ICONS)} settings entry icons (24px PNG + SVG masters).')
+    print(f'Generated {len(selected)} settings entry icons (24px PNG + SVG masters).')
 if __name__=='__main__':main()

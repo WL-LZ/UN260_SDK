@@ -31,23 +31,12 @@ void page_01_set_btn_event_cb(lv_event_t* e);
 void page_01_curr_btn_event_cb(lv_event_t* e);
 // 密码键盘相关函数
 
-void page_03_batch_label_input_event_cb(lv_event_t* e);
-void page_03_void_batch_label_gesture_event_cb(lv_event_t* e);
 
 //page 03 batch按键
-void page_03_batch_num_keypad_event_cb(lv_event_t* e);
-void page_03_batch_num_keypad_clear_event_cb(lv_event_t* e);
-void page_03_batch_num_keypad_enter_event_cb(lv_event_t* e);
 void page_03_batch_set_result(bool success, const setting_batch_result_t *result);
 
 //page 03 功能页面
-void page_03_cfd_mode_event_cb(lv_event_t* e);
-void page_03_speed_mode_event_cb(lv_event_t* e);
-void page_03_add_mode_event_cb(lv_event_t* e);
-void page_03_fo_mode_event_cb(lv_event_t* e);
-void page_03_work_mode_event_cb(lv_event_t* e);
 void page_03_update_menu_button_states_refresh(void);
-void page_03_function_button_cache_reset(void);
 //PAGE03 翻页
 //PAGE 07 货币切换
 

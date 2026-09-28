@@ -1,4 +1,5 @@
 #include "app_counting_runtime.h"
+#include "app_auto_qr.h"
 #include "un260/app_service/work_mode_service.h"
 #include "un260/counting/counting_multi_extra.h"
 #include "un260/counting/counting_multi.h"
@@ -134,6 +135,7 @@ static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t le
     fault_popup_clear_pending();
     fault_popup_reset_auto_retry();
     counting_history_session_start(buf, len);
+    app_auto_qr_on_start();
     if (multi_pass_verification_is_active()) {
         if (machine_state_add_enabled()) {
             multi_pass_capture_event_t verification_event = { 0 };
@@ -317,6 +319,7 @@ bool app_counting_runtime_reset_session(counting_session_state_t *session,
                           reason != NULL ? reason : "unknown");
         return false;
     }
+    app_auto_qr_cancel();
     counting_report_reset();
     counting_multi_reset();
     memset(session, 0, sizeof(*session));
@@ -568,6 +571,7 @@ void app_counting_runtime_handle_info(counting_session_state_t *session,
             ui_refresh_main_page();
         }
         app_counting_runtime_schedule_auto_wave(session);
+        app_auto_qr_on_end(lv_tick_get());
     }
 }
 

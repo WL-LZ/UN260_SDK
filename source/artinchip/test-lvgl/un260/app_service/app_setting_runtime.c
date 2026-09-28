@@ -150,11 +150,7 @@ void app_setting_runtime_poll(uint32_t now_ms)
     }
 
     if (setting_service_batch_take_timeout(&batch_result)) {
-        if (batch_result.type == SETTING_BATCH_REQUEST_NUMBER) {
-            page_03_batch_set_result(false, &batch_result);
-        } else if (batch_result.type == SETTING_BATCH_REQUEST_SWITCH) {
-            batch_switch_on_0x06_result(false, &batch_result);
-        }
+        page_03_batch_set_result(false, &batch_result);
         notify_timeout = true;
     }
 

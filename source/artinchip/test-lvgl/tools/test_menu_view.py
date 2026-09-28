@@ -1,132 +1,54 @@
-#!/usr/bin/env python3
-"""Render and exercise the production Menu with LVGL 8.3 software drawing.
-
-Use an isolated full source copy, never a board deployment. DMA cache allocation
-is deliberately unavailable so the production live-object fallback is rendered.
-Real PNG/font files are used. Settings transport, navigation and the Main-page
-refresh boundary are host stubs; this does not validate UART ACK or touch HW.
-"""
-import argparse
-import os
 from pathlib import Path
-import re
-import shutil
-import subprocess
-import tempfile
+import re,subprocess,tempfile,os,hashlib,contextlib,concurrent.futures
 
-
-def function(source, name):
-    match = re.search(r"^\s*(?:static\s+)?[\w* ]+\b" + name + r"\([^;]*?\)\s*\{", source, re.M)
-    if not match:
-        raise AssertionError(f"Production function missing: {name}")
-    end = source.index("{", match.start()) + 1
-    depth = 1
-    while depth:
-        if source[end] == "{":
-            depth += 1
-        elif source[end] == "}":
-            depth -= 1
-        end += 1
-    return source[match.start():end]
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--lvgl-dir", required=True, type=Path)
-    parser.add_argument("--source-dir", type=Path, default=Path(__file__).resolve().parents[1])
-    parser.add_argument("--output-dir", required=True, type=Path)
-    parser.add_argument("--render-only", action="store_true", help="Capture baseline without candidate assertions")
-    args = parser.parse_args()
-    root, lvgl = args.source_dir.resolve(), args.lvgl_dir.resolve()
-    compiler = os.environ.get("CC") or shutil.which("gcc") or shutil.which("cc")
-    if not compiler or not (lvgl / "lvgl.h").is_file():
-        raise SystemExit("Requires host GCC and full LVGL 8.3 source")
-    paths = ["un260/lv_core/lv_page_event.c", "un260/lv_resources/lv_img_init.c",
-             "un260/lv_components/lv_components.c", "un260/lv_components/lv_damped_button.c",
-             "un260/lv_components/lv_nav_button.c", "un260/lv_components/lv_card_surface.c",
-             "un260/lv_core/ui_frame_commit.c",
-             "un260/machine_state/machine_state.c", "un260/currency/currency_state.c",
-             "un260/lv_system/ui_text_page.c", "un260/lv_system/ui_text_widget.c",
-             "un260/lv_system/ui_lang.c", "un260/lv_system/lv_str.c"]
-    sources = [root / path for path in paths]
-    menu = root / "un260/lv_core/page_03_menu.c"
-    fonts = sorted(set(re.findall(r"\blv_font_\w+", "\n".join(p.read_text(encoding="utf-8") for p in [menu, *sources]))))
-    custom = [font for font in fonts if (root / f"un260/font/{font}.c").is_file()]
-    with tempfile.TemporaryDirectory(prefix="un260-menu-view-") as temporary:
-        work = Path(temporary)
-        # Preserve LVGL's public include structure, including source headers.
-        (work / "lvgl").symlink_to(lvgl, target_is_directory=True)
-        conf = work / "lv_conf.h"
-        conf.write_text("\n".join([
-            "#ifndef LV_CONF_H", "#define LV_CONF_H", "#define LV_COLOR_DEPTH 32",
-            "#define LV_MEM_SIZE (16U * 1024U * 1024U)", "#define LV_USE_LOG 0",
-            "#define LV_USE_GPU_AIC 0", "#define LV_USE_GPU_AIC_GE 0",
-            "#define LV_USE_THEME_DEFAULT 1", "#define LV_USE_THEME_BASIC 0",
-            "#define LV_USE_THEME_MONO 0", "#define LV_USE_PNG 1", "#define LV_USE_SNAPSHOT 1",
-            *[f"#define {font.upper()} 1" for font in fonts if font.startswith("lv_font_montserrat_")],
-            "#define LV_FONT_CUSTOM_DECLARE " + " ".join(f"LV_FONT_DECLARE({f});" for f in custom),
-            "#endif", ""]), encoding="utf-8")
-        # Compile these existing generic utilities unchanged, without the rest
-        # of platform_app's board/protocol loop and unrelated page projections.
-        platform = (root / "un260/lv_system/platform_app.c").read_text(encoding="utf-8")
-        helper = work / "object_utils.c"
-        helper.write_text('#include <stdarg.h>\n#include <string.h>\n#include "un260/lv_system/ui_object_utils.h"\n' +
-                          "\n".join(function(platform, name) for name in
-                                    ["find_obj_by_name", "label_set_text_if_changed", "update_label_by_name"]), encoding="utf-8")
-        context_api = "void ui_page_03_menu_refresh_data(uint32_t topics)" in menu.read_text(encoding="utf-8")
-        manager_helper = []
-        if context_api:
-            manager = (root / "un260/lv_core/lv_page_manager.c").read_text(encoding="utf-8")
-            entry = re.search(r"\[UI_PAGE_MENU\]\s*=\s*\{(.*?)\n\s*\},", manager, re.S).group(1)
-            assert ".refresh_data = ui_page_03_menu_refresh_data" in entry
-            topics = re.search(r"\.data_topics\s*=\s*([^,]+),", entry).group(1)
-            bridge = work / "manager_data.c"
-            bridge.write_text('''#include <assert.h>
-#include "un260/lv_core/lv_page_manager.h"
-#include "un260/lv_core/page_03_menu.h"
-#include "un260/lv_core/ui_frame_commit.h"
-/* Actual manager publish/commit functions below; only the unrelated page
- * registry and navigation environment are reduced for this host boundary. */
-typedef struct { ui_data_topic_t data_topics; void (*refresh_data)(uint32_t); } ui_page_registration_t;
-static struct { ui_page_t current; } g_page_manager = {UI_PAGE_MENU};
-static bool g_page_cache_ready[UI_PAGE_COUNT] = {[UI_PAGE_MENU] = true};
-static ui_data_topic_t g_page_data_dirty[UI_PAGE_COUNT];
-static unsigned host_calls;
-static uint32_t host_topics;
-static void host_refresh(uint32_t topics) { ++host_calls; host_topics |= topics; ui_page_03_menu_refresh_data(topics); }
-static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
-    [UI_PAGE_MENU] = {.data_topics = ''' + topics + ''', .refresh_data = host_refresh}
-};
-''' + "\n".join(function(manager, name) for name in ["ui_manager_commit_visible_data", "ui_manager_publish_data_changed"]) + '''
-void menu_host_manager_select(bool visible) { g_page_manager.current = visible ? UI_PAGE_MENU : UI_PAGE_MAIN; }
-void menu_host_manager_reset_observation(void) { host_calls = 0; host_topics = 0; }
-unsigned menu_host_manager_calls(void) { return host_calls; }
-uint32_t menu_host_manager_topics(void) { return host_topics; }
-uint32_t menu_host_manager_dirty(void) { return g_page_data_dirty[UI_PAGE_MENU]; }
-void menu_host_manager_commit(void) { ui_manager_commit_visible_data(NULL, 0); }
-''', encoding="utf-8")
-            manager_helper.append(str(bridge))
-        executable = work / "test-menu"
-        command = [compiler, "-std=c11", "-O1", "-g", "-Wall", "-Wextra",
-                   "-ffunction-sections", "-fdata-sections", "-Wl,--gc-sections",
-                   "-fsanitize=undefined", "-fno-sanitize-recover=all", "-DLV_DRV_CONF_H",
-                   '-DLVGL_DIR="L:/usr/local/share/lvgl_data/"', "-include", "stdio.h",
-                   f"-I{work}", f"-I{root}", f"-I{root / 'aic_ui'}", f"-I{lvgl}",
-                   f"-DLV_CONF_PATH={conf}", str(Path(__file__).with_suffix(".c")), str(helper),
-                   *manager_helper, *map(str, sources), *[str(root / f"un260/font/{font}.c") for font in custom],
-                   *[str(path) for path in sorted((lvgl / "src").rglob("*.c")) if path.stem not in custom],
-                   "-lm", "-o", str(executable)]
-        if context_api:
-            command.insert(1, "-DMENU_HOST_HAS_CONTEXT=1")
-        subprocess.run(command, check=True)
-        args.output_dir.mkdir(parents=True, exist_ok=True)
-        environment = os.environ.copy()
-        environment["MENU_RASTER_OUTPUT"] = str(args.output_dir.resolve())
-        environment["MENU_ASSET_ROOT"] = str(root / "aic_ui/lvgl_data")
-        environment["MENU_RENDER_ONLY"] = "1" if args.render_only else "0"
-        environment["UBSAN_OPTIONS"] = "print_stacktrace=1"
-        subprocess.run([str(executable)], env=environment, check=True, timeout=60)
-
-
-if __name__ == "__main__":
-    main()
+def write_if_changed(path,text):
+    if not path.exists() or path.read_text()!=text:path.write_text(text)
+from test_list_view import compiled_asset_sources
+root=Path(__file__).resolve().parents[1]
+lvgl=root.parents[1]/'third-party/lvgl-8.3.2'
+parts=['tools/test_menu_view.c','un260/workspace/workspace_model.c','un260/workspace/cashbook.c','un260/counting/counting_reject_reason.c','un260/lv_components/lv_settings.c','un260/lv_components/lv_quick_controls.c','un260/lv_components/lv_damped_button.c','un260/lv_components/lv_nav_button.c','un260/lv_components/lv_modal_dialog.c','un260/lv_components/lv_popup_style.c','un260/lv_components/lv_alnum_keyboard.c','un260/lv_components/lv_qr_popup.c','un260/lv_components/qrcodegen.c','un260/lv_components/ui_scrollbar.c','un260/lv_core/settings_detail_ui.c','un260/lv_system/ui_lang.c','un260/lv_system/ui_text_widget.c','un260/lv_system/ui_text_page.c']
+inspected=parts+['un260/lv_core/page_03_menu.c']+['un260/lv_core/'+p.name for p in (root/'un260/lv_core').glob('menu_*.inc')]
+parts+=['un260/app_service/support_report.c','un260/app_service/app_auto_qr.c']
+fonts=sorted(set(re.findall(r'lv_font_(instrument_sans_[a-z]+_\d+)','\n'.join((root/p).read_text() for p in inspected))))
+out=Path(os.environ.get('MENU_OUTPUT','/tmp/un260-menu-renders'));out.mkdir(exist_ok=True)
+cache=Path('/tmp/un260-menu-host-cache');cache.mkdir(exist_ok=True)
+with contextlib.nullcontext(str(cache)) as directory:
+    work=Path(directory);(work/'lvgl').mkdir(exist_ok=True);write_if_changed(work/'lvgl/lvgl.h','#include "'+str(lvgl/'lvgl.h')+'"\n')
+    conf=work/'lv_conf.h';write_if_changed(conf,'''#ifndef LV_CONF_H
+#define LV_CONF_H
+#define LV_COLOR_DEPTH 32
+#define LV_MEM_SIZE (4U*1024U*1024U)
+#define LV_USE_GPU_AIC 0
+#define LV_USE_GPU_AIC_GE 0
+#define LV_USE_THEME_DEFAULT 0
+#define LV_USE_THEME_BASIC 0
+#define LV_USE_THEME_MONO 0
+#define LV_USE_LOG 1
+#define LV_LOG_LEVEL LV_LOG_LEVEL_WARN
+#define LV_LOG_PRINTF 1
+#define LV_ASSERT_HANDLER __builtin_trap();
+#define LV_FONT_MONTSERRAT_16 1
+#define LV_FONT_MONTSERRAT_18 1
+#define LV_FONT_MONTSERRAT_20 1
+#define LV_FONT_MONTSERRAT_24 1
+#define LV_FONT_CUSTOM_DECLARE '''+' '.join('LV_FONT_DECLARE(lv_font_'+f+');' for f in fonts)+'\n#endif\n')
+    port=(root/'lv_port_indev.c').read_text();helper=re.search(r'void lv_port_indev_set_drag_obj\(.*?\n\}',port,re.S);assert helper
+    bridge=work/'port.c';write_if_changed(bridge,'#include "lvgl/lvgl.h"\n'+helper[0])
+    sources=[root/p for p in parts]+[root/('un260/font/lv_font_'+f+'.c') for f in fonts]+compiled_asset_sources()+[bridge]+sorted(p for p in (lvgl/'src').rglob('*.c') if p.name!='qrcodegen.c')
+    flags=['cc','-std=gnu11','-g','-O1','-Wall','-Wextra','-Wno-misleading-indentation','-fsanitize=address,undefined','-fno-sanitize-recover=all','-no-pie','-DLV_DRV_CONF_H','-DLVGL_DIR="L:/usr/local/share/lvgl_data/"',f'-I{work}',f'-I{root}',f'-I{lvgl}',f'-DLV_CONF_PATH={conf}']
+    subprocess.run(flags+['-fsyntax-only',str(root/'tools/test_menu_view.c')],check=True)
+    def compile_one(source):
+        key=hashlib.sha256((str(source)+repr(flags)).encode()).hexdigest()
+        obj=work/(key+'.o');dep=work/(key+'.d')
+        deps=[source]
+        if dep.exists():
+            deps += [Path(p) for p in dep.read_text().replace('\\\n',' ').split(':',1)[1].split()]
+        if not obj.exists() or not dep.exists() or any(not p.exists() or p.stat().st_mtime_ns>obj.stat().st_mtime_ns for p in deps):
+            subprocess.run(flags+['-MMD','-MF',str(dep),'-c',str(source),'-o',str(obj)],check=True)
+        return obj
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:objects=list(pool.map(compile_one,sources))
+    exe=work/'test';subprocess.run(['cc','-fsanitize=address,undefined','-no-pie',*map(str,objects),'-lm','-o',str(exe)],check=True)
+    result=subprocess.run([str(exe)],env=dict(os.environ,MENU_OUTPUT=str(out)))
+    from PIL import Image
+    for path in out.glob('*.bgra'):Image.frombytes('RGBA',(1280,400),path.read_bytes(),'raw','BGRA').convert('RGB').save(path.with_suffix('.png'))
+    result.check_returncode()

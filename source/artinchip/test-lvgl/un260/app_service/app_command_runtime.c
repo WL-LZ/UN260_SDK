@@ -101,6 +101,11 @@ bool app_command_runtime_request_count_start(void)
     return true;
 }
 
+bool app_command_runtime_result_pending(void)
+{
+    return g_counting_session.history_record.valid;
+}
+
 bool app_command_runtime_count_start_busy(void)
 {
     return counting_action_start_pending() || g_counting_session.start_confirmed ||

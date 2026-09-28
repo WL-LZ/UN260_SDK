@@ -1,0 +1,15 @@
+/* Exact sizes used by the approved 1280 x 400 Menu design. */
+LV_FONT_DECLARE(lv_font_instrument_sans_medium_15);
+LV_FONT_DECLARE(lv_font_instrument_sans_medium_17);
+LV_FONT_DECLARE(lv_font_instrument_sans_medium_19);
+LV_FONT_DECLARE(lv_font_instrument_sans_semibold_19);
+LV_FONT_DECLARE(lv_font_instrument_sans_semibold_21);
+LV_FONT_DECLARE(lv_font_instrument_sans_semibold_25);
+LV_FONT_DECLARE(lv_font_instrument_sans_semibold_26);
+LV_FONT_DECLARE(lv_font_instrument_sans_semibold_29);
+LV_FONT_DECLARE(lv_font_instrument_sans_semibold_37);
+LV_FONT_DECLARE(lv_font_instrument_sans_semibold_50);
+LV_FONT_DECLARE(lv_font_instrument_sans_semibold_52);
+LV_FONT_DECLARE(lv_font_instrument_sans_semibold_55);
+LV_FONT_DECLARE(lv_font_instrument_sans_semibold_17);
+LV_FONT_DECLARE(lv_font_instrument_sans_menumedium_14);

@@ -284,6 +284,8 @@ static bool setting_batch_request_begin(setting_batch_request_type_t type,
                                         bool previous_enable,
                                         uint8_t previous_num)
 {
+    /* 200 is the existing wire-level OFF sentinel, not an enabled batch size. */
+    if(target_enable&&(!sent_num||sent_num>=200))return false;
     if (protocol_request_is_pending(&g_batch_request.request)) {
 #if SETTING_BATCH_TRACE_ENABLE
         setting_batch_trace_reject(type, sent_num);

@@ -30,12 +30,15 @@ with tempfile.TemporaryDirectory(prefix="un260-history-async-") as directory:
     state = work / "history"
     state.mkdir()
     binary = work / "history-async-test"
-    subprocess.run([compiler, "-std=c11", "-O1", "-g", "-Wall", "-Wextra", "-Werror",
+    subprocess.run([compiler, "-std=c11", "-O1", "-g", "-Wall", "-Wextra", "-Werror", "-Wno-misleading-indentation",
                     "-fno-omit-frame-pointer", "-fsanitize=undefined", "-no-pie", "-pthread",
                     "-I" + str(ROOT), '-DUI_HISTORY_STORE_DIR="' + state.as_posix() + '"',
                     str(ROOT / "tools/test_history_async.c"),
                     str(ROOT / "un260/storage/storage_worker.c"),
                     str(ROOT / "un260/counting/counting_history_service.c"),
+                        str(ROOT / "un260/counting/counting_cashbook.c"),
+                        str(ROOT / "un260/workspace/cashbook.c"),
+                        str(ROOT / "tools/test_cashbook_history_bridge.c"),
                     str(ROOT / "un260/counting/counting_data_store.c"),
                     "-Wl,--wrap=malloc", "-o", str(binary)], check=True)
     index = state / "index.cfg"
