@@ -9,14 +9,17 @@ const counting_multi_t *counting_multi_current(void){return &multi;}
 static bool ready=true,busy,running,diagnostic,pending,capacity=true,connected=true,fail_send;
 static unsigned commands,last_step,last_value;
 static unsigned actuals[7]={1,0,1,0,0,0,1};
+static bool async_save,save_done,save_success=true;
+static workspace_model_t save_draft;
 uint32_t counting_cashbook_verify_group(void){return 0;}
 uint8_t machine_state_mode(void){return actuals[6]==2?MODE_SDC:actuals[6]==3?MODE_CNT:MODE_MDC;}
 void workspace_store_init(void){}
-bool workspace_store_poll(void){return false;}
+bool workspace_store_poll(void){if(!busy||!save_done)return false;busy=false;save_done=false;if(save_success)model=save_draft;return true;}
+bool workspace_store_last_success(void){return !busy&&save_success;}
 bool workspace_store_ready(void){return ready;}
 bool workspace_store_busy(void){return busy;}
 const workspace_model_t *workspace_store_get(void){return &model;}
-bool workspace_store_save(const workspace_model_t *m){if(busy)return false;model=*m;return true;}
+bool workspace_store_save(const workspace_model_t *m){if(busy||!workspace_model_valid(m))return false;if(async_save){save_draft=*m;busy=true;}else model=*m;return true;}
 bool app_command_runtime_count_start_busy(void){return running;}
 bool app_command_runtime_result_pending(void){return pending;}
 bool machine_state_aging_running(void){return false;}
@@ -73,5 +76,43 @@ int main(void)
     assert(last_step==6&&last_value==2&&workspace_service_applying());
     workspace_service_poll(8100);assert(workspace_service_applying());
     actuals[6]=2;workspace_service_poll(8200);assert(!workspace_service_applying());
-    puts("PASS workspace service: idle and ADD boundaries, sequential confirmed apply, timeout, partial stop, cancel, send failure");
+    /* Editing an active preset must save first, then send once, never fake ACK. */
+    workspace_defaults(&model);actuals[3]=10;actuals[4]=1;count.total_pcs=50;
+    uint8_t slots[]={0,13,50,100,150};async_save=true;before=commands;
+    assert(workspace_service_save_batches(1,slots,5,10,13));
+    assert(busy&&commands==before&&actuals[3]==10);
+    workspace_service_poll(9000);assert(commands==before);
+    /* No Menu callback needed: save completion belongs to the service. */
+    save_done=true;workspace_service_poll(9010);
+    assert(commands==before+1&&last_step==3&&last_value==13&&actuals[3]==10);
+    assert(count.total_pcs==50&&actuals[4]==1&&model.users[0].batches[1]==13);
+    workspace_service_poll(9020);assert(commands==before+1);
+    actuals[3]=13; /* ACK integration is covered by test_batch_reply.py. */
+
+    /* Non-active edits, OFF and removed active slots must not apply another slot. */
+    slots[2]=60;before=commands;
+    assert(workspace_service_save_batches(1,slots,5,13,13));save_done=true;workspace_service_poll(9030);assert(commands==before);
+    actuals[3]=0;slots[1]=14;
+    assert(workspace_service_save_batches(1,slots,5,0,0));save_done=true;workspace_service_poll(9040);assert(commands==before);
+    actuals[3]=14;uint8_t removed[]={0,60,100,150};
+    assert(workspace_service_save_batches(1,removed,4,0,0));save_done=true;workspace_service_poll(9050);assert(commands==before&&actuals[3]==14);
+
+    /* Failed storage, changed controller state, running and failed send stay honest. */
+    workspace_defaults(&model);actuals[3]=10;slots[1]=13;slots[2]=50;
+    assert(workspace_service_save_batches(1,slots,5,10,13));save_success=false;save_done=true;
+    workspace_service_poll(9060);assert(commands==before&&actuals[3]==10&&model.users[0].batches[1]==10);save_success=true;
+    assert(workspace_service_save_batches(1,slots,5,10,13));actuals[3]=50;save_done=true;
+    workspace_service_poll(9070);assert(commands==before&&actuals[3]==50);
+    workspace_defaults(&model);actuals[3]=10;
+    running=true;assert(!workspace_service_save_batches(1,slots,5,10,13));running=false;
+    assert(workspace_service_save_batches(1,slots,5,10,13));running=true;save_done=true;
+    workspace_service_poll(9080);assert(commands==before);running=false;
+    workspace_service_poll(9090);assert(commands==before); /* No surprise delayed apply. */
+    workspace_defaults(&model);assert(workspace_service_save_batches(1,slots,5,10,13));
+    fail_send=true;save_done=true;workspace_service_poll(9100);fail_send=false;
+    assert(commands==before+1&&actuals[3]==10&&strstr(workspace_service_batch_save_message(),"not changed"));
+    assert(!workspace_service_save_batches(999,slots,5,10,13));
+    assert(!workspace_service_save_batches(1,slots,1,10,13));
+    slots[1]=200;assert(!workspace_service_save_batches(1,slots,5,10,200));
+    puts("PASS workspace service: profile apply + active Batch edit save/send/ACK boundaries, non-active/OFF/delete, ADD, storage/send failure, changed state, lifecycle and no delayed retry");
 }

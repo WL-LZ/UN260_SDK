@@ -78,6 +78,15 @@ bool workspace_store_busy(void){return busy;}
 bool workspace_store_last_success(void){return true;}
 const char *workspace_store_message(void){return "Saved on this device.";}
 bool workspace_store_save(const workspace_model_t *m){if(busy||!workspace_model_valid(m))return false;model=*m;revision++;return true;}
+static uint8_t batch_edit_previous,batch_edit_target;
+static unsigned batch_edit_saves;
+bool workspace_service_save_batches(uint32_t owner,const uint8_t *values,unsigned count,uint8_t previous,uint8_t target){
+    workspace_model_t next=model;workspace_user_t *u=workspace_find(&next,owner);if(!u)return false;
+    u->batch_count=count;memset(u->batches,0,sizeof(u->batches));memcpy(u->batches,values,count);
+    if(!workspace_store_save(&next))return false;
+    batch_edit_previous=previous;batch_edit_target=target;batch_edit_saves++;return true;
+}
+const char *workspace_service_batch_save_message(void){return "Batch cycle saved.";}
 bool workspace_store_scan_usb(void){return true;}
 uint32_t workspace_store_usb_images(void){return 0;}
 bool workspace_store_import_avatar(unsigned i){(void)i;return false;}
@@ -240,6 +249,20 @@ int main(void)
     nav_before=nav_count;assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);assert(nav_count==nav_before+1);current=UI_PAGE_MENU;
     click("Count");assert(menu.tab==1);assert(find(menu.body,"Edit")&&find(menu.body,"Remove"));raster("menu-batch");click("Add slot");assert(menu.batch_dirty);assert(lv_obj_has_state(find(menu.body,"Use this preset"),LV_STATE_DISABLED));assert(find(menu.body,"Save"));click("Cancel");assert(!menu.batch_dirty);
     menu.selected_batch=1;menu.dirty=true;tick(120);click("Edit");assert(settings_detail_overlay_is_open());raster("menu-batch-keypad");settings_detail_keyboard_hide();
+    ui_page_03_menu_suspend();actual_state.batch_num=10;assert(ui_page_03_menu_resume());assert(menu.selected_batch==1);
+    batch_submit("12",NULL);batch_submit("13",NULL);
+    assert(menu.batch_active_original==10&&menu.batch_active_edited==13);
+    tick(120);click("Save");ui_page_03_menu_refresh_data(0);tick(120);
+    assert(batch_edit_saves==1&&batch_edit_previous==10&&batch_edit_target==13);
+    assert(!menu.batch_dirty&&actual_state.batch_num==10); /* Saving is not ACK. */
+    actual_state.batch_num=13;reset_batch();menu.selected_batch=2;batch_submit("60",NULL);
+    assert(menu.batch_active_original==13&&menu.batch_active_edited==13);
+    reset_batch();assert(menu.batches[2]==50); /* Cancel does not apply the draft. */
+    /* A controller ACK can change the active preset without recreating Menu. */
+    actual_state.batch_num=50;menu.selected_batch=2;batch_submit("60",NULL);
+    assert(menu.batch_active_original==50&&menu.batch_active_edited==60);
+    reset_batch();
+    model.users[0].batches[1]=10;actual_state.batch_num=50;reset_batch();menu.dirty=true;tick(120);
     click("Profiles");raster("menu-profiles");click("Delete");assert(settings_detail_overlay_is_open());raster("menu-delete-confirm");click("Cancel");assert(model.users[0].profile_count==2);
     click("Delete");click("Delete");assert(model.users[0].profile_count==1);ui_page_03_menu_refresh_data(0);tick(100);assert(model.users[0].profile_count==1);assert(lv_obj_has_state(find(menu.body,"Delete"),LV_STATE_DISABLED));
     click("Options");raster("menu-options");

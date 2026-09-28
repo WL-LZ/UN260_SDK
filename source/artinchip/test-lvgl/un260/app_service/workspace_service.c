@@ -15,6 +15,12 @@
 #include <stdlib.h>
 #include <string.h>
 static struct {bool active,waiting;unsigned step,confirmed;uint32_t since;workspace_profile_t target;char message[160];} apply;
+static struct {
+    bool pending;
+    uint32_t owner;
+    uint8_t previous, target;
+    char message[160];
+} batch_save;
 static const char *const steps[]={"Speed","Sorting","Sound","Batch","ADD","Start method","Count mode"};
 static unsigned value(unsigned step,const workspace_profile_t *p)
 {
@@ -44,7 +50,7 @@ const char *workspace_service_switch_blocker(void)
 {
     if(!workspace_store_ready())return "The workspace is not available yet.";
     if(workspace_store_busy())return "A workspace save or photo import is in progress.";
-    if(apply.active)return "Wait for the profile to finish applying.";
+    if(apply.active||batch_save.pending)return "Wait for the workspace change to finish.";
     if(counting_cashbook_verify_group())return "Finish or cancel the armed recount before switching workspaces.";
     if(app_command_runtime_result_pending())return "Wait for the last counting result to finish.";
     if(counting_data_current()->multi_currency_result&&counting_multi_current()->total_pcs)
@@ -70,9 +76,32 @@ bool workspace_service_apply(const workspace_profile_t *p,uint32_t now)
     apply.target=*p;if(!apply.target.mode)apply.target.mode=actual(6);apply.active=true;apply.waiting=false;apply.step=apply.confirmed=0;apply.since=now;
     snprintf(apply.message,sizeof(apply.message),"Applying profile...");return true;
 }
+static void finish_batch_save(void)
+{
+    if(!batch_save.pending||workspace_store_busy())return;
+    batch_save.pending=false;
+    if(!workspace_store_last_success())return;
+    const workspace_user_t *u=workspace_active(workspace_store_get());
+    bool target_saved=false;
+    if(u&&u->id==batch_save.owner)
+        for(unsigned i=1;i<u->batch_count;i++)
+            if(u->batches[i]==batch_save.target)target_saved=true;
+    /* Never replace a newer controller choice or apply later during a run. */
+    if(!target_saved||!machine_state_batch_enabled()||
+       machine_state_batch_num()!=batch_save.previous||machine_blocker()||
+       !protocol_send_is_ready()||boot_service_get_stage()!=BOOT_STAGE_DONE||
+       !setting_service_request_batch_switch(true,batch_save.target,true,batch_save.previous)) {
+        snprintf(batch_save.message,sizeof(batch_save.message),
+                 "Cycle saved; active Batch was not changed. Select the preset to apply it when idle.");
+        return;
+    }
+    snprintf(batch_save.message,sizeof(batch_save.message),
+             "Cycle saved. Active Batch sent for controller confirmation.");
+}
 bool workspace_service_poll(uint32_t now)
 {
     bool changed=workspace_store_poll();
+    finish_batch_save();
     if(!apply.active)return changed;
     /* A matching confirmed value is evidence; sending a command is not. */
     if(apply.waiting&&actual(apply.step)==value(apply.step,&apply.target)) {
@@ -116,8 +145,35 @@ bool workspace_service_batch_next(void)
 {
     /* Changing the Batch cycle during an idle ADD session does not change
      * ownership or clear totals. Do not inherit the operator-switch blocker. */
-    if(!workspace_store_ready()||workspace_store_busy()||apply.active||machine_blocker()||!protocol_send_is_ready())return false;
+    if(!workspace_store_ready()||workspace_store_busy()||batch_save.pending||apply.active||machine_blocker()||!protocol_send_is_ready())return false;
     const workspace_user_t *u=workspace_active(workspace_store_get());
     uint8_t target=workspace_next_batch(u,machine_state_batch_enabled()?machine_state_batch_num():0);
     return setting_service_request_batch_switch(target!=0,target?target:200,machine_state_batch_enabled(),machine_state_batch_num());
 }
+bool workspace_service_save_batches(uint32_t owner,const uint8_t *values,
+                                    unsigned count,uint8_t previous_active,
+                                    uint8_t edited_active)
+{
+    if(!values||count<2||count>WORKSPACE_BATCHES||!workspace_store_ready()||
+       workspace_store_busy()||batch_save.pending||apply.active)return false;
+    if(values[0])return false;
+    for(unsigned i=1;i<count;i++)if(!values[i]||values[i]>=200)return false;
+    const workspace_user_t *u=workspace_active(workspace_store_get());
+    if(!u||u->id!=owner)return false;
+    bool previous_found=false,target_found=false;
+    for(unsigned i=1;i<u->batch_count;i++)if(u->batches[i]==previous_active)previous_found=true;
+    for(unsigned i=1;i<count;i++)if(values[i]==edited_active)target_found=true;
+    bool sync=previous_found&&target_found&&previous_active!=edited_active&&
+              machine_state_batch_enabled()&&machine_state_batch_num()==previous_active;
+    if(sync&&(machine_blocker()||!protocol_send_is_ready()||boot_service_get_stage()!=BOOT_STAGE_DONE))return false;
+    workspace_model_t *next=malloc(sizeof(*next));if(!next)return false;
+    *next=*workspace_store_get();workspace_user_t *v=workspace_find(next,owner);
+    v->batch_count=count;memset(v->batches,0,sizeof(v->batches));memcpy(v->batches,values,count);
+    bool ok=workspace_store_save(next);free(next);
+    if(!ok)return false;
+    batch_save.pending=sync;batch_save.owner=owner;
+    batch_save.previous=previous_active;batch_save.target=edited_active;
+    snprintf(batch_save.message,sizeof(batch_save.message),"Batch cycle saved.");
+    return true;
+}
+const char *workspace_service_batch_save_message(void){return batch_save.message;}
