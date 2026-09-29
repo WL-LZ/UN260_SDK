@@ -174,7 +174,7 @@ static void action(lv_event_t*e){int id=(int)(intptr_t)lv_event_get_user_data(e)
  else if(id>=10&&id<=14){tab=id-10;if(tab==4)selected=0;redraw=true;}
  else if(id==20||id==21){draft.mode=id-20;queue_save();}
  else if(id>=30&&id<=32){draft.active[draft.mode]=id-30;queue_save();}
- else if(id>=40&&id<=45){const int values[]={1,5,10,30,0,-1};if(id==45)settings_detail_keyboard_show("Custom duration (1-1440 min)","",4,SETTINGS_DETAIL_KEYBOARD_NUM,timeout_input,NULL);else draft.minutes=values[id-40];redraw=true;}
+ else if(id>=40&&id<=45){const int values[]={1,5,10,30,0,-1};if(id==45)settings_detail_keyboard_show("Custom duration (1-1440 min)","",4,SETTINGS_DETAIL_KEYBOARD_UINT,timeout_input,NULL);else draft.minutes=values[id-40];redraw=true;}
  else if(id>=50&&id<54){layout()->date_bits^=1<<(id-50);redraw=true;}
  else if(id>=54&&id<=56){layout()->date_style=id-54;redraw=true;}
  else if(id==57){layout()->hour12^=1;redraw=true;}

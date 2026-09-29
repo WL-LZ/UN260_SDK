@@ -792,21 +792,28 @@ static void settings_keyboard_create_number_keys(lv_obj_t* parent, bool integer)
     int gap_y = integer ? 8 : 10;
     int start_x = 0;
     int start_y = 0;
+    static const int pin_x[3] = {0,115,229};
+    static const int pin_y[4] = {0,73,146,218};
+    static const int pin_h[4] = {65,65,64,65};
 
     for (int r = 0; r < 4; r++) {
         for (int c = 0; c < 3; c++) {
             lv_obj_t *key_button = settings_keyboard_create_key(parent,
-                                         start_x + c * (key_w + gap_x),
-                                         start_y + r * (key_h + gap_y),
-                                         key_w, key_h,
+                                         integer ? pin_x[c] : start_x + c * (key_w + gap_x),
+                                         integer ? pin_y[r] : start_y + r * (key_h + gap_y),
+                                         key_w, integer ? pin_h[r] : key_h,
                                          strcmp(keys[r][c],"CLEAR")==0 ? "Clear" : keys[r][c], keys[r][c],
                                          lv_color_hex(0xF8F9FB));
             if(integer) {
                 bool utility = r == 3 && c != 1;
-                lv_damped_button_set_exact_palette(key_button, lv_color_hex(utility ? 0xFFFFFF : 0xF4F6F7), lv_color_hex(0xE2E9EE));
+                lv_damped_button_set_exact_palette(key_button, lv_color_hex(utility ? 0xFBFCFD : 0xF0F3F5), lv_color_hex(0xE2E9EE));
                 lv_obj_set_style_border_width(key_button, utility ? 0 : 1, 0);
+                lv_obj_set_style_border_color(key_button,lv_color_hex(0xE9EDF0),0);
+                /* PIN keys inherit a transparent border from damped buttons. */
+                lv_obj_set_style_border_opa(key_button,LV_OPA_TRANSP,0);
                 lv_obj_set_style_text_font(lv_obj_get_child(key_button,0), utility ?
-                    &lv_font_instrument_sans_medium_16 : &lv_font_instrument_sans_medium_26, 0);
+                    &lv_font_instrument_sans_medium_14 : &lv_font_instrument_sans_medium_26, 0);
+                lv_obj_set_style_text_color(lv_obj_get_child(key_button,0),lv_color_hex(utility?0x647B89:0x20313B),0);
                 if(r == 3 && c == 2) lv_img_set_src(lv_obj_get_child(key_button,1), LVGL_DIR "pin_icons/erase.png");
             }
         }
@@ -926,6 +933,7 @@ bool settings_detail_keyboard_show_ex(const char* title,
     lv_obj_add_flag(top, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(g_settings_keyboard.root, settings_keyboard_cancel_cb, LV_EVENT_CLICKED, NULL);
     lv_popup_style(g_settings_keyboard.root,top);
+    if(integer)lv_obj_set_style_bg_color(top,lv_color_hex(0xFBFCFD),0);
     if(!numeric) lv_obj_set_style_bg_color(top,lv_color_hex(0xE7EDF1),0);
 
     dialog = lv_obj_create(top);

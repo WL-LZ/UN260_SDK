@@ -213,7 +213,7 @@ static void print_input_cb(lv_event_t* e)
     print_field_t field;
     char value[24];
     const char* title = "";
-    settings_detail_keyboard_mode_t mode = SETTINGS_DETAIL_KEYBOARD_NUM;
+    settings_detail_keyboard_mode_t mode = SETTINGS_DETAIL_KEYBOARD_UINT;
     uint16_t max_len = 2;
     print_config_value_t config;
 

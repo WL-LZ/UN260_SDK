@@ -423,7 +423,7 @@ static void action(lv_event_t *event)
     if(id==A_CANCEL_VERIFY){counting_cashbook_cancel_verify();menu.dirty=true;notify(UI_NOTICE_INFO,"Verification cancelled. Existing results are unchanged.");return;}
     if(record_action(id)||output_action(id))return;
     if(id==A_DIAGNOSTICS){settings_detail_dialog_show("Export support report?","Insert a USB drive. The report contains versions, confirmed settings and current reject codes only. It excludes serials, note images, amounts, names, photos and passwords.","Export","Cancel",support_export,NULL,NULL);return;}
-    if(id>=450&&id<=452){static const uint8_t modes[]={MODE_MDC,MODE_SDC,MODE_CNT};settings_detail_dialog_show("Change count mode?","After the controller confirms, the current Main result will be cleared. Saved history and daily totals are preserved.","Change","Cancel",mode_confirm,NULL,(void *)(uintptr_t)modes[id-450]);return;}
+    if(id>=450&&id<=452){static const uint8_t modes[]={MODE_MDC,MODE_SDC,MODE_CNT};mode_confirm((void *)(uintptr_t)modes[id-450]);return;}
     if(id==A_CAPACITY){char value[8];snprintf(value,sizeof(value),"%u",machine_state_reject_pocket_max());settings_detail_keyboard_show("Reject pocket / 30-100 notes",value,3,SETTINGS_DETAIL_KEYBOARD_UINT,capacity_done,NULL);return;}
     if(id==A_TIMEOUT){char value[8];snprintf(value,sizeof(value),"%u",standby_config()->minutes);settings_detail_keyboard_show("Standby / 0-60 minutes",value,2,SETTINGS_DETAIL_KEYBOARD_UINT,timeout_done,NULL);return;}
     if(id==A_LANGUAGE){notify(UI_NOTICE_INFO,"Language is managed in Settings > Display.");return;}

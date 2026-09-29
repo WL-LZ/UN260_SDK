@@ -9,7 +9,8 @@ enum { REPORT_IDLE_TIMEOUT_MS = 3000, REPORT_TOTAL_TIMEOUT_MS = 120000 };
 static struct {
     unsigned stage;
     uint32_t generation, owner, requested, activity;
-    bool enabled, add, due, scheduled, started, invalid, failed, live_seen, reusable;
+    bool enabled, add, due, scheduled, started, invalid, live_seen, reusable;
+    counting_report_failure_t failure;
     bool live_limit_reported;
     unsigned rows, published_rows;
     int live_next;
@@ -37,11 +38,11 @@ static bool settled(const counting_session_state_t *s)
     return s && !s->start_confirmed && s->phase == COUNTING_SESSION_FINISHED_WAIT_START;
 }
 
-static void fail(void)
+static void fail(counting_report_failure_t reason)
 {
     report.invalid = true;
     report.cache.valid = false;
-    report.failed = true;
+    report.failure = reason;
     counting_data_clear_serials(&report.staging);
 }
 
@@ -117,7 +118,9 @@ void counting_report_poll(const counting_session_state_t *s,
     if (report.stage != REPORT_IDLE) {
         if (!report.invalid &&
             ((uint32_t)(now - report.activity) >= REPORT_IDLE_TIMEOUT_MS ||
-             (uint32_t)(now - report.requested) >= REPORT_TOTAL_TIMEOUT_MS)) fail();
+             (uint32_t)(now - report.requested) >= REPORT_TOTAL_TIMEOUT_MS))
+            fail(report.stage == REPORT_REJECT ? COUNTING_REPORT_FAILURE_REJECT
+                                              : COUNTING_REPORT_FAILURE_SERIAL);
         return;
     }
     if (!report.enabled || !report.due || !settled(s)) return;
@@ -126,7 +129,7 @@ void counting_report_poll(const counting_session_state_t *s,
     report.owner = report.generation;
     report.requested = report.activity = now;
     const uint8_t request = 1;
-    if (protocol_send(0x0C, &request, 1) < 0) { fail(); return; }
+    if (protocol_send(0x0C, &request, 1) < 0) { fail(COUNTING_REPORT_FAILURE_REJECT); return; }
     report.stage = REPORT_REJECT;
 }
 
@@ -160,7 +163,7 @@ bool counting_report_accept_reject(const counting_session_state_t *s)
 
 bool counting_report_reject_start(void)
 {
-    if (report.started) { fail(); return false; }
+    if (report.started) { fail(COUNTING_REPORT_FAILURE_REJECT); return false; }
     report.started = true;
     return true;
 }
@@ -179,13 +182,15 @@ counting_report_result_t counting_report_reject_end(
 {
     if (!counting_report_accept_reject(s)) return COUNTING_REPORT_IGNORED;
     report.stage = REPORT_IDLE;
-    if (!report.started) { fail(); return COUNTING_REPORT_FAILED; }
+    if (!report.started || (d->err_expected && !d->err_num)) {
+        fail(COUNTING_REPORT_FAILURE_REJECT); return COUNTING_REPORT_FAILED;
+    }
     if (unchanged(d)) return COUNTING_REPORT_REUSED;
     report.requested = report.activity = now;
     report.started = report.invalid = false;
     const uint8_t request[2] = {1, 1};
     if (protocol_send(0x0D, request, sizeof(request)) < 0) {
-        fail(); return COUNTING_REPORT_FAILED;
+        fail(COUNTING_REPORT_FAILURE_SERIAL); return COUNTING_REPORT_FAILED;
     }
     report.stage = REPORT_SERIAL;
     return COUNTING_REPORT_IGNORED;
@@ -214,7 +219,7 @@ counting_report_result_t counting_report_serial(
     if (len != 25 || !counting_report_accept_serial(s)) return COUNTING_REPORT_IGNORED;
     report.activity = now;
     if (marker(buf, len, 0)) {
-        if (report.started) { fail(); return COUNTING_REPORT_FAILED; }
+        if (report.started) { fail(COUNTING_REPORT_FAILURE_SERIAL); return COUNTING_REPORT_FAILED; }
         counting_data_clear_serials(&report.staging);
         report.started = true;
         report.rows = 0;
@@ -222,7 +227,7 @@ counting_report_result_t counting_report_serial(
     }
     if (marker(buf, len, 255)) {
         report.stage = REPORT_IDLE;
-        if (!report.started || report.invalid) { fail(); return COUNTING_REPORT_FAILED; }
+        if (!report.started || report.invalid) { fail(COUNTING_REPORT_FAILURE_SERIAL); return COUNTING_REPORT_FAILED; }
         publish(d);
         return COUNTING_REPORT_READY;
     }
@@ -234,7 +239,7 @@ counting_report_result_t counting_report_serial(
         !memcmp(buf + 4, report.last_payload, sizeof(report.last_payload)))
         return COUNTING_REPORT_IGNORED;
     if (buf[4] != (uint8_t)(report.rows + 1U) || report.rows >= COUNTING_DATA_MAX_ITEMS) {
-        fail(); return COUNTING_REPORT_FAILED;
+        fail(COUNTING_REPORT_FAILURE_SERIAL); return COUNTING_REPORT_FAILED;
     }
     memcpy(report.last_payload, buf + 4, sizeof(report.last_payload));
     unsigned slot = report.rows++;
@@ -243,7 +248,7 @@ counting_report_result_t counting_report_serial(
     long value = strtol(denom, &end, 10);
     while (*end == ' ') ++end;
     if (end == denom || *end || value < 0 || value > 2147483647L) {
-        fail(); return COUNTING_REPORT_FAILED;
+        fail(COUNTING_REPORT_FAILURE_SERIAL); return COUNTING_REPORT_FAILED;
     }
     memcpy(serial, buf + 12, 12); serial[12] = 0;
     int n = 12;
@@ -252,11 +257,11 @@ counting_report_result_t counting_report_serial(
     while (*text == ' ') ++text;
     if (!*text || value == 0) return COUNTING_REPORT_IGNORED;
     if (!counting_data_ensure_serial_capacity(&report.staging, (int)slot + 1)) {
-        fail(); return COUNTING_REPORT_FAILED;
+        fail(COUNTING_REPORT_FAILURE_SERIAL); return COUNTING_REPORT_FAILED;
     }
     size_t size = strlen(text) + 1U;
     char *copy = malloc(size);
-    if (!copy) { fail(); return COUNTING_REPORT_FAILED; }
+    if (!copy) { fail(COUNTING_REPORT_FAILURE_SERIAL); return COUNTING_REPORT_FAILED; }
     memcpy(copy, text, size);
     report.staging.sn_str[slot] = copy;
     report.staging.denom_mix[slot] = (int)value;
@@ -281,15 +286,15 @@ int counting_report_live_slot(counting_sim_t *d, bool *cleared)
     report.live_seen = true;
     report.cache.valid = false;
     if (report.live_next >= COUNTING_DATA_MAX_ITEMS) {
-        if (!report.live_limit_reported) { fail(); report.live_limit_reported = true; }
+        if (!report.live_limit_reported) { fail(COUNTING_REPORT_FAILURE_CAPACITY); report.live_limit_reported = true; }
         return -1;
     }
     return report.live_next++;
 }
 
-bool counting_report_take_failure(void)
+counting_report_failure_t counting_report_take_failure(void)
 {
-    bool failed = report.failed;
-    report.failed = false;
+    counting_report_failure_t failed = report.failure;
+    report.failure = COUNTING_REPORT_FAILURE_NONE;
     return failed;
 }

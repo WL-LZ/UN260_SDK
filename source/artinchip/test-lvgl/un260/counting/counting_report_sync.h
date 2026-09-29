@@ -11,6 +11,13 @@ typedef enum {
     COUNTING_REPORT_FAILED
 } counting_report_result_t;
 
+typedef enum {
+    COUNTING_REPORT_FAILURE_NONE,
+    COUNTING_REPORT_FAILURE_REJECT,
+    COUNTING_REPORT_FAILURE_SERIAL,
+    COUNTING_REPORT_FAILURE_CAPACITY
+} counting_report_failure_t;
+
 /* One controller, one untagged detail transaction. All calls belong to the
  * protocol consumer; neither timers nor views write these snapshots. */
 void counting_report_begin(bool add, counting_sim_t *data);
@@ -32,6 +39,6 @@ counting_report_result_t counting_report_serial(
     const counting_session_state_t *session, counting_sim_t *data,
     const uint8_t *buf, uint8_t len, uint32_t now);
 int counting_report_live_slot(counting_sim_t *data, bool *cleared);
-bool counting_report_take_failure(void);
+counting_report_failure_t counting_report_take_failure(void);
 
 #endif

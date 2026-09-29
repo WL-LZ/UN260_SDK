@@ -54,12 +54,18 @@ static counting_detail_reply_result_t counting_reject_reply_handle(
         return COUNTING_DETAIL_REPLY_INVALID;
     }
     if (!counting_report_accept_reject(session)) return COUNTING_DETAIL_REPLY_IGNORED;
-    counting_report_touch(app_clock_uptime_ms());
 
     err_code = buf[4];
     pcs = buf[5];
     if (err_code == 0x00 && pcs == 0x00) {
+        /* 0x00 also means "reject pocket empty". Some controllers send it
+         * after START with zero notes. Only tolerate this before any data
+         * and with a zero live reject count; do not restart or extend timeout. */
+        if (counting_report_reject_started() &&
+            !sim_data->err_expected && !sim_data->err_num)
+            return COUNTING_DETAIL_REPLY_IGNORED;
         if (!counting_report_reject_start()) return COUNTING_DETAIL_REPLY_INVALID;
+        counting_report_touch(app_clock_uptime_ms());
         counting_data_clear_errors(sim_data);
         /* Keep err_expected from 0x0E for the main-page reject count. */
         counting_detail_record_history(hooks, "0x0C", buf, len);
@@ -91,6 +97,7 @@ static counting_detail_reply_result_t counting_reject_reply_handle(
         uart_debug_printf("0x0C detail ignored because err_expected=0\n");
         return COUNTING_DETAIL_REPLY_IGNORED;
     }
+    counting_report_touch(app_clock_uptime_ms());
 
     if (!counting_data_ensure_error_capacity(
             sim_data, (int)sim_data->err_num + 1)) {

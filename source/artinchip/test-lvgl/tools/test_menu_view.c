@@ -66,7 +66,8 @@ void machine_time_get(machine_time_value_t *v){*v=(machine_time_value_t){2026,9,
 void ui_page_19_history_open_record(uint32_t n){assert(n);}
 uint8_t machine_state_mode(void){return MODE_MDC;}
 uint8_t machine_state_reject_pocket_max(void){return 100;}
-bool setting_service_request_mode(uint8_t n){(void)n;return true;}
+static unsigned mode_requests;
+bool setting_service_request_mode(uint8_t n){(void)n;mode_requests++;return true;}
 bool setting_service_request_reject_pocket_max(uint8_t n,uint8_t p){(void)n;(void)p;return true;}
 static ui_history_store_t history_fixture;
 static unsigned revision,nav_count,printed;
@@ -197,6 +198,22 @@ static void check_header(void)
         assert(lv_obj_get_height(v)==44&&lv_obj_get_style_border_width(v,0)==0);
     }
 }
+static void check_numeric_keypad(void)
+{
+    lv_obj_update_layout(lv_scr_act());
+    lv_obj_t *one=find(lv_scr_act(),"1"),*two=find(lv_scr_act(),"2");
+    lv_obj_t *four=find(lv_scr_act(),"4"),*clear=find(lv_scr_act(),"Clear");
+    assert(one&&two&&four&&clear&&!find(lv_scr_act(),"Q")&&!find(lv_scr_act(),"."));
+    assert(lv_obj_get_width(one)==107&&lv_obj_get_height(one)==65);
+    assert(lv_obj_get_x(two)-lv_obj_get_x(one)==115);
+    assert(lv_obj_get_y(four)-lv_obj_get_y(one)==73);
+    assert(lv_obj_get_style_bg_color(one,0).full==lv_color_hex(0xF0F3F5).full);
+    assert(lv_obj_get_style_border_width(one,0)==1&&lv_obj_get_style_radius(one,0)==12);
+    assert(lv_obj_get_style_border_opa(one,0)==LV_OPA_TRANSP);
+    assert(lv_obj_get_style_text_font(lv_obj_get_child(one,0),0)==&lv_font_instrument_sans_medium_26);
+    assert(lv_obj_get_style_bg_color(clear,0).full==lv_color_hex(0xFBFCFD).full);
+    assert(lv_obj_get_style_border_width(clear,0)==0);
+}
 static void raster(const char *name)
 {
     if(page_03_menu_is_visible()){lv_obj_update_layout(menu.root);check_header();}
@@ -257,7 +274,7 @@ int main(void)
     nav_before=nav_count;point=(lv_point_t){47,37};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);assert(nav_count==nav_before+1&&current==UI_PAGE_MAIN);current=UI_PAGE_MENU;
     nav_before=nav_count;assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);assert(nav_count==nav_before+1);current=UI_PAGE_MENU;
     click("Count");assert(menu.tab==1);assert(find(menu.body,"Edit")&&find(menu.body,"Remove"));raster("menu-batch");click("Add slot");assert(menu.batch_dirty);assert(lv_obj_has_state(find(menu.body,"Use this preset"),LV_STATE_DISABLED));assert(find(menu.body,"Save"));click("Cancel");assert(!menu.batch_dirty);
-    menu.selected_batch=1;menu.dirty=true;tick(120);click("Edit");assert(settings_detail_overlay_is_open());raster("menu-batch-keypad");settings_detail_keyboard_hide();
+    menu.selected_batch=1;menu.dirty=true;tick(120);click("Edit");assert(settings_detail_overlay_is_open());check_numeric_keypad();raster("menu-batch-keypad");settings_detail_keyboard_hide();
     ui_page_03_menu_suspend();actual_state.batch_num=10;assert(ui_page_03_menu_resume());assert(menu.selected_batch==1);
     batch_submit("12",NULL);batch_submit("13",NULL);
     assert(menu.batch_active_original==10&&menu.batch_active_edited==13);
@@ -275,6 +292,9 @@ int main(void)
     click("Profiles");raster("menu-profiles");click("Delete");assert(settings_detail_overlay_is_open());raster("menu-delete-confirm");click("Cancel");assert(model.users[0].profile_count==2);
     click("Delete");click("Delete");assert(model.users[0].profile_count==1);ui_page_03_menu_refresh_data(0);tick(100);assert(model.users[0].profile_count==1);assert(lv_obj_has_state(find(menu.body,"Delete"),LV_STATE_DISABLED));
     click("Options");raster("menu-options");
+    click("Mixed");assert(mode_requests==0&&!settings_detail_overlay_is_open());
+    click("Single");assert(mode_requests==1&&!settings_detail_overlay_is_open()&&!test_notice_visible);
+    click("High");assert(!settings_detail_overlay_is_open()&&!test_notice_visible);
     while(model.users[0].profile_count<WORKSPACE_PROFILES){
         workspace_profile_t extra=model.users[0].profiles[0];
         snprintf(extra.name,sizeof(extra.name),"Profile %u",model.users[0].profile_count+1);
@@ -288,7 +308,13 @@ int main(void)
     click("Confirm singles");click("Confirm");assert(ledger.groups[2].confirmed);
     click("Close day");click("Confirm");assert(ledger.close_count==1);click("Day closes");raster("menu-day-closes");
     show_closed_day(1);tick(120);raster("menu-saved-close");click("Show saved totals QR");assert(lv_qr_popup_is_showing());raster("menu-saved-close-qr");lv_qr_popup_hide();click("Back to list");
-    click("History");raster("menu-history");assert(!find(menu.body,"Next"));click("Output");assert(!test_notice_visible);raster("menu-output");click("QR export");raster("menu-qr-export");
+    click("History");raster("menu-history");assert(!find(menu.body,"Next"));click("Output");assert(!test_notice_visible);raster("menu-output");
+    assert(output_action(807));tick(120);raster("menu-receipt-layout");
+    assert(output_action(822));tick(120);assert(print_fixture.space_top==2&&test_notice_visible&&test_notice_kind==UI_NOTICE_PROGRESS);
+    assert(output_action(827));assert(settings_detail_overlay_is_open());check_numeric_keypad();raster("menu-receipt-keypad");settings_detail_keyboard_hide();
+    output_input("99",(void *)(uintptr_t)PRINT_CONFIG_BOTTOM);tick(120);assert(print_fixture.space_bottom==99);
+    assert(output_action(807));tick(120);
+    click("QR export");raster("menu-qr-export");
     click("Preferences");assert(!find(menu.body,"Switch operator"));raster("menu-operators");click("New operator");assert(menu.user_edit);raster("menu-register");click("Enter a name");assert(settings_detail_overlay_is_open());raster("menu-name-keyboard");settings_detail_keyboard_hide();
     name_submit("Jordan",NULL);tick(120);click("Import USB photo");ui_page_03_menu_refresh_data(0);tick(120);assert(menu.photo_sheet);raster("menu-usb-empty");
     point=(lv_point_t){80,190};down=LV_INDEV_STATE_PRESSED;tick(40);down=LV_INDEV_STATE_RELEASED;tick(120);assert(!menu.photo_sheet);
@@ -360,7 +386,7 @@ int main(void)
         assert(lv_obj_get_y(menu.body)==76&&lv_obj_get_height(menu.body)==296);
     }
     menu.tab=5;menu.sub=0;menu.reject_all=true;
-    for(unsigned code=1;code<0x32;code++){menu.reject_code=code;menu.dirty=true;tick(100);
+    for(unsigned code=0;code<0x32;code++){menu.reject_code=code;menu.dirty=true;tick(100);
         const counting_reject_guide_t *guide=counting_reject_guide_get(code);assert(guide&&*guide->title&&*guide->meaning&&*guide->causes&&*guide->action);
         lv_obj_t *content=lv_obj_get_child(menu.body,1),*detail=lv_obj_get_child(content,-1);lv_obj_update_layout(detail);
         for(unsigned i=0;i<lv_obj_get_child_cnt(detail);i++){lv_obj_t *child=lv_obj_get_child(detail,i);assert(lv_obj_get_y(child)+lv_obj_get_height(child)<=248);}
@@ -369,7 +395,7 @@ int main(void)
     assert(strstr(counting_reject_guide_get(0x1e)->title,"denomination"));assert(strstr(counting_reject_guide_get(0x2e)->title,"Duplicate"));assert(strstr(counting_reject_guide_get(0xfe)->title,"Unknown"));
     menu.tab=4;menu.sub=0;menu.selected_user=0;menu.dirty=true;tick(100);click("Edit details");name_submit("Local operator",NULL);name_submit("B-007",(void *)2);name_submit("Branch One",(void *)3);tick(100);click("Save details");ui_page_03_menu_refresh_data(0);tick(100);
     assert(!strcmp(model.users[0].employee_id,"B-007")&&!strcmp(model.users[0].team,"Branch One"));raster("studio-operator-metadata");
-    puts("PASS Studio: all 17 pages, 49 defined reject codes, unknown fallback, 28px reserve, keyboard focus, operator metadata edit");
+    puts("PASS Studio: all 17 pages, 50 protocol code entries, unknown fallback, 28px reserve, keyboard focus, operator metadata edit");
     settings_detail_keyboard_show("Lifecycle check","10",3,SETTINGS_DETAIL_KEYBOARD_UINT,batch_submit,NULL);
     assert(settings_detail_overlay_is_open());ui_page_03_menu_destroy();assert(!menu.root&&!settings_detail_overlay_is_open());
     tick(200);test_auto_qr();puts("PASS native Menu: six tabs, real ledger decisions/close/QR, batch drafts/keypad, minimum-one delete, registration, outside-close, resume/destroy; 1280x400");return 0;

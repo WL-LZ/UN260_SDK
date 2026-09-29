@@ -221,10 +221,13 @@ void app_counting_runtime_poll_reports(const counting_session_state_t *session,
                                        uint32_t now_ms)
 {
     counting_report_poll(session, now_ms);
-    if (counting_report_take_failure()) {
-        uart_debug_printf("Serial report incomplete; retained previous snapshot\n");
-        app_counting_runtime_notice("Serial records incomplete");
-    }
+    counting_report_failure_t failure = counting_report_take_failure();
+    if (failure == COUNTING_REPORT_FAILURE_NONE) return;
+    const char *message = failure == COUNTING_REPORT_FAILURE_REJECT
+        ? "Reject details incomplete" : failure == COUNTING_REPORT_FAILURE_CAPACITY
+        ? "Serial record limit reached" : "Serial records incomplete";
+    uart_debug_printf("%s; retained previous serial snapshot\n", message);
+    app_counting_runtime_notice(message);
 }
 
 static void app_counting_runtime_on_runtime_fault(uint8_t code)

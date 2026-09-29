@@ -19,6 +19,13 @@ static void output_input(const char *value,void *context)
 static bool output_layout;
 static bool output_action(unsigned id)
 {
+    if(id>=820&&id<=827){
+        unsigned row=(id-820)/4,value=(id-820)%4;
+        if(value==3)id=row?806:805;
+        else{print_config_value_t config;print_config_get(&config);
+            if(row)config.space_bottom=value;else config.space_top=value;
+            output_send(row?PRINT_CONFIG_BOTTOM:PRINT_CONFIG_TOP,&config);return true;}
+    }
     if(id==807){output_layout=!output_layout;menu.dirty=true;return true;}
     if(id==810||id==811){menu.reject_all=id==811;menu.reject_code=0;menu.scroll_y[5][0]=0;menu.dirty=true;return true;}
     if(id==812){char details[512];snprintf(details,sizeof(details),"Display: %s\nController: %s\nImage: %s\nFPGA: %s\nController boot: %s\nImage boot: %s",device_info_display_app(),device_info_main_app(),device_info_image_app(),device_info_fpga(),device_info_main_boot(),device_info_image_boot());settings_detail_dialog_show("Software versions",details,"Close",NULL,NULL,NULL,NULL);return true;}
@@ -60,8 +67,13 @@ static void output_view(lv_obj_t *b)
         const char *titles[]={"Second heading","Top blank lines","Bottom blank lines"};
         for(unsigned i=0;i<3;i++){
             text(fields,20,25+i*69,570,titles[i]);
-            if(!i)snprintf(line,sizeof(line),"%s",config.head2);else snprintf(line,sizeof(line),"%u",i==1?config.space_top:config.space_bottom);
-            white_button(fields,618,15+i*69,390,44,*line?line:"Not set",804+i);
+            if(!i)white_button(fields,618,15,390,44,*config.head2?config.head2:"Not set",804);
+            else{
+                unsigned value=i==1?config.space_top:config.space_bottom;
+                char custom[24];snprintf(custom,sizeof(custom),value>2?"Custom: %u":"Custom",value);
+                const char *presets[]={"0","1","2",custom};
+                segments(fields,570,15+i*69,438,44,presets,4,value>2?3:value,820+(i-1)*4);
+            }
         }
         return;
     }
@@ -102,13 +114,13 @@ static void help_view(lv_obj_t *b)
         const char *filter[]={"Current","All codes"};segments(b,818,0,210,38,filter,2,menu.reject_all,810);
         context(b,"Code / cause / action",180);
         lv_obj_t *list=scroll(b,0,48,330,248);menu.task_scroll=list;
-        unsigned row=0,first=0;
-        for(unsigned code=1;code<256;code++){
+        unsigned row=0,first=256;
+        for(unsigned code=0;code<256;code++){
             if(menu.reject_all?code>=0x32:!counts[code])continue;
-            if(!first)first=code;
+            if(first==256)first=code;
         }
-        if(!menu.reject_code||(!menu.reject_all&&!counts[menu.reject_code])||(menu.reject_all&&menu.reject_code>=0x32))menu.reject_code=first;
-        for(unsigned code=1;code<256;code++){
+        if((!menu.reject_all&&!counts[menu.reject_code])||(menu.reject_all&&menu.reject_code>=0x32))menu.reject_code=first==256?0:first;
+        for(unsigned code=0;code<256;code++){
             if(menu.reject_all?code>=0x32:!counts[code])continue;
             bool selected=menu.reject_code==code;
             lv_obj_t *v=lv_settings_button(list,0,row++*58,322,52,"",false,reject_pick,(void *)(uintptr_t)code);

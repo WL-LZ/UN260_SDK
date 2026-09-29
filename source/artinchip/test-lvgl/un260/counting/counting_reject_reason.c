@@ -2,9 +2,12 @@
 
 #include <stddef.h>
 
-/* Catalogue follows protocol9, reject reply 0x00-0x31. Legacy short labels stay unchanged. */
+/* UN260 protocol framework 5, section 10 / 0x0C, codes 0x00-0x31.
+ * Meanings follow the Chinese table (several legacy English labels are vague).
+ * Causes/actions are conservative operator guidance, not a hardware diagnosis.
+ * A reject code alone does not establish authenticity. Keep legacy list labels. */
 static const counting_reject_guide_t guides[0x32]={
-    [0x00]={"No rejection","No rejected note was reported.","No fault is indicated.","No action is required."},
+    [0x00]={"Reject pocket empty","The controller reports no notes in the reject pocket.","No rejected note was reported for this list.","No reject handling is needed. This is not an authenticity verdict."},
     [0x01]={"Infrared image feature 1","An infrared image feature did not match the expected pattern.","A worn, folded or obscured note, an incorrect currency selection, or an abnormal security feature.","Check the currency and note condition. Recount separately; if repeated, follow your verification procedure."},
     [0x02]={"Infrared image feature 2","An infrared image feature did not match the expected pattern.","A worn, folded or obscured note, an incorrect currency selection, or an abnormal security feature.","Check the currency and note condition. Recount separately; if repeated, follow your verification procedure."},
     [0x03]={"Infrared image feature 3","An infrared image feature did not match the expected pattern.","A worn, folded or obscured note, an incorrect currency selection, or an abnormal security feature.","Check the currency and note condition. Recount separately; if repeated, follow your verification procedure."},
@@ -27,7 +30,7 @@ static const counting_reject_guide_t guides[0x32]={
     [0x14]={"Central magnetic code","The central magnetic code did not match the expected pattern.","An incorrect currency, damaged magnetic features, or an abnormal code.","Recount separately. Follow your organisation's verification procedure if repeated."},
     [0x15]={"Ultraviolet fluorescence","The UV response was outside the accepted range.","Contamination, note condition, incorrect currency, or an abnormal UV feature.","Check the currency and note condition. Verify persistent warnings; do not lower sensitivity."},
     [0x16]={"Overlapping notes 1","More than one note may have passed together.","Notes stuck together or an uneven stack.","Separate and straighten the notes. Reload with aligned guides and recount."},
-    [0x17]={"Overlapping notes 2","A second overlap check detected possible double feeding.","Stuck notes, folds or uneven feeding.","Separate and straighten the notes. Retry at low speed; clean the feed path if repeated."},
+    [0x17]={"Overlapping notes 2","A second overlap check detected possible double feeding.","Stuck notes, folds or uneven feeding.","Separate and straighten the notes; recount slowly. Power off before any cleaning, following the manual."},
     [0x18]={"Note too wide","The measured note width exceeded the expected range.","Overlapping notes, skewed feeding or an incorrect currency.","Separate the stack, align the guides and check the selected currency."},
     [0x19]={"Note too short","The measured note length was below the expected range.","A folded or damaged note, poor feeding or an incorrect currency.","Flatten without damaging the note. Check the currency and recount separately."},
     [0x1a]={"Insufficient note gap","The gap between consecutive notes was too small.","Chained or stuck notes, or uneven feeding.","Separate the stack and reload it evenly. Retry at low speed."},
@@ -40,8 +43,8 @@ static const counting_reject_guide_t guides[0x32]={
     [0x21]={"Skewed note","The note passed at an excessive angle.","Uneven loading, guide spacing or a folded corner.","Straighten the stack and adjust the guides. Recount at low speed."},
     [0x22]={"Optically variable feature","The OVD check did not match the expected response.","A worn or obscured feature, incorrect currency, or an abnormal security feature.","Check the currency. Recount separately and verify a repeated warning."},
     [0x23]={"Infrared security thread","The infrared thread check did not match the expected response.","A damaged or obscured thread, incorrect currency, or an abnormal feature.","Check the currency and note condition. Verify persistent warnings."},
-    [0x24]={"Hole detected","The note image indicates a hole.","A perforated or damaged note.","Set the note aside for manual condition review."},
-    [0x25]={"Folded corner","The note image indicates a folded corner.","A corner is folded over or missing.","Flatten an intact corner carefully and recount. Keep damaged notes aside."},
+    [0x24]={"Possible hole","The controller reports a suspected hole in the note.","A perforated or damaged note, or an obscured image.","Set the note aside for manual condition review."},
+    [0x25]={"Possible folded corner","The controller reports a suspected folded corner.","A corner may be folded over or damaged.","Flatten an intact corner carefully and recount. Keep damaged notes aside."},
     [0x26]={"Dirt detected","The condition check detected dirt.","Stains or contamination on the note.","Set the note aside for condition review. Do not clean currency in the machine."},
     [0x27]={"Tape detected","The condition check indicates adhesive tape.","A repaired or taped note.","Keep the note separate for manual review."},
     [0x28]={"Tear detected","The condition check indicates a tear.","A torn or damaged note.","Keep the note separate; follow your damaged-note procedure."},

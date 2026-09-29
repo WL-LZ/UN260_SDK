@@ -182,7 +182,7 @@ static void options_view(lv_obj_t *b)
     option_label(right,0,"Sorting");segments(right,210,12,276,42,sort,4,machine_state_fo_mode(),430);
     option_label(right,1,"Reject pocket");snprintf(value,sizeof(value),"%u notes",machine_state_reject_pocket_max());field_button(right,346,72,140,value,A_CAPACITY);
     option_label(right,2,"Current batch");snprintf(value,sizeof(value),machine_state_batch_enabled()?"%u notes":"Off",machine_state_batch_num());link_button(right,366,131,120,value,301);
-    box(right,18,181,468,1,LINE,0);small(right,18,205,409,"Changes never start the motor.");icon(right,MICON("shield",22),464,199,TEAL);
+    box(right,18,181,468,1,LINE,0);small(right,18,195,409,"Mode changes clear the current result after confirmation. Saved records stay unchanged.");icon(right,MICON("shield",22),464,199,TEAL);
 }
 static void operator_view(lv_obj_t *b)
 {

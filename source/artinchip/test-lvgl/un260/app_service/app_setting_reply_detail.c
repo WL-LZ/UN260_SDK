@@ -6,6 +6,7 @@
 #include "un260/lv_core/page_22_set_double_note.h"
 #include "un260/lv_core/page_23_set_flap.h"
 #include "un260/lv_core/page_24_set_reject_pocket.h"
+#include "un260/lv_core/page_03_menu.h"
 #include "un260/lv_core/page_25_set_serial_number.h"
 #include "un260/lv_core/page_26_set_aging.h"
 #include "un260/lv_core/page_27_set_cfd_level.h"

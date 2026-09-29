@@ -19,6 +19,7 @@
 #include "un260/lv_components/lv_components.h"
 #include "un260/lv_core/lv_page_event.h"
 #include "un260/lv_core/page_06_settings.h"
+#include "un260/lv_core/page_03_menu.h"
 #include "un260/lv_core/page_20_set_print.h"
 #include "un260/lv_drivers/lv_drivers.h"
 #include "un260/lv_core/page_07_curr.h"

@@ -66,7 +66,7 @@ static void edit(lv_event_t *event)
     char value[8];
     lv_snprintf(value, sizeof(value), "%u", (unsigned)machine_state_reject_pocket_max());
     settings_detail_keyboard_show(ui_text_get(UI_TEXT_SETTINGS_REJECT_POCKET_CAPACITY),
-        value, 3, SETTINGS_DETAIL_KEYBOARD_NUM, keyboard_done, NULL);
+        value, 3, SETTINGS_DETAIL_KEYBOARD_UINT, keyboard_done, NULL);
 }
 
 static void choose(lv_event_t *event)

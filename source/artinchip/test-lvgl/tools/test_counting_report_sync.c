@@ -132,6 +132,54 @@ static void test_capacity(void)
     start(false);assert(counting_data_serial_valid_count(&data)==0);
     assert(!data.sn_str); /* no prior serials in the new non-ADD history */
 }
+static void test_empty_reject_compatibility(void)
+{
+    /* Actual issue 001 capture: START / no-error zero row / END. */
+    uint8_t empty[]={0xFD,0xDF,0x07,0x0C,0x00,0x00,0x46};
+    uint8_t end[]={0xFD,0xDF,0x07,0x0C,0xFF,0xFF,0x6B};
+    uint8_t reject[]={0xFD,0xDF,0x07,0x0C,0x14,0x01,0};
+    reset();start(false);stop();assert(requests[0x0C]==1);
+    assert(frame(empty,7)==COUNTING_DETAIL_REPLY_START);
+    assert(frame(empty,7)==COUNTING_DETAIL_REPLY_IGNORED);
+    assert(!requests[0x0D]&&!counting_report_take_failure());
+    assert(frame(end,7)==COUNTING_DETAIL_REPLY_END);
+    assert(requests[0x0D]==1&&!session.history_record.end_seen);
+    frame(end,7);assert(requests[0x0D]==1); /* duplicate END cannot requery */
+    mark(0x0D,0);row(1,false);mark(0x0D,255);
+    assert(publications==1&&completions==1&&session.history_record.end_seen);
+    assert(!counting_report_take_failure());
+    /* A genuinely empty serial list remains valid. */
+    start(false);stop();frame(empty,7);frame(empty,7);frame(end,7);
+    mark(0x0D,0);mark(0x0D,255);assert(!counting_data_serial_valid_count(&data));
+
+    /* Repeated zeros must not keep a dead transaction alive. */
+    reset();start(true);stop();frame(empty,7);
+    now+=2000;frame(empty,7);now+=1100;counting_report_poll(&session,now);
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_REJECT);
+    frame(end,7);assert(!requests[0x0D]&&!completions);
+    /* A fresh run recovers once the failed transaction has drained. */
+    start(false);request_serial();assert(requests[0x0D]==1);
+    mark(0x0D,0);row(1,false);mark(0x0D,255);
+    char **before=data.sn_str;
+    ++data.total_pcs;start(true);data.err_expected=1;stop();
+    frame(empty,7);frame(empty,7);frame(end,7);
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_REJECT);
+    assert(data.sn_str==before&&requests[0x0D]==1&&!session.history_record.end_seen);
+    start(true);stop();frame(empty,7);frame(end,7);
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_REJECT); /* missing row */
+    start(true);stop();frame(empty,7);frame(reject,7);frame(empty,7);frame(end,7);
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_REJECT); /* restart after data */
+    assert(data.sn_str==before&&requests[0x0D]==1);
+    data.err_expected=0;start(true);request_serial();mark(0x0D,0);
+    now+=3001;counting_report_poll(&session,now);
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_SERIAL);
+    assert(!counting_report_take_failure());
+    reset();start(false);send_failed=true;stop();
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_REJECT);
+    reset();start(false);stop();mark(0x0C,0);send_failed=true;mark(0x0C,255);
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_SERIAL);
+    puts("PASS issue 001: captured zero/zero/end, single serial request, real completion, bounded duplicate timeout, drain/recovery, missing and restarted reject list, phase-specific failures");
+}
 static void captured_reports(const char *path)
 {
     FILE *input=fopen(path,"rb");assert(input);
@@ -160,7 +208,7 @@ static void captured_reports(const char *path)
 }
 int main(int argc,char **argv)
 {
-    test_wrap_atomic();test_empty_add();test_interleave();test_failure();test_capacity();reset();
+    test_wrap_atomic();test_empty_add();test_interleave();test_failure();test_capacity();test_empty_reject_compatibility();reset();
     if(argc==2)captured_reports(argv[1]);
     counting_report_shutdown();
     puts("PASS reports: 725/10000 rows, byte wrap incl 00/FF, original holes, duplicate frames/text, atomic publication, empty ADD reuse, interleaved runs, timeout/drain, overflow, failed send");
