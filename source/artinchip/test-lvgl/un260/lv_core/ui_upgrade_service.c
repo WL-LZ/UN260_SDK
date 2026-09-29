@@ -571,6 +571,14 @@ void ui_upgrade_service_poll(ui_upgrade_service_status_t* status)
         if (g_ui_upgrade_service.child_pid > 0 && status->finished) {
             status->running = true;
             status->finished = false;
+            status->success = false;
+            if (status->stage == UI_UPGRADE_STAGE_SUCCESS) {
+                status->stage = UI_UPGRADE_STAGE_FINISH;
+                status->progress = 99;
+                snprintf(status->step_text, sizeof(status->step_text), "Finalizing update");
+                snprintf(status->result_text, sizeof(status->result_text),
+                         "Keep the USB drive and power connected until the updater exits.");
+            }
         }
     }
 }

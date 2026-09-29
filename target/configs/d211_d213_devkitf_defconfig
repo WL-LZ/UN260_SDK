@@ -9,6 +9,7 @@ BR2_TARGET_GENERIC_ISSUE="Welcome to 100ask linux"
 BR2_TARGET_TZ_INFO=y
 BR2_TARGET_LOCALTIME="Asia/Shanghai"
 BR2_ROOTFS_POST_BUILD_SCRIPT="target/d211/d213_devkitf/post-build.sh"
+BR2_ROOTFS_POST_FAKEROOT_SCRIPT="target/d211/d213_devkitf/post-fakeroot.sh"
 BR2_ROOTFS_POST_IMAGE_SCRIPT="target/d211/common/post-image.sh"
 # BR2_TARGET_GENERIC_GETTY is not set
 BR2_ROOTFS_DEVICE_CREATION_DYNAMIC_MDEV=y

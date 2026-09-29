@@ -17,7 +17,7 @@ def function(source,name):
 
 source=(root/'un260/lv_core/ui_upgrade_service.c').read_text()
 names=['ui_upgrade_service_set_status','ui_upgrade_service_update_child_state',
-       'ui_upgrade_service_reset','ui_upgrade_service_start']
+       'ui_upgrade_service_reset','ui_upgrade_service_start','ui_upgrade_service_poll']
 with tempfile.TemporaryDirectory(prefix='un260-upgrade-session-') as tmp:
     temp=Path(tmp);header=temp/'actual_upgrade_session_functions.h'
     header.write_text('\n\n'.join(function(source,name) for name in names))

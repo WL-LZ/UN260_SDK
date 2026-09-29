@@ -197,6 +197,14 @@ prepare_devices() {
 start_ready() {
       PID=""
       light_pid=""
+      # UN260_APP_VOLUME_V1: mount before recovering cross-volume transactions.
+      # --prepare never formats or creates NAND volumes at boot.
+      if [ -f /usr/local/bin/un260_app_storage ]; then
+          if ! /usr/local/bin/un260_app_storage --prepare >> "$STARTUP_LOG" 2>&1; then
+              echo "Starting test_lvgl: Fail (application storage requires service)"
+              return 1
+          fi
+      fi
       # Complete/undo an interrupted file transaction before mapping UI binaries.
       # No USB required: original inode links and the journal live on rootfs.
       if [ -d /var/lib/un260-updater/transaction ]; then
@@ -206,7 +214,34 @@ start_ready() {
               echo "Starting test_lvgl: Fail (upgrade recovery required)"
               return 1
           fi
-          boot_trace recovery_complete
+      boot_trace recovery_complete
+      fi
+
+      # UN260_UNIFIED_1: only an installed, unfinished opt-in request can
+      # resume a package. Ordinary boot never initializes a partition.
+      if [ -f /etc/un260/unified-request ] &&
+         grep -q UN260_UNIFIED_1 /usr/bin/ui_update.sh &&
+         /usr/bin/ui_update.sh --unified-pending; then
+          select_poll_method
+          if boot_light_owner; then
+              kill -TERM "$light_pid" 2>/dev/null || true
+          fi
+          # Native maintenance display owns the same lease/handoff as boot.
+          /usr/local/bin/un260_upgrade_display >> "$STARTUP_LOG" 2>&1 &
+          upgrade_visual=$!
+          visual_wait=0
+          while ! boot_light_owner || [ "$light_pid" != "$upgrade_visual" ]; do
+              if ! kill -0 "$upgrade_visual" 2>/dev/null || [ "$visual_wait" -ge "$POLL_LIMIT" ]; then
+                  echo 'Upgrade display unavailable; no storage migration attempted'
+                  return 1
+              fi
+              poll_pause
+              visual_wait=$((visual_wait + 1))
+          done
+          if ! /usr/bin/ui_update.sh --continue-unified >> "$STARTUP_LOG" 2>&1; then
+              echo 'Unified upgrade paused; keep the same USB and inspect ui_update.log'
+              return 1
+          fi
       fi
 
       if [ "$UN260_EARLY_DISPLAY" = 1 ] && [ -f "$TSCALIB" ]; then

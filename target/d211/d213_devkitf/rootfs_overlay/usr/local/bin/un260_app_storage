@@ -1,0 +1,367 @@
+#!/bin/sh
+# Versioned, opt-in application volume. Boot/ordinary updates NEVER format NAND.
+# UN260_STORAGE_SYNC_1: verify durable USB backup before initializing NAND.
+# UN260_MTD_STREAM_1: MTD read errors are not fingerprint mismatches.
+# The one reviewed fingerprint is data-only (2048-byte pages, excluding OOB).
+SYS=/sys
+PROC=/proc
+DEV=/dev
+USB=/mnt/usb
+VOLUME=/mnt/un260-app
+STATE=/etc/un260/app-storage
+APP=/usr/local/bin/test_lvgl
+LOCK=/tmp/un260-updater.lock
+APPROVED=e19b211e20f31ce8d82c1e40b6fe3feca04e758f887c17beb976e444ab964b17
+OWNER=UN260_APP_VOLUME_V1
+RAW_BYTES=39845888
+GUARDED=0
+USB_GUARDED=0
+VOLUME_GUARDED=0
+SYNC_TOOL=/usr/local/bin/un260_storage_sync
+
+sync()
+{
+    [ "$GUARDED" = 1 ] || { command sync; return; }
+    "$SYNC_TOOL" --fd 7 / || die 'Root writeback failed'
+    if [ "$VOLUME_GUARDED" = 1 ]; then "$SYNC_TOOL" --fd 9 "$VOLUME" || die 'App volume writeback failed'; fi
+    if [ "$USB_GUARDED" = 1 ]; then
+        require_usb
+        "$SYNC_TOOL" --fd 8 "$USB" || die 'USB writeback failed; preserve backup and stop'
+    fi
+}
+backup_digest()
+{
+    if [ "$GUARDED" = 1 ]; then "$SYNC_TOOL" --hash-direct "$1"; else digest "$1"; fi
+}
+
+die() { echo "APP_STORAGE: $*" >&2; exit 1; }
+digest()
+{
+    # Preserve the checksum command's exit code; a pipeline to awk masks it.
+    digest_output=$(sha256sum "$1") || return 1
+    digest_hash=${digest_output%% *}
+    echo "$digest_hash" | grep -Eq '^[0-9a-f]{64}$' || return 1
+    printf '%s\n' "$digest_hash"
+}
+verify_current_nand()
+{
+    [ "$("$SYNC_TOOL" --probe-stream)" = UN260_STORAGE_STREAM_1 ] || die 'Install streaming-read repair package before migration'
+    current_nand_hash=$("$SYNC_TOOL" --hash-stream "$DEV/mtd11" "$RAW_BYTES") ||
+        die 'NAND read/hash failed; fingerprint not evaluated, nothing erased'
+    [ "$current_nand_hash" = "$APPROVED" ] || die 'NAND fingerprint differs from reviewed backup; nothing erased'
+}
+size() { wc -c < "$1" | tr -d ' '; }
+regular() { [ -f "$1" ] && [ ! -L "$1" ]; }
+safe_path()
+{
+    sp=$1
+    while [ "$sp" != / ] && [ -n "$sp" ]; do
+        [ ! -L "$sp" ] || return 1
+        sp=$(dirname "$sp")
+    done
+}
+geometry()
+{
+    [ "$(cat "$SYS/class/mtd/mtd11/name")" = ubisystem ] &&
+    [ "$(cat "$SYS/class/mtd/mtd11/size")" = "$RAW_BYTES" ] &&
+    [ "$(cat "$SYS/class/mtd/mtd11/erasesize")" = 131072 ] &&
+    [ "$(cat "$SYS/class/mtd/mtd11/writesize")" = 2048 ] &&
+    [ "$(cat "$SYS/class/mtd/mtd10/name")" = ubiroot ] &&
+    [ "$(cat "$SYS/class/mtd/mtd10/size")" = 67108864 ] &&
+    [ "$(cat "$SYS/class/ubi/ubi0/mtd_num")" = 10 ] || die 'Unexpected NAND/root layout; nothing erased'
+    awk '$2=="/" && $1=="ubi0:rootfs" && $3=="ubifs" {ok=1} END {exit !ok}' "$PROC/mounts" ||
+        die 'Root filesystem identity does not match'
+}
+find_ubi()
+{
+    UBI=
+    for uf in "$SYS"/class/ubi/ubi[0-9]*/mtd_num; do
+        [ -f "$uf" ] || continue
+        if [ "$(cat "$uf")" = 11 ]; then
+            [ -z "$UBI" ] || die 'Multiple attachments for mtd11'
+            UBI=$(basename "$(dirname "$uf")")
+        fi
+    done
+}
+find_volume()
+{
+    VOL=
+    for vf in "$SYS/class/ubi/${UBI}_"*/name; do
+        [ -f "$vf" ] || continue
+        [ "$(cat "$vf")" = un260_app ] && [ -z "$VOL" ] || die 'Unexpected UBI volumes; manual review required'
+        VOL=$(basename "$(dirname "$vf")")
+    done
+}
+mount_volume()
+{
+    geometry
+    safe_path "$VOLUME" || die 'Symlink in mount path'
+    find_ubi
+    if [ -z "$UBI" ]; then
+        ubiattach "$DEV/ubi_ctrl" -m 11 || die 'Cannot attach app volume; not formatting'
+        find_ubi
+    fi
+    [ -n "$UBI" ] || die 'No app UBI device'
+    find_volume
+    [ -n "$VOL" ] || die 'App volume missing; not creating at boot'
+    # Reject bind mounts, another filesystem, ro mounts, or aliases elsewhere.
+    if awk -v p="$VOLUME" '$2==p {found=1} END {exit !found}' "$PROC/mounts"; then
+        awk -v p="$VOLUME" -v d="$DEV/$VOL" -v n="$UBI:un260_app" '
+            $2==p && ($1==d || $1==n) && $3=="ubifs" && $4 ~ /(^|,)rw(,|$)/ {ok=1}
+            END {exit !ok}' "$PROC/mounts" || die 'Unexpected app mount'
+    else
+        if awk -v d="$DEV/$VOL" -v n="$UBI:un260_app" '$1==d || $1==n {found=1} END {exit !found}' "$PROC/mounts"; then
+            die 'App volume is mounted elsewhere'
+        fi
+        mkdir -p "$VOLUME" || die 'Cannot create mount point'
+        # Never hide existing rootfs files beneath a mount.
+        [ -z "$(ls -A "$VOLUME")" ] || die 'Mount point contains files'
+        mount -t ubifs "$UBI:un260_app" "$VOLUME" || die 'Cannot mount app volume'
+    fi
+    if [ "$GUARDED" = 1 ] && [ "$VOLUME_GUARDED" = 0 ]; then
+        exec 9< "$VOLUME" || die 'Cannot track app volume writes'
+        VOLUME_GUARDED=1
+    fi
+}
+owner_check()
+{
+    regular "$VOLUME/.un260-owner" && [ "$(cat "$VOLUME/.un260-owner")" = "$OWNER" ] || die 'Volume ownership mismatch'
+}
+save_phase()
+{
+    printf '%s\n%s\n%s\n' "$APPROVED" "$1" "${OLD_APP_HASH:--}" > "$STATE/pending.tmp" || die 'Cannot write migration journal'
+    sync
+    mv -f "$STATE/pending.tmp" "$STATE/pending" || die 'Cannot publish migration journal'
+    sync
+}
+load_pending()
+{
+    regular "$STATE/pending" || die 'Invalid migration journal'
+    [ "$(sed -n '1p' "$STATE/pending")" = "$APPROVED" ] || die 'Unapproved migration journal'
+    PHASE=$(sed -n '2p' "$STATE/pending")
+    OLD_APP_HASH=$(sed -n '3p' "$STATE/pending")
+    case "$PHASE" in formatting|volume-ready|app-ready) ;; *) die 'Invalid migration phase' ;; esac
+    echo "$OLD_APP_HASH" | grep -Eq '^[0-9a-f]{64}$' || die 'Invalid original app hash'
+}
+launcher()
+{
+    printf '%s\n' '#!/bin/sh' 'exec /usr/local/bin/un260_app_storage --launch "$@"'
+}
+activate()
+{
+    mount_volume
+    owner_check
+    regular "$VOLUME/test_lvgl" && [ "$(digest "$VOLUME/test_lvgl")" = "$OLD_APP_HASH" ] || die 'Migrated app verification failed'
+    # The original stays linked across the launcher switch. It is removed only
+    # after a durable active marker; open UI mappings survive until reboot.
+    expected_launcher=$(launcher | sha256sum | awk '{print $1}')
+    if [ "$(digest "$APP")" = "$OLD_APP_HASH" ]; then
+        if [ -e "$APP.un260-volume-old" ]; then
+            regular "$APP.un260-volume-old" && [ "$(digest "$APP.un260-volume-old")" = "$OLD_APP_HASH" ] || die 'Unknown original link'
+        else
+            ln "$APP" "$APP.un260-volume-old" || die 'Cannot preserve original app'
+        fi
+        safe_path "$APP.un260-volume-new" || die 'Unsafe launcher temporary path'
+        launcher > "$APP.un260-volume-new" || die 'Cannot stage launcher'
+        chmod 0755 "$APP.un260-volume-new" || die 'Cannot set launcher mode'
+        sync
+        mv -f "$APP.un260-volume-new" "$APP" || die 'Cannot activate launcher'
+        sync
+    else
+        [ "$(digest "$APP")" = "$expected_launcher" ] || die 'Root app changed during migration'
+    fi
+    printf '%s\n' "$OWNER" > "$STATE/active.tmp" || die 'Cannot stage activation'
+    sync
+    mv -f "$STATE/active.tmp" "$STATE/active" || die 'Cannot commit activation'
+    sync
+    regular "$APP.un260-volume-old" && [ "$(digest "$APP.un260-volume-old")" = "$OLD_APP_HASH" ] || die 'Original link missing or changed'
+    rm -f "$APP.un260-volume-old" || die 'Cannot release old app link'
+    sync
+    rm -f "$STATE/pending" || die 'Cannot finish migration journal'
+    sync
+    echo 'APP_STORAGE: migration committed; reboot releases the running old root inode'
+}
+prepare()
+{
+    safe_path "$STATE" && safe_path "$APP" || die 'Unsafe storage paths'
+    for sf in pending pending.tmp active active.tmp; do
+        safe_path "$STATE/$sf" || die 'Unsafe storage metadata path'
+    done
+    if [ -e "$STATE/pending" ]; then
+        load_pending
+        if [ "$PHASE" = app-ready ]; then
+            # A cut after unlinking the original but before clearing pending.
+            if regular "$STATE/active" && [ "$(cat "$STATE/active")" = "$OWNER" ] && [ ! -e "$APP.un260-volume-old" ]; then
+                mount_volume; owner_check
+                [ "$(digest "$VOLUME/test_lvgl")" = "$OLD_APP_HASH" ] || die 'Activation recovery hash mismatch'
+                rm -f "$STATE/pending" || die 'Cannot finish activation recovery'
+                sync
+            else
+                activate
+            fi
+        elif [ -e "$STATE/active" ]; then
+            die 'Conflicting active and pending state'
+        fi
+        # Early phases leave the original UI available. Only an explicit
+        # migration UPK with its verified USB backup may resume initialization.
+    fi
+    if [ -e "$STATE/active" ]; then
+        regular "$STATE/active" && [ "$(cat "$STATE/active")" = "$OWNER" ] || die 'Invalid activation marker'
+        regular "$APP" && [ "$(digest "$APP")" = "$(launcher | sha256sum | awk '{print $1}')" ] || die 'Managed launcher was overwritten; use storage-aware recovery'
+        mount_volume
+        owner_check
+        regular "$VOLUME/test_lvgl" && [ -x "$VOLUME/test_lvgl" ] || die 'Installed app missing'
+    fi
+}
+require_usb()
+{
+    safe_path "$USB" || die 'Unsafe USB path'
+    usbdev=$(awk -v p="$USB" '$2==p && $4 ~ /(^|,)rw(,|$)/ {print $1}' "$PROC/mounts")
+    case "$usbdev" in "$DEV"/sd*) [ -b "$usbdev" ] || die 'USB is not a block device' ;; *) die 'Insert a mounted writable USB drive' ;; esac
+}
+migrate()
+{
+    [ "$1" = "$APPROVED" ] || die 'This partition was not reviewed/approved'
+    parent=$(awk '$1=="PPid:" {print $2}' "$PROC/$$/status")
+    regular "$LOCK/pid" && [ "$(cat "$LOCK/pid")" = "$parent" ] || die 'Migration must run under the updater lock'
+    prepare
+    [ ! -e "$STATE/active" ] || { echo 'APP_STORAGE: already migrated'; return 0; }
+    geometry
+    require_usb
+    if [ "$GUARDED" = 1 ]; then
+        exec 8< "$USB" || die 'Cannot track USB writes'
+        USB_GUARDED=1
+        sync
+    fi
+    for cmd in ubiformat ubiattach ubimkvol dd sha256sum; do command -v "$cmd" >/dev/null || die "Required tool missing: $cmd"; done
+    backup=$USB/UN260_APP_STORAGE_BACKUP_$APPROVED
+    safe_path "$backup" || die 'Unsafe backup path'
+    mkdir -p "$backup" "$STATE" || die 'Cannot create backup/state directory'
+    if [ -e "$STATE/pending" ]; then
+        load_pending
+    else
+        regular "$APP" || die 'Original executable missing'
+        OLD_APP_HASH=$(digest "$APP") || die 'Cannot hash original executable; nothing erased'
+    fi
+    # One USB can service machines with different installed UI versions. Keep
+    # each distinct executable by content hash; never overwrite another backup.
+    app_backup=$backup/test_lvgl.$OLD_APP_HASH.before
+    if regular "$backup/test_lvgl.before" && [ "$(digest "$backup/test_lvgl.before")" = "$OLD_APP_HASH" ]; then
+        app_backup=$backup/test_lvgl.before
+    fi
+    if [ -e "$STATE/pending" ]; then
+        load_pending
+        regular "$backup/mtd11.data.bin" && [ "$(size "$backup/mtd11.data.bin")" = "$RAW_BYTES" ] &&
+            [ "$(digest "$backup/mtd11.data.bin")" = "$APPROVED" ] || die 'Resume requires the original verified USB backup'
+    else
+        find_ubi
+        [ -z "$UBI" ] || die 'mtd11 already attached; manual review required, nothing erased'
+        free=$(df -Pk "$USB" | awk 'NR==2 {print $4}')
+        case "$free" in ''|*[!0-9]*) die 'Cannot read USB capacity' ;; esac
+        [ "$free" -ge 65536 ] || die 'Need at least 64 MiB USB backup space'
+        if [ -e "$backup/mtd11.data.bin" ]; then
+            regular "$backup/mtd11.data.bin" && [ "$(size "$backup/mtd11.data.bin")" = "$RAW_BYTES" ] &&
+                [ "$(digest "$backup/mtd11.data.bin")" = "$APPROVED" ] || die 'Existing backup differs; preserve for review'
+        else
+            safe_path "$backup/mtd11.data.tmp" || die 'Unsafe backup temporary path'
+            dd if="$DEV/mtd11" of="$backup/mtd11.data.tmp" bs=131072 count=304 || die 'NAND read failed; no format'
+            [ "$(size "$backup/mtd11.data.tmp")" = "$RAW_BYTES" ] &&
+                [ "$(digest "$backup/mtd11.data.tmp")" = "$APPROVED" ] || die 'Unknown partition data; backup kept, nothing erased'
+            sync
+            mv "$backup/mtd11.data.tmp" "$backup/mtd11.data.bin" || die 'Cannot publish NAND backup'
+        fi
+        # A previous backup is not evidence that the currently installed NAND
+        # is identical. Re-read the device before authorizing its destruction.
+        verify_current_nand
+        if [ ! -e "$app_backup" ]; then
+            safe_path "$app_backup.tmp" || die 'Unsafe app backup'
+            cp "$APP" "$app_backup.tmp" || die 'Cannot back up original app'
+            [ "$(digest "$app_backup.tmp")" = "$OLD_APP_HASH" ] || die 'App backup mismatch'
+            mv "$app_backup.tmp" "$app_backup" || die 'Cannot publish app backup'
+        fi
+        regular "$app_backup" && [ "$(digest "$app_backup")" = "$OLD_APP_HASH" ] || die 'Existing app backup differs'
+        sync
+        save_phase formatting
+        PHASE=formatting
+    fi
+    # Includes resume after interruption: page-cache hashes are not evidence
+    # that a USB backup reached the device. Refuse initialization on any error.
+    sync
+    [ "$(backup_digest "$backup/mtd11.data.bin")" = "$APPROVED" ] &&
+        [ "$(backup_digest "$app_backup")" = "$OLD_APP_HASH" ] ||
+        die 'Direct USB backup readback failed; nothing further initialized'
+    sync
+    if [ "$PHASE" = formatting ]; then
+        find_ubi
+        if [ -z "$UBI" ]; then
+            # A previous attempt may have completed format before losing power.
+            if ubiattach "$DEV/ubi_ctrl" -m 11; then
+                find_ubi
+            else
+                echo 'APP_STORAGE: formatting ONLY approved mtd11; backup verified'
+                ubiformat "$DEV/mtd11" -y || die 'Format interrupted; preserve backup and migration journal'
+                ubiattach "$DEV/ubi_ctrl" -m 11 || die 'Cannot attach newly formatted mtd11'
+                find_ubi
+            fi
+        fi
+        [ -n "$UBI" ] || die 'No UBI after initialization'
+        find_volume
+        if [ -z "$VOL" ]; then
+            ubimkvol "$DEV/$UBI" -N un260_app -m || die 'Cannot create application volume'
+        fi
+        mount_volume
+        if [ -e "$VOLUME/.un260-owner" ]; then
+            owner_check
+        else
+            [ -z "$(ls -A "$VOLUME")" ] || die 'New volume not empty; not claiming it'
+            printf '%s\n' "$OWNER" > "$VOLUME/.un260-owner" || die 'Cannot write volume owner'
+            sync
+        fi
+        save_phase volume-ready
+        PHASE=volume-ready
+    fi
+    if [ "$PHASE" = volume-ready ]; then
+        mount_volume; owner_check
+        regular "$APP" && [ "$(digest "$APP")" = "$OLD_APP_HASH" ] || die 'Original app changed; migration stopped'
+        safe_path "$VOLUME/test_lvgl.migration-new" || die 'Unsafe volume temporary path'
+        # This exact incomplete staging file belongs to the pending migration.
+        rm -f "$VOLUME/test_lvgl.migration-new" || die 'Cannot discard interrupted staging copy'
+        app_kb=$((($(size "$APP") + 1023) / 1024))
+        app_free=$(df -Pk "$VOLUME" | awk 'NR==2 {print $4}')
+        case "$app_free" in ''|*[!0-9]*) die 'Cannot read app capacity' ;; esac
+        # Includes the existing copy on a resumed attempt. Do not depend on
+        # UBIFS compression to fit the first normal replacement transaction.
+        if [ -f "$VOLUME/test_lvgl" ]; then
+            [ "$(digest "$VOLUME/test_lvgl")" = "$OLD_APP_HASH" ] || die 'Unexpected app in new volume'
+        else
+            [ "$app_free" -ge $((app_kb * 2 + 4096)) ] || die 'Application volume too small for safe future replacements'
+            safe_path "$VOLUME/test_lvgl.migration-new" || die 'Unsafe volume temporary path'
+            cp "$APP" "$VOLUME/test_lvgl.migration-new" || die 'Cannot copy app to new volume'
+            chmod 0755 "$VOLUME/test_lvgl.migration-new" || die 'Cannot set app mode'
+            [ "$(digest "$VOLUME/test_lvgl.migration-new")" = "$OLD_APP_HASH" ] || die 'App copy verification failed'
+            sync
+            mv "$VOLUME/test_lvgl.migration-new" "$VOLUME/test_lvgl" || die 'Cannot publish migrated app'
+            sync
+        fi
+        save_phase app-ready
+    fi
+    activate
+}
+
+# Tests load definitions and override filesystem/device operations explicitly.
+if [ "${UN260_STORAGE_LIBRARY_ONLY:-0}" = 1 ]; then return 0; fi
+[ -x "$SYNC_TOOL" ] && [ "$("$SYNC_TOOL" --probe)" = UN260_STORAGE_SYNC_1 ] || die 'Storage writeback guard missing'
+exec 7< / || die 'Cannot track root writes'
+GUARDED=1
+case "${1:-}" in
+    --prepare) prepare ;;
+    --migrate) [ "$#" = 2 ] || die 'Missing reviewed fingerprint'; migrate "$2" ;;
+    --launch)
+        shift
+        prepare
+        [ -e "$STATE/active" ] || die 'Application volume is not active'
+        exec 7<&- 8<&- 9<&-
+        exec "$VOLUME/test_lvgl" "$@"
+        ;;
+    *) die 'Usage: un260_app_storage --prepare | --launch | --migrate REVIEWED_HASH' ;;
+esac

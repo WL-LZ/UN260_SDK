@@ -2,14 +2,18 @@
 
 ## 部署顺序
 
+此节中的内部产物路径已按 R7 收纳规则更新；当前现场交付以 `FACTORY_FLEET.md` 为准，不要求客户在完整包与增量包之间选择。
+
 第一次必须安装新生成的 `UN260_UPDATE.upk` 完整包并重启：本轮同时变更应用与 liblvgl，并安装 `un260_unpack`。不要只替换 test_lvgl，也不要先在旧升级器上使用增量包。
 
 以后正常 `make` 自动生成：
 
-- `images/UN260_UPDATE.upk`：完整包，可用于修复或基线不匹配的板子。
-- `images/UN260_UPDATE_DELTA.upk`：文件级增量包。
-- `images/UN260_UPDATE_BASE.upk`：默认固定基线，只在不存在时创建，**不是每次 make 的上一版**。首次与完整包相同，所以首次增量通常是零变化包。
-- `images/UN260_RELEASE.json`：目标版本完整文件哈希/大小/权限、基线 ID、变化和删除清单。
+- `images/UN260_UPDATE.upk`：日常直接升级完整包，包含匹配应用/库/资源，不触发首次迁移。
+- `images/un260_internal/UN260_FIRST_MIGRATION.upk`：尚未迁移的受支持旧机首次扩容专用，两阶段接续。
+- `images/un260_internal/UN260_APPLICATION.upk`：内部普通完整应用包。
+- `images/un260_internal/UN260_UPDATE_DELTA.upk`：内部文件级增量包。
+- `images/un260_internal/UN260_UPDATE_BASE.upk`：默认固定基线，只在不存在时创建，**不是每次 make 的上一版**。首次与完整包相同，所以首次增量通常是零变化包；旧基线不因目录整理而重建。
+- `images/un260_internal/UN260_RELEASE.json`：目标版本完整文件哈希/大小/权限、基线 ID、变化和删除清单。
 
 新版本支持 U 盘 `update/UN260_UPDATE_DELTA.upk` 原名；两种包同时存在时优先完整包。实际使用时只放需要安装的一个包，不要把 BASE 放入 update。增量包校验板上实际文件，不只相信版本号；基线不匹配应使用完整包。已经达到增量目标状态时，验证目标后直接报告无需替换。
 

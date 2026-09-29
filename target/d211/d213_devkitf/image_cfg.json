@@ -21,7 +21,7 @@
 			"ubisystem": {
 				"size": "-",
 				"ubi": { // Volume in UBI device
-					"user":   { "size": "-" },
+					"un260_app": { "size": "-" },
 				},
 			},
 		}
@@ -36,7 +36,6 @@
 				"device_id": 0,
 				"array_organization": [
 					{ "page": "2k", "block": "128k" },
-					{ "page": "4k", "block": "256k" },
 				],
 			}
 		},
@@ -103,15 +102,10 @@
 				"attr": ["ubi", "required"],
 				"part": ["ubiroot:rootfs"]
 			},
-			"ota": {
-				"file": "ota*.ubifs",
-				"attr": ["ubi", "optional"],
-				"part": ["ubisystem:ota"]
-			},
 			"app": {
-				"file": "user*.ubifs",
-				"attr": ["ubi", "optional"],
-				"part": ["ubisystem:user"]
+				"file": "un260_app*.ubifs",
+				"attr": ["ubi", "required"],
+				"part": ["ubisystem:un260_app"]
 			},
 		},
 	},

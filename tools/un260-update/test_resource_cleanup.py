@@ -4,9 +4,11 @@ import hashlib
 import importlib.util
 import os
 from pathlib import Path
+import signal
 import subprocess
 import tempfile
 import unittest
+from test_storage_sync import native_tool
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('release_resources', HERE / 'release_resources.py')
@@ -41,6 +43,8 @@ class CleanupTests(unittest.TestCase):
         self.app = self.root / 'usr/local/bin/test_lvgl'
         self.app.parent.mkdir(parents=True)
         self.app.write_bytes(b'NEW-APP')
+        guard = self.app.parent / 'un260_storage_sync'
+        guard.write_bytes(native_tool().read_bytes()); guard.chmod(0o755)
         text = (HERE / 'resource_cleanup.sh.in').read_text()
         manifest = '\n'.join('%s|%d|%s|%s' % (e['sha256'], e['bytes'], e['mode'], e['path']) for e in self.entries)
         # Test-only substitutions in a temporary copy; no escape hatch ships.
@@ -49,6 +53,7 @@ class CleanupTests(unittest.TestCase):
         text = text.replace('USB=/mnt/usb\n', 'USB=%s\n' % self.usb)
         text = text.replace('MOUNTS=/proc/mounts\n', 'MOUNTS=%s\n' % self.mounts)
         text = text.replace('LOCK=/tmp/un260-resource-cleanup.lock\n', 'LOCK=%s\n' % (self.dir / 'lock'))
+        text = text.replace('UPDATER_LOCK=/tmp/un260-updater.lock\n', 'UPDATER_LOCK=%s\n' % (self.dir / 'updater-lock'))
         text = text.replace('[ "$(id -u)" = 0 ]', '[ 0 = 0 ]')
         self.script.write_text(text)
 
@@ -59,10 +64,79 @@ class CleanupTests(unittest.TestCase):
 
     def run_script(self, mode, ok=True, env=None):
         shell = ['busybox', 'sh'] if os.environ.get('TEST_BUSYBOX') == '1' else ['sh']
-        result = subprocess.run(shell + [str(self.script), mode], text=True, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, env=env)
-        self.assertEqual(result.returncode == 0, ok, result.stdout)
-        return result.stdout
+        process = subprocess.Popen(shell + [str(self.script), mode], text=True, stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT, env=env, start_new_session=True)
+        try:
+            output, _ = process.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            # Kill only this test fixture's process group, including a loop in
+            # a pipeline child, so a regression cannot leak host processes.
+            os.killpg(process.pid, signal.SIGKILL)
+            output, _ = process.communicate()
+            self.fail('Cleanup did not terminate: ' + output)
+        self.assertEqual(process.returncode == 0, ok, output)
+        return output
+
+    def busybox_double_root(self, automatic=False):
+        # The old fixture used /tmp/... instead of production ROOT=/ and hid
+        # the //usr join. Force the actual BusyBox utility, not just its shell.
+        text = self.script.read_text().replace('ROOT=%s\n' % self.root,
+                                               'ROOT=/%s\n' % self.root)
+        text = text.replace('set -eu\n', 'set -eu\ndirname() { busybox dirname "$@"; }\n', 1)
+        if automatic:
+            text = text.replace(hashlib.sha256(b'NEW-APP').hexdigest(), '-')
+        self.script.write_text(text)
+
+    def test_busybox_double_root_check_apply_retry_restore(self):
+        self.busybox_double_root()
+        self.run_script('--check')
+        self.assertTrue(self.file().exists())
+        self.run_script('--apply')
+        self.assertFalse(self.file().exists())
+        self.assertTrue(self.saved().exists())
+        self.run_script('--apply')
+        self.run_script('--restore')
+        self.assertTrue(self.file().exists())
+        self.run_script('--restore')
+
+    def test_busybox_double_root_automatic_keeps_ui_assets(self):
+        self.busybox_double_root(automatic=True)
+        self.run_script('--apply')
+        self.assertFalse(self.file().exists())
+        self.assertTrue(self.file(2).exists())
+        self.run_script('--restore')
+        self.assertTrue(self.file().exists())
+
+    def test_busybox_double_root_symlink_source_kept(self):
+        self.busybox_double_root()
+        self.file().unlink()
+        self.file().symlink_to(self.user)
+        self.run_script('--apply')
+        self.assertTrue(self.file().is_symlink())
+
+    def test_busybox_double_root_symlink_ancestor_kept(self):
+        self.busybox_double_root()
+        original = self.file().parent
+        moved = self.root / 'sdk-preserved'
+        original.rename(moved)
+        original.symlink_to(moved, target_is_directory=True)
+        self.run_script('--apply')
+        self.assertTrue(self.file().exists())
+        self.assertTrue(self.file(1).exists())
+
+    def test_path_walk_root_forms_and_nonprogress_fail_closed(self):
+        source = (HERE / 'resource_cleanup.sh.in').read_text()
+        predicate = 'safe_path() {' + source.split('safe_path() {', 1)[1].split('\ncheck_usb()', 1)[0]
+        for prefix in ('/', '//', '///', '////'):
+            for path in (prefix, prefix + str(self.file()).lstrip('/')):
+                result = subprocess.run(['busybox', 'sh', '-c',
+                    'dirname() { busybox dirname "$@"; }\n' + predicate + '\nsafe_path "$1"',
+                    'test-path', path], capture_output=True, timeout=3)
+                self.assertEqual(result.returncode, 0, (path, result.stderr))
+        for shim in ('dirname() { printf "%s\\n" "$1"; }', 'dirname() { return 1; }'):
+            result = subprocess.run(['busybox', 'sh', '-c', shim + '\n' + predicate + '\nsafe_path /usr/x'],
+                                    capture_output=True, timeout=3)
+            self.assertNotEqual(result.returncode, 0)
 
     def file(self, i=0):
         return self.root / self.entries[i]['path']
@@ -92,6 +166,18 @@ class CleanupTests(unittest.TestCase):
 
     def test_unmounted_usb_refused(self):
         self.mounts.write_text('')
+        self.run_script('--apply', False)
+        self.assertTrue(self.file().exists())
+
+    def test_writeback_failure_keeps_sources(self):
+        guard = self.app.parent / 'un260_storage_sync'
+        guard.write_text('#!/bin/sh\n[ "$1" = --probe ] && { echo UN260_STORAGE_SYNC_1; exit 0; }\nexit 1\n')
+        self.run_script('--apply', False)
+        self.assertTrue(self.file().exists())
+
+    def test_direct_read_failure_keeps_sources(self):
+        guard = self.app.parent / 'un260_storage_sync'
+        guard.write_text('#!/bin/sh\ncase "$1" in --probe) echo UN260_STORAGE_SYNC_1;; --fd) exit 0;; *) exit 1;; esac\n')
         self.run_script('--apply', False)
         self.assertTrue(self.file().exists())
 
@@ -146,6 +232,16 @@ class CleanupTests(unittest.TestCase):
         journal.write_text('unfinished')
         self.run_script('--apply', False)
         self.assertTrue(self.file().exists())
+
+    def test_updater_in_preflight_refused(self):
+        (self.dir / 'updater-lock').mkdir()
+        self.run_script('--apply', False)
+        self.assertTrue(self.file().exists())
+
+    def test_cleanup_releases_shared_lock_after_failure(self):
+        self.mounts.write_text('')
+        self.run_script('--apply', False)
+        self.assertFalse((self.dir / 'updater-lock').exists())
 
     def test_build_prune_prevalidates_all_files(self):
         self.file(1).write_bytes(b'CHANGED')

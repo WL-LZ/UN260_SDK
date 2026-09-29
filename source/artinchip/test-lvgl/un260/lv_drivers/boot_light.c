@@ -167,6 +167,9 @@ static void quiet_pause(void)
     struct timespec remaining={0,16000000};
     while(!stopped&&nanosleep(&remaining,&remaining)<0&&errno==EINTR) {}
 }
+#ifdef UN260_UPDATE_DISPLAY
+#include "upgrade_display.h"
+#endif
 
 #ifdef UN260_EARLY_INIT
 int boot_light_run(void)
@@ -178,6 +181,9 @@ int main(void)
     return 1;
 #endif
     trace("main_enter");
+#ifdef UN260_UPDATE_DISPLAY
+    (void)render;(void)quiet_pause;
+#endif
     int status=1,lease=-1,fb=-1,server=-1,ipc_dir=-1;
     uint8_t *mapped=MAP_FAILED,*assets=NULL,*canvas=NULL;
     struct fb_fix_screeninfo fix={0};struct fb_var_screeninfo var={0};
@@ -188,7 +194,15 @@ int main(void)
     prctl(PR_SET_NAME,"un260-boot",0,0,0);
     umask(077);signal(SIGTERM,stop_signal);signal(SIGINT,stop_signal);signal(SIGPIPE,SIG_IGN);
     lease=open(BOOT_LIGHT_LOCK,O_CREAT|O_RDWR|O_CLOEXEC,0600);
-    if(lease<0||flock(lease,LOCK_EX|LOCK_NB))goto done;
+    if(lease<0)goto done;
+#ifdef UN260_UPDATE_DISPLAY
+    for(unsigned retry=0;flock(lease,LOCK_EX|LOCK_NB);retry++) {
+        if(retry>=100||stopped)goto done;
+        usleep(100000);
+    }
+#else
+    if(flock(lease,LOCK_EX|LOCK_NB))goto done;
+#endif
     unlink(BOOT_LIGHT_READY);
     assets=malloc(ASSET_BYTES);
     if(!assets)goto done;
@@ -219,12 +233,19 @@ int main(void)
     /* First scanout already contains a soft, visible brand mark; do not spend
        the first half second displaying only an empty background. */
     uint64_t start=now_ms()-450U;frame_state_t pages[2]={{0},{0}};unsigned visible=var.yoffset>=H?1:0;
-    while(!stopped&&now_ms()-start<20000U) {
+    while(!stopped
+#ifndef UN260_UPDATE_DISPLAY
+          &&now_ms()-start<20000U
+#endif
+    ) {
         int client=accept4(server,NULL,NULL,SOCK_CLOEXEC|SOCK_NONBLOCK);
         if(client>=0) {
             struct pollfd p={client,POLLIN,0};char request;
             if(poll(&p,1,100)>0&&recv(client,&request,1,0)==1&&request=='T') {
                 boot_light_reply_t reply={BOOT_LIGHT_MAGIC,(uint32_t)(now_ms()-start)};
+#ifdef UN260_UPDATE_DISPLAY
+                reply.magic=0; /* Transfer the fd, but never adopt upgrade art as boot animation. */
+#endif
                 union {struct cmsghdr alignment;char bytes[CMSG_SPACE(sizeof(int))];} control={0};
                 struct iovec iov={&reply,sizeof(reply)};
                 struct msghdr msg={.msg_iov=&iov,.msg_iovlen=1,.msg_control=control.bytes,.msg_controllen=sizeof(control.bytes)};
@@ -238,14 +259,21 @@ int main(void)
             close(client);
         }
         uint32_t elapsed=(uint32_t)(now_ms()-start);
+#ifndef UN260_UPDATE_DISPLAY
         if(pages[0].settled&&pages[1].settled&&
            elapsed>=BOOT_WELCOME_SETTLED&&elapsed<BOOT_DOT_START) {
             quiet_pause();continue;
         }
+#endif
         unsigned target=visible^1U;
         uint64_t work_started_us=0,work_us=0;
         if(frame_trace)work_started_us=now_us();
+#ifdef UN260_UPDATE_DISPLAY
+        upgrade_render(mapped+target*H*fix.line_length,fix.line_length);
+        (void)elapsed;(void)pages;
+#else
         render(mapped+target*H*fix.line_length,fix.line_length,assets,canvas,elapsed,&pages[target]);
+#endif
         if(frame_trace)work_us=now_us()-work_started_us;
         var.yoffset=target*H;int zero=0;
         if(display_ioctl(fb,FBIOPAN_DISPLAY,&var)||display_ioctl(fb,AICFB_WAIT_FOR_VSYNC,&zero))goto done;
@@ -259,6 +287,9 @@ int main(void)
             ready=true;
             trace("first_frame");
         }
+#ifdef UN260_UPDATE_DISPLAY
+        usleep(200000);
+#endif
     }
 done:
     if(bound) {

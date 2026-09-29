@@ -77,7 +77,7 @@ is_fixed_target()
 
     case "$rel" in
         usr/local/bin/test_lvgl|usr/local/lib/liblvgl.so|usr/local/share/lvgl_data/*|\
-        usr/bin/ui_update.sh|etc/init.d/S00lvgl|etc/un260/package-version|usr/local/bin/un260_unpack)
+        usr/bin/ui_update.sh|etc/init.d/S00lvgl|etc/un260/package-version|usr/local/bin/un260_unpack|usr/local/bin/un260_storage_sync|usr/local/bin/un260_upgrade_display|usr/local/bin/un260_resource_cleanup|usr/local/bin/un260_app_storage)
             return 0
             ;;
     esac
@@ -187,9 +187,13 @@ find "$PKG_ROOT/payload/usr/local/share/lvgl_data" -type d -exec chmod 0755 {} +
 find "$PKG_ROOT/payload/usr/local/share/lvgl_data" -type f -exec chmod 0644 {} +
 
 copy_payload_file "$LVGL_LIB_PATH" "usr/local/lib/liblvgl.so" 0755
+copy_payload_file "$TARGET_ROOT/usr/local/bin/un260_storage_sync" "usr/local/bin/un260_storage_sync" 0755
+copy_payload_file "$TARGET_ROOT/usr/local/bin/un260_upgrade_display" "usr/local/bin/un260_upgrade_display" 0755
 copy_payload_file "$UPDATER_PATH" "usr/bin/ui_update.sh" 0755
 copy_payload_file "$STARTUP_PATH" "etc/init.d/S00lvgl" 0755
 copy_payload_file "$APP_PATH" "usr/local/bin/test_lvgl" 0755
+copy_payload_file "$TARGET_ROOT/usr/local/bin/un260_resource_cleanup" "usr/local/bin/un260_resource_cleanup" 0755
+copy_payload_file "$SDK_ROOT/target/d211/d213_devkitf/rootfs_overlay/usr/local/bin/un260_app_storage" "usr/local/bin/un260_app_storage" 0755
 UNPACKER_PATH="$TARGET_ROOT/usr/local/bin/un260_unpack"
 if [[ -f "$UNPACKER_PATH" ]]; then
     copy_payload_file "$UNPACKER_PATH" "usr/local/bin/un260_unpack" 0755
@@ -201,6 +205,7 @@ chmod 0644 "$PKG_ROOT/payload/etc/un260/package-version"
 
 INSTALL_MANIFEST="$PKG_ROOT/install.tsv"
 : > "$INSTALL_MANIFEST"
+printf 'file|0755|usr/local/bin/un260_storage_sync\n' >> "$INSTALL_MANIFEST"
 printf 'tree|0755|usr/local/share/lvgl_data\n' >> "$INSTALL_MANIFEST"
 
 if [[ -n "$EXTRA_ROOT" ]]; then
@@ -218,6 +223,8 @@ fi
 
 printf 'file|0755|usr/local/lib/liblvgl.so\n' >> "$INSTALL_MANIFEST"
 printf 'file|0755|usr/bin/ui_update.sh\n' >> "$INSTALL_MANIFEST"
+printf 'file|0755|usr/local/bin/un260_resource_cleanup\n' >> "$INSTALL_MANIFEST"
+printf 'file|0755|usr/local/bin/un260_app_storage\n' >> "$INSTALL_MANIFEST"
 printf 'file|0755|etc/init.d/S00lvgl\n' >> "$INSTALL_MANIFEST"
 printf 'file|0644|etc/un260/package-version\n' >> "$INSTALL_MANIFEST"
 printf 'file|0755|usr/local/bin/test_lvgl\n' >> "$INSTALL_MANIFEST"
@@ -257,6 +264,8 @@ format=UN260_UPGRADE
 schema=1
 product=UN260
 package_type=ui
+storage_layout=app-volume-v1
+storage_guard=syncfs-v1
 version=$VERSION
 package_id=$PACKAGE_ID
 requires_reboot=1

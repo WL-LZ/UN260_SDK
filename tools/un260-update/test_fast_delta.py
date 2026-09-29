@@ -4,6 +4,7 @@ Never targets the host root; sync is stubbed, so this is NOT physical power-cut 
 """
 from pathlib import Path
 import hashlib, io, os, shutil, subprocess, tarfile, tempfile, importlib.util
+from test_storage_sync import native_tool
 root=Path(__file__).resolve().parents[2]
 work=Path(tempfile.mkdtemp(prefix='un260-fast-delta-'))
 spec=importlib.util.spec_from_file_location('delta',root/'tools/un260-update/build_delta.py')
@@ -34,6 +35,7 @@ def run_case(name,package,initial,ok,crash=False):
     for p,(d,m) in initial.items():
         f=dev/p;f.parent.mkdir(parents=True,exist_ok=True);f.write_bytes(d);f.chmod(m)
     tool=dev/'usr/local/bin/un260_unpack';tool.parent.mkdir(parents=True,exist_ok=True);shutil.copy(unpack,tool)
+    shutil.copy(native_tool(), dev/'usr/local/bin/un260_storage_sync')
     shutil.copy(package,upd/'UN260_UPDATE.upk')
     runner=case/'run.sh'
     runner.write_text(f'''#!/bin/sh

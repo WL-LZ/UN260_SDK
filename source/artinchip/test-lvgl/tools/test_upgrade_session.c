@@ -103,6 +103,12 @@ int main(void) {
     ui_upgrade_service_update_child_state();assert(waits&&upgrade_session_owner()==UPGRADE_SESSION_UI);
     /* A terminal status file is not proof that the writer process has exited. */
     g_ui_upgrade_service.status.finished=true;g_ui_upgrade_service.status.success=true;
+    g_ui_upgrade_service.status.stage=UI_UPGRADE_STAGE_SUCCESS;
+    g_ui_upgrade_service.status.progress=100;
+    ui_upgrade_service_status_t polled;
+    ui_upgrade_service_poll(&polled);
+    assert(polled.running&&!polled.finished&&!polled.success);
+    assert(polled.progress==99&&polled.stage==UI_UPGRADE_STAGE_FINISH);
     ui_upgrade_service_update_child_state();assert(upgrade_session_owner()==UPGRADE_SESSION_UI);
     wait_result=123;ui_upgrade_service_update_child_state();
     assert(upgrade_session_owner()==UPGRADE_SESSION_NONE&&g_ui_upgrade_service.child_pid<0);

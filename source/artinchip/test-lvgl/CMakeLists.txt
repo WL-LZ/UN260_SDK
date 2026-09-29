@@ -4,6 +4,12 @@ project(test_lvgl)
 add_executable(un260_unpack tools/un260_unpack.c)
 target_link_libraries(un260_unpack z)
 install(TARGETS un260_unpack RUNTIME DESTINATION bin)
+add_executable(un260_storage_sync tools/un260_storage_sync.c)
+install(TARGETS un260_storage_sync RUNTIME DESTINATION bin)
+add_executable(un260_upgrade_display un260/lv_drivers/boot_light.c un260/lv_system/backlight_service.c)
+target_compile_definitions(un260_upgrade_display PRIVATE UN260_UPDATE_DISPLAY=1)
+target_link_libraries(un260_upgrade_display z)
+install(TARGETS un260_upgrade_display RUNTIME DESTINATION bin)
 
 # Suppress cmake unused warning
 set(ignore ${BUILD_DOC} ${BUILD_DOCS} ${BUILD_EXAMPLE} ${BUILD_EXAMPLES}

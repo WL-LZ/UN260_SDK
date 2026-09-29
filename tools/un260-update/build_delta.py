@@ -42,10 +42,16 @@ def build(base,full,out):
     removed=sorted(set(b)-set(f))
     bt,ft=table(b),table(f)
     checks=''.join(f'{sha(d)}  payload/{p}\n' for p,(d,m) in sorted(changed.items())).encode()
-    install=''.join(f'file|{m:04o}|{p}\n' for p,(d,m) in sorted(changed.items()))
+    # The new scripts must never reach disk before their writeback executable.
+    install=''.join(f'file|{m:04o}|{p}\n' for p,(d,m) in sorted(changed.items(),
+        key=lambda item: (item[0] != 'usr/local/bin/un260_storage_sync', item[0])))
     install+=''.join(f'delete|{b[p][1]:04o}|{p}\n' for p in removed)
     meta=dict(format='UN260_UPGRADE',schema='2',product='UN260',package_type='ui-delta',
               version=fm['version'],package_id=sha(checks),baseline_id=sha(bt),target_id=sha(ft),requires_reboot='1')
+    if fm.get('storage_layout'):
+        meta['storage_layout']=fm['storage_layout']
+    if fm.get('storage_guard'):
+        meta['storage_guard']=fm['storage_guard']
     entries={'manifest.ini':('\n'.join(f'{k}={v}' for k,v in meta.items())+'\n').encode(),
              'checksums.sha256':checks,'install.tsv':install.encode(),'baseline.tsv':bt,'target.tsv':ft}
     out=pathlib.Path(out);out.parent.mkdir(parents=True,exist_ok=True)

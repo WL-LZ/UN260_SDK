@@ -124,6 +124,14 @@ def main():
     manifest = '\n'.join('%s|%d|%s|%s' % (e['sha256'], e['bytes'], e['mode'], e['path']) for e in entries)
     args.cleanup_script.parent.mkdir(parents=True, exist_ok=True)
     args.cleanup_script.write_text(script.replace('@MANIFEST@', manifest).replace('@APP_SHA256@', app_sha))
+    # The installed helper may run while an older UI still has its executable
+    # mapped. Never remove UI icons here, even after the on-disk app changes.
+    sdk_manifest = '\n'.join('%s|%d|%s|%s' % (e['sha256'], e['bytes'], e['mode'], e['path'])
+                             for e in entries if e['reason'].startswith('SDK GE '))
+    helper = safe_target(target, 'usr/local/bin/un260_resource_cleanup')
+    helper.parent.mkdir(parents=True, exist_ok=True)
+    helper.write_text(script.replace('@MANIFEST@', sdk_manifest).replace('@APP_SHA256@', '-'))
+    helper.chmod(0o755)
     report = target.parent / 'images/un260-resource-cleanup.json'
     report.write_text(json.dumps(dict(schema=1, app_sha256=app_sha, entries=entries,
                                      logical_bytes=sum(e['bytes'] for e in entries)), indent=2) + '\n')
