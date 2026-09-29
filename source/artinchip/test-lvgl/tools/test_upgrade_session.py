@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise exact production updater ownership transitions without running an updater."""
 from pathlib import Path
+from test_i18n_support import with_i18n
 import re, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
 
@@ -24,6 +25,7 @@ with tempfile.TemporaryDirectory(prefix='un260-upgrade-session-') as tmp:
     exe=temp/'session'
     subprocess.run(['gcc','-std=gnu11','-Wall','-Wextra','-Werror','-g',
       '-fsanitize=address,undefined','-fno-sanitize-recover=all',f'-I{root}',f'-I{temp}',
-      str(root/'tools/test_upgrade_session.c'),str(root/'un260/app_service/upgrade_session.c'),
+      *map(str,with_i18n([root/'tools/test_upgrade_session.c',root/'un260/app_service/upgrade_session.c',
+                         root/'un260/lv_system/ui_update_message.c'],root)),
       '-o',str(exe)],check=True)
     subprocess.run([str(exe)],check=True)

@@ -12,6 +12,8 @@
 #include <unistd.h>
 #include "un260/app_service/upgrade_session.h"
 #include "un260/lv_core/ui_upgrade_service.h"
+#include "un260/lv_system/ui_i18n.h"
+#include "un260/lv_system/ui_update_message.h"
 
 /* Exact production start/reap/reset/set-status functions are injected by the
  * runner. Only filesystem, media and process boundaries are simulated. */

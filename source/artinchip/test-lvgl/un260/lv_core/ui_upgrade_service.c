@@ -328,7 +328,10 @@ static void ui_upgrade_service_load_status_file(void)
         } else if (strncmp(line, "message=", 8) == 0) {
             snprintf(result_text, sizeof(result_text), "%s", line + 8);
         } else if (strncmp(line, "success=", 8) == 0) {
-            if (!ui_upgrade_service_parse_int(line + 8, 0, 1, &success)) {
+            /* The updater emits an empty result until it reaches a terminal
+             * stage. Accept that pending state without discarding progress. */
+            if (line[8] != '\0' &&
+                !ui_upgrade_service_parse_int(line + 8, 0, 1, &success)) {
                 return;
             }
         }
