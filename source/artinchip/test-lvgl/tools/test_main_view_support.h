@@ -101,7 +101,6 @@ void perf_profile_report_event_us(const char *group,const char *name,uint32_t us
 void perf_profile_watch_invalidation(const void *object,const char *name) { (void)object;(void)name; }
 void perf_profile_unwatch_invalidation(const void *object) { (void)object; }
 #ifndef HOST_REAL_FAULT
-void fault_popup_restore_island_notice(void) {}
 bool fault_popup_get_auto_enabled(void) { return fault_auto; }
 void fault_popup_set_auto_enabled(bool enabled) { fault_auto=enabled; }
 bool fault_popup_get_pending_fault(fault_source_t *source,uint8_t *type,uint8_t *code)

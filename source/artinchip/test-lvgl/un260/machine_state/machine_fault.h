@@ -8,8 +8,7 @@ typedef enum {
     MACHINE_FAULT_BOOT = 0,
     MACHINE_FAULT_START,
     MACHINE_FAULT_RUNTIME,
-    MACHINE_FAULT_SENSOR,
-    MACHINE_FAULT_BATCH
+    MACHINE_FAULT_SENSOR
 } machine_fault_source_t;
 
 typedef struct {

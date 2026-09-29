@@ -24,14 +24,16 @@ static void smart_island_warning_anim_text_opa_cb(void *var, int32_t value)
     lv_obj_set_style_text_opa((lv_obj_t *)var, (lv_opa_t)value, 0);
 }
 
+static smart_island_fault_phase_cb_t fault_phase_cb;
+void smart_island_register_fault_phase_cb(smart_island_fault_phase_cb_t callback) { fault_phase_cb = callback; }
 static machine_fault_key_t warning_key(void)
 {
     return (machine_fault_key_t){g_si_ctx.warning.fault.source,
         g_si_ctx.warning.fault.fault_type,g_si_ctx.warning.fault.code};
 }
-bool smart_island_has_active_fault(void)
+static void fault_phase(smart_island_fault_phase_t phase)
 {
-    return g_si_ctx.warning.fault.valid && machine_fault_find(warning_key(),NULL);
+    if (g_si_ctx.warning.fault.valid && fault_phase_cb) fault_phase_cb(warning_key(),phase);
 }
 void smart_island_faults_changed(void)
 {
@@ -47,9 +49,10 @@ void smart_island_warning_fault_clear(void)
     g_si_ctx.warning.fault.code = 0;
 }
 
-static void smart_island_warning_stop_motion(bool reset_shell)
+void smart_island_warning_stop(void)
 {
-    if (reset_shell) smart_island_view_notice_reset();
+    fault_phase(SMART_ISLAND_FAULT_CANCEL);
+    smart_island_view_notice_reset();
     if (g_si_ctx.objects.title && lv_obj_is_valid(g_si_ctx.objects.title)) {
         lv_anim_del(g_si_ctx.objects.title, smart_island_warning_anim_x_cb);
         lv_anim_del(g_si_ctx.objects.title, smart_island_warning_anim_text_opa_cb);
@@ -73,13 +76,8 @@ static void smart_island_warning_stop_motion(bool reset_shell)
     g_si_ctx.warning.collapse_running = false;
     g_si_ctx.warning.text_width_compact = 0;
     g_si_ctx.warning.text_width_expand = 0;
-    if (reset_shell) smart_island_reset_compact_header_position();
+    smart_island_reset_compact_header_position();
     smart_island_warning_apply_static_layout();
-}
-
-void smart_island_warning_stop(void)
-{
-    smart_island_warning_stop_motion(true);
 }
 
 static void smart_island_warning_apply_static_layout(void)
@@ -125,18 +123,6 @@ static void smart_island_warning_finish_notice(void)
         return;
     }
 
-    /* A controller fault outlives a cosmetic cycle and even Confirm (read).
-     * Only a matching recovery event removes the record. Repeat the text
-     * motion without collapsing to READY or sending any controller command. */
-    if (smart_island_has_active_fault()) {
-        if (g_si_ctx.lifecycle.suspended || fault_popup_is_showing()) {
-            smart_island_warning_stop();
-            g_si_ctx.warning.resume_animation_pending = true;
-        } else {
-            smart_island_warning_marquee_start();
-        }
-        return;
-    }
     g_si_ctx.warning.marquee_running = false;
     g_si_ctx.warning.collapse_running = true;
     smart_island_view_notice_collapse(
@@ -152,6 +138,8 @@ static void smart_island_warning_finish_commit(void)
         return;
     }
 
+    bool is_fault = g_si_ctx.warning.fault.valid;
+    machine_fault_key_t key = warning_key();
     if (resume_counting && g_si_ctx.lifecycle.count_session_active) {
         g_si_ctx.warning.text[0] = '\0';
         g_si_ctx.warning.resume_counting = false;
@@ -162,6 +150,7 @@ static void smart_island_warning_finish_commit(void)
     } else {
         smart_island_restore_idle();
     }
+    if (is_fault && fault_phase_cb) fault_phase_cb(key,SMART_ISLAND_FAULT_END);
 }
 
 static void smart_island_warning_scroll_finish_cb(lv_anim_t *animation)
@@ -221,8 +210,8 @@ static void smart_island_warning_marquee_start(void)
         return;
     }
 
-    /* Text repeats keep the existing shell geometry and translations. */
-    smart_island_warning_stop_motion(false);
+    smart_island_warning_stop();
+    fault_phase(SMART_ISLAND_FAULT_BEGIN);
     title_text = lv_label_get_text(g_si_ctx.objects.title);
     title_font = lv_obj_get_style_text_font(g_si_ctx.objects.title, LV_PART_MAIN);
     text_width = (lv_coord_t)lv_txt_get_width(
@@ -348,8 +337,8 @@ static void notify_warning(const char *warn_text,
         return;
     }
 
-    /* Informational notices cannot displace an unresolved machine fault. */
-    if (!key && (g_si_ctx.lifecycle.suspended || smart_island_has_active_fault())) return;
+    /* An unrelated hidden-page notice must not overwrite a suspended fault. */
+    if (g_si_ctx.lifecycle.suspended && !key) return;
     smart_island_warning_stop();
     smart_island_warning_fault_clear();
     if (key) {
@@ -408,7 +397,5 @@ void smart_island_notify_warning_level(const char *text, smart_island_warning_le
 }
 void smart_island_notify_fault(const char *text, machine_fault_key_t key)
 {
-    bool attention = key.source == MACHINE_FAULT_BATCH ||
-        (key.source == MACHINE_FAULT_START && key.type == 1 && key.code == 2);
-    notify_warning(text,attention ? SMART_ISLAND_WARNING_LEVEL_WARNING : SMART_ISLAND_WARNING_LEVEL_ERROR,&key);
+    notify_warning(text,SMART_ISLAND_WARNING_LEVEL_ERROR,&key);
 }

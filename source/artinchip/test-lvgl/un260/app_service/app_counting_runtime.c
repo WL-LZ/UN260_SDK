@@ -122,7 +122,7 @@ static bool app_counting_runtime_main_page_active(void)
 static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t len)
 {
     page_01_main_set_counting_locked(true);
-    app_fault_recovery_count_started();
+    app_fault_recovery_clear();
     diagnostic_calibration_feed_started();
     const bool previous_multi = counting_data_current()->multi_currency_result;
     currency_state_begin_count_session();
@@ -239,7 +239,8 @@ static void app_counting_runtime_on_runtime_fault(uint8_t code)
     app_fault_recovery_report((machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,code});
     if (code == 0x00) {
         last_notice = 0;
-        fault_popup_report_runtime_fault(0);
+        fault_popup_clear_runtime();
+        smart_island_restore_idle();
         return;
     }
 
@@ -520,7 +521,6 @@ void app_counting_runtime_handle_info(counting_session_state_t *session,
         app_counting_runtime_refresh_compact(sim_data);
         counting_history_append_frame("0x0E", buf, len);
     } else if (result.kind == COUNTING_INFO_REPLY_FINISHED) {
-        app_fault_recovery_count_finished();
         page_01_main_set_counting_locked(false);
         int current_pcs = result.final_pcs;
 

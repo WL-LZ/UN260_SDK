@@ -53,8 +53,6 @@ static protocol_frame_t g_deferred_frame;
 static bool g_deferred_frame_valid;
 static bool g_deferred_frame_blocked;
 static bool g_deferred_frame_warning_reported;
-static bool g_start_waiting_for_clear;
-static ui_page_t g_start_clear_origin;
 
 static bool app_command_runtime_main_page_active(void)
 {
@@ -98,14 +96,7 @@ bool app_command_runtime_request_count_start(void)
 {
     if (app_command_runtime_count_start_busy() || counting_action_clear_pending() ||
         !counting_history_can_start()) return false;
-    app_fault_start_state_t recovery_state=app_fault_recovery_prepare_start();
-    if (recovery_state == APP_FAULT_START_BLOCKED) return false;
-    if (recovery_state == APP_FAULT_START_WAIT) {
-        g_start_waiting_for_clear=true;
-        g_start_clear_origin=ui_manager_get_current_page();
-        page_01_main_refresh_start_state();
-        return true;
-    }
+    if (!app_fault_recovery_prepare_start()) return false;
     if (!counting_action_request_start()) {
         uart_debug_printf("count start request rejected or send failed\n");
         return false;
@@ -121,13 +112,12 @@ bool app_command_runtime_result_pending(void)
 
 bool app_command_runtime_count_start_busy(void)
 {
-    return g_start_waiting_for_clear || counting_action_start_pending() || g_counting_session.start_confirmed ||
+    return counting_action_start_pending() || g_counting_session.start_confirmed ||
         g_counting_session.phase == COUNTING_SESSION_ACTIVE;
 }
 
 bool app_command_runtime_clear_counting_data(const char *reason)
 {
-    g_start_waiting_for_clear=false;
     if (!app_counting_runtime_reset_session(&g_counting_session, reason)) {
         smart_island_notify_warning_level(UI_N_("History full: clear deferred"),
                                            SMART_ISLAND_WARNING_LEVEL_ERROR);
@@ -180,11 +170,6 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
     /* Keep the transition ahead of generic reply side effects. Returning
      * false retains this frame and holds the next START until history is safe. */
     if (cmd == 0x51) return app_command_runtime_handle_stacker_clear(buf, len);
-    if (cmd == 0x3D) { app_fault_recovery_handle_reply(buf, len); return true; }
-    if ((cmd == 0x0A && len >= 7) ||
-        (cmd == 0x0F && len >= 6 && buf[4] != 0) ||
-        (cmd == 0x06 && len == 6 && buf[4] == 4))
-        g_start_waiting_for_clear=false; /* started or a newly asserted condition */
     /* Preflight BEFORE taking request results or invoking any dispatcher. A
      * retried frame therefore cannot duplicate protocol/UI side effects. */
     if (cmd == 0x0A && len >= 7 && buf[4] == 0x01 && buf[5] == 0x01 &&
@@ -193,7 +178,6 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
         /* The controller is already running even while history delays model
          * publication. Protect Main now; replay will enter the normal start
          * hook and only an accepted end report can release the gate. */
-        app_fault_recovery_count_started();
         page_01_main_set_counting_locked(true);
         return false;
     }
@@ -348,29 +332,11 @@ uint32_t app_command_runtime_process_frames_budget(uint32_t budget_us)
     return processed;
 }
 
-static void app_command_runtime_poll_recovery_start(void)
-{
-    if (!g_start_waiting_for_clear) return;
-    if (g_start_clear_origin != ui_manager_get_current_page()) {
-        g_start_waiting_for_clear=false;
-        page_01_main_refresh_start_state();
-        return;
-    }
-    app_fault_start_state_t state=app_fault_recovery_start_status();
-    if (state == APP_FAULT_START_WAIT) return;
-    g_start_waiting_for_clear=false;
-    /* Never manufacture an Auto START. Only complete an explicit accepted
-     * user request, rechecking all normal guards after positive clear ACK. */
-    if (state == APP_FAULT_START_READY) (void)app_command_runtime_request_count_start();
-    page_01_main_refresh_start_state();
-}
-
 void app_command_runtime_poll(uint32_t now_ms)
 {
     app_counting_runtime_poll_reports(&g_counting_session, now_ms);
     motor_test_service_poll(now_ms);
     app_fault_recovery_poll();
-    app_command_runtime_poll_recovery_start();
     boot_stage_t stage = boot_service_get_stage();
     uint32_t action_timeouts = counting_action_take_timeouts();
 

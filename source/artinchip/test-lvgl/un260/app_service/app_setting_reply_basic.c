@@ -1,7 +1,6 @@
 #include "un260/lv_system/ui_i18n.h"
 #include "app_setting_reply.h"
 #include "app_setting_notice.h"
-#include "app_fault_recovery.h"
 
 #include <stdbool.h>
 
@@ -121,12 +120,6 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
             page_01_batch_refre();
             uart_debug_printf("Boot batch num: %d\n", machine_state_batch_num());
             smart_island_refresh_summary();
-        }
-        else if (status == 0x04 && len == 6)
-        {
-            /* Notification, never a setting acknowledgement or new value. */
-            app_fault_recovery_report((machine_fault_key_t){MACHINE_FAULT_BATCH,0,4});
-            fault_popup_report_batch_full();
         }
         break;
     }

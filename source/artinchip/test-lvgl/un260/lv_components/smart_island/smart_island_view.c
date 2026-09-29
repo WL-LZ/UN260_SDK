@@ -1523,10 +1523,6 @@ void smart_island_view_notice_collapse(lv_anim_ready_cb_t ready_cb)
  * before it is attached to the new page. */
 static void smart_island_prepare_reparent(void)
 {
-    if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_WARNING) {
-        smart_island_warning_stop();
-        g_si_ctx.warning.resume_animation_pending = true;
-    }
     lv_obj_t *animated_objects[] = {
         g_si_ctx.objects.root,
         g_si_ctx.objects.page_info,
@@ -1584,7 +1580,6 @@ void smart_island_create(lv_obj_t *parent)
                 g_si_ctx.lifecycle.dirty = false;
             }
             smart_island_modal_update();
-            smart_island_warning_resume_if_pending();
         }
         return;
     }
@@ -1935,7 +1930,6 @@ void smart_island_create(lv_obj_t *parent)
     smart_island_update_idle_time();
     smart_island_update_pages_visible();
     smart_island_modal_update();
-    fault_popup_restore_island_notice();
 }
 
 void smart_island_view_destroy_objects(void)

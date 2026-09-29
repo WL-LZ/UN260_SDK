@@ -18,16 +18,13 @@ static unsigned notice_posts,notice_clears;
 static char last_notice_key[48],last_notice_title[192],last_notice_code[48];
 static unsigned island_posts;
 static char island_title[192];
-static machine_fault_key_t island_key;
-static bool island_has_key;
-bool smart_island_has_active_fault(void) {return island_has_key&&machine_fault_find(island_key,NULL);}
 void smart_island_notify_warning_level(const char *value,smart_island_warning_level_t level)
 {(void)level;++island_posts;snprintf(island_title,sizeof(island_title),"%s",value);}
 void smart_island_notify_warning(const char *value){smart_island_notify_warning_level(value,SMART_ISLAND_WARNING_LEVEL_WARNING);}
 void smart_island_refresh_summary(void) {}
 void smart_island_faults_changed(void) {}
 void smart_island_notify_fault(const char *text,machine_fault_key_t key)
-{island_key=key;island_has_key=true;smart_island_notify_warning_level(text,SMART_ISLAND_WARNING_LEVEL_ERROR);}
+{(void)key;smart_island_notify_warning_level(text,SMART_ISLAND_WARNING_LEVEL_ERROR);}
 void ui_notice_set_suspended(uint32_t reason,bool value) {if(value)suspended|=reason;else suspended&=~reason;}
 void ui_notice_post(ui_notice_kind_t kind,const char *key,const char *title,const char *detail)
 {
@@ -126,7 +123,7 @@ int main(void)
     assert(popup.overlay==same_overlay&&popup.step==1&&!popup.model.playing&&popup.model.elapsed_ms==elapsed);
     replay(NULL);assert(popup.model.playing&&popup.model.elapsed_ms==0);
     click_confirm();assert(!fault_popup_is_showing()&&fault_popup_get_pending_fault(NULL,NULL,NULL)&&!suspended);
-    fault_popup_report_runtime_fault(2);assert(fault_popup_is_showing());
+    fault_popup_report_runtime_fault(2);assert(!fault_popup_is_showing());
     assert(fault_popup_show_pending_now());assert(popup.step==0);click_confirm();
     fault_popup_report_runtime_fault(3);assert(fault_popup_is_showing());advance(3200);capture("lower-open");
     lv_event_send(popup.steps[1],LV_EVENT_CLICKED,NULL);advance(1500);capture("lower-remove");

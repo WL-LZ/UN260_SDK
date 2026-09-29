@@ -14,11 +14,6 @@
 const lv_font_t *ui_message_font(const lv_font_t *base) { return base; }
 void ui_notice_set_suspended(uint32_t reason,bool value) {(void)reason;(void)value;}
 
-uint32_t __wrap_app_clock_uptime_ms(void){return lv_tick_get();}
-uint64_t __wrap_app_clock_monotonic_ms(void){return lv_tick_get();}
-static bool recovery_confirm(machine_fault_key_t key){app_fault_recovery_confirm(key);return false;}
-void ui_notice_clear(const char *key){(void)key;}
-static void ack(uint8_t result){uint8_t b[]={0xFD,0xDF,6,0x3D,result,0};app_fault_recovery_handle_reply(b,6);}
 static void fault(uint8_t code)
 {
     app_fault_recovery_report((machine_fault_key_t){MACHINE_FAULT_START,2,code});
@@ -37,87 +32,40 @@ int main(void)
     lv_img_decoder_set_close_cb(decoder,host_image_close);
     fixture(false);assert(currency_state_confirm_active_code("USD"));ui_main_create(lv_scr_act());tick(400);
     app_fault_recovery_init();fault_popup_set_auto_enabled(false);
-    fault_popup_set_confirm_handler(recovery_confirm);
-    /* No-note owns an inspectable yellow identity, never a stale door fault. */
-    fault(9);app_fault_recovery_report((machine_fault_key_t){MACHINE_FAULT_START,1,2});
-    fault_popup_report_start_no_note();tick(1500);
-    assert(g_si_ctx.warning.fault.valid&&g_si_ctx.warning.fault.fault_type==1&&g_si_ctx.warning.fault.code==2);
-    assert(g_si_ctx.warning.level==SMART_ISLAND_WARNING_LEVEL_WARNING);
-    lv_event_send(g_si_ctx.objects.root,LV_EVENT_CLICKED,NULL);
-    assert(popup.key.type==1&&popup.key.code==2&&!strcmp(lv_label_get_text(popup.title),"No banknotes detected"));
-    unsigned tx=protocol_calls;confirm(NULL);assert(protocol_calls==tx+1&&!fault_popup_is_showing());ack(1);
-    /* Popup ON: Confirm clears once; removal before Confirm also clears.
-       Confirmation never fabricates START or deletes a physical fault. */
-    machine_fault_clear();app_fault_recovery_clear();fault_popup_set_auto_enabled(true);fault(7);
-    tx=protocol_calls;tick(5000);app_fault_recovery_poll();assert(protocol_calls==tx);
-    confirm(NULL);assert(protocol_calls==tx+1&&!fault_popup_is_showing());
-    assert(machine_fault_find((machine_fault_key_t){MACHINE_FAULT_START,2,7},NULL));ack(1);
-    app_fault_recovery_stacker_cleared();assert(protocol_calls==tx+1&&!machine_fault_count());
-    fault(7);assert(fault_popup_is_showing());tx=protocol_calls;
-    app_fault_recovery_stacker_cleared();assert(protocol_calls==tx+1&&!fault_popup_is_showing());
-    app_fault_recovery_stacker_cleared();assert(protocol_calls==tx+1);ack(1);
-    /* Repeated asserted fault after Confirm reopens; duplicate while open
-       preserves the current step/animation instead of restarting it. */
-    fault(9);confirm(NULL);ack(1);fault(9);assert(fault_popup_is_showing());
-    tick(500);uint32_t elapsed=popup.model.elapsed_ms;fault(9);assert(popup.model.elapsed_ms==elapsed);
-    hide_fault_popup();machine_fault_clear();app_fault_recovery_clear();
-    machine_fault_key_t batch={MACHINE_FAULT_BATCH,0,4};
-    app_fault_recovery_report(batch);fault_popup_report_batch_full();
-    assert(!strcmp(lv_label_get_text(popup.title),"Batch full"));
-    assert(!strcmp(lv_label_get_text(popup.code),"0x06/0x04"));
-    tx=protocol_calls;confirm(NULL);assert(protocol_calls==tx+1&&!fault_popup_is_showing());ack(1);
-    app_fault_recovery_report(batch);fault_popup_report_batch_full();assert(fault_popup_is_showing());
-    fault_popup_report_runtime_fault(0);assert(fault_popup_is_showing()&&popup.key.source==MACHINE_FAULT_BATCH);
-    tx=protocol_calls;app_fault_recovery_stacker_cleared();assert(protocol_calls==tx+1&&!fault_popup_is_showing());ack(1);
-    /* Popup OFF: unresolved conditions persist over many animation cycles
-       without any unsolicited UART traffic. END before/after fault is equal. */
-    fault_popup_set_auto_enabled(false);
-    for(unsigned order=0;order<2;++order) {
-        app_fault_recovery_count_started();smart_island_notify_count_start();
-        if(order) {app_fault_recovery_count_finished();smart_island_notify_count_end(NULL);}
-        app_fault_recovery_report(batch);fault_popup_report_batch_full();
-        if(!order) {app_fault_recovery_count_finished();smart_island_notify_count_end(NULL);}
-        tx=protocol_calls;
-        for(unsigned cycle=0;cycle<20;++cycle) {
-            tick(1000);app_fault_recovery_poll();
-            assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING);
-            assert(g_si_ctx.warning.fault.source==MACHINE_FAULT_BATCH);
-            assert(!g_si_ctx.lifecycle.result_timer&&!g_si_ctx.lifecycle.count_session_active);
-            assert(protocol_calls==tx);
-            assert(lv_obj_get_style_transform_width(g_si_ctx.objects.root,0)==22);
-        }
-        smart_island_restore_idle();
-        assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING);
-        smart_island_notify_warning("Unrelated notice");
-        assert(g_si_ctx.warning.fault.source==MACHINE_FAULT_BATCH);
-        /* A separate runtime fault clears without clearing the batch latch. */
-        app_fault_recovery_report((machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,2});
-        fault_popup_report_runtime_fault(2);
-        app_fault_recovery_report((machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,0});
-        fault_popup_report_runtime_fault(0);
-        assert(g_si_ctx.warning.fault.source==MACHINE_FAULT_BATCH);
-        /* UI destruction/recreation does not fabricate recovery either. */
-        smart_island_destroy();smart_island_create(lv_scr_act());tick(500);
-        assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING&&g_si_ctx.warning.fault.source==MACHINE_FAULT_BATCH);
-        app_fault_recovery_stacker_cleared();assert(protocol_calls==tx+1);ack(1);
-        tick(5000);assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE);
-    }
-    /* Hidden pages pause the visual only; no timer-driven clear is allowed. */
-    fault_popup_set_auto_enabled(false);fault(9);tx=protocol_calls;
-    page_01_main_suspend();tick(2100);app_fault_recovery_poll();assert(protocol_calls==tx);
-    assert(page_01_main_resume());tick(18000);app_fault_recovery_poll();assert(protocol_calls==tx);
-    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING&&g_si_ctx.warning.marquee_running);
-    /* Explicit clear failure must leave the original condition inspectable. */
-    assert(fault_popup_show_key((machine_fault_key_t){MACHINE_FAULT_START,2,9}));
-    confirm(NULL);assert(protocol_calls==tx+1);tick(2100);app_fault_recovery_poll();
-    tick(10000);assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING);
-    assert(g_si_ctx.warning.fault.code==9);
-    app_fault_recovery_clear();fault_popup_clear_runtime();
-    /* Generic messages still finish normally; persistent motion is fault-only. */
-    smart_island_notify_warning("Ordinary message");tick(20000);
+    unsigned tx=protocol_calls;
+    fault(7);assert(protocol_calls==tx+1); /* legacy pocket begin handshake */
+    tick(18000);assert(protocol_calls==tx+2);
     assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE);
-    ui_main_destroy();
+    fault(7);assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING && protocol_calls==tx+3);
+    tick(1500);lv_coord_t x=lv_obj_get_x(g_si_ctx.objects.title);
+    fault(7);assert(lv_obj_get_x(g_si_ctx.objects.title)==x && protocol_calls==tx+3);
+    tick(18000);assert(protocol_calls==tx+4);
+    fault(7);app_fault_recovery_stacker_cleared();tx=protocol_calls;
+    tick(18000);assert(protocol_calls==tx && g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE);
+    /* Door fault repeats after a completed notice, without restarting a live one. */
+    fault(9);tick(18000);assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE);
+    fault(9);assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING);
+    /* No-note cannot capture that door identity or acknowledge it. */
+    app_fault_recovery_clear();fault_popup_report_start_no_note();tx=protocol_calls;
+    assert(!g_si_ctx.warning.fault.valid);tick(18000);app_fault_recovery_poll();assert(protocol_calls==tx);
+    /* The displayed identity survives unrelated unread boot faults. */
+    fault_popup_record_boot_result(5,2);fault(7);
+    assert(g_si_ctx.warning.fault.source==MACHINE_FAULT_START && g_si_ctx.warning.fault.code==7);
+    lv_event_send(g_si_ctx.objects.root,LV_EVENT_CLICKED,NULL);
+    assert(popup.key.source==MACHINE_FAULT_START && popup.key.code==7);
+    hide_fault_popup();
+    fault_popup_set_auto_enabled(true);hide_fault_popup();
+    assert(fault_popup_show_key((machine_fault_key_t){MACHINE_FAULT_START,2,7}));
+    tx=protocol_calls;confirm(NULL);assert(protocol_calls==tx); /* local read acknowledgement */
+    hide_fault_popup();machine_fault_clear();app_fault_recovery_clear();smart_island_faults_changed();
+    fault_popup_set_auto_enabled(false);fault(7);tx=protocol_calls;
+    page_01_main_suspend();tick(18000);app_fault_recovery_poll();assert(protocol_calls==tx);
+    smart_island_notify_warning("A settings warning while Main is hidden");
+    assert(g_si_ctx.warning.fault.valid && g_si_ctx.warning.fault.code==7);
+    app_fault_recovery_clear();fault_popup_clear_runtime();assert(page_01_main_resume());tick(18000);
+    assert(protocol_calls==tx && g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE);
+    fault(7);tx=protocol_calls;ui_main_destroy();tick(18000);app_fault_recovery_poll();assert(protocol_calls==tx);
     counting_data_clear_serials(counting_data_mutable());counting_data_clear_errors(counting_data_mutable());
     lv_img_decoder_delete(decoder);lv_deinit();host_external_assets_release();
-    puts("PASS real island+popup+recovery: yellow no-note click, Confirm/removal handshake, repeated reports, batch guide, runtime-clear isolation, persistent warning across cycles/end/order/recreation/suspension, no timed clear");
+    puts("PASS real island+popup+recovery: repeated full/door, live duplicate, source isolation, no-note, Confirm no TX, recovery, suspend, destroy");
 }

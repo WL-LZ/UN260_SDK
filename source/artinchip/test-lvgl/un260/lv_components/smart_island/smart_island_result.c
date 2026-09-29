@@ -192,14 +192,6 @@ void smart_island_notify_count_end(const char *result_text)
         g_si_ctx.text.result[0] = '\0';
     }
 
-    /* STOP ends motion, not the fault that caused it. A batch/full/jam
-     * report can precede 0E END; COMPLETE must not overwrite that warning. */
-    if (smart_island_has_active_fault()) {
-        smart_island_result_cancel_transition();
-        g_si_ctx.warning.resume_counting = false;
-        return;
-    }
-
     /* Keep the 310x44 counting geometry unchanged.  Fade its content first,
      * then reveal COMPLETE in the same shell, avoiding an abrupt hard swap. */
     if (!g_si_ctx.lifecycle.suspended &&

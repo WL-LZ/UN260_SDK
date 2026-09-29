@@ -14,8 +14,7 @@ int main(void)
     assert(machine_fault_report(upper));assert(!machine_fault_report(upper));
     machine_fault_acknowledge(upper);
     assert(machine_fault_find(upper,&r) && r.acknowledged);
-    assert(!machine_fault_first_unread(NULL));assert(machine_fault_report(upper));
-    assert(machine_fault_first_unread(NULL));assert(!machine_fault_report(upper));
+    assert(!machine_fault_first_unread(NULL));assert(!machine_fault_report(upper));
     assert(machine_fault_count()==1); /* Acknowledgement is not recovery. */
     assert(machine_fault_report(lower));assert(!machine_fault_find(upper,NULL));
     assert(machine_fault_count()==1 && machine_fault_first_unread(&r));
@@ -41,15 +40,9 @@ int main(void)
     assert(machine_fault_report(upper));assert(machine_fault_report(key(MACHINE_FAULT_START,2,1)));
     assert(machine_fault_count()==39); /* Full snapshot fits without allocating. */
 
-    machine_fault_key_t batch=key(MACHINE_FAULT_BATCH,0,4);
-    assert(machine_fault_report(batch));assert(machine_fault_count()==40);
-    machine_fault_acknowledge(batch);assert(machine_fault_report(batch));
-    assert(machine_fault_count()==40 && !machine_fault_report(batch));
     mf_guide_t g;char code[48];
-    fault_guide_lookup(batch,&g);assert(g.step_count==1&&g.steps[0].zone==MF_STACKER&&g.steps[0].action==MF_REMOVE);
-    fault_guide_format_code(batch,code,sizeof(code));assert(!strcmp(code,"0x06/0x04"));
     fault_guide_lookup(key(MACHINE_FAULT_START,1,2),&g);
-    assert(g.steps[0].zone==MF_HOPPER && g.step_count==1); /* Load notes, never a lower-path repair. */
+    assert(g.steps[0].zone==MF_MACHINE); /* No-notes never maps to lower path. */
     fault_guide_lookup(key(MACHINE_FAULT_START,2,2),&g);
     assert(g.step_count==3 && g.steps[0].view==MF_REAR && g.steps[0].action==MF_OPEN);
     assert(g.steps[1].action==MF_CLEAN && g.steps[2].action==MF_CLOSE);

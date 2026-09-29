@@ -155,8 +155,6 @@ void smart_island_set_scene(smart_island_scene_t scene)
 
 void smart_island_restore_idle(void)
 {
-    /* Navigation/cosmetic completion cannot declare a retained fault normal. */
-    if (smart_island_has_active_fault()) return;
     bool from_result = g_si_ctx.view.scene == SMART_ISLAND_SCENE_RESULT;
 
     /* Dismissing a notice is not a machine STOP. Only count_end/reset own

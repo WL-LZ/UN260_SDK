@@ -55,8 +55,10 @@ void smart_island_set_count_analysis(int valid_pcs, int suspect_pcs, int damaged
 void smart_island_clear_count_analysis(void); //清除本轮点钞分析
 void smart_island_notify_warning(const char *warn_text); //通知：警告出现
 void smart_island_notify_warning_level(const char *warn_text, smart_island_warning_level_t level); //通知：警告/报错
+typedef enum { SMART_ISLAND_FAULT_BEGIN, SMART_ISLAND_FAULT_END, SMART_ISLAND_FAULT_CANCEL } smart_island_fault_phase_t;
+typedef void (*smart_island_fault_phase_cb_t)(machine_fault_key_t key, smart_island_fault_phase_t phase);
+void smart_island_register_fault_phase_cb(smart_island_fault_phase_cb_t callback);
 void smart_island_notify_fault(const char *text, machine_fault_key_t key);
-bool smart_island_has_active_fault(void);
 void smart_island_faults_changed(void);
 void smart_island_restore_idle(void); //恢复默认待机态
 bool smart_island_is_expanded(void); //是否处于展开态

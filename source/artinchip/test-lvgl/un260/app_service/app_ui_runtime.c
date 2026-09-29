@@ -121,19 +121,12 @@ static void app_ui_runtime_poll_operation_notices(void)
     }
 }
 
-static bool app_ui_runtime_confirm_fault(machine_fault_key_t key)
-{
-    if (app_boot_runtime_confirm_fault(key)) return true;
-    app_fault_recovery_confirm(key);
-    return false;
-}
-
 void app_ui_runtime_init(void)
 {
     ui_notice_init();
     app_setting_notice_init();
     app_fault_recovery_init();
-    fault_popup_set_confirm_handler(app_ui_runtime_confirm_fault);
+    fault_popup_set_confirm_handler(app_boot_runtime_confirm_fault);
     g_language_generation = ui_lang_generation();
     work_mode_service_init();
     workspace_service_init();
