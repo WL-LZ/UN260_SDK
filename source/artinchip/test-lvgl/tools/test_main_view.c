@@ -20,8 +20,10 @@
 #include "un260/lv_components/ui_detail_reveal.h"
 void page_02_list_multi_open(int index,int tab) {(void)index;(void)tab;}
 static bool (*multi_policy)(gesture_action_t);
+#ifndef HOST_REAL_GESTURE
 void gesture_service_set_page_policy(uint32_t owner, bool (*drag)(void), bool (*action)(gesture_action_t)) {(void)owner;(void)drag;multi_policy=action;}
 void gesture_service_clear_page_policy(uint32_t owner) {(void)owner;multi_policy=NULL;}
+#endif
 #include "un260/lv_components/lv_nav_button.c"
 static unsigned display_back_requests;
 bool backlight_service_probe(void) { return true; }
@@ -94,6 +96,9 @@ static unsigned timers(void)
 static lv_point_t pointer_position;
 static lv_indev_state_t pointer_state;
 static bool pointer_frame_pending;
+#ifdef HOST_REAL_GESTURE
+static lv_port_pointer_observer_t host_raw_observer;
+#endif
 static lv_obj_t *host_pressed_object;
 static lv_indev_t *g_pointer_indev;
 static bool g_contact_captured;
@@ -115,7 +120,11 @@ static void pointer_read(lv_indev_drv_t *driver,lv_indev_data_t *data)
         pointer_frame_pending=false;
         lv_indev_t *indev=lv_indev_get_next(NULL);
         lv_event_code_t event=down?(raw_down?LV_EVENT_PRESSING:LV_EVENT_PRESSED):LV_EVENT_RELEASED;
+#ifdef HOST_REAL_GESTURE
+        bool owned=host_raw_observer && host_raw_observer(indev,event,&pointer_position,down?1:0,NULL);
+#else
         bool owned=host_pointer_policy && host_pointer_policy(indev,event,&pointer_position,down?1:0);
+#endif
         if (owned && !g_contact_captured) lv_port_indev_capture_pointer(indev);
         if (g_contact_captured) data->state=LV_INDEV_STATE_RELEASED;
         if (!down) g_contact_captured=false;

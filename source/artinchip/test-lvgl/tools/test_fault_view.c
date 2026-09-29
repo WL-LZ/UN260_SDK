@@ -4,6 +4,13 @@
 #include <string.h>
 #include "lvgl/lvgl.h"
 #include "un260/lv_components/lv_fault_popup.c"
+#include "un260/app_service/app_boot_runtime.h"
+#include "un260/lv_core/lv_page_manager.h"
+static ui_page_t current_page=UI_PAGE_MAIN;
+static unsigned navigations;
+ui_page_t ui_manager_get_current_page(void){return current_page;}
+void ui_manager_switch(ui_page_t page){assert(!fault_popup_is_showing());current_page=page;++navigations;}
+
 
 static lv_color_t pixels[1280*400],buffer[1280*40];
 static uint32_t suspended;
@@ -11,10 +18,16 @@ static unsigned notice_posts,notice_clears;
 static char last_notice_key[48],last_notice_title[192],last_notice_code[48];
 static unsigned island_posts;
 static char island_title[192];
+static machine_fault_key_t island_key;
+static bool island_has_key;
+bool smart_island_has_active_fault(void) {return island_has_key&&machine_fault_find(island_key,NULL);}
 void smart_island_notify_warning_level(const char *value,smart_island_warning_level_t level)
 {(void)level;++island_posts;snprintf(island_title,sizeof(island_title),"%s",value);}
 void smart_island_notify_warning(const char *value){smart_island_notify_warning_level(value,SMART_ISLAND_WARNING_LEVEL_WARNING);}
 void smart_island_refresh_summary(void) {}
+void smart_island_faults_changed(void) {}
+void smart_island_notify_fault(const char *text,machine_fault_key_t key)
+{island_key=key;island_has_key=true;smart_island_notify_warning_level(text,SMART_ISLAND_WARNING_LEVEL_ERROR);}
 void ui_notice_set_suspended(uint32_t reason,bool value) {if(value)suspended|=reason;else suspended&=~reason;}
 void ui_notice_post(ui_notice_kind_t kind,const char *key,const char *title,const char *detail)
 {
@@ -113,7 +126,7 @@ int main(void)
     assert(popup.overlay==same_overlay&&popup.step==1&&!popup.model.playing&&popup.model.elapsed_ms==elapsed);
     replay(NULL);assert(popup.model.playing&&popup.model.elapsed_ms==0);
     click_confirm();assert(!fault_popup_is_showing()&&fault_popup_get_pending_fault(NULL,NULL,NULL)&&!suspended);
-    fault_popup_report_runtime_fault(2);assert(!fault_popup_is_showing());
+    fault_popup_report_runtime_fault(2);assert(fault_popup_is_showing());
     assert(fault_popup_show_pending_now());assert(popup.step==0);click_confirm();
     fault_popup_report_runtime_fault(3);assert(fault_popup_is_showing());advance(3200);capture("lower-open");
     lv_event_send(popup.steps[1],LV_EVENT_CLICKED,NULL);advance(1500);capture("lower-remove");
@@ -148,16 +161,37 @@ int main(void)
     fault_popup_report_runtime_fault(2);
     assert(!fault_popup_is_showing() && island_posts==posted+1);
     assert(!strcmp(island_title,"Upper passage Jam") && notice_posts==banners);
-    fault_popup_report_runtime_fault(2);assert(island_posts==posted+1);
+    fault_popup_report_runtime_fault(2);assert(island_posts==posted+2);
     fault_popup_clear_runtime();
-    fault_popup_report_sensor_mask((1U<<1)|(1U<<23));assert(!fault_popup_is_showing()&&island_posts==posted+2);
-    fault_popup_report_sensor_mask((1U<<1)|(1U<<23));assert(island_posts==posted+2);
+    fault_popup_report_sensor_mask((1U<<1)|(1U<<23));assert(!fault_popup_is_showing()&&island_posts==posted+3);
+    fault_popup_report_sensor_mask((1U<<1)|(1U<<23));assert(island_posts==posted+3);
     fault_popup_set_auto_enabled(true);assert(fault_popup_is_showing());
-    click_confirm();click_confirm();assert(island_posts==posted+3);
+    click_confirm();click_confirm();assert(island_posts==posted+4);
     fault_popup_report_sensor_mask(0);
     fault_popup_set_auto_enabled(false);fault_popup_report_runtime_fault(2);posted=island_posts;
     fault_popup_record_runtime_notice(225);assert(island_posts==posted&&!fault_popup_is_showing());
     fault_popup_clear_runtime();fault_popup_set_auto_enabled(true);
+    /* A single Confirm on SELF_TEST restores the legacy sensor route,
+     * even with multiple reports. Ordinary faults never inherit that route. */
+    fault_popup_set_confirm_handler(app_boot_runtime_confirm_fault);
+    current_page=UI_PAGE_BOOT;
+    fault_popup_record_boot_result(1,2);fault_popup_record_boot_result(5,2);
+    assert(fault_popup_show_pending_now());posted=island_posts;
+    click_confirm();
+    assert(current_page==UI_PAGE_SENSOR && navigations==1 && !popup.overlay);
+    assert(machine_fault_count()==2 && island_posts==posted && !suspended);
+    machine_fault_record_t remaining;
+    assert(machine_fault_first_unread(&remaining) && remaining.key.code==5);
+    confirm(NULL);assert(navigations==1); /* stale click after close is inert */
+    machine_fault_clear();
+    current_page=UI_PAGE_BOOT;fault_popup_report_sensor_mask(1U<<23);
+    click_confirm();assert(current_page==UI_PAGE_SENSOR && navigations==2);
+    fault_popup_report_sensor_mask(0);
+    current_page=UI_PAGE_BOOT;fault_popup_report_runtime_fault(2);click_confirm();
+    assert(current_page==UI_PAGE_BOOT && navigations==2);fault_popup_clear_runtime();
+    current_page=UI_PAGE_MAIN;fault_popup_report_boot_result(5,2);click_confirm();
+    assert(current_page==UI_PAGE_MAIN && navigations==2);
+    machine_fault_clear();fault_popup_set_confirm_handler(NULL);
     for(unsigned language=0;language<2;++language) {
     ui_lang_set(language?LANGUAGE_CN:LANGUAGE_EN);
     for(unsigned source=0;source<4;++source)for(unsigned code=1;code<(source==0?6:source==1?14:source==2?8:32);++code) {

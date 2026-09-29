@@ -35,6 +35,14 @@ typedef struct {
 static gesture_runtime_t g_runtime;
 static ui_page_t g_pending_origin;
 static bool g_pending;
+static gesture_action_t g_pending_action;
+static uint64_t g_input_blocked_pages;
+static bool g_blocked_contact;
+static bool input_blocked(void)
+{
+    uint32_t page = (uint32_t)ui_manager_get_current_page();
+    return page < 64 && (g_input_blocked_pages & (UINT64_C(1) << page)) != 0;
+}
 static uint32_t g_pending_tick;
 static struct {
     bool registered;
@@ -87,7 +95,7 @@ static void gesture_navigate_async(void *user_data)
     ui_page_t page = ui_manager_get_current_page();
     uint32_t started = lv_tick_get();
     g_pending = false;
-    if(!gesture_service_enabled() || page != g_pending_origin || !gesture_action_allowed(page, action)) return;
+    if(input_blocked() || !gesture_service_enabled() || page != g_pending_origin || !gesture_action_allowed(page, action)) return;
     if(ui_page_05_set_password_request_back())return;
     if(page_policy_active() && g_page_policy.handle_action && g_page_policy.handle_action(action)) return;
     if(action == GESTURE_ACTION_HOME) {
@@ -125,7 +133,8 @@ static void gesture_queue(void)
     if(g_pending || g_runtime.origin != ui_manager_get_current_page()) return;
     g_pending_origin = g_runtime.origin;
     g_pending_tick = lv_tick_get();
-    void *data = (void *)(uintptr_t)g_runtime.action;
+    g_pending_action = g_runtime.action;
+    void *data = (void *)(uintptr_t)g_pending_action;
     /* Leave the input callback safely, but never wait for the visual return.
      * The system-layer hint lives independently of the outgoing page. */
     g_pending = lv_async_call(gesture_navigate_async, data) == LV_RES_OK;
@@ -139,6 +148,27 @@ static uint32_t g_pointer_owner;
 static gesture_pointer_policy_t g_pointer_policy;
 static bool g_pointer_captured;
 
+void gesture_service_set_input_blocked(uint32_t owner, bool blocked)
+{
+    if (owner >= 64) return;
+    uint64_t bit = UINT64_C(1) << owner;
+    if (!blocked) { g_input_blocked_pages &= ~bit; return; }
+    g_input_blocked_pages |= bit;
+    if (g_pending && (uint32_t)g_pending_origin == owner) {
+        lv_async_call_cancel(gesture_navigate_async, (void *)(uintptr_t)g_pending_action);
+        g_pending = false;
+    }
+    if (owner != (uint32_t)ui_manager_get_current_page()) return;
+    memset(&g_runtime, 0, sizeof(g_runtime));
+    g_pointer_captured = false;
+    g_blocked_contact = lv_port_indev_touch_count() != 0;
+    lv_point_t released = {0};
+    touch_feedback_sample(&released, 0);
+    touch_feedback_edge_hint(0, 0, 0);
+    if (g_blocked_contact) lv_port_indev_capture_pointer(NULL);
+}
+
+
 void gesture_service_set_pointer_policy(uint32_t owner, gesture_pointer_policy_t policy)
 { g_pointer_owner=owner; g_pointer_policy=policy; }
 void gesture_service_clear_pointer_policy(uint32_t owner)
@@ -148,6 +178,12 @@ static bool gesture_pointer_event(lv_indev_t *indev, lv_event_code_t event,
                                   const lv_point_t *point, uint8_t count, void *user_data)
 {
     LV_UNUSED(indev); LV_UNUSED(user_data);
+    if (input_blocked() || g_blocked_contact) {
+        g_blocked_contact = count != 0 && event != LV_EVENT_RELEASED;
+        memset(&g_runtime, 0, sizeof(g_runtime));
+        g_pointer_captured = false;
+        return true;
+    }
     if(app_standby_runtime_touch(count > 0 && event != LV_EVENT_RELEASED)) {
         memset(&g_runtime, 0, sizeof(g_runtime));
         touch_feedback_edge_hint(0, 0, 0);

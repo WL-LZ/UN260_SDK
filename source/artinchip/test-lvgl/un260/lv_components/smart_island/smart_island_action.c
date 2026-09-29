@@ -333,7 +333,9 @@ void smart_island_click_cb(lv_event_t *e)
             g_si_ctx.action.ignore_click_once = false;
             return;
         }
-        if (fault_popup_show_pending_now()) smart_island_warning_stop();
+        if (g_si_ctx.warning.fault.valid && fault_popup_show_key((machine_fault_key_t){
+            g_si_ctx.warning.fault.source,g_si_ctx.warning.fault.fault_type,g_si_ctx.warning.fault.code}))
+            smart_island_warning_stop();
         return;
     }
 

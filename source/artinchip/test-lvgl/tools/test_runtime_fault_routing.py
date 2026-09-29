@@ -12,6 +12,7 @@ parts=[('un260/machine_state/machine_state.c','machine_runtime_error_desc'),
        ('un260/app_service/app_counting_runtime.c','app_counting_runtime_on_runtime_fault')]
 code=r'''
 #include <assert.h>
+#include "un260/machine_state/machine_fault.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #include <stdbool.h>
@@ -21,6 +22,7 @@ code=r'''
 enum {SMART_ISLAND_WARNING_LEVEL_ERROR};
 static unsigned popups,notices,clears,restores;static uint8_t pending;
 static uint32_t now;static char message[80];
+static void app_fault_recovery_report(machine_fault_key_t key){(void)key;}
 static void fault_popup_clear_runtime(void){pending=0;++clears;}
 static void smart_island_restore_idle(void){++restores;}
 static void fault_popup_record_runtime_notice(uint8_t c){pending=c;}

@@ -32,14 +32,18 @@ static ui_main_layout_t host_saved_layout;
 static bool host_layout_initialized,host_save_fails;
 static unsigned host_layout_saves;
 static bool host_gestures=true,host_gesture_save_fails,host_standby_busy;
+#ifndef HOST_REAL_GESTURE
+void gesture_service_set_input_blocked(uint32_t owner,bool blocked){(void)owner;(void)blocked;}
 bool gesture_service_enabled(void) { return host_gestures; }
 bool gesture_service_set_enabled(bool enabled)
 { if(host_gesture_save_fails)return false;host_gestures=enabled;return true; }
-bool standby_store_busy(void) { return host_standby_busy; }
+
 void gesture_service_set_pointer_policy(uint32_t owner,gesture_pointer_policy_t cb)
 { (void)owner;host_pointer_policy=cb; }
 void gesture_service_clear_pointer_policy(uint32_t owner)
 { (void)owner;host_pointer_policy=NULL; }
+#endif
+bool standby_store_busy(void) { return host_standby_busy; }
 void ui_state_main_layout_get(ui_main_layout_t *layout)
 {
     if (!host_layout_initialized) { ui_main_layout_default(&host_saved_layout);host_layout_initialized=true; }
@@ -96,12 +100,18 @@ void perf_profile_report_event_us(const char *group,const char *name,uint32_t us
 { (void)group;(void)name;(void)us; }
 void perf_profile_watch_invalidation(const void *object,const char *name) { (void)object;(void)name; }
 void perf_profile_unwatch_invalidation(const void *object) { (void)object; }
+#ifndef HOST_REAL_FAULT
+void fault_popup_restore_island_notice(void) {}
 bool fault_popup_get_auto_enabled(void) { return fault_auto; }
 void fault_popup_set_auto_enabled(bool enabled) { fault_auto=enabled; }
 bool fault_popup_get_pending_fault(fault_source_t *source,uint8_t *type,uint8_t *code)
 { if(source)*source=FAULT_SRC_RUNTIME;if(type)*type=0;if(code)*code=2;return host_fault_pending; }
 bool fault_popup_show_pending_now(void) { return false; }
 bool fault_popup_is_showing(void) { return host_fault_showing; }
+bool fault_popup_show_key(machine_fault_key_t key) {(void)key;return false;}
+bool machine_fault_key_equal(machine_fault_key_t a,machine_fault_key_t b) {return a.source==b.source&&a.type==b.type&&a.code==b.code;}
+bool machine_fault_find(machine_fault_key_t key,machine_fault_record_t *out) {(void)key;(void)out;return host_fault_pending;}
+#endif
 bool touch_feedback_enabled(void) { return touch_enabled; }
 bool touch_feedback_set_enabled(bool enabled) { touch_enabled=enabled;return true; }
 bool ui_qr_data_is_ready(void) { return false; }

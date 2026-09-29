@@ -1,5 +1,7 @@
 #include "app_ui_runtime.h"
 #include "app_setting_notice.h"
+#include "app_fault_recovery.h"
+#include "app_boot_runtime.h"
 #include "un260/lv_components/ui_notice.h"
 #include "app_auto_qr.h"
 #include "app_standby_runtime.h"
@@ -119,10 +121,19 @@ static void app_ui_runtime_poll_operation_notices(void)
     }
 }
 
+static bool app_ui_runtime_confirm_fault(machine_fault_key_t key)
+{
+    if (app_boot_runtime_confirm_fault(key)) return true;
+    app_fault_recovery_confirm(key);
+    return false;
+}
+
 void app_ui_runtime_init(void)
 {
     ui_notice_init();
     app_setting_notice_init();
+    app_fault_recovery_init();
+    fault_popup_set_confirm_handler(app_ui_runtime_confirm_fault);
     g_language_generation = ui_lang_generation();
     work_mode_service_init();
     workspace_service_init();

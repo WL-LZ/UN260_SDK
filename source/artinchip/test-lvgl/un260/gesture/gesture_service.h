@@ -36,6 +36,10 @@ typedef bool (*gesture_pointer_policy_t)(lv_indev_t *, lv_event_code_t,
                                          const lv_point_t *, uint8_t);
 void gesture_service_set_pointer_policy(uint32_t owner, gesture_pointer_policy_t policy);
 void gesture_service_clear_pointer_policy(uint32_t owner);
+/* UI-thread, page-scoped input gate. Includes overlays, raw drags and queued
+ * gestures; unlocking never replays a contact held during the gate. Owners
+ * must release explicitly; page teardown does not release their gate. */
+void gesture_service_set_input_blocked(uint32_t owner, bool blocked);
 bool gesture_service_enabled(void);
 bool gesture_service_set_enabled(bool enabled);
 size_t gesture_service_definition_count(void);

@@ -206,6 +206,7 @@ void lv_port_indev_set_pointer_observer(lv_port_pointer_observer_t observer,
 
 void lv_port_indev_capture_pointer(lv_indev_t *indev)
 {
+    if (indev == NULL) indev = g_pointer_indev;
     if (indev == NULL || indev != g_pointer_indev) return;
     g_contact_captured = true;
     /* lv_indev_get_obj_act() is NULL between LVGL input reads. The driver

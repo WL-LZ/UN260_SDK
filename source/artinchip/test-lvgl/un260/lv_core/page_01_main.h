@@ -13,6 +13,8 @@ typedef enum {
 
 void ui_main_create(lv_obj_t* parent);
 void ui_main_destroy(void);
+/* Set by accepted count start/end reports, independent of page lifetime. */
+void page_01_main_set_counting_locked(bool locked);
 bool page_01_main_is_created(void);
 bool page_01_main_is_visible(void);
 lv_obj_t *page_01_main_find_obj(const char *name);

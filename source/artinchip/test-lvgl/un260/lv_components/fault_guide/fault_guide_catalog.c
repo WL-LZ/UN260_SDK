@@ -68,6 +68,18 @@ void fault_guide_lookup(machine_fault_key_t key, mf_guide_t *g)
 {
     if (!g) return;
     entry_t e = runtime[0];
+    if (key.source == MACHINE_FAULT_START && key.type == 1 && key.code == 2) {
+        memset(g,0,sizeof(*g));
+        g->title=T("No banknotes detected");g->location=T("Top feeder · QT");g->step_count=1;
+        g->steps[0]=step(T("Load notes"),T("Place banknotes in the feeder"),
+            T("Align the banknotes between the guides."),MF_FRONT,MF_HOPPER,MF_FOCUS);
+        return;
+    }
+    if (key.source == MACHINE_FAULT_BATCH) {
+        memset(g,0,sizeof(*g));
+        g->title=T("Batch full");g->location=T("Lower front · Stacker pocket");g->step_count=1;
+        g->steps[0]=remove_notes(MF_STACKER);return;
+    }
     if (key.source == MACHINE_FAULT_START) e = starts[key.type == 2 && key.code < sizeof(starts)/sizeof(starts[0]) ? key.code : 0];
     else if (key.source == MACHINE_FAULT_RUNTIME) e = runtime[key.code < sizeof(runtime)/sizeof(runtime[0]) ? key.code : 0];
     else if (key.source == MACHINE_FAULT_BOOT) e = boot[key.code < sizeof(boot)/sizeof(boot[0]) ? key.code : 0];
@@ -137,6 +149,7 @@ void fault_guide_format_code(machine_fault_key_t key, char *buffer, size_t size)
 {
     if (!buffer || !size) return;
     switch (key.source) {
+    case MACHINE_FAULT_BATCH: snprintf(buffer,size,"0x06/0x04"); break;
     case MACHINE_FAULT_BOOT: snprintf(buffer,size,"0x37/0x%02X/0x%02X",key.code,key.type); break;
     case MACHINE_FAULT_START: snprintf(buffer,size,"0x0A/0x%02X/0x%02X",key.type,key.code); break;
     case MACHINE_FAULT_SENSOR: snprintf(buffer,size,"0x02/bit%u",key.code); break;

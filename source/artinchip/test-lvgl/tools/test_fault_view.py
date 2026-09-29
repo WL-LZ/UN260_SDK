@@ -37,6 +37,14 @@ write_changed(conf, '''#ifndef LV_CONF_H
 sources = [root / p for p in ['tools/test_fault_view.c','un260/machine_state/machine_fault.c','un260/machine_state/machine_state.c',
  'un260/lv_components/fault_guide/fault_guide_catalog.c','un260/lv_components/fault_guide/machine_fault_view.c',
  'aic_ui/generated_fault_guide/machine_fault_assets.c','un260/font/ui_message_font.c']]
+# Execute the actual application navigation owner with the real popup.
+from test_main_view import function
+boot_owner = cache / 'boot_confirm_owner.c'
+write_changed(boot_owner, '#include "un260/app_service/app_boot_runtime.h"\n'
+    '#include "un260/lv_core/lv_page_manager.h"\n'
+    '#include "un260/lv_components/lv_fault_popup.h"\n' +
+    function((root/'un260/app_service/app_boot_runtime.c').read_text(), 'app_boot_runtime_confirm_fault'))
+sources.append(boot_owner)
 sources += [root / ('un260/font/lv_font_' + f + '.c') for f in fonts]
 sources += [root / ('un260/font/lv_font_message_cjk_' + str(n) + '.c') for n in (12,14,16,18,20,22,24,28)]
 sources += sorted(p for p in (lvgl / 'src').rglob('*.c') if p.name != 'qrcodegen.c')

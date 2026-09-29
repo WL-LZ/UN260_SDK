@@ -69,6 +69,12 @@ static bool sample(uint8_t n,int x,int y,int id_offset)
     lv_point_t center={x+(n?40*(n-1)/2:0),y};
     return observer(NULL,n?LV_EVENT_PRESSING:LV_EVENT_RELEASED,&center,n,NULL);
 }
+uint8_t lv_port_indev_touch_count(void){return fingers;}
+static unsigned captures;
+void lv_port_indev_capture_pointer(lv_indev_t *indev){(void)indev;++captures;}
+int lv_async_call_cancel(void(*cb)(void*),void *data){
+ if(queued==cb && queued_data==data){queued=NULL;return 0;}return 1;
+}
 static void drain(void){if(nav_wait)nav_timer.cb(&nav_timer);if(queued){void(*cb)(void*)=queued;queued=NULL;cb(queued_data);}}
 static void release(void){sample(0,0,0,0);drain();page=UI_PAGE_MENU;}
 int main(void)
@@ -211,5 +217,33 @@ int main(void)
     sample(1,48,180,0);sample(1,160,180,0);release();assert(back==before);
     /* Multiple queued SYN_REPORTs may be consumed at an identical UI tick. */
     sample(1,10,180,0);tick-=100;sample(1,90,180,0);release();assert(back==before+1);
+    /* A page gate precedes raw policies, modal handling and gesture settings. */
+    page=UI_PAGE_MAIN;enabled=false;raw_owned=false;password_modal=true;
+    gesture_service_set_pointer_policy(UI_PAGE_MAIN,raw_policy);
+    raw_before=raw_calls;gesture_service_set_input_blocked(UI_PAGE_MAIN,true);
+    for(int i=0;i<5;i++){assert(sample(1,600,200,0));assert(sample(0,600,200,0));}
+    assert(raw_calls==raw_before && password_modal);
+    assert(sample(2,10,200,0));assert(sample(2,200,80,0));assert(sample(0,200,80,0));
+    assert(!queued);gesture_service_set_input_blocked(UI_PAGE_MAIN,false);
+    assert(!sample(1,600,200,0));sample(0,600,200,0);
+    password_modal=false;enabled=true;gesture_service_clear_pointer_policy(UI_PAGE_MAIN);
+    /* Cancel even stationary holds immediately; never replay after unlock. */
+    sample(1,500,200,0);unsigned cap=captures;
+    gesture_service_set_input_blocked(UI_PAGE_MAIN,true);assert(captures==cap+1);
+    gesture_service_set_input_blocked(UI_PAGE_MAIN,false);
+    assert(sample(1,510,200,0));assert(sample(0,510,200,0));
+    assert(!sample(1,500,200,0));sample(0,500,200,0);
+    /* Already queued navigation stays cancelled even if start and end arrive
+       before the async callback. A gate survives clearing page policies. */
+    sample(2,200,240,0);sample(2,200,100,0);sample(0,200,100,0);assert(queued);
+    unsigned old_returns=returned;
+    gesture_service_set_input_blocked(UI_PAGE_MAIN,true);
+    gesture_service_clear_pointer_policy(UI_PAGE_MAIN);
+    gesture_service_set_input_blocked(UI_PAGE_MAIN,false);drain();assert(returned==old_returns);
+    gesture_service_set_input_blocked(UI_PAGE_MAIN,true);
+    page=UI_PAGE_MENU;assert(!sample(1,500,200,0));sample(0,500,200,0);
+    page=UI_PAGE_MAIN;assert(sample(1,500,200,0));assert(sample(0,500,200,0));
+    gesture_service_set_input_blocked(UI_PAGE_MAIN,false);
+    puts("PASS page touch gate: raw/modal/disabled-gesture coverage, hold drain, queued cancellation, hidden/recreated owner");
     puts("gesture: PASS (navigation without waiting for hint, cancellation, multi-touch and safety)");
 }

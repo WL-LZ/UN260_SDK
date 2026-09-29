@@ -40,8 +40,19 @@ void machine_fault_clear_code(machine_fault_source_t source, uint8_t code)
 
 bool machine_fault_report(machine_fault_key_t key)
 {
-    if (machine_fault_find(key, NULL)) return false;
-    if (key.source == MACHINE_FAULT_START || key.source == MACHINE_FAULT_RUNTIME)
+    for (size_t i = 0; i < count; ++i) {
+        if (!machine_fault_key_equal(records[i].key, key)) continue;
+        /* A fresh controller report after Confirm is a new occurrence, not
+         * an unread UI loop. Unchanged self-test/sensor snapshots stay read. */
+        if (records[i].acknowledged && (key.source == MACHINE_FAULT_START ||
+            key.source == MACHINE_FAULT_RUNTIME || key.source == MACHINE_FAULT_BATCH)) {
+            records[i].acknowledged = false;
+            return true;
+        }
+        return false;
+    }
+    if (key.source == MACHINE_FAULT_START || key.source == MACHINE_FAULT_RUNTIME ||
+        key.source == MACHINE_FAULT_BATCH)
         machine_fault_clear_source(key.source);
     if (count == MACHINE_FAULT_CAPACITY) return false;
     records[count++] = (machine_fault_record_t){ key, false };

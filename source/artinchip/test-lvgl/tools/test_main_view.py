@@ -72,7 +72,7 @@ def main():
         "un260/currency/currency_metadata.c", "un260/lv_system/app_clock.c"]
     sources += [ROOT / path for path in actual]
     sources = with_i18n(sources, ROOT)
-    font_inputs = sources + [ROOT / "un260/lv_core/page_01_main.c",
+    font_inputs = sources + [ROOT / "un260/lv_components/lv_fault_popup.c", ROOT / "un260/lv_core/page_01_main.c",
                              ROOT / "un260/lv_core/page_01_main_detail.c", ROOT / "un260/lv_core/page_01_main_quick.c"]
     fonts = {"lv_font_instrument_sans_bold_10"}
     for source in font_inputs:
@@ -155,6 +155,8 @@ void host_external_assets_release(void) {
 #define LV_USE_THEME_BASIC 0
 #define LV_USE_THEME_MONO 0
 #define LV_FONT_MONTSERRAT_12 1
+#define LV_FONT_MONTSERRAT_16 1
+#define LV_FONT_MONTSERRAT_24 1
 #define LV_FONT_MONTSERRAT_20 1
 #define LV_FONT_CUSTOM_DECLARE """ + " ".join(f"LV_FONT_DECLARE({font});" for font in sorted(fonts)) + "\n#endif\n")
         port = (ROOT / "lv_port_indev.c").read_text(encoding="utf-8")
@@ -188,7 +190,8 @@ const gesture_definition_t *gesture_service_definition(size_t index) {
     return index<gesture_service_definition_count()?&g_definitions[index]:NULL;
 }
 ''')
-        sources.append(catalog)
+        if not any(p.name == "gesture_service.c" for p in sources):
+            sources.append(catalog)
         skin = (ROOT / "un260/lv_components/lv_dma_snapshot_cache.c").read_text(encoding="utf-8")
         skin_presenter = work / "actual_skin_presenter.c"
         skin_presenter.write_text('#include <string.h>\n#include "un260/lv_components/lv_dma_snapshot_cache.h"\n' +

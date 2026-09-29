@@ -1,5 +1,6 @@
 #include "un260/lv_system/ui_i18n.h"
 #include "app_counting_runtime.h"
+#include "app_fault_recovery.h"
 #include "app_auto_qr.h"
 #include "un260/app_service/work_mode_service.h"
 #include "un260/counting/counting_multi_extra.h"
@@ -120,6 +121,8 @@ static bool app_counting_runtime_main_page_active(void)
 
 static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t len)
 {
+    page_01_main_set_counting_locked(true);
+    app_fault_recovery_count_started();
     diagnostic_calibration_feed_started();
     const bool previous_multi = counting_data_current()->multi_currency_result;
     currency_state_begin_count_session();
@@ -173,6 +176,7 @@ static void app_counting_runtime_on_start_failure(uint8_t type, uint8_t code)
     ui_message_t status;
     const char *description;
 
+    app_fault_recovery_report((machine_fault_key_t){MACHINE_FAULT_START,type,code});
     if (diagnostic_calibration_feed_failed(type, code)) {
         work_mode_service_hold_operation(WORK_MODE_OPERATION_CALIBRATION, false);
         cis_calib_ui_refresh();
@@ -232,10 +236,10 @@ static void app_counting_runtime_on_runtime_fault(uint8_t code)
 {
     static uint8_t last_notice;
     static uint32_t last_notice_tick;
+    app_fault_recovery_report((machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,code});
     if (code == 0x00) {
         last_notice = 0;
-        fault_popup_clear_runtime();
-        smart_island_restore_idle();
+        fault_popup_report_runtime_fault(0);
         return;
     }
 
@@ -516,6 +520,8 @@ void app_counting_runtime_handle_info(counting_session_state_t *session,
         app_counting_runtime_refresh_compact(sim_data);
         counting_history_append_frame("0x0E", buf, len);
     } else if (result.kind == COUNTING_INFO_REPLY_FINISHED) {
+        app_fault_recovery_count_finished();
+        page_01_main_set_counting_locked(false);
         int current_pcs = result.final_pcs;
 
         page_02_list_section_mark_dirty(PAGE_02_SECTION_A);

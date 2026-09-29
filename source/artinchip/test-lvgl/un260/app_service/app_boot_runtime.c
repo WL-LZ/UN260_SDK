@@ -297,3 +297,16 @@ void app_boot_runtime_poll(uint32_t now_ms, bool boot_page_active)
 
     app_boot_runtime_poll_prewarm(now_ms);
 }
+
+bool app_boot_runtime_confirm_fault(machine_fault_key_t key)
+{
+    if (ui_manager_get_current_page() != UI_PAGE_BOOT ||
+        (key.source != MACHINE_FAULT_BOOT && key.source != MACHINE_FAULT_SENSOR))
+        return false;
+
+    hide_fault_popup();
+    /* Direct switch preserves the old recovery route: SELF_TEST is not
+     * pushed into navigation history; remaining reports stay inspectable. */
+    ui_manager_switch(UI_PAGE_SENSOR);
+    return true;
+}

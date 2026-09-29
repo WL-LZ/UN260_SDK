@@ -1102,6 +1102,20 @@ void page_01_main_detail_refresh_rows_only(void)
 }
 
 static bool s_quick_owns_pointer;
+static bool s_counting_locked;
+void page_01_main_set_counting_locked(bool locked)
+{
+    s_counting_locked = locked;
+    gesture_service_set_input_blocked(UI_PAGE_MAIN, locked);
+    if (locked) {
+        page_01_main_quick_suspend();
+        s_quick_owns_pointer = false;
+        page_01_main_layout_suspend();
+    } else if (page_01_main_is_visible()) {
+        page_01_main_layout_resume();
+    }
+}
+
 static bool page_01_main_pointer(lv_indev_t *indev,lv_event_code_t event,const lv_point_t *point,uint8_t count)
 {
     if(!s_quick_owns_pointer && page_01_main_layout_is_editing()) {
@@ -1202,6 +1216,7 @@ void ui_main_create(lv_obj_t *parent)
     page_01_main_layout_attach(main_page,layout_items,page_01_apply_customer_layout);
     s_quick_owns_pointer=false;
     gesture_service_set_pointer_policy(UI_PAGE_MAIN,page_01_main_pointer);
+    if (s_counting_locked) page_01_main_set_counting_locked(true);
     s_main_dirty = 0;
     page_01_main_snapshot_capture();
 }
@@ -1324,6 +1339,7 @@ bool page_01_main_resume(void)
     if (!page_01_main_is_created()) return false;
     page_01_main_layout_resume();
     gesture_service_set_pointer_policy(UI_PAGE_MAIN,page_01_main_pointer);
+    if (s_counting_locked) page_01_main_set_counting_locked(true);
     const uint64_t started_us = perf_profile_is_enabled() ? app_clock_monotonic_us() : 0;
     page_01_main_detect_snapshot_changes();
     const uint32_t dirty = s_main_dirty;

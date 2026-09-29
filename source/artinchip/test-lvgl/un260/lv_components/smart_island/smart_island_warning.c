@@ -24,20 +24,19 @@ static void smart_island_warning_anim_text_opa_cb(void *var, int32_t value)
     lv_obj_set_style_text_opa((lv_obj_t *)var, (lv_opa_t)value, 0);
 }
 
-static void smart_island_warning_fault_capture(void)
+static machine_fault_key_t warning_key(void)
 {
-    fault_source_t source;
-    uint8_t fault_type;
-    uint8_t code;
-
-    if (fault_popup_get_pending_fault(&source, &fault_type, &code)) {
-        g_si_ctx.warning.fault.valid = true;
-        g_si_ctx.warning.fault.source = source;
-        g_si_ctx.warning.fault.fault_type = fault_type;
-        g_si_ctx.warning.fault.code = code;
-    } else {
-        smart_island_warning_fault_clear();
-    }
+    return (machine_fault_key_t){g_si_ctx.warning.fault.source,
+        g_si_ctx.warning.fault.fault_type,g_si_ctx.warning.fault.code};
+}
+bool smart_island_has_active_fault(void)
+{
+    return g_si_ctx.warning.fault.valid && machine_fault_find(warning_key(),NULL);
+}
+void smart_island_faults_changed(void)
+{
+    if (g_si_ctx.warning.fault.valid && !machine_fault_find(warning_key(),NULL))
+        smart_island_restore_idle();
 }
 
 void smart_island_warning_fault_clear(void)
@@ -48,9 +47,9 @@ void smart_island_warning_fault_clear(void)
     g_si_ctx.warning.fault.code = 0;
 }
 
-void smart_island_warning_stop(void)
+static void smart_island_warning_stop_motion(bool reset_shell)
 {
-    smart_island_view_notice_reset();
+    if (reset_shell) smart_island_view_notice_reset();
     if (g_si_ctx.objects.title && lv_obj_is_valid(g_si_ctx.objects.title)) {
         lv_anim_del(g_si_ctx.objects.title, smart_island_warning_anim_x_cb);
         lv_anim_del(g_si_ctx.objects.title, smart_island_warning_anim_text_opa_cb);
@@ -74,8 +73,13 @@ void smart_island_warning_stop(void)
     g_si_ctx.warning.collapse_running = false;
     g_si_ctx.warning.text_width_compact = 0;
     g_si_ctx.warning.text_width_expand = 0;
-    smart_island_reset_compact_header_position();
+    if (reset_shell) smart_island_reset_compact_header_position();
     smart_island_warning_apply_static_layout();
+}
+
+void smart_island_warning_stop(void)
+{
+    smart_island_warning_stop_motion(true);
 }
 
 static void smart_island_warning_apply_static_layout(void)
@@ -121,6 +125,18 @@ static void smart_island_warning_finish_notice(void)
         return;
     }
 
+    /* A controller fault outlives a cosmetic cycle and even Confirm (read).
+     * Only a matching recovery event removes the record. Repeat the text
+     * motion without collapsing to READY or sending any controller command. */
+    if (smart_island_has_active_fault()) {
+        if (g_si_ctx.lifecycle.suspended || fault_popup_is_showing()) {
+            smart_island_warning_stop();
+            g_si_ctx.warning.resume_animation_pending = true;
+        } else {
+            smart_island_warning_marquee_start();
+        }
+        return;
+    }
     g_si_ctx.warning.marquee_running = false;
     g_si_ctx.warning.collapse_running = true;
     smart_island_view_notice_collapse(
@@ -205,7 +221,8 @@ static void smart_island_warning_marquee_start(void)
         return;
     }
 
-    smart_island_warning_stop();
+    /* Text repeats keep the existing shell geometry and translations. */
+    smart_island_warning_stop_motion(false);
     title_text = lv_label_get_text(g_si_ctx.objects.title);
     title_font = lv_obj_get_style_text_font(g_si_ctx.objects.title, LV_PART_MAIN);
     text_width = (lv_coord_t)lv_txt_get_width(
@@ -295,8 +312,9 @@ static void smart_island_warning_marquee_start(void)
     else smart_island_warning_scroll_finish_cb(NULL);
 }
 
-void smart_island_notify_warning_level(const char *warn_text,
-                                       smart_island_warning_level_t level)
+static void notify_warning(const char *warn_text,
+                           smart_island_warning_level_t level,
+                           const machine_fault_key_t *key)
 {
     char next_warning_text[sizeof(g_si_ctx.warning.text)];
 
@@ -314,12 +332,14 @@ void smart_island_notify_warning_level(const char *warn_text,
     /* 同一条异常重复上报时不重启动画，避免按键动作触发重复闪烁。 */
     if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_WARNING &&
         g_si_ctx.warning.level == level &&
+        g_si_ctx.warning.fault.valid == (key != NULL) &&
+        (!key || machine_fault_key_equal(warning_key(),*key)) &&
         strcmp(g_si_ctx.warning.text, next_warning_text) == 0) {
         if (g_si_ctx.lifecycle.suspended) {
             g_si_ctx.lifecycle.dirty = true;
             return;
         }
-        if (!g_si_ctx.warning.marquee_running) {
+        if (!g_si_ctx.warning.marquee_running && !g_si_ctx.warning.collapse_running) {
             smart_island_warning_apply_static_layout();
             if (!fault_popup_is_showing()) {
                 smart_island_warning_marquee_start();
@@ -328,13 +348,15 @@ void smart_island_notify_warning_level(const char *warn_text,
         return;
     }
 
-    smart_island_warning_fault_capture();
-
-    /* Transient page-local failures (for example a rejected currency switch)
-     * already own their popup.  Do not cache their short island message while
-     * the island host page is suspended, otherwise it appears stale on MAIN. */
-    if (g_si_ctx.lifecycle.suspended && !g_si_ctx.warning.fault.valid) {
-        return;
+    /* Informational notices cannot displace an unresolved machine fault. */
+    if (!key && (g_si_ctx.lifecycle.suspended || smart_island_has_active_fault())) return;
+    smart_island_warning_stop();
+    smart_island_warning_fault_clear();
+    if (key) {
+        g_si_ctx.warning.fault.valid = true;
+        g_si_ctx.warning.fault.source = key->source;
+        g_si_ctx.warning.fault.fault_type = key->type;
+        g_si_ctx.warning.fault.code = key->code;
     }
 
     g_si_ctx.warning.resume_counting =
@@ -378,4 +400,15 @@ void smart_island_warning_resume_if_pending(void)
 void smart_island_notify_warning(const char *warn_text)
 {
     smart_island_notify_warning_level(warn_text, SMART_ISLAND_WARNING_LEVEL_WARNING);
+}
+
+void smart_island_notify_warning_level(const char *text, smart_island_warning_level_t level)
+{
+    notify_warning(text,level,NULL);
+}
+void smart_island_notify_fault(const char *text, machine_fault_key_t key)
+{
+    bool attention = key.source == MACHINE_FAULT_BATCH ||
+        (key.source == MACHINE_FAULT_START && key.type == 1 && key.code == 2);
+    notify_warning(text,attention ? SMART_ISLAND_WARNING_LEVEL_WARNING : SMART_ISLAND_WARNING_LEVEL_ERROR,&key);
 }

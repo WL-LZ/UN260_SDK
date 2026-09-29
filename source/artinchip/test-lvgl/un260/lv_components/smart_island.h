@@ -2,6 +2,7 @@
 #define SMART_ISLAND_H
 
 #include "lvgl/lvgl.h"
+#include "un260/machine_state/machine_fault.h"
 #include "un260/lv_system/ui_text.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -54,6 +55,9 @@ void smart_island_set_count_analysis(int valid_pcs, int suspect_pcs, int damaged
 void smart_island_clear_count_analysis(void); //清除本轮点钞分析
 void smart_island_notify_warning(const char *warn_text); //通知：警告出现
 void smart_island_notify_warning_level(const char *warn_text, smart_island_warning_level_t level); //通知：警告/报错
+void smart_island_notify_fault(const char *text, machine_fault_key_t key);
+bool smart_island_has_active_fault(void);
+void smart_island_faults_changed(void);
 void smart_island_restore_idle(void); //恢复默认待机态
 bool smart_island_is_expanded(void); //是否处于展开态
 
