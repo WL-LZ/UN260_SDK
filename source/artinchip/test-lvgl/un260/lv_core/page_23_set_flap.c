@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #include "page_23_set_flap.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
@@ -21,15 +22,15 @@ static void refresh(void)
     if (!frame.root) return;
     uint8_t position = machine_state_flap_position();
     const char *name = position == FLAP_POSITION_UP ? ui_text_get(names[0]) :
-                       position == FLAP_POSITION_DOWN ? ui_text_get(names[1]) : "Unknown";
+                       position == FLAP_POSITION_DOWN ? ui_text_get(names[1]) : ui_tr("Unknown");
     char text[128];
-    lv_snprintf(text,sizeof(text),"Confirmed position: %s",name);
+    lv_snprintf(text,sizeof(text),ui_tr("Confirmed position: %s"),name);
     if(strcmp(lv_label_get_text(confirmed),text))lv_label_set_text(confirmed,text);
     for (unsigned i = 0; i < 2; ++i) {
         bool selected = position == positions[i];
         if (selected) lv_obj_add_state(options[i], LV_STATE_CHECKED);
         else lv_obj_clear_state(options[i], LV_STATE_CHECKED);
-        if (pending) settings_detail_action_block(options[i], "Wait for the current flap movement to be confirmed.");
+        if (pending) settings_detail_action_block(options[i], UI_N_("Wait for the current flap movement to be confirmed."));
         else settings_detail_action_block(options[i], NULL);
     }
 }
@@ -46,11 +47,11 @@ static void choose(lv_event_t *event)
     uint8_t previous = machine_state_flap_position();
     if (target == previous) return;
     if (!setting_service_request_flap_position(target, previous)) {
-        ui_notice_post(UI_NOTICE_ERROR,"settings.flap","Flap position","Request not sent. Try again.");
+        ui_notice_post_text(UI_NOTICE_ERROR,"settings.flap",UI_N_("Flap position"),UI_N_("Request not sent. Try again."));
         return;
     }
     pending = true;
-    ui_notice_post(UI_NOTICE_PROGRESS,"settings.flap","Flap position","Waiting for controller...");
+    ui_notice_post_text(UI_NOTICE_PROGRESS,"settings.flap",UI_N_("Flap position"),UI_N_("Waiting for controller..."));
     refresh();
 }
 
@@ -64,8 +65,8 @@ void ui_page_23_set_flap_create(lv_obj_t *parent)
     lv_obj_set_style_bg_opa(frame.body, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(frame.body, 0, 0);
     lv_obj_t *row=lv_settings_panel(frame.body,0,0,1232,112);
-    lv_settings_label(row,"Flap position",24,25,&lv_font_instrument_sans_medium_22,0x1D2B34);
-    lv_settings_label(row,"Keep the note path clear when moving the flap.",24,61,&lv_font_instrument_sans_medium_14,0x586B78);
+    lv_settings_label(row,ui_tr("Flap position"),24,25,&lv_font_instrument_sans_medium_22,0x1D2B34);
+    lv_settings_label(row,ui_tr("Keep the note path clear when moving the flap."),24,61,&lv_font_instrument_sans_medium_14,0x586B78);
     lv_obj_t *base=lv_settings_segment_base(row,766,30,438,52);
     confirmed = lv_settings_label(frame.body, "", 24,136,
         &lv_font_instrument_sans_medium_16, 0x586B78);

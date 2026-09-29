@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "lv_components.h"
 #include "ui_notice.h"
 #include "lv_modal_dialog.h"
@@ -18,8 +19,8 @@ void show_boot_selftest_error_popup(const char *message)
 {
     if (lv_modal_dialog_is_visible(&boot_diagnostics)) return;
     const lv_modal_dialog_config_t config = {
-        .title="Self-test interrupted", .body=message,
-        .primary_text="Open diagnostics",
+        .title=ui_tr("Self-test interrupted"), .body=ui_tr(message),
+        .primary_text=ui_tr("Open diagnostics"),
         .title_font=&lv_font_instrument_sans_semibold_28,
         .body_font=&lv_font_instrument_sans_medium_16,
         .button_font=&lv_font_instrument_sans_semibold_16,
@@ -39,7 +40,7 @@ const char *get_system_error_desc(uint8_t code)
 }
 const char *get_counting_error_desc(uint8_t type,uint8_t code)
 {
-    if(type==1 && code==2)return "No banknotes detected";
+    if(type==1 && code==2)return UI_N_("No banknotes detected");
     const char *known=type==2 ? machine_start_error_desc(code) : NULL;
-    return known ? known : "Unrecognized start report";
+    return known ? known : UI_N_("Unrecognized start report");
 }

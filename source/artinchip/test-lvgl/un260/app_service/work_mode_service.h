@@ -30,6 +30,7 @@ void work_mode_service_set_diagnostic(bool active);
 bool work_mode_service_diagnostic_active(void);
 bool work_mode_service_diagnostic_ready(void);
 const char *work_mode_service_status_text(void);
+const char *work_mode_service_status_msgid(void);
 void work_mode_service_get_snapshot(work_mode_snapshot_t *snapshot);
 void work_mode_service_retry(void);
 enum {

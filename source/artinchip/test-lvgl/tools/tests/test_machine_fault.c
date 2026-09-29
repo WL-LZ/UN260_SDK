@@ -60,7 +60,7 @@ int main(void)
     fault_guide_format_code(key(MACHINE_FAULT_SENSOR,0,31),code,sizeof(code));assert(!strcmp(code,"0x02/bit31"));
     for(uint8_t i=1;i<=13;++i) {
         fault_guide_lookup(key(MACHINE_FAULT_START,2,i),&g);assert(g.step_count>=1&&g.step_count<=3);
-        for(uint8_t j=0;j<g.step_count;++j)assert(g.steps[j].title.en&&g.steps[j].body.en&&g.steps[j].short_title.en);
+        for(uint8_t j=0;j<g.step_count;++j)assert(g.steps[j].title.key&&g.steps[j].body.key&&g.steps[j].short_title.key);
     }
     puts("machine fault state/catalogue tests passed");return 0;
 }

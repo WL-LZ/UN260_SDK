@@ -1,3 +1,4 @@
+from test_i18n_support import with_i18n
 """Headless actual-LVGL notification rendering and lifecycle checks (ASan/UBSan)."""
 from pathlib import Path
 import concurrent.futures
@@ -51,6 +52,7 @@ sources += [root / 'un260/font/ui_message_font.c']
 sources += [root / f'un260/font/lv_font_message_cjk_{size}.c' for size in (12, 14, 16, 18, 20, 22, 24, 28)]
 sources += [root / ('un260/font/lv_font_' + font + '.c') for font in fonts]
 sources += sorted(p for p in (lvgl / 'src').rglob('*.c') if p.name != 'qrcodegen.c')
+sources = with_i18n(sources, root)
 flags = ['cc', '-std=gnu11', '-g', '-O1', '-Wall', '-Wextra', '-fsanitize=address,undefined',
          '-fno-sanitize-recover=all', '-no-pie', f'-I{cache}', f'-I{root}', f'-I{lvgl}',
          f'-DLV_CONF_PATH={conf}']

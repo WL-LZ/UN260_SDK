@@ -1,3 +1,5 @@
+#include "un260/lv_system/ui_i18n.h"
+#include "un260/lv_system/ui_message.h"
 #include "standby_store.h"
 #include "usb_storage.h"
 #include <pthread.h>
@@ -24,7 +26,7 @@ static bool last_success;
 static pthread_t thread;
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 static struct { bool importing, deleting; unsigned photo; standby_config_t cfg; } job;
-static char result[160];
+static ui_message_t result_info,message_info;
 static const char *paths[] = {
  "L:/usr/local/share/lvgl_data/standby/silver.png",
  "L:/usr/local/share/lvgl_data/standby/celadon.png",
@@ -118,19 +120,19 @@ static bool import_one(const char*path,unsigned slot,unsigned source) {
 finish:png_image_free(&image);free(input);free(rgba);free(out);return ok;
 }
 static bool imported_source(unsigned source){for(unsigned i=0;i<6;i++){if(!standby_photo_exists(i))continue;char p[160];snprintf(p,sizeof(p),"%s.source",paths[i+3]+2);FILE*f=fopen(p,"rb");unsigned value=0;if(f){size_t n=fread(&value,1,sizeof(value),f);fclose(f);if(n==sizeof(value)&&value==source)return true;}}return false;}
-static void* run(void*unused){(void)unused;bool ok;char message[160];
- if(job.deleting){ok=atomic_write(CFG,&job.cfg,sizeof(job.cfg));config_written=ok;if(ok){ok=unlink(paths[job.photo]+2)==0||errno==ENOENT;char meta[160];snprintf(meta,sizeof(meta),"%s.source",paths[job.photo]+2);if(ok)unlink(meta);}snprintf(message,sizeof(message),ok?"Imported photo deleted. Referenced layouts use daily rotation.":"Delete failed. Please try again.");}
+static void* run(void*unused){(void)unused;bool ok;ui_message_t job_message;
+ if(job.deleting){ok=atomic_write(CFG,&job.cfg,sizeof(job.cfg));config_written=ok;if(ok){ok=unlink(paths[job.photo]+2)==0||errno==ENOENT;char meta[160];snprintf(meta,sizeof(meta),"%s.source",paths[job.photo]+2);if(ok)unlink(meta);}ui_message_key(&job_message,ok?UI_N_("Imported photo deleted. Referenced layouts use daily rotation."):UI_N_("Delete failed. Please try again."));}
  else if(job.importing){unsigned found=0,added=0,failed=0;
-  if(!usb_storage_prepare()){ok=false;snprintf(message,sizeof(message),"USB is not available. Insert a drive and try again.");}
+  if(!usb_storage_prepare()){ok=false;ui_message_key(&job_message,UI_N_("USB is not available. Insert a drive and try again."));}
   else {for(unsigned i=1;i<=99;i++){
    char path[128];snprintf(path,sizeof(path),STANDBY_USB_DIRECTORY "/un260_delay_%02u.png",i);
    if(access(path,F_OK))continue;
    found++;if(imported_source(i)){failed++;continue;}
    unsigned slot=0;while(slot<6&&standby_photo_exists(slot))slot++;
    if(slot>=6){failed++;continue;}if(import_one(path,slot,i))added++;else failed++;
-  }ok=added>0;snprintf(message,sizeof(message),"Found %u. Imported %u. Skipped %u. Maximum 6 photos.",found,added,failed);}
- }else {ok=atomic_write(CFG,&job.cfg,sizeof(job.cfg));snprintf(message,sizeof(message),ok?"Standby settings saved.":"Save failed. Previous settings were kept.");}
- pthread_mutex_lock(&lock);success=ok;snprintf(result,sizeof(result),"%s",message);done=true;pthread_mutex_unlock(&lock);return NULL;
+  }ok=added>0;ui_message_uint3(&job_message,UI_N_("Found %u. Imported %u. Skipped %u. Maximum 6 photos.") ,found,added,failed);}
+ }else {ok=atomic_write(CFG,&job.cfg,sizeof(job.cfg));ui_message_key(&job_message,ok?UI_N_("Standby settings saved."):UI_N_("Save failed. Previous settings were kept."));}
+ pthread_mutex_lock(&lock);success=ok;result_info=job_message;done=true;pthread_mutex_unlock(&lock);return NULL;
 }
 bool standby_store_busy(void){return busy;}
 static bool start(bool importing,const standby_config_t*c){if(busy)return false;if(c&&!standby_config_valid(c))return false;
@@ -139,5 +141,7 @@ bool standby_store_save(const standby_config_t*c){return start(false,c);}
 bool standby_store_import(void){return start(true,NULL);}
 bool standby_store_delete(unsigned photo){if(busy||photo<3||photo>8)return false;job.cfg=*standby_config();for(unsigned m=0;m<2;m++)for(unsigned i=0;i<3;i++)if(job.cfg.layout[m][i].photo==photo){job.cfg.layout[m][i].photo=1;job.cfg.layout[m][i].scheduled=1;}job.importing=false;job.deleting=true;job.photo=photo;done=false;busy=true;if(pthread_create(&thread,NULL,run,NULL)){busy=false;return false;}return true;}
 bool standby_store_poll(char*message,unsigned capacity){if(!busy)return false;pthread_mutex_lock(&lock);bool ready=done;pthread_mutex_unlock(&lock);if(!ready)return false;
- pthread_join(thread,NULL);last_success=success;if((success&&!job.importing)||(job.deleting&&config_written))saved=job.cfg;snprintf(message,capacity,"%s",result);busy=false;return true;}
+ pthread_join(thread,NULL);last_success=success;if((success&&!job.importing)||(job.deleting&&config_written))saved=job.cfg;message_info=result_info;ui_message_render(&message_info,message,capacity);busy=false;return true;}
 bool standby_store_last_success(void){return last_success;}
+
+const ui_message_t *standby_store_message_info(void){return &message_info;}

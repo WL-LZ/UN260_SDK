@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_core/boot_anim/boot_theme_config.h"
 #if UI_BOOT_ANIM_THEME != UI_BOOT_ANIM_THEME_D
 #include "un260/lv_core/page_08_boot.h"
@@ -41,32 +42,32 @@ static void boot_page_context_reset(void)
 }
 
 static const char* boot_selftest_base_names[BOOT_SELFTEST_LIST_COUNT] = {
-    "Read config parameters",
-    "Sensor self-test ",
-    "Motor self-test ",
-    "Electromagnet self-test ",
-    "Image board self-test ",
+    UI_N_("Read config parameters"),
+    UI_N_("Sensor self-test "),
+    UI_N_("Motor self-test "),
+    UI_N_("Electromagnet self-test "),
+    UI_N_("Image board self-test "),
 };
 static const char* boot_selftest_running_names[BOOT_SELFTEST_LIST_COUNT] = {
-    "Read config parameters ",
-    "Sensor self-test ",
-    "Motor self-test ",
-    "Electromagnet self-test ",
-    "Image board self-test ",
+    UI_N_("Read config parameters "),
+    UI_N_("Sensor self-test "),
+    UI_N_("Motor self-test "),
+    UI_N_("Electromagnet self-test "),
+    UI_N_("Image board self-test "),
 };
 static const char* boot_selftest_success_names[BOOT_SELFTEST_LIST_COUNT] = {
-    "Read config parameters success",
-    "Sensor self-test success",
-    "Motor self-test success",
-    "Electromagnet self-test success",
-    "Image board self-test success",
+    UI_N_("Read config parameters success"),
+    UI_N_("Sensor self-test success"),
+    UI_N_("Motor self-test success"),
+    UI_N_("Electromagnet self-test success"),
+    UI_N_("Image board self-test success"),
 };
 static const char* boot_selftest_failed_names[BOOT_SELFTEST_LIST_COUNT] = {
-    "Read config parameters failed",
-    "Sensor self-test failed",
-    "Motor self-test failed",
-    "Electromagnet self-test failed",
-    "Image board self-test failed",
+    UI_N_("Read config parameters failed"),
+    UI_N_("Sensor self-test failed"),
+    UI_N_("Motor self-test failed"),
+    UI_N_("Electromagnet self-test failed"),
+    UI_N_("Image board self-test failed"),
 };
 ui_element_t page_08_curr_obj[] = {
     // 背景图
@@ -173,7 +174,7 @@ static void boot_progress_create(lv_obj_t* parent)
     lv_obj_clear_flag(g_boot_page.progress_fill, LV_OBJ_FLAG_SCROLLABLE);
 
     g_boot_page.progress_loading_label = lv_label_create(parent);
-    lv_label_set_text(g_boot_page.progress_loading_label, "LOADING");
+    lv_label_set_text(g_boot_page.progress_loading_label, ui_tr("LOADING"));
     lv_obj_set_pos(g_boot_page.progress_loading_label, 44, 361);
     lv_obj_set_style_text_color(g_boot_page.progress_loading_label,
                                 lv_color_hex(0x6D92AA), 0);
@@ -228,7 +229,7 @@ static void boot_selftest_list_create(lv_obj_t* parent) // 创建自检卡片列
 
     for (uint8_t i = 0; i < BOOT_SELFTEST_LIST_COUNT; i++) {
         lv_selftest_list_set_item(g_boot_page.selftest_list, i,
-                                  boot_selftest_base_names[i],
+                                  ui_tr(boot_selftest_base_names[i]),
                                   LV_SELFTEST_LIST_STATE_PENDING);
     }
 }
@@ -333,14 +334,14 @@ static const char *boot_selftest_list_text_get(uint8_t index, lv_selftest_list_s
 
     switch (state) {
     case LV_SELFTEST_LIST_STATE_LOADING:
-        return boot_selftest_running_names[index];
+        return ui_tr(boot_selftest_running_names[index]);
     case LV_SELFTEST_LIST_STATE_SUCCESS:
-        return boot_selftest_success_names[index];
+        return ui_tr(boot_selftest_success_names[index]);
     case LV_SELFTEST_LIST_STATE_ERROR:
-        return boot_selftest_failed_names[index];
+        return ui_tr(boot_selftest_failed_names[index]);
     case LV_SELFTEST_LIST_STATE_PENDING:
     default:
-        return boot_selftest_base_names[index];
+        return ui_tr(boot_selftest_base_names[index]);
     }
 }
 

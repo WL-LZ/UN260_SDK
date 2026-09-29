@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #include "lvgl/lvgl.h"
 #include "un260/lv_core/lv_page_manager.h"
@@ -25,7 +26,7 @@
 #include "un260/currency/currency_state.h"
 
 static void page_01_qr_show_toast(ui_text_id_t text_id)
-{ui_notice_post(UI_NOTICE_WARNING,"export.qr","QR export",ui_text_get(text_id));}
+{ui_notice_post_text(UI_NOTICE_WARNING,"export.qr",UI_N_("QR export"),ui_text_msgid(text_id));}
 
 static void page_01_qr_show_popup(void) //显示当前点钞结果二维码
 {
@@ -189,8 +190,7 @@ void page_01_fo_btn_event_cb(lv_event_t* e) //切换主界面底部F/O开关
 void page_01_bottom_batch_btn_event_cb(lv_event_t* e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    if (!workspace_service_batch_next())
-        ui_notice_post(UI_NOTICE_WARNING,"settings.batch","Batch unchanged","Finish the current operation, then try again.");
+    (void)workspace_service_batch_next();
 }
 
 void page_01_bottom_speed_btn_event_cb(lv_event_t* e) //切换主界面底部C区速度
@@ -220,13 +220,13 @@ void page_01_print_btn_event_cb(lv_event_t* e)
 
     if (currency_state_multi_selected() ||
         !counting_data_monetary_result_supported(counting_data_current())) {
-        ui_notice_post(UI_NOTICE_WARNING,"print.request","Printing",ui_text_get(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED));
+        ui_notice_post_text(UI_NOTICE_WARNING,"print.request",UI_N_("Printing"),ui_text_msgid(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED));
         return;
     }
 
     // 只有金额和张数都为 0 时，才提示先点钞
     if (counting_data_current()->total_amount <= 0.0f && counting_data_current()->total_pcs <= 0) {
-        ui_notice_post(UI_NOTICE_WARNING,"print.request","Printing",ui_text_get(UI_TEXT_WIDGET_PRINT_TOAST_COUNT_FIRST));
+        ui_notice_post_text(UI_NOTICE_WARNING,"print.request",UI_N_("Printing"),ui_text_msgid(UI_TEXT_WIDGET_PRINT_TOAST_COUNT_FIRST));
         return;
     }
 
@@ -247,10 +247,10 @@ void page_01_print_btn_event_cb(lv_event_t* e)
     payload[8] = now.second;
 
     if (protocol_send(0x3C, payload, 9) < 0) {
-        ui_notice_post(UI_NOTICE_ERROR,"print.request","Print request not sent","Check controller connection.");
+        ui_notice_post_text(UI_NOTICE_ERROR,"print.request",UI_N_("Print request not sent"),UI_N_("Check controller connection."));
         return;
     }
-    ui_notice_post(UI_NOTICE_INFO,"print.request","Print request sent",NULL);
+    ui_notice_post_text(UI_NOTICE_INFO,"print.request",UI_N_("Print request sent"),NULL);
 }
 
 void page_01_qr_btn_event_cb(lv_event_t* e)

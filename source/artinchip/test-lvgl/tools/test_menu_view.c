@@ -400,3 +400,6 @@ int main(void)
     assert(settings_detail_overlay_is_open());ui_page_03_menu_destroy();assert(!menu.root&&!settings_detail_overlay_is_open());
     tick(200);test_auto_qr();puts("PASS native Menu: six tabs, real ledger decisions/close/QR, batch drafts/keypad, minimum-one delete, registration, outside-close, resume/destroy; 1280x400");return 0;
 }
+
+const char *work_mode_service_status_msgid(void){return work_mode_service_status_text();}
+const ui_message_t *workspace_store_message_info(void){static ui_message_t m;ui_message_key(&m,workspace_store_message());return &m;}

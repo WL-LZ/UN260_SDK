@@ -6,7 +6,7 @@
 static bool post(ui_notice_state_t *s, ui_notice_kind_t kind, const char *key,
                  const char *title, const char *detail)
 {
-    ui_notice_config_t c = { kind, key, title, detail, 0 };
+    ui_notice_config_t c = { .kind=kind, .key=key, .title=title, .detail=detail };
     return ui_notice_state_post(s, &c);
 }
 
@@ -36,14 +36,14 @@ static void test_priority_resume_and_coalesce(void)
     assert(!ui_notice_state_elapse(&s, 1200));
     assert(post(&s, UI_NOTICE_ERROR, "error", "Failed", "Check connection"));
     assert(s.active.kind == UI_NOTICE_ERROR && s.queued_count == 1);
-    assert(s.queued[0].remaining_ms == 3300);
+    assert(s.queued[0].remaining_ms == 1050);
     assert(post(&s, UI_NOTICE_ERROR, "error", "Failed", "Check connection"));
     assert(s.active.repeats == 2 && s.queued_count == 1);
     assert(post(&s, UI_NOTICE_ERROR, "error", "New failure", NULL));
     assert(s.active.repeats == 1);
     assert(ui_notice_state_remove(&s, NULL, true));
-    assert(strcmp(s.active.key, "one") == 0 && s.active.remaining_ms == 3300);
-    assert(!ui_notice_state_elapse(&s, 3299));
+    assert(strcmp(s.active.key, "one") == 0 && s.active.remaining_ms == 1050);
+    assert(!ui_notice_state_elapse(&s, 1049));
     assert(ui_notice_state_elapse(&s, 1));
     assert(ui_notice_state_remove(&s, NULL, true));
     assert(!s.has_active);
@@ -70,7 +70,7 @@ static void test_queued_result_and_clear(void)
 static void test_bounded_queue_and_input_ownership(void)
 {
     ui_notice_state_t s;
-    char key[80], title[300], detail[400];
+    char key[80], title[400], detail[400];
     unsigned i;
     ui_notice_state_init(&s);
     post(&s, UI_NOTICE_ERROR, "active", "Critical", NULL);
@@ -95,14 +95,20 @@ static void test_bounded_queue_and_input_ownership(void)
            strcmp(s.active.detail, "Detail") == 0);
     assert(!post(&s, UI_NOTICE_INFO, "invalid", "", NULL));
     memset(title, 'a', sizeof(title));
-    title[190] = (char)0xE4; title[191] = (char)0xB8; title[192] = (char)0xAD;
+    title[318] = (char)0xE4; title[319] = (char)0xB8; title[320] = (char)0xAD;
     title[sizeof(title)-1] = '\0';
     assert(post(&s, UI_NOTICE_INFO, "stack", title, NULL));
-    assert(strlen(s.active.title) == 190);
+    assert(strlen(s.active.title) == 318);
 }
 
 int main(void)
 {
+    const uint32_t expected[]={1800,3750,3250,0,2250};
+    for(unsigned i=0;i<5;++i){
+        ui_notice_state_t s;ui_notice_state_init(&s);
+        assert(post(&s,(ui_notice_kind_t)i,"duration","Duration",NULL));
+        assert(s.active.remaining_ms==expected[i]);
+    }
     test_task_result_and_dismissal();
     test_priority_resume_and_coalesce();
     test_queued_result_and_clear();

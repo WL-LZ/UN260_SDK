@@ -3,12 +3,7 @@
 
 #include "un260/lv_system/lv_str.h"
 #include <stdint.h>
-
-typedef struct {
-    const char* en;
-    const char* cn;
-    const char* kr;
-} ui_text_item_t;
+#include "ui_i18n.h"
 
 typedef enum {
     UI_TEXT_PAGE01_QR_CODE = 0,
@@ -701,7 +696,8 @@ typedef enum {
     UI_TEXT_MAX
 } ui_text_id_t;
 
-const char* ui_text_get(ui_text_id_t text_id); //统一获取当前语言文本
+const char* ui_text_get(ui_text_id_t text_id);
+const char* ui_text_msgid(ui_text_id_t text_id); //统一获取当前语言文本
 /* Localized presentation only; counting_reject_reason_get remains unchanged. */
 const char* ui_text_counting_reject_reason(uint8_t code);
 

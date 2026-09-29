@@ -55,6 +55,7 @@ int main(void) {
     user_cfg_performance_monitor_load();
     user_cfg_performance_profile_load();
     user_cfg_gesture_load();
+    user_cfg_language_load();
     gesture_service_init();
 #endif
     device_info_init(UI_VERSION);

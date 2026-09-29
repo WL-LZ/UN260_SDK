@@ -3,6 +3,7 @@
 from pathlib import Path
 import subprocess
 import tempfile
+from test_i18n_support import with_i18n
 
 root = Path(__file__).resolve().parents[1]
 fixture = r'''
@@ -107,15 +108,22 @@ cfg_fixture = r'''
 #include <stdio.h>
 #include <string.h>
 #include "un260/lv_system/user_cfg.h"
+#include "un260/lv_system/ui_lang.h"
 int main(int argc,char**argv) {
     assert(argc==2);
     bool configured=!strcmp(argv[1],"configured");
+    ui_lang_set(LANGUAGE_CN); /* Existing draft used only to test publication. */
+    uint32_t language_before=ui_lang_generation();
     user_cfg_startup_snapshot_t s;
     user_cfg_startup_read(&s);
+    assert(ui_lang_get()==LANGUAGE_CN && ui_lang_generation()==language_before);
+    /* Syntactically valid but unknown tags are resolved by UI registry, not storage. */
+    assert(!strcmp(s.locale,!strcmp(argv[1],"invalid")?"invalid":"en"));
     assert(!strcmp(user_cfg_password_get(),"1111") && !user_cfg_gesture_enabled());
     assert(!strcmp(s.password,configured?"9876":"1111"));
     assert(s.screenshot==!configured && s.recording==configured && s.gesture==configured);
     user_cfg_startup_apply(&s);
+    assert(ui_lang_get()==LANGUAGE_EN);
     assert(!strcmp(user_cfg_password_get(),s.password));
     assert(user_cfg_gesture_enabled()==configured);
     user_cfg_startup_read(NULL); user_cfg_startup_apply(NULL);
@@ -133,9 +141,11 @@ with tempfile.TemporaryDirectory(prefix='un260-real-startup-') as directory:
         print('PASS',case,flush=True)
     cfgdir=tmp/'cfg'; cfgdir.mkdir()
     src.write_text(cfg_fixture)
-    subprocess.run(common+['-DUI_STATE_DIR="'+str(cfgdir)+'"',str(src),str(root/'un260/lv_system/user_cfg.c'),'-o',str(exe)],check=True)
+    cfg_sources=with_i18n([src,root/'un260/lv_system/user_cfg.c'],root)
+    subprocess.run(common+['-DUI_STATE_DIR="'+str(cfgdir)+'"',*map(str,cfg_sources),'-o',str(exe)],check=True)
     subprocess.run([str(exe),'missing'],check=True)
     (cfgdir/'password.cfg').write_text('9876\n')
+    (cfgdir/'language.cfg').write_text('en\n')
     for name,value in [('screenshot',0),('screen_recording',1),('performance_monitor',1),('performance_profile',1),('gestures',1)]:
         (cfgdir/(name+'.cfg')).write_text(str(value))
     subprocess.run([str(exe),'configured'],check=True)

@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #include "page_20_set_print.h"
 #include "un260/lv_core/lv_page_manager.h"
@@ -57,7 +58,7 @@ static lv_obj_t *receipt_paper, *receipt_body, *receipt_caption;
 static void print_refresh_view(void);
 
 static void print_notice(ui_notice_kind_t kind,const char *message)
-{ui_notice_post(kind,"settings.receipt","Receipt settings",message);}
+{ui_notice_post_text(kind,"settings.receipt",UI_N_("Receipt settings"),message);}
 bool ui_page_20_set_print_is_saving(void){return print_saving;}
 
 
@@ -73,7 +74,7 @@ static void print_set_active_field(bool active, print_field_t field)
 static void print_request_started(void)
 {
     print_pending = true;
-    print_notice(UI_NOTICE_PROGRESS,"Applying settings...");
+    print_notice(UI_NOTICE_PROGRESS,UI_N_("Applying settings..."));
     if (print_page) print_refresh_view();
 }
 
@@ -100,7 +101,7 @@ static uint8_t print_parse_space(const char* value)
 static bool print_send_field(print_config_field_t field,const print_config_value_t *target)
 {
     if(!print_config_request_field(field,target)){
-        print_notice(UI_NOTICE_ERROR,"Request not sent. Check controller connection.");
+        print_notice(UI_NOTICE_ERROR,UI_N_("Request not sent. Check controller connection."));
         return false;
     }
     print_request_started();
@@ -116,7 +117,7 @@ static void print_ask_leave(bool home)
 {
     if(print_pending||print_saving)return;
     print_leave_home=home;
-    if(print_dirty())settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING,"Discard changes?","The receipt changes have not been saved.","Discard","Keep editing",print_leave,NULL,NULL);
+    if(print_dirty())settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING,ui_tr("Discard changes?"),ui_tr("The receipt changes have not been saved."),ui_tr("Discard"),ui_tr("Keep editing"),print_leave,NULL,NULL);
     else print_leave(NULL);
 }
 static void print_esc_cb(lv_event_t *e)
@@ -135,7 +136,7 @@ static void print_cancel(lv_event_t *e)
 {
     (void)e;if(print_pending||print_saving)return;
     print_config_get(&print_draft);print_refresh_view();
-    print_notice(UI_NOTICE_INFO,"Changes discarded.");
+    print_notice(UI_NOTICE_INFO,UI_N_("Changes discarded."));
 }
 static void print_apply_next(void)
 {
@@ -152,9 +153,9 @@ static void print_apply_next(void)
     }else if(next.content!=print_draft.content){
         next.content=print_draft.content;sent=print_send_field(PRINT_CONFIG_CONTENT,&next);
     }else{
-        print_saving=false;print_refresh_view();print_notice(UI_NOTICE_SUCCESS,"All changes confirmed.");return;
+        print_saving=false;print_refresh_view();print_notice(UI_NOTICE_SUCCESS,UI_N_("All changes confirmed."));return;
     }
-    if(!sent){print_saving=false;print_refresh_view();print_notice(UI_NOTICE_ERROR,"Save incomplete. Confirmed changes remain; retry Save.");}
+    if(!sent){print_saving=false;print_refresh_view();print_notice(UI_NOTICE_ERROR,UI_N_("Save incomplete. Confirmed changes remain; retry Save."));}
 }
 static void print_save(lv_event_t *e)
 {
@@ -297,36 +298,36 @@ static void print_refresh_view(void)
         lv_obj_set_height(receipt_paper,176+blank);
         lv_obj_set_y(receipt_body,top);
         lv_label_set_text(receipt_caption,lines>5?
-            "Example / blank spacing scaled":"Receipt preview / Example data");
+            ui_tr("Example / blank spacing scaled"):ui_tr("Receipt preview / Example data"));
         lv_label_set_text(receipt_titles[0],config.head1[0]?config.head1:"UN260");
-        lv_label_set_text(receipt_titles[1],config.head2[0]?config.head2:"COUNT REPORT");
-        lv_label_set_text(receipt_content,config.content==PRINT_CONTENT_LIST?"Denomination summary":config.content==PRINT_CONTENT_SN?"Serial number records":"Summary + serial numbers");
+        lv_label_set_text(receipt_titles[1],config.head2[0]?config.head2:ui_tr("COUNT REPORT"));
+        lv_label_set_text(receipt_content,config.content==PRINT_CONTENT_LIST?ui_tr("Denomination summary"):config.content==PRINT_CONTENT_SN?ui_tr("Serial number records"):ui_tr("Summary + serial numbers"));
     }
     for(unsigned row=0;row<2;row++)for(unsigned i=0;i<3;i++)if(space_presets[row][i]){
         lv_obj_t *o=space_presets[row][i];
         if((row?config.space_bottom:config.space_top)==i)lv_obj_add_state(o,LV_STATE_CHECKED);else lv_obj_clear_state(o,LV_STATE_CHECKED);
-        if(print_pending)settings_detail_action_block(o, print_pending || print_saving ? "Wait for the current print settings request to finish." : "No changes to save.");else settings_detail_action_block(o, NULL);
+        if(print_pending)settings_detail_action_block(o, print_pending || print_saving ? UI_N_("Wait for the current print settings request to finish.") : UI_N_("No changes to save."));else settings_detail_action_block(o, NULL);
     }
     if(print_save_button){
-        if(print_pending||print_saving||!print_dirty())settings_detail_action_block(print_save_button, print_pending || print_saving ? "Wait for the current print settings request to finish." : "No changes to save.");else settings_detail_action_block(print_save_button, NULL);
-        if(print_pending||print_saving)settings_detail_action_block(print_cancel_button, print_pending || print_saving ? "Wait for the current print settings request to finish." : "No changes to save.");else settings_detail_action_block(print_cancel_button, NULL);
-        if(print_pending||print_saving)settings_detail_action_block(print_frame.back, print_pending || print_saving ? "Wait for the current print settings request to finish." : "No changes to save.");else settings_detail_action_block(print_frame.back, NULL);
-        if(!print_pending&&!print_saving)lv_label_set_text(print_frame.message,print_dirty()?"Unsaved changes. Scroll for more options.":"5 settings. Scroll for more options.");
+        if(print_pending||print_saving||!print_dirty())settings_detail_action_block(print_save_button, print_pending || print_saving ? UI_N_("Wait for the current print settings request to finish.") : UI_N_("No changes to save."));else settings_detail_action_block(print_save_button, NULL);
+        if(print_pending||print_saving)settings_detail_action_block(print_cancel_button, print_pending || print_saving ? UI_N_("Wait for the current print settings request to finish.") : UI_N_("No changes to save."));else settings_detail_action_block(print_cancel_button, NULL);
+        if(print_pending||print_saving)settings_detail_action_block(print_frame.back, print_pending || print_saving ? UI_N_("Wait for the current print settings request to finish.") : UI_N_("No changes to save."));else settings_detail_action_block(print_frame.back, NULL);
+        if(!print_pending&&!print_saving)lv_label_set_text(print_frame.message,print_dirty()?ui_tr("Unsaved changes. Scroll for more options."):ui_tr("5 settings. Scroll for more options."));
     }
     if (value_space_top) lv_label_set_text_fmt(value_space_top, "%u", (unsigned)config.space_top);
-    if (value_head1) lv_label_set_text(value_head1, config.head1[0] ? config.head1 : "Not set");
-    if (value_head2) lv_label_set_text(value_head2, config.head2[0] ? config.head2 : "Not set");
+    if (value_head1) lv_label_set_text(value_head1, config.head1[0] ? config.head1 : ui_tr("Not set"));
+    if (value_head2) lv_label_set_text(value_head2, config.head2[0] ? config.head2 : ui_tr("Not set"));
     if (value_space_bottom) lv_label_set_text_fmt(value_space_bottom, "%u", (unsigned)config.space_bottom);
     for (unsigned i = 0; i < 3; ++i) {
         if (!content_boxes[i]) continue;
         if (config.content == i + 1) lv_obj_add_state(content_boxes[i], LV_STATE_CHECKED);
         else lv_obj_clear_state(content_boxes[i], LV_STATE_CHECKED);
-        if (print_pending) settings_detail_action_block(content_boxes[i], print_pending || print_saving ? "Wait for the current print settings request to finish." : "No changes to save.");
+        if (print_pending) settings_detail_action_block(content_boxes[i], print_pending || print_saving ? UI_N_("Wait for the current print settings request to finish.") : UI_N_("No changes to save."));
         else settings_detail_action_block(content_boxes[i], NULL);
     }
     for (unsigned i = 0; i < 4; ++i) {
         if (!field_boxes[i]) continue;
-        if (print_pending) settings_detail_action_block(field_boxes[i], print_pending || print_saving ? "Wait for the current print settings request to finish." : "No changes to save.");
+        if (print_pending) settings_detail_action_block(field_boxes[i], print_pending || print_saving ? UI_N_("Wait for the current print settings request to finish.") : UI_N_("No changes to save."));
         else settings_detail_action_block(field_boxes[i], NULL);
     }
 }
@@ -339,7 +340,7 @@ static void print_create_field(lv_obj_t *parent, int y, const char *title,
     lv_settings_label(parent, title, 20, y + 6,
         &lv_font_instrument_sans_medium_16, 0x1D2B34);
     bool numeric=field==PRINT_FIELD_SPACE_TOP||field==PRINT_FIELD_SPACE_BOTTOM;
-    lv_settings_label(parent,numeric?"Blank lines / tap value for keyboard":"Tap to edit with keyboard",20,y+29,&lv_font_instrument_sans_medium_12,0x586B78);
+    lv_settings_label(parent,numeric?ui_tr("Blank lines / tap value for keyboard"):ui_tr("Tap to edit with keyboard"),20,y+29,&lv_font_instrument_sans_medium_12,0x586B78);
     lv_obj_t *button = lv_settings_button(parent, numeric?646:350, y, numeric?92:388, 44,
         "", false, print_input_cb, (void *)(uintptr_t)field);
     field_boxes[field] = button;
@@ -363,7 +364,7 @@ void ui_page_20_set_print_create(lv_obj_t *parent)
     active_field_valid = false;
     print_config_get(&print_draft);print_saving=false;print_leave_home=false;
     lv_settings_header_t header = {
-        .title = ui_text_get(UI_TEXT_SETTINGS_PRINT_TITLE), .subtitle="Device / Receipt configuration", .icon = "Settings", .back = print_esc_cb
+        .title = ui_text_get(UI_TEXT_SETTINGS_PRINT_TITLE), .subtitle=ui_tr("Device / Receipt configuration"), .icon = "Settings", .back = print_esc_cb
     };
     print_frame = lv_settings_frame_create(parent, &header);
     print_page = print_frame.root;
@@ -383,8 +384,8 @@ void ui_page_20_set_print_create(lv_obj_t *parent)
         lv_label_set_long_mode(receipt_titles[i],LV_LABEL_LONG_DOT);
     }
     lv_settings_box(receipt,20,66,262,1,0xDFE7ED);
-    lv_settings_label(receipt,"CNY\nPCS\nAMOUNT",20,74,&lv_font_instrument_sans_medium_14,0x1D2B34);
-    lv_obj_t *sample=lv_settings_label(receipt,"Example\n85\n425",207,74,&lv_font_instrument_sans_medium_14,0x1D2B34);
+    lv_settings_label(receipt,ui_tr("CNY\nPCS\nAMOUNT"),20,74,&lv_font_instrument_sans_medium_14,0x1D2B34);
+    lv_obj_t *sample=lv_settings_label(receipt,ui_tr("Example\n85\n425"),207,74,&lv_font_instrument_sans_medium_14,0x1D2B34);
     lv_obj_set_width(sample,74);lv_obj_set_style_text_align(sample,LV_TEXT_ALIGN_RIGHT,0);
     lv_settings_box(receipt,20,134,262,1,0xDFE7ED);
     receipt_content=lv_settings_label(receipt,"",20,150,&lv_font_instrument_sans_medium_12,0x536B79);
@@ -395,10 +396,10 @@ void ui_page_20_set_print_create(lv_obj_t *parent)
     lv_obj_set_style_width(rows,4,LV_PART_SCROLLBAR);lv_obj_set_style_bg_opa(rows,LV_OPA_COVER,LV_PART_SCROLLBAR);
     lv_obj_set_style_bg_color(rows,lv_color_hex(0x9AAEBB),LV_PART_SCROLLBAR);lv_obj_set_style_radius(rows,2,LV_PART_SCROLLBAR);
     lv_port_indev_set_drag_obj(rows,true);
-    lv_settings_label(rows,"Report content",20,10,&lv_font_instrument_sans_medium_16,0x1D2B34);
-    lv_settings_label(rows,"Choose the printed records",20,34,&lv_font_instrument_sans_medium_12,0x586B78);
+    lv_settings_label(rows,ui_tr("Report content"),20,10,&lv_font_instrument_sans_medium_16,0x1D2B34);
+    lv_settings_label(rows,ui_tr("Choose the printed records"),20,34,&lv_font_instrument_sans_medium_12,0x586B78);
     lv_obj_t *base=lv_settings_segment_base(rows,350,8,388,44);
-    const char *names[] = { "Summary", "Serial", "Both" };
+    const char *names[] = { ui_tr("Summary"), ui_tr("Serial"), ui_tr("Both") };
     for (unsigned i = 0; i < 3; ++i) {
         content_boxes[i] = lv_settings_segment(base,i,3,names[i],print_content_cb,(void *)(uintptr_t)(i+1));
     }
@@ -406,8 +407,8 @@ void ui_page_20_set_print_create(lv_obj_t *parent)
     print_create_field(rows, 122, ui_text_get(UI_TEXT_SETTINGS_PRINT_HEAD2), &value_head2, PRINT_FIELD_HEAD2);
     print_create_field(rows, 183, ui_text_get(UI_TEXT_SETTINGS_PRINT_SPACE_TOP), &value_space_top, PRINT_FIELD_SPACE_TOP);
     print_create_field(rows, 244, ui_text_get(UI_TEXT_SETTINGS_PRINT_SPACE_BOTTOM), &value_space_bottom, PRINT_FIELD_SPACE_BOTTOM);
-    print_cancel_button=lv_settings_button(print_frame.footer,964,0,124,46,"Cancel",false,print_cancel,NULL);
-    print_save_button=lv_settings_button(print_frame.footer,1100,0,132,46,"Save",true,print_save,NULL);
+    print_cancel_button=lv_settings_button(print_frame.footer,964,0,124,46,ui_tr("Cancel"),false,print_cancel,NULL);
+    print_save_button=lv_settings_button(print_frame.footer,1100,0,132,46,ui_tr("Save"),true,print_save,NULL);
     gesture_service_set_page_policy(UI_PAGE_PRINT_SETTING,NULL,print_gesture);
     lv_label_set_text(print_frame.message, "");
     print_refresh_view();
@@ -519,7 +520,7 @@ void ui_page_20_set_print_on_reply(const print_config_request_result_t* result)
     if(print_saving){
         if(result->success){print_apply_next();return;}
         print_saving=false;print_refresh_view();
-        print_notice(result->timeout?UI_NOTICE_WARNING:UI_NOTICE_ERROR,result->timeout?"No reply. Check confirmed settings before retrying.":"Save incomplete. Confirmed changes remain; retry Save.");return;
+        print_notice(result->timeout?UI_NOTICE_WARNING:UI_NOTICE_ERROR,result->timeout?UI_N_("No reply. Check confirmed settings before retrying."):UI_N_("Save incomplete. Confirmed changes remain; retry Save."));return;
     }
     /* Single-field transaction feedback is owned by the app reply dispatcher. */
 }

@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_message.h"
 #ifndef UN260_CASHBOOK_STORE_H
 #define UN260_CASHBOOK_STORE_H
 #include "un260/workspace/cashbook.h"
@@ -21,4 +22,5 @@ bool cashbook_store_scan_archives(void);
 bool cashbook_store_open_archive(uint32_t id);
 bool cashbook_store_archive(void);
 bool cashbook_store_export(void);
+const ui_message_t *cashbook_store_message_info(void);
 #endif

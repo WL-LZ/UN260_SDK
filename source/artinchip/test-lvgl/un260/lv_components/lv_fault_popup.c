@@ -3,8 +3,10 @@
 #include "fault_guide/machine_fault_view.h"
 #include "ui_notice.h"
 #include "smart_island.h"
+#include "un260/machine_state/machine_state.h"
 #include "un260/lv_components/lv_settings.h"
 #include "un260/lv_system/ui_lang.h"
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/font/manrope_fonts.h"
 #include "un260/font/ui_message_font.h"
 #include <stdio.h>
@@ -18,25 +20,19 @@ typedef struct {
     machine_fault_key_t key;
     mf_guide_t guide;
     uint8_t step;
-    bool chinese;
+    lv_obj_t *safety,*confirm_label;
 } fault_popup_t;
 static fault_popup_t popup;
 static bool auto_enabled=true;
-static bool notice_active;
-static machine_fault_key_t notice_key;
 static void present(machine_fault_key_t key);
-static void render_step(void);
-static const char *tr(const char *en,const char *zh) {return popup.chinese?zh:en;}
-static const char *text(mf_text_t value) {return fault_guide_text(value,popup.chinese);}
-static void clear_notice(void)
+static void render_step(bool restart_animation);
+static const char *text(mf_text_t value) {return fault_guide_text(value);}
+static void post_island_notice(machine_fault_key_t key)
 {
-    ui_notice_clear("machine.fault");notice_active=false;
-}
-static void post_notice(machine_fault_key_t key)
-{
-    mf_guide_t guide;char code[48];fault_guide_lookup(key,&guide);fault_guide_format_code(key,code,sizeof(code));
-    ui_notice_post(UI_NOTICE_WARNING,"machine.fault",fault_guide_text(guide.title,ui_lang_get()==LANGUAGE_CN),code);
-    notice_key=key;notice_active=true;
+    mf_guide_t guide;fault_guide_lookup(key,&guide);
+    const char *description = key.source == MACHINE_FAULT_START ? machine_start_error_desc(key.code) :
+        key.source == MACHINE_FAULT_RUNTIME ? machine_runtime_error_desc(key.code) : NULL;
+    smart_island_notify_warning_level(description ? ui_tr(description) : text(guide.title),SMART_ISLAND_WARNING_LEVEL_ERROR);
 }
 static lv_obj_t *box(lv_obj_t *parent,int x,int y,int w,int h,uint32_t color,int radius)
 {
@@ -85,16 +81,20 @@ static void confirm(lv_event_t *event)
 {
     (void)event;machine_fault_acknowledge(popup.key);
     machine_fault_record_t next_record;
-    if(machine_fault_first_unread(&next_record))present(next_record.key);else hide_fault_popup();
+    if(machine_fault_first_unread(&next_record))present(next_record.key);else {
+        machine_fault_key_t key=popup.key;
+        hide_fault_popup();
+        post_island_notice(key);
+    }
 }
 static void select_step(lv_event_t *event)
 {
     unsigned step=(unsigned)(uintptr_t)lv_event_get_user_data(event);
     if(step>=popup.guide.step_count || step==popup.step)return;
-    popup.step=step;render_step();
+    popup.step=step;render_step(true);
 }
-static void previous(lv_event_t *event) {(void)event;if(popup.step){--popup.step;render_step();}}
-static void next(lv_event_t *event) {(void)event;if(popup.step+1<popup.guide.step_count){++popup.step;render_step();}}
+static void previous(lv_event_t *event) {(void)event;if(popup.step){--popup.step;render_step(true);}}
+static void next(lv_event_t *event) {(void)event;if(popup.step+1<popup.guide.step_count){++popup.step;render_step(true);}}
 static void pause_play(lv_event_t *event)
 {
     (void)event;machine_fault_view_play(&popup.model,!popup.model.playing);
@@ -129,10 +129,10 @@ static void update_queue(void)
     if(popup.queue){lv_obj_del(popup.queue);popup.queue=NULL;}
     size_t count=machine_fault_count();
     if(count<2){lv_obj_add_flag(popup.queue_button,LV_OBJ_FLAG_HIDDEN);return;}
-    char buf[32];snprintf(buf,sizeof(buf),popup.chinese?"%u 项异常":"%u issues",(unsigned)count);
+    char buf[32];snprintf(buf,sizeof(buf),ui_tr("%u issues"),(unsigned)count);
     lv_label_set_text(popup.queue_label,buf);lv_obj_center(popup.queue_label);lv_obj_clear_flag(popup.queue_button,LV_OBJ_FLAG_HIDDEN);
 }
-static void render_step(void)
+static void render_step(bool restart_animation)
 {
     const mf_step_t *s=&popup.guide.steps[popup.step];
     bool single=popup.guide.step_count==1;
@@ -152,25 +152,23 @@ static void render_step(void)
     lv_obj_set_y(popup.step_title,single?112:177);lv_obj_set_y(popup.step_body,single?153:218);
     const char *location=text(popup.guide.location);
     if(popup.key.source==MACHINE_FAULT_START && popup.key.code==8)
-        location=s->zone==MF_REJECT?tr("Upper front · Reject pocket","正面上层 · 退钞口"):tr("Lower front · Stacker pocket","正面下层 · 接钞口");
+        location=s->zone==MF_REJECT?ui_tr("Upper front · Reject pocket"):ui_tr("Lower front · Stacker pocket");
     else if(popup.key.source==MACHINE_FAULT_START && popup.key.code==9)
-        location=s->view==MF_REAR?tr("Rear · Lower passage","背面 · 下币道"):tr("Top · Upper passage","顶部 · 上币道");
+        location=s->view==MF_REAR?ui_tr("Rear · Lower passage"):ui_tr("Top · Upper passage");
     lv_label_set_text(popup.location,location);
-    static const char *const names[]={"FRONT","UPPER PASSAGE","REAR","INTERNAL SIDE"};
-    static const char *const names_zh[]={"正面","上币道","背面","侧面内部示意"};
-    lv_label_set_text(popup.view_label,popup.chinese?names_zh[s->view]:names[s->view]);
+    static const char *const names[]={UI_N_("FRONT"),UI_N_("UPPER PASSAGE"),UI_N_("REAR"),UI_N_("INTERNAL SIDE")};
+    lv_label_set_text(popup.view_label,ui_tr(names[s->view]));
     lv_obj_t *pager[]={popup.previous,popup.next,popup.step_count};
     for(unsigned i=0;i<3;++i){if(single)lv_obj_add_flag(pager[i],LV_OBJ_FLAG_HIDDEN);else lv_obj_clear_flag(pager[i],LV_OBJ_FLAG_HIDDEN);}
     if(popup.step==0)lv_obj_add_state(popup.previous,LV_STATE_DISABLED);else lv_obj_clear_state(popup.previous,LV_STATE_DISABLED);
     if(popup.step+1==popup.guide.step_count)lv_obj_add_state(popup.next,LV_STATE_DISABLED);else lv_obj_clear_state(popup.next,LV_STATE_DISABLED);
     lv_label_set_text_fmt(popup.step_count,"%02u / %02u",popup.step+1,popup.guide.step_count);
-    machine_fault_view_set_step(&popup.model,s);lv_label_set_text(popup.pause_label,LV_SYMBOL_PAUSE);
+    if(restart_animation){machine_fault_view_set_step(&popup.model,s);lv_label_set_text(popup.pause_label,LV_SYMBOL_PAUSE);}
 }
 static void present(machine_fault_key_t key)
 {
-    clear_notice();
     if(popup.overlay && machine_fault_key_equal(popup.key,key)) {update_queue();return;}
-    hide_fault_popup();popup.key=key;popup.chinese=ui_lang_get()==LANGUAGE_CN;fault_guide_lookup(key,&popup.guide);
+    hide_fault_popup();popup.key=key;fault_guide_lookup(key,&popup.guide);
     ui_notice_set_suspended(UI_NOTICE_SUSPEND_FAULT,true);
     popup.overlay=box(lv_layer_top(),0,0,lv_disp_get_hor_res(NULL),lv_disp_get_ver_res(NULL),0x243C52,0);
     lv_obj_set_style_bg_opa(popup.overlay,97,0);lv_obj_add_flag(popup.overlay,LV_OBJ_FLAG_CLICKABLE);
@@ -181,7 +179,7 @@ static void present(machine_fault_key_t key)
     popup.view_label=label(stage,"",16,19,290,&lv_font_instrument_sans_medium_12,0x6F818E);
     icon(stage,LV_SYMBOL_REFRESH,414,10,38,38,replay,NULL);icon(stage,LV_SYMBOL_PAUSE,456,10,38,38,pause_play,&popup.pause_label);
     popup.location=label(popup.card,"",28,302,506,&lv_font_instrument_sans_medium_14,0x945329);
-    label(popup.card,tr("Wait for all moving parts to stop before handling.","请等待机构完全停止，再进行处理。"),28,327,506,&lv_font_instrument_sans_medium_12,0x586B78);
+    popup.safety=label(popup.card,ui_tr("Wait for all moving parts to stop before handling."),28,327,506,&lv_font_instrument_sans_medium_12,0x586B78);
     lv_obj_t *alert=box(popup.card,566,24,43,43,0xFBEFE5,13);
     lv_obj_t *mark=label(alert,LV_SYMBOL_WARNING,0,0,43,&lv_font_montserrat_24,0xAE5728);lv_obj_set_style_text_align(mark,LV_TEXT_ALIGN_CENTER,0);lv_obj_center(mark);
     popup.title=label(popup.card,text(popup.guide.title),622,24,556,&lv_font_instrument_sans_semibold_28,0x1D2B34);
@@ -202,25 +200,39 @@ static void present(machine_fault_key_t key)
     lv_obj_set_style_text_font(lv_obj_get_child(popup.previous,0),&lv_font_montserrat_16,0);
     lv_obj_set_style_text_font(lv_obj_get_child(popup.next,0),&lv_font_montserrat_16,0);
     popup.step_count=label(popup.card,"",617,321,50,&lv_font_instrument_sans_medium_12,0x7A8D99);
-    button(popup.card,1022,302,160,48,tr("Confirm","确认"),true,confirm,NULL,NULL);
-    update_queue();render_step();lv_obj_move_foreground(popup.overlay);
+    button(popup.card,1022,302,160,48,ui_tr("Confirm"),true,confirm,NULL,&popup.confirm_label);
+    update_queue();render_step(true);lv_obj_move_foreground(popup.overlay);
+}
+void fault_popup_language_changed(void)
+{
+    if(!popup.overlay)return;
+    bool queue_open=popup.queue!=NULL;
+    lv_coord_t queue_scroll_y=queue_open?lv_obj_get_scroll_y(popup.queue):0;
+    lv_label_set_text(popup.title,text(popup.guide.title));
+    lv_label_set_text(popup.safety,ui_tr("Wait for all moving parts to stop before handling."));
+    lv_label_set_text(popup.confirm_label,ui_tr("Confirm"));lv_obj_center(popup.confirm_label);
+    update_queue();
+    if(queue_open){
+        toggle_queue(NULL);
+        lv_obj_update_layout(popup.queue);
+        lv_obj_scroll_to_y(popup.queue,queue_scroll_y,LV_ANIM_OFF);
+    }
+    render_step(false);
 }
 static void report(machine_fault_key_t key,bool allow_auto)
 {
     bool fresh=machine_fault_report(key);
     if(!fresh)return;
-    if(!allow_auto && notice_active && !machine_fault_find(notice_key,NULL))clear_notice();
     smart_island_refresh_summary();
     if(fresh && allow_auto && auto_enabled)present(key);
     else if(popup.overlay && !machine_fault_find(popup.key,NULL))present(key);
     else {
         if(popup.overlay)update_queue();
-        if(allow_auto && !auto_enabled)post_notice(key);
+        if(allow_auto && !auto_enabled)post_island_notice(key);
     }
 }
 static void refresh_after_clear(void)
 {
-    if(notice_active && !machine_fault_find(notice_key,NULL))clear_notice();
     smart_island_refresh_summary();
     if(!popup.overlay)return;
     if(machine_fault_find(popup.key,NULL)){update_queue();return;}
@@ -237,7 +249,7 @@ void fault_popup_report_start_fault(uint8_t type,uint8_t code) {report((machine_
 void fault_popup_report_start_no_note(void)
 {
     machine_fault_clear_source(MACHINE_FAULT_START);refresh_after_clear();
-    ui_notice_post(UI_NOTICE_INFO,"counting.start","No banknotes detected","Place notes in the feeder.");
+    smart_island_notify_warning(ui_tr("No banknotes detected"));
 }
 void fault_popup_report_runtime_fault(uint8_t code)
 {
@@ -269,7 +281,7 @@ void fault_popup_report_sensor_mask(uint32_t mask)
      * unrelated unread reports. Only a newly asserted bit raises a popup. */
     if(fresh.code<32) {
         if(auto_enabled && (!popup.overlay || !machine_fault_key_equal(popup.key,fresh)))present(fresh);
-        else if(!auto_enabled)post_notice(fresh);
+        else if(!auto_enabled)post_island_notice(fresh);
     }
 }
 bool fault_popup_show_pending_now(void)

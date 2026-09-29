@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #include "un260/lv_resources/ui_page_background.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
@@ -21,13 +22,13 @@ static void prepare_manual(void *unused)
 static void action_explain(const char *reason)
 {
     work_mode_snapshot_t mode;work_mode_service_get_snapshot(&mode);
-    if(mode.phase==WORK_MODE_FAILED&&!strcmp(reason,work_mode_service_status_text())){
-        settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING,"Manual mode not confirmed",
-            "Live sensor readings are independent of work mode. Prepare Manual mode before running or calibrating the machine.",
-            "Prepare Manual","Cancel",prepare_manual,NULL,NULL);
+    if(mode.phase==WORK_MODE_FAILED&&!strcmp(reason,work_mode_service_status_msgid())){
+        settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING,ui_tr("Manual mode not confirmed"),
+            ui_tr("Live sensor readings are independent of work mode. Prepare Manual mode before running or calibrating the machine."),
+            ui_tr("Prepare Manual"),ui_tr("Cancel"),prepare_manual,NULL,NULL);
         return;
     }
-    ui_notice_post(UI_NOTICE_WARNING,"settings.blocked","Please check",reason);
+    ui_notice_post_text(UI_NOTICE_WARNING,"settings.blocked",UI_N_("Please check"),reason);
 }
 void settings_detail_action_block(lv_obj_t *button,const char *reason)
 {
@@ -39,12 +40,12 @@ static void settings_run_clicked(lv_event_t *e)
     (void)e;
     const char *reason=app_command_runtime_diagnostic_run_blocker();
     if(!reason&&app_command_runtime_request_diagnostic_run())return;
-    action_explain(reason?reason:"The command could not be sent. Please try again.");
+    action_explain(reason?reason:UI_N_("The command could not be sent. Please try again."));
 }
 void settings_detail_add_run(lv_obj_t *page)
 {
     lv_obj_t *actions=lv_settings_actions(page);
-    lv_settings_button(actions?actions:page,actions?0:1038,actions?0:21,110,46,"RUN",true,settings_run_clicked,NULL);
+    lv_settings_button(actions?actions:page,actions?0:1038,actions?0:21,110,46,ui_tr("RUN"),true,settings_run_clicked,NULL);
 }
 
 lv_color_t settings_theme_color_hex(uint32_t color)
@@ -802,7 +803,7 @@ static void settings_keyboard_create_number_keys(lv_obj_t* parent, bool integer)
                                          integer ? pin_x[c] : start_x + c * (key_w + gap_x),
                                          integer ? pin_y[r] : start_y + r * (key_h + gap_y),
                                          key_w, integer ? pin_h[r] : key_h,
-                                         strcmp(keys[r][c],"CLEAR")==0 ? "Clear" : keys[r][c], keys[r][c],
+                                         strcmp(keys[r][c],"CLEAR")==0 ? ui_tr("Clear") : keys[r][c], keys[r][c],
                                          lv_color_hex(0xF8F9FB));
             if(integer) {
                 bool utility = r == 3 && c != 1;
@@ -821,7 +822,7 @@ static void settings_keyboard_create_number_keys(lv_obj_t* parent, bool integer)
 
     lv_obj_t *card=lv_obj_get_parent(parent);
     if(integer) {
-        settings_keyboard_create_action(card,34,285,310,48,"Apply",lv_color_hex(0x1462CC),settings_keyboard_commit_cb);
+        settings_keyboard_create_action(card,34,285,310,48,ui_tr("Apply"),lv_color_hex(0x1462CC),settings_keyboard_commit_cb);
         lv_obj_t *close=settings_detail_create_button(card,792,14,36,36,"",lv_color_hex(0xFFFFFF),settings_keyboard_cancel_cb,NULL);
         lv_obj_t *icon=lv_img_create(close);lv_img_set_src(icon,LVGL_DIR "pin_icons/close.png");lv_obj_center(icon);
         return;
@@ -829,9 +830,9 @@ static void settings_keyboard_create_number_keys(lv_obj_t* parent, bool integer)
     /* Keep the existing signed/decimal contract; validation belongs to field owners. */
     settings_keyboard_create_key(card,30,204,80,46,"-","-",lv_color_hex(0xF1F4F5));
     settings_keyboard_create_key(card,120,204,80,46,".",".",lv_color_hex(0xF1F4F5));
-    settings_keyboard_create_action(card,30,280,190,46,"Cancel",
+    settings_keyboard_create_action(card,30,280,190,46,ui_tr("Cancel"),
                                     lv_color_hex(0xF1F4F5),settings_keyboard_cancel_cb);
-    settings_keyboard_create_action(card,232,280,190,46,"Apply",
+    settings_keyboard_create_action(card,232,280,190,46,ui_tr("Apply"),
                                     lv_color_hex(0x1462CC),settings_keyboard_commit_cb);
 }
 
@@ -871,11 +872,11 @@ static void settings_keyboard_create_text_keys(lv_obj_t* parent)
                                                                 lv_color_hex(0xF8F9FB));
     settings_keyboard_create_key(parent, 673, 153, 122, 44, "",
                                  "BACK", lv_color_hex(0xF8F9FB));
-    settings_keyboard_create_key(parent, 802, 153, 122, 44, "Clear", "CLEAR",lv_color_hex(0xF1F4F5));
+    settings_keyboard_create_key(parent, 802, 153, 122, 44, ui_tr("Clear"), "CLEAR",lv_color_hex(0xF1F4F5));
     lv_obj_t *card=lv_obj_get_parent(parent);
-    settings_keyboard_create_action(card, 824, 36, 186, 44, "Apply",
+    settings_keyboard_create_action(card, 824, 36, 186, 44, ui_tr("Apply"),
                                     lv_color_hex(0x1462CC), settings_keyboard_commit_cb);
-    settings_keyboard_create_action(card, 682, 36, 130, 44, "Cancel",
+    settings_keyboard_create_action(card, 682, 36, 130, 44, ui_tr("Cancel"),
                                     lv_color_hex(0xF1F4F5), settings_keyboard_cancel_cb);
 }
 

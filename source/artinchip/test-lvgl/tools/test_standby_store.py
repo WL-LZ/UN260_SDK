@@ -1,11 +1,13 @@
+from test_i18n_support import with_i18n
 #!/usr/bin/env python3
 """Host integration test: production storage code with isolated filesystem/USB."""
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 import struct
 root = Path(__file__).resolve().parents[1]
-png_headers = root.parents[2] / 'output/d211_d213_devkitf/host/riscv64-linux-gnu/sysroot/usr/include/libpng16'
+png_headers = Path(os.environ.get('UN260_SYSROOT_HEADERS') or root.parents[2] / 'output/d211_d213_devkitf/host/riscv64-linux-gnu/sysroot/usr/include') / 'libpng16'
 with tempfile.TemporaryDirectory(prefix="un260-standby-test-") as temp:
     work = Path(temp)
     (work / 'usb').mkdir()
@@ -14,7 +16,7 @@ with tempfile.TemporaryDirectory(prefix="un260-standby-test-") as temp:
                     '-I', str(root), '-I', str(png_headers), f'-DSTANDBY_STORE_DIRECTORY="{work}/state"',
                     f'-DSTANDBY_USB_DIRECTORY="{work}/usb"',
                     str(root/'tools/test_standby_store.c'),
-                    str(root/'un260/storage/standby_store.c'), '-l:libpng16.so.16', '-pthread', '-o', str(exe)], check=True)
+                    str(root/'un260/storage/standby_store.c'), *map(str,with_i18n([],root)), '-l:libpng16.so.16', '-pthread', '-o', str(exe)], check=True)
     subprocess.run([str(exe)], check=True)
     old=struct.pack('<IHBBB3x',1,37,1,0,0)
     for mode in range(2):

@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
 """ASan/UBSan offscreen maintenance renderer, no framebuffer access."""
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 import unittest
 from PIL import Image
 
-HEADER = Path(__file__).resolve().parents[2] / 'source/artinchip/test-lvgl/un260/lv_drivers/upgrade_display.h'
+# The override permits a scratch test copy to exercise the real application sources.
+APP = Path(os.environ.get('UN260_SOURCE_ROOT', str(Path(__file__).resolve().parents[2] / 'source/artinchip/test-lvgl')))
+HEADER = APP / 'un260/lv_drivers/upgrade_display.h'
+I18N_SOURCES = [APP / name for name in (
+    'un260/lv_system/ui_i18n.c', 'un260/lv_system/ui_lang.c',
+    'un260/lv_system/ui_update_message.c', 'un260/storage/ui_locale_store.c',
+    'i18n/generated/lv_i18n.c',
+)]
 
 
 class DisplayTests(unittest.TestCase):
@@ -45,12 +53,15 @@ int main(int argc,char **argv) {
 }
 ''' % (path / 'status', HEADER))
             executable = path / 'render'
-            subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined', '-fno-pie', '-no-pie', str(source), '-o', str(executable)], check=True)
+            subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined', '-fno-pie', '-no-pie', '-I', str(APP), str(source),
+                            *(str(item) for item in I18N_SOURCES), '-o', str(executable)], check=True)
             cases = {'running': 'progress=42\nstage=install\nmessage=Installing application\n',
                      'failure': 'progress=110\nstage=fail\nsuccess=0\nmessage=Storage migration paused keep USB backup and log no IMG required for diagnosis\n',
                      'success': 'progress=100\nsuccess=1\nmessage=Unified upgrade completed application is starting\n',
                      'usb-failure': 'progress=5\nstage=fail\nsuccess=0\nmessage=USB staging write failed; check filesystem or connection; preserve backup\n',
-                     'negative': 'progress=-100\nmessage=' + 'x' * 400 + '\n'}
+                     'negative': 'progress=-100\nmessage=' + 'x' * 400 + '\n',
+                     'parameterized': 'progress=30\nmessage=Insufficient app volume space: need 100KB, free 20KB; keep USB log\n',
+                     'untrusted': 'progress=20\nmessage=UNKNOWN %n%s%p diagnostic\n'}
             for name, data in cases.items():
                 (path / 'status').write_text(data)
                 destination = Path('/tmp') / ('un260-upgrade-' + name + '.ppm')

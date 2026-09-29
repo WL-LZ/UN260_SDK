@@ -25,11 +25,14 @@ static int light_level=75;
 int backlight_service_level(void){return light_level;}int backlight_service_max(void){return 100;}
 uint8_t machine_state_reject_pocket_max(void){return 100;}uint8_t machine_state_double_note_level(void){return 2;}
 const char *ui_text_get(ui_text_id_t id){(void)id;return "Not available";}
+const char *ui_text_msgid(ui_text_id_t id){return ui_text_get(id);}
+
 void ui_manager_push_page(ui_page_t p){requested=p;ui_page_06_settings_suspend();}
 bool ui_manager_pop_page(void){pops++;return true;}
 void ui_manager_switch(ui_page_t p){requested=p;}
 void ui_manager_clear_stack(void){ui_page_06_settings_reset_navigation();}
 void ui_manager_invalidate_all_page_caches(void){}
+void ui_manager_on_language_changed(void){}
 void ui_page_cis_calib_select(bool white){white_selected=white;}
 uint32_t app_clock_uptime_ms(void){return lv_tick_get();}
 bool app_command_runtime_request_diagnostic_run(void){sends++;return true;}
@@ -220,3 +223,5 @@ static void third_level_test(void){
  puts("PASS actual third-level navigation, exact parent return, seven categories overflow, optional category icons");
 }
 int main(void){lv_init();lv_disp_draw_buf_t db;lv_disp_draw_buf_init(&db,buffer,NULL,1280*40);lv_disp_drv_t dd;lv_disp_drv_init(&dd);dd.hor_res=1280;dd.ver_res=400;dd.draw_buf=&db;dd.flush_cb=flush;lv_disp_drv_register(&dd);lv_img_decoder_t*dec=lv_img_decoder_create();lv_img_decoder_set_info_cb(dec,info);lv_img_decoder_set_open_cb(dec,image_open);lv_indev_drv_t input;lv_indev_drv_init(&input);input.type=LV_INDEV_TYPE_POINTER;input.read_cb=pointer_read;input.feedback_cb=evdev_feedback;lv_indev_drv_register(&input);device_info_init("V1.0.0");catalog_test();grid_test();directory_test();third_level_test();details_test();puts("PASS actual LVGL settings suite");return 0;}
+
+const char *work_mode_service_status_msgid(void){return work_mode_service_status_text();}

@@ -89,12 +89,12 @@ static void test_reset_lifecycle(void)
     assert_settled();
 
     start_session();
-    unsigned before_notices=host_notice_posts;
     smart_island_notify_warning("Pocket full");
-    assert(host_notice_posts==before_notices+1 && !strcmp(host_notice_detail,"Pocket full"));
-    assert(g_si_ctx.view.scene == SMART_ISLAND_SCENE_COUNTING);
+    assert(g_si_ctx.warning.resume_counting);
     assert(app_counting_runtime_reset_session(&session,"warning clear"));
-    assert(g_si_ctx.view.scene == SMART_ISLAND_SCENE_IDLE);
+    assert(g_si_ctx.view.scene == SMART_ISLAND_SCENE_WARNING);
+    assert(!strcmp(g_si_ctx.warning.text,"Pocket full"));
+    tick(2500); /* Restored short notice performs two full 1s/1s flashes. */
     assert(!g_si_ctx.lifecycle.count_session_active);
     assert_settled();
 
@@ -160,8 +160,7 @@ static void test_notice_during_count(void)
     start_session();
     smart_island_notify_warning("First notice");
     smart_island_notify_warning("Second notice");
-    assert(!strcmp(host_notice_detail,"Second notice"));
-    assert(g_si_ctx.lifecycle.count_session_active && g_si_ctx.view.scene==SMART_ISLAND_SCENE_COUNTING);
+    assert(g_si_ctx.warning.resume_counting);
     tick(5000);
     assert(g_si_ctx.lifecycle.count_session_active && g_si_ctx.view.scene==SMART_ISLAND_SCENE_COUNTING);
     smart_island_notify_warning("Cleared fault");

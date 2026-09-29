@@ -12,6 +12,17 @@
 
 #define SETTING_REQUEST_TIMEOUT_MS 800U
 
+static setting_request_observer_t request_observer;
+void setting_service_set_request_observer(setting_request_observer_t observer)
+{
+    request_observer = observer;
+}
+static void setting_request_accepted(uint8_t command)
+{
+    if (request_observer) request_observer(command);
+}
+
+
 typedef struct {
     protocol_request_t request;
     uint8_t target;
@@ -45,6 +56,7 @@ static bool setting_basic_request_begin(setting_basic_request_slot_t *slot,
         return false;
     }
 
+    setting_request_accepted(cmd_g);
     return true;
 }
 
@@ -131,6 +143,7 @@ static bool setting_action_request_begin(setting_action_request_slot_t *slot,
         protocol_request_finish(&slot->request);
         return false;
     }
+    setting_request_accepted(cmd_g);
     return true;
 }
 
@@ -180,6 +193,7 @@ static bool setting_value_request_begin(setting_value_request_slot_t *slot,
         return false;
     }
 
+    setting_request_accepted(cmd_g);
     return true;
 }
 
@@ -309,6 +323,7 @@ static bool setting_batch_request_begin(setting_batch_request_type_t type,
         return false;
     }
 
+    setting_request_accepted(0x06);
     return true;
 }
 
@@ -394,7 +409,9 @@ bool setting_service_take_speed_result(uint8_t *target)
 
 bool setting_service_request_work_mode(uint8_t target)
 {
-    return work_mode_service_request(target);
+    bool accepted = work_mode_service_request(target);
+    if (accepted) setting_request_accepted(0x38);
+    return accepted;
 }
 
 bool setting_service_request_beep(bool target)

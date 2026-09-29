@@ -1,3 +1,4 @@
+from test_i18n_support import with_i18n
 """Render the real LVGL fault component and check its lifecycle under sanitizers."""
 from pathlib import Path
 import concurrent.futures
@@ -33,12 +34,13 @@ write_changed(conf, '''#ifndef LV_CONF_H
 #define LV_FONT_MONTSERRAT_24 1
 #define LV_ASSERT_HANDLER __builtin_trap();
 #define LV_FONT_CUSTOM_DECLARE ''' + ' '.join('LV_FONT_DECLARE(lv_font_' + f + ');' for f in fonts) + '\n#endif\n')
-sources = [root / p for p in ['tools/test_fault_view.c','un260/machine_state/machine_fault.c',
+sources = [root / p for p in ['tools/test_fault_view.c','un260/machine_state/machine_fault.c','un260/machine_state/machine_state.c',
  'un260/lv_components/fault_guide/fault_guide_catalog.c','un260/lv_components/fault_guide/machine_fault_view.c',
  'aic_ui/generated_fault_guide/machine_fault_assets.c','un260/font/ui_message_font.c']]
 sources += [root / ('un260/font/lv_font_' + f + '.c') for f in fonts]
 sources += [root / ('un260/font/lv_font_message_cjk_' + str(n) + '.c') for n in (12,14,16,18,20,22,24,28)]
 sources += sorted(p for p in (lvgl / 'src').rglob('*.c') if p.name != 'qrcodegen.c')
+sources = with_i18n(sources, root)
 flags = ['cc','-std=gnu11','-g','-O1','-Wall','-Wextra','-fsanitize=address,undefined','-fno-sanitize-recover=all',
          '-no-pie',f'-I{cache}',f'-I{root}',f'-I{lvgl}',f'-DLV_CONF_PATH={conf}']
 def compile_one(source):

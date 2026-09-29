@@ -1,0 +1,56 @@
+{
+  "en": {
+    "%u notes": {
+      "one": "%u note",
+      "other": "%u notes"
+    },
+    "%u currencies": {
+      "one": "%u currency",
+      "other": "%u currencies"
+    },
+    "%u notes to check": {
+      "one": "%u note to check",
+      "other": "%u notes to check"
+    },
+    "%u undated groups: set the business date.": {
+      "one": "%u undated group: set the business date.",
+      "other": "%u undated groups: set the business date."
+    },
+    "Selected: %u minutes": {
+      "one": "Selected: %u minute",
+      "other": "Selected: %u minutes"
+    },
+    "%u minutes": {
+      "one": "%u minute",
+      "other": "%u minutes"
+    },
+    " · %u runs": {
+      "one": " · %u run",
+      "other": " · %u runs"
+    },
+    "Review %u pending counts": {
+      "one": "Review %u pending count",
+      "other": "Review %u pending counts"
+    },
+    "%d notes · denomination summary": {
+      "one": "%d note · denomination summary",
+      "other": "%d notes · denomination summary"
+    },
+    "Preview - reverts in %d seconds unless you keep it.": {
+      "one": "Preview - reverts in %d second unless you keep it.",
+      "other": "Preview - reverts in %d seconds unless you keep it."
+    },
+    "%u notes%s": {
+      "one": "%u note%s",
+      "other": "%u notes%s"
+    },
+    "%s / %u notes": {
+      "one": "%s / %u note",
+      "other": "%s / %u notes"
+    },
+    "%s  %s / %u notes": {
+      "one": "%s  %s / %u note",
+      "other": "%s  %s / %u notes"
+    }
+  }
+}

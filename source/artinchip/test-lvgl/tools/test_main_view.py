@@ -5,6 +5,7 @@ Peripheral actions are captured, DMA skin presenter uses real software snapshots
 and the quick drawer runs its real controls, snapshots and touch arbitration.
 This host test does not validate the board or controller protocol.
 """
+from test_i18n_support import with_i18n
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
@@ -70,6 +71,7 @@ def main():
         "un260/machine_state/machine_state.c", "un260/currency/currency_state.c",
         "un260/currency/currency_metadata.c", "un260/lv_system/app_clock.c"]
     sources += [ROOT / path for path in actual]
+    sources = with_i18n(sources, ROOT)
     font_inputs = sources + [ROOT / "un260/lv_core/page_01_main.c",
                              ROOT / "un260/lv_core/page_01_main_detail.c", ROOT / "un260/lv_core/page_01_main_quick.c"]
     fonts = {"lv_font_instrument_sans_bold_10"}

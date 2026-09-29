@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "upgrade_page_runtime.h"
@@ -22,16 +23,16 @@ static void paint(upgrade_page_runtime_t *runtime)
     unsigned step = terminal || runtime->timed_out ? 2 :
                     runtime->has_last_status && runtime->last_status == 0x02 ? 1 : 0;
     uint32_t ink = runtime->timed_out ? 0x946321 : terminal ? (success ? 0x287953 : 0xB1393E) : 0x1D2B34;
-    const char *phase = runtime->blocked ? "Another update is active" : runtime->timed_out ? "Result not received" :
-        terminal ? (success ? "Update complete" : "Update not completed") :
-        runtime->waiting ? (step == 1 ? "Installing update" : "Waiting for the controller") :
-        "Ready to request update";
+    const char *phase = runtime->blocked ? ui_tr("Another update is active") : runtime->timed_out ? ui_tr("Result not received") :
+        terminal ? (success ? ui_tr("Update complete") : ui_tr("Update not completed")) :
+        runtime->waiting ? (step == 1 ? ui_tr("Installing update") : ui_tr("Waiting for the controller")) :
+        ui_tr("Ready to request update");
     const char *status = runtime->blocked ?
-        "Wait for the other update to finish. Its result may still be unknown." : runtime->timed_out ?
-        "No reply arrived within the expected time. The update may still be running." :
-        runtime->has_last_status ? runtime->config->status_text(runtime->last_status) :
-        runtime->waiting ? "The request has been sent. Keep power connected." :
-        "Start when the correct update file is ready for the controller.";
+        ui_tr("Wait for the other update to finish. Its result may still be unknown.") : runtime->timed_out ?
+        ui_tr("No reply arrived within the expected time. The update may still be running.") :
+        runtime->has_last_status ? ui_tr(runtime->config->status_text(runtime->last_status)) :
+        runtime->waiting ? ui_tr("The request has been sent. Keep power connected.") :
+        ui_tr("Start when the correct update file is ready for the controller.");
     lv_label_set_text(runtime->phase_label, phase);
     lv_obj_set_style_text_color(runtime->phase_label, lv_color_hex(ink), 0);
     lv_label_set_text(runtime->status_label, status);
@@ -44,13 +45,13 @@ static void paint(upgrade_page_runtime_t *runtime)
         lv_obj_t *label = lv_obj_get_child(runtime->steps[i], 0);
         lv_obj_set_style_text_color(label, lv_color_hex(active ? 0x1462CC : 0x586B78), 0);
     }
-    if (runtime->waiting || runtime->timed_out || runtime->blocked) settings_detail_action_block(runtime->start, runtime->waiting ? "The update is in progress. Keep power connected." : runtime->timed_out ? "The update result is unknown. Check the controller before starting another update." : "Resolve the update error before starting another update.");
+    if (runtime->waiting || runtime->timed_out || runtime->blocked) settings_detail_action_block(runtime->start, runtime->waiting ? UI_N_("The update is in progress. Keep power connected.") : runtime->timed_out ? UI_N_("The update result is unknown. Check the controller before starting another update.") : UI_N_("Resolve the update error before starting another update."));
     else settings_detail_action_block(runtime->start, NULL);
-    if (runtime->waiting && !runtime->timed_out) settings_detail_action_block(runtime->back, runtime->waiting ? "The update is in progress. Keep power connected." : runtime->timed_out ? "The update result is unknown. Check the controller before starting another update." : "Resolve the update error before starting another update.");
+    if (runtime->waiting && !runtime->timed_out) settings_detail_action_block(runtime->back, runtime->waiting ? UI_N_("The update is in progress. Keep power connected.") : runtime->timed_out ? UI_N_("The update result is unknown. Check the controller before starting another update.") : UI_N_("Resolve the update error before starting another update."));
     else settings_detail_action_block(runtime->back, NULL);
     lv_label_set_text(runtime->message, runtime->timed_out ?
-        "Keep power connected. Leaving this page does not stop the update." :
-        success ? "The update file has been kept." : "Keep power connected. Do not remove the update media.");
+        ui_tr("Keep power connected. Leaving this page does not stop the update.") :
+        success ? ui_tr("The update file has been kept.") : ui_tr("Keep power connected. Do not remove the update media."));
 }
 
 static void timeout_cb(lv_timer_t *timer)
@@ -64,7 +65,7 @@ static void timeout_cb(lv_timer_t *timer)
     if (!runtime->waiting || runtime->timed_out) return;
     if (lv_tick_elaps(runtime->wait_start_tick) < runtime->config->timeout_ms) return;
     runtime->timed_out = true;
-    ui_notice_post(UI_NOTICE_WARNING,"upgrade.controller","Update result unknown","Keep power connected. The update may still be running.");
+    ui_notice_post_text(UI_NOTICE_WARNING,"upgrade.controller",UI_N_("Update result unknown"),UI_N_("Keep power connected. The update may still be running."));
     paint(runtime);
 }
 
@@ -85,18 +86,18 @@ bool upgrade_page_runtime_start(upgrade_page_runtime_t *runtime)
     if (!runtime || !runtime->config || runtime->waiting || runtime->timed_out) return false;
     if (!upgrade_session_begin(runtime->config->owner)) {
         runtime->blocked = true;
-        ui_notice_post(UI_NOTICE_WARNING,"upgrade.controller","Update unavailable","Another update is active.");
+        ui_notice_post_text(UI_NOTICE_WARNING,"upgrade.controller",UI_N_("Update unavailable"),UI_N_("Another update is active."));
         paint(runtime);
         return false;
     }
     runtime->blocked = false;
     if (!protocol_send_is_ready() || protocol_send(runtime->config->command, &payload, 1) < 0) {
         upgrade_session_end(runtime->config->owner);
-        ui_notice_post(UI_NOTICE_ERROR,"upgrade.controller","Update request not sent","Check controller connection.");
+        ui_notice_post_text(UI_NOTICE_ERROR,"upgrade.controller",UI_N_("Update request not sent"),UI_N_("Check controller connection."));
         return false;
     }
     runtime->waiting = true;
-    ui_notice_post(UI_NOTICE_PROGRESS,"upgrade.controller","Updating controller","Keep power connected.");
+    ui_notice_post_text(UI_NOTICE_PROGRESS,"upgrade.controller",UI_N_("Updating controller"),UI_N_("Keep power connected."));
     runtime->timed_out = false;
     runtime->has_last_status = false;
     runtime->wait_start_tick = lv_tick_get();
@@ -117,7 +118,7 @@ void upgrade_page_runtime_handle_reply(upgrade_page_runtime_t *runtime, uint8_t 
         runtime->waiting = false;
         upgrade_session_end(runtime->config->owner);
         bool success=status==0x03||status==0x04;
-        ui_notice_post(success?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,"upgrade.controller",success?"Update complete":"Update not completed",runtime->config->status_text(status));
+        ui_notice_post_text(success?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,"upgrade.controller",success?UI_N_("Update complete"):UI_N_("Update not completed"),runtime->config->status_text(status));
     }
     paint(runtime);
 }
@@ -135,9 +136,9 @@ static void request_back(upgrade_page_runtime_t *runtime, bool home)
     if (!runtime || settings_detail_overlay_is_open()) return;
     runtime->home_requested = home;
     if (runtime->timed_out) {
-        settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING, "Leave update status?",
-            "The result is unknown. Leaving does not stop the update. Keep the machine powered on.",
-            "Leave page", "Keep waiting", leave, NULL, runtime);
+        settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING, ui_tr("Leave update status?"),
+            ui_tr("The result is unknown. Leaving does not stop the update. Keep the machine powered on."),
+            ui_tr("Leave page"), ui_tr("Keep waiting"), leave, NULL, runtime);
     } else if (!runtime->waiting) leave(runtime);
 }
 
@@ -166,7 +167,7 @@ void upgrade_page_runtime_create(upgrade_page_runtime_t *runtime, lv_obj_t *pare
     const upgrade_page_runtime_config_t *config, const char *title, const char *installed_version)
 {
     if (!runtime || runtime->root) return;
-    const lv_settings_header_t header = {.title = title, .subtitle = "Data / Upgrade",
+    const lv_settings_header_t header = {.title = title, .subtitle = ui_tr("Data / Upgrade"),
         .back = back_cb, .user_data = runtime};
     lv_settings_frame_t frame = lv_settings_frame_create(parent, &header);
     runtime->root = frame.root;
@@ -175,22 +176,22 @@ void upgrade_page_runtime_create(upgrade_page_runtime_t *runtime, lv_obj_t *pare
     lv_obj_set_style_bg_opa(frame.body, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(frame.body, 0, 0);
     lv_obj_t *prepare = lv_settings_panel(frame.body, 0, 0, 404, 242);
-    lv_settings_label(prepare, "Before you begin", 22, 18, &lv_font_instrument_sans_semibold_18, 0x1D2B34);
+    lv_settings_label(prepare, ui_tr("Before you begin"), 22, 18, &lv_font_instrument_sans_semibold_18, 0x1D2B34);
     lv_obj_t *instructions = lv_settings_label(prepare,
-        "Prepare the correct update file.\nKeep power connected throughout the update.\nDo not remove the update media.",
+        ui_tr("Prepare the correct update file.\nKeep power connected throughout the update.\nDo not remove the update media."),
         22, 54, &lv_font_instrument_sans_medium_14, 0x586B78);
     lv_obj_set_width(instructions, 360);
     lv_obj_set_style_text_line_space(instructions, 7, 0);
     lv_settings_box(prepare, 22, 167, 360, 1, 0xE3E9ED);
-    lv_settings_label(prepare, "Installed version", 22, 183, &lv_font_instrument_sans_medium_14, 0x586B78);
-    lv_settings_label(prepare, installed_version && installed_version[0] ? installed_version : "Not received",
+    lv_settings_label(prepare, ui_tr("Installed version"), 22, 183, &lv_font_instrument_sans_medium_14, 0x586B78);
+    lv_settings_label(prepare, installed_version && installed_version[0] ? installed_version : ui_tr("Not received"),
         218, 181, &lv_font_instrument_sans_semibold_18, 0x1D2B34);
     lv_obj_t *progress = lv_settings_panel(frame.body, 420, 0, 812, 242);
     runtime->phase_label = lv_settings_label(progress, "", 24, 21, &lv_font_instrument_sans_semibold_22, 0x1D2B34);
     runtime->status_label = lv_settings_label(progress, "", 24, 59, &lv_font_instrument_sans_medium_16, 0x586B78);
     lv_obj_set_width(runtime->status_label, 764);
     lv_obj_set_style_text_line_space(runtime->status_label, 4, 0);
-    const char *stages[] = {"Request", "Installing", "Result"};
+    const char *stages[] = {ui_tr("Request"), ui_tr("Installing"), ui_tr("Result")};
     for (unsigned i = 0; i < 3; ++i) {
         runtime->steps[i] = lv_settings_box(progress, 24 + 258 * i, 139, 248, 58, 0xF1F4F5);
         lv_obj_set_style_radius(runtime->steps[i], 10, 0);
@@ -198,7 +199,7 @@ void upgrade_page_runtime_create(upgrade_page_runtime_t *runtime, lv_obj_t *pare
             &lv_font_instrument_sans_medium_16, 0x586B78);
         lv_obj_center(label);
     }
-    runtime->start = lv_settings_button(frame.footer, 1062, 0, 170, 44, "Start update", true, start_cb, runtime);
+    runtime->start = lv_settings_button(frame.footer, 1062, 0, 170, 44, ui_tr("Start update"), true, start_cb, runtime);
     upgrade_page_runtime_init(runtime, config, runtime->status_label);
     visible_runtime = runtime;
     gesture_service_set_page_policy(config->page_id, NULL, upgrade_gesture);

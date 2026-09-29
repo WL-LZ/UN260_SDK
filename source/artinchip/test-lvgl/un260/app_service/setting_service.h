@@ -43,6 +43,10 @@ typedef enum {
     SETTING_REQUEST_TIMEOUT_BEEP = 1U << 5,
 } setting_request_timeout_t;
 
+/* UI-thread observer, called once after accepting a request; never owns transport. */
+typedef void (*setting_request_observer_t)(uint8_t command);
+void setting_service_set_request_observer(setting_request_observer_t observer);
+
 bool setting_service_request_mode(uint8_t target);
 bool setting_service_mode_is_pending(void);
 bool setting_service_take_mode_result(uint8_t *target);

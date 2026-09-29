@@ -1,3 +1,5 @@
+#include "ui_report_i18n.h"
+#include "un260/lv_system/ui_i18n.h"
 #include "lvgl/lvgl.h"
 #include "un260/lv_components/ui_notice.h"
 #include "ui_export_data.h"
@@ -240,6 +242,7 @@ static void ui_export_data_escape_js_str(char *dst, size_t dst_size, const char 
 
 static bool ui_export_data_write_html_file(const char *file_path)
 {
+    language_t report_language=ui_lang_get();
     FILE *fp;
     int i;
     int sn_no = 0;
@@ -293,7 +296,7 @@ static bool ui_export_data_write_html_file(const char *file_path)
         "<head>\n"
         "<meta charset=\"UTF-8\" />\n"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n"
-        "<title>UN260 Smart Count Report</title>\n"
+        "<title data-i18n=\"UN260 Smart Count Report\">UN260 Smart Count Report</title>\n"
         "<style>\n"
         ":root{--bg-page:#e2e8f0;--bg-container:#f8fafc;--bg-card:#ffffff;--text-main:#0f172a;--text-sub:#475569;--text-muted:#94a3b8;--border-light:#edf2f7;--indigo:#4f46e5;--indigo-bg:#e0e7ff;--emerald:#059669;--emerald-bg:#d1fae5;--amber:#d97706;--amber-bg:#ffedd5;--slate:#64748b;--slate-bg:#f1f5f9;--rose:#e11d48;--rose-bg:#ffe4e6;--shadow-card:0 10px 30px rgba(15,23,42,.06);--shadow-container:0 24px 60px rgba(15,23,42,.12);}*{box-sizing:border-box;margin:0;padding:0;}body{background:linear-gradient(180deg,#dbe4ef 0%%,#eef4f8 100%%);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:24px 0;color:var(--text-main);} .dashboard-container{width:1280px;min-height:400px;background:rgba(248,250,252,.95);border-radius:28px;box-shadow:var(--shadow-container);overflow:hidden;border:1px solid rgba(255,255,255,.8);} .header-section{background:rgba(255,255,255,.92);padding:18px 28px 16px;border-bottom:1px solid var(--border-light);} .header-top{display:grid;grid-template-columns:230px 1fr 230px;align-items:start;gap:24px;} .header-left h1{font-size:20px;font-weight:750;letter-spacing:.2px;} .header-left .meta{font-size:12px;color:var(--text-sub);margin-top:6px;} .hero-summary{display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:-2px;} .total-inline{display:flex;align-items:baseline;justify-content:center;gap:16px;width:100%%;} .value-inline{font-size:44px;line-height:1;font-weight:800;color:var(--text-main);letter-spacing:-1px;} .label-inline{font-size:13px;line-height:1;font-weight:500;color:var(--text-sub);} .hero-summary .sub{margin-top:10px;font-size:13px;color:var(--text-sub);display:flex;flex-direction:column;gap:2px;align-items:center;} .hero-summary .sub strong{color:var(--text-main);} .settings-bar{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;justify-content:center;} .badge{padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:7px;} .badge::before{content:'';width:7px;height:7px;border-radius:50%%;} .badge-indigo{background:var(--indigo-bg);color:var(--indigo);} .badge-indigo::before{background:var(--indigo);} .badge-emerald{background:var(--emerald-bg);color:var(--emerald);} .badge-emerald::before{background:#10b981;} .badge-amber{background:var(--amber-bg);color:var(--amber);} .badge-amber::before{background:#fb923c;} .badge-slate{background:var(--slate-bg);color:var(--slate);} .badge-slate::before{background:var(--slate);opacity:.6;} .content-section{padding:18px 28px 20px;display:grid;grid-template-columns:1.1fr 1.45fr .9fr;gap:18px;align-items:start;} .panel{background:var(--bg-card);border-radius:18px;border:1px solid rgba(15,23,42,.04);box-shadow:var(--shadow-card);overflow:hidden;display:flex;flex-direction:column;} .panel-header{padding:16px 18px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-light);} .panel-header h2{font-size:15px;font-weight:700;} .panel-note{font-size:12px;color:var(--text-muted);} .table-wrap{padding:0 10px 8px;} table{width:100%%;border-collapse:collapse;text-align:left;} th{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;padding:11px 10px;border-bottom:1px solid var(--border-light);background:#fff;position:sticky;top:0;z-index:1;} td{padding:11px 10px;font-size:13px;color:var(--text-sub);border-bottom:1px solid var(--border-light);} tr:last-child td{border-bottom:none;} .num-font{font-variant-numeric:tabular-nums;color:var(--text-main);} .text-right{text-align:right;} .panel-denom .graph-area{padding:8px 18px 16px;border-top:1px solid var(--border-light);background:linear-gradient(180deg,#ffffff 0%%,#fafcff 100%%);} .graph-title{font-size:12px;font-weight:700;color:var(--text-sub);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;} .graph-title span{font-size:11px;color:var(--text-muted);font-weight:600;} .bar-row{display:grid;grid-template-columns:48px 1fr 82px;gap:10px;align-items:center;margin:10px 0;} .bar-label{font-size:12px;font-weight:700;color:var(--text-main);} .bar-track{height:10px;background:#eef2ff;border-radius:999px;overflow:hidden;position:relative;} .bar-fill{height:100%%;border-radius:999px;background:linear-gradient(90deg,#6366f1 0%%,#8b5cf6 100%%);} .bar-fill-green{background:linear-gradient(90deg,#22c55e 0%%,#16a34a 100%%);} .bar-values{font-size:12px;font-weight:700;color:var(--text-main);display:grid;grid-template-columns:48px 52px;gap:10px;text-align:left;} .bar-values .percent-value{color:var(--text-muted);font-weight:600;position:relative;left:-10px;} .search-box{display:flex;align-items:center;gap:10px;} .search-box input{width:180px;padding:10px 12px;border-radius:12px;border:1px solid var(--border-light);background:#f8fafc;color:var(--text-main);font-size:12px;outline:none;transition:.2s ease;} .search-box input:focus{border-color:#c7d2fe;box-shadow:0 0 0 4px rgba(99,102,241,.08);background:#fff;} .search-status{padding:0 18px 10px;color:var(--text-muted);font-size:12px;} .sn-table-wrap{flex:1;overflow:auto;padding:0 10px 0;} .highlight-row td{background:#eef2ff;} .no-match{display:none;padding:18px;text-align:center;color:var(--text-muted);font-size:13px;} .no-match.show{display:block;} .reject-empty{padding:16px 18px 14px;display:flex;flex-direction:column;gap:12px;} .reject-card{border-radius:16px;padding:16px;background:linear-gradient(135deg,#ecfdf5 0%%,#f8fafc 100%%);border:1px solid #d1fae5;} .reject-card .tag{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:999px;background:#d1fae5;color:var(--emerald);font-size:12px;font-weight:800;} .reject-card h3{font-size:18px;font-weight:800;margin-top:14px;color:#065f46;} .reject-card p{margin-top:6px;font-size:13px;line-height:1.5;color:#4b5563;} .empty-points{display:grid;grid-template-columns:1fr;gap:10px;} .empty-item{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:12px;background:#fff;border:1px solid var(--border-light);font-size:12px;} .empty-item strong{font-size:12px;color:var(--text-main);} .reject-detail{padding:14px 18px 16px;display:flex;flex-direction:column;gap:12px;} .reject-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;} .reject-stat{padding:12px 14px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;} .reject-stat strong{display:block;font-size:12px;color:#9a3412;margin-bottom:6px;} .reject-stat span{font-size:22px;font-weight:800;color:#7c2d12;} .reject-table-wrap{border:1px solid var(--border-light);border-radius:14px;overflow:hidden;background:#fff;} .reject-table-wrap table th,.reject-table-wrap table td{position:static;} @media (max-width:1320px){body{padding:16px}.dashboard-container{width:100%%}}\n"
         "</style>\n"
@@ -303,32 +306,33 @@ static bool ui_export_data_write_html_file(const char *file_path)
         "<header class=\"header-section\">\n"
         "<div class=\"header-top\">\n"
         "<div class=\"header-left\">\n"
-        "<h1>UN260 Smart Count Report</h1>\n"
-        "<div class=\"meta\">%04u-%02u-%02u %02u:%02u:%02u | Currency: <strong>%s</strong></div>\n"
+        "<h1 data-i18n=\"UN260 Smart Count Report\">UN260 Smart Count Report</h1>\n"
+        "<div class=\"meta\">%04u-%02u-%02u %02u:%02u:%02u | <span data-i18n=\"Currency\">Currency</span>: <strong>%s</strong></div>\n"
         "</div>\n"
         "<div class=\"hero-summary\">\n"
-        "<div class=\"topline total-inline\"><span class=\"value-inline\"><span class=\"counter\" data-target=\"%.0f\">0</span></span><span class=\"label-inline\">Total Amount</span></div>\n"
-        "<div class=\"sub\"><span><strong><span class=\"counter\" data-target=\"%d\">0</span></strong> Notes Counted</span><span><strong><span class=\"counter\" data-target=\"%d\">0</span></strong> Reject</span></div>\n"
+        "<div class=\"topline total-inline\"><span class=\"value-inline\"><span class=\"counter\" data-target=\"%.0f\">0</span></span><span class=\"label-inline\" data-i18n=\"Total Amount\">Total Amount</span></div>\n"
+        "<div class=\"sub\"><span><strong><span class=\"counter\" data-target=\"%d\">0</span></strong> <span data-i18n=\"Notes Counted\">Notes Counted</span></span><span><strong><span class=\"counter\" data-target=\"%d\">0</span></strong> <span data-i18n=\"Reject\">Reject</span></span></div>\n"
         "</div>\n"
         "<div class=\"header-spacer\"></div>\n"
         "</div>\n"
         "<div class=\"settings-bar\">\n"
-        "<span class=\"badge badge-indigo\">%s</span>\n"
-        "<span class=\"badge badge-slate\">%s</span>\n"
-        "<span class=\"badge badge-emerald\">%s</span>\n"
-        "<span class=\"badge badge-indigo\">%s</span>\n"
-        "<span class=\"badge badge-slate\">%s</span>\n"
-        "<span class=\"badge badge-amber\">%s</span>\n"
+        "<span class=\"badge badge-indigo\" data-i18n>%s</span>\n"
+        "<span class=\"badge badge-slate\" data-i18n>%s</span>\n"
+        "<span class=\"badge badge-emerald\" data-i18n>%s</span>\n"
+        "<span class=\"badge badge-indigo\" data-i18n>%s</span>\n"
+        "<span class=\"badge badge-slate\" data-i18n data-i18n-batch=\"%d\">%s</span>\n"
+        "<span class=\"badge badge-amber\" data-i18n>%s</span>\n"
         "</div>\n"
         "</header>\n"
         "<div class=\"content-section\">\n"
         "<section class=\"panel panel-denom\">\n"
-        "<div class=\"panel-header\"><h2>Denomination</h2><div class=\"panel-note\">Face value distribution</div></div>\n"
-        "<div class=\"table-wrap\"><table><thead><tr><th>Denom</th><th class=\"text-right\">PCS</th><th class=\"text-right\">Amount</th></tr></thead><tbody>\n",
+        "<div class=\"panel-header\"><h2 data-i18n=\"Denomination\">Denomination</h2><div class=\"panel-note\" data-i18n=\"Face value distribution\">Face value distribution</div></div>\n"
+        "<div class=\"table-wrap\"><table><thead><tr><th data-i18n=\"Denom\">Denom</th><th class=\"text-right\" data-i18n=\"PCS\">PCS</th><th class=\"text-right\" data-i18n=\"Amount\">Amount</th></tr></thead><tbody>\n",
         (unsigned)now.year, (unsigned)now.month, (unsigned)now.day,
         (unsigned)now.hour, (unsigned)now.minute, (unsigned)now.second,
         curr_buf, total_amount, total_pcs, reject_total,
-        mode_buf, sort_buf, work_buf, add_buf, batch_buf, speed_buf);
+        mode_buf, sort_buf, work_buf, add_buf,
+        machine_state_batch_enabled()?(int)machine_state_batch_num():-1, batch_buf, speed_buf);
 
     for (i = 0; i < counting_data_current()->denom_number && i < (int)(sizeof(counting_data_current()->denom) / sizeof(counting_data_current()->denom[0])); i++) {
         if (counting_data_current()->denom[i].value <= 0) {
@@ -342,7 +346,7 @@ static bool ui_export_data_write_html_file(const char *file_path)
     fprintf(fp,
         "</tbody></table></div>\n"
         "<div class=\"graph-area\">\n"
-        "<div class=\"graph-title\"><div>Amount Distribution</div><span>Horizontal overview</span></div>\n");
+        "<div class=\"graph-title\"><div data-i18n=\"Amount Distribution\">Amount Distribution</div><span data-i18n=\"Horizontal overview\">Horizontal overview</span></div>\n");
 
     for (i = 0; i < counting_data_current()->denom_number && i < (int)(sizeof(counting_data_current()->denom) / sizeof(counting_data_current()->denom[0])); i++) {
         float amount = counting_data_current()->denom[i].amount;
@@ -357,7 +361,7 @@ static bool ui_export_data_write_html_file(const char *file_path)
                 counting_data_current()->denom[i].value, pct, amount, pct);
     }
 
-    fprintf(fp, "<div class=\"graph-title\" style=\"margin-top:16px;\"><div>PCS Distribution</div><span>Count overview</span></div>\n");
+    fprintf(fp, "<div class=\"graph-title\" style=\"margin-top:16px;\"><div data-i18n=\"PCS Distribution\">PCS Distribution</div><span data-i18n=\"Count overview\">Count overview</span></div>\n");
 
     for (i = 0; i < counting_data_current()->denom_number && i < (int)(sizeof(counting_data_current()->denom) / sizeof(counting_data_current()->denom[0])); i++) {
         float pcs = (float)counting_data_current()->denom[i].pcs;
@@ -375,9 +379,9 @@ static bool ui_export_data_write_html_file(const char *file_path)
     fprintf(fp,
         "</div></section>\n"
         "<section class=\"panel panel-sn\">\n"
-        "<div class=\"panel-header\"><h2>Serial Numbers</h2><div class=\"search-box\"><input id=\"snSearch\" type=\"text\" placeholder=\"Search Serial Number\" /></div></div>\n"
+        "<div class=\"panel-header\"><h2 data-i18n=\"Serial Numbers\">Serial Numbers</h2><div class=\"search-box\"><input id=\"snSearch\" type=\"text\" data-i18n-placeholder=\"Search Serial Number\" placeholder=\"Search Serial Number\" /></div></div>\n"
         "<div class=\"search-status\" id=\"searchStatus\">%d matches</div>\n"
-        "<div class=\"sn-table-wrap\"><table><thead><tr><th>No.</th><th>Serial Number</th><th class=\"text-right\">Value</th></tr></thead><tbody id=\"snTableBody\">\n",
+        "<div class=\"sn-table-wrap\"><table><thead><tr><th data-i18n=\"No.\">No.</th><th data-i18n=\"Serial Number\">Serial Number</th><th class=\"text-right\" data-i18n=\"Value\">Value</th></tr></thead><tbody id=\"snTableBody\">\n",
         total_pcs);
 
     {
@@ -397,12 +401,12 @@ static bool ui_export_data_write_html_file(const char *file_path)
         }
     }
     if (sn_no == 0) {
-        fprintf(fp, "<tr data-sn=\"NONE\"><td>--</td><td class=\"num-font sn-cell\">None</td><td class=\"text-right num-font\">--</td></tr>\n");
+        fprintf(fp, "<tr data-sn=\"NONE\"><td>--</td><td class=\"num-font sn-cell\" data-i18n=\"None\">None</td><td class=\"text-right num-font\">--</td></tr>\n");
     }
 
     fprintf(fp,
-        "</tbody></table><div class=\"no-match\" id=\"noMatch\">No matching serial number found.</div></div></section>\n"
-        "<section class=\"panel panel-reject\"><div class=\"panel-header\"><h2>Rejected</h2><div class=\"panel-note\">Status summary</div></div><div id=\"rejectContent\"></div></section>\n"
+        "</tbody></table><div class=\"no-match\" id=\"noMatch\" data-i18n=\"No matching serial number found.\">No matching serial number found.</div></div></section>\n"
+        "<section class=\"panel panel-reject\"><div class=\"panel-header\"><h2 data-i18n=\"Rejected\">Rejected</h2><div class=\"panel-note\" data-i18n=\"Status summary\">Status summary</div></div><div id=\"rejectContent\"></div></section>\n"
         "</div></div>\n"
         "<script>(function(){\n"
         "const reportData={totalAmount:%.0f,totalNotes:%d,rejectCount:%d,suspectNotes:%d,damagedNotes:0,rejectDetails:[",
@@ -437,15 +441,16 @@ static bool ui_export_data_write_html_file(const char *file_path)
 
     fprintf(fp,
         "]};\n"
-        "const counters=document.querySelectorAll('.counter');counters.forEach(el=>{const target=Number(el.dataset.target||0);const duration=1100;const start=performance.now();function tick(now){const progress=Math.min((now-start)/duration,1);const eased=1-Math.pow(1-progress,3);el.textContent=Math.round(target*eased).toLocaleString('en-US');if(progress<1)requestAnimationFrame(tick);}requestAnimationFrame(tick);});\n"
+        "const counters=document.querySelectorAll('.counter');counters.forEach(el=>{const target=Number(el.dataset.target||0);const duration=1100;const start=performance.now();function tick(now){const progress=Math.min((now-start)/duration,1);const eased=1-Math.pow(1-progress,3);el.textContent=Math.round(target*eased).toLocaleString(window.reportLocale||'en-US');if(progress<1)requestAnimationFrame(tick);}requestAnimationFrame(tick);});\n"
         "const input=document.getElementById('snSearch');const rows=Array.from(document.querySelectorAll('#snTableBody tr'));const status=document.getElementById('searchStatus');const noMatch=document.getElementById('noMatch');\n"
-        "function applySearch(){const q=input.value.trim().toUpperCase();let visible=0;rows.forEach(row=>{const sn=(row.dataset.sn||'').toUpperCase();const matched=!q||sn.includes(q);row.style.display=matched?'':'none';row.classList.toggle('highlight-row',!!q&&matched);if(matched)visible++;});status.textContent=visible+(visible===1?' match':' matches');noMatch.classList.toggle('show',visible===0);} \n"
+        "function applySearch(){const q=input.value.trim().toUpperCase();let visible=0;rows.forEach(row=>{const sn=(row.dataset.sn||'').toUpperCase();const matched=!q||sn.includes(q);row.style.display=matched?'':'none';row.classList.toggle('highlight-row',!!q&&matched);if(matched)visible++;});status.dataset.count=visible;status.textContent=window.reportMatches?window.reportMatches(visible):visible+' matches';noMatch.classList.toggle('show',visible===0);} \n"
         "function syncSerialHeight(){const denomPanel=document.querySelector('.panel-denom');const snPanel=document.querySelector('.panel-sn');if(!denomPanel||!snPanel)return;const h=denomPanel.offsetHeight;snPanel.style.height=h+'px';snPanel.style.minHeight=h+'px';}\n"
-        "function renderRejectSection(){const container=document.getElementById('rejectContent');if(!container)return;const hasReject=(reportData.rejectCount>0)||(reportData.rejectDetails&&reportData.rejectDetails.length>0);if(!hasReject){container.innerHTML='<div class=\"reject-empty\"><div class=\"reject-card\"><div class=\"tag\">Excellent</div><h3>No rejected notes</h3><p>All notes passed validation successfully.</p></div><div class=\"empty-points\"><div class=\"empty-item\"><span>Suspect Notes</span><strong>'+reportData.suspectNotes+'</strong></div><div class=\"empty-item\"><span>Damaged Notes</span><strong>'+reportData.damagedNotes+'</strong></div></div></div>';return;}const rowsHtml=(reportData.rejectDetails||[]).map(item=>'<tr><td>'+item.no+'</td><td class=\"num-font\">'+item.pcs+'</td><td>'+item.reason+'</td></tr>').join('');container.innerHTML='<div class=\"reject-detail\"><div class=\"reject-stats\"><div class=\"reject-stat\"><strong>Suspect Notes</strong><span>'+reportData.suspectNotes+'</span></div><div class=\"reject-stat\"><strong>Damaged Notes</strong><span>'+reportData.damagedNotes+'</span></div></div><div class=\"reject-table-wrap\"><table><thead><tr><th>No</th><th>PCS</th><th>Reason</th></tr></thead><tbody>'+rowsHtml+'</tbody></table></div></div>';}\n"
+        "function renderRejectSection(){const container=document.getElementById('rejectContent');if(!container)return;const hasReject=(reportData.rejectCount>0)||(reportData.rejectDetails&&reportData.rejectDetails.length>0);if(!hasReject){container.innerHTML='<div class=\"reject-empty\"><div class=\"reject-card\"><div class=\"tag\" data-i18n=\"Excellent\">Excellent</div><h3 data-i18n=\"No rejected notes\">No rejected notes</h3><p data-i18n=\"All notes passed validation successfully.\">All notes passed validation successfully.</p></div><div class=\"empty-points\"><div class=\"empty-item\"><span data-i18n=\"Suspect Notes\">Suspect Notes</span><strong>'+reportData.suspectNotes+'</strong></div><div class=\"empty-item\"><span data-i18n=\"Damaged Notes\">Damaged Notes</span><strong>'+reportData.damagedNotes+'</strong></div></div></div>';return;}const rowsHtml=(reportData.rejectDetails||[]).map(item=>'<tr><td>'+item.no+'</td><td class=\"num-font\">'+item.pcs+'</td><td data-i18n>'+item.reason+'</td></tr>').join('');container.innerHTML='<div class=\"reject-detail\"><div class=\"reject-stats\"><div class=\"reject-stat\"><strong data-i18n=\"Suspect Notes\">Suspect Notes</strong><span>'+reportData.suspectNotes+'</span></div><div class=\"reject-stat\"><strong data-i18n=\"Damaged Notes\">Damaged Notes</strong><span>'+reportData.damagedNotes+'</span></div></div><div class=\"reject-table-wrap\"><table><thead><tr><th data-i18n=\"No\">No</th><th data-i18n=\"PCS\">PCS</th><th data-i18n=\"Reason\">Reason</th></tr></thead><tbody>'+rowsHtml+'</tbody></table></div></div>';}\n"
         "if(input){input.addEventListener('input',applySearch);}applySearch();renderRejectSection();window.addEventListener('load',()=>{syncSerialHeight();});window.addEventListener('resize',()=>{syncSerialHeight();});requestAnimationFrame(()=>{syncSerialHeight();});\n"
-        "})();</script>\n"
-        "</body></html>\n");
+        "})();</script>\n");
 
+    ui_report_i18n_write(fp,report_language);
+    fputs("</body></html>\n",fp);
     return ui_export_data_flush_and_verify(fp, file_path);
 }
 
@@ -596,27 +601,27 @@ bool ui_export_data_request(void)
 
     if (currency_state_multi_selected() ||
         !counting_data_monetary_result_supported(counting_data_current())) {
-        ui_notice_post(UI_NOTICE_WARNING,"export.current","Export unavailable",ui_text_get(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED));
+        ui_notice_post_text(UI_NOTICE_WARNING,"export.current",UI_N_("Export unavailable"),ui_text_msgid(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED));
         return false;
     }
 
     if (g_ui_export_data_lock) {
-        ui_notice_post(UI_NOTICE_INFO,"export.current","Export","Wait a moment before exporting again.");
+        ui_notice_post_text(UI_NOTICE_INFO,"export.current",UI_N_("Export"),UI_N_("Wait a moment before exporting again."));
         return false;
     }
 
     if (ui_export_data_is_empty()) {
-        ui_notice_post(UI_NOTICE_WARNING,"export.current","No data to export","Count notes first.");
+        ui_notice_post_text(UI_NOTICE_WARNING,"export.current",UI_N_("No data to export"),UI_N_("Count notes first."));
         return false;
     }
 
     if (!usb_storage_prepare()) {
-        ui_notice_post(UI_NOTICE_WARNING,"export.current","USB drive unavailable","Insert a writable USB drive.");
+        ui_notice_post_text(UI_NOTICE_WARNING,"export.current",UI_N_("USB drive unavailable"),UI_N_("Insert a writable USB drive."));
         return false;
     }
 
     ui_export_data_start_lock();
-    ui_notice_post(UI_NOTICE_PROGRESS,"export.current","Exporting records","Keep the USB drive connected.");
+    ui_notice_post_text(UI_NOTICE_PROGRESS,"export.current",UI_N_("Exporting records"),UI_N_("Keep the USB drive connected."));
 
     ui_export_data_build_export_name(export_name, sizeof(export_name));
     if (!usb_storage_make_unique_file_pair(export_name,
@@ -650,8 +655,8 @@ cleanup:
     if (html_tmp_path[0] != '\0') {
         unlink(html_tmp_path);
     }
-    ui_notice_post(ok?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,"export.current",
-        ok?"Records exported":"Export failed",ok?"Saved to USB.":"Check the USB drive, then try again.");
+    ui_notice_post_text(ok?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,"export.current",
+        ok?UI_N_("Records exported"):UI_N_("Export failed"),ok?UI_N_("Saved to USB."):UI_N_("Check the USB drive, then try again."));
     return ok;
 }
 

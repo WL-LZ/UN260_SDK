@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "app_counting_runtime.h"
 #include "app_auto_qr.h"
 #include "un260/app_service/work_mode_service.h"
@@ -151,7 +152,7 @@ static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t le
     }
 
     if (data_collection_state_mode() != DATA_COLLECT_MODE_NONE) {
-        data_collection_state_set_status("Counting started...");
+        data_collection_state_set_status(UI_N_("Counting started..."));
         page_06_data_collection_refresh();
     } else if (ui_manager_get_current_page() != UI_PAGE_PURE &&
                !work_mode_service_diagnostic_active()) {
@@ -169,7 +170,7 @@ static void app_counting_runtime_on_error_frame(const char *tag,
 
 static void app_counting_runtime_on_start_failure(uint8_t type, uint8_t code)
 {
-    char status[160];
+    ui_message_t status;
     const char *description;
 
     if (diagnostic_calibration_feed_failed(type, code)) {
@@ -181,7 +182,7 @@ static void app_counting_runtime_on_start_failure(uint8_t type, uint8_t code)
     }
 
     if (type == 0x01 && code == 0x02) {
-        description = "No banknotes detected";
+        description = UI_N_("No banknotes detected");
         fault_popup_report_start_no_note();
         uart_debug_printf("0x0A start fail (no note)\n");
 
@@ -195,7 +196,7 @@ static void app_counting_runtime_on_start_failure(uint8_t type, uint8_t code)
 
     } else {
         smart_island_notify_warning_level(
-            ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_COUNT_ERROR),
+            ui_text_msgid(UI_TEXT_WIDGET_SMART_ISLAND_COUNT_ERROR),
             SMART_ISLAND_WARNING_LEVEL_ERROR);
         return;
     }
@@ -204,17 +205,14 @@ static void app_counting_runtime_on_start_failure(uint8_t type, uint8_t code)
         return;
     }
 
-    snprintf(status,
-             sizeof(status),
-             "Start failed: %s",
-             description);
-    data_collection_state_set_status(status);
+    ui_message_text(&status,UI_N_("Start failed: %s"),description);
+    data_collection_state_set_message(&status);
     page_06_data_collection_refresh();
 }
 
 static void app_counting_runtime_notice(const char *text)
 {
-    ui_notice_post(UI_NOTICE_WARNING,"counting.report","Counting report",text);
+    ui_notice_post_text(UI_NOTICE_WARNING,"counting.report",UI_N_("Counting report"),text);
 }
 
 void app_counting_runtime_poll_reports(const counting_session_state_t *session,
@@ -224,8 +222,8 @@ void app_counting_runtime_poll_reports(const counting_session_state_t *session,
     counting_report_failure_t failure = counting_report_take_failure();
     if (failure == COUNTING_REPORT_FAILURE_NONE) return;
     const char *message = failure == COUNTING_REPORT_FAILURE_REJECT
-        ? "Reject details incomplete" : failure == COUNTING_REPORT_FAILURE_CAPACITY
-        ? "Serial record limit reached" : "Serial records incomplete";
+        ? UI_N_("Reject details incomplete") : failure == COUNTING_REPORT_FAILURE_CAPACITY
+        ? UI_N_("Serial record limit reached") : UI_N_("Serial records incomplete");
     uart_debug_printf("%s; retained previous serial snapshot\n", message);
     app_counting_runtime_notice(message);
 }
@@ -246,7 +244,8 @@ static void app_counting_runtime_on_runtime_fault(uint8_t code)
         uart_debug_printf("0x0F unmapped controller code=0x%02X\n", code);
         uint32_t now = app_clock_uptime_ms();
         if (code != last_notice || (uint32_t)(now - last_notice_tick) >= 30000U) {
-            app_counting_runtime_notice(get_system_error_desc(code));
+            ui_message_t message;ui_message_uint(&message,UI_N_("Controller report 0x%02X"),code);
+            ui_notice_post_message(UI_NOTICE_WARNING,"counting.report",UI_N_("Counting report"),&message);
             last_notice = code; last_notice_tick = now;
         }
         return;
@@ -422,7 +421,7 @@ static void app_counting_runtime_report_history_commit(
                     session->history_record.save_attempts);
     } else if (result == COUNTING_HISTORY_COMMIT_FAILED) {
         uart_debug_printf("history storage failed or full; pending records retained, new starts blocked\n");
-        smart_island_notify_warning_level("History save pending: storage unavailable",
+        smart_island_notify_warning_level(UI_N_("History save pending: storage unavailable"),
                                            SMART_ISLAND_WARNING_LEVEL_ERROR);
     } else if (result == COUNTING_HISTORY_COMMIT_SAVED && previous_attempts > 0) {
         uart_debug_printf("history save recovered after %u retries\n",

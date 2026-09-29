@@ -15,6 +15,7 @@ void page_06_settings_set_status(const char *t,lv_color_t c) {(void)t;(void)c;}
 void work_mode_service_retry(void){assert(!"Unexpected hardware mode request");}
 void work_mode_service_get_snapshot(work_mode_snapshot_t *s){memset(s,0,sizeof(*s));}
 const char *work_mode_service_status_text(void){return "Unavailable in host test";}
+const char *work_mode_service_status_msgid(void){return "Unavailable in host test";}
 const char *app_command_runtime_diagnostic_run_blocker(void){return "No device attached";}
 bool app_command_runtime_request_diagnostic_run(void){assert(!"Unexpected motor request");return false;}
 static unsigned submitted,closed;

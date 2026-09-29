@@ -1,4 +1,5 @@
 #include"user_cfg.h"
+#include "ui_lang.h"
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -160,6 +161,7 @@ void user_cfg_startup_read(user_cfg_startup_snapshot_t *snapshot)
     (void)user_cfg_bool_load(PERFORMANCE_MONITOR_CFG_PATH, false, &snapshot->performance_monitor);
     (void)user_cfg_bool_load(PERFORMANCE_PROFILE_CFG_PATH, false, &snapshot->performance_profile);
     (void)user_cfg_bool_load(GESTURE_CFG_PATH, false, &snapshot->gesture);
+    (void)ui_locale_store_read(snapshot->locale);
 }
 
 void user_cfg_startup_apply(const user_cfg_startup_snapshot_t *snapshot)
@@ -172,6 +174,7 @@ void user_cfg_startup_apply(const user_cfg_startup_snapshot_t *snapshot)
     g_performance_monitor_enabled = snapshot->performance_monitor;
     g_performance_profile_enabled = snapshot->performance_profile;
     g_gesture_enabled = snapshot->gesture;
+    ui_lang_restore(snapshot->locale);
 }
 
 static bool user_cfg_bool_save(const char *path, const char *temp_path,
@@ -382,3 +385,11 @@ bool user_cfg_touch_feedback_save(bool enabled)
                               enabled, &g_touch_feedback_enabled);
 }
 bool user_cfg_touch_feedback_enabled(void) { return g_touch_feedback_enabled; }
+
+bool user_cfg_language_load(void)
+{
+    char tag[UI_LOCALE_TAG_CAPACITY];
+    bool loaded = ui_locale_store_read(tag);
+    ui_lang_restore(tag);
+    return loaded;
+}

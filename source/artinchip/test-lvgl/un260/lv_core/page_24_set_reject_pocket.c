@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #include "page_24_set_reject_pocket.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
@@ -24,10 +25,10 @@ static void refresh(void)
     for (unsigned i = 0; i < 8; ++i) {
         if (capacity == 30 + i * 10) lv_obj_add_state(presets[i], LV_STATE_CHECKED);
         else lv_obj_clear_state(presets[i], LV_STATE_CHECKED);
-        if (pending) settings_detail_action_block(presets[i], "Wait for the controller to confirm the current capacity.");
+        if (pending) settings_detail_action_block(presets[i], UI_N_("Wait for the controller to confirm the current capacity."));
         else settings_detail_action_block(presets[i], NULL);
     }
-    if (pending) settings_detail_action_block(value_button, "Wait for the controller to confirm the current capacity.");
+    if (pending) settings_detail_action_block(value_button, UI_N_("Wait for the controller to confirm the current capacity."));
     else settings_detail_action_block(value_button, NULL);
 }
 
@@ -39,11 +40,11 @@ static void request_capacity(uint8_t capacity)
     uint8_t previous = machine_state_reject_pocket_max();
     if (capacity == previous) return;
     if (!setting_service_request_reject_pocket_max(capacity, previous)) {
-        ui_notice_post(UI_NOTICE_ERROR,"settings.reject_pocket","Reject pocket","Request not sent. Try again.");
+        ui_notice_post_text(UI_NOTICE_ERROR,"settings.reject_pocket",UI_N_("Reject pocket"),UI_N_("Request not sent. Try again."));
         return;
     }
     pending = true;
-    ui_notice_post(UI_NOTICE_PROGRESS,"settings.reject_pocket","Reject pocket","Waiting for controller...");
+    ui_notice_post_text(UI_NOTICE_PROGRESS,"settings.reject_pocket",UI_N_("Reject pocket"),UI_N_("Waiting for controller..."));
     refresh();
 }
 
@@ -54,7 +55,7 @@ static void keyboard_done(const char *value, void *user_data)
     char *end;
     long capacity = strtol(value, &end, 10);
     if (*end || capacity < REJECT_POCKET_MIN_CAPACITY || capacity > REJECT_POCKET_MAX_CAPACITY) {
-        ui_notice_post(UI_NOTICE_WARNING,"settings.reject_pocket","Invalid capacity","Enter 30-100 notes.");
+        ui_notice_post_text(UI_NOTICE_WARNING,"settings.reject_pocket",UI_N_("Invalid capacity"),UI_N_("Enter 30-100 notes."));
         return;
     }
     request_capacity((uint8_t)capacity);
@@ -92,14 +93,14 @@ void ui_page_24_set_reject_pocket_create(lv_obj_t *parent)
     lv_obj_set_style_bg_opa(frame.body, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(frame.body, 0, 0);
     lv_obj_t *row=lv_settings_panel(frame.body,0,0,1232,208);
-    lv_settings_label(row, "Reject pocket capacity", 24, 22,
+    lv_settings_label(row, ui_tr("Reject pocket capacity"), 24, 22,
         &lv_font_instrument_sans_medium_18, 0x1D2B34);
-    lv_settings_label(row,"Select a preset or enter a custom capacity.",24,54,&lv_font_instrument_sans_medium_14,0x586B78);
+    lv_settings_label(row,ui_tr("Select a preset or enter a custom capacity."),24,54,&lv_font_instrument_sans_medium_14,0x586B78);
     confirmed = lv_settings_label(row, "", 776, 26,
         &lv_font_instrument_sans_semibold_22, 0x1D2B34);
-    value_button = lv_settings_button(row, 976, 19, 228, 52, "Enter capacity", false, edit, NULL);
+    value_button = lv_settings_button(row, 976, 19, 228, 52, ui_tr("Enter capacity"), false, edit, NULL);
     lv_settings_box(row,24,90,1180,1,0xE8EDF0);
-    lv_settings_label(row,"Quick selection",24,128,&lv_font_instrument_sans_medium_16,0x536B79);
+    lv_settings_label(row,ui_tr("Quick selection"),24,128,&lv_font_instrument_sans_medium_16,0x536B79);
     lv_obj_t *base=lv_settings_segment_base(row,270,114,934,52);
     for (unsigned i = 0; i < 8; ++i) {
         char text[8];

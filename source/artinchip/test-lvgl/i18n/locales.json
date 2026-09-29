@@ -1,0 +1,38 @@
+[
+  {
+    "id": 0,
+    "tag": "en",
+    "code": "EN",
+    "name": "English",
+    "direction": "ltr",
+    "enabled": true,
+    "translations_ready": true,
+    "font_ready": true,
+    "shaping_ready": true,
+    "font_profile": "latin"
+  },
+  {
+    "id": 1,
+    "tag": "zh-Hans",
+    "code": "ZH",
+    "name": "简体中文",
+    "direction": "ltr",
+    "enabled": false,
+    "translations_ready": false,
+    "font_ready": false,
+    "shaping_ready": true,
+    "font_profile": "cjk-draft"
+  },
+  {
+    "id": 2,
+    "tag": "ko",
+    "code": "KO",
+    "name": "한국어",
+    "direction": "ltr",
+    "enabled": false,
+    "translations_ready": false,
+    "font_ready": false,
+    "shaping_ready": true,
+    "font_profile": "cjk-draft"
+  }
+]

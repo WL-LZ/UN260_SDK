@@ -26,7 +26,7 @@ static void brightness_event(lv_event_t *event)
         menu.brightness_drag=true;
         if(!backlight_service_set(lv_slider_get_value(slider))){
             lv_slider_set_value(slider,backlight_service_level(),LV_ANIM_OFF);
-            notify(UI_NOTICE_ERROR,"The display did not accept the brightness change.");
+            notify(UI_NOTICE_ERROR,UI_N_("The display did not accept the brightness change."));
         }
         if(menu.brightness_value&&backlight_service_max()>0)
             lv_label_set_text_fmt(menu.brightness_value,"%d%%",backlight_service_level()*100/backlight_service_max());
@@ -35,13 +35,13 @@ static void brightness_event(lv_event_t *event)
         if(!ok){backlight_service_set(menu.brightness_previous);lv_slider_set_value(slider,backlight_service_level(),LV_ANIM_OFF);}
         if(menu.brightness_value&&backlight_service_max()>0)
             lv_label_set_text_fmt(menu.brightness_value,"%d%%",backlight_service_level()*100/backlight_service_max());
-        menu.brightness_drag=false;notify(ok?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,ok?"Brightness saved.":"Brightness restored; the change was not saved.");
+        menu.brightness_drag=false;notify(ok?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,ok?UI_N_("Brightness saved."):UI_N_("Brightness restored; the change was not saved."));
     }
 }
 static void brightness(lv_obj_t *p,int x,int y,int w,int h)
 {
     lv_obj_t *card=box(p,x,y,w,h,PANEL,18);
-    icon(card,MICON("sun",22),20,22,BLUE);text(card,52,24,w-154,"Screen brightness");
+    icon(card,MICON("sun",22),20,22,BLUE);text(card,52,24,w-154,ui_tr("Screen brightness"));
     char value[20];int max=backlight_service_max(),level=backlight_service_level();
     if(max>0)snprintf(value,sizeof(value),"%d%%",level*100/max);else strcpy(value,"--");
     menu.brightness_value=label(card,w-112,19,92,value,&lv_font_instrument_sans_semibold_29,INK);
@@ -71,10 +71,10 @@ static uint32_t business_day(void)
 }
 static void short_day(char *out,size_t size,uint32_t day)
 {
-    static const char *months[]={"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
+    static const char *months[]={UI_N_("Jan"),UI_N_("Feb"),UI_N_("Mar"),UI_N_("Apr"),UI_N_("May"),UI_N_("Jun"),UI_N_("Jul"),UI_N_("Aug"),UI_N_("Sep"),UI_N_("Oct"),UI_N_("Nov"),UI_N_("Dec")};
     unsigned month=day/100%100;
-    if(month>=1&&month<=12)snprintf(out,size,"%u %s",day%100,months[month-1]);
-    else snprintf(out,size,"Set business date");
+    if(month>=1&&month<=12)snprintf(out,size,"%u %s",day%100,ui_tr(months[month-1]));
+    else snprintf(out,size,"%s",ui_tr("Set business date"));
 }
 /* Ledger amounts are integer values; format without a lossy float conversion. */
 static void money_text(char out[32],uint64_t value)
@@ -92,9 +92,9 @@ static void currency_totals(lv_obj_t *p,int x,int y,int w,int h,uint32_t day)
     cashbook_money_t totals[CASHBOOK_CURRENCIES];unsigned n,confirmed,pending;
     bool ok=cashbook_totals(menu.tab==2?cashbook_store_view():cashbook_store_get(),day,totals,&n,&confirmed,&pending);
     lv_obj_t *card=box(p,x,y,w,h,BLUE,18);
-    label(card,16,16,w-52,"Confirmed",&lv_font_instrument_sans_medium_16,0xFFFFFF);icon(card,MICON("check",20),w-36,16,0xFFFFFF);
+    label(card,16,16,w-52,ui_tr("Confirmed"),&lv_font_instrument_sans_medium_16,0xFFFFFF);icon(card,MICON("check",20),w-36,16,0xFFFFFF);
     if(!cashbook_store_ready()||!ok){label(card,16,58,w-32,cashbook_store_message(),&lv_font_instrument_sans_menumedium_14,0xFFFFFF);return;}
-    if(!n){label(card,16,68,w-32,"No totals yet",&lv_font_instrument_sans_semibold_21,0xFFFFFF);return;}
+    if(!n){label(card,16,68,w-32,ui_tr("No totals yet"),&lv_font_instrument_sans_semibold_21,0xFFFFFF);return;}
     char current[4];currency_state_get_selected_code(current);
     for(unsigned i=1;i<n;i++)if(!strcmp(totals[i].code,current)){
         cashbook_money_t first=totals[i];memmove(totals+1,totals,i*sizeof(*totals));totals[0]=first;break;
@@ -102,11 +102,11 @@ static void currency_totals(lv_obj_t *p,int x,int y,int w,int h,uint32_t day)
     lv_obj_t *list=scroll(card,16,46,w-32,h-98);
     for(unsigned i=0;i<n;i++){
         label(list,0,i*53,w-32,totals[i].code,&lv_font_instrument_sans_menumedium_14,0xFFFFFF);
-        char s[32];snprintf(s,sizeof(s),"%u notes",totals[i].pcs);label(list,0,i*53+20,85,s,&lv_font_instrument_sans_medium_12,0xD9E7FB);
+        char s[32];snprintf(s,sizeof(s),ui_trn("%u notes", (totals[i].pcs)),totals[i].pcs);label(list,0,i*53+20,85,s,&lv_font_instrument_sans_medium_12,0xD9E7FB);
         money_text(s,totals[i].amount);
         lv_obj_t *l=label(list,70,i*53+3,w-102,s,strlen(s)>12?&lv_font_instrument_sans_semibold_18:&lv_font_instrument_sans_semibold_24,0xFFFFFF);
         lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_RIGHT,0);
         if(i+1<n){lv_obj_t *rule=box(list,0,i*53+43,w-32,1,0xFFFFFF,0);lv_obj_set_style_bg_opa(rule,LV_OPA_20,0);}
     }
-    label(card,16,h-32,w-32,"One selected result per group.",&lv_font_instrument_sans_medium_13,0xD9E7FB);
+    label(card,16,h-32,w-32,ui_tr("One selected result per group."),&lv_font_instrument_sans_medium_13,0xD9E7FB);
 }

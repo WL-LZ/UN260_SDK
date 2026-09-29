@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "work_mode_service.h"
 
 #include <stddef.h>
@@ -340,33 +341,35 @@ bool work_mode_service_take_failure(void)
     return result;
 }
 
-const char *work_mode_service_status_text(void)
+const char *work_mode_service_status_msgid(void)
 {
     if (state.failure == FAILURE_LOAD) return state.diagnostic ?
-        "Mode preference unavailable. Retry." : "Mode storage unavailable. Open a diagnostic page to retry.";
+        UI_N_("Mode preference unavailable. Retry.") : UI_N_("Mode storage unavailable. Open a diagnostic page to retry.");
     if (state.failure == FAILURE_SAVE) return state.diagnostic ?
-        "Could not save mode preference. Retry." : "Mode could not be saved. Open a diagnostic page to retry.";
+        UI_N_("Could not save mode preference. Retry.") : UI_N_("Mode could not be saved. Open a diagnostic page to retry.");
     if (state.failure == FAILURE_SEND) return state.diagnostic ?
-        "Mode request not sent. Retry." : "Mode request not sent. Retry Start mode in Menu.";
+        UI_N_("Mode request not sent. Retry.") : UI_N_("Mode request not sent. Retry Start mode in Menu.");
     if (state.failure == FAILURE_REPLY) return state.diagnostic ?
-        "Mode change not confirmed. Retry." : "Mode not confirmed. Retry Start mode in Menu.";
+        UI_N_("Mode change not confirmed. Retry.") : UI_N_("Mode not confirmed. Retry Start mode in Menu.");
     if (state.failure == FAILURE_TIMEOUT) return state.diagnostic ?
-        "Mode confirmation timed out. Retry." : "Mode timed out. Retry Start mode in Menu.";
+        UI_N_("Mode confirmation timed out. Retry.") : UI_N_("Mode timed out. Retry Start mode in Menu.");
     switch (state.phase) {
-    case WORK_MODE_WAITING_SYNC: return "Waiting for controller mode";
-    case WORK_MODE_SAVING: return "Saving mode preference";
+    case WORK_MODE_WAITING_SYNC: return UI_N_("Waiting for controller mode");
+    case WORK_MODE_SAVING: return UI_N_("Saving mode preference");
     case WORK_MODE_WAITING_IDLE:
         return state.actual_valid && state.actual == WORK_MODE_MANUAL ?
-            "Manual mode retained until the operation finishes" :
-            "Waiting for the operation to finish";
+            UI_N_("Manual mode retained until the operation finishes") :
+            UI_N_("Waiting for the operation to finish");
     case WORK_MODE_SWITCHING:
         return state.request == REQUEST_USER && state.target == WORK_MODE_AUTO ?
-            "Confirming automatic mode" : "Confirming manual mode";
-    case WORK_MODE_RESTORING: return "Restoring start mode";
-    case WORK_MODE_READY: return state.diagnostic ? "Manual mode confirmed" : "Start mode confirmed";
-    default: return "Start mode unavailable";
+            UI_N_("Confirming automatic mode") : UI_N_("Confirming manual mode");
+    case WORK_MODE_RESTORING: return UI_N_("Restoring start mode");
+    case WORK_MODE_READY: return state.diagnostic ? UI_N_("Manual mode confirmed") : UI_N_("Start mode confirmed");
+    default: return UI_N_("Start mode unavailable");
     }
 }
+
+const char *work_mode_service_status_text(void){return ui_tr(work_mode_service_status_msgid());}
 
 void work_mode_service_get_snapshot(work_mode_snapshot_t *snapshot)
 {

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "un260/lv_components/ui_notice.h"
+#include "un260/lv_system/ui_i18n.h"
 /* View/service fixtures record the presentation boundary. Component animation,
  * queue and touch behavior are exercised by the dedicated notice tests. */
 static unsigned test_notice_count;
@@ -19,6 +20,11 @@ void ui_notice_post(ui_notice_kind_t kind,const char *key,const char *title,cons
     snprintf(test_notice_title,sizeof(test_notice_title),"%s",title?title:"");
     snprintf(test_notice_detail,sizeof(test_notice_detail),"%s",detail?detail:"");
 }
+void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title,const char *detail)
+{ui_notice_post(kind,key,ui_tr(title),ui_tr(detail));}
+void ui_notice_post_message(ui_notice_kind_t kind,const char *key,const char *title,const ui_message_t *message)
+{char detail[UI_NOTICE_DETAIL_CAPACITY];ui_message_render(message,detail,sizeof(detail));ui_notice_post(kind,key,ui_tr(title),detail);}
+void ui_notice_language_changed(void){}
 void ui_notice_dismiss(const char *key)
 {if(!key||!strcmp(key,test_notice_key))test_notice_visible=false;}
 void ui_notice_clear(const char *key){ui_notice_dismiss(key);}

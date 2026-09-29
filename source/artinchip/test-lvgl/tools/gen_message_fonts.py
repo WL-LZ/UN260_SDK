@@ -6,6 +6,7 @@ lv_font_conv; source TTC defaults to Debian/Ubuntu fonts-noto-cjk (SIL OFL 1.1).
 """
 from pathlib import Path
 import argparse
+import ast
 import hashlib
 import json
 import re
@@ -13,7 +14,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 SIZES = (12, 14, 16, 18, 20, 22, 24, 28)
-INPUTS = ('un260/lv_system/ui_text_page.c', 'un260/lv_system/ui_text_widget.c',
+INPUTS = ('i18n/legacy_ids.json', 'i18n/locales.json',
           'un260/lv_components/lv_fault_popup.c',
           'un260/lv_components/fault_guide/fault_guide_catalog.c')
 ASSETS = ROOT / 'aic_ui/font/message'
@@ -26,11 +27,42 @@ def literal_codepoints(source):
         chars.update(ord(c) for c in literal if ord(c) >= 0x80)
     return chars
 
+def translated_points(keys):
+    """Read the maintained catalogues, not the generated C representation.
+
+    These are the existing message fallback roles, not proof that an entire
+    locale has fonts. Language activation has a separate full-UI readiness gate.
+    """
+    chars = {ord(c) for key in keys for c in key if ord(c) >= 0x80}
+    for path in sorted((ROOT / 'i18n/locales').glob('*.json')) + sorted((ROOT / 'i18n/fragments').glob('*.json')):
+        for entries in json.loads(path.read_text(encoding='utf-8')).values():
+            for key in keys:
+                value = entries.get(key)
+                values = value.values() if isinstance(value, dict) else (value,)
+                for text in values:
+                    if text:
+                        chars.update(ord(c) for c in text if ord(c) >= 0x80)
+    return chars
+
+
+def marked_keys(source):
+    return {ast.literal_eval(value) for value in re.findall(
+        r'\b(?:UI_N_|ui_tr|ui_trn|T)\s*\(\s*(' + LITERAL + ')', source)}
+
+
+def fault_keys(source):
+    keys = marked_keys(source)
+    for title, location in re.findall(r'\bE\(\s*(' + LITERAL + r')\s*,\s*(' + LITERAL + ')', source):
+        keys.update((ast.literal_eval(title), ast.literal_eval(location)))
+    return keys
+
+
 def required_codepoints():
-    chars = set()
-    for relative in INPUTS:
-        chars.update(literal_codepoints((ROOT / relative).read_text(encoding='utf-8')))
-    return sorted(chars)
+    legacy = json.loads((ROOT / INPUTS[0]).read_text(encoding='utf-8'))
+    keys = set(legacy.values())
+    keys.update(marked_keys((ROOT / INPUTS[2]).read_text(encoding='utf-8')))
+    keys.update(fault_keys((ROOT / INPUTS[3]).read_text(encoding='utf-8')))
+    return sorted(translated_points(keys))
 
 def required_by_size():
     """Roles match ui_notice.c and lv_fault_popup.c; keep broad message sizes.
@@ -40,21 +72,20 @@ def required_by_size():
     Unicode list. The real-LVGL tests additionally walk each displayed label.
     """
     all_points = set(required_codepoints())
-    popup = literal_codepoints((ROOT / INPUTS[2]).read_text(encoding='utf-8'))
+    popup = translated_points(marked_keys((ROOT / INPUTS[2]).read_text(encoding='utf-8')))
     catalog_source = (ROOT / INPUTS[3]).read_text(encoding='utf-8')
-    catalog = literal_codepoints(catalog_source)
-    title_literals = re.findall(r'\bE\(\s*'+LITERAL+r'\s*,\s*('+LITERAL+r')', catalog_source)
-    title_literals += re.findall(r'\.title\s*=\s*T\(\s*'+LITERAL+r'\s*,\s*('+LITERAL+r')', catalog_source)
-    titles = literal_codepoints(' '.join(title_literals))
+    catalog = translated_points(fault_keys(catalog_source))
+    title_literals = re.findall(r'\bE\(\s*('+LITERAL+r')', catalog_source)
+    title_literals += re.findall(r'\.title\s*=\s*T\(\s*('+LITERAL+r')', catalog_source)
+    titles = translated_points({ast.literal_eval(value) for value in title_literals})
     if not titles:
         raise SystemExit('Fault title catalogue grammar changed; update role extraction')
-    widget = (ROOT / INPUTS[1]).read_text(encoding='utf-8')
+    legacy = json.loads((ROOT / INPUTS[0]).read_text(encoding='utf-8'))
     meta = set()
     for name in ('UI_TEXT_NOTICE_NOW', 'UI_TEXT_NOTICE_ONGOING'):
-        match = re.search(r'\['+name+r'\b[^]]*\]\s*=\s*\{([^}]+)\}', widget)
-        if not match:
+        if name not in legacy:
             raise SystemExit('Missing notice metadata: '+name)
-        meta.update(literal_codepoints(match[1]))
+        meta.update(translated_points({legacy[name]}))
     return {12: sorted(popup), 14: sorted(catalog | popup | meta),
             16: sorted(titles), 18: sorted(all_points), 20: sorted(all_points),
             22: sorted(all_points), 24: sorted(catalog), 28: sorted(titles)}

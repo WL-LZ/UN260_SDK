@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "app_setting_reply.h"
 #include "app_setting_notice.h"
 
@@ -68,7 +69,7 @@ static void setting_reply_handle_double_note(const uint8_t *buf, uint8_t len)
     uart_debug_printf("0x31 double note level ack: level=0x%02X res=0x%02X\n", buf[4], buf[5]);
     if (result_taken) {
         ui_page_22_set_double_note_on_reply(&result);
-        app_setting_notice_result("settings.double_note", "Double-note sensitivity", result.success);
+        app_setting_notice_result("settings.double_note", UI_N_("Double-note sensitivity"), result.success);
     }
 }
 
@@ -106,7 +107,7 @@ static void setting_reply_handle_serial_number(const uint8_t *buf, uint8_t len)
 
     uart_debug_printf("0x32 serial number level ack: level=0x%02X res=0x%02X\n", buf[4], buf[5]);
     ui_page_25_set_serial_number_on_reply(buf[4], buf[5]);
-    app_setting_notice_result("settings.serial_number", "Serial number", result.success);
+    app_setting_notice_result("settings.serial_number", UI_N_("Serial number"), result.success);
 }
 
 static void setting_reply_handle_flap(const uint8_t *buf, uint8_t len)
@@ -122,7 +123,7 @@ static void setting_reply_handle_flap(const uint8_t *buf, uint8_t len)
     if (setting_service_take_flap_position_result(buf[4], &result)) {
         machine_state_confirm_flap_position(result.success ? result.target : result.previous);
         ui_page_23_set_flap_on_reply(&result);
-        app_setting_notice_result("settings.flap", "Flap position", result.success);
+        app_setting_notice_result("settings.flap", UI_N_("Flap position"), result.success);
     }
 }
 
@@ -156,14 +157,14 @@ static void setting_reply_handle_reject_pocket(const uint8_t *buf, uint8_t len)
         if (setting_service_take_reject_pocket_max_result(res, &result)) {
             machine_state_confirm_reject_pocket_max(result.target);
             ui_page_24_set_reject_pocket_on_reply(&result);
-            app_setting_notice_result("settings.reject_pocket", "Reject capacity", result.success);
+            app_setting_notice_result("settings.reject_pocket", UI_N_("Reject capacity"), result.success);
         }
     } else if (res == 0x02) {
         uart_debug_printf("Reject pocket pcs set fail\n");
         if (setting_service_take_reject_pocket_max_result(res, &result)) {
             machine_state_confirm_reject_pocket_max(result.previous);
             ui_page_24_set_reject_pocket_on_reply(&result);
-            app_setting_notice_result("settings.reject_pocket", "Reject capacity", result.success);
+            app_setting_notice_result("settings.reject_pocket", UI_N_("Reject capacity"), result.success);
         }
     } else {
         uart_debug_printf("0x08 unknown res=0x%02X\n", res);
@@ -178,7 +179,7 @@ static void setting_reply_handle_print(const uint8_t *buf, uint8_t len)
         if (print_config_take_status_reply(buf[4], &result)) {
             bool saving = ui_page_20_set_print_is_saving();
             ui_page_20_set_print_on_reply(&result);
-            if (!saving) app_setting_notice_result("settings.receipt", "Receipt settings", result.success);
+            if (!saving) app_setting_notice_result("settings.receipt", UI_N_("Receipt settings"), result.success);
         }
         return;
     }
@@ -204,7 +205,7 @@ static void setting_reply_handle_print(const uint8_t *buf, uint8_t len)
     }
     bool saving = ui_page_20_set_print_is_saving();
             ui_page_20_set_print_on_reply(&result);
-            if (!saving) app_setting_notice_result("settings.receipt", "Receipt settings", result.success);
+            if (!saving) app_setting_notice_result("settings.receipt", UI_N_("Receipt settings"), result.success);
 }
 
 bool app_setting_reply_handle_detail(uint8_t cmd,

@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "lv_nav_button.h"
 #include "lv_damped_button.h"
 #include "un260/lv_resources/ui_icons.h"
@@ -39,7 +40,7 @@ lv_obj_t *lv_nav_button_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
         .disabled_color=0xF0F1F2, .text_color=0x293B44,
         .disabled_text_color=0xADB7BD, .radius=10
     };
-    lv_obj_t *button = lv_damped_button_create(parent, &style, "Back",
+    lv_obj_t *button = lv_damped_button_create(parent, &style, ui_tr("Back"),
         &lv_font_instrument_sans_medium_16);
     if(!button) return NULL;
     lv_obj_set_pos(button, x, y);

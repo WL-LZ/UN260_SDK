@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #include "page_30_set_factory.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
@@ -21,8 +22,8 @@ static void update_controls(void)
 {
     if (!frame.root) return;
     if (pending || reboot_required) {
-        settings_detail_action_block(reset_button, reboot_required ? "Restart the device to complete the reset." : "Reset is in progress. Keep power connected.");
-        settings_detail_action_block(frame.back, reboot_required ? "Restart the device to complete the reset." : "Reset is in progress. Keep power connected.");
+        settings_detail_action_block(reset_button, reboot_required ? UI_N_("Restart the device to complete the reset.") : UI_N_("Reset is in progress. Keep power connected."));
+        settings_detail_action_block(frame.back, reboot_required ? UI_N_("Restart the device to complete the reset.") : UI_N_("Reset is in progress. Keep power connected."));
     } else {
         settings_detail_action_block(reset_button, NULL);
         settings_detail_action_block(frame.back, NULL);
@@ -34,11 +35,11 @@ static void confirm_start(void *user_data)
     (void)user_data;
     if (pending || reboot_required) return;
     if (!setting_service_request_factory_reset()) {
-        ui_notice_post(UI_NOTICE_ERROR,"settings.factory","Reset not sent","Try again.");
+        ui_notice_post_text(UI_NOTICE_ERROR,"settings.factory",UI_N_("Reset not sent"),UI_N_("Try again."));
         return;
     }
     pending = true;
-    ui_notice_post(UI_NOTICE_PROGRESS,"settings.factory","Factory reset","Waiting for controller...");
+    ui_notice_post_text(UI_NOTICE_PROGRESS,"settings.factory",UI_N_("Factory reset"),UI_N_("Waiting for controller..."));
     update_controls();
 }
 
@@ -59,10 +60,10 @@ static void confirm_reboot(void *user_data)
     reboot_timer = lv_timer_create(reboot_tick, 1000, NULL);
     if (reboot_timer) {
         lv_timer_set_repeat_count(reboot_timer, 1);
-        ui_notice_post(UI_NOTICE_PROGRESS,"settings.factory","Restarting",NULL);
+        ui_notice_post_text(UI_NOTICE_PROGRESS,"settings.factory",UI_N_("Restarting"),NULL);
     } else {
-        settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING, "Restart not scheduled",
-            "Please try again.", "Restart", NULL, confirm_reboot, NULL, NULL);
+        settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING, ui_tr("Restart not scheduled"),
+            ui_tr("Please try again."), ui_tr("Restart"), NULL, confirm_reboot, NULL, NULL);
     }
 }
 
@@ -112,19 +113,19 @@ void ui_page_30_set_factory_create(lv_obj_t *parent)
     lv_obj_set_style_bg_opa(frame.body, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(frame.body, 0, 0);
     lv_obj_t *impact = lv_settings_panel(frame.body, 0, 0, 724, 242);
-    factory_impact(impact, 18, "Settings", "Controller settings",
-        "Restores the controller's factory configuration.");
-    factory_impact(impact, 94, "Layers", "PRE totals and details",
-        "A clear request is sent before the device restarts.");
-    factory_impact(impact, 170, "Clock", "Restart required",
-        "Restart is offered after the controller confirms the reset.");
+    factory_impact(impact, 18, "Settings", ui_tr("Controller settings"),
+        ui_tr("Restores the controller's factory configuration."));
+    factory_impact(impact, 94, "Layers", ui_tr("PRE totals and details"),
+        ui_tr("A clear request is sent before the device restarts."));
+    factory_impact(impact, 170, "Clock", ui_tr("Restart required"),
+        ui_tr("Restart is offered after the controller confirms the reset."));
     lv_obj_t *action = lv_settings_panel(frame.body, 748, 0, 484, 242);
     lv_obj_set_style_border_color(action, lv_color_hex(0xDFC8C5), 0);
-    lv_settings_label(action, "Restore factory settings", 24, 22,
+    lv_settings_label(action, ui_tr("Restore factory settings"), 24, 22,
         &lv_font_instrument_sans_medium_18, 0x1D2B34);
     lv_obj_t *description = lv_settings_label(action,
-        "This replaces the current controller configuration."
-        "\nReview the effects before continuing.", 24, 66,
+        ui_tr("This replaces the current controller configuration."
+        "\nReview the effects before continuing."), 24, 66,
         &lv_font_instrument_sans_medium_16, 0x586B78);
     lv_obj_set_width(description, 436);
     lv_label_set_long_mode(description, LV_LABEL_LONG_WRAP);
@@ -159,7 +160,7 @@ void ui_page_30_set_factory_on_reply(uint8_t res)
     pending = false;
     reboot_required = res == 0x01;
     update_controls();
-    if(!reboot_required)ui_notice_post(UI_NOTICE_ERROR,"settings.factory","Reset rejected","Check controller status before retrying.");
+    if(!reboot_required)ui_notice_post_text(UI_NOTICE_ERROR,"settings.factory",UI_N_("Reset rejected"),UI_N_("Check controller status before retrying."));
     if (!frame.root) return;
     if (reboot_required) {
         ui_notice_clear("settings.factory");
@@ -175,6 +176,6 @@ void ui_page_30_set_factory_on_timeout(void)
     pending=false;
     /* Unknown acknowledgement must never schedule a restart. */
     update_controls();
-    ui_notice_post(UI_NOTICE_WARNING,"settings.factory","Reset unconfirmed",
-        "No reply. Check controller status before retrying.");
+    ui_notice_post_text(UI_NOTICE_WARNING,"settings.factory",UI_N_("Reset unconfirmed"),
+        UI_N_("No reply. Check controller status before retrying."));
 }

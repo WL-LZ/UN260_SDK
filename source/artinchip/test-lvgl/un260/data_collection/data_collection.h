@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_message.h"
 #ifndef DATA_COLLECTION_H
 #define DATA_COLLECTION_H
 
@@ -28,6 +29,7 @@ const char *data_collection_state_status(void);
 void data_collection_state_select_mode(data_collect_mode_t mode, const char *status);
 void data_collection_state_reset_pcs(void);
 void data_collection_state_set_status(const char *status);
+void data_collection_state_set_message(const ui_message_t *message);
 void data_collection_state_exit(const char *status);
 
 bool data_collection_request_begin(data_collect_mode_t target_mode,

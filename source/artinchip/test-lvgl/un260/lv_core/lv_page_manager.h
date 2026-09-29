@@ -78,6 +78,9 @@ bool ui_manager_suspend_to_home(void);
 bool ui_manager_restore_from_home(void);
 bool ui_manager_invalidate_page_cache(ui_page_t page); // 主动释放非活动缓存页
 void ui_manager_invalidate_all_page_caches(void); // 释放所有非活动缓存页
+/* Language Save calls this before leaving its page. Recreate hidden views on
+ * their next activation; never destroy an active draft/operation to relabel it. */
+void ui_manager_on_language_changed(void);
 /* Returns true when the retained page is ready (already cached or created and
  * suspended by this call).  Returns false while an optional data dependency
  * is not ready, allowing the boot scheduler to retry without creating stale

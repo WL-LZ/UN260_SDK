@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "boot_theme_config.h"
 #if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D
 #include "un260/lv_core/page_08_boot.h"
@@ -16,7 +17,7 @@ LV_FONT_DECLARE(lv_font_instrument_sans_semibold_16);
 static const char background[]="L:/usr/local/share/lvgl_data/boot_theme_d/background.png";
 static const char ready_background[]="L:/usr/local/share/lvgl_data/backgrounds/boot.png";
 typedef struct { lv_obj_t *seal,*check,*title,*sub,*signature; } ready_visual_t;
-static const char *names[5]={"Configuration","Sensors","Motor","Electromagnet","Image board"};
+static const char *names[5]={UI_N_("Configuration"),UI_N_("Sensors"),UI_N_("Motor"),UI_N_("Electromagnet"),UI_N_("Image board")};
 enum { WAIT, CHECK, PASS, FAIL };
 static struct {
     lv_obj_t *root,*title,*count,*progress,*percent,*caption,*track,*section;
@@ -57,9 +58,9 @@ static void ready_create(lv_obj_t *parent, ready_visual_t *v)
         lv_obj_clear_flag(v->seal,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
         v->check=lv_line_create(v->seal);
         if(v->check){lv_obj_set_pos(v->check,11,11);lv_line_set_points(v->check,points,3);lv_obj_set_style_line_width(v->check,2,0);lv_obj_set_style_line_rounded(v->check,true,0);lv_obj_set_style_line_color(v->check,lv_color_hex(0x598197),0);}}
-    v->title=label(parent,0,174,1280,"Ready to count.",&lv_font_instrument_sans_medium_36,0x304652);
-    v->sub=label(parent,0,230,1280,"Precision starts here.",&lv_font_instrument_sans_medium_16,0x869BAB);
-    v->signature=label(parent,0,366,1280,"UN260  /  PRECISION IN EVERY NOTE",&lv_font_instrument_sans_medium_12,0x90A4B3);
+    v->title=label(parent,0,174,1280,ui_tr("Ready to count."),&lv_font_instrument_sans_medium_36,0x304652);
+    v->sub=label(parent,0,230,1280,ui_tr("Precision starts here."),&lv_font_instrument_sans_medium_16,0x869BAB);
+    v->signature=label(parent,0,366,1280,ui_tr("UN260  /  PRECISION IN EVERY NOTE"),&lv_font_instrument_sans_medium_12,0x90A4B3);
     lv_obj_t *labels[]={v->title,v->sub,v->signature};
     for(unsigned i=0;i<3;i++)if(labels[i])lv_obj_set_style_text_align(labels[i],LV_TEXT_ALIGN_CENTER,0);
 }
@@ -99,7 +100,7 @@ static void apply(uint32_t now){
             view.phase[i]=state;view.active_at[i]=now;
             if(i==0&&state==CHECK&&age<970)view.active_at[i]=view.shown_at+970;
             uint32_t color=state==FAIL?0xB53622:state==PASS?0x209A78:state==CHECK?0x0074F8:0xA1B0BC;
-            if(view.states[i]){lv_label_set_text_static(view.states[i],state==FAIL?"Not passed":state==PASS?"Ready":state==CHECK?"Checking":"Waiting");lv_obj_set_style_text_color(view.states[i],lv_color_hex(color),0);}
+            if(view.states[i]){lv_label_set_text_static(view.states[i],state==FAIL?ui_tr("Not passed"):state==PASS?ui_tr("Ready"):state==CHECK?ui_tr("Checking"):ui_tr("Waiting"));lv_obj_set_style_text_color(view.states[i],lv_color_hex(color),0);}
             if(view.icons[i]){lv_obj_set_style_border_color(view.icons[i],lv_color_hex(color),0);lv_obj_set_style_bg_color(view.icons[i],lv_color_hex(color),0);}
             if(view.marks[i]){
                 if(state==PASS||state==FAIL){lv_img_set_src(view.marks[i],state==PASS?&selfcheck_pass:&selfcheck_fail);lv_obj_clear_flag(view.marks[i],LV_OBJ_FLAG_HIDDEN);}
@@ -112,13 +113,13 @@ static void apply(uint32_t now){
         view.completed=s.completed_count;
         if(view.progress)lv_obj_set_width(view.progress,1176*s.completed_count/5);
         if(view.percent)lv_label_set_text_fmt(view.percent,"%u%%",s.completed_count*20U);
-        if(view.count)lv_label_set_text_fmt(view.count,"%u / 5 complete",s.completed_count);
+        if(view.count)lv_label_set_text_fmt(view.count,ui_tr("%u / 5 complete"),s.completed_count);
     }
     bool ready=s.stage==BOOT_STAGE_DONE&&passed==5&&!failed;
     if(ready&&!view.done){view.done=true;view.done_at=now;}
     if(!ready)view.done=false;
-    if(failed!=view.failed){view.failed=failed;if(view.title)lv_label_set_text_static(view.title,failed?"Needs attention.":"Getting ready.");}
-    set_text(view.caption,failed?"Check the reported fault before continuing.":"Checking your system.");
+    if(failed!=view.failed){view.failed=failed;if(view.title)lv_label_set_text_static(view.title,failed?ui_tr("Needs attention."):ui_tr("Getting ready."));}
+    set_text(view.caption,failed?ui_tr("Check the reported fault before continuing."):ui_tr("Checking your system."));
     if(view.caption){lv_color_t c=lv_color_hex(failed?0xB53622:0x68818F);if(lv_obj_get_style_text_color(view.caption,0).full!=c.full)lv_obj_set_style_text_color(view.caption,c,0);}
     if(!ready&&!failed&&!view.waiting){
         view.waiting=lv_spinner_create(view.root,900,72);
@@ -209,8 +210,8 @@ static void make_card(unsigned i){
     lv_obj_remove_style_all(o);lv_obj_set_pos(o,52+i*238,216);lv_obj_set_size(o,224,88);
     lv_obj_set_style_shadow_width(o,8,0);lv_obj_set_style_shadow_ofs_y(o,2,0);lv_obj_set_style_shadow_color(o,lv_color_hex(0x8B9DB4),0);
     lv_obj_set_style_radius(o,13,0);lv_obj_clear_flag(o,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
-    view.labels[i]=label(o,46,23,168,names[i],&lv_font_instrument_sans_medium_16,0x243F51);
-    view.states[i]=label(o,46,49,168,"Waiting",&lv_font_instrument_sans_medium_12,0xA1B0BC);
+    view.labels[i]=label(o,46,23,168,ui_tr(names[i]),&lv_font_instrument_sans_medium_16,0x243F51);
+    view.states[i]=label(o,46,49,168,ui_tr("Waiting"),&lv_font_instrument_sans_medium_12,0xA1B0BC);
     view.icons[i]=lv_obj_create(o);if(view.icons[i]){
         lv_obj_t *icon=view.icons[i];lv_obj_remove_style_all(icon);lv_obj_set_pos(icon,16,35);lv_obj_set_size(icon,18,18);
         lv_obj_set_style_radius(icon,LV_RADIUS_CIRCLE,0);lv_obj_set_style_border_width(icon,1,0);lv_obj_clear_flag(icon,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
@@ -230,11 +231,11 @@ bool ui_page_08_curr_prepare_step(void){
         lv_obj_t *img=lv_img_create(view.root);if(img){lv_img_set_src(img,background);(void)_lv_img_cache_open(background,lv_color_black(),0);}
     }else if(step==2){
         view.ready_bg=lv_img_create(view.root);if(view.ready_bg){lv_img_set_src(view.ready_bg,ready_background);lv_obj_add_flag(view.ready_bg,LV_OBJ_FLAG_HIDDEN);(void)_lv_img_cache_open(ready_background,lv_color_black(),0);}
-        view.title=label(view.root,52,110,800,"Getting ready.",&lv_font_instrument_sans_medium_36,0x344759);
-        view.caption=label(view.root,96,159,800,"Checking your system.",&lv_font_instrument_sans_medium_16,0x68818F);
+        view.title=label(view.root,52,110,800,ui_tr("Getting ready."),&lv_font_instrument_sans_medium_36,0x344759);
+        view.caption=label(view.root,96,159,800,ui_tr("Checking your system."),&lv_font_instrument_sans_medium_16,0x68818F);
 
-        view.section=label(view.root,1098,107,130,"SELF-CHECK",&lv_font_instrument_sans_semibold_14,0x68818F);
-        view.count=label(view.root,1068,132,160,"0 / 5 complete",&lv_font_instrument_sans_semibold_14,0x788B99);
+        view.section=label(view.root,1098,107,130,ui_tr("SELF-CHECK"),&lv_font_instrument_sans_semibold_14,0x68818F);
+        view.count=label(view.root,1068,132,160,ui_tr("0 / 5 complete"),&lv_font_instrument_sans_semibold_14,0x788B99);
         lv_obj_t *track=lv_obj_create(view.root);view.track=track;if(track){lv_obj_remove_style_all(track);lv_obj_set_pos(track,52,324);lv_obj_set_size(track,1176,2);lv_obj_set_style_bg_color(track,lv_color_hex(0xD1DCE4),0);lv_obj_set_style_bg_opa(track,255,0);}
         view.progress=lv_obj_create(view.root);if(view.progress){lv_obj_remove_style_all(view.progress);lv_obj_set_pos(view.progress,52,324);lv_obj_set_size(view.progress,0,2);lv_obj_set_style_bg_opa(view.progress,255,0);}
         view.percent=label(view.root,1148,338,80,"0%",&lv_font_instrument_sans_semibold_16,0x788B99);

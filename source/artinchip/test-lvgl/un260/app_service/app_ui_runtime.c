@@ -1,4 +1,5 @@
 #include "app_ui_runtime.h"
+#include "app_setting_notice.h"
 #include "un260/lv_components/ui_notice.h"
 #include "app_auto_qr.h"
 #include "app_standby_runtime.h"
@@ -23,12 +24,16 @@
 #include "un260/lv_system/ui_screenshot.h"
 #include "un260/lv_system/ui_screen_recording.h"
 #include "un260/lv_system/user_cfg.h"
+#include "un260/lv_system/ui_i18n.h"
+#include "un260/lv_system/ui_lang.h"
+#include "un260/lv_components/lv_fault_popup.h"
 
 #include <stdbool.h>
 
 #define APP_UI_UPGRADE_DETECT_INTERVAL_MS 500U
 
 static uint32_t g_upgrade_detect_tick;
+static uint32_t g_language_generation;
 
 /* User-requested work only: startup loads and background maintenance are not
  * registered. Storage accepts one job per service, so its busy -> idle edge
@@ -52,17 +57,17 @@ static const char *operation_key(app_ui_notice_operation_t operation)
 static const char *operation_title(app_ui_notice_operation_t operation)
 {
     switch (operation) {
-    case APP_UI_NOTICE_BATCH_SAVE: return "Batch cycle";
-    case APP_UI_NOTICE_RECORD_STORE: return "Records";
-    case APP_UI_NOTICE_PROFILE_APPLY: return "Counting profile";
-    default: return "Workspace";
+    case APP_UI_NOTICE_BATCH_SAVE: return UI_N_("Batch cycle");
+    case APP_UI_NOTICE_RECORD_STORE: return UI_N_("Records");
+    case APP_UI_NOTICE_PROFILE_APPLY: return UI_N_("Counting profile");
+    default: return UI_N_("Workspace");
     }
 }
 
 void app_ui_runtime_notice_started(app_ui_notice_operation_t operation, const char *detail)
 {
     const char *key = operation_key(operation);
-    if (!key) return;
+    if (!key || !app_setting_notice_page_allowed()) return;
     switch (operation) {
     case APP_UI_NOTICE_WORKSPACE_STORE:
     case APP_UI_NOTICE_BATCH_SAVE:
@@ -81,7 +86,7 @@ void app_ui_runtime_notice_started(app_ui_notice_operation_t operation, const ch
     }
     /* A new accepted request is a new acknowledgement lifetime. */
     ui_notice_clear(key);
-    ui_notice_post(UI_NOTICE_PROGRESS, key, operation_title(operation), detail);
+    ui_notice_post_text(UI_NOTICE_PROGRESS, key, operation_title(operation), detail);
 }
 
 static void app_ui_runtime_poll_operation_notices(void)
@@ -90,15 +95,17 @@ static void app_ui_runtime_poll_operation_notices(void)
         app_ui_notice_operation_t operation = g_operation_notice.workspace_operation;
         bool success = workspace_store_last_success();
         g_operation_notice.workspace = false;
-        ui_notice_post(success ? UI_NOTICE_SUCCESS : UI_NOTICE_ERROR,
+        if (!app_setting_notice_page_allowed()) ui_notice_clear(operation_key(operation));
+        else ui_notice_post_message(success ? UI_NOTICE_SUCCESS : UI_NOTICE_ERROR,
             operation_key(operation), operation_title(operation),
             success && operation == APP_UI_NOTICE_BATCH_SAVE ?
-                workspace_service_batch_save_message() : workspace_store_message());
+                workspace_service_batch_save_message_info() : workspace_store_message_info());
     }
     if (g_operation_notice.records && !cashbook_store_busy()) {
         g_operation_notice.records = false;
-        ui_notice_post(cashbook_store_last_success() ? UI_NOTICE_SUCCESS : UI_NOTICE_ERROR,
-            "records.store", "Records", cashbook_store_message());
+        if (!app_setting_notice_page_allowed()) ui_notice_clear("records.store");
+        else ui_notice_post_message(cashbook_store_last_success() ? UI_NOTICE_SUCCESS : UI_NOTICE_ERROR,
+            "records.store", UI_N_("Records"), cashbook_store_message_info());
     }
     if (g_operation_notice.profile && !workspace_service_applying()) {
         workspace_apply_result_t result = workspace_service_apply_result();
@@ -106,14 +113,17 @@ static void app_ui_runtime_poll_operation_notices(void)
             result == WORKSPACE_APPLY_FAILED ? UI_NOTICE_ERROR :
             result == WORKSPACE_APPLY_UNCONFIRMED ? UI_NOTICE_WARNING : UI_NOTICE_INFO;
         g_operation_notice.profile = false;
-        ui_notice_post(kind, "workspace.apply", "Counting profile",
-            workspace_service_apply_message());
+        if (!app_setting_notice_page_allowed()) ui_notice_clear("workspace.apply");
+        else ui_notice_post_message(kind, "workspace.apply", UI_N_("Counting profile"),
+            workspace_service_apply_message_info());
     }
 }
 
 void app_ui_runtime_init(void)
 {
     ui_notice_init();
+    app_setting_notice_init();
+    g_language_generation = ui_lang_generation();
     work_mode_service_init();
     workspace_service_init();
     cashbook_store_init();
@@ -144,6 +154,12 @@ static void app_ui_runtime_poll_upgrade(uint32_t now_ms)
 
 void app_ui_runtime_poll(uint32_t now_ms)
 {
+    uint32_t language_generation = ui_lang_generation();
+    if (language_generation != g_language_generation) {
+        g_language_generation = language_generation;
+        ui_notice_language_changed();
+        fault_popup_language_changed();
+    }
     ui_page_t page = ui_manager_get_current_page();
     ui_notice_set_suspended(UI_NOTICE_SUSPEND_STANDBY, page == UI_PAGE_STANDBY);
     ui_notice_set_suspended(UI_NOTICE_SUSPEND_MODAL,

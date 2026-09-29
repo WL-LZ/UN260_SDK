@@ -3,10 +3,11 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "un260/lv_system/ui_message.h"
 
 #define UI_NOTICE_QUEUE_CAPACITY 8
 #define UI_NOTICE_KEY_CAPACITY 48
-#define UI_NOTICE_TITLE_CAPACITY 192
+#define UI_NOTICE_TITLE_CAPACITY UI_MESSAGE_KEY_CAPACITY
 #define UI_NOTICE_DETAIL_CAPACITY 320
 
 typedef enum {
@@ -24,6 +25,8 @@ typedef struct {
     const char *detail;
     /* 0 selects the type default; progress never expires. */
     uint32_t duration_ms;
+    bool localized;
+    const ui_message_t *message;
 } ui_notice_config_t;
 
 typedef struct {
@@ -34,6 +37,9 @@ typedef struct {
     uint32_t remaining_ms;
     uint32_t revision;
     uint16_t repeats;
+    bool localized;
+    bool has_message;
+    ui_message_t message;
 } ui_notice_item_t;
 
 /* Presentation state only: no protocol, business timers, callbacks or heap. */

@@ -21,14 +21,14 @@ static bool checkpoint_read(int fd,cashbook_t *book)
 }
 static bool archive_period(void)
 {
-    if(!published->run_count||published->sequence==UINT32_MAX){snprintf(result,sizeof(result),"No records to archive.");return false;}
+    if(!published->run_count||published->sequence==UINT32_MAX){ui_message_key(&result_info,UI_N_("No records to archive."));return false;}
     for(unsigned i=0;i<published->group_count;i++){
         const cashbook_group_t *g=&published->groups[i];
         if(!g->excluded&&(!cashbook_closed(published,g->day)||g->review||!g->confirmed)){
-            snprintf(result,sizeof(result),"Confirm or exclude every group, then close all business days before archiving.");return false;
+            ui_message_key(&result_info,UI_N_("Confirm or exclude every group, then close all business days before archiving."));return false;
         }
     }
-    snprintf(result,sizeof(result),"Archive storage is unavailable. Original records are retained.");
+    ui_message_key(&result_info,UI_N_("Archive storage is unavailable. Original records are retained."));
     if(mkdir(CASHBOOK_DIRECTORY,0755)&&errno!=EEXIST)return false;
     int dir=open(CASHBOOK_DIRECTORY,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);if(dir<0)return false;
     char name[64];archive_name(name,sizeof(name),published->sequence);
@@ -41,12 +41,12 @@ static bool archive_period(void)
         if(ok){fatal=true;ok=!renameat(dir,"cashbook.next",dir,"cashbook.v1")&&!fsync(dir);if(ok)fatal=false;}
     }
     close(dir);
-    snprintf(result,sizeof(result),ok?"Period archived. Older records remain available in Archives.":"Archive not confirmed. Original records are retained; restart to check storage.");return ok;
+    ui_message_key(&result_info,ok?UI_N_("Period archived. Older records remain available in Archives."):UI_N_("Archive not confirmed. Original records are retained; restart to check storage."));return ok;
 }
 static bool scan_archives(void)
 {
     archive_draft_count=0;DIR *dir=opendir(CASHBOOK_DIRECTORY);
-    if(!dir){snprintf(result,sizeof(result),errno==ENOENT?"No archived periods yet.":"Archive storage could not be read.");return errno==ENOENT;}
+    if(!dir){ui_message_key(&result_info,errno==ENOENT?UI_N_("No archived periods yet."):UI_N_("Archive storage could not be read."));return errno==ENOENT;}
     struct dirent *entry;
     while((entry=readdir(dir))){unsigned id;int end=0;
         if(sscanf(entry->d_name,"cashbook-archive-%10u.bin%n",&id,&end)!=1||!end||entry->d_name[end])continue;
@@ -56,13 +56,13 @@ static bool scan_archives(void)
         if(archive_draft_count<CASHBOOK_ARCHIVES)archive_draft_count++;
         memmove(archive_draft+pos+1,archive_draft+pos,(archive_draft_count-pos-1)*sizeof(item));archive_draft[pos]=item;
     }
-    closedir(dir);snprintf(result,sizeof(result),"%u archived periods available.",archive_draft_count);return true;
+    closedir(dir);ui_message_uint(&result_info,UI_N_("%u archived periods available.") ,archive_draft_count);return true;
 }
 static bool read_archive(void)
 {
     char path[256],name[64];archive_name(name,sizeof(name),archive_id);snprintf(path,sizeof(path),CASHBOOK_DIRECTORY "/%s",name);
     int fd=open(path,O_RDONLY|O_NOFOLLOW|O_NONBLOCK);bool ok=fd>=0&&checkpoint_read(fd,view_draft);if(fd>=0)close(fd);
-    snprintf(result,sizeof(result),ok?"Archived period / read only. Export or return to current records.":"Archive could not be verified. Its file was not changed.");return ok;
+    ui_message_key(&result_info,ok?UI_N_("Archived period / read only. Export or return to current records."):UI_N_("Archive could not be verified. Its file was not changed."));return ok;
 }
 static bool export_line(int fd,const char *format,...)
 {
@@ -71,10 +71,10 @@ static bool export_line(int fd,const char *format,...)
 }
 static bool export_view(void)
 {
-    if(!usb_storage_prepare()){snprintf(result,sizeof(result),"Insert a USB drive and try again.");return false;}
+    if(!usb_storage_prepare()){ui_message_key(&result_info,UI_N_("Insert a USB drive and try again."));return false;}
     const cashbook_t *book=archive_view?archive_view:published;
     int dir=open(CASHBOOK_USB_DIRECTORY,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);
-    if(dir<0){snprintf(result,sizeof(result),"USB storage could not be opened. Reinsert the drive and retry.");return false;}
+    if(dir<0){ui_message_key(&result_info,UI_N_("USB storage could not be opened. Reinsert the drive and retry."));return false;}
     char name[96];int fd=-1;
     for(unsigned i=0;i<1000;i++){snprintf(name,sizeof(name),"UN260_records_%010u_%03u.csv",book->sequence,i);fd=openat(dir,name,O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW,0600);if(fd>=0||errno!=EEXIST)break;}
     bool ok=fd>=0&&export_line(fd,"TYPE,DAY,VERSION,GROUP,ATTEMPT,SOURCE,STATUS,CURRENCY,NOTES,AMOUNT\r\n");
@@ -92,5 +92,5 @@ static bool export_view(void)
     if(ok)ok=!fsync(dir);
     if(!ok&&fd>=0)unlinkat(dir,name,0);
     close(dir);
-    snprintf(result,sizeof(result),ok?"Saved to USB: %s":"Export failed. Check the USB drive and retry.",name);return ok;
+    ui_message_string(&result_info,ok?UI_N_("Saved to USB: %s"):UI_N_("Export failed. Check the USB drive and retry.") ,name);return ok;
 }

@@ -9,7 +9,8 @@
 typedef enum {
     SMART_ISLAND_SCENE_IDLE = 0,
     SMART_ISLAND_SCENE_COUNTING,
-    SMART_ISLAND_SCENE_RESULT
+    SMART_ISLAND_SCENE_RESULT,
+    SMART_ISLAND_SCENE_WARNING
 } smart_island_scene_t;
 
 typedef enum {
@@ -30,6 +31,7 @@ typedef enum {
 
 typedef void (*smart_island_action_cb_t)(uint8_t action_id); //动作按钮回调
 
+
 #define SMART_ISLAND_ACTION_QR            1
 #define SMART_ISLAND_ACTION_TIME_SETTING  2
 #define SMART_ISLAND_ACTION_FUNC3         3
@@ -44,7 +46,8 @@ void smart_island_set_visual(smart_island_visual_t visual, bool anim_en); //设�
 void smart_island_notify_count_start(void); //通知：开始点钞
 void smart_island_update_counting(int pcs, float amount); //更新跑钞态实时数量/金额
 void smart_island_notify_count_end(const char *result_text); //通知：点钞结束
-/* The owner accepted a result/session reset. Cancel counting presentation. */
+/* The owner accepted a result/session reset. Cancel counting presentation,
+ * but retain unrelated warning scenes. */
 void smart_island_notify_count_reset(void);
 void smart_island_notify_serial_number(int denomination, const char *serial_number); //通知：本把冠字号更新
 void smart_island_set_count_analysis(int valid_pcs, int suspect_pcs, int damaged_pcs); //更新本轮点钞分析

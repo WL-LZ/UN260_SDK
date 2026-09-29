@@ -8,6 +8,7 @@ bool setting_service_request_beep(bool enabled){machine_state_confirm_buzzer(ena
 #include "un260/lv_system/ui_qr_data.h"
 #include "un260/lv_core/page_18_pure.h"
 #include "un260/lv_components/ui_notice.h"
+#include "un260/lv_system/ui_i18n.h"
 
 /* Surrounding workflows are captured, never sent to hardware/storage. Main,
  * detail projection, styling, hit tests, fonts and Smart Island remain real. */
@@ -20,6 +21,8 @@ void ui_notice_post(ui_notice_kind_t kind,const char *key,const char *title,cons
     (void)key;(void)title;++host_notice_posts;host_notice_kind=kind;
     snprintf(host_notice_detail,sizeof(host_notice_detail),"%s",detail?detail:"");
 }
+void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title,const char *detail)
+{ui_notice_post(kind,key,ui_tr(title),ui_tr(detail));}
 static bool start_busy, prewarming, touch_enabled, fault_auto;
 static bool host_fault_pending,host_fault_showing,host_transitioning;
 static ui_page_t destination;
@@ -96,7 +99,7 @@ void perf_profile_unwatch_invalidation(const void *object) { (void)object; }
 bool fault_popup_get_auto_enabled(void) { return fault_auto; }
 void fault_popup_set_auto_enabled(bool enabled) { fault_auto=enabled; }
 bool fault_popup_get_pending_fault(fault_source_t *source,uint8_t *type,uint8_t *code)
-{ (void)source;(void)type;(void)code;return host_fault_pending; }
+{ if(source)*source=FAULT_SRC_RUNTIME;if(type)*type=0;if(code)*code=2;return host_fault_pending; }
 bool fault_popup_show_pending_now(void) { return false; }
 bool fault_popup_is_showing(void) { return host_fault_showing; }
 bool touch_feedback_enabled(void) { return touch_enabled; }

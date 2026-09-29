@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "app_boot_runtime.h"
 
 #include <stddef.h>
@@ -288,10 +289,10 @@ void app_boot_runtime_poll(uint32_t now_ms, bool boot_page_active)
         app_boot_runtime_send_handshake(now_ms);
     } else if (action == BOOT_SERVICE_ACTION_HANDSHAKE_TIMEOUT) {
         show_boot_selftest_error_popup(
-            "Controller handshake timed out.\nCheck the controller connection in diagnostics.");
+            UI_N_("Controller handshake timed out.\nCheck the controller connection in diagnostics."));
     } else if (action == BOOT_SERVICE_ACTION_SELF_TEST_TIMEOUT) {
         show_boot_selftest_error_popup(
-            "Self-test timed out.\nOpen diagnostics to inspect the incomplete checks.");
+            UI_N_("Self-test timed out.\nOpen diagnostics to inspect the incomplete checks."));
     }
 
     app_boot_runtime_poll_prewarm(now_ms);

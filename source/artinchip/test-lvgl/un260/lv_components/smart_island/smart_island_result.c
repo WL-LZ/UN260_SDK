@@ -101,6 +101,11 @@ void smart_island_notify_count_start(void)
     smart_island_result_cancel_transition();
 
     g_si_ctx.lifecycle.count_session_active = true;
+    g_si_ctx.warning.level = SMART_ISLAND_WARNING_LEVEL_WARNING;
+    g_si_ctx.warning.resume_animation_pending = false;
+    g_si_ctx.warning.resume_counting = false;
+    smart_island_warning_fault_clear();
+    smart_island_warning_stop();
     g_si_ctx.text.result[0] = '\0';
     g_si_ctx.text.serial_ticker[0] = '\0';
     g_si_ctx.counting.pcs = counting_data_current()->total_pcs;
@@ -221,6 +226,7 @@ void smart_island_notify_count_reset(void)
     bool from_result = g_si_ctx.view.scene == SMART_ISLAND_SCENE_RESULT;
 
     g_si_ctx.lifecycle.count_session_active = false;
+    g_si_ctx.warning.resume_counting = false;
     smart_island_result_cancel_transition();
     smart_island_result_stop_timer();
     if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_COUNTING ||

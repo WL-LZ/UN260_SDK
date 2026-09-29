@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "page_05_set_password.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_components/lv_pin_keypad.h"
@@ -30,7 +31,7 @@ static void password_confirm(const char *pin, void *user_data)
         return;
     }
     lv_pin_keypad_clear(&g_password_page.keypad);
-    lv_pin_keypad_set_error(&g_password_page.keypad, "Incorrect password. Try again.");
+    lv_pin_keypad_set_error(&g_password_page.keypad, ui_tr("Incorrect password. Try again."));
 }
 
 static void password_outside_cb(lv_event_t *event)
@@ -49,12 +50,12 @@ static void password_deleted_cb(lv_event_t *event)
 static void password_show_keypad(void)
 {
     const lv_pin_keypad_config_t config = {
-        .title = "Settings access",
-        .prompt = "Enter your 4-digit password.",
+        .title = ui_tr("Settings access"),
+        .prompt = ui_tr("Enter your 4-digit password."),
         .leading_icon = LVGL_DIR "pin_icons/lock.png",
         .footnote_icon = LVGL_DIR "pin_icons/shield.png",
-        .footnote = "For authorized configuration and service.",
-        .idle_status = "Opens automatically when the code is correct.",
+        .footnote = ui_tr("For authorized configuration and service."),
+        .idle_status = ui_tr("Opens automatically when the code is correct."),
         .confirm_cb = password_confirm,
         .cancel_cb = password_cancel,
         .auto_confirm = true,

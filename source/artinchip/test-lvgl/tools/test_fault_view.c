@@ -9,8 +9,11 @@ static lv_color_t pixels[1280*400],buffer[1280*40];
 static uint32_t suspended;
 static unsigned notice_posts,notice_clears;
 static char last_notice_key[48],last_notice_title[192],last_notice_code[48];
-static language_t host_language=LANGUAGE_EN;
-language_t ui_lang_get(void) {return host_language;}
+static unsigned island_posts;
+static char island_title[192];
+void smart_island_notify_warning_level(const char *value,smart_island_warning_level_t level)
+{(void)level;++island_posts;snprintf(island_title,sizeof(island_title),"%s",value);}
+void smart_island_notify_warning(const char *value){smart_island_notify_warning_level(value,SMART_ISLAND_WARNING_LEVEL_WARNING);}
 void smart_island_refresh_summary(void) {}
 void ui_notice_set_suspended(uint32_t reason,bool value) {if(value)suspended|=reason;else suspended&=~reason;}
 void ui_notice_post(ui_notice_kind_t kind,const char *key,const char *title,const char *detail)
@@ -20,6 +23,10 @@ void ui_notice_post(ui_notice_kind_t kind,const char *key,const char *title,cons
     snprintf(last_notice_title,sizeof(last_notice_title),"%s",title);
     snprintf(last_notice_code,sizeof(last_notice_code),"%s",detail);
 }
+void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title,const char *detail)
+{ui_notice_post(kind,key,ui_tr(title),ui_tr(detail));}
+void ui_notice_post_message(ui_notice_kind_t kind,const char *key,const char *title,const ui_message_t *value)
+{char detail[320];ui_message_render(value,detail,sizeof(detail));ui_notice_post(kind,key,ui_tr(title),detail);}
 void ui_notice_clear(const char *key) {assert(!strcmp(key,"machine.fault"));++notice_clears;}
 void lv_settings_action_style(lv_obj_t *obj,lv_settings_action_role_t role)
 {
@@ -98,6 +105,12 @@ int main(void)
     lv_event_send(popup.steps[1],LV_EVENT_CLICKED,NULL);assert(popup.step==1);advance(1500);capture("upper-remove");
     uint32_t elapsed=popup.model.elapsed_ms;fault_popup_report_runtime_fault(2);assert(popup.step==1&&popup.model.elapsed_ms==elapsed);
     pause_play(NULL);advance(1000);assert(popup.model.elapsed_ms==elapsed&&popup.model.timer->paused);
+    lv_obj_t *same_overlay=popup.overlay;
+    ui_lang_set(LANGUAGE_CN);fault_popup_language_changed();
+    assert(popup.overlay==same_overlay&&popup.step==1&&!popup.model.playing&&popup.model.elapsed_ms==elapsed);
+    assert(!strcmp(lv_label_get_text(popup.title),"上通道卡钞"));verify_layout();
+    ui_lang_set(LANGUAGE_EN);fault_popup_language_changed();
+    assert(popup.overlay==same_overlay&&popup.step==1&&!popup.model.playing&&popup.model.elapsed_ms==elapsed);
     replay(NULL);assert(popup.model.playing&&popup.model.elapsed_ms==0);
     click_confirm();assert(!fault_popup_is_showing()&&fault_popup_get_pending_fault(NULL,NULL,NULL)&&!suspended);
     fault_popup_report_runtime_fault(2);assert(!fault_popup_is_showing());
@@ -119,31 +132,38 @@ int main(void)
     fault_popup_report_sensor_mask((1U<<1)|(1U<<2));assert(popup.key.code==2 && popup.model.playing);
     fault_popup_report_sensor_mask(0);assert(!fault_popup_is_showing());
     fault_popup_record_runtime_notice(225);assert(fault_popup_show_pending_now());capture("unknown");
-    fault_popup_record_boot_result(5,2);toggle_queue(NULL);assert(popup.queue);
+    for(unsigned step=1;step<8;++step)fault_popup_record_boot_result(step,2);
+    toggle_queue(NULL);assert(popup.queue);
+    lv_obj_update_layout(popup.queue);lv_obj_scroll_to_y(popup.queue,100,LV_ANIM_OFF);
+    lv_coord_t scroll_y=lv_obj_get_scroll_y(popup.queue);assert(scroll_y==100);
+    ui_lang_set(LANGUAGE_CN);fault_popup_language_changed();
+    assert(popup.queue&&lv_obj_get_scroll_y(popup.queue)==scroll_y);
+    ui_lang_set(LANGUAGE_EN);fault_popup_language_changed();
+    assert(popup.queue&&lv_obj_get_scroll_y(popup.queue)==scroll_y);
     lv_obj_del(popup.overlay);assert(!popup.overlay&&!popup.model.timer&&!suspended);
     assert(!popup.queue);assert(fault_popup_show_pending_now());assert(popup.step==0);hide_fault_popup();
     machine_fault_clear();
     fault_popup_set_auto_enabled(false);
-    unsigned posted=notice_posts,cleared=notice_clears;
+    unsigned posted=island_posts, banners=notice_posts;
     fault_popup_report_runtime_fault(2);
-    assert(!fault_popup_is_showing() && notice_posts==posted+1 && !strcmp(last_notice_key,"machine.fault"));
-    assert(!strcmp(last_notice_title,"Upper passage jam")&&!strcmp(last_notice_code,"0x0F/0x02"));
-    fault_popup_report_runtime_fault(2);assert(notice_posts==posted+1);
-    fault_popup_clear_runtime();assert(notice_clears==cleared+1);
-    fault_popup_report_sensor_mask((1U<<1)|(1U<<23));assert(!fault_popup_is_showing()&&notice_posts==posted+2);
-    assert(!strcmp(last_notice_code,"0x02/bit1"));
-    fault_popup_report_sensor_mask((1U<<1)|(1U<<23));assert(notice_posts==posted+2);
-    fault_popup_set_auto_enabled(true);assert(fault_popup_is_showing()&&notice_clears==cleared+2);
-    click_confirm();click_confirm();fault_popup_report_sensor_mask(0);
-    fault_popup_set_auto_enabled(false);fault_popup_report_runtime_fault(2);posted=notice_posts;cleared=notice_clears;
-    fault_popup_record_runtime_notice(225);assert(notice_posts==posted&&!fault_popup_is_showing()&&notice_clears==cleared+1);
+    assert(!fault_popup_is_showing() && island_posts==posted+1);
+    assert(!strcmp(island_title,"Upper passage Jam") && notice_posts==banners);
+    fault_popup_report_runtime_fault(2);assert(island_posts==posted+1);
+    fault_popup_clear_runtime();
+    fault_popup_report_sensor_mask((1U<<1)|(1U<<23));assert(!fault_popup_is_showing()&&island_posts==posted+2);
+    fault_popup_report_sensor_mask((1U<<1)|(1U<<23));assert(island_posts==posted+2);
+    fault_popup_set_auto_enabled(true);assert(fault_popup_is_showing());
+    click_confirm();click_confirm();assert(island_posts==posted+3);
+    fault_popup_report_sensor_mask(0);
+    fault_popup_set_auto_enabled(false);fault_popup_report_runtime_fault(2);posted=island_posts;
+    fault_popup_record_runtime_notice(225);assert(island_posts==posted&&!fault_popup_is_showing());
     fault_popup_clear_runtime();fault_popup_set_auto_enabled(true);
     for(unsigned language=0;language<2;++language) {
-    host_language=language?LANGUAGE_CN:LANGUAGE_EN;
+    ui_lang_set(language?LANGUAGE_CN:LANGUAGE_EN);
     for(unsigned source=0;source<4;++source)for(unsigned code=1;code<(source==0?6:source==1?14:source==2?8:32);++code) {
         machine_fault_key_t k={(machine_fault_source_t)source,source==0||source==1?2:0,(uint8_t)code};
         present(k);
-        for(unsigned s=0;s<popup.guide.step_count;++s){popup.step=s;render_step();verify_layout();}
+        for(unsigned s=0;s<popup.guide.step_count;++s){popup.step=s;render_step(true);verify_layout();}
         hide_fault_popup();
     }
     }

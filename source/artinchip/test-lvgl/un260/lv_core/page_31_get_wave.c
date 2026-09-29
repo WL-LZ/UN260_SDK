@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "page_31_get_wave.h"
@@ -44,7 +45,7 @@ static const uint8_t g_wave_sources[WAVE_SOURCE_COUNT] = {0x01, 0x02, 0x03, 0x04
 
 static lv_settings_frame_t wave_frame;
 static lv_obj_t* wave_page = NULL;
-static const char *wave_names[]={"MT","MG 1 / 2","MG 3","MG 4","MG 5 / 6","Upper UV","Lower UV"};
+static const char *wave_names[]={"MT","MG 1 / 2","MG 3","MG 4","MG 5 / 6",UI_N_("Upper UV"),UI_N_("Lower UV")};
 static uint8_t wave_received_mask;
 static lv_obj_t* wave_chart_host = NULL;
 static lv_obj_t* wave_line = NULL;
@@ -80,7 +81,7 @@ static void wave_refresh_request_button(uint32_t now_ms)
     if (!wave_request_button || !lv_obj_is_valid(wave_request_button)) return;
 
     if (wave_request_active || wave_guard_active(now_ms) || !work_mode_service_diagnostic_ready()) {
-        settings_detail_action_block(wave_request_button, !work_mode_service_diagnostic_ready() ? work_mode_service_status_text() : "The previous capture is still being received. Please wait.");
+        settings_detail_action_block(wave_request_button, !work_mode_service_diagnostic_ready() ? work_mode_service_status_msgid() : UI_N_("The previous capture is still being received. Please wait."));
     } else {
         settings_detail_action_block(wave_request_button, NULL);
     }
@@ -132,7 +133,7 @@ static void wave_set_status(const char* text, lv_color_t color)
 static void wave_notice(ui_notice_kind_t kind,const char *text)
 {
     wave_set_status("",lv_color_hex(0x586B78));
-    ui_notice_post(kind,"capture.wave","Signal capture",text);
+    ui_notice_post_text(kind,"capture.wave",UI_N_("Signal capture"),text);
 }
 
 static void wave_refresh_sources(void)
@@ -159,7 +160,7 @@ static void wave_refresh_sources(void)
     }
 
     if (wave_title_label) {
-        lv_label_set_text(wave_title_label, wave_names[wave_source_index(selected_wave_id)]);
+        lv_label_set_text(wave_title_label, ui_tr(wave_names[wave_source_index(selected_wave_id)]));
         if (wave_line && lv_obj_is_valid(wave_line)) {
             lv_obj_set_style_line_color(wave_line, lv_color_hex(0x79AEF2), 0);
         }
@@ -214,7 +215,7 @@ static void wave_store_values(uint8_t wave_id, const uint8_t* values, uint16_t l
     uint16_t count = 0;
 
     if (wave_id < 1 || wave_id > WAVE_SOURCE_COUNT || !values || len == 0) {
-        wave_notice(UI_NOTICE_WARNING,ui_text_get(UI_TEXT_SETTINGS_WAVE_GET_NO_DATA));
+        wave_notice(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_SETTINGS_WAVE_GET_NO_DATA));
         return;
     }
 
@@ -266,11 +267,11 @@ bool ui_page_31_get_wave_request(void)
         for (size_t i = 0; i < WAVE_SOURCE_COUNT; i++) {
             wave_value_counts[i] = 0;
         }
-        wave_notice(UI_NOTICE_PROGRESS,ui_text_get(UI_TEXT_SETTINGS_WAVE_GET_WAITING));
+        wave_notice(UI_NOTICE_PROGRESS,ui_text_msgid(UI_TEXT_SETTINGS_WAVE_GET_WAITING));
         return true;
     }
 
-    wave_notice(UI_NOTICE_ERROR,"Could not send capture request. Try again.");
+    wave_notice(UI_NOTICE_ERROR,UI_N_("Could not send capture request. Try again."));
     return false;
 }
 
@@ -297,7 +298,7 @@ static void wave_esc_cb(lv_event_t* e)
 void ui_page_31_get_wave_create(lv_obj_t *parent)
 {
     if (wave_page) return;
-    lv_settings_header_t header={"Waveform","Maintenance / Magnetic and UV channels","Layers",wave_esc_cb,NULL};
+    lv_settings_header_t header={ui_tr("Waveform"),ui_tr("Maintenance / Magnetic and UV channels"),"Layers",wave_esc_cb,NULL};
     wave_frame=lv_settings_frame_create(parent,&header);wave_page=wave_frame.root;
     settings_detail_add_run(wave_page);
     lv_obj_set_style_bg_opa(wave_frame.body,LV_OPA_TRANSP,0);
@@ -306,20 +307,20 @@ void ui_page_31_get_wave_create(lv_obj_t *parent)
     lv_obj_set_style_radius(sources,14,0);
     for(unsigned i=0;i<WAVE_SOURCE_COUNT;i++) {
         lv_obj_t *item=lv_settings_button(sources,8+(i%2)*201,8+(i/2)*58,193,52,
-                                          wave_names[i],false,wave_source_cb,(void *)(uintptr_t)(i+1));
+                                          ui_tr(wave_names[i]),false,wave_source_cb,(void *)(uintptr_t)(i+1));
         lv_obj_set_style_border_width(item,1,0);
         source_items[i].card=item;source_items[i].label=lv_obj_get_child(item,0);
     }
-    lv_settings_label(sources,"7 channels",235,203,&lv_font_instrument_sans_medium_14,0x586B78);
+    lv_settings_label(sources,ui_tr("7 channels"),235,203,&lv_font_instrument_sans_medium_14,0x586B78);
     lv_obj_t *preview=lv_settings_box(wave_frame.body,426,0,806,242,0xFFFFFF);
     lv_obj_set_style_radius(preview,14,0);
     wave_title_label=lv_settings_label(preview,"",16,15,&lv_font_instrument_sans_medium_18,0x1D2B34);
-    lv_settings_label(preview,"RAW VALUE  0 - 255",572,19,&lv_font_instrument_sans_medium_12,0x586B78);
+    lv_settings_label(preview,ui_tr("RAW VALUE  0 - 255"),572,19,&lv_font_instrument_sans_medium_12,0x586B78);
     wave_chart_host=lv_settings_box(preview,16,47,WAVE_PREVIEW_W,WAVE_PREVIEW_H,0x1D2B34);
     lv_obj_set_style_radius(wave_chart_host,10,0);
     for(unsigned i=1;i<5;i++)lv_settings_box(wave_chart_host,12,i*WAVE_PREVIEW_H/5,WAVE_PREVIEW_W-24,1,0x334550);
     for(unsigned i=1;i<8;i++)lv_settings_box(wave_chart_host,i*WAVE_PREVIEW_W/8,12,1,WAVE_PREVIEW_H-24,0x334550);
-    wave_placeholder=lv_settings_label(wave_chart_host,"Capture a note to view its signal",0,0,
+    wave_placeholder=lv_settings_label(wave_chart_host,ui_tr("Capture a note to view its signal"),0,0,
                                        &lv_font_instrument_sans_medium_18,0xC8D3DA);
     lv_obj_center(wave_placeholder);
     wave_line=lv_line_create(wave_chart_host);
@@ -327,13 +328,13 @@ void ui_page_31_get_wave_create(lv_obj_t *parent)
     lv_obj_set_style_line_rounded(wave_line,true,0);
     lv_obj_set_style_line_color(wave_line,lv_color_hex(0x79AEF2),0);
     lv_obj_add_flag(wave_line,LV_OBJ_FLAG_HIDDEN);
-    lv_settings_label(preview,"Sample position",331,221,&lv_font_instrument_sans_medium_12,0x586B78);
+    lv_settings_label(preview,ui_tr("Sample position"),331,221,&lv_font_instrument_sans_medium_12,0x586B78);
     wave_status_label=wave_frame.message;
-    wave_set_status("Place a note as required, then select Capture.",lv_color_hex(0x586B78));
-    mode_retry_button=lv_settings_button(wave_frame.footer,904,0,130,46,"Retry",false,mode_retry_clicked,NULL);
+    wave_set_status(ui_tr("Place a note as required, then select Capture."),lv_color_hex(0x586B78));
+    mode_retry_button=lv_settings_button(wave_frame.footer,904,0,130,46,ui_tr("Retry"),false,mode_retry_clicked,NULL);
     lv_obj_add_flag(mode_retry_button,LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_width(wave_frame.message,884);
-    wave_request_button=lv_settings_button(wave_frame.footer,1050,0,182,46,"Capture",true,wave_request_cb,NULL);
+    wave_request_button=lv_settings_button(wave_frame.footer,1050,0,182,46,ui_tr("Capture"),true,wave_request_cb,NULL);
     wave_refresh_sources();wave_refresh_request_button(app_clock_uptime_ms());
 }
 
@@ -384,7 +385,7 @@ void ui_page_31_get_wave_on_frame(const uint8_t* data, uint16_t len)
     if (sub == 0x00) {
         wave_request_finish(now_ms, false);
         wave_clear_data();
-        wave_notice(UI_NOTICE_WARNING,ui_text_get(UI_TEXT_SETTINGS_WAVE_GET_NO_DATA));
+        wave_notice(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_SETTINGS_WAVE_GET_NO_DATA));
         return;
     }
 
@@ -401,7 +402,7 @@ void ui_page_31_get_wave_on_frame(const uint8_t* data, uint16_t len)
     if (sub == WAVE_SOURCE_COUNT) {
         wave_request_finish(now_ms, false);
         bool complete = wave_received_mask == (1U << WAVE_SOURCE_COUNT) - 1U;
-        wave_notice(complete?UI_NOTICE_SUCCESS:UI_NOTICE_WARNING,complete?"Capture complete. 7 channels received.":"Channels missing. Capture again.");
+        wave_notice(complete?UI_NOTICE_SUCCESS:UI_NOTICE_WARNING,complete?UI_N_("Capture complete. 7 channels received."):UI_N_("Channels missing. Capture again."));
     }
 }
 
@@ -411,7 +412,7 @@ bool ui_page_31_get_wave_poll(uint32_t now_ms)
 
     if (wave_request_active && wave_time_reached(now_ms, wave_request_deadline)) {
         wave_request_finish(now_ms, true);
-        wave_notice(UI_NOTICE_WARNING,ui_text_get(UI_TEXT_SETTINGS_WAVE_GET_TIMEOUT));
+        wave_notice(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_SETTINGS_WAVE_GET_TIMEOUT));
         timed_out = true;
     } else {
         wave_refresh_request_button(now_ms);

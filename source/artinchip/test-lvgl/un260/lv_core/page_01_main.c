@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_resources/ui_page_background.h"
 #include "un260/lv_core/page_01_main.h"
 #include "page_01_multi.h"
@@ -699,7 +700,7 @@ static void page_01_detail_section_btn_style_apply(void)
 static void page_01_detail_section_btn_text_refresh(void)
 {
     lv_obj_t *buttons[] = {s_detail_btn_a, s_detail_btn_b, s_detail_btn_c};
-    const char *titles[] = {"REPORT", "SERIAL", "REJECT"};
+    const char *titles[] = {ui_tr("REPORT"), ui_tr("SERIAL"), ui_tr("REJECT")};
     for (unsigned i = 0; i < 3; ++i)
         if (buttons[i]) lv_label_set_text(lv_obj_get_child(buttons[i], 1), titles[i]);
 }
@@ -750,9 +751,9 @@ static void page_01_detail_section_btn_create_all(void)
     lv_obj_set_style_radius(s_detail_tray, 12, 0);
     lv_obj_clear_flag(s_detail_tray, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
     /* 3 equal 172px targets + two 1px seams fill the unchanged 518px tray. */
-    s_detail_btn_a = page_01_detail_section_btn_create(620, 26, "REPORT", PAGE_01_DETAIL_SECTION_A);
-    s_detail_btn_b = page_01_detail_section_btn_create(793, 26, "SERIAL", PAGE_01_DETAIL_SECTION_B);
-    s_detail_btn_c = page_01_detail_section_btn_create(966, 26, "REJECT", PAGE_01_DETAIL_SECTION_C);
+    s_detail_btn_a = page_01_detail_section_btn_create(620, 26, ui_tr("REPORT"), PAGE_01_DETAIL_SECTION_A);
+    s_detail_btn_b = page_01_detail_section_btn_create(793, 26, ui_tr("SERIAL"), PAGE_01_DETAIL_SECTION_B);
+    s_detail_btn_c = page_01_detail_section_btn_create(966, 26, ui_tr("REJECT"), PAGE_01_DETAIL_SECTION_C);
     page_01_detail_section_btn_style_apply();
     /* A non-interactive stroke above all three flush selected surfaces. */
     s_detail_frame = lv_obj_create(main_page);
@@ -987,8 +988,8 @@ static void main_currency_target(lv_obj_t *parent)
     lv_obj_add_event_cb(target, page_01_curr_btn_event_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *icon = main_icon(target, "curr_USD_img",
         LVGL_DIR"main_icons/currencies_32.png", 4, 15);
-    main_label(target, NULL, "Currency", 80, 3, 120, &lv_font_instrument_sans_medium_12, 0x7A8D9B);
-    lv_obj_t *code = main_label(target, NULL, "AUTO", 80, 24, 112,
+    main_label(target, NULL, ui_tr("Currency"), 80, 3, 120, &lv_font_instrument_sans_medium_12, 0x7A8D9B);
+    lv_obj_t *code = main_label(target, NULL, ui_tr("AUTO"), 80, 24, 112,
         &lv_font_instrument_sans_semibold_24, 0x17212A);
     main_icon(target, NULL, LVGL_DIR"main_icons/caret_down_16.png", 206, 33);
     s_curr_img = icon; s_currency_code = code;
@@ -1000,34 +1001,34 @@ static void page_01_main_build_content(void)
     main_action("mode_btn", "page_01_mode_icon.png", LVGL_DIR"main_icons/cube_28.png",
         "mode_label", "MDC", 16, 12, 80, 74, page_01_mode_btn_event_cb, false);
     main_action("setting_btn", "page_01_set_icon.png", LVGL_DIR"main_icons/gear_28.png",
-        "setting_label", "SETTING", 16, 94, 80, 74, page_01_set_btn_event_cb, false);
+        "setting_label", ui_tr("SETTING"), 16, 94, 80, 74, page_01_set_btn_event_cb, false);
     main_action("list_btn", "page_01_list_icon.png", LVGL_DIR"main_icons/list_28.png",
-        "list_label", "LIST", 16, 176, 80, 74, page_01_list_btn_event_cb, false);
+        "list_label", ui_tr("LIST"), 16, 176, 80, 74, page_01_list_btn_event_cb, false);
     main_action("print_btn", "page_01_print_icon.png", LVGL_DIR"main_icons/printer_28.png",
-        "print_label", "PRINT", 16, 258, 80, 74, page_01_print_btn_event_cb, false);
+        "print_label", ui_tr("PRINT"), 16, 258, 80, 74, page_01_print_btn_event_cb, false);
     main_action("menu_btn", "page_01_menu_icon.png", LVGL_DIR"main_icons/menu_28.png",
-        "menu_label", "MENU", 1168, 12, 96, 98, page_01_menu_btn_event_cb, false);
+        "menu_label", ui_tr("MENU"), 1168, 12, 96, 98, page_01_menu_btn_event_cb, false);
     main_action("start_btn", "page_01_start_icon.png", LVGL_DIR"main_icons/play_28.png",
-        "start_label", "START", 1168, 123, 96, 98, page_01_start_btn_event_cb, true);
+        "start_label", ui_tr("START"), 1168, 123, 96, 98, page_01_start_btn_event_cb, true);
     main_action("esc_btn", "page_01_esc_icon.png", LVGL_DIR"main_icons/clear_28.png",
-        "esc_label", "CLEAR", 1168, 234, 96, 98, page_01_esc_btn_event_cb, false);
+        "esc_label", ui_tr("CLEAR"), 1168, 234, 96, 98, page_01_esc_btn_event_cb, false);
     s_summary_card = main_box(main_page, 108, 12, 482, 320, 0xFFFFFF, 16);
     lv_obj_set_style_border_width(s_summary_card, 1, 0);
     lv_obj_set_style_border_color(s_summary_card, lv_color_hex(0xECF0F3), 0);
     lv_obj_set_style_border_opa(s_summary_card, LV_OPA_COVER, 0);
     main_currency_target(s_summary_card);
     lv_obj_t *reject = main_box(s_summary_card, 346, 25, 114, 38, 0xF4F7F8, 8);
-    main_label(reject, NULL, "REJECT", 10, 13, 56, &lv_font_instrument_sans_medium_10, 0x657F90);
+    main_label(reject, NULL, ui_tr("REJECT"), 10, 13, 56, &lv_font_instrument_sans_medium_10, 0x657F90);
     lv_obj_t *reject_num = main_label(reject, "reject_num_label", "0", 66, 8, 39,
         &lv_font_instrument_sans_semibold_20, 0x4C606E);
     lv_obj_set_style_text_align(reject_num, LV_TEXT_ALIGN_RIGHT, 0);
     main_box(s_summary_card, 22, 90, 438, 1, 0xEFF3F5, 0);
     main_icon(s_summary_card, NULL, LVGL_DIR"main_icons/stack_20.png", 22, 133);
-    main_label(s_summary_card, NULL, "PCS", 52, 133, 64, &lv_font_instrument_sans_medium_20, 0x4C606E);
+    main_label(s_summary_card, NULL, ui_tr("PCS"), 52, 133, 64, &lv_font_instrument_sans_medium_20, 0x4C606E);
     s_total_pcs_label = main_label(s_summary_card, "01_pcs_label", "0", 120, 108, 340,
         &lv_font_manrope_bold_48, 0x17212A);
     main_box(s_summary_card, 22, 190, 438, 1, 0xEFF3F5, 0);
-    main_label(s_summary_card, NULL, "AMOUNT", 22, 230, 100, &lv_font_instrument_sans_medium_12, 0x7A8D9B);
+    main_label(s_summary_card, NULL, ui_tr("AMOUNT"), 22, 230, 100, &lv_font_instrument_sans_medium_12, 0x7A8D9B);
     s_curr_label = main_label(s_summary_card, "curr_icon_label", "", 22, 244, 92,
         &lv_font_main_currency_56, 0x0074F8);
     s_amount_unit_icon = main_icon(s_summary_card, NULL, LVGL_DIR"main_icons/currencies_56.png", 22, 248);

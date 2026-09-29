@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "lv_pin_keypad.h"
 #include "lv_damped_button.h"
 #include "lv_settings_palette.h"
@@ -66,7 +67,7 @@ static void pin_refresh(lv_pin_keypad_t *keypad)
         }
     }
     lv_damped_button_set_text(keypad->eye,
-        keypad->digits_visible ? "Hide" : "Show");
+        keypad->digits_visible ? ui_tr("Hide") : ui_tr("Show"));
     keypad->cursor_on = true;
     lv_obj_set_style_bg_opa(keypad->cursor, LV_OPA_COVER, 0);
     if (keypad->compact || n == LV_PIN_DIGITS) {
@@ -130,7 +131,7 @@ static void pin_visibility_event(lv_event_t *event)
         !lv_pin_keypad_is_visible(keypad)) return;
     bool visible = !keypad->digits_visible;
     if (keypad->save_visibility && !keypad->save_visibility(visible)) {
-        lv_pin_keypad_set_status(keypad, "Could not save display preference.");
+        lv_pin_keypad_set_status(keypad, ui_tr("Could not save display preference."));
         return;
     }
     keypad->digits_visible = visible;
@@ -154,7 +155,7 @@ static void pin_key_event(lv_event_t *event)
     if (key == 11) {
         if(keypad->auto_confirm){lv_pin_keypad_clear(keypad);lv_pin_keypad_set_status(keypad,NULL);return;}
         if (!lv_pin_input_is_complete(keypad->input.value)) {
-            lv_pin_keypad_set_status(keypad, "Enter exactly 4 digits.");
+            lv_pin_keypad_set_status(keypad, ui_tr("Enter exactly 4 digits."));
             return;
         }
         /* The callback may hide/destroy the keypad (or its parent page). */
@@ -242,7 +243,7 @@ static void pin_apply_layout(lv_pin_keypad_t *keypad, bool compact)
         &lv_font_instrument_sans_medium_13:&lv_font_instrument_sans_medium_14,0);
     lv_obj_set_pos(keypad->cancel,compact?791:24,compact?14:260);
     lv_obj_set_size(keypad->cancel,compact?40:368,compact?36:44);
-    lv_damped_button_set_text(keypad->cancel,compact?"":"Cancel");
+    lv_damped_button_set_text(keypad->cancel,compact?"":ui_tr("Cancel"));
     lv_damped_button_set_exact_palette(keypad->cancel,
         lv_color_hex(compact?0xFBFCFD:LV_SETTINGS_CONTROL_SURFACE),
         lv_color_hex(compact?0xE2E9EE:LV_SETTINGS_CONTROL_PRESSED));
@@ -324,7 +325,7 @@ bool lv_pin_keypad_create(lv_pin_keypad_t *keypad, lv_obj_t *parent,
         .text_color = LV_SETTINGS_ACTION_TEXT, .disabled_color = LV_SETTINGS_DISABLED_SURFACE,
         .disabled_text_color = LV_SETTINGS_DISABLED_TEXT, .radius = 10
     };
-    keypad->eye = lv_damped_button_create(card, &eye_style, "Show",
+    keypad->eye = lv_damped_button_create(card, &eye_style, ui_tr("Show"),
                                           &lv_font_instrument_sans_medium_16);
     lv_damped_button_set_exact_palette(keypad->eye, lv_color_hex(eye_style.normal_color), lv_color_hex(eye_style.pressed_color));
     lv_obj_set_pos(keypad->eye, 288, 148);
@@ -340,7 +341,7 @@ bool lv_pin_keypad_create(lv_pin_keypad_t *keypad, lv_obj_t *parent,
         .text_color = LV_SETTINGS_ACTION_TEXT, .disabled_color = LV_SETTINGS_DISABLED_SURFACE,
         .disabled_text_color = LV_SETTINGS_DISABLED_TEXT, .radius = 10
     };
-    keypad->cancel = lv_damped_button_create(card, &cancel_style, "Cancel",
+    keypad->cancel = lv_damped_button_create(card, &cancel_style, ui_tr("Cancel"),
                                               &lv_font_instrument_sans_medium_16);
     lv_damped_button_set_exact_palette(keypad->cancel, lv_color_hex(cancel_style.normal_color), lv_color_hex(cancel_style.pressed_color));
     lv_obj_set_pos(keypad->cancel, 24, 260);
@@ -361,7 +362,7 @@ bool lv_pin_keypad_create(lv_pin_keypad_t *keypad, lv_obj_t *parent,
             .disabled_color = LV_SETTINGS_DISABLED_SURFACE, .disabled_text_color = LV_SETTINGS_DISABLED_TEXT, .radius = 12
         };
         lv_obj_t *button = lv_damped_button_create(card, &style,
-            key == 10 ? "" : key == 11 ? "Confirm" : digit,
+            key == 10 ? "" : key == 11 ? ui_tr("Confirm") : digit,
             key == 11 ? &lv_font_instrument_sans_medium_16 : &lv_font_instrument_sans_medium_28);
         lv_damped_button_set_exact_palette(button, lv_color_hex(style.normal_color), lv_color_hex(style.pressed_color));
         keypad->keys[i] = button;
@@ -390,9 +391,9 @@ bool lv_pin_keypad_show(lv_pin_keypad_t *keypad,
     if (!keypad || !config || !keypad->root || !lv_obj_is_valid(keypad->root))
         return false;
     lv_pin_input_set(&keypad->input, initial_value);
-    lv_label_set_text(keypad->eyebrow, config->eyebrow ? config->eyebrow : "SECURE ACCESS");
-    lv_label_set_text(keypad->title, config->title ? config->title : "Enter access PIN");
-    lv_label_set_text(keypad->prompt, config->prompt ? config->prompt : "Please enter your 4-digit PIN");
+    lv_label_set_text(keypad->eyebrow, config->eyebrow ? config->eyebrow : ui_tr("SECURE ACCESS"));
+    lv_label_set_text(keypad->title, config->title ? config->title : ui_tr("Enter access PIN"));
+    lv_label_set_text(keypad->prompt, config->prompt ? config->prompt : ui_tr("Please enter your 4-digit PIN"));
     keypad->confirm_cb = config->confirm_cb;
     keypad->cancel_cb = config->cancel_cb;
     keypad->user_data = config->user_data;
@@ -409,7 +410,7 @@ bool lv_pin_keypad_show(lv_pin_keypad_t *keypad,
     }else lv_obj_add_flag(keypad->footnote_icon,LV_OBJ_FLAG_HIDDEN);
     lv_label_set_text(keypad->footnote,config->compact&&config->footnote?config->footnote:"");
     pin_apply_layout(keypad,config->compact);
-    lv_damped_button_set_text(keypad->keys[11],config->auto_confirm?"Clear":"Confirm");
+    lv_damped_button_set_text(keypad->keys[11],config->auto_confirm?ui_tr("Clear"):ui_tr("Confirm"));
     keypad->save_visibility = config->save_visibility;
     lv_obj_clear_flag(keypad->root, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(keypad->root);

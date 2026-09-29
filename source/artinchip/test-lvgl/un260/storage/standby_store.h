@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_message.h"
 #ifndef UN260_STANDBY_STORE_H
 #define UN260_STANDBY_STORE_H
 #include <stdbool.h>
@@ -52,4 +53,5 @@ bool standby_store_poll(char *message, unsigned capacity);
 bool standby_store_last_success(void);
 bool standby_photo_exists(unsigned slot);
 const char *standby_photo_path(unsigned photo);
+const ui_message_t *standby_store_message_info(void);
 #endif

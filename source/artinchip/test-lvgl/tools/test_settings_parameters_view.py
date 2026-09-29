@@ -5,12 +5,13 @@ Host ASan/UBSan output is not board touch/display verification.
 """
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+from test_i18n_support import with_i18n, lvgl_source
 import os, re, subprocess, sys, tempfile
 from PIL import Image
 from test_list_view import compiled_asset_sources
 
 root = Path(__file__).resolve().parents[1]
-lvgl = root.parents[1] / 'third-party/lvgl-8.3.2'
+lvgl = lvgl_source(root)
 out = Path(sys.argv[1]).resolve()
 out.mkdir(parents=True, exist_ok=True)
 pages = ['05_set_password', '20_set_print', '22_set_double_note', '23_set_flap', '24_set_reject_pocket',
@@ -47,8 +48,9 @@ with tempfile.TemporaryDirectory(prefix='un260-settings-parameters-') as temp:
     sources = [root / 'tools/test_settings_parameters_view.c', work / 'drag.c',
                *compiled_asset_sources(), *[root / p for p in parts],
                *[root / 'un260/font' / f'{f}.c' for f in fonts], *lvgl.joinpath('src').rglob('*.c')]
+    sources = with_i18n(sources, root)
     common = ['gcc', '-DLV_DRV_CONF_H', '-DLVGL_DIR="L:/usr/local/share/lvgl_data/"',
-              '-std=gnu11', '-O1', '-g', '-Wall', '-Wextra', '-fsanitize=address,undefined',
+              '-DUI_STATE_DIR="/tmp/un260-i18n-tests"','-std=gnu11', '-O1', '-g', '-Wall', '-Wextra', '-fsanitize=address,undefined',
               '-fno-sanitize-recover=all', f'-I{work}', f'-I{root}', f'-I{lvgl}', f'-DLV_CONF_PATH={conf}']
     objects = [work / f'{i}.o' for i in range(len(sources))]
     def build(pair):

@@ -80,6 +80,19 @@ static lv_res_t open_image(lv_img_decoder_t*d,lv_img_decoder_dsc_t*s){if(info(d,
 static void assert_flat(lv_obj_t*o){assert(lv_obj_get_style_shadow_width(o,LV_PART_MAIN)==0);for(unsigned i=0;i<lv_obj_get_child_cnt(o);i++)assert_flat(lv_obj_get_child(o,i));}
 static void snapshot(const char*n){lv_obj_update_layout(lv_scr_act());lv_obj_invalidate(lv_scr_act());lv_refr_now(NULL);char path[256];snprintf(path,sizeof(path),"%s/%s.bgra",getenv("OUT"),n);FILE*f=fopen(path,"wb");assert(f);assert(fwrite(pixels,4,1280*400,f)==1280*400);fclose(f);}
 static unsigned char*load(const char*n,size_t size){char path[256];snprintf(path,sizeof(path),"%s/%s",getenv("OUT"),n);FILE*f=fopen(path,"rb");assert(f);unsigned char*p=malloc(size);assert(p&&fread(p,1,size,f)==size);fclose(f);return p;}
+static void date_utf8_test(void){
+ struct {char text[8];unsigned char guard[4];} out={{0},{0xA5,0xA5,0xA5,0xA5}};
+ date_append(out.text,sizeof(out.text),"","\xe6\x98\x9f\xe6\x9c\x9f\xe4\xb8\x80");
+ assert(strlen(out.text)==6&&!strcmp(out.text,"\xe6\x98\x9f\xe6\x9c\x9f"));
+ for(unsigned i=0;i<sizeof(out.guard);i++)assert(out.guard[i]==0xA5);
+ date_append(out.text,sizeof(out.text)," | ","Monday");
+ assert(strlen(out.text)<sizeof(out.text));
+ char tiny[2]={0};date_append(tiny,sizeof(tiny),"","\xe6\x98\x9f");assert(!tiny[0]);
+ standby_layout_t p={0};p.date_bits=15;machine_time_value_t t={0};t.year=2026;t.month=9;t.day=29;
+ date_format(out.text,sizeof(out.text),&p,&t);assert(strlen(out.text)<sizeof(out.text));
+ for(unsigned i=0;i<sizeof(out.guard);i++)assert(out.guard[i]==0xA5);
+ puts("PASS translated date bounds preserve complete UTF-8 and adjacent memory");
+}
 static void policy_test(void){
  assert(registered_drag&&registered_action);
  standby_config_t old=draft;draft=saved;tab=4;assert(registered_drag());
@@ -139,7 +152,7 @@ static void fade_test(void){
 }
 int main(void){standby_defaults(&saved);lv_init();mist=load("mist.bgra",1280*400*4);user_bg=load("user.bgra",1280*400*4);wallpaper=load("wallpaper.bgra",1280*400*4);gear=load("gear.bgra",24*28*4);lv_disp_draw_buf_t db;lv_disp_draw_buf_init(&db,buffer,NULL,1280*40);lv_disp_drv_t dd;lv_disp_drv_init(&dd);dd.hor_res=1280;dd.ver_res=400;dd.draw_buf=&db;dd.flush_cb=flush;lv_disp_drv_register(&dd);lv_img_decoder_t*dec=lv_img_decoder_create();lv_img_decoder_set_info_cb(dec,info);lv_img_decoder_set_open_cb(dec,open_image);
  silver=load("silver.bgra",1280*400*4);champagne=load("champagne.bgra",1280*400*4);
- ui_page_34_standby_create(lv_scr_act());snapshot("settings");assert_flat(page);
+ date_utf8_test();ui_page_34_standby_create(lv_scr_act());snapshot("settings");assert_flat(page);
  assert(lv_obj_get_style_bg_opa(body,LV_PART_MAIN)==LV_OPA_TRANSP);
  assert(lv_obj_get_child_cnt(body)==2); /* mode selector and settings card only */
  assert(lv_obj_get_y(lv_obj_get_child(body,0))==0);
@@ -150,3 +163,5 @@ int main(void){standby_defaults(&saved);lv_init();mist=load("mist.bgra",1280*400
  tab=1;render();snapshot("timeout");assert_flat(page);tab=2;draft.layout[1][0].date_bits=15;render();snapshot("date");assert_flat(page);tab=3;draft.mode=0;render();snapshot("photos");assert_flat(page);assert(lv_obj_get_child_cnt(gallery)==4);lv_event_send(lv_obj_get_child(gallery,3),LV_EVENT_CLICKED,NULL);assert(draft.layout[0][draft.active[0]].photo==STANDBY_PHOTO_MIST);assert(!draft.layout[0][draft.active[0]].scheduled);scene_update(&preview,&draft,true);assert(preview.photo==STANDBY_PHOTO_MIST);render();snapshot("photos-mist");assert(!lv_obj_has_flag(body,LV_OBJ_FLAG_SCROLLABLE));with_imports=true;render();lv_obj_update_layout(page);lv_obj_scroll_to_y(gallery,100,LV_ANIM_OFF);assert(lv_obj_get_scroll_y(gallery)>0);assert(lv_obj_get_scroll_y(body)==0);snapshot("photos-scroll");with_imports=false;draft.mode=1;render();snapshot("palette");tab=4;render();snapshot("position");position_test();policy_test();ui_page_34_standby_destroy();assert(!registered_drag&&!registered_action);
  ui_page_35_standby_create(lv_scr_act());advance_fade(300);snapshot("standby-photo");ui_page_35_standby_destroy();saved.mode=1;ui_page_35_standby_create(lv_scr_act());advance_fade(300);snapshot("standby-type");ui_page_35_standby_destroy();
  for(unsigned i=0;i<10;i++){ui_page_34_standby_create(lv_scr_act());ui_page_34_standby_destroy();}assert(!page&&!settings_timer&&!clock_timer);runtime_test();fade_test();puts("PASS actual LVGL standby view renders and repeated lifecycle");return 0;}
+
+const ui_message_t *standby_store_message_info(void){static ui_message_t m;ui_message_key(&m,"Standby settings saved.");return &m;}

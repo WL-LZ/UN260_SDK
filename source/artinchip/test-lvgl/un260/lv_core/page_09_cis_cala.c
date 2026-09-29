@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "page_09_cis_cala.h"
 #include "un260/lv_components/ui_notice.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
@@ -40,10 +41,10 @@ static void calibration_leave(void *data)
 static void calibration_leave_warning(bool home)
 {
     leave_home=home;
-    settings_detail_dialog_show("Leave calibration?",
-        "The controller has not reported a final result. Leaving does not stop calibration. "
-        "Manual mode remains active for safety.",
-        "Leave","Stay",calibration_leave,NULL,NULL);
+    settings_detail_dialog_show(ui_tr("Leave calibration?"),
+        ui_tr("The controller has not reported a final result. Leaving does not stop calibration. "
+        "Manual mode remains active for safety."),
+        ui_tr("Leave"),ui_tr("Stay"),calibration_leave,NULL,NULL);
 }
 static bool calibration_gesture(gesture_action_t action)
 {
@@ -95,16 +96,16 @@ static void cis_start(lv_event_t *e)
     if (state.cis_state == CIS_CALIB_RUNNING || state.cb_state == CB_CALIB_RUNNING) return;
     if (!work_mode_service_diagnostic_ready()) return;
     const char *blocker=app_command_runtime_calibration_blocker();
-    if(blocker){ui_notice_post(UI_NOTICE_WARNING,"calibration.action","Calibration unavailable",blocker);return;}
+    if(blocker){ui_notice_post_text(UI_NOTICE_WARNING,"calibration.action",UI_N_("Calibration unavailable"),blocker);return;}
     send_failed = false;
     if (!diagnostic_calibration_begin(selected_white_balance ? CALIB_TARGET_CB : CALIB_TARGET_CIS,
                                       app_clock_uptime_ms())) return;
     if (!settings_detail_send_command(selected_white_balance ? 0x5F : 0x5B, &sub, 1)) {
         diagnostic_calibration_end_session();
         send_failed = true;
-        ui_notice_post(UI_NOTICE_ERROR,"calibration.action","Calibration not sent","Check the controller connection.");
-        lv_label_set_text(status_title, "Could not start");
-        lv_label_set_text(status_detail, "Check the controller connection, then try again.");
+        ui_notice_post_text(UI_NOTICE_ERROR,"calibration.action",UI_N_("Calibration not sent"),UI_N_("Check the controller connection."));
+        lv_label_set_text(status_title, ui_tr("Could not start"));
+        lv_label_set_text(status_detail, ui_tr("Check the controller connection, then try again."));
         return;
     }
     work_mode_service_hold_operation(WORK_MODE_OPERATION_CALIBRATION, true);
@@ -126,8 +127,8 @@ void ui_page_cis_calib_create(lv_obj_t *parent)
 {
     if (cis_page) return;
     lv_settings_header_t header = {
-        selected_white_balance ? "White balance" : "CIS calibration",
-        "Maintenance / Calibration", selected_white_balance ? "Sun" : "Layers", cis_back, NULL
+        selected_white_balance ? ui_tr("White balance") : ui_tr("CIS calibration"),
+        ui_tr("Maintenance / Calibration"), selected_white_balance ? "Sun" : "Layers", cis_back, NULL
     };
     frame = lv_settings_frame_create(parent, &header);
     cis_page = frame.root;
@@ -135,29 +136,29 @@ void ui_page_cis_calib_create(lv_obj_t *parent)
     lv_obj_set_style_border_width(frame.body, 0, 0);
     lv_obj_t *prepare = lv_settings_box(frame.body, 0, 0, 680, 242, 0xFFFFFF);
     lv_obj_set_style_radius(prepare, 14, 0);
-    lv_settings_label(prepare, "Before you begin", 24, 20,
+    lv_settings_label(prepare, ui_tr("Before you begin"), 24, 20,
                       &lv_font_instrument_sans_medium_18, 0x1D2B34);
-    preparation_row(prepare, 62, "1", selected_white_balance?"Place banknotes in the hopper":"Place the CIS bar",
-                    selected_white_balance?"Prepare the notes for white balance.":"Place the CIS bar manually in the upper note path.");
-    preparation_row(prepare, 119, "2", "Press Start",
-                    selected_white_balance?"Send the white balance command before feeding notes.":"No banknote run is required for CIS calibration.");
-    preparation_row(prepare, 176, "3", "Wait for the result",
-                    "The machine calibrates and reports the result.");
+    preparation_row(prepare, 62, "1", selected_white_balance?ui_tr("Place banknotes in the hopper"):ui_tr("Place the CIS bar"),
+                    selected_white_balance?ui_tr("Prepare the notes for white balance."):ui_tr("Place the CIS bar manually in the upper note path."));
+    preparation_row(prepare, 119, "2", ui_tr("Press Start"),
+                    selected_white_balance?ui_tr("Send the white balance command before feeding notes."):ui_tr("No banknote run is required for CIS calibration."));
+    preparation_row(prepare, 176, "3", ui_tr("Wait for the result"),
+                    ui_tr("The machine calibrates and reports the result."));
 
     lv_obj_t *state = lv_settings_box(frame.body, 696, 0, 536, 242, 0xF1F4F5);
     lv_obj_set_style_radius(state, 14, 0);
-    lv_settings_label(state, "CALIBRATION STATUS", 24, 24,
+    lv_settings_label(state, ui_tr("CALIBRATION STATUS"), 24, 24,
                       &lv_font_instrument_sans_medium_14, 0x586B78);
-    status_title = lv_settings_label(state, "Ready to calibrate", 24, 63,
+    status_title = lv_settings_label(state, ui_tr("Ready to calibrate"), 24, 63,
                                      &lv_font_instrument_sans_medium_22, 0x1D2B34);
     status_detail = lv_settings_label(state, "", 24, 103,
                                       &lv_font_instrument_sans_medium_16, 0x586B78);
     lv_obj_set_width(status_detail, 488);
     lv_label_set_long_mode(status_detail, LV_LABEL_LONG_WRAP);
-    lv_label_set_text(frame.message, "Calibration starts only when you press Start.");
-    start_button = lv_settings_button(frame.footer, 1060, 0, 172, 46, "Start", true, cis_start, NULL);
+    lv_label_set_text(frame.message, ui_tr("Calibration starts only when you press Start."));
+    start_button = lv_settings_button(frame.footer, 1060, 0, 172, 46, ui_tr("Start"), true, cis_start, NULL);
     gesture_service_set_page_policy(UI_PAGE_CIS_CALIB, NULL, calibration_gesture);
-    mode_retry_button=lv_settings_button(frame.footer,904,0,130,46,"Retry",false,mode_retry_clicked,NULL);
+    mode_retry_button=lv_settings_button(frame.footer,904,0,130,46,ui_tr("Retry"),false,mode_retry_clicked,NULL);
     lv_obj_add_flag(mode_retry_button,LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_width(frame.message,884);
     status_timer = lv_timer_create(status_tick, 200, NULL);
@@ -168,61 +169,61 @@ void cis_calib_ui_refresh(void)
 {
     mode_retry_refresh();
     calibration_state_snapshot_t state;
-    const char *title = "Ready to calibrate";
-    const char *detail = "Prepare the machine, then press Start.";
+    const char *title = ui_tr("Ready to calibrate");
+    const char *detail = ui_tr("Prepare the machine, then press Start.");
     uint32_t color = 0x1D2B34;
     if (!cis_page || !lv_obj_is_valid(cis_page)) return;
     diagnostic_calibration_get_snapshot(&state);
     bool running = state.cis_state == CIS_CALIB_RUNNING || state.cb_state == CB_CALIB_RUNNING;
     bool success = selected_white_balance ? state.cb_state == CB_CALIB_SUCCESS : state.cis_state == CIS_CALIB_SUCCESS;
     if (state.timed_out && running) {
-        title = "Waiting for a final result";
-        detail = "The controller has not confirmed completion. Manual mode stays active. "
-                 "Back lets you leave without stopping the calibration.";
+        title = ui_tr("Waiting for a final result");
+        detail = ui_tr("The controller has not confirmed completion. Manual mode stays active. "
+                 "Back lets you leave without stopping the calibration.");
         color = 0xA35B12;
     } else if (running) {
         bool needs_feed=selected_white_balance&&!state.feed_started;
-        title = needs_feed?"Waiting for note feeding":"Calibration in progress";
-        detail = needs_feed?"The calibration command has been sent. Waiting for the controller to feed notes.":
-                           "Waiting for the controller. Keep the path clear and do not power off.";
+        title = needs_feed?ui_tr("Waiting for note feeding"):ui_tr("Calibration in progress");
+        detail = needs_feed?ui_tr("The calibration command has been sent. Waiting for the controller to feed notes."):
+                           ui_tr("Waiting for the controller. Keep the path clear and do not power off.");
         color = 0x1462CC;
     } else if (send_failed) {
-        title = "Could not start";
-        detail = "Check the controller connection, then try again.";
+        title = ui_tr("Could not start");
+        detail = ui_tr("Check the controller connection, then try again.");
         color = 0xB63B32;
     } else if (success) {
-        title = "Calibration complete";
-        detail = "The controller confirmed the result. You can return to settings.";
+        title = ui_tr("Calibration complete");
+        detail = ui_tr("The controller confirmed the result. You can return to settings.");
         color = 0x247650;
     } else if (selected_white_balance && state.cb_state == CB_CALIB_FAIL_FEED) {
-        title = "Feeding did not start";
+        title = ui_tr("Feeding did not start");
         detail = state.feed_error_type==1&&state.feed_error_code==2?
-            "No banknotes detected. Place a note in the hopper, then press Start again.":
-            "Resolve the reported feed error, then press Start again.";
+            ui_tr("No banknotes detected. Place a note in the hopper, then press Start again."):
+            ui_tr("Resolve the reported feed error, then press Start again.");
         color = 0xB63B32;
     } else if ((!selected_white_balance && state.cis_state >= CIS_CALIB_FAIL_UPPER) ||
                (selected_white_balance && state.cb_state == CB_CALIB_FAIL_IR)) {
-        title = "Calibration not completed";
+        title = ui_tr("Calibration not completed");
         detail = !selected_white_balance && state.cis_state == CIS_CALIB_FAIL_UPPER ?
-                 "Check the upper channel and calibration material, then retry." :
+                 ui_tr("Check the upper channel and calibration material, then retry.") :
                  !selected_white_balance && state.cis_state == CIS_CALIB_FAIL_LOWER ?
-                 "Check the lower channel and calibration material, then retry." :
-                 "Check the infrared channel and calibration material, then retry.";
+                 ui_tr("Check the lower channel and calibration material, then retry.") :
+                 ui_tr("Check the infrared channel and calibration material, then retry.");
         color = 0xB63B32;
     }
     const char *blocker=running?NULL:app_command_runtime_calibration_blocker();
     if(blocker){
-        title=work_mode_service_diagnostic_ready()?"Waiting for the machine":"Preparing manual mode";
-        detail=blocker;color=0xA35B12;
+        title=work_mode_service_diagnostic_ready()?ui_tr("Waiting for the machine"):ui_tr("Preparing manual mode");
+        detail=ui_tr(blocker);color=0xA35B12;
     }
     calibration_text(status_title, title);
     lv_obj_set_style_text_color(status_title, lv_color_hex(color), 0);
     calibration_text(status_detail, detail);
-    settings_detail_action_block(start_button,running?"Calibration is already in progress.":blocker);
+    settings_detail_action_block(start_button,running?UI_N_("Calibration is already in progress."):blocker);
     settings_detail_action_block(frame.back,NULL);
     calibration_text(frame.message, !work_mode_service_diagnostic_ready() ? work_mode_service_status_text() :
-                      running ? "Calibration is controlled by the machine." :
-                      "Calibration starts only when you press Start.");
+                      running ? ui_tr("Calibration is controlled by the machine.") :
+                      ui_tr("Calibration starts only when you press Start."));
 }
 
 void ui_page_cis_calib_destroy(void)

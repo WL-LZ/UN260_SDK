@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #include "page_25_set_serial_number.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
@@ -22,12 +23,12 @@ static void refresh(void)
 {
     if (!frame.root) return;
     uint8_t level = serial_number_state_level();
-    lv_label_set_text_fmt(confirmed, "Confirmed: %s", level <= SERIAL_NUMBER_LEVEL_MAX ? ui_text_get(names[level]) : "Unknown");
+    lv_label_set_text_fmt(confirmed, ui_tr("Confirmed: %s"), level <= SERIAL_NUMBER_LEVEL_MAX ? ui_text_get(names[level]) : ui_tr("Unknown"));
     for (unsigned i = 0; i < 4; ++i) {
         bool selected = level == i;
         if (selected) lv_obj_add_state(options[i], LV_STATE_CHECKED);
         else lv_obj_clear_state(options[i], LV_STATE_CHECKED);
-        if (pending) settings_detail_action_block(options[i], "Wait for the controller to confirm the current setting.");
+        if (pending) settings_detail_action_block(options[i], UI_N_("Wait for the controller to confirm the current setting."));
         else settings_detail_action_block(options[i], NULL);
     }
 }
@@ -43,16 +44,16 @@ static void choose(lv_event_t *event)
     uint8_t level = (uint8_t)(uintptr_t)lv_event_get_user_data(event);
     if (level == serial_number_state_level()) return;
     if (!serial_number_service_request(level != SERIAL_NUMBER_LEVEL_OFF, level)) {
-        ui_notice_post(UI_NOTICE_WARNING,"settings.serial_number","Serial number","Wait for the current setting result.");
+        ui_notice_post_text(UI_NOTICE_WARNING,"settings.serial_number",UI_N_("Serial number"),UI_N_("Wait for the current setting result."));
         return;
     }
     if (!settings_detail_send_command(0x32, &level, 1)) {
         serial_number_service_cancel_request();
-        ui_notice_post(UI_NOTICE_ERROR,"settings.serial_number","Serial number","Request not sent. Try again.");
+        ui_notice_post_text(UI_NOTICE_ERROR,"settings.serial_number",UI_N_("Serial number"),UI_N_("Request not sent. Try again."));
         return;
     }
     pending = true;
-    ui_notice_post(UI_NOTICE_PROGRESS,"settings.serial_number","Serial number","Waiting for controller...");
+    ui_notice_post_text(UI_NOTICE_PROGRESS,"settings.serial_number",UI_N_("Serial number"),UI_N_("Waiting for controller..."));
     refresh();
 }
 
@@ -66,8 +67,8 @@ void ui_page_25_set_serial_number_create(lv_obj_t *parent)
     lv_obj_set_style_bg_opa(frame.body, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(frame.body, 0, 0);
     lv_obj_t *row=lv_settings_panel(frame.body,0,0,1232,112);
-    lv_settings_label(row,"Serial number recognition",24,25,&lv_font_instrument_sans_medium_22,0x1D2B34);
-    lv_settings_label(row,"Choose the recognition level; Off disables recognition.",24,61,&lv_font_instrument_sans_medium_14,0x586B78);
+    lv_settings_label(row,ui_tr("Serial number recognition"),24,25,&lv_font_instrument_sans_medium_22,0x1D2B34);
+    lv_settings_label(row,ui_tr("Choose the recognition level; Off disables recognition."),24,61,&lv_font_instrument_sans_medium_14,0x586B78);
     lv_obj_t *base=lv_settings_segment_base(row,712,30,492,52);
     confirmed=lv_settings_label(frame.body,"",24,136,&lv_font_instrument_sans_medium_16,0x586B78);
     for(unsigned i=0;i<4;i++)

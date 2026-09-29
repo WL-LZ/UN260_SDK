@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_message.h"
 #ifndef UN260_WORKSPACE_STORE_H
 #define UN260_WORKSPACE_STORE_H
 #include "un260/workspace/workspace_model.h"
@@ -18,4 +19,5 @@ unsigned workspace_store_revision(void);
 bool workspace_store_last_success(void);
 /* Snapshot is copied before the worker starts. Report producer owns the whitelist. */
 bool workspace_store_export_support(const char *report);
+const ui_message_t *workspace_store_message_info(void);
 #endif

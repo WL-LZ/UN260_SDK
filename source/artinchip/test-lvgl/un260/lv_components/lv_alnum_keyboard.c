@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "lv_alnum_keyboard.h"
 #include "lv_popup_style.h"
 #include "lv_damped_button.h"
@@ -433,7 +434,7 @@ lv_alnum_keyboard_t *lv_alnum_keyboard_create(lv_obj_t *parent,
 
     if (config->choice_title) {
         keyboard->choice_grid=plain(panel,226,92,782,198,0xE7EDF1,0);
-        keyboard->choice_empty=label_create(panel,config->choice_empty?config->choice_empty:"No options",&lv_font_instrument_sans_medium_18,
+        keyboard->choice_empty=label_create(panel,config->choice_empty?config->choice_empty:ui_tr("No options"),&lv_font_instrument_sans_medium_18,
             MUTED_COLOR,250,157,720,32);
         if(!keyboard->choice_grid || !keyboard->choice_empty)goto failed;
         lv_obj_add_flag(keyboard->choice_grid,LV_OBJ_FLAG_SCROLLABLE);

@@ -5,8 +5,6 @@
 #include "un260/lv_components/lv_fault_popup.h"
 #include <stddef.h>
 
-void smart_island_set_scene(smart_island_scene_t scene);
-
 #define SMART_ISLAND_WIDTH                261
 #define SMART_ISLAND_ACTION_PAGE_CAPACITY 5U
 #define SMART_ISLAND_ACTION_PAGE_COUNT    SMART_ISLAND_ACTION_PAGE_CAPACITY
@@ -96,6 +94,25 @@ typedef struct {
 } smart_island_view_state_t;
 
 typedef struct {
+    bool valid;
+    fault_source_t source;
+    uint8_t fault_type;
+    uint8_t code;
+} smart_island_warning_fault_t;
+
+typedef struct {
+    smart_island_warning_level_t level;
+    bool marquee_running;
+    bool collapse_running;
+    lv_coord_t text_width_compact;
+    lv_coord_t text_width_expand;
+    bool resume_animation_pending;
+    bool resume_counting;
+    smart_island_warning_fault_t fault;
+    char text[64];
+} smart_island_warning_state_t;
+
+typedef struct {
     int pcs;
     int amount;
     int denomination;
@@ -146,15 +163,20 @@ typedef struct {
     smart_island_object_refs_t objects;
     smart_island_action_state_t action;
     smart_island_view_state_t view;
+    smart_island_warning_state_t warning;
     smart_island_counting_state_t counting;
     smart_island_text_state_t text;
     smart_island_lifecycle_state_t lifecycle;
 } smart_island_context_t;
 
 extern smart_island_context_t g_si_ctx;
+void smart_island_set_scene(smart_island_scene_t scene);
 
 /* 子模块之间共享的内部接口，不对 smart_island.h 使用者公开。 */
 void smart_island_result_stop_timer(void);
+void smart_island_warning_stop(void);
+void smart_island_warning_resume_if_pending(void);
+void smart_island_warning_fault_clear(void);
 void smart_island_reset_page_positions(void);
 void smart_island_reset_compact_header_position(void);
 void smart_island_reset_time_position(void);
@@ -176,6 +198,9 @@ void smart_island_view_apply_visual(smart_island_visual_t visual, bool anim_en);
 void smart_island_view_refresh_scene(void);
 void smart_island_view_update_counting(void);
 void smart_island_view_message_pulse(void);
+void smart_island_view_notice_expand(void);
+void smart_island_view_notice_collapse(lv_anim_ready_cb_t ready_cb);
+void smart_island_view_notice_reset(void);
 void smart_island_view_result_enter(void);
 void smart_island_view_result_collapse(void);
 void smart_island_view_idle_enter(void);

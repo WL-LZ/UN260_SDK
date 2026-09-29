@@ -1,6 +1,7 @@
 #include "ui_notice.h"
 #include "lvgl/lvgl.h"
 #include "un260/lv_system/ui_text.h"
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/font/ui_message_font.h"
 #include <stdio.h>
 #include <string.h>
@@ -9,7 +10,7 @@
 #define NOTICE_HEIGHT 116
 #define NOTICE_Y 14
 #define NOTICE_OFFSCREEN_Y (-140)
-#define NOTICE_ENTER_MS 380
+#define NOTICE_ENTER_MS 240
 #define NOTICE_EXIT_MS 240
 #define NOTICE_SPINNER_MS 40
 
@@ -27,8 +28,6 @@ static struct {
     uint32_t last_tick;
     uint16_t angle;
     lv_coord_t animation_y;
-    lv_opa_t animation_opacity;
-    lv_opa_t opacity;
     bool initialized;
     bool visible;
     bool leaving;
@@ -40,11 +39,6 @@ static struct {
 static void present(bool animate);
 static void service_start(void);
 
-static lv_opa_t opacity(unsigned value)
-{
-    return (lv_opa_t)((value * notice.opacity) / LV_OPA_COVER);
-}
-
 static void line(lv_draw_ctx_t *ctx, const lv_area_t *a,
                  int x1, int y1, int x2, int y2, int width)
 {
@@ -53,7 +47,7 @@ static void line(lv_draw_ctx_t *ctx, const lv_area_t *a,
     lv_point_t p2 = { a->x1 + x2, a->y1 + y2 };
     lv_draw_line_dsc_init(&d);
     d.color = lv_color_white();
-    d.opa = notice.opacity;
+    d.opa = LV_OPA_COVER;
     d.width = width;
     d.round_start = d.round_end = 1;
     lv_draw_line(ctx, &d, &p1, &p2);
@@ -65,7 +59,7 @@ static void arc(lv_draw_ctx_t *ctx, const lv_area_t *a, unsigned start, unsigned
     lv_point_t center = { a->x1 + 58, a->y1 + 58 };
     lv_draw_arc_dsc_init(&d);
     d.color = lv_color_white();
-    d.opa = opacity(opa);
+    d.opa = opa;
     d.width = 3;
     d.rounded = 1;
     lv_draw_arc(ctx, &d, &center, 17, start, end);
@@ -83,7 +77,7 @@ static void label(lv_draw_ctx_t *ctx, const lv_area_t *origin, int x, int y, int
     lv_draw_label_dsc_init(&d);
     d.font = ui_message_font(font);
     d.color = lv_color_hex(color);
-    d.opa = notice.opacity;
+    d.opa = LV_OPA_COVER;
     d.align = align;
     d.flag = LV_TEXT_FLAG_EXPAND;
     ctx->clip_area = &clip;
@@ -93,10 +87,7 @@ static void label(lv_draw_ctx_t *ctx, const lv_area_t *origin, int x, int y, int
 
 static void draw(lv_event_t *event)
 {
-    static const uint32_t colors[][2] = {
-        { 0x2DBA79, 0x19965E }, { 0xF16D69, 0xD64A49 },
-        { 0xEDA83E, 0xD08825 }, { 0x528EF0, 0x2C6DCD }, { 0x8293A8, 0x64778F }
-    };
+    static const uint32_t colors[] = {0x20AC71,0xDF5754,0xDD982F,0x397FE1,0x74879D};
     lv_draw_ctx_t *ctx = lv_event_get_draw_ctx(event);
     lv_area_t a, tile;
     lv_draw_rect_dsc_t d;
@@ -106,28 +97,18 @@ static void draw(lv_event_t *event)
     lv_obj_get_coords(notice.object, &a);
     lv_draw_rect_dsc_init(&d);
     d.radius = 29;
-    d.bg_color = lv_color_hex(0xEEF0F2);
-    d.bg_grad.stops[0].color = d.bg_color;
-    d.bg_grad.stops[1].color = lv_color_hex(0xDDE1E6);
-    d.bg_grad.dir = LV_GRAD_DIR_VER;
-    d.bg_opa = opacity(242);
+    d.bg_color = lv_color_hex(0xECEFF1);
+    d.bg_opa = LV_OPA_COVER;
     d.border_width = 1;
     d.border_color = lv_color_white();
-    d.border_opa = opacity(184);
-    d.shadow_color = lv_color_hex(0x192633);
-    d.shadow_width = 22;
-    d.shadow_ofs_y = 6;
-    d.shadow_opa = opacity(35);
+    d.border_opa = LV_OPA_COVER;
     lv_draw_rect(ctx, &d, &a);
 
     tile = (lv_area_t){ a.x1 + 25, a.y1 + 25, a.x1 + 90, a.y1 + 90 };
     lv_draw_rect_dsc_init(&d);
     d.radius = 18;
-    d.bg_color = lv_color_hex(colors[notice.shown.kind][0]);
-    d.bg_grad.stops[0].color = d.bg_color;
-    d.bg_grad.stops[1].color = lv_color_hex(colors[notice.shown.kind][1]);
-    d.bg_grad.dir = LV_GRAD_DIR_VER;
-    d.bg_opa = notice.opacity;
+    d.bg_color = lv_color_hex(colors[notice.shown.kind]);
+    d.bg_opa = LV_OPA_COVER;
     lv_draw_rect(ctx, &d, &tile);
 
     switch (notice.shown.kind) {
@@ -177,6 +158,7 @@ static void fit_text(char *out, size_t size, const char *text, const lv_font_t *
     lv_point_t measured;
     font = ui_message_font(font);
     if (count >= size) count = size - 1;
+    while (count && ((unsigned char)text[count] & 0xc0) == 0x80) --count;
     memcpy(out, text, count);
     out[count] = '\0';
     for (i = 0; i < count; ++i) if (out[i] == '\n' || out[i] == '\r') out[i] = ' ';
@@ -195,12 +177,16 @@ static void fit_text(char *out, size_t size, const char *text, const lv_font_t *
 static void prepare_copy(void)
 {
     lv_point_t measured;
+    char detail[UI_NOTICE_DETAIL_CAPACITY];
+    const char *title=notice.shown.localized?ui_tr(notice.shown.title):notice.shown.title;
+    const char *body=notice.shown.localized?ui_tr(notice.shown.detail):notice.shown.detail;
+    if(notice.shown.has_message){ui_message_render(&notice.shown.message,detail,sizeof(detail));body=detail;}
     notice.title_font = ui_message_font(&lv_font_instrument_sans_semibold_22);
-    lv_txt_get_size(&measured, notice.shown.title, notice.title_font, 0, 0,
+    lv_txt_get_size(&measured, title, notice.title_font, 0, 0,
                     LV_COORD_MAX, LV_TEXT_FLAG_EXPAND);
     if (measured.x > 518) notice.title_font = ui_message_font(&lv_font_instrument_sans_semibold_20);
-    fit_text(notice.title, sizeof(notice.title), notice.shown.title, notice.title_font, 518);
-    fit_text(notice.detail, sizeof(notice.detail), notice.shown.detail,
+    fit_text(notice.title, sizeof(notice.title), title, notice.title_font, 518);
+    fit_text(notice.detail, sizeof(notice.detail), body,
              &lv_font_instrument_sans_medium_18, 610);
 }
 
@@ -213,11 +199,7 @@ static void animation_exec(void *object, int32_t value)
 {
     int start = notice.animation_y;
     int end = notice.leaving ? NOTICE_OFFSCREEN_Y : NOTICE_Y;
-    int end_opacity = notice.leaving ? 0 : LV_OPA_COVER;
     lv_obj_set_y(object, start + (end - start) * value / 1000);
-    notice.opacity = (lv_opa_t)(notice.animation_opacity +
-        (end_opacity - notice.animation_opacity) * value / 1000);
-    lv_obj_invalidate(object);
 }
 
 static void animation_ready(lv_anim_t *animation)
@@ -239,7 +221,6 @@ static void animate(bool leaving)
     lv_anim_del(notice.object, animation_exec);
     notice.leaving = leaving;
     notice.animation_y = leaving ? lv_obj_get_y(notice.object) : NOTICE_OFFSCREEN_Y;
-    notice.animation_opacity = leaving ? notice.opacity : 0;
     notice.animating = true;
     lv_anim_init(&a);
     lv_anim_set_var(&a, notice.object);
@@ -306,11 +287,6 @@ static void event(lv_event_t *e)
 {
     switch (lv_event_get_code(e)) {
     case LV_EVENT_DRAW_MAIN: draw(e); break;
-    case LV_EVENT_REFR_EXT_DRAW_SIZE: {
-        lv_coord_t *size = lv_event_get_param(e);
-        if (*size < 28) *size = 28;
-        break;
-    }
     case LV_EVENT_PRESSED:
         consume_visible_time(); notice.held = true; service_stop(); break;
     case LV_EVENT_RELEASED:
@@ -338,7 +314,6 @@ void ui_notice_init(void)
     lv_obj_clear_flag(notice.object, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(notice.object, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(notice.object, event, LV_EVENT_ALL, NULL);
-    lv_obj_refresh_ext_draw_size(notice.object);
     notice.timer = lv_timer_create(timer_event, NOTICE_SPINNER_MS, NULL);
     service_stop();
 }
@@ -358,7 +333,6 @@ static void present(bool with_animation)
     lv_anim_del(notice.object, animation_exec);
     notice.animating = notice.leaving = notice.held = false;
     notice.visible = true;
-    notice.opacity = LV_OPA_COVER;
     lv_obj_set_y(notice.object, with_animation ? NOTICE_OFFSCREEN_Y : NOTICE_Y);
     lv_obj_clear_flag(notice.object, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(notice.object);
@@ -384,8 +358,25 @@ bool ui_notice_show(const ui_notice_config_t *config)
 
 void ui_notice_post(ui_notice_kind_t kind, const char *key, const char *title, const char *detail)
 {
-    ui_notice_config_t config = { kind, key, title, detail, 0 };
+    ui_notice_config_t config = { .kind=kind, .key=key, .title=title, .detail=detail };
     (void)ui_notice_show(&config);
+}
+void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title,const char *detail)
+{
+    ui_notice_config_t config={.kind=kind,.key=key,.title=title,.detail=detail,.localized=true};
+    (void)ui_notice_show(&config);
+}
+void ui_notice_post_message(ui_notice_kind_t kind,const char *key,const char *title,const ui_message_t *message)
+{
+    ui_notice_config_t config={.kind=kind,.key=key,.title=title,.localized=true,.message=message};
+    (void)ui_notice_show(&config);
+}
+void ui_notice_language_changed(void)
+{
+    if(!notice.initialized||!notice.object)return;
+    /* Repaint the existing snapshot, including an exit already in flight.
+     * Do not post/merge, restart animation, or touch the queue/visible lifetime. */
+    prepare_copy();lv_obj_invalidate(notice.object);
 }
 
 void ui_notice_dismiss(const char *key)

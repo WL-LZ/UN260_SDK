@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #include "page_27_set_cfd_level.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
@@ -49,22 +50,22 @@ static void refresh(void)
         lv_label_set_text(frame.message,"");
     }else if(loading && !busy && !ready){
         if(loading_orbit){lv_obj_del(loading_orbit);loading_orbit=NULL;}
-        lv_label_set_text(loading_text,"Levels unavailable. Use Retry at the top.");
+        lv_label_set_text(loading_text,ui_tr("Levels unavailable. Use Retry at the top."));
     }
     for (unsigned scene = 0; scene < CFD_SCENE_COUNT; ++scene) {
         if (scene == selected_scene) lv_obj_add_state(profiles[scene], LV_STATE_CHECKED);
         else lv_obj_clear_state(profiles[scene], LV_STATE_CHECKED);
-        if (!ready || busy || loading) settings_detail_action_block(profiles[scene], busy || saving ? "Wait for the current controller request to finish." : !ready || loading ? "Detection levels have not finished loading." : "No changes to update.");
+        if (!ready || busy || loading) settings_detail_action_block(profiles[scene], busy || saving ? UI_N_("Wait for the current controller request to finish.") : !ready || loading ? UI_N_("Detection levels have not finished loading.") : UI_N_("No changes to update."));
         else settings_detail_action_block(profiles[scene], NULL);
     }
     for(unsigned item=0;item<CFD_ITEM_COUNT;item++)for(unsigned level=0;level<CFD_LEVEL_MAX;level++){
         lv_obj_t *o=cells[item][level];
         if(ready&&draft.levels[selected_scene][item]==level+1)lv_obj_add_state(o,LV_STATE_CHECKED);else lv_obj_clear_state(o,LV_STATE_CHECKED);
-        if(!ready||busy||loading)settings_detail_action_block(o, busy || saving ? "Wait for the current controller request to finish." : !ready || loading ? "Detection levels have not finished loading." : "No changes to update.");else settings_detail_action_block(o, NULL);
+        if(!ready||busy||loading)settings_detail_action_block(o, busy || saving ? UI_N_("Wait for the current controller request to finish.") : !ready || loading ? UI_N_("Detection levels have not finished loading.") : UI_N_("No changes to update."));else settings_detail_action_block(o, NULL);
     }
-    if (!dirty() || busy) settings_detail_action_block(save_button, busy || saving ? "Wait for the current controller request to finish." : !ready || loading ? "Detection levels have not finished loading." : "No changes to update.");
+    if (!dirty() || busy) settings_detail_action_block(save_button, busy || saving ? UI_N_("Wait for the current controller request to finish.") : !ready || loading ? UI_N_("Detection levels have not finished loading.") : UI_N_("No changes to update."));
     else settings_detail_action_block(save_button, NULL);
-    if (saving) settings_detail_action_block(frame.back, busy || saving ? "Wait for the current controller request to finish." : !ready || loading ? "Detection levels have not finished loading." : "No changes to update.");
+    if (saving) settings_detail_action_block(frame.back, busy || saving ? UI_N_("Wait for the current controller request to finish.") : !ready || loading ? UI_N_("Detection levels have not finished loading.") : UI_N_("No changes to update."));
     else settings_detail_action_block(frame.back, NULL);
     if (ready || busy) lv_obj_add_flag(retry_button, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_clear_flag(retry_button, LV_OBJ_FLAG_HIDDEN);
@@ -81,14 +82,14 @@ static void query(void)
     loading=lv_settings_body_overlay(frame.body);
     loading_orbit=lv_loading_orbit_create_sized(loading,48);
     lv_obj_align(loading_orbit,LV_ALIGN_CENTER,0,-24);
-    loading_text=lv_settings_label(loading,"Reading detection levels",0,137,&lv_font_instrument_sans_medium_18,0x536B79);
+    loading_text=lv_settings_label(loading,ui_tr("Reading detection levels"),0,137,&lv_font_instrument_sans_medium_18,0x536B79);
     lv_obj_set_width(loading_text,lv_pct(100));lv_obj_set_style_text_align(loading_text,LV_TEXT_ALIGN_CENTER,0);
     lv_obj_align(loading_text,LV_ALIGN_CENTER,0,36);
     loading_cycle_done=false;loading_timer=lv_timer_create(loading_done,900,NULL);
     if(!loading_timer)loading_cycle_done=true;
-    lv_label_set_text_fmt(currency_label, "%s / Profiles", code);
+    lv_label_set_text_fmt(currency_label, ui_tr("%s / Profiles"), code);
     bool sent = cfd_service_request_query(code);
-    if(!sent)ui_notice_post(UI_NOTICE_ERROR,"settings.cfd","Detection levels unavailable","Could not send request. Use Retry.");
+    if(!sent)ui_notice_post_text(UI_NOTICE_ERROR,"settings.cfd",UI_N_("Detection levels unavailable"),UI_N_("Could not send request. Use Retry."));
     refresh();
 }
 
@@ -109,8 +110,8 @@ static void ask_leave(bool home)
     if (saving) return;
     leave_home = home;
     if (dirty()) settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING,
-        "Discard changes?", "Your levels have not been applied.",
-        "Discard", "Keep editing", leave, NULL, NULL);
+        ui_tr("Discard changes?"), ui_tr("Your levels have not been applied."),
+        ui_tr("Discard"), ui_tr("Keep editing"), leave, NULL, NULL);
     else leave(NULL);
 }
 
@@ -132,7 +133,7 @@ static void profile(lv_event_t *event)
     if (lv_event_get_code(event) != LV_EVENT_CLICKED || !ready || loading || cfd_service_busy()) return;
     selected_scene = (uint8_t)(uintptr_t)lv_event_get_user_data(event);
     refresh();
-    lv_label_set_text(frame.message, dirty() ? "Unsaved changes." : "Choose a profile, then select each channel level.");
+    lv_label_set_text(frame.message, dirty() ? ui_tr("Unsaved changes.") : ui_tr("Choose a profile, then select each channel level."));
 }
 
 static void cell(lv_event_t *event)
@@ -143,18 +144,18 @@ static void cell(lv_event_t *event)
     if(item>=CFD_ITEM_COUNT)return;
     draft.levels[selected_scene][item]=level;
     refresh();
-    lv_label_set_text(frame.message, dirty() ? "Unsaved changes." : "Choose a profile, then select each channel level.");
+    lv_label_set_text(frame.message, dirty() ? ui_tr("Unsaved changes.") : ui_tr("Choose a profile, then select each channel level."));
 }
 
 static void save(lv_event_t *event)
 {
     if (lv_event_get_code(event) != LV_EVENT_CLICKED || !dirty() || cfd_service_busy()) return;
     if (!cfd_service_request_update(&draft, selected_scene)) {
-        ui_notice_post(UI_NOTICE_ERROR,"settings.cfd","Levels not sent","Your changes are kept. Try again.");
+        ui_notice_post_text(UI_NOTICE_ERROR,"settings.cfd",UI_N_("Levels not sent"),UI_N_("Your changes are kept. Try again."));
         return;
     }
     saving = true;
-    ui_notice_post(UI_NOTICE_PROGRESS,"settings.cfd","Detection levels","Applying levels...");
+    ui_notice_post_text(UI_NOTICE_PROGRESS,"settings.cfd",UI_N_("Detection levels"),UI_N_("Applying levels..."));
     refresh();
 }
 
@@ -180,7 +181,7 @@ void ui_page_27_set_cfd_level_create(lv_obj_t *parent)
     lv_obj_t *base=lv_settings_segment_base(row,530,4,678,44);
     for(unsigned scene=0;scene<CFD_SCENE_COUNT;scene++)
         profiles[scene]=lv_settings_segment(base,scene,CFD_SCENE_COUNT,ui_text_get(profile_names[scene]),profile,(void*)(uintptr_t)scene);
-    const char *hints[]={"Ultraviolet detection","Magnetic detection","Magnetic thread detection","Infrared detection"};
+    const char *hints[]={ui_tr("Ultraviolet detection"),ui_tr("Magnetic detection"),ui_tr("Magnetic thread detection"),ui_tr("Infrared detection")};
     for(unsigned item=0;item<CFD_ITEM_COUNT;item++){
         row=lv_settings_control_row(rows,0,0,1218,44,true);
         lv_settings_label(row,channel_names[item],24,20,&lv_font_instrument_sans_medium_18,0x1D2B34);
@@ -191,7 +192,7 @@ void ui_page_27_set_cfd_level_create(lv_obj_t *parent)
             cells[item][level]=lv_settings_segment(base,level,CFD_LEVEL_MAX,text,cell,(void*)(uintptr_t)(item*CFD_LEVEL_MAX+level));
         }
     }
-    retry_button = lv_settings_button(frame.footer, 964, 0, 124, 46, "Retry", false, retry, NULL);
+    retry_button = lv_settings_button(frame.footer, 964, 0, 124, 46, ui_tr("Retry"), false, retry, NULL);
     save_button = lv_settings_button(frame.footer, 1100, 0, 132, 46,
         ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE), true, save, NULL);
     gesture_service_set_page_policy(UI_PAGE_CFD_LEVEL_SETTING, NULL, gesture);
@@ -234,12 +235,12 @@ void ui_page_27_set_cfd_level_on_info(const uint8_t *data, uint16_t len)
     bool was_saving=saving;
     cfd_state_confirm(&config);
     saving = false;
-    if(was_saving)ui_notice_post(UI_NOTICE_SUCCESS,"settings.cfd","Detection levels saved",NULL);
+    if(was_saving)ui_notice_post_text(UI_NOTICE_SUCCESS,"settings.cfd",UI_N_("Detection levels saved"),NULL);
     if (!frame.root) return;
     original = draft = config;
     selected_scene = original_scene = data[3] - 1;
     ready = true;
-    lv_label_set_text_fmt(currency_label, "%s / Profiles", config.currency);
+    lv_label_set_text_fmt(currency_label, ui_tr("%s / Profiles"), config.currency);
     refresh();
     if(!loading)lv_label_set_text(frame.message, "");
 }
@@ -248,8 +249,8 @@ void ui_page_27_set_cfd_level_on_request_failed(void)
 {
     bool was_saving = saving;
     saving = false;
-    if(was_saving||frame.root)ui_notice_post(UI_NOTICE_WARNING,"settings.cfd",was_saving?"Levels unconfirmed":"Detection levels unavailable",
-        was_saving?"No reply. Your changes are kept; check before retrying.":"No reply. Use Retry to load levels.");
+    if(was_saving||frame.root)ui_notice_post_text(UI_NOTICE_WARNING,"settings.cfd",was_saving?UI_N_("Levels unconfirmed"):UI_N_("Detection levels unavailable"),
+        was_saving?UI_N_("No reply. Your changes are kept; check before retrying."):UI_N_("No reply. Use Retry to load levels."));
     if (!frame.root) return;
     refresh();
 }

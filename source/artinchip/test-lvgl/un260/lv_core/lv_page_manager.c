@@ -802,6 +802,14 @@ void ui_manager_invalidate_all_page_caches(void)
     }
 }
 
+void ui_manager_on_language_changed(void)
+{
+    ui_manager_invalidate_all_page_caches();
+    if (g_page_manager.current == UI_PAGE_MAIN)
+        page_01_update_language_texts();
+    ui_manager_publish_data_changed(UI_DATA_TOPIC_ALL);
+}
+
 static uint8_t ui_manager_predecode_static_images(
     const ui_page_registration_t *registration)
 {

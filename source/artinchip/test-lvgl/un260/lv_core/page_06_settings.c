@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 /* Settings navigation owns layout; device actions remain in their existing services. */
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "page_06_settings.h"
@@ -84,7 +85,7 @@ static const settings_node_t *category(void){
 }
 static void create_sidebar(void){
  sidebar=lv_settings_box(view,12,12,216,376,0xF7F9FB);lv_obj_set_style_radius(sidebar,16,0);
- lv_settings_label(sidebar,"Settings",18,18,&lv_font_instrument_sans_semibold_24,0x1D2B34);
+ lv_settings_label(sidebar,ui_tr("Settings"),18,18,&lv_font_instrument_sans_semibold_24,0x1D2B34);
  lv_settings_label(sidebar,"UN260",153,27,&lv_font_instrument_sans_medium_12,0x586B78);
  const settings_node_t *selected=category();
  lv_obj_t *selected_button=NULL;
@@ -101,7 +102,7 @@ static void create_sidebar(void){
    lv_settings_icon(b,icon,12,12);
   }
   int title_x=catalog[i].icon?48:16;
-  lv_obj_t *title=lv_settings_label(b,catalog[i].title,title_x,15,&lv_font_instrument_sans_medium_16,active?0x1462CC:0x1D2B34);
+  lv_obj_t *title=lv_settings_label(b,ui_tr(catalog[i].title),title_x,15,&lv_font_instrument_sans_medium_16,active?0x1462CC:0x1D2B34);
   lv_obj_set_width(title,192-title_x);lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
   if(active){
    selected_button=b;
@@ -114,7 +115,7 @@ static void create_sidebar(void){
  lv_obj_t *home=lv_settings_back(list,0,0,200,47,home_event_cb,NULL);
  lv_obj_set_style_border_width(home,0,0);
  lv_obj_t *home_text=lv_obj_get_child(home,0);
- lv_label_set_text(home_text,"Back to count");
+ lv_label_set_text(home_text,ui_tr("Back to count"));
  lv_obj_set_width(home_text,144);lv_obj_set_style_text_align(home_text,LV_TEXT_ALIGN_LEFT,0);
  lv_obj_align(home_text,LV_ALIGN_LEFT_MID,48,0);
  lv_obj_t *home_icon=lv_obj_get_child(home,1);
@@ -122,16 +123,16 @@ static void create_sidebar(void){
 }
 static void value_for(const settings_node_t *n,char *out,size_t cap){
  out[0]=0;
- if(!strcmp(n->id,"language"))snprintf(out,cap,"%s",ui_lang_get()==LANGUAGE_EN?"English":"Unavailable");
- else if(!strcmp(n->id,"time"))snprintf(out,cap,"24-hour");
+ if(!strcmp(n->id,"language"))snprintf(out,cap,"%s",ui_lang_current()->name);
+ else if(!strcmp(n->id,"time"))snprintf(out,cap,"%s",ui_tr("24-hour"));
  else if(!strcmp(n->id,"brightness")){
   int max=backlight_service_max();
   if(max>0)snprintf(out,cap,"%d%%",backlight_service_level()*100/max);
-  else snprintf(out,cap,"Unavailable");
+  else snprintf(out,cap,"%s",ui_tr("Unavailable"));
  }
- else if(!strcmp(n->id,"standby")){unsigned m=standby_config()->minutes;snprintf(out,cap,m?"%u min":"Never",m);}
- else if(!strcmp(n->id,"reject"))snprintf(out,cap,"%u PCS",machine_state_reject_pocket_max());
- else if(!strcmp(n->id,"double"))snprintf(out,cap,"Level %u",machine_state_double_note_level());
+ else if(!strcmp(n->id,"standby")){unsigned m=standby_config()->minutes;snprintf(out,cap,m?ui_tr("%u min"):ui_tr("Never"),m);}
+ else if(!strcmp(n->id,"reject"))snprintf(out,cap,ui_tr("%u PCS"),machine_state_reject_pocket_max());
+ else if(!strcmp(n->id,"double"))snprintf(out,cap,ui_tr("Level %u"),machine_state_double_note_level());
 }
 static void refresh_values(void){
  for(size_t i=0;i<catalog_count;i++)if(value_labels[i]){
@@ -140,19 +141,19 @@ static void refresh_values(void){
  }
 }
 static void create_version_page_content(lv_obj_t *parent){
- static const char *names[]={"Controller","Image board","Display & logic"};
- static const char *hints[]={"Machine control","Image processing","Interface and FPGA"};
+ static const char *names[]={UI_N_("Controller"),UI_N_("Image board"),UI_N_("Display & logic")};
+ static const char *hints[]={UI_N_("Machine control"),UI_N_("Image processing"),UI_N_("Interface and FPGA")};
  static const int indexes[3][2]={{0,3},{1,4},{5,2}};
  lv_obj_set_style_bg_opa(parent,0,0);lv_obj_set_style_border_width(parent,0,0);
  for(int i=0;i<3;i++){
   lv_obj_t *card=lv_settings_panel(parent,i*416,0,400,242);
-  lv_settings_label(card,names[i],22,20,&lv_font_instrument_sans_semibold_22,0x1D2B34);
-  lv_settings_label(card,hints[i],22,49,&lv_font_instrument_sans_medium_14,0x586B78);
+  lv_settings_label(card,ui_tr(names[i]),22,20,&lv_font_instrument_sans_semibold_22,0x1D2B34);
+  lv_settings_label(card,ui_tr(hints[i]),22,49,&lv_font_instrument_sans_medium_14,0x586B78);
   lv_settings_box(card,22,80,356,1,0xE3E9ED);
   for(int j=0;j<2;j++){
    const int index=indexes[i][j],y=98+j*71;
-   lv_settings_label(card,j?(i==2?"FPGA":"Bootloader"):(i==2?"UI software":"Application"),22,y,&lv_font_instrument_sans_medium_14,0x586B78);
-   version_value_labels[index]=lv_settings_label(card,"Waiting",22,y+22,&lv_font_instrument_sans_semibold_22,0x1D2B34);
+   lv_settings_label(card,j?(i==2?"FPGA":ui_tr("Bootloader")):(i==2?ui_tr("UI software"):ui_tr("Application")),22,y,&lv_font_instrument_sans_medium_14,0x586B78);
+   version_value_labels[index]=lv_settings_label(card,ui_tr("Waiting"),22,y+22,&lv_font_instrument_sans_semibold_22,0x1D2B34);
    lv_obj_set_width(version_value_labels[index],356);lv_label_set_long_mode(version_value_labels[index],LV_LABEL_LONG_DOT);
   }
  }
@@ -173,11 +174,11 @@ static const char* get_data_collect_mode_name(data_collect_mode_t mode)
 {
     switch (mode) {
     case DATA_COLLECT_MODE_ALL:
-        return "All notes";
+        return ui_tr("All notes");
     case DATA_COLLECT_MODE_FALSE:
-        return "Rejected notes";
+        return ui_tr("Rejected notes");
     default:
-        return "Not selected";
+        return ui_tr("Not selected");
     }
 }
 
@@ -232,7 +233,7 @@ void page_06_data_collection_refresh(void)
         bool enabled=!request_pending&&!busy&&(i!=2||ready)&&
                      (i<2||mode!=DATA_COLLECT_MODE_NONE);
         if(enabled)settings_detail_action_block(actions[i], NULL);
-        else settings_detail_action_block(actions[i], request_pending ? "Wait for the current collection request to finish." : busy ? "Stop counting before changing collection." : !ready ? work_mode_service_status_text() : "Select All notes or Rejected notes first.");
+        else settings_detail_action_block(actions[i], request_pending ? UI_N_("Wait for the current collection request to finish.") : busy ? UI_N_("Stop counting before changing collection.") : !ready ? work_mode_service_status_msgid() : UI_N_("Select All notes or Rejected notes first."));
     }
     work_mode_snapshot_t gate;
     work_mode_service_get_snapshot(&gate);
@@ -284,10 +285,10 @@ static void data_collect_mode_btn_event_cb(lv_event_t* e)
 
     if (sub == 0x01) {
         mode = DATA_COLLECT_MODE_ALL;
-        status = "Requesting all-note collection";
+        status = UI_N_("Requesting all-note collection");
     } else if (sub == 0x02) {
         mode = DATA_COLLECT_MODE_FALSE;
-        status = "Requesting rejected-note collection";
+        status = UI_N_("Requesting rejected-note collection");
     } else {
         return;
     }
@@ -298,7 +299,7 @@ static void data_collect_mode_btn_event_cb(lv_event_t* e)
     }
     if (!settings_detail_send_command(0xC0, &sub, 1)) {
         data_collection_request_cancel();
-        data_collection_state_set_status("Command not sent. Check the controller connection.");
+        data_collection_state_set_status(UI_N_("Command not sent. Check the controller connection."));
         page_06_data_collection_refresh();
         return;
     }
@@ -311,17 +312,17 @@ static void data_collect_start_btn_event_cb(lv_event_t* e)
     if(!work_mode_service_diagnostic_ready()||data_collection_request_pending()||app_command_runtime_count_start_busy())return;
 
     if (data_collection_state_mode() == DATA_COLLECT_MODE_NONE) {
-        data_collection_state_set_status("Please select a collection mode first");
+        data_collection_state_set_status(UI_N_("Please select a collection mode first"));
         page_06_data_collection_refresh();
         return;
     }
 
     if (app_command_runtime_request_diagnostic_run()) {
         data_collection_state_reset_pcs();
-        data_collection_state_set_status("Counting command sent. Waiting for controller reply...");
+        data_collection_state_set_status(UI_N_("Counting command sent. Waiting for controller reply..."));
         page_06_data_collection_refresh();
     } else {
-        data_collection_state_set_status("Start was not accepted. Check the controller.");
+        data_collection_state_set_status(UI_N_("Start was not accepted. Check the controller."));
         page_06_data_collection_refresh();
     }
 }
@@ -333,13 +334,13 @@ static void data_collect_disable_btn_event_cb(lv_event_t* e)
     if(app_command_runtime_count_start_busy()||data_collection_state_mode()==DATA_COLLECT_MODE_NONE)return;
 
     if (!data_collection_request_begin(DATA_COLLECT_MODE_NONE,
-                                       "Exiting collection mode...",
+                                       UI_N_("Exiting collection mode..."),
                                        app_clock_uptime_ms())) {
         return;
     }
     if (!settings_detail_send_command(0xC0, &sub, 1)) {
         data_collection_request_cancel();
-        data_collection_state_set_status("Command not sent. Check the controller connection.");
+        data_collection_state_set_status(UI_N_("Command not sent. Check the controller connection."));
         page_06_data_collection_refresh();
         return;
     }
@@ -387,26 +388,26 @@ static void create_data_collection_page_content(lv_settings_frame_t *frame)
     lv_obj_t *parent=frame->body;
     lv_obj_set_style_bg_opa(parent,0,0);lv_obj_set_style_border_width(parent,0,0);
     lv_obj_t *modes=lv_settings_panel(parent,0,0,424,242);
-    lv_settings_label(modes,"Collect",22,19,&lv_font_instrument_sans_semibold_18,0x1D2B34);
-    dc_btn_all = create_dc_mode_button(modes, 22, 52, "All notes",
+    lv_settings_label(modes,ui_tr("Collect"),22,19,&lv_font_instrument_sans_semibold_18,0x1D2B34);
+    dc_btn_all = create_dc_mode_button(modes, 22, 52, ui_tr("All notes"),
                                        0x01, &dc_label_all, &dc_check_all);
-    dc_btn_false = create_dc_mode_button(modes, 22, 126, "Rejected notes",
+    dc_btn_false = create_dc_mode_button(modes, 22, 126, ui_tr("Rejected notes"),
                                          0x02, &dc_label_false, &dc_check_false);
-    lv_settings_label(modes,"Choose a mode before starting.",22,207,&lv_font_instrument_sans_medium_14,0x586B78);
+    lv_settings_label(modes,ui_tr("Choose a mode before starting."),22,207,&lv_font_instrument_sans_medium_14,0x586B78);
     lv_obj_t *card=lv_settings_panel(parent,440,0,792,242);
-    lv_settings_label(card,"Collection session",24,19,&lv_font_instrument_sans_semibold_18,0x1D2B34);
+    lv_settings_label(card,ui_tr("Collection session"),24,19,&lv_font_instrument_sans_semibold_18,0x1D2B34);
     lv_settings_box(card,24,52,744,1,0xE3E9ED);
-    lv_settings_label(card,"Confirmed mode",24,73,&lv_font_instrument_sans_medium_14,0x586B78);
-    dc_mode_value_label=lv_settings_label(card,"Not selected",24,98,&lv_font_instrument_sans_semibold_24,0x1D2B34);
-    lv_settings_label(card,"Notes collected",548,73,&lv_font_instrument_sans_medium_14,0x586B78);
+    lv_settings_label(card,ui_tr("Confirmed mode"),24,73,&lv_font_instrument_sans_medium_14,0x586B78);
+    dc_mode_value_label=lv_settings_label(card,ui_tr("Not selected"),24,98,&lv_font_instrument_sans_semibold_24,0x1D2B34);
+    lv_settings_label(card,ui_tr("Notes collected"),548,73,&lv_font_instrument_sans_medium_14,0x586B78);
     dc_pcs_label=lv_settings_label(card,"0",548,98,&lv_font_instrument_sans_semibold_40,0x1D2B34);
     lv_settings_box(card,24,160,744,1,0xE3E9ED);
-    dc_status_label=lv_settings_label(card,"Select a collection mode",24,184,&lv_font_instrument_sans_medium_16,0x586B78);
+    dc_status_label=lv_settings_label(card,ui_tr("Select a collection mode"),24,184,&lv_font_instrument_sans_medium_16,0x586B78);
     lv_obj_set_width(dc_status_label,744);
     lv_label_set_long_mode(dc_status_label, LV_LABEL_LONG_WRAP);
-    dc_btn_disable=lv_settings_button(frame->footer,898,0,164,44,"End collection",false,data_collect_disable_btn_event_cb,NULL);
-    dc_btn_start=lv_settings_button(frame->footer,1076,0,156,44,"RUN",true,data_collect_start_btn_event_cb,NULL);
-    dc_btn_retry=lv_settings_button(frame->footer,756,0,128,44,"Retry",false,data_collection_retry,NULL);
+    dc_btn_disable=lv_settings_button(frame->footer,898,0,164,44,ui_tr("End collection"),false,data_collect_disable_btn_event_cb,NULL);
+    dc_btn_start=lv_settings_button(frame->footer,1076,0,156,44,ui_tr("RUN"),true,data_collect_start_btn_event_cb,NULL);
+    dc_btn_retry=lv_settings_button(frame->footer,756,0,128,44,ui_tr("Retry"),false,data_collection_retry,NULL);
     lv_obj_add_flag(dc_btn_retry,LV_OBJ_FLAG_HIDDEN);
     dc_gate_label=frame->message;
     lv_obj_set_width(dc_gate_label,736);
@@ -425,7 +426,7 @@ static void refresh_directory_count(void){
    if(!lv_obj_has_flag(lv_obj_get_child(group,j),LV_OBJ_FLAG_HIDDEN))visible++;
  }
  char text[80];bool more=lv_obj_get_scroll_bottom(grid)>2,above=lv_obj_get_scroll_y(grid)>2;
- snprintf(text,sizeof(text),"%u %s%s",visible,visible==1?"setting":"settings",more?"  /  Swipe for more":above?"  /  Swipe to return":"");
+ snprintf(text,sizeof(text),"%u %s%s",visible,visible==1?ui_tr("setting"):ui_tr("settings"),more?ui_tr("  /  Swipe for more"):above?ui_tr("  /  Swipe to return"):"");
  if(strcmp(lv_label_get_text(count_label),text))lv_label_set_text(count_label,text);
 }
 static void settings_poll(lv_timer_t *timer){
@@ -440,11 +441,11 @@ static void render(void){
  grid=sidebar=count_label=NULL;reset_detail_refs();
  if(view)lv_obj_del(view);
  if(scope->kind==SETTINGS_DETAIL){
-  lv_settings_header_t h={.title=scope->title,.subtitle="Settings",.back=back_event_cb};
+  lv_settings_header_t h={.title=ui_tr(scope->title),.subtitle=ui_tr("Settings"),.back=back_event_cb};
   lv_settings_frame_t f=lv_settings_frame_create(settings_page,&h);view=f.root;
   if(scope_is("versions")){
    create_version_page_content(f.body);
-   lv_label_set_text(f.message,"Controller versions are reported by the machine. UI version is local.");
+   lv_label_set_text(f.message,ui_tr("Controller versions are reported by the machine. UI version is local."));
   }
   else if(scope_is("collection")){
    create_data_collection_page_content(&f);
@@ -454,8 +455,8 @@ static void render(void){
  view=lv_settings_box(settings_page,0,0,1280,400,0);lv_obj_set_style_bg_opa(view,0,0);
  create_sidebar();
  const settings_node_t *cat=category();
- const char *subtitle=scope->kind==SETTINGS_CATEGORY?scope->hint:cat->title;
- lv_settings_header_t h={.title=scope->title,.subtitle=subtitle,.back=back_event_cb};
+ const char *subtitle=scope->kind==SETTINGS_CATEGORY?ui_tr(scope->hint):ui_tr(cat->title);
+ lv_settings_header_t h={.title=ui_tr(scope->title),.subtitle=subtitle,.back=back_event_cb};
  lv_settings_header(view,256,18,1000,&h);
  grid=lv_settings_list(view,253,84,1006,274);
  lv_obj_t *groups[SETTINGS_NODE_MAX]={0};
@@ -466,12 +467,12 @@ static void render(void){
     !strcmp(catalog[j].parent,n->parent)&&catalog[j].group&&!strcmp(catalog[j].group,n->group)){group=groups[j];break;}
   if(!group)group=lv_settings_group(grid);
   groups[i]=group;
-  lv_settings_item_t cfg={.title=n->title,.hint=n->hint,.value=value,.icon=n->icon,.grouped=true,
+  lv_settings_item_t cfg={.title=ui_tr(n->title),.hint=n->hint?ui_tr(n->hint):NULL,.value=value,.icon=n->icon,.grouped=true,
    .activate=activate,.user_data=(void*)n,.value_label=&value_labels[i]};
   lv_settings_item(group,&cfg);
  }
  count_label=lv_settings_label(view,"",256,369,&lv_font_instrument_sans_medium_14,0x586B78);
- if(scope_is("calibration"))lv_settings_label(view,"Select a calibration to prepare it.",754,369,&lv_font_instrument_sans_medium_14,0x586B78);
+ if(scope_is("calibration"))lv_settings_label(view,ui_tr("Select a calibration to prepare it."),754,369,&lv_font_instrument_sans_medium_14,0x586B78);
  lv_obj_update_layout(grid);lv_obj_scroll_to_y(grid,scroll_positions[scope-catalog],LV_ANIM_OFF);
  refresh_directory_count();
 }

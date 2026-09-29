@@ -1,4 +1,7 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "ui_upgrade_service.h"
+#include "un260/lv_system/ui_update_message.h"
+#include "un260/lv_system/ui_lang.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -362,8 +365,8 @@ static void ui_upgrade_service_load_status_file(void)
     if (success == 1) {
         ui_upgrade_service_set_status(false, true, true, 100,
                                       UI_UPGRADE_STAGE_SUCCESS,
-                                      "Upgrade complete",
-                                      result_text[0] ? result_text : "System upgrade completed successfully");
+                                      UI_N_("Upgrade complete"),
+                                      result_text[0] ? result_text : UI_N_("System upgrade completed successfully"));
         g_ui_upgrade_service.running = false;
         g_ui_upgrade_service.finished = true;
         g_ui_upgrade_service.success = true;
@@ -371,7 +374,7 @@ static void ui_upgrade_service_load_status_file(void)
         ui_upgrade_service_set_status(false, true, false, progress,
                                       UI_UPGRADE_STAGE_FAIL,
                                       step_text,
-                                      result_text[0] ? result_text : "The upgrade package is invalid. Please check the file and try again.");
+                                      result_text[0] ? result_text : UI_N_("The upgrade package is invalid. Please check the file and try again."));
         g_ui_upgrade_service.running = false;
         g_ui_upgrade_service.finished = true;
         g_ui_upgrade_service.success = false;
@@ -401,7 +404,7 @@ static void ui_upgrade_service_update_child_state(void)
                                       g_ui_upgrade_service.status.progress,
                                       UI_UPGRADE_STAGE_FAIL,
                                       "Update result unknown",
-                                      "The updater process result could not be confirmed. Keep power connected.");
+                                      UI_N_("The updater process result could not be confirmed. Keep power connected."));
         return;
     }
 
@@ -425,7 +428,7 @@ static void ui_upgrade_service_update_child_state(void)
                                           g_ui_upgrade_service.status.progress,
                                           UI_UPGRADE_STAGE_FAIL,
                                           "Updater exited with an error",
-                                          "The updater did not finish successfully. Check the update result before retrying.");
+                                          UI_N_("The updater did not finish successfully. Check the update result before retrying."));
         }
         return;
     }
@@ -434,14 +437,14 @@ static void ui_upgrade_service_update_child_state(void)
         g_ui_upgrade_service.success = true;
         ui_upgrade_service_set_status(false, true, true, 100,
                                       UI_UPGRADE_STAGE_SUCCESS,
-                                      "Upgrade complete",
-                                      "The system has been updated successfully. Rebooting the device is recommended.");
+                                      UI_N_("Upgrade complete"),
+                                      UI_N_("The system has been updated successfully. Rebooting the device is recommended."));
     } else {
         g_ui_upgrade_service.success = false;
         ui_upgrade_service_set_status(false, true, false, 12,
                                       UI_UPGRADE_STAGE_FAIL,
                                       "Upgrade package verification failed",
-                                      "The upgrade package is invalid. Please check the file and try again.");
+                                      UI_N_("The upgrade package is invalid. Please check the file and try again."));
     }
 }
 
@@ -568,6 +571,9 @@ void ui_upgrade_service_poll(ui_upgrade_service_status_t* status)
 
     if (status != NULL) {
         *status = g_ui_upgrade_service.status;
+        language_t language=ui_lang_get();
+        ui_update_message_render(language,g_ui_upgrade_service.status.step_text,status->step_text,sizeof(status->step_text));
+        ui_update_message_render(language,g_ui_upgrade_service.status.result_text,status->result_text,sizeof(status->result_text));
         if (g_ui_upgrade_service.child_pid > 0 && status->finished) {
             status->running = true;
             status->finished = false;
@@ -575,9 +581,9 @@ void ui_upgrade_service_poll(ui_upgrade_service_status_t* status)
             if (status->stage == UI_UPGRADE_STAGE_SUCCESS) {
                 status->stage = UI_UPGRADE_STAGE_FINISH;
                 status->progress = 99;
-                snprintf(status->step_text, sizeof(status->step_text), "Finalizing update");
+                snprintf(status->step_text, sizeof(status->step_text), "%s",ui_tr("Finalizing update"));
                 snprintf(status->result_text, sizeof(status->result_text),
-                         "Keep the USB drive and power connected until the updater exits.");
+                         "%s",ui_tr("Keep the USB drive and power connected until the updater exits."));
             }
         }
     }

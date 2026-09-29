@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "page_12_sensor.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "settings_detail_ui.h"
@@ -41,19 +42,19 @@ static void sensor_refresh_view(void)
                 lv_label_set_text_fmt(sensor_page.values[i], "%u.%03u V",
                                       millivolts / 1000U, millivolts % 1000U);
             } else {
-                lv_label_set_text(sensor_page.values[i], "Waiting");
+                lv_label_set_text(sensor_page.values[i], ui_tr("Waiting"));
             }
             lv_obj_set_style_text_color(sensor_page.values[i],
                                          lv_color_hex(snapshot.valid[i] ? 0x1D2B34 : 0x586B78), 0);
         }
-        lv_label_set_text_fmt(sensor_page.received, "%u / %u channels", count, SENSOR_VOLTAGE_CH_NUM);
+        lv_label_set_text_fmt(sensor_page.received, ui_tr("%u / %u channels"), count, SENSOR_VOLTAGE_CH_NUM);
         sensor_page.initialized = true;
     }
-    const char *message = sensor_page.query_failed ? "Could not send query. Retrying the controller connection." :
-        !sensor_page.last_received_ms ? "Waiting for sensor readings from the controller." :
+    const char *message = sensor_page.query_failed ? ui_tr("Could not send query. Retrying the controller connection.") :
+        !sensor_page.last_received_ms ? ui_tr("Waiting for sensor readings from the controller.") :
         now - sensor_page.last_received_ms > 2000 ?
-        "No recent response. Readings shown are the last received values." :
-        "Live readings. Values are not a pass / fail assessment.";
+        ui_tr("No recent response. Readings shown are the last received values.") :
+        ui_tr("Live readings. Values are not a pass / fail assessment.");
     /* Receiving voltages is read-only and independent of the RUN mode lease. */
     if (strcmp(lv_label_get_text(sensor_page.frame.message),message))
         lv_label_set_text(sensor_page.frame.message,message);
@@ -68,7 +69,7 @@ static void sensor_poll_timer_cb(lv_timer_t *timer)
 void ui_page_12_sensor_create(lv_obj_t *parent)
 {
     if (sensor_page.frame.root) return;
-    lv_settings_header_t header = {"Sensors", "Maintenance / Live voltage", "Wrench", sensor_esc_cb, NULL};
+    lv_settings_header_t header = {ui_tr("Sensors"), ui_tr("Maintenance / Live voltage"), "Wrench", sensor_esc_cb, NULL};
     sensor_page.frame = lv_settings_frame_create(parent, &header);
     settings_detail_add_run(sensor_page.frame.root);
     lv_obj_set_style_bg_opa(sensor_page.frame.body, LV_OPA_TRANSP, 0);
@@ -80,13 +81,13 @@ void ui_page_12_sensor_create(lv_obj_t *parent)
         lv_obj_set_style_radius(card, 14, 0);
         lv_settings_label(card, sensor_names[i], 18, 17,
                            &lv_font_instrument_sans_medium_16, 0x586B78);
-        sensor_page.values[i] = lv_settings_label(card, "Waiting", 18, 57,
+        sensor_page.values[i] = lv_settings_label(card, ui_tr("Waiting"), 18, 57,
                            &lv_font_instrument_sans_medium_24, 0x1D2B34);
     }
     lv_obj_t *summary = lv_settings_box(sensor_page.frame.body, 1035, 124, 197, 114, 0xF1F4F5);
     lv_obj_set_style_radius(summary, 14, 0);
-    lv_settings_label(summary, "RECEIVING", 18, 17, &lv_font_instrument_sans_medium_14, 0x586B78);
-    sensor_page.received = lv_settings_label(summary, "0 / 11 channels", 18, 57,
+    lv_settings_label(summary, ui_tr("RECEIVING"), 18, 17, &lv_font_instrument_sans_medium_14, 0x586B78);
+    sensor_page.received = lv_settings_label(summary, ui_tr("0 / 11 channels"), 18, 57,
                                               &lv_font_instrument_sans_medium_18, 0x1D2B34);
     lv_obj_set_width(sensor_page.frame.message,1030);
     sensor_page.last_update = 0;

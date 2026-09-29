@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #include "page_29_set_password.h"
 #include "un260/lv_components/lv_pin_keypad.h"
@@ -34,22 +35,22 @@ static lv_obj_t *password_save_button;
 static void password_setting_open_keyboard(password_field_t field);
 
 static const char *const field_titles[PASSWORD_FIELD_COUNT] = {
-    "Current password",
-    "New password",
-    "Confirm password",
+    UI_N_("Current password"),
+    UI_N_("New password"),
+    UI_N_("Confirm password"),
 };
 
 static const char *const field_prompts[PASSWORD_FIELD_COUNT] = {
-    "Please enter your current 4-digit PIN",
-    "Please enter your new 4-digit PIN",
-    "Please re-enter your new 4-digit PIN",
+    UI_N_("Please enter your current 4-digit PIN"),
+    UI_N_("Please enter your new 4-digit PIN"),
+    UI_N_("Please re-enter your new 4-digit PIN"),
 };
 
 static void password_setting_refresh_fields(void)
 {
     if(password_save_button){
         if(lv_pin_input_is_complete(field_text[PASSWORD_FIELD_CONFIRM]))settings_detail_action_block(password_save_button, NULL);
-        else settings_detail_action_block(password_save_button, "Verify the current PIN, then enter and confirm your new PIN.");
+        else settings_detail_action_block(password_save_button, UI_N_("Verify the current PIN, then enter and confirm your new PIN."));
     }
     for (uint8_t i = 0; i < PASSWORD_FIELD_COUNT; i++) {
         bool active = (i == active_field);
@@ -74,7 +75,7 @@ static void password_setting_refresh_fields(void)
         }
         if (field_values[i]) {
             lv_label_set_text(field_values[i],
-                              len > 0 ? masked : "Tap to enter PIN");
+                              len > 0 ? masked : ui_tr("Tap to enter PIN"));
             lv_obj_set_style_text_color(field_values[i],
                                         len > 0 ? lv_color_hex(0x1D2B34) : lv_color_hex(0x586B78),
                                         0);
@@ -83,7 +84,7 @@ static void password_setting_refresh_fields(void)
 }
 
 static void password_setting_show_toast(const char *text,ui_notice_kind_t kind)
-{ui_notice_post(kind,"settings.password","Password",text);}
+{ui_notice_post_text(kind,"settings.password",UI_N_("Password"),text);}
 
 static void password_setting_close_keyboard(void *user_data)
 {
@@ -101,17 +102,17 @@ static void password_setting_keyboard_cb(const char* value, void* user_data)
     if (field >= PASSWORD_FIELD_COUNT || !lv_pin_input_is_complete(value)) return;
     if(field!=active_field)return;
     if(field==PASSWORD_FIELD_CURRENT&&strcmp(value,user_cfg_password_get())){
-        lv_pin_keypad_set_status(&password_setting_keypad,"Incorrect current PIN. Try again.");return;
+        lv_pin_keypad_set_status(&password_setting_keypad,ui_tr("Incorrect current PIN. Try again."));return;
     }
     if(field==PASSWORD_FIELD_CONFIRM&&strcmp(value,field_text[PASSWORD_FIELD_NEW])){
-        lv_pin_keypad_set_status(&password_setting_keypad,"PINs do not match. Re-enter the new PIN.");return;
+        lv_pin_keypad_set_status(&password_setting_keypad,ui_tr("PINs do not match. Re-enter the new PIN."));return;
     }
     lv_snprintf(field_text[field], sizeof(field_text[field]), "%s", value);
     for(unsigned i=field+1;i<PASSWORD_FIELD_COUNT;i++)memset(field_text[i],0,sizeof(field_text[i]));
     password_setting_close_keyboard(NULL);
     if(field<PASSWORD_FIELD_CONFIRM){
         active_field=field+1;password_setting_open_keyboard(active_field);
-    }else ui_notice_post(UI_NOTICE_INFO,"settings.password","PIN verified","Tap Save to apply the new password.");
+    }else ui_notice_post_text(UI_NOTICE_INFO,"settings.password",UI_N_("PIN verified"),UI_N_("Tap Save to apply the new password."));
     password_setting_refresh_fields();
 }
 
@@ -119,9 +120,9 @@ static void password_setting_open_keyboard(password_field_t field)
 {
     if (field >= PASSWORD_FIELD_COUNT || field!=active_field) return;
     const lv_pin_keypad_config_t config = {
-        .eyebrow = "CHANGE PASSWORD",
-        .title = field_titles[field],
-        .prompt = field_prompts[field],
+        .eyebrow = ui_tr("CHANGE PASSWORD"),
+        .title = ui_tr(field_titles[field]),
+        .prompt = ui_tr(field_prompts[field]),
         .confirm_cb = password_setting_keyboard_cb,
         .cancel_cb = password_setting_close_keyboard,
         .user_data = (void *)(uintptr_t)field,
@@ -154,36 +155,36 @@ static void password_setting_save_cb(lv_event_t* e)
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
 
     if (field_text[PASSWORD_FIELD_NEW][0] == '\0') {
-        password_setting_show_toast("Password cannot be empty", UI_NOTICE_WARNING);
+        password_setting_show_toast(UI_N_("Password cannot be empty"), UI_NOTICE_WARNING);
         return;
     }
 
     for (unsigned i = 0; i < PASSWORD_FIELD_COUNT; ++i) {
         if (!lv_pin_input_is_complete(field_text[i])) {
-            password_setting_show_toast("Enter exactly 4 digits in each field.", UI_NOTICE_WARNING);
+            password_setting_show_toast(UI_N_("Enter exactly 4 digits in each field."), UI_NOTICE_WARNING);
             return;
         }
     }
 
     if (strcmp(field_text[PASSWORD_FIELD_CURRENT], user_cfg_password_get()) != 0) {
-        password_setting_show_toast("Incorrect current PIN.", UI_NOTICE_WARNING);
+        password_setting_show_toast(UI_N_("Incorrect current PIN."), UI_NOTICE_WARNING);
         return;
     }
 
     if (strcmp(field_text[PASSWORD_FIELD_NEW], field_text[PASSWORD_FIELD_CONFIRM]) != 0) {
-        password_setting_show_toast("Passwords do not match", UI_NOTICE_WARNING);
+        password_setting_show_toast(UI_N_("Passwords do not match"), UI_NOTICE_WARNING);
         return;
     }
 
     if (!user_cfg_password_save(field_text[PASSWORD_FIELD_NEW])) {
-        password_setting_show_toast("Save failed", UI_NOTICE_ERROR);
+        password_setting_show_toast(UI_N_("Save failed"), UI_NOTICE_ERROR);
         return;
     }
 
     memset(field_text, 0, sizeof(field_text));
     active_field = PASSWORD_FIELD_CURRENT;
     password_setting_refresh_fields();
-    password_setting_show_toast("Password saved", UI_NOTICE_SUCCESS);
+    password_setting_show_toast(UI_N_("Password saved"), UI_NOTICE_SUCCESS);
 }
 
 static bool password_dirty(void)
@@ -204,8 +205,8 @@ static void password_ask_leave(bool home)
 {
     password_leave_home = home;
     if (password_dirty()) settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING,
-        "Discard changes?", "Your new password has not been saved.",
-        "Discard", "Keep editing", password_leave, NULL, NULL);
+        ui_tr("Discard changes?"), ui_tr("Your new password has not been saved."),
+        ui_tr("Discard"), ui_tr("Keep editing"), password_leave, NULL, NULL);
     else password_leave(NULL);
 }
 
@@ -271,11 +272,11 @@ static void password_setting_create_field(lv_obj_t *parent, password_field_t fie
     lv_obj_set_style_bg_color(item, lv_color_hex(0xFFFFFF), 0);
     lv_obj_set_style_border_width(item, 1, 0);
     lv_obj_set_style_border_color(item, lv_color_hex(0xE3E9ED), 0);
-    lv_settings_label(item, field_titles[field], 24, 24,
+    lv_settings_label(item, ui_tr(field_titles[field]), 24, 24,
         &lv_font_instrument_sans_medium_18, 0x1D2B34);
-    field_values[field] = lv_settings_label(item, "Tap to enter PIN", 24, 90,
+    field_values[field] = lv_settings_label(item, ui_tr("Tap to enter PIN"), 24, 90,
         &lv_font_instrument_sans_medium_18, 0x586B78);
-    lv_settings_label(item, field_prompts[field], 24, 142,
+    lv_settings_label(item, ui_tr(field_prompts[field]), 24, 142,
         &lv_font_instrument_sans_medium_14, 0x586B78);
     field_cards[field] = item;
 }
@@ -296,13 +297,13 @@ void ui_page_29_set_password_create(lv_obj_t *parent)
     lv_obj_add_event_cb(password_setting_page, password_setting_deleted_cb, LV_EVENT_DELETE, NULL);
     lv_obj_add_flag(password_setting_page, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(password_setting_page, password_setting_outside, LV_EVENT_CLICKED, NULL);
-    lv_settings_label(password_setting_form,"Protect access",24,24,&lv_font_instrument_sans_semibold_24,0x1D2B34);
-    lv_settings_label(password_setting_form,"1  Verify current PIN\n\n2  Enter a new PIN\n\n3  Confirm and save",24,78,&lv_font_instrument_sans_medium_16,0x586B78);
+    lv_settings_label(password_setting_form,ui_tr("Protect access"),24,24,&lv_font_instrument_sans_semibold_24,0x1D2B34);
+    lv_settings_label(password_setting_form,ui_tr("1  Verify current PIN\n\n2  Enter a new PIN\n\n3  Confirm and save"),24,78,&lv_font_instrument_sans_medium_16,0x586B78);
     for (unsigned field = 0; field < PASSWORD_FIELD_COUNT; ++field)
         password_setting_create_field(password_setting_form, (password_field_t)field);
-    lv_label_set_text(password_frame.message, "Enter your current PIN, then enter and confirm a new PIN.");
-    lv_settings_button(password_frame.footer, 964, 0, 124, 46, "Cancel", false, password_setting_cancel, NULL);
-    password_save_button=lv_settings_button(password_frame.footer, 1100, 0, 132, 46, "Save", true, password_setting_save_cb, NULL);
+    lv_label_set_text(password_frame.message, ui_tr("Enter your current PIN, then enter and confirm a new PIN."));
+    lv_settings_button(password_frame.footer, 964, 0, 124, 46, ui_tr("Cancel"), false, password_setting_cancel, NULL);
+    password_save_button=lv_settings_button(password_frame.footer, 1100, 0, 132, 46, ui_tr("Save"), true, password_setting_save_cb, NULL);
     active_field = PASSWORD_FIELD_CURRENT;
     password_leave_home = false;
     memset(field_text, 0, sizeof(field_text));

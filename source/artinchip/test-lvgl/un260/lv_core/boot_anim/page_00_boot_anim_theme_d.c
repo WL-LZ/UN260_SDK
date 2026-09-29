@@ -1,3 +1,5 @@
+#include "un260/lv_system/ui_i18n.h"
+#include "un260/lv_system/ui_lang.h"
 #include "un260/lv_core/page_00_boot_anim.h"
 
 #if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D
@@ -177,8 +179,8 @@ void ui_page_00_boot_anim_set_startup_error(bool diagnostics_available)
         g_intro.revealing = false;
         apply_elapsed(INTRO_MIN_REVEAL_MS);
         lv_obj_set_style_text_font(g_intro.welcome, &lv_font_open_runde_medium_40, 0);
-        lv_label_set_text_static(g_intro.welcome, "STARTUP ERROR");
-        lv_label_set_text_static(g_intro.brand, "RESTART DEVICE");
+        lv_label_set_text_static(g_intro.welcome, ui_tr("STARTUP ERROR"));
+        lv_label_set_text_static(g_intro.brand, ui_tr("RESTART DEVICE"));
         lv_obj_set_style_text_font(g_intro.brand, &lv_font_open_runde_medium_24, 0);
         lv_obj_set_y(g_intro.brand, 305);
         text_opacity(g_intro.brand, LV_OPA_COVER);
@@ -202,7 +204,7 @@ void ui_page_00_boot_anim_set_startup_error(bool diagnostics_available)
     lv_obj_add_event_cb(g_intro.diagnostics, startup_diagnostics, LV_EVENT_CLICKED, NULL);
     lv_obj_t *text = lv_label_create(g_intro.diagnostics);
     if (text) {
-        lv_label_set_text_static(text, "DIAGNOSTICS");
+        lv_label_set_text_static(text, ui_tr("DIAGNOSTICS"));
         lv_obj_set_style_text_font(text, &lv_font_open_runde_medium_40, 0);
         lv_obj_set_style_text_color(text, lv_color_hex(0x74818A), 0);
         lv_obj_center(text);
@@ -297,7 +299,9 @@ void ui_page_00_boot_anim_create(lv_obj_t *parent)
     if (!g_intro.icon_ready) lv_obj_add_flag(g_intro.icon, LV_OBJ_FLAG_HIDDEN);
 
     g_intro.brand = label(g_intro.root, "UN260", &lv_font_open_runde_medium_48, 1);
-    g_intro.welcome = label(g_intro.root, BOOT_WELCOME_TEXT, &lv_font_boot_welcome, 0);
+    bool english = ui_lang_get() == LANGUAGE_EN;
+    g_intro.welcome = label(g_intro.root, english ? BOOT_WELCOME_TEXT : ui_tr("Welcome"),
+                            english ? &lv_font_boot_welcome : &lv_font_open_runde_medium_40, 0);
     if (!g_intro.brand || !g_intro.welcome) { create_failed(); return; }
     for (unsigned i = 0; i < 3; ++i) {
         g_intro.dots[i] = lv_obj_create(g_intro.root);

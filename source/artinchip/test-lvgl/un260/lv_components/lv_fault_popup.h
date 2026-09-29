@@ -9,6 +9,7 @@ typedef machine_fault_source_t fault_source_t;
 /* UI-thread entry points. Confirm acknowledges only, never transmits. */
 void hide_fault_popup(void);
 bool fault_popup_is_showing(void);
+void fault_popup_language_changed(void);
 void fault_popup_set_auto_enabled(bool enabled);
 bool fault_popup_get_auto_enabled(void);
 void fault_popup_report_start_fault(uint8_t type, uint8_t code);

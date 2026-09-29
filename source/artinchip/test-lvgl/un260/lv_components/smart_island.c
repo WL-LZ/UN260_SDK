@@ -13,21 +13,30 @@ smart_island_context_t g_si_ctx = {
     .view.bg_current = SMART_ISLAND_BG_IDLE,
     .view.bg_from = SMART_ISLAND_BG_IDLE,
     .view.bg_to = SMART_ISLAND_BG_IDLE,
+    .warning.level = SMART_ISLAND_WARNING_LEVEL_WARNING,
+    .warning.fault.source = FAULT_SRC_START_COUNT,
     .text.idle_quality_percent = 100,
 };
 
 void smart_island_destroy(void)
 {
     smart_island_result_stop_timer();
+    smart_island_warning_stop();
     smart_island_view_destroy_objects();
     g_si_ctx.view.page_slide_dir = 0;
     g_si_ctx.view.anim_running = false;
     g_si_ctx.action.ignore_click_once = false;
     g_si_ctx.action.ignore_action_click_once = false;
+    g_si_ctx.warning.marquee_running = false;
+    g_si_ctx.warning.text_width_compact = 0;
+    g_si_ctx.warning.text_width_expand = 0;
+    g_si_ctx.warning.resume_animation_pending = false;
+    g_si_ctx.warning.resume_counting = false;
     g_si_ctx.view.swipe.pressed = false;
     g_si_ctx.view.swipe.swiped = false;
     g_si_ctx.view.swipe.start_pt.x = 0;
     g_si_ctx.view.swipe.start_pt.y = 0;
+    smart_island_warning_fault_clear();
     g_si_ctx.view.bg_current = SMART_ISLAND_BG_IDLE;
     g_si_ctx.view.bg_from = SMART_ISLAND_BG_IDLE;
     g_si_ctx.view.bg_to = SMART_ISLAND_BG_IDLE;
@@ -104,6 +113,19 @@ void smart_island_set_suspended(bool suspended)
          * Keeping a clean island clean avoids rebuilding the complete scene on
          * every cached main-page resume.
          */
+        if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_WARNING) {
+            bool keep_fault = g_si_ctx.warning.fault.valid;
+
+            smart_island_warning_stop();
+            if (keep_fault) {
+                g_si_ctx.warning.resume_animation_pending = true;
+            } else {
+                g_si_ctx.warning.text[0] = '\0';
+                g_si_ctx.view.scene = SMART_ISLAND_SCENE_IDLE;
+                g_si_ctx.view.visual = SMART_ISLAND_VISUAL_COMPACT;
+                g_si_ctx.lifecycle.dirty = true;
+            }
+        }
         return;
     }
 
@@ -112,11 +134,12 @@ void smart_island_set_suspended(bool suspended)
         smart_island_view_refresh_scene();
         g_si_ctx.lifecycle.dirty = false;
     }
+    smart_island_warning_resume_if_pending();
 }
 
 void smart_island_set_scene(smart_island_scene_t scene)
 {
-    if ((unsigned int)scene > (unsigned int)SMART_ISLAND_SCENE_RESULT) return;
+    if ((unsigned int)scene > (unsigned int)SMART_ISLAND_SCENE_WARNING) return;
 
     g_si_ctx.view.scene = scene;
     smart_island_result_stop_timer();
@@ -128,24 +151,43 @@ void smart_island_set_scene(smart_island_scene_t scene)
     smart_island_view_refresh_scene();
 }
 
+
+
 void smart_island_restore_idle(void)
 {
     bool from_result = g_si_ctx.view.scene == SMART_ISLAND_SCENE_RESULT;
 
-    /* Only count_end/reset owns the counting lifecycle. */
+    /* Dismissing a notice is not a machine STOP. Only count_end/reset own
+     * count_session_active; a clear-fault reply during counting resumes it. */
     if (g_si_ctx.lifecycle.count_session_active) {
+        smart_island_warning_stop();
+        smart_island_warning_fault_clear();
+        g_si_ctx.warning.text[0] = '\0';
+        g_si_ctx.warning.resume_counting = false;
+        g_si_ctx.warning.resume_animation_pending = false;
         smart_island_set_scene(SMART_ISLAND_SCENE_COUNTING);
         smart_island_set_visual(SMART_ISLAND_VISUAL_COMPACT, false);
         smart_island_view_update_counting();
         return;
     }
     if (g_si_ctx.lifecycle.suspended) {
+        g_si_ctx.warning.level = SMART_ISLAND_WARNING_LEVEL_WARNING;
+        g_si_ctx.warning.text[0] = '\0';
+        g_si_ctx.warning.resume_animation_pending = false;
+        g_si_ctx.warning.resume_counting = false;
+        smart_island_warning_fault_clear();
         g_si_ctx.text.result[0] = '\0';
         g_si_ctx.view.scene = SMART_ISLAND_SCENE_IDLE;
         g_si_ctx.view.visual = SMART_ISLAND_VISUAL_COMPACT;
         g_si_ctx.lifecycle.dirty = true;
         return;
     }
+    smart_island_warning_stop();
+    g_si_ctx.warning.level = SMART_ISLAND_WARNING_LEVEL_WARNING;
+    smart_island_warning_fault_clear();
+    g_si_ctx.warning.text[0] = '\0';
+    g_si_ctx.warning.resume_animation_pending = false;
+    g_si_ctx.warning.resume_counting = false;
     g_si_ctx.text.result[0] = '\0';
     smart_island_set_scene(SMART_ISLAND_SCENE_IDLE);
     /* The result collapse has already landed on compact geometry.  Reapplying
@@ -182,6 +224,11 @@ void smart_island_refresh_summary(void)
         g_si_ctx.lifecycle.dirty = true;
         return;
     }
+    /* Warning 场景中避免外部刷新重刷样式，防止 ESC/CLEAR 造成文本“重新闪烁” */
+    if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_WARNING) {
+        return;
+    }
+
     smart_island_view_refresh_scene();
 }
 

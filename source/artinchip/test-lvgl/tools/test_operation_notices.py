@@ -3,6 +3,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import os
+from test_i18n_support import with_i18n
 
 root = Path(__file__).resolve().parents[1]
 source = (root / 'un260/app_service/app_ui_runtime.c').read_text()
@@ -25,6 +26,10 @@ fixture = r'''
 #include "un260/app_service/app_ui_runtime.h"
 #include "un260/app_service/workspace_service.h"
 #include "un260/lv_components/ui_notice.h"
+#include "un260/lv_system/ui_i18n.h"
+static bool notices_allowed=true;
+bool app_setting_notice_page_allowed(void){return notices_allowed;}
+static ui_message_t ws_message, records_message, profile_message, batch_message;
 static bool ws_busy, ws_ok=true, records_busy, records_ok=true, applying;
 static workspace_apply_result_t profile_result=WORKSPACE_APPLY_IDLE;
 bool workspace_store_busy(void){return ws_busy;}
@@ -37,15 +42,25 @@ const char *cashbook_store_message(void){return records_ok?"Exported":"USB unava
 bool workspace_service_applying(void){return applying;}
 workspace_apply_result_t workspace_service_apply_result(void){return profile_result;}
 const char *workspace_service_apply_message(void){return "Profile result";}
+const ui_message_t *workspace_store_message_info(void){ui_message_key(&ws_message,workspace_store_message());return &ws_message;}
+const ui_message_t *workspace_service_batch_save_message_info(void){ui_message_key(&batch_message,workspace_service_batch_save_message());return &batch_message;}
+const ui_message_t *cashbook_store_message_info(void){ui_message_key(&records_message,cashbook_store_message());return &records_message;}
+const ui_message_t *workspace_service_apply_message_info(void){ui_message_key(&profile_message,workspace_service_apply_message());return &profile_message;}
 static ui_notice_state_t queue;
 static unsigned posts;
 static ui_notice_kind_t last_kind;
 static char last_key[64],last_detail[320];
 void ui_notice_clear(const char *key){ui_notice_state_remove(&queue,key,false);}
 void ui_notice_post(ui_notice_kind_t kind,const char *key,const char *title,const char *detail){
-    ui_notice_config_t config={kind,key,title,detail,0};
+    ui_notice_config_t config={.kind=kind,.key=key,.title=title,.detail=detail};
     ui_notice_state_post(&queue,&config);posts++;last_kind=kind;
     snprintf(last_key,sizeof(last_key),"%s",key);snprintf(last_detail,sizeof(last_detail),"%s",detail);
+}
+void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title,const char *detail){
+    ui_notice_post(kind,key,ui_tr(title),ui_tr(detail));
+}
+void ui_notice_post_message(ui_notice_kind_t kind,const char *key,const char *title,const ui_message_t *detail){
+    char text[320];ui_message_render(detail,text,sizeof(text));ui_notice_post(kind,key,ui_tr(title),text);
 }
 static unsigned fo_consumed,fo_confirmed,fo_notice;
 static bool fo_pending=true;
@@ -104,6 +119,16 @@ int main(void){
  applying=false;profile_result=WORKSPACE_APPLY_UNCONFIRMED;app_ui_runtime_poll_operation_notices();
  assert(last_kind==UI_NOTICE_WARNING);
  unsigned before=posts;app_ui_runtime_poll_operation_notices();assert(posts==before);
+ /* A home-origin request must never acquire a banner lifetime, even when
+  * completed after navigation; leaving Menu for Home consumes without posting. */
+ ui_notice_state_init(&queue);notices_allowed=false;applying=true;
+ app_ui_runtime_notice_started(APP_UI_NOTICE_PROFILE_APPLY,"Applying profile");
+ unsigned home_posts=posts;notices_allowed=true;applying=false;
+ app_ui_runtime_poll_operation_notices();assert(posts==home_posts&&!queue.has_active);
+ applying=true;app_ui_runtime_notice_started(APP_UI_NOTICE_PROFILE_APPLY,"Applying profile");
+ home_posts=posts;notices_allowed=false;applying=false;
+ app_ui_runtime_poll_operation_notices();assert(posts==home_posts&&!queue.has_active);
+ notices_allowed=true;
  /* A 6-byte frame contains only type then checksum, never a result byte. */
  uint8_t truncated[]={0xfd,0xdf,6,0x3a,1,1};route_fo(truncated,6);
  assert(fo_pending&&!fo_consumed&&!fo_confirmed&&!fo_notice);
@@ -116,8 +141,9 @@ int main(void){
 with tempfile.TemporaryDirectory(prefix='un260-operation-notice-') as tmp:
     code, exe = Path(tmp)/'owner.c', Path(tmp)/('owner.exe' if os.name=='nt' else 'owner')
     code.write_text(fixture + owner + fo + main)
+    sources=with_i18n([code,root/'un260/lv_components/ui_notice_state.c'],root)
     command=[os.environ.get('CC','cc'),'-std=c11','-Wall','-Wextra','-Werror',
-             '-I'+str(root),str(code),str(root/'un260/lv_components/ui_notice_state.c'),'-o',str(exe)]
+             '-I'+str(root),*map(str,sources),'-o',str(exe)]
     if os.name!='nt':command+=['-fsanitize=address,undefined','-no-pie']
     subprocess.run(command,check=True)
     subprocess.run([str(exe)],check=True)

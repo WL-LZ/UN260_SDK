@@ -48,6 +48,8 @@ void ui_manager_switch(ui_page_t p){(void)p;}
 void ui_manager_clear_stack(void){}
 uint32_t app_clock_uptime_ms(void){return lv_tick_get();}
 const char *ui_text_get(ui_text_id_t id){(void)id;return "Waiting for response";}
+const char *ui_text_msgid(ui_text_id_t id){return ui_text_get(id);}
+
 void settings_detail_dialog_hide(void){confirm=NULL;}
 bool settings_detail_dialog_show(const char*a,const char*b,const char*c,const char*d,settings_detail_dialog_cb_t cb,settings_detail_dialog_cb_t cancel,void*data){(void)a;(void)b;(void)c;(void)d;(void)cancel;(void)data;confirm=cb;return true;}
 static bool (*policy)(gesture_action_t);
@@ -142,6 +144,14 @@ static void debug_test(void){
  assert(!strcmp(lv_textarea_get_text(input),"FD DF "));
  debug_key(kb,10);debug_key(kb,11);assert(!strcmp(lv_textarea_get_text(input),"FD DF AB "));
  debug_key(kb,17);assert(!strcmp(lv_textarea_get_text(input),"FD DF "));
+ /* Actions use logical key IDs, independent of the displayed language. */
+ const char **original_map=lv_btnmatrix_get_map_array(kb);
+ static const char *translated_map[]={"1","2","3","4","5","6","\n","7","8","9","0","A","B","\n","C","D","E","F","Supprimer","Effacer",""};
+ lv_btnmatrix_set_map(kb,translated_map);
+ debug_key(kb,10);debug_key(kb,11);debug_key(kb,16);
+ assert(!strcmp(lv_textarea_get_text(input),"FD DF A"));
+ debug_key(kb,17);assert(!strcmp(lv_textarea_get_text(input),"FD DF "));
+ lv_btnmatrix_set_map(kb,original_map);
  puts("PASS Debug production HEX keyboard: long input, deletion, prefix and Clear without recursion");
  for(unsigned i=0;i<205;i++)debug_append_rx_log("FD DF 06 38 01 26");
  lv_obj_t *record=label_find(lv_scr_act(),"RX 0040: FD DF 06 38 01 26");assert(record);lv_obj_t *log=lv_obj_get_parent(record);lv_obj_scroll_to_y(log,100,LV_ANIM_OFF);lv_obj_update_layout(log);lv_area_t before,after;lv_obj_get_coords(record,&before);debug_append_rx_log("FD DF 06 38 01 26");lv_obj_get_coords(record,&after);assert(before.y1==after.y1);
@@ -166,3 +176,5 @@ int main(void){
  for(unsigned i=0;i<4;i++){ui_page_12_sensor_create(lv_scr_act());ui_page_12_sensor_destroy();ui_page_10_debug_create();ui_page_10_debug_destroy();ui_page_28_get_image_create(lv_scr_act());ui_page_28_get_image_destroy();ui_page_31_get_wave_create(lv_scr_act());ui_page_31_get_wave_destroy();}
  puts("PASS actual LVGL diagnostic details suite");return 0;
 }
+
+const char *work_mode_service_status_msgid(void){return work_mode_service_status_text();}

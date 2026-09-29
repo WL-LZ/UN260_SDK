@@ -1,3 +1,4 @@
+from test_i18n_support import with_i18n
 #!/usr/bin/env python3
 """A profile owns only its current command; unrelated results must remain visible."""
 from pathlib import Path
@@ -15,18 +16,27 @@ code = r'''
 #include <stdio.h>
 #include <string.h>
 #include "un260/lv_components/ui_notice.h"
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/app_service/app_setting_notice.h"
+#include "un260/app_service/setting_service.h"
+#include "un260/lv_core/lv_page_manager.h"
+static ui_page_t page=UI_PAGE_MENU;
+static setting_request_observer_t observer;
+ui_page_t ui_manager_get_current_page(void){return page;}
+void setting_service_set_request_observer(setting_request_observer_t value){observer=value;}
 #include "un260/app_service/workspace_service.h"
 static struct { bool active,waiting; unsigned step,confirmed; char message[160]; } apply;
 static workspace_apply_result_t apply_result;
+static ui_message_t apply_message_info;
 static const char *const steps[]={"Speed","Sorting","Sound","Batch","ADD","Start method","Count mode"};
 static unsigned notices;
 static ui_notice_kind_t last;
-void ui_notice_post(ui_notice_kind_t kind,const char *key,const char *title,const char *detail) {
+void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title,const char *detail) {
     assert(key&&title&&detail);notices++;last=kind;
 }
 ''' + owns + reject + r'''
 int main(void) {
+    app_setting_notice_init();
     apply.active=apply.waiting=true;apply.step=0;
     apply.confirmed=2;apply_result=WORKSPACE_APPLY_PENDING;
     app_setting_notice_result("settings.speed","Speed",true);assert(!notices);
@@ -41,6 +51,7 @@ int main(void) {
     /* Capture ownership before finishing so no child ERROR is emitted. */
     app_setting_notice_result("settings.speed","Speed",false);
     assert(notices==4&&!apply.active&&!apply.waiting&&apply_result==WORKSPACE_APPLY_FAILED);
+    ui_message_render(&apply_message_info,apply.message,sizeof(apply.message));
     assert(strstr(apply.message,"Speed rejected")&&strstr(apply.message,"2 changes confirmed"));
     assert(!workspace_service_reject_command(0x16));
     apply.active=apply.waiting=true;apply_result=WORKSPACE_APPLY_PENDING;
@@ -50,6 +61,17 @@ int main(void) {
     app_setting_notice_timeout("settings.speed","Speed");assert(notices==5);
     apply.active=false;
     app_setting_notice_result("settings.speed","Speed",true);assert(notices==6);
+    page=UI_PAGE_MAIN;observer(0x16);
+    app_setting_notice_result("settings.speed","Speed",true);assert(notices==6);
+    page=UI_PAGE_MENU;
+    app_setting_notice_result("settings.speed","Speed",false);assert(notices==6);
+    observer(0x16);
+    app_setting_notice_result("settings.speed","Speed",true);assert(notices==7);
+    page=UI_PAGE_PURE;app_setting_notice_timeout("settings.speed","Speed");assert(notices==7);
+    page=UI_PAGE_DETAIL;app_setting_notice_timeout("settings.speed","Speed");assert(notices==8);
+    page=UI_PAGE_MAIN;apply.active=apply.waiting=true;apply.step=0;
+    app_setting_notice_result("settings.speed","Speed",false);
+    assert(notices==8&&!apply.active&&apply_result==WORKSPACE_APPLY_FAILED);
     puts("PASS profile matched reject ends once without child notice; unrelated results visible; timeout remains unconfirmed");
 }
 '''
@@ -58,6 +80,7 @@ with tempfile.TemporaryDirectory(prefix='un260-setting-notice-') as directory:
     binary=work/('test.exe' if os.name=='nt' else 'test')
     command=[os.environ.get('CC','cc'),'-std=c11','-Wall','-Wextra','-Werror',
              '-I'+str(root),str(source),str(root/'un260/app_service/app_setting_notice.c'),'-o',str(binary)]
+    command[1:1]=list(map(str,with_i18n([],root)))
     if os.name!='nt':command+=['-fsanitize=address,undefined','-no-pie']
     subprocess.run(command,check=True)
     subprocess.run([str(binary)],check=True)

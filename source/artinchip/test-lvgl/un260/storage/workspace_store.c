@@ -1,3 +1,5 @@
+#include "un260/lv_system/ui_i18n.h"
+#include "un260/lv_system/ui_message.h"
 #include "workspace_store.h"
 #include "usb_storage.h"
 #include <pthread.h>
@@ -27,7 +29,8 @@ static bool initialized,ready,busy,done,ok,uncertain_save;
 static operation_t operation;
 static unsigned source,revision;
 static uint32_t found,images;
-static char message[160],result[160];
+static char message[320];
+static ui_message_t message_info,result_info;
 static uint32_t checksum(const void *data,size_t size)
 {
     const uint8_t *p=data;uint32_t crc=0xFFFFFFFFU;
@@ -157,21 +160,21 @@ static bool export_support(void)
     if(success&&fsync(dir))success=false;
     if(!success&&fd>=0)unlinkat(dir,name,0);
     close(dir);
-    if(success)snprintf(result,sizeof(result),"Saved to USB: %s",name);
+    if(success)ui_message_string(&result_info,UI_N_("Saved to USB: %s") ,name);
     return success;
 }
 static void *run(void *unused)
 {
     (void)unused;bool success=false;
-    if(operation==LOAD){success=load_model();snprintf(result,sizeof(result),success?"Workspace loaded.":"Workspace could not be read. Existing file was not replaced.");}
-    if(operation==SAVE){success=save_model();snprintf(result,sizeof(result),success?"Saved on this device.":uncertain_save?"Storage confirmation failed. Restart to check the saved workspace.":"Save failed. Check storage before trying again.");}
-    if(operation==SUPPORT){success=export_support();if(!success)snprintf(result,sizeof(result),"Support export failed. Check USB space and connection, then retry.");}
+    if(operation==LOAD){success=load_model();ui_message_key(&result_info,success?UI_N_("Workspace loaded."):UI_N_("Workspace could not be read. Existing file was not replaced."));}
+    if(operation==SAVE){success=save_model();ui_message_key(&result_info,success?UI_N_("Saved on this device."):uncertain_save?UI_N_("Storage confirmation failed. Restart to check the saved workspace."):UI_N_("Save failed. Check storage before trying again."));}
+    if(operation==SUPPORT){success=export_support();if(!success)ui_message_key(&result_info,UI_N_("Support export failed. Check USB space and connection, then retry."));}
     if(operation==SCAN||operation==IMPORT) {
-        if(!usb_storage_prepare())snprintf(result,sizeof(result),"Insert a USB drive and try again.");
+        if(!usb_storage_prepare())ui_message_key(&result_info,UI_N_("Insert a USB drive and try again."));
         else if(operation==SCAN) {
             found=0;for(unsigned i=0;i<=20;i++){int fd=open_image(i);if(fd>=0){uint8_t sig[8];if(full_io(fd,sig,8,false)&&!png_sig_cmp(sig,0,8))found|=1U<<i;close(fd);}}
-            success=true;snprintf(result,sizeof(result),found?"Choose a photo to preview.":"No supported photo. Use avatar.png or un260_avatar_01.png (01-20).");
-        } else {success=import_image();snprintf(result,sizeof(result),success?"Photo ready. Save to keep it on this device.":"Photo could not be read. Use PNG, 16-2048 px, at most 2 MB.");}
+            success=true;ui_message_key(&result_info,found?UI_N_("Choose a photo to preview."):UI_N_("No supported photo. Use avatar.png or un260_avatar_01.png (01-20)."));
+        } else {success=import_image();ui_message_key(&result_info,success?UI_N_("Photo ready. Save to keep it on this device."):UI_N_("Photo could not be read. Use PNG, 16-2048 px, at most 2 MB."));}
     }
     pthread_mutex_lock(&lock);ok=success;done=true;pthread_mutex_unlock(&lock);return NULL;
 }
@@ -179,13 +182,13 @@ static bool start(operation_t op)
 {
     if(busy)return false;
     operation=op;done=false;busy=true;
-    if(pthread_create(&worker,NULL,run,NULL)){busy=false;snprintf(message,sizeof(message),"Background task could not start.");return false;}
+    if(pthread_create(&worker,NULL,run,NULL)){busy=false;ui_message_key(&message_info,UI_N_("Background task could not start."));return false;}
     return true;
 }
 void workspace_store_init(void)
 {
     if(initialized)return;
-    workspace_defaults(&saved);snprintf(message,sizeof(message),"Loading workspace...");
+    workspace_defaults(&saved);ui_message_key(&message_info,UI_N_("Loading workspace..."));
     initialized=start(LOAD);
 }
 bool workspace_store_poll(void)
@@ -200,11 +203,12 @@ bool workspace_store_poll(void)
     if(operation==SAVE&&!ok&&uncertain_save)ready=false;
     if(operation==SCAN)images=ok?found:0;
     if(operation==IMPORT&&ok)preview=imported;
-    snprintf(message,sizeof(message),"%s",result);busy=false;return true;
+    message_info=result_info;busy=false;return true;
 }
 bool workspace_store_ready(void){return ready;}
 bool workspace_store_busy(void){return busy;}
-const char *workspace_store_message(void){return message;}
+const char *workspace_store_message(void){ui_message_render(&message_info,message,sizeof(message));return message;}
+const ui_message_t *workspace_store_message_info(void){return &message_info;}
 const workspace_model_t *workspace_store_get(void){return &saved;}
 bool workspace_store_save(const workspace_model_t *m)
 {

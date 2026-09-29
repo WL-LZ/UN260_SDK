@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "lv_upgrade_popup.h"
 #include "un260/lv_core/settings_detail_ui.h"
 #include "un260/lv_core/ui_upgrade_service.h"
@@ -1450,8 +1451,8 @@ void lv_upgrade_popup_process_detect(const ui_upgrade_detect_info_t* detect_info
         if (detect_info->package_hash_status == UI_UPGRADE_PACKAGE_HASH_MATCH) {
             if (!g_upgrade_popup_detect_latched &&
                 (g_upgrade_popup.state == UPGRADE_POPUP_STATE_IDLE || g_upgrade_popup.root == NULL)) {
-                ui_notice_post(UI_NOTICE_INFO, "usb.inserted", "USB connected",
-                    "This update is already installed.");
+                ui_notice_post_text(UI_NOTICE_INFO, "usb.inserted", UI_N_("USB connected"),
+                    UI_N_("This update is already installed."));
             }
 
             if (g_upgrade_popup.state == UPGRADE_POPUP_STATE_PROMPT) {

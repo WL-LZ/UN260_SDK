@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "page_07_curr_overview.h"
 #include "page_07_curr_layout.h"
 #include "page_07_curr_view.h"
@@ -67,24 +68,24 @@ static void stroke(lv_obj_t *parent, const lv_point_t *points, unsigned count,
 static const char *description(const char *code)
 {
     static const struct { const char *code; const char *name; } names[] = {
-        {"AUT", "Auto detect"}, {"MUL", "Multi-currency"},
-        {"EUR", "Euro area"}, {"USD", "United States"}, {"CNY", "China"},
-        {"RUB", "Russia"}, {"TRY", "Turkiye"}, {"GBP", "United Kingdom"},
-        {"MXN", "Mexico"}, {"CAD", "Canada"}, {"ILS", "Israel"},
-        {"AED", "UAE"}, {"SAR", "Saudi Arabia"}, {"IRR", "Iran"},
-        {"KRW", "South Korea"}, {"JPY", "Japan"}, {"HKD", "Hong Kong"},
-        {"AUD", "Australia"}, {"SGD", "Singapore"}, {"MOP", "Macao"},
-        {"XOF", "West Africa"}, {"XAF", "Central Africa"}, {"UAH", "Ukraine"},
-        {"INR", "India"}, {"EGP", "Egypt"}, {"PHP", "Philippines"},
-        {"THB", "Thailand"}, {"IDR", "Indonesia"}, {"ZAR", "South Africa"},
-        {"QAR", "Qatar"}, {"PKR", "Pakistan"}, {"CHF", "Switzerland"},
-        {"TJS", "Tajikistan"}, {"AMD", "Armenia"}, {"AZN", "Azerbaijan"},
-        {"LBP", "Lebanon"}, {"MUR", "Mauritius"},
-        {"MAD", "Morocco"}, {"HNL", "Honduras"}
+        {"AUT", UI_N_("Auto detect")}, {"MUL", UI_N_("Multi-currency")},
+        {"EUR", UI_N_("Euro area")}, {"USD", UI_N_("United States")}, {"CNY", UI_N_("China")},
+        {"RUB", UI_N_("Russia")}, {"TRY", UI_N_("Turkiye")}, {"GBP", UI_N_("United Kingdom")},
+        {"MXN", UI_N_("Mexico")}, {"CAD", UI_N_("Canada")}, {"ILS", UI_N_("Israel")},
+        {"AED", UI_N_("UAE")}, {"SAR", UI_N_("Saudi Arabia")}, {"IRR", UI_N_("Iran")},
+        {"KRW", UI_N_("South Korea")}, {"JPY", UI_N_("Japan")}, {"HKD", UI_N_("Hong Kong")},
+        {"AUD", UI_N_("Australia")}, {"SGD", UI_N_("Singapore")}, {"MOP", UI_N_("Macao")},
+        {"XOF", UI_N_("West Africa")}, {"XAF", UI_N_("Central Africa")}, {"UAH", UI_N_("Ukraine")},
+        {"INR", UI_N_("India")}, {"EGP", UI_N_("Egypt")}, {"PHP", UI_N_("Philippines")},
+        {"THB", UI_N_("Thailand")}, {"IDR", UI_N_("Indonesia")}, {"ZAR", UI_N_("South Africa")},
+        {"QAR", UI_N_("Qatar")}, {"PKR", UI_N_("Pakistan")}, {"CHF", UI_N_("Switzerland")},
+        {"TJS", UI_N_("Tajikistan")}, {"AMD", UI_N_("Armenia")}, {"AZN", UI_N_("Azerbaijan")},
+        {"LBP", UI_N_("Lebanon")}, {"MUR", UI_N_("Mauritius")},
+        {"MAD", UI_N_("Morocco")}, {"HNL", UI_N_("Honduras")}
     };
     for (unsigned i = 0; i < sizeof(names) / sizeof(names[0]); ++i)
-        if (!strncmp(names[i].code, code, 3)) return names[i].name;
-    return "Currency";
+        if (!strncmp(names[i].code, code, 3)) return ui_tr(names[i].name);
+    return ui_tr("Currency");
 }
 
 /* All flags share one decoded image. Offset clipping is 1:1 and bypasses
@@ -161,10 +162,10 @@ static void position_update(lv_event_t *event)
     if (ctx->objects.overview.visible_range_key == key) return;
     ctx->objects.overview.visible_range_key = key;
     int count = ctx->model.visible_count;
-    lv_label_set_text_fmt(ctx->objects.overview.position, "%d-%d of %d / %s",
+    lv_label_set_text_fmt(ctx->objects.overview.position, ui_tr("%d-%d of %d / %s"),
         count ? first * CURR_GRID_COLS + 1 : 0,
         LV_MIN(count, (last + 1) * CURR_GRID_COLS), count,
-        ctx->model.favorite_only ? "Favorites" : "All currencies");
+        ctx->model.favorite_only ? ui_tr("Favorites") : ui_tr("All currencies"));
 }
 
 void page07_curr_overview_selection(page07_curr_context_t *ctx)
@@ -172,7 +173,7 @@ void page07_curr_overview_selection(page07_curr_context_t *ctx)
     if (!ctx->objects.grid_layer) return;
     char code[4];
     if (currency_state_get_code((uint8_t)ctx->model.selected_abs_idx, code)) {
-        lv_label_set_text_fmt(ctx->objects.overview.current_code, "Selected %s / %s",
+        lv_label_set_text_fmt(ctx->objects.overview.current_code, ui_tr("Selected %s / %s"),
             currency_state_display_code(code), description(code));
     }
     for (int i = 0; i < ctx->model.visible_count; ++i) {
@@ -208,23 +209,23 @@ void page07_curr_overview_build(page07_curr_context_t *ctx,
     stroke(glyph_box, layers, 5, 9, 9, 0x648393);
     stroke(glyph_box, layer_edge, 3, 9, 20, 0x648393);
     stroke(glyph_box, layer_edge, 3, 9, 25, 0x648393);
-    text(root, "Currency", 78, 14, &lv_font_instrument_sans_semibold_28, 0x20313B);
+    text(root, ui_tr("Currency"), 78, 14, &lv_font_instrument_sans_semibold_28, 0x20313B);
     ctx->objects.overview.current_code = text(root, "", 78, 48,
         &lv_font_instrument_sans_medium_12, 0x637887);
 
     lv_obj_t *filters = surface(root, 610, 14, 284, 46, 0xE5EBF0, 12);
     for (int i = 0; i < 2; ++i) {
         bool active = (bool)i == ctx->model.favorite_only;
-        lv_obj_t *button = action(filters, i ? "Favorites" : "All currencies",
+        lv_obj_t *button = action(filters, i ? ui_tr("Favorites") : ui_tr("All currencies"),
             3 + i * 139, 3, 139, actions->filter, i);
         lv_obj_set_height(button, 40);
         lv_damped_button_set_palette(button, lv_color_hex(active ? 0xFFFFFF : 0xE5EBF0),
             lv_damped_button_pressed_color(lv_color_hex(active ? 0xFFFFFF : 0xE5EBF0)));
         ctx->objects.overview.filter[i] = button;
     }
-    ctx->objects.overview.card_button = action(root, "Card view", 918, 15, 170, actions->card, 0);
+    ctx->objects.overview.card_button = action(root, ui_tr("Card view"), 918, 15, 170, actions->card, 0);
     surface(root, 1106, 23, 1, 28, 0xB8C4CC, 0);
-    ctx->objects.overview.back_button = action(root, "Back", 1124, 15, 132, actions->back, 0);
+    ctx->objects.overview.back_button = action(root, ui_tr("Back"), 1124, 15, 132, actions->back, 0);
     static const lv_point_t chevron[] = {{5,0},{0,5},{5,10}};
     stroke(ctx->objects.overview.back_button, chevron, 3, 24, 17, 0x648393);
 
@@ -299,11 +300,11 @@ void page07_curr_overview_build(page07_curr_context_t *ctx,
     ctx->objects.overview.visible_range_key = -1;
     lv_obj_add_event_cb(scroll, position_update, LV_EVENT_SCROLL, ctx);
     lv_event_send(scroll, LV_EVENT_SCROLL, NULL);
-    lv_obj_t *hint = text(root, "Tap to select / Star to save / Swipe for more", 0, 382,
+    lv_obj_t *hint = text(root, ui_tr("Tap to select / Star to save / Swipe for more"), 0, 382,
         &lv_font_instrument_sans_medium_12, 0x586B78);
     lv_obj_align(hint, LV_ALIGN_TOP_RIGHT, -24, 382);
     if (!ctx->model.visible_count) {
-        lv_obj_t *empty = text(scroll, "No currencies available", 0, 0,
+        lv_obj_t *empty = text(scroll, ui_tr("No currencies available"), 0, 0,
             &lv_font_instrument_sans_medium_18, 0x586B78);
         lv_obj_center(empty);
     }

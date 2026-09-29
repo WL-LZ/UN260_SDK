@@ -1,5 +1,6 @@
 #ifndef USER_CFG_H
 #define USER_CFG_H
+#include "un260/storage/ui_locale_store.h"
 #include <stdbool.h>
 #include <stdint.h>
 #define LV_DEBUG 1
@@ -67,6 +68,7 @@ typedef enum {
 typedef struct {
     char password[USER_PASSWORD_MAX_LEN + 1];
     bool screenshot, recording, performance_monitor, performance_profile, gesture;
+    char locale[UI_LOCALE_TAG_CAPACITY];
 } user_cfg_startup_snapshot_t;
 void user_cfg_startup_read(user_cfg_startup_snapshot_t *snapshot);
 void user_cfg_startup_apply(const user_cfg_startup_snapshot_t *snapshot);
@@ -90,6 +92,7 @@ bool user_cfg_performance_monitor_enabled(void);
 bool user_cfg_performance_profile_load(void);
 bool user_cfg_performance_profile_save(bool enabled);
 bool user_cfg_performance_profile_enabled(void);
+bool user_cfg_language_load(void);
 bool user_cfg_gesture_load(void);
 bool user_cfg_gesture_save(bool enabled);
 bool user_cfg_gesture_enabled(void);

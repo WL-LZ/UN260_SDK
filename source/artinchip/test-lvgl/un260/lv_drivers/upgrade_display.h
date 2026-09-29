@@ -2,6 +2,12 @@
  * Uses boot_light.c's existing framebuffer validation and display lease. */
 #ifndef UN260_UPGRADE_DISPLAY_H
 #define UN260_UPGRADE_DISPLAY_H
+#include "un260/lv_system/ui_i18n.h"
+#include "un260/lv_system/ui_update_message.h"
+/* The emergency framebuffer font only supports Latin A-Z/0-9. Resolve through
+ * the shared catalogue in its supported locale until a localized native font
+ * profile is installed. Do not attempt unreadable CJK/RTL with this renderer. */
+static const char *upgrade_copy(const char *key) { return ui_tr_for(LANGUAGE_EN, key); }
 #ifndef UPGRADE_STATUS_PATH
 #define UPGRADE_STATUS_PATH "/tmp/ui_update.status"
 #endif
@@ -35,7 +41,8 @@ static void upgrade_text(uint8_t *pixels,unsigned stride,int x,int y,const char 
 static void upgrade_render(uint8_t *pixels,unsigned stride)
 {
     int progress=0,failed=0,success=0;
-    char line[256],message[160]="CHECKING THE SAME USB PACKAGE";
+    char line[256],message[160];
+    snprintf(message,sizeof(message),"%s",upgrade_copy(UI_N_("CHECKING THE SAME USB PACKAGE")));
     FILE *status=fopen(UPGRADE_STATUS_PATH,"r");
     if(status) {
         while(fgets(line,sizeof(line),status)) {
@@ -53,15 +60,16 @@ static void upgrade_render(uint8_t *pixels,unsigned stride)
     if(progress>100)progress=100;
     uint32_t accent=failed?0xffb76313:0xff195bbb;
     upgrade_rect(pixels,stride,0,0,1280,400,0xfff3f5f6);
-    upgrade_text(pixels,stride,64,42,"UN260 SYSTEM UPDATE",3,0xff576c79);
-    upgrade_text(pixels,stride,64,104,failed?"UPDATE PAUSED":success?"UPDATE COMPLETE":"UPDATING YOUR DEVICE",5,accent);
-    upgrade_text(pixels,stride,64,179,failed?"KEEP BACKUPS AND CHECK THE ERROR":"KEEP USB AND POWER CONNECTED",3,0xff20313b);
+    upgrade_text(pixels,stride,64,42,upgrade_copy(UI_N_("UN260 SYSTEM UPDATE")),3,0xff576c79);
+    upgrade_text(pixels,stride,64,104,upgrade_copy(failed?UI_N_("UPDATE PAUSED"):success?UI_N_("UPDATE COMPLETE"):UI_N_("UPDATING YOUR DEVICE")),5,accent);
+    upgrade_text(pixels,stride,64,179,upgrade_copy(failed?UI_N_("KEEP BACKUPS AND CHECK THE ERROR"):UI_N_("KEEP USB AND POWER CONNECTED")),3,0xff20313b);
     upgrade_rect(pixels,stride,64,238,1152,12,0xffdce3e8);
     upgrade_rect(pixels,stride,64,238,1152*progress/100,12,accent);
     /* Wrap the diagnostic instead of cropping away the actionable suffix. */
-    char first[91];snprintf(first,sizeof(first),"%.90s",message);
+    char resolved[320];ui_update_message_render(LANGUAGE_EN,message,resolved,sizeof(resolved));
+    char first[91];snprintf(first,sizeof(first),"%.90s",resolved);
     upgrade_text(pixels,stride,64,283,first,2,0xff576c79);
-    if(strlen(message)>90)upgrade_text(pixels,stride,64,307,message+90,2,0xff576c79);
-    upgrade_text(pixels,stride,64,353,failed?"RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE":"BACKUP   STORAGE   APPLICATION   VERIFY",2,0xff576c79);
+    if(strlen(resolved)>90)upgrade_text(pixels,stride,64,307,resolved+90,2,0xff576c79);
+    upgrade_text(pixels,stride,64,353,upgrade_copy(failed?UI_N_("RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE"):UI_N_("BACKUP   STORAGE   APPLICATION   VERIFY")),2,0xff576c79);
 }
 #endif

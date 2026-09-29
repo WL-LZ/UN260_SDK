@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "app_setting_runtime.h"
 #include "app_setting_notice.h"
 #include "un260/lv_components/ui_notice.h"
@@ -125,8 +126,8 @@ void app_setting_runtime_poll(uint32_t now_ms)
     work_mode_service_poll(now_ms, app_command_runtime_count_start_busy() ||
         machine_state_aging_running() || calibration.session_active ||
         (boot_stage != BOOT_STAGE_DONE && boot_stage != BOOT_STAGE_FAIL));
-    if (work_mode_service_take_failure()) {
-        ui_notice_post(UI_NOTICE_WARNING, "settings.work_mode", "Work mode", work_mode_service_status_text());
+    if (work_mode_service_take_failure() && app_setting_notice_allowed("settings.work_mode")) {
+        ui_notice_post_text(UI_NOTICE_WARNING, "settings.work_mode", UI_N_("Work mode"), work_mode_service_status_msgid());
     }
 
     if (g_mode_clear_scheduled &&
@@ -142,12 +143,12 @@ void app_setting_runtime_poll(uint32_t now_ms)
         uart_debug_printf("basic setting request timeout mask=0x%02X\n",
                     (unsigned int)basic_timeouts);
         static const struct { uint32_t bit; const char *key; const char *title; } notices[] = {
-            { SETTING_REQUEST_TIMEOUT_MODE, "settings.mode", "Count mode" },
-            { SETTING_REQUEST_TIMEOUT_ADD, "settings.add", "ADD" },
-            { SETTING_REQUEST_TIMEOUT_FO_MODE, "settings.sorting", "Sorting" },
-            { SETTING_REQUEST_TIMEOUT_SPEED, "settings.speed", "Speed" },
-            { SETTING_REQUEST_TIMEOUT_WORK_MODE, "settings.work_mode", "Work mode" },
-            { SETTING_REQUEST_TIMEOUT_BEEP, "settings.sound", "Sound" }
+            { SETTING_REQUEST_TIMEOUT_MODE, "settings.mode", UI_N_("Count mode") },
+            { SETTING_REQUEST_TIMEOUT_ADD, "settings.add", UI_N_("ADD") },
+            { SETTING_REQUEST_TIMEOUT_FO_MODE, "settings.sorting", UI_N_("Sorting") },
+            { SETTING_REQUEST_TIMEOUT_SPEED, "settings.speed", UI_N_("Speed") },
+            { SETTING_REQUEST_TIMEOUT_WORK_MODE, "settings.work_mode", UI_N_("Work mode") },
+            { SETTING_REQUEST_TIMEOUT_BEEP, "settings.sound", UI_N_("Sound") }
         };
         for (unsigned i = 0; i < sizeof(notices)/sizeof(notices[0]); ++i)
             if (basic_timeouts & notices[i].bit)
@@ -157,32 +158,32 @@ void app_setting_runtime_poll(uint32_t now_ms)
 
     if (setting_service_batch_take_timeout(&batch_result)) {
         page_03_batch_set_result(false, &batch_result);
-        app_setting_notice_timeout("settings.batch", "Batch");
+        app_setting_notice_timeout("settings.batch", UI_N_("Batch"));
     }
 
     if (setting_service_take_double_note_level_timeout(&value_result)) {
         machine_state_confirm_double_note_level(value_result.previous);
         ui_page_22_set_double_note_on_reply(&value_result);
-        app_setting_notice_timeout("settings.double_note", "Double-note sensitivity");
+        app_setting_notice_timeout("settings.double_note", UI_N_("Double-note sensitivity"));
     }
 
     if (setting_service_take_flap_position_timeout(&value_result)) {
         machine_state_confirm_flap_position(value_result.previous);
         ui_page_23_set_flap_on_reply(&value_result);
-        app_setting_notice_timeout("settings.flap", "Flap position");
+        app_setting_notice_timeout("settings.flap", UI_N_("Flap position"));
     }
 
     if (setting_service_take_reject_pocket_max_timeout(&value_result)) {
         machine_state_confirm_reject_pocket_max(value_result.previous);
         ui_page_24_set_reject_pocket_on_reply(&value_result);
-        app_setting_notice_timeout("settings.reject_pocket", "Reject capacity");
+        app_setting_notice_timeout("settings.reject_pocket", UI_N_("Reject capacity"));
     }
 
     if (serial_number_service_take_timeout(&serial_result)) {
         serial_number_state_confirm(serial_result.previous_enabled,
                                     serial_result.previous_level);
         ui_page_25_set_serial_number_on_reply(serial_result.response_level, 0x02);
-        app_setting_notice_timeout("settings.serial_number", "Serial number");
+        app_setting_notice_timeout("settings.serial_number", UI_N_("Serial number"));
     }
 
     if (currency_service_take_switch_timeout(&currency_result)) {
@@ -201,7 +202,7 @@ void app_setting_runtime_poll(uint32_t now_ms)
     if (print_config_take_timeout(&print_result)) {
         bool saving = ui_page_20_set_print_is_saving();
         ui_page_20_set_print_on_reply(&print_result);
-        if (!saving) app_setting_notice_timeout("settings.receipt", "Receipt settings");
+        if (!saving) app_setting_notice_timeout("settings.receipt", UI_N_("Receipt settings"));
     }
 
     if (setting_service_take_aging_timeout(&action_result)) {
@@ -217,7 +218,7 @@ void app_setting_runtime_poll(uint32_t now_ms)
     if (data_collection_request_take_timeout(now_ms)) {
         uart_debug_printf("data collection mode request timeout\n");
         page_06_data_collection_refresh();
-        app_setting_notice_timeout("settings.data_collection", "Data collection");
+        app_setting_notice_timeout("settings.data_collection", UI_N_("Data collection"));
     }
 
 }

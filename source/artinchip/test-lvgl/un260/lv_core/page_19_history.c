@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #include "un260/lv_resources/ui_page_background.h"
 #include "page_19_history.h"
@@ -135,7 +136,7 @@ static lv_obj_t *button(lv_obj_t *parent,int x,int y,int w,int h,const char *tex
     return obj;
 }
 static void toast(ui_notice_kind_t kind,const char *text)
-{ui_notice_post(kind,"history.feedback","History",text);}
+{ui_notice_post_text(kind,"history.feedback",UI_N_("History"),text);}
 static const ui_history_record_t *record_find(uint32_t id)
 {
     const ui_history_store_t *store=ui_history_data_get();
@@ -540,8 +541,8 @@ static void multi_render(void)
 static void show_record(uint32_t id)
 {
     int index=record_index(id);
-    if (index<0 || !record_find(id)) {toast(UI_NOTICE_WARNING,tr(UI_TEXT_HISTORY_MISSING));return;}
-    if (!prepare_detail((unsigned)index) || !detail_create()) {toast(UI_NOTICE_WARNING,tr(UI_TEXT_SERIAL_UNAVAILABLE));return;}
+    if (index<0 || !record_find(id)) {toast(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_HISTORY_MISSING));return;}
+    if (!prepare_detail((unsigned)index) || !detail_create()) {toast(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_SERIAL_UNAVAILABLE));return;}
     history->tapping=false;lv_recycled_list_stop(history->list);
     history->current_id=id;history->detail_mode=true;
     history->multi_selected=-1;
@@ -627,7 +628,7 @@ static void refresh_header(void)
             text_set(history->summary,text);
         }
         if(rec&&rec->operator_id) {
-            snprintf(text,sizeof(text),"%s  |  Operator: %s",lv_label_get_text(history->subtitle),rec->operator_name);
+            snprintf(text,sizeof(text),ui_tr("%s  |  Operator: %s"),lv_label_get_text(history->subtitle),rec->operator_name);
             text_set(history->subtitle,text);
         }
     } else {
@@ -651,12 +652,12 @@ static void refresh_header(void)
                 history->record_count>=UI_HISTORY_MAX_RECORDS?5:0;
             if(!ui_manager_is_prewarming_page(UI_PAGE_HISTORY)&&state!=history->notice_state){
                 unsigned previous=history->notice_state;history->notice_state=state;
-                if(state==1||state==2)ui_notice_post(UI_NOTICE_ERROR,"history.storage","History storage",tr(state==1?UI_TEXT_HISTORY_STORAGE_FAILED:UI_TEXT_HISTORY_SAVE_FAILED));
-                else if(state==3)ui_notice_post(UI_NOTICE_PROGRESS,"history.storage","History","Saving records...");
+                if(state==1||state==2)ui_notice_post_text(UI_NOTICE_ERROR,"history.storage",UI_N_("History storage"),ui_text_msgid(state==1?UI_TEXT_HISTORY_STORAGE_FAILED:UI_TEXT_HISTORY_SAVE_FAILED));
+                else if(state==3)ui_notice_post_text(UI_NOTICE_PROGRESS,"history.storage",UI_N_("History"),UI_N_("Saving records..."));
                 else {
-                    if(previous==3)ui_notice_post(UI_NOTICE_SUCCESS,"history.storage","History saved",NULL);
-                    if(state==4){snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_UNKNOWN_FMT),(unsigned)history->unknown_count);ui_notice_post(UI_NOTICE_INFO,"history.metadata","History",text);}
-                    else if(state==5)ui_notice_post(UI_NOTICE_WARNING,"history.metadata","History capacity reached",tr(UI_TEXT_HISTORY_CAPACITY_FULL));
+                    if(previous==3)ui_notice_post_text(UI_NOTICE_SUCCESS,"history.storage",UI_N_("History saved"),NULL);
+                    if(state==4){ui_message_t info;ui_message_uint(&info,ui_text_msgid(UI_TEXT_HISTORY_UNKNOWN_FMT),(unsigned)history->unknown_count);ui_notice_post_message(UI_NOTICE_INFO,"history.metadata",UI_N_("History"),&info);}
+                    else if(state==5)ui_notice_post_text(UI_NOTICE_WARNING,"history.metadata",UI_N_("History capacity reached"),ui_text_msgid(UI_TEXT_HISTORY_CAPACITY_FULL));
                 }
             }
         }
@@ -747,7 +748,7 @@ static void refresh_records(bool reset)
         if (i<0 || !record_find(id)) {
             /* An external deletion or retention rollover invalidates the ID,
              * not the user's filter/reading position. Do not recurse here. */
-            show_list_panels();toast(UI_NOTICE_WARNING,tr(UI_TEXT_HISTORY_MISSING));
+            show_list_panels();toast(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_HISTORY_MISSING));
         } else if(record_find(id)->multi.enabled) {
             multi_render();
         } else if (prepare_detail((unsigned)i)) {
@@ -785,7 +786,7 @@ static void open_search(void)
     for (size_t i=0;i<history->record_count;++i) (void)prepare_detail((unsigned)i);
     history->search=page_19_history_search_create(history->root,&history->input,history->records,
         history->record_count,search_closed,NULL);
-    if (!history->search) toast(UI_NOTICE_WARNING,tr(UI_TEXT_SERIAL_UNAVAILABLE));
+    if (!history->search) toast(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_SERIAL_UNAVAILABLE));
 }
 static void close_dialog(void)
 {
@@ -814,7 +815,7 @@ static void confirmation_apply(lv_event_t *event)
     }
     close_dialog();history->model_dirty=true;
     if (accepted) {history->selected_count=0;history->selecting=false;}
-    else toast(UI_NOTICE_ERROR,tr(UI_TEXT_HISTORY_SAVE_FAILED));
+    else toast(UI_NOTICE_ERROR,ui_text_msgid(UI_TEXT_HISTORY_SAVE_FAILED));
     refresh_records(false);
 }
 static void show_confirmation(bool clear_total)
@@ -851,7 +852,7 @@ static void show_confirmation(bool clear_total)
     lv_recycled_list_stop(history->list);history->tapping=false;
     return;
 failed:
-    close_dialog();toast(UI_NOTICE_WARNING,tr(UI_TEXT_SERIAL_UNAVAILABLE));
+    close_dialog();toast(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_SERIAL_UNAVAILABLE));
 }
 static void sort_event(lv_event_t *event)
 {
@@ -904,7 +905,7 @@ static void action_event(lv_event_t *event)
         const uint32_t *ids=history->selecting ? history->selected_ids :
             history->reviewing_unknown ? history->unknown_ids : history->result_ids;
         size_t count=history->selecting ? history->selected_count : displayed_count();
-        if (!count) toast(UI_NOTICE_WARNING,tr(UI_TEXT_SERIAL_UNAVAILABLE));
+        if (!count) toast(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_SERIAL_UNAVAILABLE));
         else (void)ui_history_export_data_request_records(ids,count);
     } else if (history->selecting) show_confirmation(false);
     else {history->selecting=true;history->selected_count=0;refresh_records(false);}

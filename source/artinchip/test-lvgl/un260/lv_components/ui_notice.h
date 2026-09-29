@@ -10,6 +10,10 @@ bool ui_notice_show(const ui_notice_config_t *config);
 /* Queue pressure/duplicate suppression only affect presentation, never the
  * operation. Callers must use their service result as the business authority. */
 void ui_notice_post(ui_notice_kind_t kind, const char *key, const char *title, const char *detail);
+/* Retain source IDs/parameters so queued and visible messages can be retranslated. */
+void ui_notice_post_text(ui_notice_kind_t kind, const char *key, const char *title_key, const char *detail_key);
+void ui_notice_post_message(ui_notice_kind_t kind, const char *key, const char *title_key, const ui_message_t *message);
+void ui_notice_language_changed(void);
 /* Tap/dismiss acknowledges the card only; it never cancels the associated task. */
 void ui_notice_dismiss(const char *key);
 void ui_notice_clear(const char *key);

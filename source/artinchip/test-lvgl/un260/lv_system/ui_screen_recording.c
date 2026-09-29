@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #include "ui_screen_recording.h"
 
@@ -51,7 +52,7 @@ static void ui_screen_recording_fps_dialog_close(void)
 }
 
 static void ui_screen_recording_show_toast(const char *text,ui_notice_kind_t kind)
-{ui_notice_post(kind,"capture.recording","Screen recording",text);}
+{ui_notice_post_text(kind,"capture.recording",UI_N_("Screen recording"),text);}
 
 static void ui_screen_recording_apply_state(screen_recording_state_t state)
 {
@@ -83,13 +84,13 @@ static void ui_screen_recording_start(uint32_t fps)
     if (result == SCREEN_RECORDING_START_OK) {
         ui_screen_recording_apply_state(SCREEN_RECORDING_STARTING);
         ui_screen_recording_show_toast(
-            ui_text_get(UI_TEXT_WIDGET_SCREEN_RECORDING_STARTED), UI_NOTICE_INFO);
+            ui_text_msgid(UI_TEXT_WIDGET_SCREEN_RECORDING_STARTED), UI_NOTICE_INFO);
     } else if (result == SCREEN_RECORDING_START_USB_NOT_READY) {
         ui_screen_recording_show_toast(
-            ui_text_get(UI_TEXT_WIDGET_SCREENSHOT_INSERT_USB), UI_NOTICE_WARNING);
+            ui_text_msgid(UI_TEXT_WIDGET_SCREENSHOT_INSERT_USB), UI_NOTICE_WARNING);
     } else if (result != SCREEN_RECORDING_START_BUSY) {
         ui_screen_recording_show_toast(
-            ui_text_get(UI_TEXT_WIDGET_SCREEN_RECORDING_FAILED), UI_NOTICE_ERROR);
+            ui_text_msgid(UI_TEXT_WIDGET_SCREEN_RECORDING_FAILED), UI_NOTICE_ERROR);
     }
 }
 
@@ -207,7 +208,7 @@ static void ui_screen_recording_click_cb(lv_event_t *event)
         screen_recording_service_request_stop();
         ui_screen_recording_apply_state(SCREEN_RECORDING_STOPPING);
         ui_screen_recording_show_toast(
-            ui_text_get(UI_TEXT_WIDGET_SCREEN_RECORDING_STOPPING), UI_NOTICE_INFO);
+            ui_text_msgid(UI_TEXT_WIDGET_SCREEN_RECORDING_STOPPING), UI_NOTICE_INFO);
     } else if (state == SCREEN_RECORDING_IDLE) {
         ui_screen_recording_show_fps_dialog();
     }
@@ -248,10 +249,10 @@ void ui_screen_recording_indicator_poll(void)
     if (screen_recording_service_poll_completion(&completion)) {
         if (completion.result == SCREEN_RECORDING_COMPLETION_SAVED) {
             ui_screen_recording_show_toast(
-                ui_text_get(UI_TEXT_WIDGET_SCREEN_RECORDING_SAVED), UI_NOTICE_SUCCESS);
+                ui_text_msgid(UI_TEXT_WIDGET_SCREEN_RECORDING_SAVED), UI_NOTICE_SUCCESS);
         } else {
             ui_screen_recording_show_toast(
-                ui_text_get(UI_TEXT_WIDGET_SCREEN_RECORDING_FAILED), UI_NOTICE_ERROR);
+                ui_text_msgid(UI_TEXT_WIDGET_SCREEN_RECORDING_FAILED), UI_NOTICE_ERROR);
         }
         state = screen_recording_service_state();
     }

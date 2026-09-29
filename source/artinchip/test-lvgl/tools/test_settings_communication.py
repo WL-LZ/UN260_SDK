@@ -5,6 +5,7 @@ UART, time and view edges are isolated; the print parser, request services,
 CFD response projection and page teardown functions are compiled unchanged.
 """
 from pathlib import Path
+from test_i18n_support import with_i18n
 import re
 import subprocess
 import tempfile
@@ -281,7 +282,7 @@ with tempfile.TemporaryDirectory(prefix='un260-settings-communication-') as dire
     for opt in ('-O0','-O2'):
         binary = work/('test.exe' if os.name=='nt' else 'test')
         command=[os.environ.get('CC','cc'),'-std=c11',opt,'-Wall','-Wextra','-Werror',
-                 '-I'+str(root),str(work/'test.c'),*[str(root/s) for s in sources],'-o',str(binary)]
+                 '-I'+str(root),str(work/'test.c'),*map(str,with_i18n([root/s for s in sources],root)),'-o',str(binary)]
         if os.name!='nt':command+=['-fsanitize=undefined','-fno-sanitize-recover=all']
         subprocess.run(command,check=True)
         subprocess.run([str(binary)],check=True)

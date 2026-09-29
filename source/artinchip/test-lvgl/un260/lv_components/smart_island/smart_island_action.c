@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/smart_island/smart_island_internal.h"
 #include "un260/gesture/touch_feedback.h"
 #include "un260/lv_components/lv_fault_popup.h"
@@ -243,7 +244,8 @@ static void smart_island_swipe_cb(lv_event_t *e)
         g_si_ctx.view.swipe.swiped = false;
     }
 
-    if (g_si_ctx.view.visual != SMART_ISLAND_VISUAL_EXPANDED ||
+    if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_WARNING ||
+        g_si_ctx.view.visual != SMART_ISLAND_VISUAL_EXPANDED ||
         g_si_ctx.view.anim_running) {
         return;
     }
@@ -326,12 +328,12 @@ void smart_island_click_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
 
-    if (fault_popup_get_pending_fault(NULL, NULL, NULL)) {
+    if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_WARNING) {
         if (g_si_ctx.action.ignore_click_once) {
             g_si_ctx.action.ignore_click_once = false;
             return;
         }
-        (void)fault_popup_show_pending_now();
+        if (fault_popup_show_pending_now()) smart_island_warning_stop();
         return;
     }
 
@@ -415,7 +417,7 @@ static void smart_island_action_btn_cb(lv_event_t *e)
 
 static void smart_island_show_qr_error_toast(const char *text)
 {
-    ui_notice_post(UI_NOTICE_WARNING, "export.qr", "QR export",
+    ui_notice_post_text(UI_NOTICE_WARNING, "export.qr", UI_N_("QR export"),
         smart_island_text_or_default(text, UI_TEXT_WIDGET_QR_POPUP_NO_DATA));
 }
 
@@ -424,12 +426,12 @@ static void smart_island_show_qr_popup(void)
     char qr_text[3072];
     if (currency_state_multi_selected() ||
         !counting_data_monetary_result_supported(counting_data_current())) {
-        ui_notice_post(UI_NOTICE_WARNING, "export.qr", "QR export",
-            ui_text_get(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED));
+        ui_notice_post_text(UI_NOTICE_WARNING, "export.qr", UI_N_("QR export"),
+            ui_text_msgid(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED));
         return;
     }
     if (!ui_qr_data_is_ready()) {
-        smart_island_show_qr_error_toast(ui_text_get(UI_TEXT_WIDGET_QR_POPUP_NO_DATA));
+        smart_island_show_qr_error_toast(ui_text_msgid(UI_TEXT_WIDGET_QR_POPUP_NO_DATA));
         return;
     }
     if (!ui_qr_data_build(qr_text, sizeof(qr_text))) {
@@ -654,7 +656,7 @@ static void smart_island_action_btn_style_apply(uint8_t index)
     lv_obj_set_style_bg_grad_dir(btn, LV_GRAD_DIR_VER, 0);
 
     if (arrow && lv_obj_is_valid(arrow)) {
-        lv_label_set_text(arrow, enabled ? "ON" : "OFF");
+        lv_label_set_text(arrow, enabled ? ui_tr("ON") : ui_tr("OFF"));
         lv_obj_set_style_text_color(arrow,
             lv_color_hex(enabled ? SMART_ISLAND_BTN_SWITCH_ON_TEXT : SMART_ISLAND_BTN_SWITCH_OFF_TEXT), 0);
         lv_obj_set_style_text_font(arrow, &lv_font_instrument_sans_medium_12, 0);
@@ -689,7 +691,7 @@ static void smart_island_action_item_apply(uint8_t index)
         } else if (g_si_ctx.action.ids[index] == SMART_ISLAND_ACTION_FUNC4) {
             lv_label_set_text(label, ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_ACTION_FUNC4));
         } else if (g_si_ctx.action.ids[index] == SMART_ISLAND_ACTION_TOUCH_GUIDE) {
-            lv_label_set_text(label, "TOUCH GUIDE");
+            lv_label_set_text(label, ui_tr("TOUCH GUIDE"));
         } else if (g_si_ctx.action.text_ids[index] < UI_TEXT_MAX) {
             lv_label_set_text(label, ui_text_get(g_si_ctx.action.text_ids[index]));
         } else if (g_si_ctx.action.texts[index][0] != '\0') {

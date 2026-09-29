@@ -66,6 +66,8 @@ void lv_upgrade_popup_show_result(bool success, const char *description) {
 }
 bool lv_upgrade_popup_is_showing(void) { return popup; }
 const char *ui_text_get(ui_text_id_t id) { (void)id; return "Back"; }
+const char *ui_text_msgid(ui_text_id_t id){return ui_text_get(id);}
+
 
 static lv_color_t pixels[1280*400], buffer[1280*40];
 static void flush(lv_disp_drv_t *driver, const lv_area_t *area, lv_color_t *color) {

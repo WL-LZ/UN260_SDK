@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_message.h"
 #ifndef UN260_WORKSPACE_SERVICE_H
 #define UN260_WORKSPACE_SERVICE_H
 #include "un260/workspace/workspace_model.h"
@@ -26,4 +27,6 @@ bool workspace_service_save_batches(uint32_t owner, const uint8_t *values,
                                     unsigned count, uint8_t previous_active,
                                     uint8_t edited_active);
 const char *workspace_service_batch_save_message(void);
+const ui_message_t *workspace_service_apply_message_info(void);
+const ui_message_t *workspace_service_batch_save_message_info(void);
 #endif

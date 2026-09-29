@@ -2,6 +2,7 @@
 """Actual production settings, fonts, PNG resources and LVGL renderer; hardware edges captured."""
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+from test_i18n_support import with_i18n, lvgl_source
 import os,re,subprocess,tempfile,sys
 from PIL import Image
 from test_list_view import compiled_asset_sources
@@ -15,7 +16,7 @@ def function(source,name):
         elif token.group()=='}':
             depth-=1
             if not depth:return source[match.start():source.index('{',match.start())+token.end()]
-lvgl=root.parents[1]/'third-party/lvgl-8.3.2'
+lvgl = lvgl_source(root)
 out=Path(sys.argv[1]).resolve();out.mkdir(parents=True,exist_ok=True)
 for name in ['user','settings']:
     im=Image.open(root/'aic_ui/lvgl_data/backgrounds'/f'{name}.png').convert('RGBA')
@@ -35,7 +36,8 @@ with tempfile.TemporaryDirectory(prefix='un260-settings-view-') as temp:
       root/'un260/lv_components/lv_nav_button.c',root/'un260/lv_components/lv_damped_button.c',
       root/'un260/diagnostic/diagnostic.c',root/'un260/app_service/motor_test_service.c',root/'un260/protocol/protocol_frame.c',
       *[root/'un260/font'/f'{f}.c' for f in fonts],*lvgl.joinpath('src').rglob('*.c')]
-    common=['gcc','-DLVGL_DIR="L:/usr/local/share/lvgl_data/"','-DLV_DRV_CONF_H','-std=gnu11','-O1','-g','-Wall','-Wextra',
+    sources = with_i18n(sources, root)
+    common=['gcc','-DLVGL_DIR="L:/usr/local/share/lvgl_data/"','-DLV_DRV_CONF_H','-DUI_STATE_DIR="/tmp/un260-i18n-tests"','-std=gnu11','-O1','-g','-Wall','-Wextra',
       '-fsanitize=address,undefined','-fno-sanitize-recover=all',f'-I{work}',f'-I{root}',f'-I{root}/un260/lv_core',f'-I{lvgl}',f'-DLV_CONF_PATH={conf}']
     objects=[work/f'{i}.o' for i in range(len(sources))]
     def build(pair):subprocess.run([*common,'-c',str(pair[0]),'-o',str(pair[1])],check=True)

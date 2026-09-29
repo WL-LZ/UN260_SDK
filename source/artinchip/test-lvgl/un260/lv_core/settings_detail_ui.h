@@ -59,7 +59,8 @@ void settings_detail_dialog_hide(void);
 bool settings_detail_overlay_is_open(void);
 /* Diagnostic page shortcut; owned by its parent. No calibration command is sent. */
 void settings_detail_add_run(lv_obj_t *page);
-/* reason must remain valid until cleared or the button is deleted. */
+/* reason is an English message ID (UI_N_), translated when displayed.
+ * It must remain valid until cleared or the button is deleted. */
 void settings_detail_action_block(lv_obj_t *button, const char *reason);
 bool settings_detail_keyboard_show(const char* title,
                                    const char* init_value,

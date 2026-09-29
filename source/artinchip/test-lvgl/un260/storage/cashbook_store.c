@@ -1,3 +1,5 @@
+#include "un260/lv_system/ui_i18n.h"
+#include "un260/lv_system/ui_message.h"
 #include "cashbook_store.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -35,7 +37,8 @@ static cashbook_t *archive_view,*view_draft;
 static cashbook_archive_t archives[CASHBOOK_ARCHIVES],archive_draft[CASHBOOK_ARCHIVES];
 static unsigned archive_count,archive_draft_count;
 static uint32_t archive_id;
-static char message[160],result[160];
+static char message[320],result[320];
+static ui_message_t message_info,result_info;
 static uint32_t crc(const void *data,size_t n)
 {const unsigned char *p=data;uint32_t c=~0U;while(n--){c^=*p++;for(unsigned i=0;i<8;i++)c=(c>>1)^(0xEDB88320U&-(c&1));}return ~c;}
 static bool io(int fd,void *data,size_t n,bool write_it)
@@ -86,17 +89,17 @@ static bool append(void)
 static void *work(void *unused)
 {
     (void)unused;bool ok;
-    if(loading){ok=load();snprintf(result,sizeof(result),ok?"Records ready.":"Records could not be recovered. Original journal retained; counting history is unchanged.");}
+    if(loading){ok=load();ui_message_key(&result_info,ok?UI_N_("Records ready."):UI_N_("Records could not be recovered. Original journal retained; counting history is unchanged."));}
     else if(job==JOB_ARCHIVE)ok=archive_period();
     else if(job==JOB_SCAN)ok=scan_archives();
     else if(job==JOB_VIEW)ok=read_archive();
     else if(job==JOB_EXPORT)ok=export_view();
     else{
         *draft=*published;
-        ok=cashbook_apply(draft,&command,result,sizeof(result));
+        ok=cashbook_apply(draft,&command,result,sizeof(result));ui_message_key(&result_info,result);
         if(ok&&draft->sequence!=published->sequence){
             ok=append();
-            if(!ok)snprintf(result,sizeof(result),"Record save failed. Restart to verify storage before changing totals.");
+            if(!ok)ui_message_key(&result_info,UI_N_("Record save failed. Restart to verify storage before changing totals."));
         }
     }
     pthread_mutex_lock(&mutex);success=ok;complete=true;pthread_mutex_unlock(&mutex);return NULL;
@@ -104,7 +107,7 @@ static void *work(void *unused)
 static bool begin(void)
 {
     complete=false;busy=true;
-    if(pthread_create(&thread,NULL,work,NULL)){busy=false;snprintf(message,sizeof(message),"Record worker could not start.");return false;}
+    if(pthread_create(&thread,NULL,work,NULL)){busy=false;ui_message_key(&message_info,UI_N_("Record worker could not start."));return false;}
     return true;
 }
 void cashbook_store_init(void)
@@ -112,8 +115,8 @@ void cashbook_store_init(void)
     if(initialized)return;
     initialized=true;cashbook_defaults(&empty);
     published=calloc(1,sizeof(*published));draft=calloc(1,sizeof(*draft));
-    if(!published||!draft){free(published);free(draft);published=draft=NULL;snprintf(message,sizeof(message),"Not enough memory to open records.");return;}
-    cashbook_defaults(published);loading=true;snprintf(message,sizeof(message),"Loading records...");begin();
+    if(!published||!draft){free(published);free(draft);published=draft=NULL;ui_message_key(&message_info,UI_N_("Not enough memory to open records."));return;}
+    cashbook_defaults(published);loading=true;ui_message_key(&message_info,UI_N_("Loading records..."));begin();
 }
 bool cashbook_store_poll(void)
 {
@@ -125,26 +128,27 @@ bool cashbook_store_poll(void)
     if(job==JOB_VIEW){if(success){free(archive_view);archive_view=view_draft;view_draft=NULL;}else{free(view_draft);view_draft=NULL;}}
     if(!success&&(loading||fatal))ready=false;
     if(!loading&&job==JOB_COMMAND){rejected=!success;if(rejected){failed_command=command;failed_sequence=published->sequence;}}
-    loading=false;snprintf(message,sizeof(message),"%s",result);return true;
+    loading=false;message_info=result_info;return true;
 }
 bool cashbook_store_ready(void){return ready;}
 bool cashbook_store_busy(void){return busy;}
 bool cashbook_store_last_success(void){return success;}
 const cashbook_t *cashbook_store_get(void){return published?published:&empty;}
-const char *cashbook_store_message(void){return message;}
+const char *cashbook_store_message(void){ui_message_render(&message_info,message,sizeof(message));return message;}
+const ui_message_t *cashbook_store_message_info(void){return &message_info;}
 bool cashbook_store_submit(const cashbook_command_t *c)
 {
     if(!c||!ready||busy)return false;
     if(rejected&&failed_sequence==published->sequence&&!memcmp(c,&failed_command,sizeof(*c)))return false;
-    command=*c;job=JOB_COMMAND;fatal=false;snprintf(message,sizeof(message),"Saving record...");return begin();
+    command=*c;job=JOB_COMMAND;fatal=false;ui_message_key(&message_info,UI_N_("Saving record..."));return begin();
 }
 const cashbook_t *cashbook_store_view(void){return archive_view?archive_view:cashbook_store_get();}
 bool cashbook_store_view_archived(void){return archive_view!=NULL;}
 void cashbook_store_close_view(void){if(!busy){free(archive_view);archive_view=NULL;}}
 unsigned cashbook_store_archives(const cashbook_archive_t **items){if(items)*items=archives;return archive_count;}
 static bool start_job(job_t next,const char *status)
-{if(!ready||busy)return false;job=next;fatal=false;snprintf(message,sizeof(message),"%s",status);return begin();}
-bool cashbook_store_scan_archives(void){return start_job(JOB_SCAN,"Looking for archived periods...");}
+{if(!ready||busy)return false;job=next;fatal=false;ui_message_key(&message_info,status);return begin();}
+bool cashbook_store_scan_archives(void){return start_job(JOB_SCAN,UI_N_("Looking for archived periods..."));}
 bool cashbook_store_open_archive(uint32_t id)
 {
     if(!ready||busy)return false;
@@ -152,8 +156,8 @@ bool cashbook_store_open_archive(uint32_t id)
     for(unsigned i=0;i<archive_count;i++)if(archives[i].id==id)found=true;
     if(!found)return false;
     view_draft=malloc(sizeof(*view_draft));if(!view_draft)return false;archive_id=id;
-    if(start_job(JOB_VIEW,"Opening archived records..."))return true;
+    if(start_job(JOB_VIEW,UI_N_("Opening archived records...")))return true;
     free(view_draft);view_draft=NULL;return false;
 }
-bool cashbook_store_archive(void){if(archive_view)return false;return start_job(JOB_ARCHIVE,"Archiving closed period...");}
-bool cashbook_store_export(void){return start_job(JOB_EXPORT,"Exporting record summary to USB...");}
+bool cashbook_store_archive(void){if(archive_view)return false;return start_job(JOB_ARCHIVE,UI_N_("Archiving closed period..."));}
+bool cashbook_store_export(void){return start_job(JOB_EXPORT,UI_N_("Exporting record summary to USB..."));}

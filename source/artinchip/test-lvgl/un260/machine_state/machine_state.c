@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "machine_state.h"
 #include "un260/lv_system/user_cfg.h"
 
@@ -22,20 +23,20 @@ static machine_state_snapshot_t g_machine_state = {
 };
 
 static const char *const g_machine_start_error_desc[] = {
-    [0x00] = "No Error",
-    [0x01] = "Upper Channel Error",
-    [0x02] = "Lower Channel Error",
-    [0x03] = "Reject Exit Error",
-    [0x04] = "Reject Pocket Error",
-    [0x05] = "Reject Pocket Full Only",
-    [0x06] = "Stacker Pocket Error",
-    [0x07] = "Stacker Pocket Full Only",
-    [0x08] = "Stacker and Reject Pockets Full",
-    [0x09] = "Upper and Lower Channels Not Closed",
-    [0x0A] = "Genuine Note Exit Error",
-    [0x0B] = "Dust Cover / Baffle Closure Error",
-    [0x0C] = "Flap Error",
-    [0x0D] = "Encoder Disk Error",
+    [0x00] = UI_N_("No Error"),
+    [0x01] = UI_N_("Upper Channel Error"),
+    [0x02] = UI_N_("Lower Channel Error"),
+    [0x03] = UI_N_("Reject Exit Error"),
+    [0x04] = UI_N_("Reject Pocket Error"),
+    [0x05] = UI_N_("Reject Pocket Full Only"),
+    [0x06] = UI_N_("Stacker Pocket Error"),
+    [0x07] = UI_N_("Stacker Pocket Full Only"),
+    [0x08] = UI_N_("Stacker and Reject Pockets Full"),
+    [0x09] = UI_N_("Upper and Lower Channels Not Closed"),
+    [0x0A] = UI_N_("Genuine Note Exit Error"),
+    [0x0B] = UI_N_("Dust Cover / Baffle Closure Error"),
+    [0x0C] = UI_N_("Flap Error"),
+    [0x0D] = UI_N_("Encoder Disk Error"),
 };
 
 void machine_state_get_snapshot(machine_state_snapshot_t *snapshot)
@@ -46,9 +47,9 @@ void machine_state_get_snapshot(machine_state_snapshot_t *snapshot)
 const char *machine_runtime_error_desc(uint8_t code)
 {
     static const char *const descriptions[] = {
-        "No Error", "Feeder Jam", "Upper passage Jam", "Lower passage Jam",
-        "Reject Exit Jam", "Stacker Exit Jam", "Diverter Solenoid Fault",
-        "Stacker Pocket Residual Note"
+        UI_N_("No Error"), UI_N_("Feeder Jam"), UI_N_("Upper passage Jam"), UI_N_("Lower passage Jam"),
+        UI_N_("Reject Exit Jam"), UI_N_("Stacker Exit Jam"), UI_N_("Diverter Solenoid Fault"),
+        UI_N_("Stacker Pocket Residual Note")
     };
     return code < sizeof(descriptions) / sizeof(descriptions[0]) ? descriptions[code] : NULL;
 }

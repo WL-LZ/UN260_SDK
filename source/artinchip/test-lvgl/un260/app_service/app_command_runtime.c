@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "app_command_runtime.h"
 #include "motor_test_service.h"
 #include "work_mode_service.h"
@@ -60,15 +61,15 @@ static bool app_command_runtime_main_page_active(void)
 
 static const char *diagnostic_operation_blocker(bool allow_calibration_feed)
 {
-    if(!work_mode_service_diagnostic_ready())return work_mode_service_status_text();
-    if(!protocol_send_is_ready())return "Controller connection is unavailable.";
-    if(upgrade_session_owner()!=UPGRADE_SESSION_NONE)return "Wait for the update to finish.";
-    if(app_command_runtime_count_start_busy())return "A count is already in progress.";
+    if(!work_mode_service_diagnostic_ready())return work_mode_service_status_msgid();
+    if(!protocol_send_is_ready())return UI_N_("Controller connection is unavailable.");
+    if(upgrade_session_owner()!=UPGRADE_SESSION_NONE)return UI_N_("Wait for the update to finish.");
+    if(app_command_runtime_count_start_busy())return UI_N_("A count is already in progress.");
     calibration_state_snapshot_t calibration;diagnostic_calibration_get_snapshot(&calibration);
     if(calibration.session_active &&
        !(allow_calibration_feed && diagnostic_calibration_allows_feed()))
-        return "Wait for calibration to finish.";
-    if(machine_state_aging_running()||motor_test_service_busy())return "Stop the motor test before running banknotes.";
+        return UI_N_("Wait for calibration to finish.");
+    if(machine_state_aging_running()||motor_test_service_busy())return UI_N_("Stop the motor test before running banknotes.");
     return NULL;
 }
 const char *app_command_runtime_calibration_blocker(void)
@@ -82,8 +83,8 @@ const char *app_command_runtime_diagnostic_run_blocker(void)
     /* Failed self-test enters service recovery; calibration itself must not
      * depend on ordinary count-ready sensors (the CIS bar occupies the path). */
     boot_stage_t boot=boot_service_get_stage();
-    if(boot!=BOOT_STAGE_DONE&&boot!=BOOT_STAGE_FAIL)return "Wait for the self-check to finish.";
-    if(fault_popup_is_showing())return "Close the machine guide before running.";
+    if(boot!=BOOT_STAGE_DONE&&boot!=BOOT_STAGE_FAIL)return UI_N_("Wait for the self-check to finish.");
+    if(fault_popup_is_showing())return UI_N_("Close the machine guide before running.");
     return NULL;
 }
 bool app_command_runtime_request_diagnostic_run(void)
@@ -115,7 +116,7 @@ bool app_command_runtime_count_start_busy(void)
 bool app_command_runtime_clear_counting_data(const char *reason)
 {
     if (!app_counting_runtime_reset_session(&g_counting_session, reason)) {
-        smart_island_notify_warning_level("History full: clear deferred",
+        smart_island_notify_warning_level(UI_N_("History full: clear deferred"),
                                            SMART_ISLAND_WARNING_LEVEL_ERROR);
         return false;
     }
@@ -304,8 +305,8 @@ uint32_t app_command_runtime_process_frames_budget(uint32_t budget_us)
                 const bool available = ui_history_data_is_available();
                 uart_debug_printf("RX transition paused: history %s; retaining frame and session\n",
                                   available ? "full" : "unavailable");
-                smart_island_notify_warning_level(available ? "History full: receiving paused" :
-                                                   "History unavailable: receiving paused",
+                smart_island_notify_warning_level(available ? UI_N_("History full: receiving paused") :
+                                                   UI_N_("History unavailable: receiving paused"),
                                                    SMART_ISLAND_WARNING_LEVEL_ERROR);
                 g_deferred_frame_warning_reported = true;
             }

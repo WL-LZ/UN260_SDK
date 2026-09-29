@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_core/page_00_boot_anim.h"
 
 #include "un260/lv_core/lv_page_manager.h"
@@ -56,34 +57,34 @@ typedef struct {
 static boot_intro_context_t g_boot_intro;
 
 static const char *const g_boot_intro_message_text[BOOT_INTRO_MESSAGE_COUNT] = {
-    "INTELLIGENT CASH MACHINE",
-    "PRECISION IN EVERY COUNT",
-    "ENGINEERED FOR TRUST",
-    "UN260  /  SYSTEM READY",
+    UI_N_("INTELLIGENT CASH MACHINE"),
+    UI_N_("PRECISION IN EVERY COUNT"),
+    UI_N_("ENGINEERED FOR TRUST"),
+    UI_N_("UN260  /  SYSTEM READY"),
 };
 
 static const char *const g_boot_intro_log_text[BOOT_INTRO_LOG_COUNT] = {
     "root@d213ecv:~# systemctl start cash-engine",
-    "Starting Cash Counting Engine... [  OK  ]",
-    "Initializing hardware interfaces... [  OK  ]",
-    "Loading RISC-V kernel modules... [  OK  ]",
-    "Initializing DDR controller... [  OK  ]",
-    "Mounting NAND filesystem... [  OK  ]",
-    "Starting network interface... [  OK  ]",
+    UI_N_("Starting Cash Counting Engine... [  OK  ]"),
+    UI_N_("Initializing hardware interfaces... [  OK  ]"),
+    UI_N_("Loading RISC-V kernel modules... [  OK  ]"),
+    UI_N_("Initializing DDR controller... [  OK  ]"),
+    UI_N_("Mounting NAND filesystem... [  OK  ]"),
+    UI_N_("Starting network interface... [  OK  ]"),
     "inet addr:127.0.0.1  Mask:255.0.0.0",
     "UP LOOPBACK RUNNING  MTU:65536  Metric:1",
     "RX packets:0 errors:0 dropped:0 overruns:0 frame:0",
     "TX packets:0 errors:0 dropped:0 overruns:0 carrier:0",
     "collisions:0 txqueuelen:1000",
     "RX bytes:0 (0.0 B)  TX bytes:0 (0.0 B)",
-    "Probing banknote sensor array... [  OK  ]",
-    "Calibrating feed and stacker motors... [  OK  ]",
-    "Touch controller ONLINE [  OK  ]",
-    "LVGL display pipeline READY [  OK  ]",
-    "UART communication channels ONLINE [  OK  ]",
-    "UN260 protocol frame FD DF synchronized [  OK  ]",
-    "Loading currency recognition profiles... [  OK  ]",
-    "Counter services READY [  OK  ]",
+    UI_N_("Probing banknote sensor array... [  OK  ]"),
+    UI_N_("Calibrating feed and stacker motors... [  OK  ]"),
+    UI_N_("Touch controller ONLINE [  OK  ]"),
+    UI_N_("LVGL display pipeline READY [  OK  ]"),
+    UI_N_("UART communication channels ONLINE [  OK  ]"),
+    UI_N_("UN260 protocol frame FD DF synchronized [  OK  ]"),
+    UI_N_("Loading currency recognition profiles... [  OK  ]"),
+    UI_N_("Counter services READY [  OK  ]"),
     "root@d213ecv:~# cash-engine --verify",
 };
 
@@ -377,15 +378,24 @@ static void boot_intro_apply_terminal(uint32_t elapsed_ms)
     while (!g_boot_intro.terminal_complete &&
            elapsed_ms >= g_boot_intro.terminal_next_char_ms &&
            emitted < BOOT_INTRO_LOG_CHARS_PER_TICK) {
-        const char *line = g_boot_intro_log_text[
-            g_boot_intro.terminal_line_index % BOOT_INTRO_LOG_COUNT];
+        const char *line = ui_tr(g_boot_intro_log_text[
+            g_boot_intro.terminal_line_index % BOOT_INTRO_LOG_COUNT]);
         char character = line[g_boot_intro.terminal_char_index];
 
         if (character != '\0') {
-            if (boot_intro_terminal_append(character)) {
-                ++g_boot_intro.terminal_char_index;
+            uint32_t next = g_boot_intro.terminal_char_index;
+            (void)_lv_txt_encoded_next(line, &next);
+            size_t bytes = next - g_boot_intro.terminal_char_index;
+            if (bytes && g_boot_intro.terminal_text_length + bytes <
+                         sizeof(g_boot_intro.terminal_text)) {
+                memcpy(g_boot_intro.terminal_text + g_boot_intro.terminal_text_length,
+                       line + g_boot_intro.terminal_char_index, bytes);
+                g_boot_intro.terminal_text_length += bytes;
+                g_boot_intro.terminal_text[g_boot_intro.terminal_text_length] = '\0';
                 text_changed = true;
             }
+            /* Truncated long translations still advance to the next line. */
+            g_boot_intro.terminal_char_index = next;
             g_boot_intro.terminal_next_char_ms +=
                 boot_intro_terminal_next_delay();
         } else if (elapsed_ms >= BOOT_INTRO_TERMINAL_STOP_MS) {
@@ -595,7 +605,7 @@ void ui_page_00_boot_anim_create(lv_obj_t *parent)
 
     for (index = 0U; index < BOOT_INTRO_MESSAGE_COUNT; ++index) {
         g_boot_intro.message[index] = boot_intro_create_label(
-            g_boot_intro.root, g_boot_intro_message_text[index],
+            g_boot_intro.root, ui_tr(g_boot_intro_message_text[index]),
             &lv_font_instrument_sans_medium_14, 340, 236, 600);
         lv_obj_set_style_text_letter_space(g_boot_intro.message[index], 4, 0);
     }
@@ -605,7 +615,7 @@ void ui_page_00_boot_anim_create(lv_obj_t *parent)
         &lv_font_instrument_sans_medium_10, 26, 20, 260);
     lv_obj_set_style_text_align(g_boot_intro.meta_left, LV_TEXT_ALIGN_LEFT, 0);
     g_boot_intro.meta_right = boot_intro_create_label(
-        g_boot_intro.root, "PRECISION CASH ENGINE",
+        g_boot_intro.root, ui_tr("PRECISION CASH ENGINE"),
         &lv_font_instrument_sans_medium_10, 1010, 20, 240);
     lv_obj_set_style_text_align(g_boot_intro.meta_right, LV_TEXT_ALIGN_RIGHT, 0);
 

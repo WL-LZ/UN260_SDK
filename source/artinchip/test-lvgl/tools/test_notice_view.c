@@ -95,20 +95,26 @@ int main(void)
     driver.hor_res = 1280; driver.ver_res = 400;
     driver.draw_buf = &draw_buffer; driver.flush_cb = flush;
     assert(lv_disp_drv_register(&driver));
+    assert(NOTICE_ENTER_MS == NOTICE_EXIT_MS && NOTICE_EXIT_MS == 240);
     backdrop();
     unsigned children = lv_obj_get_child_cnt(lv_layer_top());
     ui_notice_post(UI_NOTICE_SUCCESS, "receipt", "Receipt settings", "Saved");
     advance(420);
-    assert(ui_notice_is_visible() && notice.opacity == LV_OPA_COVER);
+    assert(ui_notice_is_visible());
     assert(lv_obj_get_x(notice.object) == 265 && lv_obj_get_y(notice.object) == 14);
     assert(lv_obj_get_child_cnt(lv_layer_top()) == children + 1);
     assert(lv_obj_get_child_cnt(notice.object) == 0);
     capture("success");
+    assert(lv_color_to32(pixels[35*1280+850])==lv_color_to32(lv_color_hex(0xECEFF1)));
+    assert(lv_color_to32(pixels[113*1280+850])==lv_color_to32(lv_color_hex(0xECEFF1)));
+    assert(lv_color_to32(pixels[14*1280+850])==lv_color_to32(lv_color_white()));
     lv_event_send(notice.object, LV_EVENT_CLICKED, NULL);
     advance(100);
-    assert(ui_notice_is_visible() && notice.leaving && notice.opacity < LV_OPA_COVER);
+    assert(ui_notice_is_visible() && notice.leaving);
     assert(lv_obj_get_y(notice.object) < 14);
     capture("dismiss-animation");
+    int sample_y=lv_obj_get_y(notice.object)+99;
+    if(sample_y>=0)assert(lv_color_to32(pixels[sample_y*1280+850])==lv_color_to32(lv_color_hex(0xECEFF1)));
     advance(200);
     assert(!ui_notice_is_visible() && notice.timer->paused);
     assert(!lv_anim_get(notice.object, animation_exec));
@@ -151,17 +157,16 @@ int main(void)
     assert(ui_notice_is_visible() && notice.shown.kind == UI_NOTICE_SUCCESS && !notice.leaving);
     ui_notice_clear("race");
 
-    /* Tapping during entry must continue from the current position/opacity. */
+    /* Tapping during entry must continue from the current position. */
     ui_notice_post(UI_NOTICE_INFO, "early", "Information", NULL);
     advance(100);
     lv_coord_t entry_y = lv_obj_get_y(notice.object);
-    lv_opa_t entry_opacity = notice.opacity;
     ui_notice_dismiss(NULL);
-    assert(lv_obj_get_y(notice.object) == entry_y && notice.opacity == entry_opacity);
+    assert(lv_obj_get_y(notice.object) == entry_y);
     advance(260);
     assert(!ui_notice_is_visible());
 
-    ui_notice_config_t short_notice = { UI_NOTICE_INFO, "short", "Timer pause", "Shown time only", 1500 };
+    ui_notice_config_t short_notice = { .kind=UI_NOTICE_INFO, .key="short", .title="Timer pause", .detail="Shown time only", .duration_ms=1500 };
     ui_notice_show(&short_notice); advance(420); advance(400);
     ui_notice_set_suspended(UI_NOTICE_SUSPEND_STANDBY, true);
     uint32_t remaining = notice.state.active.remaining_ms;
@@ -186,6 +191,16 @@ int main(void)
     advance(420); capture("info");
     ui_notice_deinit();
     assert(lv_obj_get_child_cnt(lv_layer_top()) == children);
+    ui_notice_clear("new");
+    ui_notice_post_text(UI_NOTICE_PROGRESS,"locale","Confirm","Saved");advance(420);
+    uint32_t locale_revision=notice.state.active.revision,locale_remaining=notice.state.active.remaining_ms;
+    uint16_t locale_repeats=notice.state.active.repeats;
+    lv_obj_t *same_object=notice.object;
+    ui_lang_set(LANGUAGE_CN);ui_notice_language_changed();
+    assert(!strcmp(notice.title,ui_tr("Confirm")));
+    assert(notice.object==same_object&&notice.state.active.revision==locale_revision&&notice.state.active.remaining_ms==locale_remaining&&notice.state.active.repeats==locale_repeats);
+    ui_notice_dismiss("locale");ui_lang_set(LANGUAGE_EN);ui_notice_language_changed();advance(300);
+    ui_notice_post_text(UI_NOTICE_PROGRESS,"locale","Confirm","Saved");assert(!ui_notice_is_visible());
     language = 1;
     ui_notice_post(UI_NOTICE_SUCCESS, "receipt", "打印设置", "已保存");
     advance(420); capture("success-cn"); ui_notice_clear("receipt");

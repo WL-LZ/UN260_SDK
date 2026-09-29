@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/lv_debug_overlay.h"
 
 #include "lvgl/lvgl.h"
@@ -25,25 +26,25 @@ static void debug_overlay_refresh_cb(lv_timer_t *timer)
     perf_stats_sample();
     perf_stats_get_snapshot(&stats);
 
-    lv_label_set_text_fmt(g_debug_fps_label, "FPS: %d", stats.fps);
+    lv_label_set_text_fmt(g_debug_fps_label, ui_tr("FPS: %d"), stats.fps);
 
     if (stats.cpu_valid) {
-        lv_label_set_text_fmt(g_debug_cpu_label, "CPU: %.0f%%", stats.cpu_percent);
+        lv_label_set_text_fmt(g_debug_cpu_label, ui_tr("CPU: %.0f%%"), stats.cpu_percent);
     } else {
-        lv_label_set_text(g_debug_cpu_label, "CPU: N/A");
+        lv_label_set_text(g_debug_cpu_label, ui_tr("CPU: N/A"));
     }
 
     if (stats.mem_valid) {
-        lv_label_set_text_fmt(g_debug_mem_label, "MEM: %.1fMB", stats.mem_mb);
+        lv_label_set_text_fmt(g_debug_mem_label, ui_tr("MEM: %.1fMB"), stats.mem_mb);
     } else {
-        lv_label_set_text(g_debug_mem_label, "MEM: N/A");
+        lv_label_set_text(g_debug_mem_label, ui_tr("MEM: N/A"));
     }
 
-    lv_label_set_text_fmt(g_debug_lvgl_label, "LVGL: %.2f/%.2fms",
+    lv_label_set_text_fmt(g_debug_lvgl_label, ui_tr("LVGL: %.2f/%.2fms"),
                           stats.lvgl_avg_ms, stats.lvgl_max_ms);
-    lv_label_set_text_fmt(g_debug_loop_label, "LOOP: %.2f/%.2fms",
+    lv_label_set_text_fmt(g_debug_loop_label, ui_tr("LOOP: %.2f/%.2fms"),
                           stats.loop_avg_ms, stats.loop_max_ms);
-    lv_label_set_text_fmt(g_debug_main_label, "MAIN: %.2f/%.2fms",
+    lv_label_set_text_fmt(g_debug_main_label, ui_tr("MAIN: %.2f/%.2fms"),
                           stats.main_refresh_avg_ms,
                           stats.main_refresh_max_ms);
 }
@@ -84,12 +85,12 @@ void lv_debug_overlay_init(void)
     lv_obj_set_style_text_color(g_debug_loop_label, lv_color_white(), 0);
     lv_obj_set_style_text_color(g_debug_main_label, lv_color_white(), 0);
 
-    lv_label_set_text(g_debug_fps_label, "FPS: 0");
-    lv_label_set_text(g_debug_cpu_label, "CPU: --%");
-    lv_label_set_text(g_debug_mem_label, "MEM: --");
-    lv_label_set_text(g_debug_lvgl_label, "LVGL: --/--ms");
-    lv_label_set_text(g_debug_loop_label, "LOOP: --/--ms");
-    lv_label_set_text(g_debug_main_label, "MAIN: --/--ms");
+    lv_label_set_text(g_debug_fps_label, ui_tr("FPS: 0"));
+    lv_label_set_text(g_debug_cpu_label, ui_tr("CPU: --%"));
+    lv_label_set_text(g_debug_mem_label, ui_tr("MEM: --"));
+    lv_label_set_text(g_debug_lvgl_label, ui_tr("LVGL: --/--ms"));
+    lv_label_set_text(g_debug_loop_label, ui_tr("LOOP: --/--ms"));
+    lv_label_set_text(g_debug_main_label, ui_tr("MAIN: --/--ms"));
 
     if (g_debug_timer == NULL) {
         g_debug_timer = lv_timer_create(debug_overlay_refresh_cb, 1000, NULL);

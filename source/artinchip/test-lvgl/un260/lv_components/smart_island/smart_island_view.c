@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/smart_island/smart_island_internal.h"
 #include "un260/lv_components/lv_capsule_pagination.h"
 #include "un260/currency/currency_state.h"
@@ -24,7 +25,10 @@ static scaled_font_t multi_symbol_font;
 static uint8_t multi_symbol_pixels[1024];
 
 #define SMART_ISLAND_BG_COUNTING          0x111111
+#define SMART_ISLAND_BG_WARNING           0xF59E0B
+#define SMART_ISLAND_BG_ERROR             0xFF5A5F
 #define SMART_ISLAND_BG_SUCCESS           0x17A673
+#define SMART_ISLAND_BG_UPDATE            0x111111
 #define SMART_ISLAND_TEXT_LIGHT           0xFFFFFF
 #define SMART_ISLAND_TEXT_SUB             0x777777
 #define SMART_ISLAND_LAST_TEXT_GRAY       0x737373
@@ -367,6 +371,7 @@ static void smart_island_get_currency_code(char *buf, size_t size)
     }
 }
 
+
 static void smart_island_counting_anim_stop(void)
 {
     lv_obj_t *bills[] = {
@@ -649,7 +654,7 @@ static void smart_island_counting_apply_visibility(void)
     }
     for(unsigned i=0;i<4;i++)lv_obj_add_flag(g_si_ctx.objects.counting_multi[i],LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(g_si_ctx.objects.counting_gate,LV_OBJ_FLAG_HIDDEN);
-    lv_label_set_text(g_si_ctx.objects.counting_unit,"PCS");
+    lv_label_set_text(g_si_ctx.objects.counting_unit,ui_tr("PCS"));
     lv_obj_set_pos(g_si_ctx.objects.counting_serial,142,12);
     lv_obj_set_width(g_si_ctx.objects.counting_serial,154);
     lv_obj_set_style_text_align(g_si_ctx.objects.counting_serial,LV_TEXT_ALIGN_CENTER,0);
@@ -848,7 +853,7 @@ static void smart_island_rebuild_scene_texts(void)
 
     case SMART_ISLAND_SCENE_RESULT:
         lv_snprintf(g_si_ctx.text.compact, sizeof(g_si_ctx.text.compact),
-                    "%d PCS  %s",
+                    ui_tr("%d PCS  %s"),
                     g_si_ctx.counting.pcs,
                     ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_COUNT_FINISHED));
         g_si_ctx.text.info_title[0] = '\0';
@@ -857,6 +862,16 @@ static void smart_island_rebuild_scene_texts(void)
         g_si_ctx.text.info_extra[0] = '\0';
         break;
 
+    case SMART_ISLAND_SCENE_WARNING:
+        lv_snprintf(g_si_ctx.text.compact, sizeof(g_si_ctx.text.compact), "%s",
+            smart_island_text_or_default(g_si_ctx.warning.text, UI_TEXT_WIDGET_SMART_ISLAND_COUNT_ERROR));
+        lv_snprintf(g_si_ctx.text.info_title, sizeof(g_si_ctx.text.info_title), "%s",
+            smart_island_text_or_default(g_si_ctx.warning.text, UI_TEXT_WIDGET_SMART_ISLAND_COUNT_ERROR));
+        lv_snprintf(g_si_ctx.text.info_summary, sizeof(g_si_ctx.text.info_summary), "%s",
+            smart_island_text_or_default(g_si_ctx.warning.text, UI_TEXT_WIDGET_SMART_ISLAND_COUNT_ERROR));
+        lv_snprintf(g_si_ctx.text.info_footer, sizeof(g_si_ctx.text.info_footer), "%s",
+            "");
+        break;
 
     case SMART_ISLAND_SCENE_IDLE:
     default:
@@ -933,12 +948,6 @@ static void smart_island_rebuild_scene_texts(void)
     }
     }
 
-    /* Persistent status affordance, not an expiring message: tapping the
-     * capsule reopens the active guide without acknowledging or retrying. */
-    if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_IDLE &&
-        fault_popup_get_pending_fault(NULL, NULL, NULL)) {
-        lv_snprintf(g_si_ctx.text.compact, sizeof(g_si_ctx.text.compact), "Machine issue");
-    }
     smart_island_apply_texts();
 }
 
@@ -1007,7 +1016,7 @@ static void smart_island_apply_scene_style(void)
         bg_hex = SMART_ISLAND_BG_IDLE;
         title_color = lv_color_hex(SMART_ISLAND_TEXT_LIGHT);
         dot_color = lv_color_hex(SMART_ISLAND_READY_DOT);
-        show_time = true;
+        show_time = (g_si_ctx.view.scene == SMART_ISLAND_SCENE_IDLE);
         show_dot = true;
         break;
 
@@ -1029,16 +1038,21 @@ static void smart_island_apply_scene_style(void)
             g_si_ctx.view.visual != SMART_ISLAND_VISUAL_EXPANDED;
         show_dot = !show_counting;
         break;
+    case SMART_ISLAND_SCENE_WARNING:
+        bg_hex =
+            (g_si_ctx.warning.level == SMART_ISLAND_WARNING_LEVEL_ERROR)
+            ? SMART_ISLAND_BG_ERROR
+            : SMART_ISLAND_BG_WARNING;
+        title_color = lv_color_hex(SMART_ISLAND_TEXT_LIGHT);
+        dot_color = lv_color_hex(SMART_ISLAND_DOT_NON_IDLE);
+        show_time = false;
+        show_dot = true;
+        break;
 
     default: break;
     }
 
     /* 功能页仍不显示时间，头部通过滑动动画进出 */
-    if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_IDLE &&
-        fault_popup_get_pending_fault(NULL, NULL, NULL)) {
-        dot_color = lv_color_hex(0xE69A3A);
-        show_time = false;
-    }
     if (g_si_ctx.view.visual == SMART_ISLAND_VISUAL_EXPANDED &&
         g_si_ctx.view.page == SMART_ISLAND_PAGE_ACTION) {
         show_time = false;
@@ -1051,7 +1065,8 @@ static void smart_island_apply_scene_style(void)
 
     if (g_si_ctx.objects.title && lv_obj_is_valid(g_si_ctx.objects.title)) {
         lv_obj_set_style_text_color(g_si_ctx.objects.title, title_color, 0);
-        lv_obj_set_style_text_opa(g_si_ctx.objects.title, LV_OPA_COVER, 0);
+        if(g_si_ctx.view.scene!=SMART_ISLAND_SCENE_WARNING)
+            lv_obj_set_style_text_opa(g_si_ctx.objects.title, LV_OPA_COVER, 0);
         if (show_counting) {
             lv_obj_add_flag(g_si_ctx.objects.title, LV_OBJ_FLAG_HIDDEN);
         } else {
@@ -1068,7 +1083,7 @@ static void smart_island_apply_scene_style(void)
             lv_label_set_long_mode(g_si_ctx.objects.title, LV_LABEL_LONG_CLIP);
             lv_obj_set_width(g_si_ctx.objects.title,
                              SMART_ISLAND_COUNT_W - 52);
-        } else {
+        } else if(g_si_ctx.view.scene!=SMART_ISLAND_SCENE_WARNING) {
             lv_label_set_long_mode(g_si_ctx.objects.title, LV_LABEL_LONG_CLIP);
             lv_obj_set_width(g_si_ctx.objects.title, 150);
         }
@@ -1079,7 +1094,8 @@ static void smart_island_apply_scene_style(void)
     }
 
     if (g_si_ctx.objects.expand_title && lv_obj_is_valid(g_si_ctx.objects.expand_title)) {
-        lv_obj_set_style_text_opa(g_si_ctx.objects.expand_title, LV_OPA_COVER, 0);
+        if(g_si_ctx.view.scene!=SMART_ISLAND_SCENE_WARNING)
+            lv_obj_set_style_text_opa(g_si_ctx.objects.expand_title, LV_OPA_COVER, 0);
         lv_obj_clear_flag(g_si_ctx.objects.expand_title, LV_OBJ_FLAG_HIDDEN);
     }
     if (g_si_ctx.objects.expand_subtitle && lv_obj_is_valid(g_si_ctx.objects.expand_subtitle)) {
@@ -1137,7 +1153,8 @@ static void smart_island_apply_scene_style(void)
     }
 
     if (g_si_ctx.objects.expand_title && lv_obj_is_valid(g_si_ctx.objects.expand_title)) {
-        lv_obj_set_pos(g_si_ctx.objects.expand_title, 20, 18);
+        if(g_si_ctx.view.scene!=SMART_ISLAND_SCENE_WARNING)
+            lv_obj_set_pos(g_si_ctx.objects.expand_title, 20, 18);
     }
 
     if (g_si_ctx.objects.expand_footer && lv_obj_is_valid(g_si_ctx.objects.expand_footer)) {
@@ -1390,6 +1407,115 @@ void smart_island_view_message_pulse(void)
     }
 }
 
+void smart_island_view_notice_reset(void)
+{
+    smart_island_pulse_stop();
+}
+
+void smart_island_view_notice_expand(void)
+{
+    lv_anim_t animation;
+
+    if (g_si_ctx.lifecycle.suspended ||
+        g_si_ctx.view.visual == SMART_ISLAND_VISUAL_EXPANDED ||
+        g_si_ctx.objects.root == NULL ||
+        !lv_obj_is_valid(g_si_ctx.objects.root)) {
+        return;
+    }
+
+    smart_island_pulse_stop();
+
+    /* A warning is a held presentation, not a pulse.  Expand once and leave
+     * the shell plus its content at the end positions until notice expiry. */
+    lv_anim_init(&animation);
+    lv_anim_set_var(&animation, g_si_ctx.objects.root);
+    lv_anim_set_exec_cb(&animation, smart_island_anim_stretch_cb);
+    lv_anim_set_values(&animation, 0, 22);
+    lv_anim_set_time(&animation, 260);
+    lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
+    lv_anim_start(&animation);
+
+    if (g_si_ctx.objects.dot && lv_obj_is_valid(g_si_ctx.objects.dot) &&
+        !lv_obj_has_flag(g_si_ctx.objects.dot, LV_OBJ_FLAG_HIDDEN)) {
+        lv_anim_init(&animation);
+        lv_anim_set_var(&animation, g_si_ctx.objects.dot);
+        lv_anim_set_exec_cb(&animation, smart_island_anim_translate_x_cb);
+        lv_anim_set_values(&animation, 0, -8);
+        lv_anim_set_time(&animation, 260);
+        lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
+        lv_anim_start(&animation);
+    }
+    if (g_si_ctx.objects.title && lv_obj_is_valid(g_si_ctx.objects.title) &&
+        !lv_obj_has_flag(g_si_ctx.objects.title, LV_OBJ_FLAG_HIDDEN)) {
+        lv_anim_init(&animation);
+        lv_anim_set_var(&animation, g_si_ctx.objects.title);
+        lv_anim_set_exec_cb(&animation, smart_island_anim_translate_x_cb);
+        /* Long warnings scroll inside their own fixed viewport. */
+        lv_anim_set_values(&animation, 0,
+            g_si_ctx.warning.text_width_compact > SMART_ISLAND_WIDTH - 36 - 14 ? 0 : 8);
+        lv_anim_set_time(&animation, 260);
+        lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
+        lv_anim_start(&animation);
+    }
+}
+
+void smart_island_view_notice_collapse(lv_anim_ready_cb_t ready_cb)
+{
+    lv_anim_t animation;
+    lv_coord_t stretch;
+    lv_coord_t dot_tx = 0;
+    lv_coord_t title_tx = 0;
+
+    if (g_si_ctx.lifecycle.suspended ||
+        g_si_ctx.objects.root == NULL ||
+        !lv_obj_is_valid(g_si_ctx.objects.root)) {
+        if (ready_cb) ready_cb(NULL);
+        return;
+    }
+
+    stretch = lv_obj_get_style_transform_width(g_si_ctx.objects.root,
+                                                LV_PART_MAIN);
+    lv_anim_del(g_si_ctx.objects.root, smart_island_anim_stretch_cb);
+
+    if (g_si_ctx.objects.dot && lv_obj_is_valid(g_si_ctx.objects.dot)) {
+        dot_tx = lv_obj_get_style_translate_x(g_si_ctx.objects.dot,
+                                              LV_PART_MAIN);
+        lv_anim_del(g_si_ctx.objects.dot, smart_island_anim_translate_x_cb);
+        lv_anim_init(&animation);
+        lv_anim_set_var(&animation, g_si_ctx.objects.dot);
+        lv_anim_set_exec_cb(&animation, smart_island_anim_translate_x_cb);
+        lv_anim_set_values(&animation, dot_tx, 0);
+        lv_anim_set_time(&animation, 260);
+        /* Reverse of notice_expand's ease_out curve: the same motion played
+         * backward, so the dot and the shell settle with identical timing. */
+        lv_anim_set_path_cb(&animation, lv_anim_path_ease_in);
+        lv_anim_start(&animation);
+    }
+    if (g_si_ctx.objects.title && lv_obj_is_valid(g_si_ctx.objects.title)) {
+        title_tx = lv_obj_get_style_translate_x(g_si_ctx.objects.title,
+                                                LV_PART_MAIN);
+        lv_anim_del(g_si_ctx.objects.title, smart_island_anim_translate_x_cb);
+        lv_anim_init(&animation);
+        lv_anim_set_var(&animation, g_si_ctx.objects.title);
+        lv_anim_set_exec_cb(&animation, smart_island_anim_translate_x_cb);
+        lv_anim_set_values(&animation, title_tx, 0);
+        lv_anim_set_time(&animation, 260);
+        lv_anim_set_path_cb(&animation, lv_anim_path_ease_in);
+        lv_anim_start(&animation);
+    }
+
+    /* Start the callback-bearing shell animation last.  Scene restoration is
+     * therefore deferred until the visible content has also converged. */
+    lv_anim_init(&animation);
+    lv_anim_set_var(&animation, g_si_ctx.objects.root);
+    lv_anim_set_exec_cb(&animation, smart_island_anim_stretch_cb);
+    lv_anim_set_values(&animation, stretch, 0);
+    lv_anim_set_time(&animation, 260);
+    lv_anim_set_path_cb(&animation, lv_anim_path_ease_in);
+    lv_anim_set_ready_cb(&animation, ready_cb);
+    lv_anim_start(&animation);
+}
+
 /* A cached island can be moved from the main page to another live page (PURE
  * currently does this).  Page switching may happen while collapse/page-slide
  * animations are still running.  Their ready callbacks are not a reliable
@@ -1462,6 +1588,7 @@ void smart_island_create(lv_obj_t *parent)
         smart_island_destroy();
     }
 
+    memset(g_si_ctx.warning.text, 0, sizeof(g_si_ctx.warning.text));
     memset(g_si_ctx.text.result, 0, sizeof(g_si_ctx.text.result));
     memset(g_si_ctx.text.info_extra, 0, sizeof(g_si_ctx.text.info_extra));
     memset(g_si_ctx.text.idle_line1, 0, sizeof(g_si_ctx.text.idle_line1));
@@ -1516,8 +1643,6 @@ void smart_island_create(lv_obj_t *parent)
     lv_obj_set_style_text_color(g_si_ctx.objects.time, lv_color_hex(SMART_ISLAND_TEXT_LIGHT), 0);
     lv_obj_align(g_si_ctx.objects.time, LV_ALIGN_RIGHT_MID, -14, 0);
     lv_obj_clear_flag(g_si_ctx.objects.time, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_CLICK_FOCUSABLE);
-
-
 
     /* Compact running presentation.  It is deliberately independent from the
      * expanded info/action pages so those pages keep their existing content,
@@ -1638,7 +1763,7 @@ void smart_island_create(lv_obj_t *parent)
     lv_obj_set_style_bg_opa(g_si_ctx.objects.counting_value_scan, LV_OPA_COVER, 0);
 
     g_si_ctx.objects.counting_unit = lv_label_create(g_si_ctx.objects.counting_root);
-    lv_label_set_text(g_si_ctx.objects.counting_unit, "PCS");
+    lv_label_set_text(g_si_ctx.objects.counting_unit, ui_tr("PCS"));
     lv_obj_set_pos(g_si_ctx.objects.counting_unit, 192, 16);
     lv_obj_set_style_text_font(g_si_ctx.objects.counting_unit,
                                &lv_font_instrument_sans_medium_14, 0);

@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "page_01_main_layout.h"
 #include <stdlib.h>
 #include <string.h>
@@ -104,7 +105,7 @@ static void marks_refresh(void)
         lv_obj_set_style_border_color(mark,lv_color_hex(color),0);
         lv_obj_clear_flag(mark,LV_OBJ_FLAG_HIDDEN);
     }
-    hint(editor.target>=0?"Release to swap":editor.source>=0?"Selected: drag to a blue area":"Select an area to move");
+    hint(editor.target>=0?ui_tr("Release to swap"):editor.source>=0?ui_tr("Selected: drag to a blue area"):ui_tr("Select an area to move"));
 }
 
 static void clear_drag(void)
@@ -153,12 +154,12 @@ static void release_action(int action)
     if (action==0) {
         ui_main_layout_default(&editor.draft);editor.apply(&editor.draft);
         clear_drag();marks_refresh();
-        hint("Default restored. Done to save.");
+        hint(ui_tr("Default restored. Done to save."));
     } else if (action==1) finish(false);
     else if (action==2) {
         if (ui_main_layout_equal(&editor.saved,&editor.draft) || ui_state_main_layout_save(&editor.draft)) {
             editor.saved=editor.draft;finish(true);
-        } else hint("Could not save. Retry or Cancel.");
+        } else hint(ui_tr("Could not save. Retry or Cancel."));
     }
 }
 
@@ -209,7 +210,7 @@ bool page_01_main_layout_pointer(lv_indev_t *indev,lv_event_code_t event,const l
             editor.target=-1;editor.action=-1;editor.dragging=editor.drag_moved=false;
             if (editor.editing && action<0) {
                 marks_refresh();
-                if (swapped) hint("Position swapped. Done to save.");
+                if (swapped) hint(ui_tr("Position swapped. Done to save."));
             }
         } else if (editor.dragging && editor.drag_moved) {
             int group=-1,slot=-1;
@@ -267,9 +268,9 @@ void page_01_main_layout_attach(lv_obj_t *root,lv_obj_t *const items[ITEM_COUNT]
     editor.bar=box(editor.overlay,252,8,776,52,0xFFFFFF);
     lv_obj_set_style_border_width(editor.bar,2,0);
     lv_obj_set_style_border_color(editor.bar,lv_color_hex(0xD5E0E7),0);
-    editor.hint=label(editor.bar,"Layout edit",0x1D2B34);lv_obj_set_pos(editor.hint,16,16);
+    editor.hint=label(editor.bar,ui_tr("Layout edit"),0x1D2B34);lv_obj_set_pos(editor.hint,16,16);
     lv_obj_set_width(editor.hint,366);lv_label_set_long_mode(editor.hint,LV_LABEL_LONG_CLIP);
-    const char *titles[]={"Reset","Cancel","Done"};
+    const char *titles[]={ui_tr("Reset"),ui_tr("Cancel"),ui_tr("Done")};
     for (unsigned i=0;i<3;++i) {
         editor.actions[i]=box(editor.bar,392+124*i,4,116,44,i==2?0x125FCB:0xF1F4F5);
         lv_obj_t *text=label(editor.actions[i],titles[i],i==2?0xFFFFFF:0x1D2B34);lv_obj_center(text);

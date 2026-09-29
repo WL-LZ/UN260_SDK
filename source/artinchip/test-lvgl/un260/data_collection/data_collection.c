@@ -1,4 +1,5 @@
 #include "data_collection.h"
+#include "un260/lv_system/ui_i18n.h"
 
 #include <stdio.h>
 
@@ -11,12 +12,13 @@ typedef struct {
     uint32_t started_ms;
     data_collect_mode_t late_target_mode;
     uint32_t late_guard_started_ms;
-    char previous_status[DATA_COLLECTION_STATUS_MAX];
+    ui_message_t previous_status;
 } data_collection_request_t;
 
 static data_collect_mode_t g_mode = DATA_COLLECT_MODE_NONE;
 static uint16_t g_pcs;
-static char g_status[DATA_COLLECTION_STATUS_MAX] = "Please select a collection mode.";
+static char g_status[320];
+static ui_message_t g_status_info={.key=UI_N_("Please select a collection mode.")};
 static data_collection_request_t g_request;
 
 static bool data_collection_mode_is_valid_request(data_collect_mode_t mode)
@@ -38,7 +40,7 @@ static void data_collection_request_finish(void)
     g_request.pending = false;
     g_request.target_mode = DATA_COLLECT_MODE_NONE;
     g_request.started_ms = 0;
-    g_request.previous_status[0] = '\0';
+    g_request.previous_status.key[0] = '\0';
 }
 
 data_collect_mode_t data_collection_state_mode(void)
@@ -53,13 +55,16 @@ uint16_t data_collection_state_pcs(void)
 
 const char *data_collection_state_status(void)
 {
-    return g_status;
+    ui_message_render(&g_status_info,g_status,sizeof(g_status));return g_status;
 }
 
 void data_collection_state_set_status(const char *status)
 {
-    snprintf(g_status, sizeof(g_status), "%s", status != NULL ? status : "");
+    ui_message_key(&g_status_info,status);
 }
+
+void data_collection_state_set_message(const ui_message_t *message)
+{if(message)g_status_info=*message;}
 
 void data_collection_state_select_mode(data_collect_mode_t mode, const char *status)
 {
@@ -90,8 +95,7 @@ bool data_collection_request_begin(data_collect_mode_t target_mode,
         return false;
     }
 
-    snprintf(g_request.previous_status, sizeof(g_request.previous_status),
-             "%s", g_status);
+    g_request.previous_status=g_status_info;
     g_request.pending = true;
     g_request.target_mode = target_mode;
     g_request.started_ms = now_ms;
@@ -105,7 +109,7 @@ void data_collection_request_cancel(void)
 {
     if (!g_request.pending) return;
 
-    data_collection_state_set_status(g_request.previous_status);
+    g_status_info=g_request.previous_status;
     data_collection_request_finish();
 }
 
@@ -128,7 +132,7 @@ bool data_collection_request_take_timeout(uint32_t now_ms)
     data_collection_request_finish();
     g_request.late_target_mode = target_mode;
     g_request.late_guard_started_ms = now_ms;
-    data_collection_state_set_status("Collection mode request timed out.");
+    data_collection_state_set_status(UI_N_("Collection mode request timed out."));
     return true;
 }
 
@@ -155,7 +159,7 @@ data_collection_reply_result_t data_collection_reply_handle(
     const uint8_t *buf, uint8_t len, uint32_t now_ms)
 {
     const char *status;
-    char unknown_status[48];
+
     uint8_t reply_status;
 
     /* 4 字节帧头/命令 + 1 字节状态 + 1 字节 CRC。 */
@@ -173,14 +177,14 @@ data_collection_reply_result_t data_collection_reply_handle(
 
         data_collection_request_finish();
         if (target_mode == DATA_COLLECT_MODE_NONE) {
-            data_collection_state_exit("Collection mode exited.");
+            data_collection_state_exit(UI_N_("Collection mode exited."));
             return DATA_COLLECTION_REPLY_EXITED;
         }
         data_collection_state_select_mode(
             target_mode,
             target_mode == DATA_COLLECT_MODE_ALL ?
-                "ALL DATA collection mode ready." :
-                "FALSE REPORT collection mode ready.");
+                UI_N_("ALL DATA collection mode ready.") :
+                UI_N_("FALSE REPORT collection mode ready."));
         return DATA_COLLECTION_REPLY_REQUEST_CONFIRMED;
     }
     if (g_request.pending &&
@@ -191,19 +195,19 @@ data_collection_reply_result_t data_collection_reply_handle(
 
     switch (reply_status) {
     case 0x01:
-        status = "ALL DATA collection mode ready.";
+        status = UI_N_("ALL DATA collection mode ready.");
         break;
     case 0x02:
-        status = "Collection completed. Data can be copied from USB.";
+        status = UI_N_("Collection completed. Data can be copied from USB.");
         break;
     case 0x03:
-        status = "FALSE REPORT collection mode ready.";
+        status = UI_N_("FALSE REPORT collection mode ready.");
         break;
     case 0x05:
-        status = "USB ready. You can start counting.";
+        status = UI_N_("USB ready. You can start counting.");
         break;
     case 0x06:
-        status = "USB not ready. Collection mode error.";
+        status = UI_N_("USB not ready. Collection mode error.");
         if (g_request.pending) {
             data_collection_request_finish();
             data_collection_state_set_status(status);
@@ -211,11 +215,10 @@ data_collection_reply_result_t data_collection_reply_handle(
         }
         break;
     case 0xFF:
-        data_collection_state_exit("Collection mode exited.");
+        data_collection_state_exit(UI_N_("Collection mode exited."));
         return DATA_COLLECTION_REPLY_EXITED;
     default:
-        snprintf(unknown_status, sizeof(unknown_status), "Collection reply: 0x%02X", reply_status);
-        data_collection_state_set_status(unknown_status);
+        ui_message_uint(&g_status_info,UI_N_("Collection reply: 0x%02X"),reply_status);
         return DATA_COLLECTION_REPLY_UNKNOWN;
     }
 

@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #include "ui_screenshot.h"
 #include "lvgl/lvgl.h"
@@ -83,7 +84,7 @@ static ui_screenshot_result_t ui_screenshot_save_to_usb(void)
 }
 
 static void ui_screenshot_show_toast(const char *text,ui_notice_kind_t kind)
-{ui_notice_post(kind,"capture.screenshot","Screenshot",text);}
+{ui_notice_post_text(kind,"capture.screenshot",UI_N_("Screenshot"),text);}
 
 static void ui_screenshot_indicator_click_cb(lv_event_t* event)
 {
@@ -99,11 +100,11 @@ static void ui_screenshot_indicator_click_cb(lv_event_t* event)
     lv_obj_clear_flag(g_screenshot_indicator, LV_OBJ_FLAG_HIDDEN);
 
     if (result == UI_SCREENSHOT_OK) {
-        ui_screenshot_show_toast(ui_text_get(UI_TEXT_WIDGET_SCREENSHOT_SAVED), UI_NOTICE_SUCCESS);
+        ui_screenshot_show_toast(ui_text_msgid(UI_TEXT_WIDGET_SCREENSHOT_SAVED), UI_NOTICE_SUCCESS);
     } else if (result == UI_SCREENSHOT_USB_NOT_MOUNTED) {
-        ui_screenshot_show_toast(ui_text_get(UI_TEXT_WIDGET_SCREENSHOT_INSERT_USB), UI_NOTICE_WARNING);
+        ui_screenshot_show_toast(ui_text_msgid(UI_TEXT_WIDGET_SCREENSHOT_INSERT_USB), UI_NOTICE_WARNING);
     } else {
-        ui_screenshot_show_toast(ui_text_get(UI_TEXT_WIDGET_SCREENSHOT_SAVE_FAILED), UI_NOTICE_ERROR);
+        ui_screenshot_show_toast(ui_text_msgid(UI_TEXT_WIDGET_SCREENSHOT_SAVE_FAILED), UI_NOTICE_ERROR);
     }
 }
 

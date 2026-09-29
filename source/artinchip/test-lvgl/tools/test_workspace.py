@@ -1,3 +1,4 @@
+from test_i18n_support import with_i18n
 from pathlib import Path
 import tempfile,subprocess,os,shutil,ctypes.util
 from PIL import Image
@@ -9,10 +10,11 @@ with tempfile.TemporaryDirectory(prefix='un260-workspace-') as directory:
     (usb/'un260_avatar_03.png').write_bytes((usb/'avatar.png').read_bytes()[:40])
     Image.new('RGB',(4096,16)).save(usb/'un260_avatar_04.png')
     binary=temp/'test'
-    headers=root.parents[2]/'output/d211_d213_devkitf/host/riscv64-linux-gnu/sysroot/usr/include'
+    headers=Path(os.environ.get('UN260_SYSROOT_HEADERS') or root.parents[2]/'output/d211_d213_devkitf/host/riscv64-linux-gnu/sysroot/usr/include')
     for name in ('png.h','pngconf.h','pnglibconf.h'):shutil.copyfile(headers/name,temp/name)
-    sources=['tools/test_workspace.c','un260/workspace/workspace_model.c','un260/storage/workspace_store.c']
-    subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-g','-O1','-fsanitize=address,undefined','-fno-sanitize-recover=all','-no-pie',f'-I{root}',f'-I{temp}',f'-DWORKSPACE_DIRECTORY="{data}"',f'-DWORKSPACE_USB_DIRECTORY="{usb}"',*[str(root/p) for p in sources],'-l:'+ctypes.util.find_library('png16'),'-lpthread','-Wl,--wrap=fsync','-o',str(binary)],check=True)
+    sources=[root/p for p in ['tools/test_workspace.c','un260/workspace/workspace_model.c','un260/storage/workspace_store.c']]
+    sources=with_i18n(sources,root)
+    subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-g','-O1','-fsanitize=address,undefined','-fno-sanitize-recover=all','-no-pie',f'-I{root}',f'-I{temp}',f'-DWORKSPACE_DIRECTORY="{data}"',f'-DWORKSPACE_USB_DIRECTORY="{usb}"',*map(str,sources),'-l:'+ctypes.util.find_library('png16'),'-lpthread','-Wl,--wrap=fsync','-o',str(binary)],check=True)
     subprocess.run([str(binary)],check=True)
     reports=list(usb.glob('UN260_support_*.txt'));assert len(reports)==1
     assert reports[0].read_text()=='UN260 SUPPORT\nNo personal data\n'

@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #include "page_33_set_brightness.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
@@ -29,8 +30,8 @@ static void refresh(void)
         settings_detail_action_block(preview.keep, NULL);
         settings_detail_action_block(preview.revert, NULL);
     } else {
-        settings_detail_action_block(preview.keep, "Adjust the brightness first.");
-        settings_detail_action_block(preview.revert, "Adjust the brightness first.");
+        settings_detail_action_block(preview.keep, UI_N_("Adjust the brightness first."));
+        settings_detail_action_block(preview.revert, UI_N_("Adjust the brightness first."));
     }
 }
 
@@ -44,8 +45,8 @@ static void restore(void)
     if (preview.timer) lv_timer_pause(preview.timer);
     if (preview.slider) lv_slider_set_value(preview.slider, backlight_service_level(), LV_ANIM_OFF);
     refresh();
-    ui_notice_post(ok?UI_NOTICE_INFO:UI_NOTICE_ERROR,"settings.brightness","Brightness",
-        ok?"Previous brightness restored.":"Could not restore previous brightness.");
+    ui_notice_post_text(ok?UI_NOTICE_INFO:UI_NOTICE_ERROR,"settings.brightness",UI_N_("Brightness"),
+        ok?UI_N_("Previous brightness restored."):UI_N_("Could not restore previous brightness."));
     if(frame.message)lv_label_set_text(frame.message,"");
 }
 
@@ -61,7 +62,7 @@ static void tick(lv_timer_t *timer)
     int seconds = (int)((8000 - elapsed + 999) / 1000);
     if (seconds != preview.shown_seconds) {
         preview.shown_seconds = seconds;
-        lv_label_set_text_fmt(frame.message, "Preview - reverts in %d seconds unless you keep it.", seconds);
+        lv_label_set_text_fmt(frame.message, ui_trn("Preview - reverts in %d seconds unless you keep it.", (seconds)), seconds);
     }
 }
 
@@ -70,14 +71,14 @@ static void keep(lv_event_t *event)
     if (lv_event_get_code(event) != LV_EVENT_CLICKED || !preview.pending) return;
     if (!backlight_service_save()) {
         preview.save_failed = true;
-        ui_notice_post(UI_NOTICE_ERROR,"settings.brightness","Brightness not saved","Preview will revert automatically.");
+        ui_notice_post_text(UI_NOTICE_ERROR,"settings.brightness",UI_N_("Brightness not saved"),UI_N_("Preview will revert automatically."));
         return;
     }
     preview.pending = false;
     if (preview.timer) lv_timer_pause(preview.timer);
     refresh();
     lv_label_set_text(frame.message, "");
-    ui_notice_post(UI_NOTICE_SUCCESS,"settings.brightness","Brightness saved",NULL);
+    ui_notice_post_text(UI_NOTICE_SUCCESS,"settings.brightness",UI_N_("Brightness saved"),NULL);
 }
 
 static void revert(lv_event_t *event)
@@ -98,7 +99,7 @@ static void slider_event(lv_event_t *event)
     if (!preview.pending) preview.previous = backlight_service_level();
     if (!backlight_service_set(requested)) {
         lv_slider_set_value(preview.slider, backlight_service_level(), LV_ANIM_OFF);
-        ui_notice_post(UI_NOTICE_ERROR,"settings.brightness","Brightness unchanged","Could not apply this brightness.");
+        ui_notice_post_text(UI_NOTICE_ERROR,"settings.brightness",UI_N_("Brightness unchanged"),UI_N_("Could not apply this brightness."));
         return;
     }
     preview.pending = true;
@@ -108,7 +109,7 @@ static void slider_event(lv_event_t *event)
     lv_timer_reset(preview.timer);
     lv_timer_resume(preview.timer);
     refresh();
-    lv_label_set_text(frame.message, "Preview - keep this brightness or let it revert.");
+    lv_label_set_text(frame.message, ui_tr("Preview - keep this brightness or let it revert."));
 }
 
 static void back(lv_event_t *event)
@@ -130,18 +131,18 @@ static void deleted(lv_event_t *event)
 void ui_page_33_set_brightness_create(lv_obj_t *parent)
 {
     if (frame.root) return;
-    lv_settings_header_t header = { .title = "Brightness", .icon = "Sun", .back = back };
+    lv_settings_header_t header = { .title = ui_tr("Brightness"), .icon = "Sun", .back = back };
     frame = lv_settings_frame_create(parent, &header);
     lv_obj_add_event_cb(frame.root, deleted, LV_EVENT_DELETE, NULL);
     lv_obj_set_style_bg_opa(frame.body, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(frame.body, 0, 0);
-    lv_settings_label(frame.body, "Display brightness", 0, 20,
+    lv_settings_label(frame.body, ui_tr("Display brightness"), 0, 20,
         &lv_font_instrument_sans_medium_18, 0x1D2B34);
     preview.value = lv_settings_label(frame.body, "--", 0, 70,
         &lv_font_instrument_sans_semibold_28, 0x1D2B34);
     lv_obj_t *track = lv_settings_box(frame.body, 304, 12, 928, 202, 0xFFFFFF);
     lv_obj_set_style_radius(track, 14, 0);
-    lv_settings_label(track, "Adjust to preview", 28, 22,
+    lv_settings_label(track, ui_tr("Adjust to preview"), 28, 22,
         &lv_font_instrument_sans_medium_16, 0x1D2B34);
     preview.slider = lv_slider_create(track);
     lv_port_indev_set_drag_obj(preview.slider, true);
@@ -159,20 +160,20 @@ void ui_page_33_set_brightness_create(lv_obj_t *parent)
     lv_obj_set_style_radius(preview.slider, LV_RADIUS_CIRCLE, LV_PART_KNOB);
     lv_obj_set_style_pad_all(preview.slider, 10, LV_PART_KNOB);
     lv_obj_add_event_cb(preview.slider, slider_event, LV_EVENT_ALL, NULL);
-    lv_settings_label(track, "Minimum", 28, 140, &lv_font_instrument_sans_medium_14, 0x586B78);
-    lv_settings_label(track, "Maximum", 826, 140, &lv_font_instrument_sans_medium_14, 0x586B78);
-    preview.revert = lv_settings_button(frame.footer, 964, 0, 124, 46, "Revert", false, revert, NULL);
-    preview.keep = lv_settings_button(frame.footer, 1100, 0, 132, 46, "Keep", true, keep, NULL);
+    lv_settings_label(track, ui_tr("Minimum"), 28, 140, &lv_font_instrument_sans_medium_14, 0x586B78);
+    lv_settings_label(track, ui_tr("Maximum"), 826, 140, &lv_font_instrument_sans_medium_14, 0x586B78);
+    preview.revert = lv_settings_button(frame.footer, 964, 0, 124, 46, ui_tr("Revert"), false, revert, NULL);
+    preview.keep = lv_settings_button(frame.footer, 1100, 0, 132, 46, ui_tr("Keep"), true, keep, NULL);
     preview.timer = lv_timer_create(tick, 100, NULL);
     if (preview.timer) lv_timer_pause(preview.timer);
     bool available = backlight_service_probe() && backlight_service_max() > 0 && preview.timer;
     if (available) {
         lv_slider_set_range(preview.slider, 1, backlight_service_max());
         lv_slider_set_value(preview.slider, backlight_service_level(), LV_ANIM_OFF);
-        lv_label_set_text(frame.message, "Unsaved brightness automatically reverts after 8 seconds.");
+        lv_label_set_text(frame.message, ui_tr("Unsaved brightness automatically reverts after 8 seconds."));
     } else {
         lv_obj_add_state(preview.slider, LV_STATE_DISABLED);
-        lv_label_set_text(frame.message, "Adjustable backlight is unavailable.");
+        lv_label_set_text(frame.message, ui_tr("Adjustable backlight is unavailable."));
     }
     refresh();
 }

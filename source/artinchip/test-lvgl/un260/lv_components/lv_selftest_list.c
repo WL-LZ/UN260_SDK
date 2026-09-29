@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "lv_selftest_list.h"
 
 #include <stdio.h>
@@ -325,7 +326,7 @@ static void selftest_list_apply_state(lv_selftest_list_ctx_t *ctx, lv_selftest_l
         lv_obj_set_style_bg_color(item->card, ctx->cfg.success_bg_color, 0);
         lv_obj_set_style_text_color(item->name_label, ctx->cfg.success_text_color, 0);
         lv_obj_set_style_text_color(item->state_label, ctx->cfg.success_state_color, 0);
-        lv_label_set_text(item->state_label, "PASS");
+        lv_label_set_text(item->state_label, ui_tr("PASS"));
         lv_obj_add_flag(item->spinner_arc, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(item->pending_ring, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(item->icon_img, LV_OBJ_FLAG_HIDDEN);
@@ -336,7 +337,7 @@ static void selftest_list_apply_state(lv_selftest_list_ctx_t *ctx, lv_selftest_l
         lv_obj_set_style_bg_color(item->card, ctx->cfg.loading_bg_color, 0);
         lv_obj_set_style_text_color(item->name_label, ctx->cfg.loading_text_color, 0);
         lv_obj_set_style_text_color(item->state_label, ctx->cfg.loading_state_color, 0);
-        lv_label_set_text(item->state_label, "Loading...");
+        lv_label_set_text(item->state_label, ui_tr("Loading..."));
         lv_obj_add_flag(item->pending_ring, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(item->icon_img, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(item->spinner_arc, LV_OBJ_FLAG_HIDDEN);
@@ -358,7 +359,7 @@ static void selftest_list_apply_state(lv_selftest_list_ctx_t *ctx, lv_selftest_l
         lv_obj_set_style_bg_color(item->card, ctx->cfg.error_bg_color, 0);
         lv_obj_set_style_text_color(item->name_label, ctx->cfg.error_text_color, 0);
         lv_obj_set_style_text_color(item->state_label, ctx->cfg.error_state_color, 0);
-        lv_label_set_text(item->state_label, "FAIL");
+        lv_label_set_text(item->state_label, ui_tr("FAIL"));
         lv_obj_add_flag(item->spinner_arc, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(item->pending_ring, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(item->icon_img, LV_OBJ_FLAG_HIDDEN);

@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "app_setting_reply.h"
 #include "app_setting_notice.h"
 
@@ -39,7 +40,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                 break;
             }
             machine_state_confirm_mode(requested_mode);
-            app_setting_notice_result("settings.mode", "Count mode", true);
+            app_setting_notice_result("settings.mode", UI_N_("Count mode"), true);
             page_01_mode_switch_refre();
             page_01_bottom_a_refresh_mode(true);
             page_01_curr_img_refre();
@@ -57,7 +58,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                 break;
             }
             uart_debug_printf("Set work mode fail\n");
-            app_setting_notice_result("settings.mode", "Count mode", false);
+            app_setting_notice_result("settings.mode", UI_N_("Count mode"), false);
         }
         else if (status == 0x03)
         {
@@ -94,7 +95,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                 break;
             }
             page_03_batch_set_result(true, &result);
-            app_setting_notice_result("settings.batch", "Batch", true);
+            app_setting_notice_result("settings.batch", UI_N_("Batch"), true);
             uart_debug_printf("Set batch num success\n");
             smart_island_refresh_summary();
         }
@@ -106,7 +107,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                 break;
             }
             page_03_batch_set_result(false, &result);
-            app_setting_notice_result("settings.batch", "Batch", false);
+            app_setting_notice_result("settings.batch", UI_N_("Batch"), false);
             uart_debug_printf("Set batch num fail\n");
         }
         else if (status == 0x03)
@@ -135,7 +136,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                 break;
             }
             machine_state_confirm_add(target);
-            app_setting_notice_result("settings.add", "ADD", true);
+            app_setting_notice_result("settings.add", UI_N_("ADD"), true);
             page_01_bottom_a_refresh_add(true);
             page_03_update_menu_button_states_refresh();
             uart_debug_printf("ADD set success\n");
@@ -146,7 +147,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                 break;
             }
             uart_debug_printf("ADD set failed\n");
-            app_setting_notice_result("settings.add", "ADD", false);
+            app_setting_notice_result("settings.add", UI_N_("ADD"), false);
             page_03_update_menu_button_states_refresh();
         } else if (sub == 0x02) {
             if (len < 7) break;
@@ -181,7 +182,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                 break;
             }
             machine_state_confirm_buzzer(target);
-            app_setting_notice_result("settings.sound", "Sound", true);
+            app_setting_notice_result("settings.sound", UI_N_("Sound"), true);
             uart_debug_printf("BEEP set success\n");
             page_03_update_menu_button_states_refresh();
         } else if (sub == 0x02) {
@@ -190,7 +191,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                 break;
             }
             uart_debug_printf("BEEP set failed\n");
-            app_setting_notice_result("settings.sound", "Sound", false);
+            app_setting_notice_result("settings.sound", UI_N_("Sound"), false);
             page_03_update_menu_button_states_refresh();
         } else if (sub == 0x03) {
             if (len < 7) break;
@@ -217,7 +218,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                     break;
                 }
                 machine_state_confirm_speed(target_speed);
-            app_setting_notice_result("settings.speed", "Speed", true);
+            app_setting_notice_result("settings.speed", UI_N_("Speed"), true);
                 page_03_update_menu_button_states_refresh();
                 page_01_bottom_c_refresh_speed(true);
                 page_01_speed_refre();
@@ -231,7 +232,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                 }
                 page_03_update_menu_button_states_refresh();
                 uart_debug_printf("SPEED set FAIL: type=0x%02X\n", type);
-                app_setting_notice_result("settings.speed", "Speed", false);
+                app_setting_notice_result("settings.speed", UI_N_("Speed"), false);
             } else {
                 uart_debug_printf("SPEED set UNKNOWN result: type=0x%02X, res=0x%02X\n", type, res);
             }
@@ -278,7 +279,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                     break;
                 }
                 machine_state_confirm_fo_mode(target_mode);
-            app_setting_notice_result("settings.sorting", "Sorting", true);
+            app_setting_notice_result("settings.sorting", UI_N_("Sorting"), true);
                 page_01_bottom_a_refresh_fo(true);
                 page_03_update_menu_button_states_refresh();
                 uart_debug_printf("FO set SUCCESS: type=0x%02X -> ui=%u\n", type, machine_state_fo_mode());
@@ -289,7 +290,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                     break;
                 }
                 uart_debug_printf("FO set FAIL: type=0x%02X\n", type);
-                app_setting_notice_result("settings.sorting", "Sorting", false);
+                app_setting_notice_result("settings.sorting", UI_N_("Sorting"), false);
                 page_03_update_menu_button_states_refresh();
             } else {
                 uart_debug_printf("FO set UNKNOWN result: type=0x%02X, res=0x%02X\n", type, val);

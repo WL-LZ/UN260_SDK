@@ -1,12 +1,18 @@
 cmake_minimum_required(VERSION 3.12)
 
 project(test_lvgl)
+set(UN260_I18N_SOURCES
+    un260/lv_system/ui_lang.c
+    un260/lv_system/ui_i18n.c
+    un260/storage/ui_locale_store.c
+    i18n/generated/lv_i18n.c)
 add_executable(un260_unpack tools/un260_unpack.c)
 target_link_libraries(un260_unpack z)
 install(TARGETS un260_unpack RUNTIME DESTINATION bin)
 add_executable(un260_storage_sync tools/un260_storage_sync.c)
 install(TARGETS un260_storage_sync RUNTIME DESTINATION bin)
-add_executable(un260_upgrade_display un260/lv_drivers/boot_light.c un260/lv_system/backlight_service.c)
+add_executable(un260_upgrade_display un260/lv_drivers/boot_light.c un260/lv_system/backlight_service.c
+    un260/lv_system/ui_update_message.c ${UN260_I18N_SOURCES})
 target_compile_definitions(un260_upgrade_display PRIVATE UN260_UPDATE_DISPLAY=1)
 target_link_libraries(un260_upgrade_display z)
 install(TARGETS un260_upgrade_display RUNTIME DESTINATION bin)
@@ -30,6 +36,32 @@ find_program(UN260_ASSET_PYTHON NAMES python3 PATHS /usr/bin /usr/local/bin NO_D
 if(NOT UN260_ASSET_PYTHON)
     message(FATAL_ERROR "python3 + Pillow required for UN260 image conversion")
 endif()
+execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_update_messages.py --check
+                RESULT_VARIABLE UPDATE_MESSAGE_RESULT)
+if(NOT UPDATE_MESSAGE_RESULT EQUAL 0)
+    message(FATAL_ERROR "Updater display catalogue needs refresh")
+endif()
+execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_i18n.py --check
+                RESULT_VARIABLE I18N_RESULT)
+if(NOT I18N_RESULT EQUAL 0)
+    message(FATAL_ERROR "Language catalogue validation failed; regenerate with tools/gen_i18n.py")
+endif()
+execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_visible_text.py --check
+                RESULT_VARIABLE VISIBLE_TEXT_RESULT)
+if(NOT VISIBLE_TEXT_RESULT EQUAL 0)
+    message(FATAL_ERROR "Visible UI text bypasses the language boundary")
+endif()
+file(GLOB_RECURSE UN260_I18N_INPUTS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/i18n/*")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${UN260_I18N_INPUTS}
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_i18n.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_update_messages.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_visible_text.py")
+# Check source markers on incremental builds too, even when CMake inputs did
+# not change. This runs on the host only; firmware lookup has no file I/O.
+add_custom_target(un260_i18n_check
+    COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_update_messages.py --check
+    COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_i18n.py --check
+    COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_visible_text.py --check)
 execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/build_boot_light_assets.py
                 RESULT_VARIABLE BOOT_LIGHT_ASSET_RESULT)
 if(NOT BOOT_LIGHT_ASSET_RESULT EQUAL 0)
@@ -315,7 +347,10 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_system/ui_state_store.c
     un260/lv_system/ui_state_runtime.c
     un260/lv_system/lv_str.c
-    un260/lv_system/ui_lang.c
+    ${UN260_I18N_SOURCES}
+    un260/lv_system/ui_message.c
+    un260/lv_system/ui_update_message.c
+    un260/lv_system/ui_report_i18n.c
     un260/lv_system/ui_text_page.c
     un260/lv_system/ui_text_widget.c
     un260/lv_system/ui_qr_data.c
@@ -484,6 +519,8 @@ add_executable(${PROJECT_NAME} main.c
 )
 
 # Find libts for link
+add_dependencies(${PROJECT_NAME} un260_i18n_check)
+add_dependencies(un260_upgrade_display un260_i18n_check)
 if ( ${USE_RTP_TSLIB} STREQUAL "yes")
 	add_definitions(-DUSE_RTP_TSLIB)
 	find_library(LIBTS libts.so)
@@ -523,6 +560,8 @@ endif()
 add_definitions(-DLVGL_DIR="L:${CMAKE_INSTALL_FULL_DATAROOTDIR}/lvgl_data/")
 
 if(DEFINED CMAKE_INSTALL_FULL_DATAROOTDIR)
+    install(FILES tools/vendor/lv_i18n-LICENSE
+        DESTINATION ${CMAKE_INSTALL_FULL_DATAROOTDIR}/lvgl_data/licenses RENAME lv_i18n-MIT.txt)
     install(FILES aic_ui/font/message/OFL.txt
         DESTINATION ${CMAKE_INSTALL_FULL_DATAROOTDIR}/lvgl_data/licenses RENAME Message-CJK-OFL.txt)
 	install(FILES aic_ui/font/Roboto-OFL.txt aic_ui/font/OoohBaby-OFL.txt

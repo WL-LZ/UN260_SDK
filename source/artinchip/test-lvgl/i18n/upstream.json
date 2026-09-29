@@ -1,0 +1,12 @@
+{
+  "package": "lv_i18n",
+  "version": "0.2.1",
+  "git_commit": "8bf1fd3ab37251667be11f27efcadb1ae8cd3e25",
+  "url": "https://registry.npmjs.org/lv_i18n/-/lv_i18n-0.2.1.tgz",
+  "sha256": "e5861672ebb1a109a08444e98f11e7ba440658b29f9bebf99274fce6367b36eb",
+  "patches": [
+    "Const phrase tables and bounded binary search with generated lengths",
+    "INT32_MIN-safe plural absolute-value conversion and unused-operand annotation",
+    "Explicit immutable-pack singular lookup for captured export locales"
+  ]
+}

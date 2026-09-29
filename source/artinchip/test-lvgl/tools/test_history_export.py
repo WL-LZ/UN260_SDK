@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from test_i18n_support import with_i18n
 
 ROOT = Path(__file__).resolve().parents[1]
 compiler = os.environ.get("CC") or shutil.which("cc") or shutil.which("gcc")
@@ -19,6 +20,7 @@ with tempfile.TemporaryDirectory(prefix="un260-history-export-") as directory:
         includes += ["-I" + dependency_root]
     subprocess.run([compiler, "-std=c11", "-D_POSIX_C_SOURCE=200809L", "-O1", "-g", "-Wall", "-Wextra", "-Werror",
                     *includes,
+                    *(str(p) for p in with_i18n([ROOT / "un260/lv_system/ui_report_i18n.c"], ROOT)),
                     str(ROOT / "tools/test_history_export.c"),
                     str(ROOT / "un260/history/history_record_detail.c"),
                     str(ROOT / "un260/history/history_export_sn_parser.c"),

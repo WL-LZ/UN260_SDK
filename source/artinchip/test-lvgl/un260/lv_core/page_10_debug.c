@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "page_10_debug.h"
@@ -63,7 +64,7 @@ static void debug_page_context_reset(void)
 static const char *kb_hex_map[] = {
     "1","2","3","4","5","6","\n",
     "7","8","9","0","A","B","\n",
-    "C","D","E","F","Delete","Clear",""
+    "C","D","E","F",UI_N_("Delete"),UI_N_("Clear"),""
 };
 
 /* ---------- 自动添加空格逻辑 ---------- */
@@ -84,9 +85,9 @@ static void kb_hex_event_cb(lv_event_t* e) {
     if (txt == NULL) {
         return;
     }
-    if (strcmp(txt, "Clear") == 0) {
+    if (btn_id == 17U) {
         lv_textarea_set_text(g_debug_page.input, "FD DF ");
-    } else if (strcmp(txt, "Delete") == 0) {
+    } else if (btn_id == 16U) {
         int length = (int)strlen(lv_textarea_get_text(g_debug_page.input));
         if (length > 6) {
             char input[192];
@@ -179,16 +180,16 @@ static void btn_send_event_cb(lv_event_t* e)
     uint8_t frame[64];
     int len = hex_str_to_bytes(cmd_str, frame, sizeof(frame));
     if (len < PROTOCOL_FRAME_MIN_SIZE) {
-        append_log("ERR", "Frame too short", "FFAAA3");
+        append_log(ui_tr("ERR"), ui_tr("Frame too short"), "FFAAA3");
         return;
     }
 
     if (!protocol_frame_is_valid(frame, (size_t)len)) {
-        append_log("ERR", "Invalid frame or length", "FFAAA3");
+        append_log(ui_tr("ERR"), ui_tr("Invalid frame or length"), "FFAAA3");
         return;
     }
     if (frame[len - 1] != PROTOCOL_FRAME_TRAILER) {
-        append_log("ERR", "Invalid frame trailer", "FFAAA3");
+        append_log(ui_tr("ERR"), ui_tr("Invalid frame trailer"), "FFAAA3");
         return;
     }
 
@@ -199,13 +200,13 @@ static void btn_send_event_cb(lv_event_t* e)
     if (cmd_g == 0x38 || cmd_g == 0x52 || cmd_g == 0x53 || cmd_g == 0x54 ||
         cmd_g == 0x5B || cmd_g == 0x5F || cmd_g == 0x46 || cmd_g == 0xC0 ||
         cmd_g == 0x0A) {
-        append_log("ERR", "Use the dedicated test controls for this command", "FFAAA3");
+        append_log(ui_tr("ERR"), ui_tr("Use the dedicated test controls for this command"), "FFAAA3");
         return;
     }
 
     /* ===== 调用真实发送 ===== */
     if (protocol_send(cmd_g, cmd_s, cmd_s_len) < 0) {
-        append_log("ERR", "Send failed", "FFAAA3");
+        append_log(ui_tr("ERR"), ui_tr("Send failed"), "FFAAA3");
         return;
     }
 
@@ -214,7 +215,7 @@ static void btn_send_event_cb(lv_event_t* e)
     g_debug_page.tx_count++;
     if (g_debug_page.tx_count_label &&
         lv_obj_is_valid(g_debug_page.tx_count_label)) {
-        lv_label_set_text_fmt(g_debug_page.tx_count_label, "TX: %u",
+        lv_label_set_text_fmt(g_debug_page.tx_count_label, ui_tr("TX: %u"),
                               g_debug_page.tx_count);
     }
 
@@ -240,16 +241,16 @@ static void btn_clear_log_event_cb(lv_event_t* e) {
     g_debug_page.rx_count = 0;
     if (g_debug_page.tx_count_label &&
         lv_obj_is_valid(g_debug_page.tx_count_label)) {
-        lv_label_set_text(g_debug_page.tx_count_label, "TX: 0");
+        lv_label_set_text(g_debug_page.tx_count_label, ui_tr("TX: 0"));
     }
     if (g_debug_page.rx_count_label &&
         lv_obj_is_valid(g_debug_page.rx_count_label)) {
-        lv_label_set_text(g_debug_page.rx_count_label, "RX: 0");
+        lv_label_set_text(g_debug_page.rx_count_label, ui_tr("RX: 0"));
     }
 }
 
 static void debug_log_show_toast(const char *text,ui_notice_kind_t kind)
-{ui_notice_post(kind,"debug.export","Debug log",text);}
+{ui_notice_post_text(kind,"debug.export",UI_N_("Debug log"),text);}
 
 static void btn_download_log_event_cb(lv_event_t* e)
 {
@@ -267,13 +268,13 @@ static void btn_download_log_event_cb(lv_event_t* e)
 
     result = ui_export_text_lines("comm_log", lines, line_count);
     if (result == UI_EXPORT_TEXT_OK) {
-        debug_log_show_toast(ui_text_get(UI_TEXT_DEBUG_DOWNLOAD_SUCCESS), UI_NOTICE_SUCCESS);
+        debug_log_show_toast(ui_text_msgid(UI_TEXT_DEBUG_DOWNLOAD_SUCCESS), UI_NOTICE_SUCCESS);
     } else if (result == UI_EXPORT_TEXT_EMPTY) {
-        debug_log_show_toast(ui_text_get(UI_TEXT_DEBUG_NO_LOG), UI_NOTICE_WARNING);
+        debug_log_show_toast(ui_text_msgid(UI_TEXT_DEBUG_NO_LOG), UI_NOTICE_WARNING);
     } else if (result == UI_EXPORT_TEXT_USB_NOT_READY) {
-        debug_log_show_toast(ui_text_get(UI_TEXT_WIDGET_SCREENSHOT_INSERT_USB), UI_NOTICE_WARNING);
+        debug_log_show_toast(ui_text_msgid(UI_TEXT_WIDGET_SCREENSHOT_INSERT_USB), UI_NOTICE_WARNING);
     } else {
-        debug_log_show_toast(ui_text_get(UI_TEXT_DEBUG_DOWNLOAD_FAILED), UI_NOTICE_ERROR);
+        debug_log_show_toast(ui_text_msgid(UI_TEXT_DEBUG_DOWNLOAD_FAILED), UI_NOTICE_ERROR);
     }
 }
 
@@ -412,8 +413,8 @@ static void debug_tick(lv_timer_t *timer)
     mode_retry_refresh();
     bool ready=work_mode_service_diagnostic_ready();
     if(ready)settings_detail_action_block(send_button, NULL);
-    else settings_detail_action_block(send_button, work_mode_service_status_text());
-    const char *message=ready?"HEX commands are sent directly to the controller.":work_mode_service_status_text();
+    else settings_detail_action_block(send_button, work_mode_service_status_msgid());
+    const char *message=ready?ui_tr("HEX commands are sent directly to the controller."):work_mode_service_status_text();
     if(strcmp(lv_label_get_text(debug_frame.message),message))lv_label_set_text(debug_frame.message,message);
 }
 void page_10_back_btn_event_cb(lv_event_t *e)
@@ -424,15 +425,15 @@ void ui_page_10_debug_create(void)
 {
     if(page_debug)return;
     debug_page_context_reset();lv_debug_overlay_init();
-    lv_settings_header_t header={"Debug","About & security / Service tools",NULL,page_10_back_btn_event_cb,NULL};
+    lv_settings_header_t header={ui_tr("Debug"),ui_tr("About & security / Service tools"),NULL,page_10_back_btn_event_cb,NULL};
     debug_frame=lv_settings_frame_create(lv_scr_act(),&header);page_debug=debug_frame.root;
     settings_detail_add_run(page_debug);
     lv_obj_set_style_bg_opa(debug_frame.body,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(debug_frame.body,0,0);
     lv_obj_t *tabs=lv_settings_box(page_debug,230,15,390,46,LV_SETTINGS_CONTROL_SURFACE);
     lv_obj_set_style_radius(tabs,12,0);
-    debug_tabs[0]=lv_settings_button(tabs,3,3,226,40,"Communication",false,debug_tab,(void *)0);
-    debug_tabs[1]=lv_settings_button(tabs,229,3,158,40,"Tools",false,debug_tab,(void *)1);
+    debug_tabs[0]=lv_settings_button(tabs,3,3,226,40,ui_tr("Communication"),false,debug_tab,(void *)0);
+    debug_tabs[1]=lv_settings_button(tabs,229,3,158,40,ui_tr("Tools"),false,debug_tab,(void *)1);
     lv_obj_set_style_bg_color(debug_tabs[0],lv_color_white(),0);
     lv_obj_set_style_bg_color(debug_tabs[1],lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),0);
 
@@ -454,8 +455,11 @@ void ui_page_10_debug_create(void)
     lv_obj_set_style_radius(g_debug_page.input,10,0);
     lv_obj_set_style_pad_all(g_debug_page.input,12,0);
     lv_obj_set_size(g_debug_page.input,454,48);
-    send_button=lv_settings_button(input_panel,480,14,136,48,"Send",true,btn_send_event_cb,NULL);
+    send_button=lv_settings_button(input_panel,480,14,136,48,ui_tr("Send"),true,btn_send_event_cb,NULL);
     g_debug_page.keyboard=lv_btnmatrix_create(input_panel);
+    /* LVGL map includes row separators; button actions use logical indices. */
+    kb_hex_map[18] = ui_tr("Delete");
+    kb_hex_map[19] = ui_tr("Clear");
     lv_btnmatrix_set_map(g_debug_page.keyboard,kb_hex_map);
     lv_obj_remove_style_all(g_debug_page.keyboard);
     lv_obj_set_pos(g_debug_page.keyboard,8,73);lv_obj_set_size(g_debug_page.keyboard,614,163);
@@ -472,10 +476,10 @@ void ui_page_10_debug_create(void)
 
     lv_obj_t *log=lv_settings_box(communication_view,646,0,586,242,0xFFFFFF);
     lv_obj_set_style_radius(log,14,0);
-    lv_settings_label(log,"Communication log",16,19,&lv_font_instrument_sans_medium_18,0x1D2B34);
-    g_debug_page.tx_count_label=lv_settings_label(log,"TX: 0",246,22,&lv_font_instrument_sans_medium_14,0x586B78);
-    g_debug_page.rx_count_label=lv_settings_label(log,"RX: 0",340,22,&lv_font_instrument_sans_medium_14,0x586B78);
-    lv_settings_button(log,466,8,104,44,"Clear",false,btn_clear_log_event_cb,NULL);
+    lv_settings_label(log,ui_tr("Communication log"),16,19,&lv_font_instrument_sans_medium_18,0x1D2B34);
+    g_debug_page.tx_count_label=lv_settings_label(log,ui_tr("TX: 0"),246,22,&lv_font_instrument_sans_medium_14,0x586B78);
+    g_debug_page.rx_count_label=lv_settings_label(log,ui_tr("RX: 0"),340,22,&lv_font_instrument_sans_medium_14,0x586B78);
+    lv_settings_button(log,466,8,104,44,ui_tr("Clear"),false,btn_clear_log_event_cb,NULL);
     g_debug_page.log_area=lv_settings_box(log,16,62,554,164,0x1D2B34);
     lv_obj_set_style_radius(g_debug_page.log_area,10,0);
     lv_obj_add_flag(g_debug_page.log_area,LV_OBJ_FLAG_SCROLLABLE|LV_OBJ_FLAG_CLICKABLE);
@@ -488,13 +492,13 @@ void ui_page_10_debug_create(void)
 
     tools_view=lv_settings_box(debug_frame.body,0,0,1232,242,0);
     lv_obj_set_style_bg_opa(tools_view,LV_OPA_TRANSP,0);
-    debug_switch_card(tools_view,0,0,"Screenshots","Save a capture to USB using the screenshot shortcut.",user_cfg_screenshot_enabled(),screenshot_switch_event_cb);
-    debug_switch_card(tools_view,624,0,"Screen recording","Enable recording controls. Turning off stops recording.",user_cfg_screen_recording_enabled(),screen_recording_switch_event_cb);
-    debug_switch_card(tools_view,0,127,"Performance monitor","Show live rendering and system statistics.",user_cfg_performance_monitor_enabled(),performance_monitor_switch_event_cb);
-    debug_switch_card(tools_view,624,127,"Performance profile","Enable detailed performance sampling for diagnosis.",user_cfg_performance_profile_enabled(),performance_profile_switch_event_cb);
+    debug_switch_card(tools_view,0,0,ui_tr("Screenshots"),ui_tr("Save a capture to USB using the screenshot shortcut."),user_cfg_screenshot_enabled(),screenshot_switch_event_cb);
+    debug_switch_card(tools_view,624,0,ui_tr("Screen recording"),ui_tr("Enable recording controls. Turning off stops recording."),user_cfg_screen_recording_enabled(),screen_recording_switch_event_cb);
+    debug_switch_card(tools_view,0,127,ui_tr("Performance monitor"),ui_tr("Show live rendering and system statistics."),user_cfg_performance_monitor_enabled(),performance_monitor_switch_event_cb);
+    debug_switch_card(tools_view,624,127,ui_tr("Performance profile"),ui_tr("Enable detailed performance sampling for diagnosis."),user_cfg_performance_profile_enabled(),performance_profile_switch_event_cb);
     lv_obj_add_flag(tools_view,LV_OBJ_FLAG_HIDDEN);
-    export_button=lv_settings_button(debug_frame.footer,1050,0,182,46,"Export log",false,btn_download_log_event_cb,NULL);
-    mode_retry_button=lv_settings_button(debug_frame.footer,904,0,130,46,"Retry",false,mode_retry_clicked,NULL);
+    export_button=lv_settings_button(debug_frame.footer,1050,0,182,46,ui_tr("Export log"),false,btn_download_log_event_cb,NULL);
+    mode_retry_button=lv_settings_button(debug_frame.footer,904,0,130,46,ui_tr("Retry"),false,mode_retry_clicked,NULL);
     lv_obj_add_flag(mode_retry_button,LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_width(debug_frame.message,884);
     debug_timer=lv_timer_create(debug_tick,200,NULL);debug_tick(NULL);
@@ -523,7 +527,7 @@ void debug_append_rx_log(const char* data) {
     g_debug_page.rx_count++;
     if (g_debug_page.rx_count_label &&
         lv_obj_is_valid(g_debug_page.rx_count_label)) {
-        lv_label_set_text_fmt(g_debug_page.rx_count_label, "RX: %u",
+        lv_label_set_text_fmt(g_debug_page.rx_count_label, ui_tr("RX: %u"),
                               g_debug_page.rx_count);
     }
 }

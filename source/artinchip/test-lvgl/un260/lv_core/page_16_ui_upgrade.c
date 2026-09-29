@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "page_16_ui_upgrade.h"
@@ -40,30 +41,30 @@ static bool package_ready(void)
 
 static const char *preparation_text(void)
 {
-    if (!page.detected.usb_present) return "Insert the USB drive containing the UI update package.";
-    if (!page.detected.usb_mounted) return "The USB drive is detected but not mounted. Check the drive and reconnect it.";
-    if (!page.detected.package_found) return "No UI update package was found on this USB drive.";
+    if (!page.detected.usb_present) return ui_tr("Insert the USB drive containing the UI update package.");
+    if (!page.detected.usb_mounted) return ui_tr("The USB drive is detected but not mounted. Check the drive and reconnect it.");
+    if (!page.detected.package_found) return ui_tr("No UI update package was found on this USB drive.");
     if (page.detected.package_hash_status == UI_UPGRADE_PACKAGE_HASH_ERROR)
-        return "The update package could not be verified. Check the file and try again.";
-    if (!package_ready()) return "Waiting for package verification.";
+        return ui_tr("The update package could not be verified. Check the file and try again.");
+    if (!package_ready()) return ui_tr("Waiting for package verification.");
     if (page.detected.package_hash_status == UI_UPGRADE_PACKAGE_HASH_MATCH)
-        return "This package matches the installed version. Start only if you want to reinstall it.";
-    return "The update package is ready. Keep power and the USB drive connected.";
+        return ui_tr("This package matches the installed version. Start only if you want to reinstall it.");
+    return ui_tr("The update package is ready. Keep power and the USB drive connected.");
 }
 
 static const char *stage_title(ui_upgrade_stage_t stage)
 {
     switch (stage) {
-    case UI_UPGRADE_STAGE_PREPARE: return "Preparing update";
-    case UI_UPGRADE_STAGE_VERIFY: return "Verifying package";
-    case UI_UPGRADE_STAGE_EXTRACT: return "Unpacking package";
-    case UI_UPGRADE_STAGE_PREFLIGHT: return "Checking requirements";
-    case UI_UPGRADE_STAGE_INSTALL: return "Installing update";
-    case UI_UPGRADE_STAGE_SYNC: return "Writing changes";
-    case UI_UPGRADE_STAGE_FINISH: return "Finishing update";
-    case UI_UPGRADE_STAGE_SUCCESS: return "Update complete";
-    case UI_UPGRADE_STAGE_FAIL: return "Update not completed";
-    default: return "Waiting for update status";
+    case UI_UPGRADE_STAGE_PREPARE: return ui_tr("Preparing update");
+    case UI_UPGRADE_STAGE_VERIFY: return ui_tr("Verifying package");
+    case UI_UPGRADE_STAGE_EXTRACT: return ui_tr("Unpacking package");
+    case UI_UPGRADE_STAGE_PREFLIGHT: return ui_tr("Checking requirements");
+    case UI_UPGRADE_STAGE_INSTALL: return ui_tr("Installing update");
+    case UI_UPGRADE_STAGE_SYNC: return ui_tr("Writing changes");
+    case UI_UPGRADE_STAGE_FINISH: return ui_tr("Finishing update");
+    case UI_UPGRADE_STAGE_SUCCESS: return ui_tr("Update complete");
+    case UI_UPGRADE_STAGE_FAIL: return ui_tr("Update not completed");
+    default: return ui_tr("Waiting for update status");
     }
 }
 
@@ -72,41 +73,41 @@ static void render(void)
     if (!page.frame.root) return;
     bool running = page.actual.running;
     bool finished = page.actual.finished && !running;
-    const char *title = page.uncertain ? "Update result unknown" :
-        page.blocked ? "Another update is active" : page.start_error ? "Update could not start" :
+    const char *title = page.uncertain ? ui_tr("Update result unknown") :
+        page.blocked ? ui_tr("Another update is active") : page.start_error ? ui_tr("Update could not start") :
         running || finished ? stage_title(page.actual.stage) :
-        package_ready() ? "Ready to update" : "Prepare an update package";
+        package_ready() ? ui_tr("Ready to update") : ui_tr("Prepare an update package");
     const char *detail = page.uncertain ?
         (page.actual.result_text[0] ? page.actual.result_text :
-         "The updater process result could not be confirmed. Keep power connected.") :
-        page.blocked ? "Wait for the other update to finish. Its result may still be unknown." :
-        page.start_error ? page.start_error :
+         ui_tr("The updater process result could not be confirmed. Keep power connected.")) :
+        page.blocked ? ui_tr("Wait for the other update to finish. Its result may still be unknown.") :
+        page.start_error ? ui_tr(page.start_error) :
         finished ? page.actual.result_text :
         running ? page.actual.step_text : preparation_text();
     if (!detail[0]) detail = finished ?
-        (page.actual.success ? "The update completed successfully." : "The update did not complete. Check the package.") :
-        "Waiting for the updater to report its next step.";
+        (page.actual.success ? ui_tr("The update completed successfully.") : ui_tr("The update did not complete. Check the package.")) :
+        ui_tr("Waiting for the updater to report its next step.");
     uint32_t tone = page.uncertain ? 0x946321 :
         page.start_error || (finished && !page.actual.success) ? 0xB1393E :
         finished ? 0x287953 : 0x1D2B34;
     lv_label_set_text(page.phase, title);
     lv_obj_set_style_text_color(page.phase, lv_color_hex(tone), 0);
     lv_label_set_text(page.status, detail);
-    lv_label_set_text(page.usb, !page.detected.usb_present ? "Not connected" :
-        page.detected.usb_mounted ? "Connected" : "Not mounted");
-    lv_label_set_text(page.package, !page.detected.package_found ? "Not found" :
-        page.detected.package_hash_status == UI_UPGRADE_PACKAGE_HASH_MATCH ? "Same as installed" :
-        page.detected.package_hash_status == UI_UPGRADE_PACKAGE_HASH_DIFFERENT ? "Update available" :
-        page.detected.package_hash_status == UI_UPGRADE_PACKAGE_HASH_ERROR ? "Cannot verify" : "Not verified");
-    if (running || page.blocked || !package_ready()) settings_detail_action_block(page.start, running ? "The update is in progress. Keep power connected." : page.blocked ? "Resolve the update error before starting another update." : "Insert a USB drive containing a valid update package.");
+    lv_label_set_text(page.usb, !page.detected.usb_present ? ui_tr("Not connected") :
+        page.detected.usb_mounted ? ui_tr("Connected") : ui_tr("Not mounted"));
+    lv_label_set_text(page.package, !page.detected.package_found ? ui_tr("Not found") :
+        page.detected.package_hash_status == UI_UPGRADE_PACKAGE_HASH_MATCH ? ui_tr("Same as installed") :
+        page.detected.package_hash_status == UI_UPGRADE_PACKAGE_HASH_DIFFERENT ? ui_tr("Update available") :
+        page.detected.package_hash_status == UI_UPGRADE_PACKAGE_HASH_ERROR ? ui_tr("Cannot verify") : ui_tr("Not verified"));
+    if (running || page.blocked || !package_ready()) settings_detail_action_block(page.start, running ? UI_N_("The update is in progress. Keep power connected.") : page.blocked ? UI_N_("Resolve the update error before starting another update.") : UI_N_("Insert a USB drive containing a valid update package."));
     else settings_detail_action_block(page.start, NULL);
-    if (running) settings_detail_action_block(page.frame.back, running ? "The update is in progress. Keep power connected." : page.blocked ? "Resolve the update error before starting another update." : "Insert a USB drive containing a valid update package.");
+    if (running) settings_detail_action_block(page.frame.back, running ? UI_N_("The update is in progress. Keep power connected.") : page.blocked ? UI_N_("Resolve the update error before starting another update.") : UI_N_("Insert a USB drive containing a valid update package."));
     else settings_detail_action_block(page.frame.back, NULL);
     lv_label_set_text(page.frame.message, page.uncertain ?
-        "Update result unknown. Keep power connected." : running ?
-        "Keep power connected. Do not remove the USB drive." :
-        finished && page.actual.success ? "Restart the device to use the updated UI." :
-        "The update package is kept on the USB drive.");
+        ui_tr("Update result unknown. Keep power connected.") : running ?
+        ui_tr("Keep power connected. Do not remove the USB drive.") :
+        finished && page.actual.success ? ui_tr("Restart the device to use the updated UI.") :
+        ui_tr("The update package is kept on the USB drive."));
 
     int progress = page.actual.progress < 0 ? 0 : page.actual.progress > 100 ? 100 : page.actual.progress;
     /* Only the updater may advance progress. No independent animation or timer. */
@@ -190,9 +191,9 @@ static void request_back(bool home)
     if (page.actual.running || lv_upgrade_popup_is_showing() || settings_detail_overlay_is_open()) return;
     page.home_requested = home;
     if (page.uncertain) {
-        settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING, "Leave update status?",
-            "The result is unknown. Leaving does not stop the update. Keep the machine powered on.",
-            "Leave page", "Keep waiting", leave_page, NULL, NULL);
+        settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING, ui_tr("Leave update status?"),
+            ui_tr("The result is unknown. Leaving does not stop the update. Keep the machine powered on."),
+            ui_tr("Leave page"), ui_tr("Keep waiting"), leave_page, NULL, NULL);
     } else leave_page(NULL);
 }
 
@@ -222,7 +223,7 @@ static void start_clicked(lv_event_t *event)
     if (page.actual.running || page.blocked || lv_upgrade_popup_is_showing()) return;
     page.have_detected = false;
     refresh(NULL);
-    if (!package_ready()) { ui_notice_post(UI_NOTICE_WARNING,"upgrade.ui","Update package unavailable","Check the USB drive and package.");render();return; }
+    if (!package_ready()) { ui_notice_post_text(UI_NOTICE_WARNING,"upgrade.ui",UI_N_("Update package unavailable"),UI_N_("Check the USB drive and package."));render();return; }
     ui_upgrade_service_reset();
     memset(&page.actual, 0, sizeof(page.actual));
     page.have_status = false;
@@ -230,15 +231,15 @@ static void start_clicked(lv_event_t *event)
     page.start_error = NULL;
     switch (result) {
     case UI_UPGRADE_START_OK: result_presented = false; break;
-    case UI_UPGRADE_START_BUSY: page.start_error = "Another update is still running. Wait for its result."; break;
-    case UI_UPGRADE_START_SCRIPT_NOT_FOUND: page.start_error = "The UI updater is unavailable. Contact service support."; break;
-    case UI_UPGRADE_START_PACKAGE_NOT_READY: page.start_error = "The update package is not ready. Check the USB drive and file."; break;
-    case UI_UPGRADE_START_STATUS_CLEANUP_FAILED: page.start_error = "Previous update status could not be cleared. Contact service support."; break;
-    case UI_UPGRADE_START_FORK_FAILED: page.start_error = "The updater could not start. Try again when the device is idle."; break;
+    case UI_UPGRADE_START_BUSY: page.start_error = UI_N_("Another update is still running. Wait for its result."); break;
+    case UI_UPGRADE_START_SCRIPT_NOT_FOUND: page.start_error = UI_N_("The UI updater is unavailable. Contact service support."); break;
+    case UI_UPGRADE_START_PACKAGE_NOT_READY: page.start_error = UI_N_("The update package is not ready. Check the USB drive and file."); break;
+    case UI_UPGRADE_START_STATUS_CLEANUP_FAILED: page.start_error = UI_N_("Previous update status could not be cleared. Contact service support."); break;
+    case UI_UPGRADE_START_FORK_FAILED: page.start_error = UI_N_("The updater could not start. Try again when the device is idle."); break;
     }
-    if(result!=UI_UPGRADE_START_OK)ui_notice_post(
+    if(result!=UI_UPGRADE_START_OK)ui_notice_post_text(
         result==UI_UPGRADE_START_BUSY||result==UI_UPGRADE_START_PACKAGE_NOT_READY?UI_NOTICE_WARNING:UI_NOTICE_ERROR,
-        "upgrade.ui","UI update not started",page.start_error);
+        "upgrade.ui",UI_N_("UI update not started"),page.start_error);
     refresh(NULL);
     render();
 }
@@ -246,14 +247,14 @@ static void start_clicked(lv_event_t *event)
 void ui_page_16_ui_upgrade_create(lv_obj_t *parent)
 {
     if (page.frame.root) return;
-    lv_settings_header_t header = {.title = "UI update", .subtitle = "Data / Upgrade",
+    lv_settings_header_t header = {.title = ui_tr("UI update"), .subtitle = ui_tr("Data / Upgrade"),
         .back = back_clicked};
     page.frame = lv_settings_frame_create(parent, &header);
     lv_obj_set_style_bg_opa(page.frame.body, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(page.frame.body, 0, 0);
     lv_obj_t *media = lv_settings_panel(page.frame.body, 0, 0, 404, 242);
-    lv_settings_label(media, "Update source", 22, 18, &lv_font_instrument_sans_semibold_18, 0x1D2B34);
-    const char *names[] = {"USB drive", "UI package", "Installed version"};
+    lv_settings_label(media, ui_tr("Update source"), 22, 18, &lv_font_instrument_sans_semibold_18, 0x1D2B34);
+    const char *names[] = {ui_tr("USB drive"), ui_tr("UI package"), ui_tr("Installed version")};
     lv_obj_t **values[] = {&page.usb, &page.package, &page.installed};
     for (unsigned i = 0; i < 3; ++i) {
         int y = 67 + 57 * i;
@@ -265,7 +266,7 @@ void ui_page_16_ui_upgrade_create(lv_obj_t *parent)
         if (i < 2) lv_settings_box(media, 22, y + 34, 360, 1, 0xE3E9ED);
     }
     const char *version = device_info_display_app();
-    lv_label_set_text(page.installed, version && version[0] ? version : "Not received");
+    lv_label_set_text(page.installed, version && version[0] ? version : ui_tr("Not received"));
     lv_obj_t *workflow = lv_settings_panel(page.frame.body, 420, 0, 812, 242);
     page.phase = lv_settings_label(workflow, "", 24, 21, &lv_font_instrument_sans_semibold_22, 0x1D2B34);
     page.status = lv_settings_label(workflow, "", 24, 59, &lv_font_instrument_sans_medium_16, 0x586B78);
@@ -284,7 +285,7 @@ void ui_page_16_ui_upgrade_create(lv_obj_t *parent)
     lv_obj_set_style_radius(page.progress, 3, LV_PART_INDICATOR);
     page.percent = lv_settings_label(workflow, "0%", 734, 107, &lv_font_instrument_sans_medium_16, 0x586B78);
     lv_obj_set_width(page.percent, 54); lv_obj_set_style_text_align(page.percent, LV_TEXT_ALIGN_RIGHT, 0);
-    const char *stages[] = {"Prepare", "Installing", "Result"};
+    const char *stages[] = {ui_tr("Prepare"), ui_tr("Installing"), ui_tr("Result")};
     for (unsigned i = 0; i < 3; ++i) {
         page.steps[i] = lv_settings_box(workflow, 24 + 258 * i, 155, 248, 58, 0xF1F4F5);
         lv_obj_set_style_radius(page.steps[i], 10, 0);
@@ -293,7 +294,7 @@ void ui_page_16_ui_upgrade_create(lv_obj_t *parent)
         lv_obj_center(label);
     }
     page.start = lv_settings_button(page.frame.footer, 1062, 0, 170, 44,
-        "Start update", true, start_clicked, NULL);
+        ui_tr("Start update"), true, start_clicked, NULL);
     gesture_service_set_page_policy(UI_PAGE_UI_UPGRADE, NULL, guard_gesture);
     refresh(NULL);
     page.timer = lv_timer_create(refresh, 200, NULL);

@@ -30,17 +30,19 @@ static uint32_t lifetime(ui_notice_kind_t kind, uint32_t requested)
     if (kind == UI_NOTICE_PROGRESS) return 0;
     if (requested) return requested;
     switch (kind) {
-    case UI_NOTICE_ERROR: return 7500;
-    case UI_NOTICE_WARNING: return 6500;
-    case UI_NOTICE_INFO: return 4500;
-    default: return 3600;
+    case UI_NOTICE_ERROR: return 3750;
+    case UI_NOTICE_WARNING: return 3250;
+    case UI_NOTICE_INFO: return 2250;
+    default: return 1800;
     }
 }
 
 static bool same_content(const ui_notice_item_t *a, const ui_notice_item_t *b)
 {
     return a->kind == b->kind && strcmp(a->title, b->title) == 0 &&
-           strcmp(a->detail, b->detail) == 0;
+           strcmp(a->detail, b->detail) == 0 && a->localized == b->localized &&
+           a->has_message == b->has_message &&
+           (!a->has_message || ui_message_equal(&a->message,&b->message));
 }
 
 static bool same_slot(const ui_notice_item_t *a, const ui_notice_item_t *b)
@@ -132,6 +134,8 @@ bool ui_notice_state_post(ui_notice_state_t *state, const ui_notice_config_t *co
     copy_text(item.key, sizeof(item.key), config->key);
     copy_text(item.title, sizeof(item.title), config->title);
     copy_text(item.detail, sizeof(item.detail), config->detail);
+    item.localized=config->localized;
+    if(config->message){item.has_message=true;item.message=*config->message;}
     item.remaining_ms = lifetime(item.kind, config->duration_ms);
     item.repeats = 1;
     if (item.kind == UI_NOTICE_PROGRESS && item.key[0]) {

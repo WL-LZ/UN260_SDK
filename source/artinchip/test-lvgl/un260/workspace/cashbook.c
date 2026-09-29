@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_i18n.h"
 #include "cashbook.h"
 #include <stdio.h>
 #include <string.h>
@@ -81,17 +82,17 @@ static unsigned overlap(const cashbook_result_t *a,const cashbook_result_t *b)
 }
 bool cashbook_apply(cashbook_t *b,const cashbook_command_t *c,char *reason,unsigned capacity)
 {
-    if(!b||!c)return fail(reason,capacity,"Invalid operation.");
+    if(!b||!c)return fail(reason,capacity,UI_N_("Invalid operation."));
     cashbook_group_t *g=(cashbook_group_t *)cashbook_group(b,c->group);
     cashbook_run_t *r=(cashbook_run_t *)cashbook_run(b,c->run);
     if(c->operation==CASHBOOK_INGEST){
-        if(!result_valid(&c->result))return fail(reason,capacity,"Incomplete or invalid result metadata.");
+        if(!result_valid(&c->result))return fail(reason,capacity,UI_N_("Incomplete or invalid result metadata."));
         const cashbook_run_t *previous=NULL;
         for(unsigned i=0;i<b->run_count;i++)if(b->runs[i].result.source==c->result.source){
             previous=&b->runs[i];
             if(!memcmp(&previous->result,&c->result,sizeof(c->result)))return true;
         }
-        if(b->run_count==CASHBOOK_RUNS||b->group_count==CASHBOOK_RUNS)return fail(reason,capacity,"Record storage is full. Export and archive closed days before more counts.");
+        if(b->run_count==CASHBOOK_RUNS||b->group_count==CASHBOOK_RUNS)return fail(reason,capacity,UI_N_("Record storage is full. Export and archive closed days before more counts."));
         uint32_t day=b->business_day?b->business_day:c->result.day;
         if(previous){g=(cashbook_group_t *)cashbook_group(b,previous->group);day=g->day;}
         /* A closed day is frozen. Late data waits unassigned for an explicit decision. */
@@ -118,22 +119,22 @@ bool cashbook_apply(cashbook_t *b,const cashbook_command_t *c,char *reason,unsig
             if(min>=3&&overlap(&other->result,&r->result)*100>=min*80){r->candidate=other->group;g->review=true;break;}
         }
     }else if(c->operation==CASHBOOK_SET_DAY){
-        if(!cashbook_day_valid(c->day)||cashbook_closed(b,c->day))return fail(reason,capacity,"Choose a valid, open business date.");
+        if(!cashbook_day_valid(c->day)||cashbook_closed(b,c->day))return fail(reason,capacity,UI_N_("Choose a valid, open business date."));
         b->business_day=c->day;
         for(unsigned i=0;i<b->group_count;i++)if(!b->groups[i].day&&!b->groups[i].confirmed)b->groups[i].day=c->day;
     }else if(c->operation==CASHBOOK_CONFIRM_SINGLES){
-        if(!cashbook_day_valid(c->day)||cashbook_closed(b,c->day))return fail(reason,capacity,"Choose a valid, open business date.");
+        if(!cashbook_day_valid(c->day)||cashbook_closed(b,c->day))return fail(reason,capacity,UI_N_("Choose a valid, open business date."));
         unsigned confirmed=0;uint16_t attempts[CASHBOOK_RUNS]={0};
         for(unsigned i=0;i<b->run_count;i++)if(b->runs[i].group&&b->runs[i].group<=CASHBOOK_RUNS)attempts[b->runs[i].group-1]++;
         for(unsigned i=0;i<b->group_count;i++){
             cashbook_group_t *single=&b->groups[i];const cashbook_run_t *selected=cashbook_run(b,single->selected);
             if(single->day==c->day&&!single->excluded&&!single->confirmed&&!single->review&&attempts[i]==1&&selected&&selected->result.complete&&!selected->candidate){single->confirmed=true;confirmed++;}
         }
-        if(!confirmed)return fail(reason,capacity,"No complete, unambiguous single counts need confirmation. Review recounts individually.");
+        if(!confirmed)return fail(reason,capacity,UI_N_("No complete, unambiguous single counts need confirmation. Review recounts individually."));
     }else if(c->operation==CASHBOOK_CLOSE){
-        if(!cashbook_day_valid(c->day)||cashbook_closed(b,c->day)||b->close_count==CASHBOOK_CLOSES)return fail(reason,capacity,"Check the business date and available close slots.");
+        if(!cashbook_day_valid(c->day)||cashbook_closed(b,c->day)||b->close_count==CASHBOOK_CLOSES)return fail(reason,capacity,UI_N_("Check the business date and available close slots."));
         cashbook_money_t money[CASHBOOK_CURRENCIES];unsigned n,confirmed,pending;
-        if(!cashbook_totals(b,c->day,money,&n,&confirmed,&pending)||pending||!confirmed)return fail(reason,capacity,"Resolve every pending count before closing this day.");
+        if(!cashbook_totals(b,c->day,money,&n,&confirmed,&pending)||pending||!confirmed)return fail(reason,capacity,UI_N_("Resolve every pending count before closing this day."));
         cashbook_close_t *close=&b->closes[b->close_count];memset(close,0,sizeof(*close));
         close->id=b->close_count+1;close->day=c->day;close->operator_id=c->operator_id;close->revision=1;close->current=true;close->currencies=n;
         memcpy(close->money,money,sizeof(money));
@@ -142,37 +143,37 @@ bool cashbook_apply(cashbook_t *b,const cashbook_command_t *c,char *reason,unsig
         b->close_count++;if(b->business_day==c->day)b->business_day=0;
     }else if(c->operation==CASHBOOK_REOPEN){
         bool found=false;for(unsigned i=0;i<b->close_count;i++)if(b->closes[i].day==c->day&&b->closes[i].current){b->closes[i].current=false;found=true;}
-        if(!found)return fail(reason,capacity,"This day is not closed.");
+        if(!found)return fail(reason,capacity,UI_N_("This day is not closed."));
     }else{
-        if(!g||cashbook_closed(b,g->day))return fail(reason,capacity,"Reopen the closed day before changing a result.");
+        if(!g||cashbook_closed(b,g->day))return fail(reason,capacity,UI_N_("Reopen the closed day before changing a result."));
         switch(c->operation){
         case CASHBOOK_CONFIRM: case CASHBOOK_SELECT:
-            if(!r||r->group!=g->id||!r->result.complete||!cashbook_day_valid(g->day))return fail(reason,capacity,"Choose a complete result and a valid business date first.");
+            if(!r||r->group!=g->id||!r->result.complete||!cashbook_day_valid(g->day))return fail(reason,capacity,UI_N_("Choose a complete result and a valid business date first."));
             g->selected=r->id;g->confirmed=true;g->review=false;g->excluded=false;
             for(unsigned i=0;i<b->run_count;i++)if(b->runs[i].group==g->id)b->runs[i].candidate=0;
             break;
         case CASHBOOK_MERGE:{
-            if(!r||r->group==g->id||g->excluded)return fail(reason,capacity,"Choose a different, active destination group.");
+            if(!r||r->group==g->id||g->excluded)return fail(reason,capacity,UI_N_("Choose a different, active destination group."));
             cashbook_group_t *source=(cashbook_group_t *)cashbook_group(b,r->group);
-            if(source->day!=g->day||cashbook_closed(b,source->day)||source->confirmed)return fail(reason,capacity,"Only an unconfirmed group in this day can be attached.");
+            if(source->day!=g->day||cashbook_closed(b,source->day)||source->confirmed)return fail(reason,capacity,UI_N_("Only an unconfirmed group in this day can be attached."));
             for(unsigned i=0;i<b->run_count;i++)if(b->runs[i].group==source->id){b->runs[i].group=g->id;b->runs[i].candidate=0;}
             source->excluded=true;source->review=false;g->review=true;
             for(unsigned i=0;i<b->run_count;i++)if(b->runs[i].candidate==source->id)b->runs[i].candidate=g->id;
             break;}
         case CASHBOOK_SPLIT:
-            if(!r||r->group!=g->id||cashbook_attempts(b,g->id)<2||b->group_count==CASHBOOK_RUNS)return fail(reason,capacity,"Choose one result from a recount group.");
+            if(!r||r->group!=g->id||cashbook_attempts(b,g->id)<2||b->group_count==CASHBOOK_RUNS)return fail(reason,capacity,UI_N_("Choose one result from a recount group."));
             b->groups[b->group_count]=(cashbook_group_t){.id=b->group_count+1,.day=g->day,.selected=r->id};
             r->group=++b->group_count;r->candidate=0;
             if(g->selected==r->id){g->confirmed=false;for(unsigned i=0;i<b->run_count;i++)if(b->runs[i].group==g->id){g->selected=b->runs[i].id;break;}}
             g->review=true;break;
         case CASHBOOK_EXCLUDE:g->excluded=true;g->confirmed=false;g->review=false;break;
-        case CASHBOOK_RESTORE:if(!cashbook_attempts(b,g->id))return fail(reason,capacity,"This group was merged. Split its result from the destination instead.");g->excluded=false;g->confirmed=false;g->review=true;break;
+        case CASHBOOK_RESTORE:if(!cashbook_attempts(b,g->id))return fail(reason,capacity,UI_N_("This group was merged. Split its result from the destination instead."));g->excluded=false;g->confirmed=false;g->review=true;break;
         case CASHBOOK_ASSIGN_DAY:
-            if(g->confirmed||!cashbook_day_valid(c->day)||cashbook_closed(b,c->day))return fail(reason,capacity,"Choose an open date for an unconfirmed count.");
+            if(g->confirmed||!cashbook_day_valid(c->day)||cashbook_closed(b,c->day))return fail(reason,capacity,UI_N_("Choose an open date for an unconfirmed count."));
             g->day=c->day;g->review=true;break;
-        default:return fail(reason,capacity,"Unsupported operation.");
+        default:return fail(reason,capacity,UI_N_("Unsupported operation."));
         }
     }
-    if(b->sequence==UINT32_MAX)return fail(reason,capacity,"Ledger sequence exhausted.");
-    b->sequence++;if(reason&&capacity)snprintf(reason,capacity,"Saved. Counting results are unchanged.");return true;
+    if(b->sequence==UINT32_MAX)return fail(reason,capacity,UI_N_("Ledger sequence exhausted."));
+    b->sequence++;if(reason&&capacity)snprintf(reason,capacity,UI_N_("Saved. Counting results are unchanged."));return true;
 }

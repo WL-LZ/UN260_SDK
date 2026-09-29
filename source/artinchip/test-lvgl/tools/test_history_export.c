@@ -197,6 +197,10 @@ int main(int argc, char **argv)
     assert(strstr(html, "data-target=\"300\""));
     assert(strstr(html, "data-sn=\"A&lt;&amp;&quot;123\""));
     assert(strstr(html, "savedRejectPcs:4,rejectDetails:[{no:1,pcs:4,reason:\"UV\"}]"));
+    char *catalog = strstr(html,"<script>(function(){'use strict';const text=");
+    assert(catalog && strstr(catalog,"</body></html>"));
+    assert(strstr(catalog,"window.reportLocale=\"en\""));
+    *catalog = '\0'; /* Dictionary entries are not rendered historical evidence. */
     assert(!strstr(html, "Suspect Notes") && !strstr(html, "Damaged Notes"));
     assert(!strstr(html, "All notes passed validation"));
     assert(!strstr(html, "BAT:OFF"));
@@ -235,6 +239,15 @@ int main(int argc, char **argv)
     assert(strstr(html,"<h2>USD</h2>") && strstr(html,"<h2>CNY</h2>"));
     assert(strstr(html,"Details incomplete; totals preserved"));
     free(csv);free(html);cleanup_outputs();unlock_and_reset();
+    ui_lang_set(LANGUAGE_CN);
+    assert(ui_history_export_data_request_records(ids,1));
+    csv=read_all(test_paths[0][0]);html=read_all(test_paths[0][1]);
+    assert(strstr(html,"window.reportLocale=\"zh-Hans\""));
+    assert(strstr(html,"data-i18n=\"ADD\""));
+    assert(strstr(html,"<h2>USD</h2>")&&strstr(html,"<h2>CNY</h2>"));
+    assert(strstr(html,ui_tr("Amount"))); /* Export dictionary uses the frozen locale. */
+    assert(strstr(csv,"Currency,\"USD\"")&&strstr(csv,"Detail status,Incomplete"));
+    free(csv);free(html);cleanup_outputs();unlock_and_reset();ui_lang_set(LANGUAGE_EN);
     memset(&rec->multi,0,sizeof(rec->multi));memcpy(rec->currency,"USD",4);
 
     test_store.records[1] = *rec;

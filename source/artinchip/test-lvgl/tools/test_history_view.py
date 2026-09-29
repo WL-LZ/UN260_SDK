@@ -4,6 +4,7 @@
 The store and external actions are in-memory stubs. No device, real history,
 USB mount or firmware write is used. This is not a board touch/GE validation.
 """
+from test_i18n_support import with_i18n, lvgl_source
 import argparse
 import os
 from pathlib import Path
@@ -108,7 +109,8 @@ def main():
                    *(ROOT / f"un260/font/lv_font_{f}.c" for f in fonts),
                    *sorted(p for p in (lvgl / "src").rglob("*.c") if p.name != "qrcodegen.c")]
         executable = work / "test-history-view"
-        command = [compiler, "-std=c11", "-O1", "-g", "-Wall", "-Wextra",
+        sources = with_i18n(sources, ROOT)
+        command = [compiler, "-D_GNU_SOURCE", '-DUI_STATE_DIR="/tmp/un260-i18n-tests"', "-std=c11", "-O1", "-g", "-Wall", "-Wextra",
                    "-DLV_DRV_CONF_H", '-DLVGL_DIR="L:/usr/local/share/lvgl_data/"',
                    "-fsanitize=address,undefined" if args.asan else "-fsanitize=undefined", "-fno-sanitize-recover=all",
                    f"-I{work}", f"-I{ROOT}", f"-I{lvgl}", f"-DLV_CONF_PATH={conf}",

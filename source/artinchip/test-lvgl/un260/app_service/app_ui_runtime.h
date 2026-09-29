@@ -15,6 +15,7 @@ typedef enum {
 
 /* Register only after a user-requested async service operation was accepted.
  * The global UI runtime owns its final notice even if the page is hidden. */
+/* detail is a static source message ID, resolved when the notice is drawn. */
 void app_ui_runtime_notice_started(app_ui_notice_operation_t operation,
                                    const char *detail);
 
