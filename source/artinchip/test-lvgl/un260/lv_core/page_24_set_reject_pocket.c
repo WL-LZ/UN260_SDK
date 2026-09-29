@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #include "page_24_set_reject_pocket.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "un260/lv_core/settings_detail_ui.h"
@@ -38,11 +39,11 @@ static void request_capacity(uint8_t capacity)
     uint8_t previous = machine_state_reject_pocket_max();
     if (capacity == previous) return;
     if (!setting_service_request_reject_pocket_max(capacity, previous)) {
-        lv_label_set_text(frame.message, "Could not send the change. Please try again.");
+        ui_notice_post(UI_NOTICE_ERROR,"settings.reject_pocket","Reject pocket","Request not sent. Try again.");
         return;
     }
     pending = true;
-    /* Keep the footer stable during short ACK round trips; selection is locked. */
+    ui_notice_post(UI_NOTICE_PROGRESS,"settings.reject_pocket","Reject pocket","Waiting for controller...");
     refresh();
 }
 
@@ -53,8 +54,7 @@ static void keyboard_done(const char *value, void *user_data)
     char *end;
     long capacity = strtol(value, &end, 10);
     if (*end || capacity < REJECT_POCKET_MIN_CAPACITY || capacity > REJECT_POCKET_MAX_CAPACITY) {
-        lv_label_set_text_fmt(frame.message, "Enter a capacity from %u to %u.",
-            REJECT_POCKET_MIN_CAPACITY, REJECT_POCKET_MAX_CAPACITY);
+        ui_notice_post(UI_NOTICE_WARNING,"settings.reject_pocket","Invalid capacity","Enter 30-100 notes.");
         return;
     }
     request_capacity((uint8_t)capacity);
@@ -106,7 +106,7 @@ void ui_page_24_set_reject_pocket_create(lv_obj_t *parent)
         lv_snprintf(text, sizeof(text), "%u", 30 + i * 10);
         presets[i] = lv_settings_segment(base,i,8,text,choose,(void *)(uintptr_t)(30+i*10));
     }
-    lv_label_set_text(frame.message, pending ? "Waiting for controller." : "Select a capacity to apply.");
+    lv_label_set_text(frame.message, "");
     refresh();
 }
 
@@ -132,7 +132,5 @@ void ui_page_24_set_reject_pocket_on_reply(const setting_value_result_t *result)
     if (!result) return;
     pending = false;
     refresh();
-    const char *message=result->success ? "Capacity confirmed." :
-        result->timeout ? "No confirmation received. Previous capacity retained." : "Change rejected. Previous capacity retained.";
-    if(frame.message&&strcmp(lv_label_get_text(frame.message),message))lv_label_set_text(frame.message,message);
+
 }

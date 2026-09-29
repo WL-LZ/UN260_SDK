@@ -1,3 +1,4 @@
+#include "test_notice_sink.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include <assert.h>
 #include <stdio.h>

@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #include "page_27_set_cfd_level.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "un260/lv_core/settings_detail_ui.h"
@@ -45,7 +46,7 @@ static void refresh(void)
     if(loading && ready && loading_cycle_done){
         lv_obj_del(loading);loading=loading_text=loading_orbit=NULL;
         lv_obj_clear_flag(rows,LV_OBJ_FLAG_HIDDEN);
-        lv_label_set_text(frame.message,"Levels confirmed. Select a channel level to edit.");
+        lv_label_set_text(frame.message,"");
     }else if(loading && !busy && !ready){
         if(loading_orbit){lv_obj_del(loading_orbit);loading_orbit=NULL;}
         lv_label_set_text(loading_text,"Levels unavailable. Use Retry at the top.");
@@ -87,8 +88,7 @@ static void query(void)
     if(!loading_timer)loading_cycle_done=true;
     lv_label_set_text_fmt(currency_label, "%s / Profiles", code);
     bool sent = cfd_service_request_query(code);
-    lv_label_set_text(frame.message, sent ? "Reading levels from controller..." :
-        "Could not read levels. Retry to enable editing.");
+    if(!sent)ui_notice_post(UI_NOTICE_ERROR,"settings.cfd","Detection levels unavailable","Could not send request. Use Retry.");
     refresh();
 }
 
@@ -150,11 +150,11 @@ static void save(lv_event_t *event)
 {
     if (lv_event_get_code(event) != LV_EVENT_CLICKED || !dirty() || cfd_service_busy()) return;
     if (!cfd_service_request_update(&draft, selected_scene)) {
-        lv_label_set_text(frame.message, "Could not send levels. Your changes are kept.");
+        ui_notice_post(UI_NOTICE_ERROR,"settings.cfd","Levels not sent","Your changes are kept. Try again.");
         return;
     }
     saving = true;
-    /* Preserve the footer through short ACK round trips; controls stay locked. */
+    ui_notice_post(UI_NOTICE_PROGRESS,"settings.cfd","Detection levels","Applying levels...");
     refresh();
 }
 
@@ -196,7 +196,7 @@ void ui_page_27_set_cfd_level_create(lv_obj_t *parent)
         ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE), true, save, NULL);
     gesture_service_set_page_policy(UI_PAGE_CFD_LEVEL_SETTING, NULL, gesture);
     if (saving) {
-        lv_label_set_text(frame.message, "Waiting for controller.");
+        lv_label_set_text(frame.message, "");
         refresh();
     } else query();
 }
@@ -231,24 +231,25 @@ void ui_page_27_set_cfd_level_on_info(const uint8_t *data, uint16_t len)
         }
     if (!cfd_service_take_query_result(config.currency) &&
         !cfd_service_take_update_result(&config, (uint8_t)(data[3] - 1))) return;
+    bool was_saving=saving;
     cfd_state_confirm(&config);
     saving = false;
+    if(was_saving)ui_notice_post(UI_NOTICE_SUCCESS,"settings.cfd","Detection levels saved",NULL);
     if (!frame.root) return;
     original = draft = config;
     selected_scene = original_scene = data[3] - 1;
     ready = true;
     lv_label_set_text_fmt(currency_label, "%s / Profiles", config.currency);
     refresh();
-    if(!loading)lv_label_set_text(frame.message, "Levels confirmed. Select a channel level to edit.");
+    if(!loading)lv_label_set_text(frame.message, "");
 }
 
 void ui_page_27_set_cfd_level_on_request_failed(void)
 {
     bool was_saving = saving;
     saving = false;
+    if(was_saving||frame.root)ui_notice_post(UI_NOTICE_WARNING,"settings.cfd",was_saving?"Levels unconfirmed":"Detection levels unavailable",
+        was_saving?"No reply. Your changes are kept; check before retrying.":"No reply. Use Retry to load levels.");
     if (!frame.root) return;
     refresh();
-    lv_label_set_text(frame.message, was_saving ?
-        "No confirmation received. Your changes are kept; retry Update." :
-        "Could not read levels. Retry to enable editing.");
 }

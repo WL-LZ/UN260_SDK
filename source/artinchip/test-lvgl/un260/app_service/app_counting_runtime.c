@@ -131,9 +131,7 @@ static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t le
         counting_data_mark_multi_result(counting_data_mutable());
     page_02_list_report_reset();
     page_01_curr_img_refre();
-    hide_counting_error_popup();
-    fault_popup_clear_pending();
-    fault_popup_reset_auto_retry();
+    fault_popup_clear_runtime();
     counting_history_session_start(buf, len);
     app_auto_qr_on_start();
     if (multi_pass_verification_is_active()) {
@@ -169,20 +167,6 @@ static void app_counting_runtime_on_error_frame(const char *tag,
     counting_history_capture_error(tag, buf, len);
 }
 
-static const char *app_counting_runtime_start_ui_error_desc(uint8_t code)
-{
-    const char *description;
-
-    if (code == 0x00) {
-        return ui_text_get(UI_TEXT_WIDGET_FAULT_NO_NOTE_MAIN);
-    }
-    description = machine_start_error_desc(code);
-    if (description != NULL) {
-        return description;
-    }
-    return ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_COUNT_ERROR);
-}
-
 static void app_counting_runtime_on_start_failure(uint8_t type, uint8_t code)
 {
     char status[160];
@@ -200,9 +184,7 @@ static void app_counting_runtime_on_start_failure(uint8_t type, uint8_t code)
         description = "No banknotes detected";
         fault_popup_report_start_no_note();
         uart_debug_printf("0x0A start fail (no note)\n");
-        smart_island_notify_warning_level(
-            ui_text_get(UI_TEXT_WIDGET_FAULT_NO_NOTE_MAIN),
-            SMART_ISLAND_WARNING_LEVEL_WARNING);
+
     } else if (type == 0x01 || type == 0x02) {
         description = get_counting_error_desc(type, code);
         fault_popup_report_start_fault(type, code);
@@ -210,9 +192,7 @@ static void app_counting_runtime_on_start_failure(uint8_t type, uint8_t code)
                               ? "0x0A start fail (normal): val=%02X desc=%s\n"
                               : "0x0A start fail (fault): code=%02X desc=%s\n",
                           code, description);
-        smart_island_notify_warning_level(
-            app_counting_runtime_start_ui_error_desc(code),
-            SMART_ISLAND_WARNING_LEVEL_ERROR);
+
     } else {
         smart_island_notify_warning_level(
             ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_COUNT_ERROR),
@@ -234,12 +214,7 @@ static void app_counting_runtime_on_start_failure(uint8_t type, uint8_t code)
 
 static void app_counting_runtime_notice(const char *text)
 {
-    lv_print_toast_config_t config = lv_print_toast_get_default_config();
-    config.text = text;
-    config.x = 380; config.y = 342; config.w = 520; config.h = 46;
-    config.show_loader = false;
-    config.auto_hide_ms = 3500;
-    lv_print_toast_show_with_config(&config);
+    ui_notice_post(UI_NOTICE_WARNING,"counting.report","Counting report",text);
 }
 
 void app_counting_runtime_poll_reports(const counting_session_state_t *session,
@@ -258,10 +233,7 @@ static void app_counting_runtime_on_runtime_fault(uint8_t code)
     static uint32_t last_notice_tick;
     if (code == 0x00) {
         last_notice = 0;
-        hide_fault_popup();
-        fault_popup_clear_pending();
-        fault_popup_reset_auto_retry();
-        system_error_state_reset();
+        fault_popup_clear_runtime();
         smart_island_restore_idle();
         return;
     }
@@ -279,8 +251,7 @@ static void app_counting_runtime_on_runtime_fault(uint8_t code)
     fault_popup_report_runtime_fault(code);
     uart_debug_printf("0x0F fault=0x%02X %s\n",
                       code, get_system_error_desc(code));
-    smart_island_notify_warning_level(get_system_error_desc(code),
-                                      SMART_ISLAND_WARNING_LEVEL_ERROR);
+
 }
 
 static const counting_control_reply_hooks_t g_counting_control_hooks = {

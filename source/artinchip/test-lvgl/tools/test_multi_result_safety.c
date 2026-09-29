@@ -1,3 +1,5 @@
+#include "un260/lv_components/ui_notice.h"
+#include "un260/lv_components/lv_fault_popup.h"
 #include <assert.h>
 #include <stddef.h>
 #include "un260/storage/workspace_store.h"
@@ -32,12 +34,6 @@ static bool history_available = true;
 static const char *last_toast;
 
 typedef struct { int code; } lv_event_t;
-typedef struct {
-    int x, w, h;
-    const char *text;
-    bool show_loader, align_center, use_text_area;
-    uint32_t loader_color, auto_hide_ms;
-} lv_print_toast_config_t;
 #define LV_EVENT_CLICKED 1
 #define lv_color_hex(value) (value)
 #define lv_snprintf snprintf
@@ -46,11 +42,8 @@ typedef struct {
 #define UI_EXPORT_TOAST_TEXT_EXPORT_FAILED "Export failed"
 static bool g_ui_export_data_lock;
 static int lv_event_get_code(lv_event_t *event) { return event->code; }
-static lv_print_toast_config_t lv_print_toast_get_default_config(void)
-{ return (lv_print_toast_config_t){ 0 }; }
-static void lv_print_toast_show_with_config(const lv_print_toast_config_t *config)
-{ toast_calls++; last_toast = config->text; }
-static void lv_print_toast_show(const char *text) { toast_calls++; last_toast = text; }
+void ui_notice_post(ui_notice_kind_t kind,const char *key,const char *title,const char *detail)
+{(void)kind;(void)key;toast_calls++;last_toast=detail?detail:title;}
 const char *ui_text_get(ui_text_id_t id)
 {
     switch (id) {
@@ -71,8 +64,6 @@ static int protocol_send(uint8_t command, const uint8_t *payload, uint16_t len)
     uart_calls++;
     return len;
 }
-static void ui_export_data_show_alarm_toast(const char *text) { last_toast = text; toast_calls++; }
-static void ui_export_data_show_normal_toast(const char *text) { last_toast = text; toast_calls++; }
 static bool ui_export_data_is_empty(void) { return counting_data_current()->total_pcs == 0; }
 static bool usb_storage_prepare(void) { usb_calls++; return true; }
 static void ui_export_data_start_lock(void) {}
@@ -175,8 +166,7 @@ static void translate(void) {}
 static void lv_recycled_list_refresh(void *list, uint32_t count, bool reset)
 { (void)list; (void)reset; last_row_count = count; }
 
-enum { SMART_ISLAND_SCENE_COUNTING, SMART_ISLAND_SCENE_RESULT, SMART_ISLAND_SCENE_WARNING,
-       SMART_ISLAND_SCENE_UPDATE, SMART_ISLAND_SCENE_QR, SMART_ISLAND_SCENE_IDLE };
+enum { SMART_ISLAND_SCENE_COUNTING, SMART_ISLAND_SCENE_RESULT, SMART_ISLAND_SCENE_IDLE };
 static struct {
     struct {
         char compact[128], info_title[128], info_summary[128], info_footer[128], info_extra[128];
@@ -185,16 +175,16 @@ static struct {
         int analysis_valid_pcs, analysis_suspect_pcs, analysis_damaged_pcs;
         uint8_t idle_quality_percent;
     } text;
-    struct { int scene; struct { const char *title, *subtitle; } content; } view;
+    struct { int scene; } view;
     struct { int pcs; } counting;
-    struct { const char *text; } warning;
 } g_si_ctx;
 static const char *smart_island_get_work_mode_text(void) { return "MDC"; }
 static uint8_t machine_state_mode(void) { return MODE_MDC; }
 static const char *smart_island_text_or_default(const char *text, ui_text_id_t id)
 { return text && text[0] ? text : ui_text_get(id); }
 static void smart_island_apply_texts(void) {}
-static void smart_island_show_qr_error_toast(const char *text) { last_toast = text; }
+bool fault_popup_get_pending_fault(fault_source_t *source,uint8_t *type,uint8_t *code)
+{(void)source;(void)type;(void)code;return false;}
 static unsigned qr_shows;
 static bool lv_qr_popup_show(const char *text) { assert(text[0]); qr_shows++; return true; }
 
@@ -228,9 +218,6 @@ static void assert_texts_safe(void)
     snprintf(g_si_ctx.text.idle_line1, sizeof(g_si_ctx.text.idle_line1), "STALE AMOUNT 987654");
     smart_island_rebuild_scene_texts();
     assert(strcmp(g_si_ctx.text.info_summary, "MULTI 12 pcs") == 0);
-    g_si_ctx.view.scene = SMART_ISLAND_SCENE_QR;
-    smart_island_rebuild_scene_texts();
-    assert(strcmp(g_si_ctx.text.info_footer, "MULTI 12 pcs") == 0);
     smart_island_show_qr_popup();
     assert(strcmp(last_toast, "MULTI_UNSUPPORTED") == 0 && qr_shows == qr_before);
     g_pure_page.amount_value = NULL; g_pure_page.pcs_value = NULL; g_pure_page.reject_value = NULL;

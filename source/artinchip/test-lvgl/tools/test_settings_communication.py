@@ -9,6 +9,7 @@ import re
 import subprocess
 import tempfile
 import argparse
+import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[1])
@@ -50,6 +51,7 @@ code = r'''
 #include "un260/print/print_config.h"
 #include "un260/cfd/cfd.h"
 #include "un260/protocol/auxiliary_reply.h"
+#include "tools/test_notice_sink.h"
 static uint64_t now_ms;
 static int send_result;
 static unsigned sends, print_replies, boot_replies;
@@ -64,6 +66,9 @@ static void uart_debug_printf(const char *fmt, ...) { (void)fmt; }
 static void ui_page_20_set_print_on_reply(const print_config_request_result_t *r) {
     print_replies++; last_print=*r;
 }
+bool ui_page_20_set_print_is_saving(void) { return false; }
+void app_setting_notice_result(const char *key,const char *title,bool success)
+{ assert(key&&title);(void)success; }
 static void ui_page_20_set_print_on_boot_setting(const uint8_t *data, uint16_t len) {
     assert(data && len>=2); boot_replies++;
 }
@@ -274,9 +279,9 @@ with tempfile.TemporaryDirectory(prefix='un260-settings-communication-') as dire
                'un260/protocol/protocol_request.c', 'un260/protocol/auxiliary_reply.c',
                'un260/app_service/motor_test_service.c']
     for opt in ('-O0','-O2'):
-        binary = work/'test'
-        subprocess.run(['cc','-std=c11',opt,'-Wall','-Wextra','-Werror',
-                        '-fsanitize=undefined','-fno-sanitize-recover=all',
-                        '-I'+str(root),str(work/'test.c'),
-                        *[str(root/s) for s in sources],'-o',str(binary)], check=True)
+        binary = work/('test.exe' if os.name=='nt' else 'test')
+        command=[os.environ.get('CC','cc'),'-std=c11',opt,'-Wall','-Wextra','-Werror',
+                 '-I'+str(root),str(work/'test.c'),*[str(root/s) for s in sources],'-o',str(binary)]
+        if os.name!='nt':command+=['-fsanitize=undefined','-fno-sanitize-recover=all']
+        subprocess.run(command,check=True)
         subprocess.run([str(binary)],check=True)

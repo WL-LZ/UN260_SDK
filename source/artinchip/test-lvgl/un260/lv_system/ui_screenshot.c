@@ -1,7 +1,8 @@
+#include "un260/lv_components/ui_notice.h"
 #include "ui_screenshot.h"
+#include "lvgl/lvgl.h"
 
 #include "lv_fbdev.h"
-#include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/user_cfg.h"
 #include "un260/storage/usb_storage.h"
@@ -81,20 +82,8 @@ static ui_screenshot_result_t ui_screenshot_save_to_usb(void)
     return UI_SCREENSHOT_OK;
 }
 
-static void ui_screenshot_show_toast(const char* text, bool alarm)
-{
-    lv_print_toast_config_t toast_cfg = lv_print_toast_get_default_config();
-
-    toast_cfg.w = 360;
-    toast_cfg.h = 101;
-    toast_cfg.text = text;
-    toast_cfg.show_loader = false;
-    toast_cfg.align_center = true;
-    toast_cfg.use_text_area = false;
-    toast_cfg.loader_color = alarm ? lv_color_hex(0xC0392B) : lv_color_hex(0x18A66A);
-    toast_cfg.auto_hide_ms = 1800;
-    lv_print_toast_show_with_config(&toast_cfg);
-}
+static void ui_screenshot_show_toast(const char *text,ui_notice_kind_t kind)
+{ui_notice_post(kind,"capture.screenshot","Screenshot",text);}
 
 static void ui_screenshot_indicator_click_cb(lv_event_t* event)
 {
@@ -110,11 +99,11 @@ static void ui_screenshot_indicator_click_cb(lv_event_t* event)
     lv_obj_clear_flag(g_screenshot_indicator, LV_OBJ_FLAG_HIDDEN);
 
     if (result == UI_SCREENSHOT_OK) {
-        ui_screenshot_show_toast(ui_text_get(UI_TEXT_WIDGET_SCREENSHOT_SAVED), false);
+        ui_screenshot_show_toast(ui_text_get(UI_TEXT_WIDGET_SCREENSHOT_SAVED), UI_NOTICE_SUCCESS);
     } else if (result == UI_SCREENSHOT_USB_NOT_MOUNTED) {
-        ui_screenshot_show_toast(ui_text_get(UI_TEXT_WIDGET_SCREENSHOT_INSERT_USB), true);
+        ui_screenshot_show_toast(ui_text_get(UI_TEXT_WIDGET_SCREENSHOT_INSERT_USB), UI_NOTICE_WARNING);
     } else {
-        ui_screenshot_show_toast(ui_text_get(UI_TEXT_WIDGET_SCREENSHOT_SAVE_FAILED), true);
+        ui_screenshot_show_toast(ui_text_get(UI_TEXT_WIDGET_SCREENSHOT_SAVE_FAILED), UI_NOTICE_ERROR);
     }
 }
 

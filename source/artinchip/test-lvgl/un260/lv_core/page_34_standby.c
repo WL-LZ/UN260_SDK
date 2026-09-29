@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "page_34_standby.h"
 #include "un260/lv_resources/ui_icons.h"
@@ -19,7 +20,7 @@
 #include <math.h>
 LV_FONT_DECLARE(lv_font_standby_112);
 typedef struct {lv_obj_t *root,*group,*time,*date,*greeting,*image,*dial,*date_group,*dial_group;int photo,minute;bool small;uint32_t dial_ink;scaled_font_t clock_font,detail_font;uint8_t clock_pixels[32768],detail_pixels[2048];} scene_t;
-static lv_obj_t *page,*body,*note,*hex_label,*gallery,*edit_hint;
+static lv_obj_t *page,*body,*hex_label,*gallery,*edit_hint;
 static lv_timer_t *settings_timer,*clock_timer;
 static standby_config_t draft;
 static scene_t preview,full;
@@ -27,8 +28,6 @@ static int tab; /* home, timeout, date, appearance, position, text colour */
 static int selected;
 static struct {bool active;int item;lv_point_t origin[3];} moving;
 static bool redraw,saving;
-static uint32_t notice_tick;
-static bool notice_visible;
 static const uint32_t colors[]={0x14232D,0xEDF1EC,0x30243C};
 static const char*names[]={"Silver","Celadon","Champagne"};
 static void render(void);
@@ -151,7 +150,7 @@ static lv_obj_t*button(lv_obj_t*p,int x,int y,int w,const char*t,int id,bool act
 static void link_button(lv_obj_t*p,int x,int y,int w,const char*t,int id){lv_obj_t*b=button(p,x,y,w,t,id,false);lv_obj_set_style_bg_opa(b,0,0);lv_obj_set_style_bg_opa(b,255,LV_STATE_PRESSED);lv_obj_set_style_text_font(lv_obj_get_child(b,0),&lv_font_instrument_sans_medium_12,0);}
 static lv_obj_t* choice(lv_obj_t*p,int x,int y,int w,int h,const char*t,int id,bool selected,uint32_t bg){lv_obj_t*b=control(p,x,y,w,h,id,bg,selected?0x3B87E7:0xDCE4E9);lv_obj_t*l=label(b,t,0,0,&lv_font_instrument_sans_medium_14,0x293B44);lv_obj_center(l);return b;}
 static void toggle(lv_obj_t*p,int x,int y,int w,const char*t,int id,bool on){lv_obj_t*b=control(p,x,y,w,48,id,0xFFFFFF,0xE4EBEF);label(b,t,15,15,&lv_font_instrument_sans_medium_14,0x293B44);lv_obj_t*s=box(b,w-59,11,43,25,on?0x287CE5:0xDCE4E9);lv_obj_clear_flag(s,LV_OBJ_FLAG_CLICKABLE);lv_obj_set_style_radius(s,13,0);lv_obj_t*k=box(s,on?20:2,2,21,21,0xFFFFFF);lv_obj_clear_flag(k,LV_OBJ_FLAG_CLICKABLE);lv_obj_set_style_radius(k,11,0);}
-static void queue_save(void){if(standby_store_save(&draft)){saving=true;redraw=true;}else if(note){lv_label_set_text(note,"Could not start saving. Please try again.");lv_obj_clear_flag(note,LV_OBJ_FLAG_HIDDEN);}}
+static void queue_save(void){if(standby_store_save(&draft)){saving=true;redraw=true;ui_notice_post(UI_NOTICE_PROGRESS,"settings.standby","Standby settings","Saving...");}else ui_notice_post(UI_NOTICE_ERROR,"settings.standby","Standby settings not saved","Try again.");}
 static void discard(void*u){(void)u;draft=*standby_config();tab=0;redraw=true;}
 static bool owns_single_drag(void){return tab==4||standby_store_busy()||settings_detail_overlay_is_open();}
 static void discard_to_home(void*u){(void)u;ui_manager_suspend_to_home();}
@@ -166,9 +165,9 @@ static bool handle_gesture(gesture_action_t action){
 bool ui_page_34_standby_request_back(void){if(!page)return false;if(standby_store_busy()||settings_detail_overlay_is_open())return true;if(tab){if(memcmp(&draft,standby_config(),sizeof(draft)))settings_detail_dialog_show("Discard changes?","Your saved layout will not change.","Discard","Keep editing",discard,NULL,NULL);else{tab=0;redraw=true;}}else ui_manager_pop_page();return true;}
 static void reset_mode(void*u){(void)u;standby_config_t d;standby_defaults(&d);memcpy(draft.layout[draft.mode],d.layout[draft.mode],sizeof(d.layout[0]));draft.active[draft.mode]=0;queue_save();}
 static void delete_photo(void*u){(void)u;unsigned photo=layout()->photo;if(standby_store_delete(photo)){for(unsigned m=0;m<2;m++)for(unsigned i=0;i<3;i++)if(draft.layout[m][i].photo==photo){draft.layout[m][i].photo=1;draft.layout[m][i].scheduled=1;}redraw=true;}}
-static void timeout_input(const char*s,void*u){(void)u;char*end;long v=strtol(s,&end,10);if(!*s||*end||v<1||v>1440){settings_detail_dialog_show("Invalid duration","Enter 1 to 1440 minutes. Choose Never separately.","OK",NULL,NULL,NULL,NULL);return;}draft.minutes=v;redraw=true;}
-static void hex_input(const char*s,void*u){(void)u;if(*s=='#')s++;bool digits=true;for(const char*t=s;*t;t++)if(!isxdigit((unsigned char)*t))digits=false;char*end;unsigned long v=strtoul(s,&end,16);if(!digits||strlen(s)!=6||*end||v>0xFFFFFF){settings_detail_dialog_show("Invalid colour","Enter exactly six hexadecimal digits, e.g. EAF0F3.","OK",NULL,NULL,NULL,NULL);return;}if(tab==5){if(draft.mode&&layout()->auto_text)return;layout()->text_color=v;}else layout()->color=v;redraw=true;}
-static void action(lv_event_t*e){int id=(int)(intptr_t)lv_event_get_user_data(e);if(standby_store_busy()){settings_detail_dialog_show("Please wait","A file operation is in progress.","OK",NULL,NULL,NULL,NULL);return;}
+static void timeout_input(const char*s,void*u){(void)u;char*end;long v=strtol(s,&end,10);if(!*s||*end||v<1||v>1440){ui_notice_post(UI_NOTICE_WARNING,"settings.standby","Invalid duration","Enter 1-1440 minutes, or select Never.");return;}draft.minutes=v;redraw=true;}
+static void hex_input(const char*s,void*u){(void)u;if(*s=='#')s++;bool digits=true;for(const char*t=s;*t;t++)if(!isxdigit((unsigned char)*t))digits=false;char*end;unsigned long v=strtoul(s,&end,16);if(!digits||strlen(s)!=6||*end||v>0xFFFFFF){ui_notice_post(UI_NOTICE_WARNING,"settings.standby","Invalid colour","Enter six hexadecimal digits, e.g. EAF0F3.");return;}if(tab==5){if(draft.mode&&layout()->auto_text)return;layout()->text_color=v;}else layout()->color=v;redraw=true;}
+static void action(lv_event_t*e){int id=(int)(intptr_t)lv_event_get_user_data(e);if(standby_store_busy()){ui_notice_post(UI_NOTICE_WARNING,"settings.standby","Please wait","A file operation is in progress.");return;}
  if(id==1)ui_page_34_standby_request_back();
  else if(id==2)queue_save();
  else if(id==3){ui_manager_push_page(UI_PAGE_STANDBY);}
@@ -181,7 +180,7 @@ static void action(lv_event_t*e){int id=(int)(intptr_t)lv_event_get_user_data(e)
  else if(id==57){layout()->hour12^=1;redraw=true;}
  else if(id==58){layout()->greeting^=1;redraw=true;}
  else if(id>=60&&id<=62){layout()->color=colors[id-60];redraw=true;}
- else if(id==63){if(tab==5&&draft.mode&&layout()->auto_text){settings_detail_dialog_show("Automatic colour","Turn off Automatic black / white to edit your custom colour.","OK",NULL,NULL,NULL,NULL);return;}char hex[8];snprintf(hex,sizeof(hex),"%06X",tab==5?layout()->text_color:layout()->color);settings_detail_keyboard_show("HEX colour",hex,7,SETTINGS_DETAIL_KEYBOARD_TEXT,hex_input,NULL);}
+ else if(id==63){if(tab==5&&draft.mode&&layout()->auto_text){ui_notice_post(UI_NOTICE_INFO,"settings.standby","Automatic colour","Turn off Automatic black / white to edit this colour.");return;}char hex[8];snprintf(hex,sizeof(hex),"%06X",tab==5?layout()->text_color:layout()->color);settings_detail_keyboard_show("HEX colour",hex,7,SETTINGS_DETAIL_KEYBOARD_TEXT,hex_input,NULL);}
  else if(id==64){if(standby_store_import())redraw=true;}
  else if(id==66){tab=5;redraw=true;}
  else if(id==94){layout()->auto_text^=1;redraw=true;}
@@ -200,7 +199,7 @@ static void color_changed(lv_event_t*e){
 static void rgb_controls(lv_obj_t*parent,int top,uint32_t value,bool locked){
  for(int i=0;i<3;i++){label(parent,(const char*[]){"R","G","B"}[i],5,top-9+i*48,&lv_font_instrument_sans_medium_18,0x52758A);lv_obj_t*s=lv_slider_create(parent);lv_obj_set_pos(s,55,top+i*48);lv_obj_set_size(s,588,10);lv_obj_set_style_bg_color(s,lv_color_hex(0xDAE4EC),LV_PART_MAIN);lv_obj_set_style_bg_opa(s,255,LV_PART_MAIN);lv_obj_set_style_radius(s,5,LV_PART_MAIN);lv_obj_set_style_bg_color(s,lv_color_hex(locked?0xA8B6C2:0x287BE4),LV_PART_INDICATOR);lv_obj_set_style_bg_opa(s,255,LV_PART_INDICATOR);lv_obj_set_style_bg_color(s,lv_color_hex(0xFFFFFF),LV_PART_KNOB);lv_obj_set_style_bg_opa(s,255,LV_PART_KNOB);lv_obj_set_style_radius(s,LV_RADIUS_CIRCLE,LV_PART_KNOB);lv_obj_set_style_pad_all(s,9,LV_PART_KNOB);lv_obj_set_style_border_width(s,2,LV_PART_KNOB);lv_obj_set_style_border_color(s,lv_color_hex(locked?0xA8B6C2:0x287BE4),LV_PART_KNOB);lv_obj_set_ext_click_area(s,16);lv_slider_set_range(s,0,255);lv_slider_set_value(s,(value>>(16-i*8))&255,LV_ANIM_OFF);lv_obj_add_event_cb(s,color_changed,LV_EVENT_VALUE_CHANGED,(void*)(intptr_t)(16-i*8));if(locked)lv_obj_add_state(s,LV_STATE_DISABLED);}
 }
-static void render(void){lv_obj_clean(page);memset(&preview,0,sizeof(preview));moving.active=false;hex_label=NULL;note=NULL;gallery=NULL;edit_hint=NULL;notice_visible=false;
+static void render(void){lv_obj_clean(page);memset(&preview,0,sizeof(preview));moving.active=false;hex_label=NULL;gallery=NULL;edit_hint=NULL;
  if(tab==4){if((selected==2&&!draft.mode)||(selected==1&&!layout()->date_bits))selected=0;scene_create(&preview,page,0,0,false,true,&draft);button(page,390,345,100,"Left",90,false);button(page,500,345,100,"Centre",91,false);button(page,610,345,100,"Right",92,false);button(page,870,345,120,"Cancel",1,false);button(page,1000,345,190,"Save layout",2,true);editor_apply();return;}
  const char*titles[]={"Standby","Start after","Clock & date",draft.mode?"Colour palette":"Photo collection","Edit position","Text colour"};label(page,titles[tab],30,22,&lv_font_instrument_sans_medium_24,0x20303A);if(tab){char crumb[64];snprintf(crumb,sizeof(crumb),"%s / Layout %u",draft.mode?"Typographic":"Photo",draft.active[draft.mode]+1);label(page,crumb,305,31,&lv_font_instrument_sans_medium_12,0x627C8D);}
  button(page,986,16,132,tab?"Save":"Preview >",tab?2:3,true);
@@ -208,7 +207,6 @@ static void render(void){lv_obj_clean(page);memset(&preview,0,sizeof(preview));m
  button(page,1144,16,106,"< Back",1,false);
  scene_create(&preview,page,30,76,true,false,&draft);lv_obj_set_size(preview.root,520,163);lv_obj_set_style_radius(preview.root,16,0);lv_obj_set_style_clip_corner(preview.root,true,0);
  lv_obj_t*tag=box(preview.root,411,130,97,22,0xFFFFFF);lv_obj_clear_flag(tag,LV_OBJ_FLAG_CLICKABLE);lv_obj_set_style_radius(tag,7,0);label(tag,"LIVE PREVIEW",8,5,&lv_font_instrument_sans_medium_10,0x5C7480);
- note=label(page,standby_store_busy()?"Working... Please wait.":"",315,364,&lv_font_instrument_sans_medium_12,0x52758A);lv_obj_set_width(note,650);lv_obj_set_style_bg_color(note,lv_color_hex(0xFFFFFF),0);lv_obj_set_style_bg_opa(note,255,0);lv_obj_set_style_pad_all(note,7,0);lv_obj_set_style_radius(note,8,0);lv_obj_set_style_text_align(note,LV_TEXT_ALIGN_CENTER,0);if(!standby_store_busy())lv_obj_add_flag(note,LV_OBJ_FLAG_HIDDEN);
  body=box(page,574,76,676,296,0xF6F8FA);lv_obj_set_style_bg_opa(body,LV_OPA_TRANSP,0);
  standby_layout_t*p=layout();
  if(!tab){
@@ -242,11 +240,21 @@ gallery=box(body,0,140,676,156,0xF6F8FA);lv_obj_set_style_bg_opa(gallery,LV_OPA_
   button(page,30,284,190,"Import from USB",64,false);button(page,232,284,318,"Text colour",66,false);if(standby_photo_is_imported(p->photo))link_button(page,30,346,190,"Delete selected photo",67);
   label(page,"Changes apply only to this layout. Other layouts stay unchanged.",30,253,&lv_font_instrument_sans_medium_12,0x8395A1);label(page,"USB root: un260_delay_01.png ... 99.png\nPNG up to 5 MB. Max 6 photos.",232,338,&lv_font_instrument_sans_medium_12,0x667F90);
  }
- if(note)lv_obj_move_foreground(note);
 }
-static void settings_tick(lv_timer_t*t){(void)t;char msg[160];if(standby_store_poll(msg,sizeof(msg))){if(saving){bool ok=!memcmp(&draft,standby_config(),sizeof(draft));saving=false;if(ok)tab=0;}render();redraw=false;if(note){lv_label_set_text(note,msg);lv_obj_clear_flag(note,LV_OBJ_FLAG_HIDDEN);notice_tick=lv_tick_get();notice_visible=true;}return;}if(redraw){render();redraw=false;}if(notice_visible&&lv_tick_elaps(notice_tick)>=2500){notice_visible=false;if(note)lv_obj_add_flag(note,LV_OBJ_FLAG_HIDDEN);}if(!(tab==4&&moving.active))scene_update(&preview,&draft,false);}
+static void settings_tick(lv_timer_t*t){
+ (void)t;char msg[160];
+ if(standby_store_poll(msg,sizeof(msg))){
+  bool ok=standby_store_last_success();
+  if(saving){saving=false;if(ok)tab=0;}
+  render();redraw=false;
+  ui_notice_post(ok?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,"settings.standby","Standby settings",msg);
+  return;
+ }
+ if(redraw){render();redraw=false;}
+ if(!(tab==4&&moving.active))scene_update(&preview,&draft,false);
+}
 void ui_page_34_standby_create(lv_obj_t*parent){if(page)return;draft=*standby_config();tab=0;selected=0;saving=false;gesture_service_set_page_policy(UI_PAGE_STANDBY_SETTING,owns_single_drag,handle_gesture);page=box(parent,0,0,1280,400,0xF6F8FA);ui_page_background_apply(page,UI_BACKGROUND_SETTINGS);render();settings_timer=lv_timer_create(settings_tick,100,NULL);}
-void ui_page_34_standby_destroy(void){gesture_service_clear_page_policy(UI_PAGE_STANDBY_SETTING);settings_detail_keyboard_hide();settings_detail_dialog_hide();if(settings_timer)lv_timer_del(settings_timer);settings_timer=NULL;if(page)lv_obj_del(page);page=NULL;body=NULL;note=NULL;hex_label=NULL;gallery=NULL;edit_hint=NULL;moving.active=false;notice_visible=false;memset(&preview,0,sizeof(preview));}
+void ui_page_34_standby_destroy(void){gesture_service_clear_page_policy(UI_PAGE_STANDBY_SETTING);settings_detail_keyboard_hide();settings_detail_dialog_hide();if(settings_timer)lv_timer_del(settings_timer);settings_timer=NULL;if(page)lv_obj_del(page);page=NULL;body=NULL;hex_label=NULL;gallery=NULL;edit_hint=NULL;moving.active=false;memset(&preview,0,sizeof(preview));}
 /* A black cover animates without a full-screen translucent object layer.
  * The page owns cover and animation; entry and exit timings are independent. */
 #define STANDBY_FADE_IN_MS 300

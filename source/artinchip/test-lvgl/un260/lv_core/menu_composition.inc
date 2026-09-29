@@ -26,7 +26,7 @@ static void brightness_event(lv_event_t *event)
         menu.brightness_drag=true;
         if(!backlight_service_set(lv_slider_get_value(slider))){
             lv_slider_set_value(slider,backlight_service_level(),LV_ANIM_OFF);
-            notify("The display did not accept the brightness change.");
+            notify(UI_NOTICE_ERROR,"The display did not accept the brightness change.");
         }
         if(menu.brightness_value&&backlight_service_max()>0)
             lv_label_set_text_fmt(menu.brightness_value,"%d%%",backlight_service_level()*100/backlight_service_max());
@@ -35,7 +35,7 @@ static void brightness_event(lv_event_t *event)
         if(!ok){backlight_service_set(menu.brightness_previous);lv_slider_set_value(slider,backlight_service_level(),LV_ANIM_OFF);}
         if(menu.brightness_value&&backlight_service_max()>0)
             lv_label_set_text_fmt(menu.brightness_value,"%d%%",backlight_service_level()*100/backlight_service_max());
-        menu.brightness_drag=false;notify(ok?"Brightness saved.":"Brightness restored; the change was not saved.");
+        menu.brightness_drag=false;notify(ok?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,ok?"Brightness saved.":"Brightness restored; the change was not saved.");
     }
 }
 static void brightness(lv_obj_t *p,int x,int y,int w,int h)

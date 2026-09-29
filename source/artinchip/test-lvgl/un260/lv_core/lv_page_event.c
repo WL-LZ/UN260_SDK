@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #include "lvgl/lvgl.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "lv_page_event.h"
@@ -9,7 +10,6 @@
 #include "un260/lv_system/machine_time.h"
 #include "un260/lv_core/page_03_menu.h"
 #include "un260/protocol/protocol_send.h"
-#include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_components/lv_qr_popup.h"
 #include "un260/lv_components/lv_components.h"
 #include "un260/lv_components/lv_damped_button.h"
@@ -24,20 +24,8 @@
 #include "un260/machine_state/machine_state.h"
 #include "un260/currency/currency_state.h"
 
-static void page_01_qr_show_toast(ui_text_id_t text_id) //显示二维码相关提示框
-{
-    lv_print_toast_config_t toast_cfg = lv_print_toast_get_default_config();
-
-    toast_cfg.w = 320;
-    toast_cfg.h = 101;
-    toast_cfg.text = ui_text_get(text_id);
-    toast_cfg.show_loader = false;
-    toast_cfg.align_center = true;
-    toast_cfg.use_text_area = false;
-    toast_cfg.auto_hide_ms = 1200;
-
-    lv_print_toast_show_with_config(&toast_cfg);
-}
+static void page_01_qr_show_toast(ui_text_id_t text_id)
+{ui_notice_post(UI_NOTICE_WARNING,"export.qr","QR export",ui_text_get(text_id));}
 
 static void page_01_qr_show_popup(void) //显示当前点钞结果二维码
 {
@@ -202,9 +190,7 @@ void page_01_bottom_batch_btn_event_cb(lv_event_t* e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
     if (!workspace_service_batch_next())
-        settings_detail_dialog_show("Batch not changed",
-            "Wait for the current operation, then try again. Manage your saved slots in Menu.",
-            "OK", NULL, NULL, NULL, NULL);
+        ui_notice_post(UI_NOTICE_WARNING,"settings.batch","Batch unchanged","Finish the current operation, then try again.");
 }
 
 void page_01_bottom_speed_btn_event_cb(lv_event_t* e) //切换主界面底部C区速度
@@ -228,39 +214,19 @@ void page_01_set_btn_event_cb(lv_event_t* e){
 
 void page_01_print_btn_event_cb(lv_event_t* e)
 {
-    lv_print_toast_config_t toast_cfg;
-
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
         return;
     }
 
     if (currency_state_multi_selected() ||
         !counting_data_monetary_result_supported(counting_data_current())) {
-        toast_cfg = lv_print_toast_get_default_config();
-        toast_cfg.x = 320;
-        toast_cfg.w = 640;
-        toast_cfg.h = 120;
-        toast_cfg.text = ui_text_get(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED);
-        toast_cfg.show_loader = false;
-        toast_cfg.align_center = true;
-        toast_cfg.auto_hide_ms = 3500;
-        lv_print_toast_show_with_config(&toast_cfg);
+        ui_notice_post(UI_NOTICE_WARNING,"print.request","Printing",ui_text_get(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED));
         return;
     }
 
     // 只有金额和张数都为 0 时，才提示先点钞
     if (counting_data_current()->total_amount <= 0.0f && counting_data_current()->total_pcs <= 0) {
-        toast_cfg = lv_print_toast_get_default_config();
-        toast_cfg.w = 320;
-        toast_cfg.h = 101;
-        toast_cfg.text = ui_text_get(UI_TEXT_WIDGET_PRINT_TOAST_COUNT_FIRST);
-        toast_cfg.show_loader = true;
-        toast_cfg.align_center = true;
-        toast_cfg.use_text_area = false;
-        toast_cfg.loader_color = lv_color_hex(0xC0392B);
-        toast_cfg.auto_hide_ms = 2000;
-
-        lv_print_toast_show_with_config(&toast_cfg);
+        ui_notice_post(UI_NOTICE_WARNING,"print.request","Printing",ui_text_get(UI_TEXT_WIDGET_PRINT_TOAST_COUNT_FIRST));
         return;
     }
 
@@ -280,8 +246,11 @@ void page_01_print_btn_event_cb(lv_event_t* e)
     payload[7] = now.minute;
     payload[8] = now.second;
 
-    lv_print_toast_show(ui_text_get(UI_TEXT_WIDGET_PRINT_TOAST_PRINTING));
-    protocol_send(0x3C, payload, 9);
+    if (protocol_send(0x3C, payload, 9) < 0) {
+        ui_notice_post(UI_NOTICE_ERROR,"print.request","Print request not sent","Check controller connection.");
+        return;
+    }
+    ui_notice_post(UI_NOTICE_INFO,"print.request","Print request sent",NULL);
 }
 
 void page_01_qr_btn_event_cb(lv_event_t* e)

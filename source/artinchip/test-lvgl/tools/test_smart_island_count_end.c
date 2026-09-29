@@ -89,11 +89,12 @@ static void test_reset_lifecycle(void)
     assert_settled();
 
     start_session();
+    unsigned before_notices=host_notice_posts;
     smart_island_notify_warning("Pocket full");
-    assert(g_si_ctx.warning.resume_counting);
+    assert(host_notice_posts==before_notices+1 && !strcmp(host_notice_detail,"Pocket full"));
+    assert(g_si_ctx.view.scene == SMART_ISLAND_SCENE_COUNTING);
     assert(app_counting_runtime_reset_session(&session,"warning clear"));
-    assert(g_si_ctx.view.scene == SMART_ISLAND_SCENE_WARNING);
-    assert(!strcmp(g_si_ctx.warning.text,"Pocket full"));
+    assert(g_si_ctx.view.scene == SMART_ISLAND_SCENE_IDLE);
     assert(!g_si_ctx.lifecycle.count_session_active);
     assert_settled();
 
@@ -111,15 +112,7 @@ static void test_reset_lifecycle(void)
     assert_settled();
     assert(lv_obj_get_width(g_si_ctx.objects.root)==SMART_ISLAND_WIDTH);
 
-    start_session();smart_island_notify_update(25,"Updating");
-    assert(app_counting_runtime_reset_session(&session,"update scene reset"));
-    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_UPDATE);
-    assert(g_si_ctx.view.content.progress==25 && !g_si_ctx.lifecycle.count_session_active);
-    smart_island_restore_idle();tick(400);
-    start_session();smart_island_notify_qr("Report");
-    assert(app_counting_runtime_reset_session(&session,"QR scene reset"));
-    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_QR && !g_si_ctx.lifecycle.count_session_active);
-    smart_island_restore_idle();tick(400);
+
 }
 
 static void test_end_lifecycle(void)
@@ -167,7 +160,8 @@ static void test_notice_during_count(void)
     start_session();
     smart_island_notify_warning("First notice");
     smart_island_notify_warning("Second notice");
-    assert(g_si_ctx.warning.resume_counting);
+    assert(!strcmp(host_notice_detail,"Second notice"));
+    assert(g_si_ctx.lifecycle.count_session_active && g_si_ctx.view.scene==SMART_ISLAND_SCENE_COUNTING);
     tick(5000);
     assert(g_si_ctx.lifecycle.count_session_active && g_si_ctx.view.scene==SMART_ISLAND_SCENE_COUNTING);
     smart_island_notify_warning("Cleared fault");

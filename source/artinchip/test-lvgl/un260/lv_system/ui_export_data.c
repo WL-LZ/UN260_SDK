@@ -1,3 +1,5 @@
+#include "lvgl/lvgl.h"
+#include "un260/lv_components/ui_notice.h"
 #include "ui_export_data.h"
 
 #include <stdio.h>
@@ -6,7 +8,6 @@
 #include <time.h>
 #include <unistd.h>
 #include <ctype.h>
-#include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_system/user_cfg.h"
 #include "un260/lv_system/machine_time.h"
 #include "un260/machine_state/machine_state.h"
@@ -17,44 +18,9 @@
 #include "un260/lv_system/ui_text.h"
 
 #define UI_EXPORT_LOCK_MS                  2000U
-#define UI_EXPORT_TOAST_TEXT_EXPORTING     "Exporting..."
-#define UI_EXPORT_TOAST_TEXT_COUNT_FIRST   "Please Count First"
-#define UI_EXPORT_TOAST_TEXT_EXPORT_FAILED "Export Failed"
 
 static bool g_ui_export_data_lock = false;
 static lv_timer_t *g_ui_export_data_unlock_timer = NULL;
-
-static void ui_export_data_show_alarm_toast(const char *text)
-{
-    lv_print_toast_config_t toast_cfg = lv_print_toast_get_default_config();
-
-    toast_cfg.w = 320;
-    toast_cfg.h = 101;
-    toast_cfg.text = text ? text : UI_EXPORT_TOAST_TEXT_COUNT_FIRST;
-    toast_cfg.show_loader = true;
-    toast_cfg.align_center = true;
-    toast_cfg.use_text_area = false;
-    toast_cfg.loader_color = lv_color_hex(0xC0392B);
-    toast_cfg.auto_hide_ms = UI_EXPORT_LOCK_MS;
-
-    lv_print_toast_show_with_config(&toast_cfg);
-}
-
-static void ui_export_data_show_normal_toast(const char *text)
-{
-    lv_print_toast_config_t toast_cfg = lv_print_toast_get_default_config();
-
-    toast_cfg.w = 320;
-    toast_cfg.h = 101;
-    toast_cfg.text = text ? text : UI_EXPORT_TOAST_TEXT_EXPORTING;
-    toast_cfg.show_loader = true;
-    toast_cfg.align_center = true;
-    toast_cfg.use_text_area = false;
-    toast_cfg.loader_color = LV_PRINT_TOAST_DEFAULT_LOADER_COLOR;
-    toast_cfg.auto_hide_ms = UI_EXPORT_LOCK_MS;
-
-    lv_print_toast_show_with_config(&toast_cfg);
-}
 
 static int ui_export_data_get_reject_count(void)
 {
@@ -630,35 +596,27 @@ bool ui_export_data_request(void)
 
     if (currency_state_multi_selected() ||
         !counting_data_monetary_result_supported(counting_data_current())) {
-        lv_print_toast_config_t toast_cfg = lv_print_toast_get_default_config();
-        toast_cfg.x = 320;
-        toast_cfg.w = 640;
-        toast_cfg.h = 120;
-        toast_cfg.text = ui_text_get(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED);
-        toast_cfg.show_loader = false;
-        toast_cfg.align_center = true;
-        toast_cfg.auto_hide_ms = 3500;
-        lv_print_toast_show_with_config(&toast_cfg);
+        ui_notice_post(UI_NOTICE_WARNING,"export.current","Export unavailable",ui_text_get(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED));
         return false;
     }
 
     if (g_ui_export_data_lock) {
-        ui_export_data_show_normal_toast(UI_EXPORT_TOAST_TEXT_EXPORTING);
+        ui_notice_post(UI_NOTICE_INFO,"export.current","Export","Wait a moment before exporting again.");
         return false;
     }
 
     if (ui_export_data_is_empty()) {
-        ui_export_data_show_alarm_toast(UI_EXPORT_TOAST_TEXT_COUNT_FIRST);
+        ui_notice_post(UI_NOTICE_WARNING,"export.current","No data to export","Count notes first.");
         return false;
     }
 
     if (!usb_storage_prepare()) {
-        ui_export_data_show_alarm_toast(UI_EXPORT_TOAST_TEXT_EXPORT_FAILED);
+        ui_notice_post(UI_NOTICE_WARNING,"export.current","USB drive unavailable","Insert a writable USB drive.");
         return false;
     }
 
     ui_export_data_start_lock();
-    ui_export_data_show_normal_toast(UI_EXPORT_TOAST_TEXT_EXPORTING);
+    ui_notice_post(UI_NOTICE_PROGRESS,"export.current","Exporting records","Keep the USB drive connected.");
 
     ui_export_data_build_export_name(export_name, sizeof(export_name));
     if (!usb_storage_make_unique_file_pair(export_name,
@@ -692,9 +650,8 @@ cleanup:
     if (html_tmp_path[0] != '\0') {
         unlink(html_tmp_path);
     }
-    if (!ok) {
-        ui_export_data_show_alarm_toast(UI_EXPORT_TOAST_TEXT_EXPORT_FAILED);
-    }
+    ui_notice_post(ok?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,"export.current",
+        ok?"Records exported":"Export failed",ok?"Saved to USB.":"Check the USB drive, then try again.");
     return ok;
 }
 

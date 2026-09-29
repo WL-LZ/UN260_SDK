@@ -1,5 +1,6 @@
 #include "lv_modal_dialog.h"
 #include "lv_popup_style.h"
+#include "ui_notice.h"
 #include "un260/lv_resources/lv_img_init.h"
 
 #include <string.h>
@@ -12,6 +13,22 @@
 static bool modal_obj_valid(const lv_obj_t *object)
 {
     return object != NULL && lv_obj_is_valid((lv_obj_t *)object);
+}
+
+static void modal_notice_release(lv_modal_dialog_t *dialog)
+{
+    if (!dialog->notice_held) return;
+    dialog->notice_held = false;
+    ui_notice_dialog_release();
+}
+
+static void modal_deleted(lv_event_t *event)
+{
+    lv_modal_dialog_t *dialog = lv_event_get_user_data(event);
+    modal_notice_release(dialog);
+    dialog->root = NULL;
+    dialog->primary_action = dialog->secondary_action = NULL;
+    dialog->action_user_data = NULL;
 }
 
 static void modal_set_text(lv_obj_t *label, const char *text)
@@ -71,6 +88,7 @@ static void modal_create(lv_modal_dialog_t *dialog, lv_obj_t *parent,
 
     dialog->parent = parent;
     dialog->root = lv_obj_create(parent);
+    lv_obj_add_event_cb(dialog->root, modal_deleted, LV_EVENT_DELETE, dialog);
     lv_obj_remove_style_all(dialog->root);
     lv_obj_set_pos(dialog->root, 0, 0);
     lv_obj_set_size(dialog->root, MODAL_SCREEN_WIDTH, MODAL_SCREEN_HEIGHT);
@@ -189,12 +207,18 @@ bool lv_modal_dialog_show(lv_modal_dialog_t *dialog,
     dialog->action_user_data = config->action_user_data;
     lv_obj_clear_flag(dialog->root, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(dialog->root);
+    if (!dialog->notice_held) {
+        dialog->notice_held = true;
+        ui_notice_dialog_acquire();
+    }
     return true;
 }
 
 void lv_modal_dialog_hide(lv_modal_dialog_t *dialog)
 {
-    if (dialog == NULL || !modal_obj_valid(dialog->root)) return;
+    if (dialog == NULL) return;
+    modal_notice_release(dialog);
+    if (!modal_obj_valid(dialog->root)) return;
     if (!lv_obj_has_flag(dialog->root, LV_OBJ_FLAG_HIDDEN)) {
         lv_obj_add_flag(dialog->root, LV_OBJ_FLAG_HIDDEN);
     }

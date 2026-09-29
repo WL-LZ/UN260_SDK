@@ -2,3 +2,5 @@
 /aic_ui/generated_assets/
 /aic_ui/lvgl_data/boot_theme_c/boot-light.bin
 __pycache__/
+
+/aic_ui/generated_fault_guide/

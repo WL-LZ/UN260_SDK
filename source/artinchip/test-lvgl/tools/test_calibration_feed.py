@@ -12,13 +12,14 @@ code=r'''
 #define WORK_MODE_OPERATION_CALIBRATION 1
 #define SMART_ISLAND_WARNING_LEVEL_WARNING 1
 #define SMART_ISLAND_WARNING_LEVEL_ERROR 2
-#define UI_TEXT_WIDGET_FAULT_NO_NOTE_MAIN 1
 #define UI_TEXT_WIDGET_SMART_ISLAND_COUNT_ERROR 2
 #define DATA_COLLECT_MODE_NONE 0
-static bool hold,pending;static unsigned refreshes;
+static bool hold,pending;static unsigned refreshes,notices;
+#define UI_NOTICE_INFO 0
+void ui_notice_post(int kind,const char *key,const char *title,const char *detail){(void)kind;(void)key;(void)title;(void)detail;notices++;}
 void work_mode_service_hold_operation(unsigned owner,bool active){assert(owner==1);hold=active;}
 void cis_calib_ui_refresh(void){refreshes++;}
-void fault_popup_report_start_no_note(void){pending=true;}
+void fault_popup_report_start_no_note(void){pending=false;notices++;}
 void fault_popup_report_start_fault(unsigned t,unsigned c){(void)t;(void)c;pending=true;}
 void uart_debug_printf(const char *f,...){(void)f;}
 const char *ui_text_get(int k){(void)k;return "error";}
@@ -52,9 +53,9 @@ int main(void){
  assert(!hold&&pending); /* real machine faults are not hidden */
  pending=false;assert(diagnostic_calibration_begin(CALIB_TARGET_CIS,250));hold=true;
  assert(!diagnostic_calibration_allows_feed());app_counting_runtime_on_start_failure(1,2);
- assert(hold&&pending); /* no cross-target release */
+ assert(hold&&!pending&&notices==1); /* no cross-target release, informational no-note */
  diagnostic_calibration_end_session();pending=false;
- app_counting_runtime_on_start_failure(1,2);assert(pending); /* ordinary counting unchanged */
+ app_counting_runtime_on_start_failure(1,2);assert(!pending&&notices==2); /* ordinary no-note is an informational notice */
  puts("PASS white balance: Start -> feed, production no-note callback releases lease without hidden fault; mechanical/CIS/normal failures preserved");
 }
 '''

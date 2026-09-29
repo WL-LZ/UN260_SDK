@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #include "un260/lv_resources/ui_page_background.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "un260/lv_core/settings_detail_ui.h"
@@ -26,7 +27,7 @@ static void action_explain(const char *reason)
             "Prepare Manual","Cancel",prepare_manual,NULL,NULL);
         return;
     }
-    settings_detail_dialog_show_ex(SETTINGS_DIALOG_INFO,"Please note",reason,"OK",NULL,NULL,NULL,NULL);
+    ui_notice_post(UI_NOTICE_WARNING,"settings.blocked","Please check",reason);
 }
 void settings_detail_action_block(lv_obj_t *button,const char *reason)
 {
@@ -429,6 +430,13 @@ bool settings_detail_dialog_show(const char* title,
         title,content,confirm_text,cancel_text,confirm_cb,cancel_cb,user_data);
 }
 
+static void settings_detail_dialog_deleted(lv_event_t *event)
+{
+    if (g_settings_dialog.root != lv_event_get_target(event)) return;
+    memset(&g_settings_dialog, 0, sizeof(g_settings_dialog));
+    ui_notice_dialog_release();
+}
+
 bool settings_detail_dialog_show_ex(settings_detail_dialog_kind_t kind,
     const char *title,const char *content,const char *confirm_text,const char *cancel_text,
     settings_detail_dialog_cb_t confirm_cb,settings_detail_dialog_cb_t cancel_cb,void *user_data)
@@ -514,6 +522,8 @@ bool settings_detail_dialog_show_ex(settings_detail_dialog_kind_t kind,
     g_settings_dialog.confirm_cb = confirm_cb;
     g_settings_dialog.cancel_cb = cancel_cb;
     g_settings_dialog.user_data = user_data;
+    lv_obj_add_event_cb(root, settings_detail_dialog_deleted, LV_EVENT_DELETE, NULL);
+    ui_notice_dialog_acquire();
     return true;
 }
 

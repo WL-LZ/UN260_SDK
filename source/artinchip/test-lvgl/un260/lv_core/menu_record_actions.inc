@@ -23,9 +23,9 @@ static void verify_confirm(void *unused)
 {
     (void)unused;
     if(cashbook_store_view_archived()||!counting_cashbook_arm_verify(menu.selected_group)){
-        explain("Finish pending saves first. Verification needs an open group, ADD off and a single-currency count. Device settings are never changed automatically.");return;
+        explain("Finish saves. Use an open group, ADD off and one currency.");return;
     }
-    notify("Verification armed. The next non-empty count will be attached for review.");
+    notify(UI_NOTICE_INFO,"Ready to verify. The next count will be linked for review.");
     confirmed_back(NULL);
 }
 static void archive_confirm(void *unused)
@@ -33,13 +33,13 @@ static void archive_confirm(void *unused)
     (void)unused;
     const counting_sim_t *current=counting_data_current();
     if(current&&current->total_pcs&&(machine_state_add_enabled()||current->multi_currency_result)){
-        explain("Clear the current ADD or MULTI result before archiving. Its later cumulative update must stay in the same active period.");return;
+        explain("Clear the current ADD or MULTI result before archiving.");return;
     }
-    if(app_command_runtime_count_start_busy()||!counting_history_can_archive()||counting_cashbook_verify_group()||!cashbook_store_archive())explain("Finish counting and verification. Pending revisions must be reviewed in this period; new independent saved counts may follow the archive.");
-    else{menu.selected_group=0;menu.record_day=0;menu.show_archives=false;menu.dirty=true;menu.record_wait=true;notify("Archiving closed records...");}
+    if(app_command_runtime_count_start_busy()||!counting_history_can_archive()||counting_cashbook_verify_group()||!cashbook_store_archive())explain("Finish counting, verification and pending record reviews.");
+    else{menu.selected_group=0;menu.record_day=0;menu.show_archives=false;menu.dirty=true;app_ui_runtime_notice_started(APP_UI_NOTICE_RECORD_STORE,"Archiving closed records...");}
 }
 static void export_records_confirm(void *unused)
-{(void)unused;if(!cashbook_store_export())explain("Wait for record storage, then retry.");else {menu.record_wait=true;notify("Exporting records to USB. Keep the drive connected.");}}
+{(void)unused;if(!cashbook_store_export())explain("Wait for record storage, then retry.");else app_ui_runtime_notice_started(APP_UI_NOTICE_RECORD_STORE,"Exporting records to USB. Keep the drive connected.");}
 static bool record_action(unsigned id)
 {
     if(id>=10000){
@@ -80,15 +80,15 @@ static bool record_action(unsigned id)
 }
 static void mode_confirm(void *context)
 {
-    if(app_command_runtime_count_start_busy()||!setting_service_request_mode((uintptr_t)context))explain("The controller is busy. Finish counting and try again.");
-    else notify("Waiting for count mode confirmation...");
+    if(app_command_runtime_count_start_busy()||!setting_service_request_mode((uintptr_t)context))notify(UI_NOTICE_WARNING,"Mode not sent. Finish counting and try again.");
+    else clear_notice();
 }
 static void capacity_done(const char *value,void *unused)
 {
     (void)unused;char *end;long v=strtol(value,&end,10);
     if(!*value||*end||v<REJECT_POCKET_MIN_CAPACITY||v>REJECT_POCKET_MAX_CAPACITY){explain("Enter a capacity from 30 to 100 notes.");return;}
-    if(app_command_runtime_count_start_busy()||!setting_service_request_reject_pocket_max(v,machine_state_reject_pocket_max()))explain("The capacity could not be sent. Wait for the controller and retry.");
-    else notify("Waiting for capacity confirmation...");
+    if(app_command_runtime_count_start_busy()||!setting_service_request_reject_pocket_max(v,machine_state_reject_pocket_max()))notify(UI_NOTICE_WARNING,"Capacity not sent. Finish the current operation and retry.");
+    else clear_notice();
 }
 static void timeout_done(const char *value,void *unused)
 {
@@ -96,5 +96,5 @@ static void timeout_done(const char *value,void *unused)
     if(!*value||*end||v<0||v>60){explain("Enter 0 to disable automatic standby, or 1-60 minutes.");return;}
     standby_config_t config=*standby_config();config.minutes=v;
     if(!standby_store_save(&config))explain("Standby settings could not be saved. Try again shortly.");
-    else notify("Saving standby time...");
+    else ui_notice_post(UI_NOTICE_PROGRESS,"settings.standby","Standby settings","Saving...");
 }

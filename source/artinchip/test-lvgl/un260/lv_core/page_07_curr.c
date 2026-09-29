@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #include "un260/lv_core/page_07_curr.h"
 #include "un260/lv_components/ui_scrollbar.h"
 #include "un260/lv_core/page_07_curr/page_07_curr_internal.h"
@@ -231,11 +232,10 @@ static void curr_select_and_exit_abs(int abs_idx)
 
     if (!currency_service_request_switch((uint8_t)abs_idx, target_code)) return;
     if (protocol_send(0x03, (const uint8_t*)target_code, 3) < 0) {
-        currency_switch_result_t result;
-
-        if (currency_service_take_switch_result(0x02, &result)) {
-            page_07_curr_apply_switch_result(&result);
-        }
+        currency_service_cancel_switch();
+        ui_notice_post(UI_NOTICE_ERROR,"settings.currency","Currency not sent","Previous currency retained.");
+    } else {
+        ui_notice_post(UI_NOTICE_PROGRESS,"settings.currency","Changing currency",target_code);
     }
 }
 
@@ -244,6 +244,9 @@ void page_07_curr_apply_switch_result(const currency_switch_result_t* result)
     char curr_code[4];
 
     if (!result) return;
+    ui_notice_post(result->success?UI_NOTICE_SUCCESS:result->timeout?UI_NOTICE_WARNING:UI_NOTICE_ERROR,
+        "settings.currency",result->success?"Currency changed":result->timeout?"Currency unconfirmed":"Currency rejected",
+        result->success?result->target_code:result->timeout?"No reply. Showing the last confirmed currency.":"Previous currency retained.");
     if (result->success) {
         g_page07_curr.model.selected_abs_idx = result->target_index;
         g_page07_curr.model.selected_visible_idx = page07_curr_model_find_visible_pos(g_page07_curr.model.selected_abs_idx);
@@ -266,7 +269,6 @@ void page_07_curr_apply_switch_result(const currency_switch_result_t* result)
     } else {
         curr_refresh_right_views();
     }
-    show_currency_set_fail_popup();
 }
 
 static void curr_update_card_fav_content(int i)

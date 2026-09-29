@@ -1,3 +1,4 @@
+#include "test_notice_sink.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,12 +30,8 @@ lv_timer_t *lv_timer_create(void (*callback)(lv_timer_t *), uint32_t period, voi
 }
 void lv_timer_del(lv_timer_t *timer) { (void)timer; }
 void lv_timer_set_repeat_count(lv_timer_t *timer, int32_t count) { (void)timer; (void)count; }
-lv_print_toast_config_t lv_print_toast_get_default_config(void)
-{
-    lv_print_toast_config_t config = {0};
-    return config;
-}
-void lv_print_toast_show_with_config(const lv_print_toast_config_t *config) { (void)config; }
+
+
 bool usb_storage_prepare(void)
 {
     ++prepare_calls;

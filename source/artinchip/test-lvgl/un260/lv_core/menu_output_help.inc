@@ -3,9 +3,9 @@ static bool output_waiting;
 static void output_send(print_config_field_t field,const print_config_value_t *value)
 {
     if(app_command_runtime_count_start_busy()||!print_config_request_field(field,value)){
-        explain("Wait for counting and the current print setting to finish, then try again.");return;
+        notify(UI_NOTICE_WARNING,"Print setting not sent. Finish the current operation and try again.");return;
     }
-    output_waiting=true;notify("Waiting for receipt setting confirmation...");
+    output_waiting=true;ui_notice_post(UI_NOTICE_PROGRESS,"settings.receipt","Receipt settings","Applying settings...");
 }
 static void output_input(const char *value,void *context)
 {
@@ -89,7 +89,7 @@ static void support_export(void *unused)
 {
     (void)unused;char report[8192];
     if(!support_report_build(report,sizeof(report))||!workspace_store_export_support(report))explain("The report could not be prepared. Wait for storage and try again.");
-    else {menu.workspace_wait=true;notify("Writing support report to USB. Keep the drive connected.");}
+    else app_ui_runtime_notice_started(APP_UI_NOTICE_WORKSPACE_STORE,"Writing support report to USB. Keep the drive connected.");
 }
 
 static void help_view(lv_obj_t *b)

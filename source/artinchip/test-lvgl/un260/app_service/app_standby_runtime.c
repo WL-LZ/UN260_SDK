@@ -1,4 +1,5 @@
 #include "app_standby_runtime.h"
+#include "un260/lv_components/ui_notice.h"
 #include "app_command_runtime.h"
 #include "un260/storage/standby_store.h"
 #include "un260/lv_core/lv_page_manager.h"
@@ -19,7 +20,7 @@ bool app_standby_runtime_touch(bool down){if(down||touching)activity=lv_tick_get
 void app_standby_runtime_poll(uint32_t now){
  if(!initialized){activity=now;initialized=true;standby_store_init();}
  ui_page_t page=ui_manager_get_current_page();
- if(page!=UI_PAGE_STANDBY_SETTING){char message[160];standby_store_poll(message,sizeof(message));}
+ if(page!=UI_PAGE_STANDBY_SETTING){char message[160];if(standby_store_poll(message,sizeof(message))) ui_notice_post(standby_store_last_success()?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,"settings.standby","Standby settings",message);}
  bool blocked=app_command_runtime_count_start_busy()||machine_state_aging_running()||fault_popup_is_showing()||fault_popup_get_pending_fault(NULL,NULL,NULL)||lv_upgrade_popup_is_showing()||lv_qr_popup_is_showing();
  if(page==UI_PAGE_STANDBY){if(blocked)wake=true;if(wake&&!ui_manager_is_transitioning()&&ui_page_35_standby_fade_out()){wake=false;activity=now;ui_manager_pop_page();}return;}
  /* Conservative allow-list: setup, result browsing and maintenance never sleep. */

@@ -1,0 +1,25 @@
+{
+  "archive": "/home/pc/un260-archives/20260929-fault-notice/retired-unused-ui-assets.tar.gz",
+  "files": [
+    {
+      "path": "un260/lv_resources/page_02_list_img.c",
+      "bytes": 6145987,
+      "sha256": "0b3297de9bd70c9a6c525193ef7d6c70df2af33621c1f581f05f64817d59d6df"
+    },
+    {
+      "path": "un260/lv_resources/page_03_menu_bg_img.c",
+      "bytes": 12290010,
+      "sha256": "1453ede0d5a70e1954c2127368106826adcb1222acc60ba9f1b1d51f1e7f2628"
+    },
+    {
+      "path": "aic_ui/lvgl_data/page_02_list_img.png",
+      "bytes": 181748,
+      "sha256": "66b337ae7b96a37eb30e79a9f3e1a8d591d0415bda7877d45274a94cd2f46c4b"
+    },
+    {
+      "path": "aic_ui/lvgl_data/page_03_menu_bg_img.png",
+      "bytes": 268450,
+      "sha256": "0aacc3a2dfb2c2dbbac4bb3a93f9fad7daf98d3f04627e2be223d71ba0c59142"
+    }
+  ]
+}

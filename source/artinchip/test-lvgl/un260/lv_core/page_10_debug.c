@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "page_10_debug.h"
 #include "settings_detail_ui.h"
@@ -9,7 +10,6 @@
 #include "un260/lv_components/lv_debug_overlay.h"
 #include "un260/protocol/protocol_frame.h"
 #include "un260/protocol/protocol_send.h"
-#include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_system/ui_export_data.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_components/lv_damped_button.h"
@@ -248,20 +248,8 @@ static void btn_clear_log_event_cb(lv_event_t* e) {
     }
 }
 
-static void debug_log_show_toast(const char* text, bool alarm)
-{
-    lv_print_toast_config_t toast_cfg = lv_print_toast_get_default_config();
-
-    toast_cfg.w = 380;
-    toast_cfg.h = 101;
-    toast_cfg.text = text;
-    toast_cfg.show_loader = false;
-    toast_cfg.align_center = true;
-    toast_cfg.use_text_area = false;
-    toast_cfg.loader_color = alarm ? lv_color_hex(0xC0392B) : lv_color_hex(0x18A66A);
-    toast_cfg.auto_hide_ms = 1800;
-    lv_print_toast_show_with_config(&toast_cfg);
-}
+static void debug_log_show_toast(const char *text,ui_notice_kind_t kind)
+{ui_notice_post(kind,"debug.export","Debug log",text);}
 
 static void btn_download_log_event_cb(lv_event_t* e)
 {
@@ -279,13 +267,13 @@ static void btn_download_log_event_cb(lv_event_t* e)
 
     result = ui_export_text_lines("comm_log", lines, line_count);
     if (result == UI_EXPORT_TEXT_OK) {
-        debug_log_show_toast(ui_text_get(UI_TEXT_DEBUG_DOWNLOAD_SUCCESS), false);
+        debug_log_show_toast(ui_text_get(UI_TEXT_DEBUG_DOWNLOAD_SUCCESS), UI_NOTICE_SUCCESS);
     } else if (result == UI_EXPORT_TEXT_EMPTY) {
-        debug_log_show_toast(ui_text_get(UI_TEXT_DEBUG_NO_LOG), true);
+        debug_log_show_toast(ui_text_get(UI_TEXT_DEBUG_NO_LOG), UI_NOTICE_WARNING);
     } else if (result == UI_EXPORT_TEXT_USB_NOT_READY) {
-        debug_log_show_toast(ui_text_get(UI_TEXT_WIDGET_SCREENSHOT_INSERT_USB), true);
+        debug_log_show_toast(ui_text_get(UI_TEXT_WIDGET_SCREENSHOT_INSERT_USB), UI_NOTICE_WARNING);
     } else {
-        debug_log_show_toast(ui_text_get(UI_TEXT_DEBUG_DOWNLOAD_FAILED), true);
+        debug_log_show_toast(ui_text_get(UI_TEXT_DEBUG_DOWNLOAD_FAILED), UI_NOTICE_ERROR);
     }
 }
 

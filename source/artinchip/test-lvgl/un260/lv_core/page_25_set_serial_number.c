@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #include "page_25_set_serial_number.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "un260/lv_core/settings_detail_ui.h"
@@ -42,16 +43,16 @@ static void choose(lv_event_t *event)
     uint8_t level = (uint8_t)(uintptr_t)lv_event_get_user_data(event);
     if (level == serial_number_state_level()) return;
     if (!serial_number_service_request(level != SERIAL_NUMBER_LEVEL_OFF, level)) {
-        lv_label_set_text(frame.message, "Another change is waiting for confirmation.");
+        ui_notice_post(UI_NOTICE_WARNING,"settings.serial_number","Serial number","Wait for the current setting result.");
         return;
     }
     if (!settings_detail_send_command(0x32, &level, 1)) {
         serial_number_service_cancel_request();
-        lv_label_set_text(frame.message, "Could not send the change. Please try again.");
+        ui_notice_post(UI_NOTICE_ERROR,"settings.serial_number","Serial number","Request not sent. Try again.");
         return;
     }
     pending = true;
-    /* Keep the footer stable during short ACK round trips; selection is locked. */
+    ui_notice_post(UI_NOTICE_PROGRESS,"settings.serial_number","Serial number","Waiting for controller...");
     refresh();
 }
 
@@ -71,7 +72,7 @@ void ui_page_25_set_serial_number_create(lv_obj_t *parent)
     confirmed=lv_settings_label(frame.body,"",24,136,&lv_font_instrument_sans_medium_16,0x586B78);
     for(unsigned i=0;i<4;i++)
         options[i]=lv_settings_segment(base,i,4,ui_text_get(names[i]),choose,(void*)(uintptr_t)i);
-    lv_label_set_text(frame.message, pending ? "Waiting for controller." : "Select an option to apply.");
+    lv_label_set_text(frame.message, "");
     refresh();
 }
 
@@ -93,9 +94,8 @@ void ui_page_25_set_serial_number_on_boot_setting(uint8_t level)
 
 void ui_page_25_set_serial_number_on_reply(uint8_t level, uint8_t res)
 {
-    (void)level;
+    (void)level;(void)res;
     pending = false;
     refresh();
-    const char *message=res==0x01?"Change confirmed.":"Change not confirmed. Previous setting retained.";
-    if(frame.message&&strcmp(lv_label_get_text(frame.message),message))lv_label_set_text(frame.message,message);
+
 }

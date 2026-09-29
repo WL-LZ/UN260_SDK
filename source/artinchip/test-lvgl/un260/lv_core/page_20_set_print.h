@@ -10,4 +10,6 @@ void ui_page_20_set_print_destroy(void);
 void ui_page_20_set_print_on_boot_setting(const uint8_t* data, uint16_t len);
 void ui_page_20_set_print_on_reply(const print_config_request_result_t* result);
 
+bool ui_page_20_set_print_is_saving(void);
+
 #endif

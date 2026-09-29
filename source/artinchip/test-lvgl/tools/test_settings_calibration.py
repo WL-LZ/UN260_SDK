@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import os
 
 root = Path(__file__).resolve().parents[1]
 source = (root / "un260/lv_core/page_09_cis_cala.c").read_text()
@@ -33,6 +34,7 @@ code = r'''
 #include <string.h>
 #include "un260/diagnostic/diagnostic.h"
 #include "un260/app_service/work_mode_service.h"
+#include "tools/test_notice_sink.h"
 typedef int lv_obj_t;
 typedef int lv_event_t;
 typedef int lv_timer_t;
@@ -191,8 +193,9 @@ with tempfile.TemporaryDirectory(prefix="un260-calibration-route-") as temp:
     work = Path(temp)
     (work / "test.c").write_text(code)
     for opt in ("-O0", "-O2"):
-        subprocess.run(["cc", "-std=c11", opt, "-Wall", "-Wextra", "-Werror",
-                        "-fsanitize=undefined", "-fno-sanitize-recover=all", "-I"+str(root),
-                        str(work/"test.c"), str(root/"un260/diagnostic/diagnostic.c"),
-                        "-o", str(work/"test")], check=True)
-        subprocess.run([str(work/"test")], check=True)
+        binary=work/("test.exe" if os.name=="nt" else "test")
+        command=[os.environ.get("CC","cc"), "-std=c11", opt, "-Wall", "-Wextra", "-Werror", "-I"+str(root),
+                 str(work/"test.c"), str(root/"un260/diagnostic/diagnostic.c"), "-o", str(binary)]
+        if os.name!="nt":command += ["-fsanitize=undefined", "-fno-sanitize-recover=all"]
+        subprocess.run(command,check=True)
+        subprocess.run([str(binary)], check=True)

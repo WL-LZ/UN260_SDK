@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "page_21_set_language.h"
 #include "lv_page_manager.h"
@@ -48,6 +49,7 @@ static void language_cancel(lv_event_t *e){(void)e;language_home=false;language_
 static void language_apply(lv_event_t *e){
  (void)e;if(!language_dirty())return;
  ui_lang_set(language_draft);ui_manager_invalidate_all_page_caches();language_home=false;language_leave(NULL);
+ ui_notice_post(UI_NOTICE_SUCCESS,"settings.language","Language changed",NULL);
 }
 static void language_choice(lv_event_t *e){
  unsigned n=(unsigned)(uintptr_t)lv_event_get_user_data(e);

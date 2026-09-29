@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "page_16_ui_upgrade.h"
 #include "un260/lv_core/lv_page_manager.h"
@@ -221,7 +222,7 @@ static void start_clicked(lv_event_t *event)
     if (page.actual.running || page.blocked || lv_upgrade_popup_is_showing()) return;
     page.have_detected = false;
     refresh(NULL);
-    if (!package_ready()) { render(); return; }
+    if (!package_ready()) { ui_notice_post(UI_NOTICE_WARNING,"upgrade.ui","Update package unavailable","Check the USB drive and package.");render();return; }
     ui_upgrade_service_reset();
     memset(&page.actual, 0, sizeof(page.actual));
     page.have_status = false;
@@ -235,6 +236,9 @@ static void start_clicked(lv_event_t *event)
     case UI_UPGRADE_START_STATUS_CLEANUP_FAILED: page.start_error = "Previous update status could not be cleared. Contact service support."; break;
     case UI_UPGRADE_START_FORK_FAILED: page.start_error = "The updater could not start. Try again when the device is idle."; break;
     }
+    if(result!=UI_UPGRADE_START_OK)ui_notice_post(
+        result==UI_UPGRADE_START_BUSY||result==UI_UPGRADE_START_PACKAGE_NOT_READY?UI_NOTICE_WARNING:UI_NOTICE_ERROR,
+        "upgrade.ui","UI update not started",page.start_error);
     refresh(NULL);
     render();
 }

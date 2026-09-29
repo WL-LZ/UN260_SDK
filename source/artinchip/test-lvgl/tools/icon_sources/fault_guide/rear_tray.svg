@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" id="mmv2-17" viewBox="112 19 256 268" class="mm-model mm-still" data-view="rear" data-zone="none" data-action="none" role="img" aria-labelledby="mmv2-17-title" preserveAspectRatio="xMidYMid meet" width="510" height="273"><title id="mmv2-17-title">UN260 背面，整机，none</title><defs>
+      <linearGradient id="mmv2-17-body" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f5f8fa"></stop><stop offset="1" stop-color="#bdccd7"></stop></linearGradient>
+      <linearGradient id="mmv2-17-edge" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#8296a5"></stop><stop offset=".45" stop-color="#c8d5de"></stop><stop offset="1" stop-color="#8294a1"></stop></linearGradient>
+      <linearGradient id="mmv2-17-dark" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#364751"></stop><stop offset="1" stop-color="#202e37"></stop></linearGradient>
+      <linearGradient id="mmv2-17-steel" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#edf4f8"></stop><stop offset=".4" stop-color="#c5d3dc"></stop><stop offset="1" stop-color="#8da2b2"></stop></linearGradient>
+      <linearGradient id="mmv2-17-glass" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#425b6a"></stop><stop offset="1" stop-color="#283e4a"></stop></linearGradient>
+      <filter id="mmv2-17-shadow" x="-25%" y="-150%" width="150%" height="400%"><feGaussianBlur stdDeviation="3"></feGaussianBlur></filter>
+      <marker id="mmv2-17-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M1 1L8 5L1 9" fill="none" stroke="#2475cc" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"></path></marker>
+      <clipPath id="mmv2-17-drawer-mask"><rect x="143" y="176" width="194" height="62"></rect></clipPath>
+    </defs><style>
+      #mmv2-17{overflow:visible;display:block;isolation:isolate}
+      #mmv2-17 .mm-line{stroke:#738996;stroke-width:1.15;stroke-linejoin:round;stroke-linecap:round}
+      #mmv2-17 .mm-fine{fill:none;stroke:#9cabb5;stroke-width:.85;stroke-linecap:round}
+      #mmv2-17 .mm-focus{fill:#ef9c36;fill-opacity:.12;stroke:#e29632;stroke-width:2;stroke-linejoin:round;animation:mmv2-17-pulse 2.5s ease-in-out infinite}
+      #mmv2-17 .mm-area{stroke-dasharray:4 3}
+      #mmv2-17 .mm-arrow{fill:none;stroke:#2475cc;stroke-width:2.4;stroke-linecap:round;marker-end:url(#mmv2-17-arrow);animation:mmv2-17-arrow 2.8s ease-in-out infinite}
+      #mmv2-17 .mm-paper{animation:mmv2-17-paper 3.5s ease-in-out infinite}
+      #mmv2-17 .mm-paper-up{animation:mmv2-17-paper-up 3.5s ease-in-out infinite}
+      #mmv2-17 .mm-wipe{animation:mmv2-17-wipe 3.6s ease-in-out infinite}
+      #mmv2-17 .mm-spark{animation:mmv2-17-spark 3.6s ease-in-out infinite}
+      #mmv2-17 .mm-upper-lid{transform-origin:240px 126px;transform:scaleY(1)}
+      #mmv2-17 .mm-upper-under{opacity:1}
+      #mmv2-17 .mm-upper-outside{opacity:0}
+      #mmv2-17 .mm-mechanism .mm-upper-lid{animation:mmv2-17-lid 4.7s ease-in-out infinite}
+      #mmv2-17 .mm-mechanism .mm-upper-under{animation:mmv2-17-under 4.7s ease-in-out infinite}
+      #mmv2-17 .mm-mechanism .mm-upper-outside{animation:mmv2-17-outside 4.7s ease-in-out infinite}
+      #mmv2-17 .mm-lower-tray{transform:translateY(-56px)}
+      #mmv2-17 .mm-lower-face{transform:translateY(0px)}
+      #mmv2-17 .mm-lower-handle-target{opacity:1}
+      #mmv2-17 .mm-lower-passage-target{opacity:0}
+      #mmv2-17 .mm-mechanism .mm-lower-tray{animation:mmv2-17-tray 4.7s ease-in-out infinite}
+      #mmv2-17 .mm-mechanism .mm-lower-face{animation:mmv2-17-face 4.7s ease-in-out infinite}
+      #mmv2-17 .mm-mechanism .mm-lower-handle-target{animation:mmv2-17-handle-target 4.7s ease-in-out infinite}
+      #mmv2-17 .mm-mechanism .mm-lower-passage-target{animation:mmv2-17-passage-target 4.7s ease-in-out infinite}
+      #mmv2-17 .mm-reverse .mm-upper-lid,#mmv2-17 .mm-reverse .mm-upper-under,#mmv2-17 .mm-reverse .mm-upper-outside,#mmv2-17 .mm-reverse .mm-lower-tray,#mmv2-17 .mm-reverse .mm-lower-face,#mmv2-17 .mm-reverse .mm-lower-handle-target,#mmv2-17 .mm-reverse .mm-lower-passage-target{animation-direction:reverse}
+      #mmv2-17.mm-paused *{animation-play-state:paused!important}
+      #mmv2-17.mm-still *{animation:none!important}
+      @keyframes mmv2-17-pulse{0%,100%{fill-opacity:.10;stroke-opacity:.7}50%{fill-opacity:.22;stroke-opacity:1}}
+      @keyframes mmv2-17-arrow{0%,100%{opacity:.5}40%,75%{opacity:1}}
+      @keyframes mmv2-17-paper{0%,20%{transform:translate(0,0);opacity:1}76%,94%{transform:translate(39px,-28px);opacity:1}100%{transform:translate(39px,-28px);opacity:0}}
+      @keyframes mmv2-17-paper-up{0%,20%{transform:translate(0,0);opacity:1}76%,94%{transform:translate(0,-32px);opacity:1}100%{transform:translate(0,-32px);opacity:0}}
+      @keyframes mmv2-17-wipe{0%,100%{transform:translateX(-25px)}50%{transform:translateX(25px)}}
+      @keyframes mmv2-17-spark{0%,25%,100%{opacity:.15}50%,75%{opacity:1}}
+      @keyframes mmv2-17-lid{0%,15%{transform:scaleY(-.85)}65%,100%{transform:scaleY(1)}}
+      @keyframes mmv2-17-under{0%,37%{opacity:0}45%,100%{opacity:1}}
+      @keyframes mmv2-17-outside{0%,37%{opacity:1}45%,100%{opacity:0}}
+      @keyframes mmv2-17-tray{0%,15%{transform:translateY(-56px)}65%,100%{transform:translateY(0)}}
+      @keyframes mmv2-17-face{0%,15%{transform:translateY(0)}65%,100%{transform:translateY(56px)}}
+      @keyframes mmv2-17-handle-target{0%,20%{opacity:1}48%,100%{opacity:0}}
+      @keyframes mmv2-17-passage-target{0%,22%{opacity:0}50%,100%{opacity:1}}
+      @media(prefers-reduced-motion:reduce){#mmv2-17 *{animation:none!important}}
+    </style><ellipse cx="240" cy="282" rx="110" ry="4" fill="#697f8e" opacity=".16" filter="url(#mmv2-17-shadow)" display="none"></ellipse>
+        <g data-part="rear-shell" display="none"><path d="M169 70V38Q169 33 174 33H195Q200 33 200 38V70M280 70V38Q280 33 285 33H306Q311 33 311 38V70" fill="url(#mmv2-17-body)" class="mm-line" display="none"></path>
+        <path d="M162 70V27M318 70V27" class="mm-fine" display="none"></path>
+        <path d="M139 76L150 67H330L341 76 351 254Q351 268 338 270H142Q129 268 129 254z" fill="url(#mmv2-17-edge)" class="mm-line" display="none"></path>
+        <path d="M147 76H333V266H147z" fill="url(#mmv2-17-dark)" class="mm-line" display="none"></path>
+        <path d="M148 137H332V171H148z" fill="#344953" display="none"></path>
+        <path d="M162 91H222V124H162z" fill="#4f6674" stroke="#8196a3" stroke-width="1.2" display="none"></path>
+        <path d="M168 97H216V118H168z" fill="#3b525f" display="none"></path><path d="M185 103H200V110H185z" fill="#8da1ae" display="none"></path>
+        <path d="M235 86H315V112H235z" fill="#1e303b" class="mm-line" display="none"></path><path d="M240 112H309Q307 124 298 124H251Q242 124 240 112z" fill="url(#mmv2-17-steel)" class="mm-line" display="none"></path>
+        <path data-part="lower-passage-seam" d="M149 171H331" fill="none" stroke="#172b37" stroke-width="3.4" display="none"></path>
+        <path d="M150 169.5H330" stroke="#879ba8" stroke-width=".8" display="none"></path>
+        <path d="M147 223H333V265H147z" fill="#3b4e59" stroke="#617987" stroke-width=".9" display="none"></path>
+        <rect x="169" y="230" width="14" height="10" rx="1.5" fill="#91a6b4" stroke="#253f50" display="none"></rect><path d="M176 232V236" stroke="#354e5e" stroke-width="1.7" display="none"></path>
+        <path d="M167 246L171 242H183L187 246V259H167z" fill="#dce8ef" stroke="#203f51" display="none"></path><path d="M173 248V253M181 248V253M177 245V249" stroke="#4d6778" stroke-width="1.5" display="none"></path>
+        <g fill="#a0b4c1" display="none"><circle cx="209" cy="239" r="1" display="none"></circle><circle cx="213" cy="239" r="1" display="none"></circle><circle cx="217" cy="239" r="1" display="none"></circle><circle cx="221" cy="239" r="1" display="none"></circle><circle cx="225" cy="239" r="1" display="none"></circle><circle cx="209" cy="244" r="1" display="none"></circle><circle cx="213" cy="244" r="1" display="none"></circle><circle cx="217" cy="244" r="1" display="none"></circle><circle cx="221" cy="244" r="1" display="none"></circle><circle cx="225" cy="244" r="1" display="none"></circle><circle cx="209" cy="249" r="1" display="none"></circle><circle cx="213" cy="249" r="1" display="none"></circle><circle cx="217" cy="249" r="1" display="none"></circle><circle cx="221" cy="249" r="1" display="none"></circle><circle cx="225" cy="249" r="1" display="none"></circle></g>
+        <rect x="244" y="238" width="14" height="10" rx="1" fill="#1c3341" display="none"></rect><rect x="265" y="238" width="8" height="10" rx="1" fill="#bed0dd" display="none"></rect><path d="M284 239H299L302 246H281z" fill="#c8d9e5" stroke="#234358" display="none"></path>
+        <path d="M160 270V278H174V270M306 270V278H320V270" fill="#718794" stroke="#536b7a" stroke-width="1" display="none"></path></g>
+        <g data-part="lower-passage" class="">
+          <path d="M148 176H332V222H148z" fill="#162b38" display="none"></path><path d="M154 180H326V188H154z" fill="url(#mmv2-17-steel)" display="none"></path>
+          <g display="none"><rect x="175" y="193" width="15" height="16" rx="3" fill="url(#mmv2-17-steel)" class="mm-line" display="none"></rect><path d="M178 195.5v11m9 -11v11" class="mm-fine" display="none"></path></g><g display="none"><rect x="205" y="193" width="15" height="16" rx="3" fill="url(#mmv2-17-steel)" class="mm-line" display="none"></rect><path d="M208 195.5v11m9 -11v11" class="mm-fine" display="none"></path></g><g display="none"><rect x="248" y="193" width="15" height="16" rx="3" fill="url(#mmv2-17-steel)" class="mm-line" display="none"></rect><path d="M251 195.5v11m9 -11v11" class="mm-fine" display="none"></path></g><g display="none"><rect x="278" y="193" width="15" height="16" rx="3" fill="url(#mmv2-17-steel)" class="mm-line" display="none"></rect><path d="M281 195.5v11m9 -11v11" class="mm-fine" display="none"></path></g>
+          <g clip-path="url(#mmv2-17-drawer-mask)"><g data-part="lower-passage-tray" class="mm-lower-tray" style="transform: none;">
+            <path d="M156 176H324L333 232H147z" fill="url(#mmv2-17-steel)" class="mm-line"></path>
+            <path d="M162 179L154 229M318 179L326 229" stroke="#7c929f" stroke-width="1.2"></path>
+            <path d="M162 194H318M157 219H323" stroke="#627f91" stroke-width="4"></path>
+            <g><rect x="171" y="187" width="12" height="14" rx="3" fill="url(#mmv2-17-steel)" class="mm-line"></rect><path d="M174 189.5v9m6 -9v9" class="mm-fine"></path></g><g><rect x="196" y="187" width="12" height="14" rx="3" fill="url(#mmv2-17-steel)" class="mm-line"></rect><path d="M199 189.5v9m6 -9v9" class="mm-fine"></path></g><g><rect x="245" y="187" width="12" height="14" rx="3" fill="url(#mmv2-17-steel)" class="mm-line"></rect><path d="M248 189.5v9m6 -9v9" class="mm-fine"></path></g><g><rect x="270" y="187" width="12" height="14" rx="3" fill="url(#mmv2-17-steel)" class="mm-line"></rect><path d="M273 189.5v9m6 -9v9" class="mm-fine"></path></g>
+            <g><rect x="166" y="211" width="14" height="15" rx="3" fill="url(#mmv2-17-steel)" class="mm-line"></rect><path d="M169 213.5v10m8 -10v10" class="mm-fine"></path></g><g><rect x="194" y="211" width="14" height="15" rx="3" fill="url(#mmv2-17-steel)" class="mm-line"></rect><path d="M197 213.5v10m8 -10v10" class="mm-fine"></path></g><g><rect x="247" y="211" width="14" height="15" rx="3" fill="url(#mmv2-17-steel)" class="mm-line"></rect><path d="M250 213.5v10m8 -10v10" class="mm-fine"></path></g><g><rect x="275" y="211" width="14" height="15" rx="3" fill="url(#mmv2-17-steel)" class="mm-line"></rect><path d="M278 213.5v10m8 -10v10" class="mm-fine"></path></g>
+
+          </g></g>
+          <g data-part="lower-passage-front" class="mm-lower-face" display="none"><path d="M147 176H333V222H147z" fill="url(#mmv2-17-dark)" class="mm-line" display="none"></path>
+            <path d="M149 177H331" stroke="#93a7b5" stroke-width="1.2" display="none"></path>
+            <path d="M205 188H275V197Q273 211 260 211H220Q207 211 205 197z" fill="#172e3d" stroke="#668291" stroke-width="1" display="none"></path>
+            <path d="M213 190H267V194Q266 203 259 203H221Q214 203 213 194z" fill="#536f81" display="none"></path>
+
+          </g>
+        </g></svg>

@@ -48,6 +48,8 @@ bool standby_store_delete(unsigned photo);
 bool standby_store_busy(void);
 /* Poll on UI thread. Completed jobs never hold references to a page. */
 bool standby_store_poll(char *message, unsigned capacity);
+/* UI-thread result of the last completed poll; not a live worker flag. */
+bool standby_store_last_success(void);
 bool standby_photo_exists(unsigned slot);
 const char *standby_photo_path(unsigned photo);
 #endif

@@ -9,10 +9,7 @@
 typedef enum {
     SMART_ISLAND_SCENE_IDLE = 0,
     SMART_ISLAND_SCENE_COUNTING,
-    SMART_ISLAND_SCENE_RESULT,
-    SMART_ISLAND_SCENE_WARNING,
-    SMART_ISLAND_SCENE_UPDATE,
-    SMART_ISLAND_SCENE_QR
+    SMART_ISLAND_SCENE_RESULT
 } smart_island_scene_t;
 
 typedef enum {
@@ -33,14 +30,6 @@ typedef enum {
 
 typedef void (*smart_island_action_cb_t)(uint8_t action_id); //动作按钮回调
 
-typedef struct {
-    char title[64];
-    char subtitle[64];
-    uint16_t progress;
-    uint8_t icon;
-    bool show_progress;
-} smart_island_content_t;
-
 #define SMART_ISLAND_ACTION_QR            1
 #define SMART_ISLAND_ACTION_TIME_SETTING  2
 #define SMART_ISLAND_ACTION_FUNC3         3
@@ -52,20 +41,16 @@ void smart_island_destroy(void); //销毁灵动岛
 void smart_island_set_suspended(bool suspended); //主页面隐藏时暂停对象刷新
 void smart_island_refresh_time(void); //刷新默认时间显示
 void smart_island_set_visual(smart_island_visual_t visual, bool anim_en); //设置视觉形态
-void smart_island_set_scene(smart_island_scene_t scene, const char *title, const char *subtitle); //设置场景与文本
 void smart_island_notify_count_start(void); //通知：开始点钞
 void smart_island_update_counting(int pcs, float amount); //更新跑钞态实时数量/金额
 void smart_island_notify_count_end(const char *result_text); //通知：点钞结束
-/* The owner accepted a result/session reset. Cancel counting presentation,
- * but retain unrelated warning, update and QR scenes. */
+/* The owner accepted a result/session reset. Cancel counting presentation. */
 void smart_island_notify_count_reset(void);
 void smart_island_notify_serial_number(int denomination, const char *serial_number); //通知：本把冠字号更新
 void smart_island_set_count_analysis(int valid_pcs, int suspect_pcs, int damaged_pcs); //更新本轮点钞分析
 void smart_island_clear_count_analysis(void); //清除本轮点钞分析
 void smart_island_notify_warning(const char *warn_text); //通知：警告出现
 void smart_island_notify_warning_level(const char *warn_text, smart_island_warning_level_t level); //通知：警告/报错
-void smart_island_notify_update(uint16_t progress, const char *text); //通知：升级中
-void smart_island_notify_qr(const char *text); //通知：二维码相关提示
 void smart_island_restore_idle(void); //恢复默认待机态
 bool smart_island_is_expanded(void); //是否处于展开态
 

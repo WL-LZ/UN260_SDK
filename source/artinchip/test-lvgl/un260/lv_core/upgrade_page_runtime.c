@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "upgrade_page_runtime.h"
 
@@ -63,6 +64,7 @@ static void timeout_cb(lv_timer_t *timer)
     if (!runtime->waiting || runtime->timed_out) return;
     if (lv_tick_elaps(runtime->wait_start_tick) < runtime->config->timeout_ms) return;
     runtime->timed_out = true;
+    ui_notice_post(UI_NOTICE_WARNING,"upgrade.controller","Update result unknown","Keep power connected. The update may still be running.");
     paint(runtime);
 }
 
@@ -83,19 +85,18 @@ bool upgrade_page_runtime_start(upgrade_page_runtime_t *runtime)
     if (!runtime || !runtime->config || runtime->waiting || runtime->timed_out) return false;
     if (!upgrade_session_begin(runtime->config->owner)) {
         runtime->blocked = true;
+        ui_notice_post(UI_NOTICE_WARNING,"upgrade.controller","Update unavailable","Another update is active.");
         paint(runtime);
         return false;
     }
     runtime->blocked = false;
     if (!protocol_send_is_ready() || protocol_send(runtime->config->command, &payload, 1) < 0) {
         upgrade_session_end(runtime->config->owner);
-        if (runtime->status_label) {
-            lv_label_set_text(runtime->status_label, "The request could not be sent. Check the connection and try again.");
-            lv_obj_set_style_text_color(runtime->status_label, lv_color_hex(0xB1393E), 0);
-        }
+        ui_notice_post(UI_NOTICE_ERROR,"upgrade.controller","Update request not sent","Check controller connection.");
         return false;
     }
     runtime->waiting = true;
+    ui_notice_post(UI_NOTICE_PROGRESS,"upgrade.controller","Updating controller","Keep power connected.");
     runtime->timed_out = false;
     runtime->has_last_status = false;
     runtime->wait_start_tick = lv_tick_get();
@@ -115,6 +116,8 @@ void upgrade_page_runtime_handle_reply(upgrade_page_runtime_t *runtime, uint8_t 
     if (terminal) {
         runtime->waiting = false;
         upgrade_session_end(runtime->config->owner);
+        bool success=status==0x03||status==0x04;
+        ui_notice_post(success?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,"upgrade.controller",success?"Update complete":"Update not completed",runtime->config->status_text(status));
     }
     paint(runtime);
 }

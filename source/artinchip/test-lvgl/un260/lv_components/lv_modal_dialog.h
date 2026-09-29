@@ -19,6 +19,7 @@ typedef struct {
     lv_modal_dialog_action_cb_t primary_action;
     lv_modal_dialog_action_cb_t secondary_action;
     void *action_user_data;
+    bool notice_held;
 } lv_modal_dialog_t;
 
 typedef struct {

@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -241,6 +242,7 @@ int main(void) {
         if (!processed_frames && !app_command_runtime_frames_pending())
             app_runtime_wakeup_wait_since(wake_sequence, wait_ms);
     }
+    ui_notice_deinit();
     app_setting_runtime_stop();
     app_serial_runtime_stop();
 

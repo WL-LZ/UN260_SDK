@@ -5,6 +5,8 @@
 extern const ui_text_item_t g_ui_text_page_group[UI_TEXT_PAGE_MAX];
 
 static const ui_text_item_t g_ui_text_widget_group[UI_TEXT_MAX - UI_TEXT_WIDGET_BASE] = {
+    [UI_TEXT_NOTICE_NOW - UI_TEXT_WIDGET_BASE] = {"Now", "现在", "지금"},
+    [UI_TEXT_NOTICE_ONGOING - UI_TEXT_WIDGET_BASE] = {"Ongoing", "进行中", "진행 중"},
     //升级弹窗
     [UI_TEXT_WIDGET_UPGRADE_POPUP_TAG - UI_TEXT_WIDGET_BASE] = {"SYSTEM UPGRADE", "系统升级", "시스템 업그레이드"},
     [UI_TEXT_WIDGET_UPGRADE_POPUP_PROMPT_TITLE - UI_TEXT_WIDGET_BASE] = {"Upgrade package detected", "检测到升级包", "업그레이드 패키지 감지됨"},
@@ -158,29 +160,6 @@ static const ui_text_item_t g_ui_text_widget_group[UI_TEXT_MAX - UI_TEXT_WIDGET_
     [UI_TEXT_WIDGET_PURE_START - UI_TEXT_WIDGET_BASE] = {"S T A R T", "开 始", "시 작"},
     [UI_TEXT_WIDGET_PURE_CLEAR - UI_TEXT_WIDGET_BASE] = {"C L E A R", "清 空", "초 기 화"},
 
-    //故障弹窗（no-note）
-    [UI_TEXT_WIDGET_FAULT_START_FAILED - UI_TEXT_WIDGET_BASE] = {"START COUNT FAILED", "启动点钞失败", "계수 시작 실패"},
-    [UI_TEXT_WIDGET_FAULT_START_COUNT_ERROR - UI_TEXT_WIDGET_BASE] = {"START COUNT ERROR", "启动点钞错误", "계수 시작 오류"},
-    [UI_TEXT_WIDGET_FAULT_NO_NOTE_MAIN - UI_TEXT_WIDGET_BASE] = {"No Banknotes Detected", "未检测到纸钞", "지폐가 감지되지 않았습니다"},
-    [UI_TEXT_WIDGET_FAULT_NO_NOTE_REASON - UI_TEXT_WIDGET_BASE] = {"The machine is normal, but no banknotes were detected.", "设备状态正常，但未检测到纸钞。", "장비 상태는 정상이지만 지폐가 감지되지 않았습니다."},
-    [UI_TEXT_WIDGET_FAULT_NO_NOTE_SOLUTION - UI_TEXT_WIDGET_BASE] = {"Please place banknotes in the hopper and try again.", "请在进钞口放入纸钞后重试。", "호퍼에 지폐를 넣은 뒤 다시 시도하세요."},
-    [UI_TEXT_WIDGET_FAULT_DIAGNOSTICS_TITLE - UI_TEXT_WIDGET_BASE] = {"MACHINE DIAGNOSTICS", "设备诊断", "장비 진단"},
-    [UI_TEXT_WIDGET_FAULT_SELFTEST_ERROR - UI_TEXT_WIDGET_BASE] = {"SELF-TEST ERROR", "自检错误", "자가 점검 오류"},
-    [UI_TEXT_WIDGET_FAULT_BOOT_SENSOR_FAILED - UI_TEXT_WIDGET_BASE] = {"Sensor Self-Test Failed", "传感器自检失败", "센서 자가 점검 실패"},
-    [UI_TEXT_WIDGET_FAULT_BOOT_MOTOR_FAILED - UI_TEXT_WIDGET_BASE] = {"Motor Self-Test Failed", "电机自检失败", "모터 자가 점검 실패"},
-    [UI_TEXT_WIDGET_FAULT_BOOT_MAGNET_FAILED - UI_TEXT_WIDGET_BASE] = {"Electromagnet Self-Test Failed", "电磁铁自检失败", "전자석 자가 점검 실패"},
-    [UI_TEXT_WIDGET_FAULT_BOOT_CONFIG_FAILED - UI_TEXT_WIDGET_BASE] = {"Read Config Parameters Failed", "读取配置参数失败", "구성 파라미터 읽기 실패"},
-    [UI_TEXT_WIDGET_FAULT_BOOT_IMAGE_FAILED - UI_TEXT_WIDGET_BASE] = {"Image Board Self-Test Failed", "图像板自检失败", "이미지 보드 자가 점검 실패"},
-    [UI_TEXT_WIDGET_FAULT_BOOT_GENERIC_FAILED - UI_TEXT_WIDGET_BASE] = {"Boot Self-Test Failed", "开机自检失败", "부팅 자가 점검 실패"},
-    [UI_TEXT_WIDGET_FAULT_RUNTIME_ERROR_SENSOR - UI_TEXT_WIDGET_BASE] = {"ERROR SENSOR", "运行错误传感器", "오류 센서"},
-    [UI_TEXT_WIDGET_FAULT_RUNTIME_UNKNOWN - UI_TEXT_WIDGET_BASE] = {"Unknown Runtime Fault", "未知运行故障", "알 수 없는 런타임 고장"},
-    [UI_TEXT_WIDGET_FAULT_REASON_TITLE - UI_TEXT_WIDGET_BASE] = {"Reason", "原因", "원인"},
-    [UI_TEXT_WIDGET_FAULT_SOLUTION_TITLE - UI_TEXT_WIDGET_BASE] = {"Solution", "解决方案", "해결 방법"},
-    [UI_TEXT_WIDGET_FAULT_CONFIRM - UI_TEXT_WIDGET_BASE] = {"CONFIRM", "确认", "확인"},
-    [UI_TEXT_WIDGET_FAULT_TIME_FMT - UI_TEXT_WIDGET_BASE] = {"TIME: %s", "时间: %s", "시간: %s"},
-    [UI_TEXT_WIDGET_FAULT_MODEL_FMT - UI_TEXT_WIDGET_BASE] = {"MODEL: %s", "机型: %s", "모델: %s"},
-    [UI_TEXT_WIDGET_FAULT_REASON_FALLBACK - UI_TEXT_WIDGET_BASE] = {"Please check machine status and related hardware.", "请检查设备状态及相关硬件。", "장비 상태와 관련 하드웨어를 확인하세요."},
-    [UI_TEXT_WIDGET_FAULT_SOLUTION_FALLBACK - UI_TEXT_WIDGET_BASE] = {"Press CONFIRM after checking the machine.", "检查设备后按确认。", "장비를 점검한 뒤 확인을 누르세요."},
     [UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED - UI_TEXT_WIDGET_BASE] = {"MULTI currency details unavailable. History, print and export are disabled.", "MULTI 暂缺逐币种数据，无法保存历史、打印或导出。", "MULTI 통화별 데이터가 없어 기록, 인쇄 및 내보내기를 사용할 수 없습니다."}
 };
 

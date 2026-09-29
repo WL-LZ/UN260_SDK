@@ -23,12 +23,10 @@ extern "C" {
  LV_IMG_DECLARE(page_01_start_icon);
  LV_IMG_DECLARE(page_01_usb_icon);
 //page_list
- LV_IMG_DECLARE(page_02_list_img);
  LV_IMG_DECLARE(page_02_home_icon);
 
  //page_menu
  LV_IMG_DECLARE(page_03_del_icon);
- LV_IMG_DECLARE(page_03_menu_bg_img);
  LV_IMG_DECLARE(page_03_ok_icon);
 
  //page_set_passage

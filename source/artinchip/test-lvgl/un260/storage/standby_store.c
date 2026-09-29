@@ -20,6 +20,7 @@
 #define PIXELS (1280U * 400U)
 static standby_config_t saved;
 static bool initialized, busy, done, success, config_written;
+static bool last_success;
 static pthread_t thread;
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 static struct { bool importing, deleting; unsigned photo; standby_config_t cfg; } job;
@@ -138,4 +139,5 @@ bool standby_store_save(const standby_config_t*c){return start(false,c);}
 bool standby_store_import(void){return start(true,NULL);}
 bool standby_store_delete(unsigned photo){if(busy||photo<3||photo>8)return false;job.cfg=*standby_config();for(unsigned m=0;m<2;m++)for(unsigned i=0;i<3;i++)if(job.cfg.layout[m][i].photo==photo){job.cfg.layout[m][i].photo=1;job.cfg.layout[m][i].scheduled=1;}job.importing=false;job.deleting=true;job.photo=photo;done=false;busy=true;if(pthread_create(&thread,NULL,run,NULL)){busy=false;return false;}return true;}
 bool standby_store_poll(char*message,unsigned capacity){if(!busy)return false;pthread_mutex_lock(&lock);bool ready=done;pthread_mutex_unlock(&lock);if(!ready)return false;
- pthread_join(thread,NULL);if((success&&!job.importing)||(job.deleting&&config_written))saved=job.cfg;snprintf(message,capacity,"%s",result);busy=false;return true;}
+ pthread_join(thread,NULL);last_success=success;if((success&&!job.importing)||(job.deleting&&config_written))saved=job.cfg;snprintf(message,capacity,"%s",result);busy=false;return true;}
+bool standby_store_last_success(void){return last_success;}

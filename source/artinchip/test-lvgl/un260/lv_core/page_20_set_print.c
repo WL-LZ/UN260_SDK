@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #include "page_20_set_print.h"
 #include "un260/lv_core/lv_page_manager.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
@@ -47,7 +48,6 @@ static lv_obj_t* value_head1 = NULL;
 static lv_obj_t* value_head2 = NULL;
 static lv_obj_t* value_space_bottom = NULL;
 static lv_obj_t* field_boxes[4] = { NULL };
-static lv_obj_t* status_label = NULL;
 static lv_obj_t* content_boxes[3] = { NULL };
 static print_field_t active_field = PRINT_FIELD_SPACE_TOP;
 static bool active_field_valid = false;
@@ -56,12 +56,10 @@ static lv_obj_t *receipt_paper, *receipt_body, *receipt_caption;
 
 static void print_refresh_view(void);
 
-static void print_set_status(const char* text, lv_color_t color)
-{
-    if (!status_label) return;
-    lv_label_set_text(status_label, text);
-    lv_obj_set_style_text_color(status_label, color, 0);
-}
+static void print_notice(ui_notice_kind_t kind,const char *message)
+{ui_notice_post(kind,"settings.receipt","Receipt settings",message);}
+bool ui_page_20_set_print_is_saving(void){return print_saving;}
+
 
 static void print_set_active_field(bool active, print_field_t field)
 {
@@ -75,7 +73,7 @@ static void print_set_active_field(bool active, print_field_t field)
 static void print_request_started(void)
 {
     print_pending = true;
-    /* Locked Save/Cancel indicate the transaction without flashing the footer. */
+    print_notice(UI_NOTICE_PROGRESS,"Applying settings...");
     if (print_page) print_refresh_view();
 }
 
@@ -102,7 +100,7 @@ static uint8_t print_parse_space(const char* value)
 static bool print_send_field(print_config_field_t field,const print_config_value_t *target)
 {
     if(!print_config_request_field(field,target)){
-        print_set_status(ui_text_get(UI_TEXT_SETTINGS_UART_NOT_READY),lv_color_hex(0xC03A2B));
+        print_notice(UI_NOTICE_ERROR,"Request not sent. Check controller connection.");
         return false;
     }
     print_request_started();
@@ -137,7 +135,7 @@ static void print_cancel(lv_event_t *e)
 {
     (void)e;if(print_pending||print_saving)return;
     print_config_get(&print_draft);print_refresh_view();
-    print_set_status("Changes discarded.",lv_color_hex(0x586B78));
+    print_notice(UI_NOTICE_INFO,"Changes discarded.");
 }
 static void print_apply_next(void)
 {
@@ -154,9 +152,9 @@ static void print_apply_next(void)
     }else if(next.content!=print_draft.content){
         next.content=print_draft.content;sent=print_send_field(PRINT_CONFIG_CONTENT,&next);
     }else{
-        print_saving=false;print_refresh_view();print_set_status("All changes confirmed.",lv_color_hex(0x29704D));return;
+        print_saving=false;print_refresh_view();print_notice(UI_NOTICE_SUCCESS,"All changes confirmed.");return;
     }
-    if(!sent){print_saving=false;print_refresh_view();print_set_status("Save incomplete. Confirmed changes remain; retry Save.",lv_color_hex(0xA35B12));}
+    if(!sent){print_saving=false;print_refresh_view();print_notice(UI_NOTICE_ERROR,"Save incomplete. Confirmed changes remain; retry Save.");}
 }
 static void print_save(lv_event_t *e)
 {
@@ -411,8 +409,7 @@ void ui_page_20_set_print_create(lv_obj_t *parent)
     print_cancel_button=lv_settings_button(print_frame.footer,964,0,124,46,"Cancel",false,print_cancel,NULL);
     print_save_button=lv_settings_button(print_frame.footer,1100,0,132,46,"Save",true,print_save,NULL);
     gesture_service_set_page_policy(UI_PAGE_PRINT_SETTING,NULL,print_gesture);
-    status_label = print_frame.message;
-    lv_label_set_text(status_label, print_pending ? "Waiting for controller." : "Values update after controller confirmation.");
+    lv_label_set_text(print_frame.message, "");
     print_refresh_view();
 }
 
@@ -431,7 +428,7 @@ void ui_page_20_set_print_destroy(void)
     value_head1 = NULL;
     value_head2 = NULL;
     value_space_bottom = NULL;
-    status_label = NULL;print_save_button=print_cancel_button=NULL;
+    print_save_button=print_cancel_button=NULL;
     memset(receipt_titles,0,sizeof(receipt_titles));receipt_content=NULL;
     receipt_paper=receipt_body=receipt_caption=NULL;
     memset(space_presets,0,sizeof(space_presets));
@@ -508,7 +505,7 @@ void ui_page_20_set_print_on_boot_setting(const uint8_t* data, uint16_t len)
 
     if (print_page) {
         print_config_get(&print_draft);print_refresh_view();
-        print_set_status("Configuration received.", lv_color_hex(0x586B78));
+        lv_label_set_text(print_frame.message, "");
     }
 }
 
@@ -522,11 +519,7 @@ void ui_page_20_set_print_on_reply(const print_config_request_result_t* result)
     if(print_saving){
         if(result->success){print_apply_next();return;}
         print_saving=false;print_refresh_view();
-        print_set_status("Save incomplete. Confirmed changes remain; retry Save.",lv_color_hex(0xA35B12));return;
+        print_notice(result->timeout?UI_NOTICE_WARNING:UI_NOTICE_ERROR,result->timeout?"No reply. Check confirmed settings before retrying.":"Save incomplete. Confirmed changes remain; retry Save.");return;
     }
-    if (!result->success) {
-        print_set_status(ui_text_get(UI_TEXT_SETTINGS_PRINT_FAIL), lv_color_hex(0xC03A2B));
-    } else {
-        print_set_status(ui_text_get(UI_TEXT_SETTINGS_PRINT_SUCCESS), lv_color_hex(0x1462CC));
-    }
+    /* Single-field transaction feedback is owned by the app reply dispatcher. */
 }

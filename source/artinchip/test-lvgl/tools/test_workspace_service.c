@@ -62,7 +62,20 @@ int main(void)
     workspace_service_poll(200);assert(commands==before+1); /* No send is not an ACK. */
     actuals[last_step]=last_value;workspace_service_poll(300);assert(last_step==1);
     workspace_service_poll(2201);assert(!workspace_service_applying());assert(strstr(workspace_service_apply_message(),"Stopped at Sorting"));
+    assert(workspace_service_apply_result()==WORKSPACE_APPLY_UNCONFIRMED);
     before=commands;workspace_service_poll(3000);assert(commands==before);
+    /* A matched reject ends the transaction immediately. Unrelated commands
+     * and duplicate rejects cannot change this profile or start later steps. */
+    assert(workspace_service_apply(&p,3100));workspace_service_poll(3101);
+    assert(last_step==1&&workspace_service_owns_command(0x3A));
+    before=commands;
+    assert(!workspace_service_reject_command(0x41)&&workspace_service_applying());
+    assert(workspace_service_reject_command(0x3A));
+    assert(!workspace_service_applying()&&workspace_service_apply_result()==WORKSPACE_APPLY_FAILED);
+    assert(strstr(workspace_service_apply_message(),"Sorting rejected"));
+    assert(!workspace_service_reject_command(0x3A));
+    workspace_service_poll(3200);workspace_service_poll(5100);
+    assert(commands==before&&workspace_service_apply_result()==WORKSPACE_APPLY_FAILED);
     assert(workspace_service_apply(&p,4000));workspace_service_poll(4001);workspace_service_cancel_apply();
     before=commands;actuals[last_step]=last_value;workspace_service_poll(4010);assert(commands==before&&!workspace_service_applying());
     fail_send=true;assert(workspace_service_apply(&p,5000));workspace_service_poll(5001);assert(!workspace_service_applying());fail_send=false;

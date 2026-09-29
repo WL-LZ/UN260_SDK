@@ -12,6 +12,7 @@
 #include "un260/machine_state/machine_state.h"
 #include "un260/protocol/mode_codec.h"
 #include "un260/lv_system/ui_state_store.h"
+#include "test_notice_sink.h"
 
 #define PAGE07_CURR_MAX_ITEMS MAX_CURRENCIES
 #define UI_PAGE_MAIN 1
@@ -23,7 +24,7 @@ static struct { page07_curr_model_state_t model; } g_page07_curr;
 static void *curr_page = (void *)1;
 static ui_state_page07_t saved;
 static uint64_t tick;
-static unsigned sends, saves, navigations, errors;
+static unsigned sends, saves, navigations;
 static uint8_t last_cmd, last_payload[8];
 static uint16_t last_length;
 static bool send_fails, mode_clear;
@@ -63,8 +64,8 @@ static void page_01_bottom_a_refresh_mode(bool animate) { (void)animate; }
 static void page_01_curr_img_refre(void) {}
 static void smart_island_refresh_summary(void) {}
 static void page_01_main_scroll_reset(void) {}
-static void show_currency_set_fail_popup(void) { errors++; }
-static void show_start_fault_popup(uint8_t type, uint8_t code) { (void)type; (void)code; errors++; }
+static void app_setting_notice_result(const char *key,const char *title,bool success)
+{ui_notice_post(success?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,key,title,NULL);}
 static void curr_set_left_info_by_abs(int index) { (void)index; }
 static void curr_apply_selected_style(void) {}
 static void curr_scroll_to_visible_idx(int index, bool animate) { (void)index; (void)animate; }
@@ -98,7 +99,7 @@ static void reset(void)
     memset(&saved, 0, sizeof(saved)); memset(&g_page07_curr, 0, sizeof(g_page07_curr));
     machine_state_confirm_mode(MODE_MDC);
     page07_curr_model_load(); page07_curr_model_refresh_visible();
-    sends = saves = navigations = errors = 0;
+    sends = saves = navigations = 0;
     tick = 0; send_fails = mode_clear = false;
 }
 static void test_catalog_and_model(void)
@@ -178,8 +179,10 @@ static void test_requests_replies_and_boot(void)
     tick=801; currency_switch_result_t result;
     assert(currency_service_take_switch_timeout(&result));
     page_07_curr_apply_switch_result(&result); selected("MUL");
+    assert(result.timeout&&test_notice_kind==UI_NOTICE_WARNING);
     currency_ack(1); selected("MUL");
     send_fails=true; choose("AUT"); selected("MUL");
+    assert(test_notice_kind==UI_NOTICE_ERROR&&!strcmp(test_notice_title,"Currency not sent"));
     assert(!currency_service_switch_pending());
     send_fails=false; choose("AUT");
     assert(last_cmd==3 && last_length==3 && !memcmp(last_payload,"AUT",3));

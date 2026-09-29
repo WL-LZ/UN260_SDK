@@ -1,4 +1,5 @@
 #include "app_ui_runtime.h"
+#include "un260/lv_components/ui_notice.h"
 #include "app_auto_qr.h"
 #include "app_standby_runtime.h"
 #include "un260/storage/standby_store.h"
@@ -29,8 +30,90 @@
 
 static uint32_t g_upgrade_detect_tick;
 
+/* User-requested work only: startup loads and background maintenance are not
+ * registered. Storage accepts one job per service, so its busy -> idle edge
+ * belongs to the accepted request until this UI-thread observer consumes it. */
+static struct {
+    bool workspace, records, profile;
+    app_ui_notice_operation_t workspace_operation;
+} g_operation_notice;
+
+static const char *operation_key(app_ui_notice_operation_t operation)
+{
+    switch (operation) {
+    case APP_UI_NOTICE_WORKSPACE_STORE: return "workspace.store";
+    case APP_UI_NOTICE_BATCH_SAVE: return "workspace.batch";
+    case APP_UI_NOTICE_RECORD_STORE: return "records.store";
+    case APP_UI_NOTICE_PROFILE_APPLY: return "workspace.apply";
+    default: return NULL;
+    }
+}
+
+static const char *operation_title(app_ui_notice_operation_t operation)
+{
+    switch (operation) {
+    case APP_UI_NOTICE_BATCH_SAVE: return "Batch cycle";
+    case APP_UI_NOTICE_RECORD_STORE: return "Records";
+    case APP_UI_NOTICE_PROFILE_APPLY: return "Counting profile";
+    default: return "Workspace";
+    }
+}
+
+void app_ui_runtime_notice_started(app_ui_notice_operation_t operation, const char *detail)
+{
+    const char *key = operation_key(operation);
+    if (!key) return;
+    switch (operation) {
+    case APP_UI_NOTICE_WORKSPACE_STORE:
+    case APP_UI_NOTICE_BATCH_SAVE:
+        if (!workspace_store_busy()) return;
+        g_operation_notice.workspace = true;
+        g_operation_notice.workspace_operation = operation;
+        break;
+    case APP_UI_NOTICE_RECORD_STORE:
+        if (!cashbook_store_busy()) return;
+        g_operation_notice.records = true;
+        break;
+    case APP_UI_NOTICE_PROFILE_APPLY:
+        if (!workspace_service_applying()) return;
+        g_operation_notice.profile = true;
+        break;
+    }
+    /* A new accepted request is a new acknowledgement lifetime. */
+    ui_notice_clear(key);
+    ui_notice_post(UI_NOTICE_PROGRESS, key, operation_title(operation), detail);
+}
+
+static void app_ui_runtime_poll_operation_notices(void)
+{
+    if (g_operation_notice.workspace && !workspace_store_busy()) {
+        app_ui_notice_operation_t operation = g_operation_notice.workspace_operation;
+        bool success = workspace_store_last_success();
+        g_operation_notice.workspace = false;
+        ui_notice_post(success ? UI_NOTICE_SUCCESS : UI_NOTICE_ERROR,
+            operation_key(operation), operation_title(operation),
+            success && operation == APP_UI_NOTICE_BATCH_SAVE ?
+                workspace_service_batch_save_message() : workspace_store_message());
+    }
+    if (g_operation_notice.records && !cashbook_store_busy()) {
+        g_operation_notice.records = false;
+        ui_notice_post(cashbook_store_last_success() ? UI_NOTICE_SUCCESS : UI_NOTICE_ERROR,
+            "records.store", "Records", cashbook_store_message());
+    }
+    if (g_operation_notice.profile && !workspace_service_applying()) {
+        workspace_apply_result_t result = workspace_service_apply_result();
+        ui_notice_kind_t kind = result == WORKSPACE_APPLY_SUCCEEDED ? UI_NOTICE_SUCCESS :
+            result == WORKSPACE_APPLY_FAILED ? UI_NOTICE_ERROR :
+            result == WORKSPACE_APPLY_UNCONFIRMED ? UI_NOTICE_WARNING : UI_NOTICE_INFO;
+        g_operation_notice.profile = false;
+        ui_notice_post(kind, "workspace.apply", "Counting profile",
+            workspace_service_apply_message());
+    }
+}
+
 void app_ui_runtime_init(void)
 {
+    ui_notice_init();
     work_mode_service_init();
     workspace_service_init();
     cashbook_store_init();
@@ -61,24 +144,22 @@ static void app_ui_runtime_poll_upgrade(uint32_t now_ms)
 
 void app_ui_runtime_poll(uint32_t now_ms)
 {
-    bool stream_timed_out = false;
+    ui_page_t page = ui_manager_get_current_page();
+    ui_notice_set_suspended(UI_NOTICE_SUSPEND_STANDBY, page == UI_PAGE_STANDBY);
+    ui_notice_set_suspended(UI_NOTICE_SUSPEND_MODAL,
+        ui_page_00_boot_anim_is_active() || page == UI_PAGE_BOOT ||
+        page == UI_PAGE_BOOT_ANIM || page == UI_PAGE_UI_UPGRADE || lv_upgrade_popup_is_showing());
 
     app_setting_runtime_poll(now_ms);
     if(cashbook_store_poll()) ui_manager_publish_data_changed(UI_DATA_TOPIC_MACHINE_SETTINGS);
     if (workspace_service_poll(now_ms))
         ui_manager_publish_data_changed(UI_DATA_TOPIC_MACHINE_SETTINGS);
+    app_ui_runtime_poll_operation_notices();
     if (diagnostic_calibration_poll(now_ms)) {
         cis_calib_ui_refresh();
     }
-    if (ui_page_28_get_image_poll(now_ms)) {
-        stream_timed_out = true;
-    }
-    if (ui_page_31_get_wave_poll(now_ms)) {
-        stream_timed_out = true;
-    }
-    if (stream_timed_out) {
-        show_communication_error_popup();
-    }
+    ui_page_28_get_image_poll(now_ms);
+    ui_page_31_get_wave_poll(now_ms);
     if (!ui_page_00_boot_anim_is_active()) {
         ui_screenshot_indicator_poll();
     }

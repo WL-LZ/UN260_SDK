@@ -1,29 +1,37 @@
-/* Real LVGL and production island; exclude the unrelated display-test page. */
+/* Production island must forward notices without owning their visual lifetime. */
 #include "lvgl/lvgl.h"
 #define HOST_ISLAND_ONLY
 #define main main_raster_entry_unused
 #include "test_main_view.c"
 #undef main
 
-static void test_readable_warning(const char *message)
+static void test_notice_adapter(void)
 {
-    smart_island_notify_warning(message);tick(300);render();
-    assert(lv_obj_get_x(g_si_ctx.objects.title_clip)==36);
-    assert(lv_obj_get_x(g_si_ctx.objects.title)==0);
-    write_bmp("island-warning-start");
-    tick(800);render();
-    lv_coord_t from=lv_obj_get_x(g_si_ctx.objects.title);
-    tick(500);render();
-    lv_coord_t to=lv_obj_get_x(g_si_ctx.objects.title);
-    assert(to<from && from-to<=25); /* <=45 px/s plus one 20ms frame. */
-    smart_island_view_refresh_scene();render();
-    assert(lv_obj_get_x(g_si_ctx.objects.title)==to);
-    smart_island_notify_warning(message); /* Duplicate must not restart hold. */
-    assert(lv_obj_get_x(g_si_ctx.objects.title)==to);
-    write_bmp("island-warning-scrolling");
-    tick(18000);render();
-    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE);
-    assert(!g_si_ctx.warning.marquee_running);
+    unsigned initial_timers=timers(),posts=host_notice_posts,tx=protocol_calls;
+    smart_island_notify_warning("Mode timed out. Retry Start mode in Menu.");
+    assert(host_notice_posts==posts+1 && host_notice_kind==UI_NOTICE_WARNING);
+    assert(!strcmp(host_notice_detail,"Mode timed out. Retry Start mode in Menu."));
+    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE && timers()==initial_timers);
+    smart_island_notify_warning_level("Export failed",SMART_ISLAND_WARNING_LEVEL_ERROR);
+    assert(host_notice_posts==posts+2 && host_notice_kind==UI_NOTICE_ERROR);
+    assert(!strcmp(host_notice_detail,"Export failed"));
+    smart_island_notify_warning_level("Invalid",(smart_island_warning_level_t)99);
+    assert(host_notice_posts==posts+2);
+    smart_island_notify_warning(NULL);
+    assert(host_notice_posts==posts+3 && host_notice_detail[0]);
+    assert(protocol_calls==tx); /* A notice never acknowledges machine hardware. */
+    tick(18000);render();assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE);
+    assert(timers()==initial_timers);
+    page_01_main_suspend();
+    smart_island_notify_warning("Hidden page notice");
+    assert(host_notice_posts==posts+4 && !strcmp(host_notice_detail,"Hidden page notice"));
+    tick(1000);assert(page_01_main_resume());tick(400);
+    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE && timers()==initial_timers);
+    host_fault_pending=true;smart_island_refresh_summary();render();
+    assert(!strcmp(lv_label_get_text(g_si_ctx.objects.title),"Machine issue"));
+    write_bmp("island-unresolved-fault");
+    host_fault_pending=false;smart_island_refresh_summary();render();
+    assert(strcmp(lv_label_get_text(g_si_ctx.objects.title),"Machine issue"));
 }
 
 int main(void)
@@ -39,18 +47,12 @@ int main(void)
     lv_img_decoder_set_info_cb(decoder,host_image_info);lv_img_decoder_set_open_cb(decoder,host_image_open);
     lv_img_decoder_set_close_cb(decoder,host_image_close);
     fixture(false);assert(currency_state_confirm_active_code("USD"));ui_main_create(lv_scr_act());tick(400);
-    unsigned initial_timers=timers();
-    test_readable_warning("Mode timed out. Retry Start mode in Menu.");
-    test_readable_warning("A much longer diagnostic warning must remain readable to the end");
-    smart_island_notify_warning("Mode timed out. Retry Start mode in Menu.");tick(1200);
-    smart_island_notify_warning("USB ready");tick(100);
-    assert(lv_label_get_long_mode(g_si_ctx.objects.title)==LV_LABEL_LONG_CLIP);
-    page_01_main_suspend();tick(10000);assert(page_01_main_resume());tick(400);
-    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE);
-    assert(timers()==initial_timers);
-    smart_island_notify_warning("A long warning interrupted by destroying its host page");tick(1200);
-    ui_main_destroy();tick(15000);
+    test_notice_adapter();
+    ui_main_destroy();
+    unsigned posts=host_notice_posts;
+    smart_island_notify_warning("Notice without Main");
+    assert(host_notice_posts==posts+1 && !strcmp(host_notice_detail,"Notice without Main"));
     counting_data_clear_serials(counting_data_mutable());counting_data_clear_errors(counting_data_mutable());
     lv_img_decoder_delete(decoder);lv_deinit();host_external_assets_release();
-    puts("PASS warning: initial hold, bounded pixel speed, clipped viewport, length-independent speed, refresh/duplicate, expiry, replacement, hide/resume, destroy");
+    puts("PASS notice adapter: type/content, no scene/timer/protocol mutation, hidden/destroyed Main, persistent unresolved fault");
 }

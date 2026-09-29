@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #include "page_33_set_brightness.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "un260/lv_core/settings_detail_ui.h"
@@ -43,8 +44,9 @@ static void restore(void)
     if (preview.timer) lv_timer_pause(preview.timer);
     if (preview.slider) lv_slider_set_value(preview.slider, backlight_service_level(), LV_ANIM_OFF);
     refresh();
-    if (frame.message) lv_label_set_text(frame.message, ok ?
-        "Previous brightness restored." : "Could not restore the previous brightness.");
+    ui_notice_post(ok?UI_NOTICE_INFO:UI_NOTICE_ERROR,"settings.brightness","Brightness",
+        ok?"Previous brightness restored.":"Could not restore previous brightness.");
+    if(frame.message)lv_label_set_text(frame.message,"");
 }
 
 static void tick(lv_timer_t *timer)
@@ -68,13 +70,14 @@ static void keep(lv_event_t *event)
     if (lv_event_get_code(event) != LV_EVENT_CLICKED || !preview.pending) return;
     if (!backlight_service_save()) {
         preview.save_failed = true;
-        lv_label_set_text(frame.message, "Save failed. The preview will revert automatically.");
+        ui_notice_post(UI_NOTICE_ERROR,"settings.brightness","Brightness not saved","Preview will revert automatically.");
         return;
     }
     preview.pending = false;
     if (preview.timer) lv_timer_pause(preview.timer);
     refresh();
-    lv_label_set_text(frame.message, "Brightness saved.");
+    lv_label_set_text(frame.message, "");
+    ui_notice_post(UI_NOTICE_SUCCESS,"settings.brightness","Brightness saved",NULL);
 }
 
 static void revert(lv_event_t *event)
@@ -95,7 +98,7 @@ static void slider_event(lv_event_t *event)
     if (!preview.pending) preview.previous = backlight_service_level();
     if (!backlight_service_set(requested)) {
         lv_slider_set_value(preview.slider, backlight_service_level(), LV_ANIM_OFF);
-        lv_label_set_text(frame.message, "Could not change brightness.");
+        ui_notice_post(UI_NOTICE_ERROR,"settings.brightness","Brightness unchanged","Could not apply this brightness.");
         return;
     }
     preview.pending = true;

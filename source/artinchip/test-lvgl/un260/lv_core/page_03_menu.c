@@ -1,3 +1,5 @@
+#include "un260/lv_components/ui_notice.h"
+#include "un260/app_service/app_ui_runtime.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "page_03_menu.h"
 #include "lv_page_manager.h"
@@ -60,19 +62,17 @@ static const char *const sublabels[][5]={{NULL},{"Batch presets","Profiles","Opt
     {"Operators","Interaction","Display & sound"},{"Reject guide","Care","Device"}};
 static const unsigned subcounts[]={0,3,5,2,3,3};
 static struct {
-    lv_obj_t *root,*body,*notice_box,*notice_label,*quick,*photo_sheet,*user_sheet,*record_sheet,*nav[6],*task_scroll;
+    lv_obj_t *root,*body,*quick,*photo_sheet,*user_sheet,*record_sheet,*nav[6],*task_scroll;
     lv_timer_t *timer;
     unsigned tab,sub,selected_batch,selected_profile,selected_user,batch_page;
     bool record_pending,verify_pick,reject_all;
-    bool dirty,batch_dirty,user_edit,scan_wait,photo_wait,photo_ready,was_applying,show_archives;
-    bool workspace_wait,record_wait;
+    bool dirty,batch_dirty,user_edit,scan_wait,photo_wait,photo_ready,show_archives;
     unsigned saving;
     uint32_t selected_group,selected_run,selected_close,record_day,qr_generation;
     unsigned reject_code;
     lv_obj_t *brightness_value;
     int brightness_previous;
     bool brightness_drag;
-    uint32_t notice_tick;
     lv_obj_t *quick_switch[3],*quick_state[3];
     bool quick_value[3];
     uint8_t batches[WORKSPACE_BATCHES],batch_count;
@@ -80,7 +80,7 @@ static struct {
     uint32_t owner,editing_user;
     unsigned rendered_tab,rendered_sub;
     lv_coord_t scroll_y[6][5];
-    char user_name[WORKSPACE_NAME+1],employee_id[WORKSPACE_EMPLOYEE_ID+1],team[WORKSPACE_TEAM+1],notice[160];
+    char user_name[WORKSPACE_NAME+1],employee_id[WORKSPACE_EMPLOYEE_ID+1],team[WORKSPACE_TEAM+1];
     workspace_avatar_t avatar;
     lv_img_dsc_t avatar_desc,form_avatar_desc,usb_avatar_desc;
 } menu;
@@ -90,38 +90,14 @@ static void records_detail(lv_obj_t *);
 static uint32_t business_day(void);
 static void photo_sheet(void);
 static void clear_notice(void)
+{ui_notice_dismiss("menu.operation");}
+static void notify(ui_notice_kind_t kind,const char *message)
 {
-    if(menu.notice_box)lv_obj_del(menu.notice_box);
-    menu.notice_box=menu.notice_label=NULL;menu.notice[0]=0;
+    if(!message||!*message||!page_03_menu_is_visible())return;
+    ui_notice_post(kind,"menu.operation","Menu",message);
 }
-static void dismiss_notice(lv_event_t *e){(void)e;clear_notice();}
-static void notify(const char *s)
-{
-    if(!s||!*s||!page_03_menu_is_visible())return;
-    if(!strcmp(s,"Records ready."))return;
-    if(strstr(s,"Saved on this device")||strstr(s,"saved on this device"))s="Saved";
-    if(!strcmp(menu.notice,s))return;
-    snprintf(menu.notice,sizeof(menu.notice),"%s",s);menu.notice_tick=lv_tick_get();
-    if(!menu.notice_box){
-        menu.notice_box=lv_settings_box(menu.root,350,342,580,40,0x1D2B34);
-        lv_obj_set_style_radius(menu.notice_box,14,0);
-        menu.notice_label=lv_settings_label(menu.notice_box,"",18,10,&lv_font_instrument_sans_medium_15,0xFFFFFF);
-        lv_obj_set_width(menu.notice_label,532);
-        lv_obj_add_flag(menu.notice_box,LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_event_cb(menu.notice_box,dismiss_notice,LV_EVENT_CLICKED,NULL);lv_label_set_long_mode(menu.notice_label,LV_LABEL_LONG_DOT);
-    }
-    lv_label_set_text(menu.notice_label,s);lv_obj_set_width(menu.notice_label,LV_SIZE_CONTENT);lv_obj_update_layout(menu.notice_label);
-    int width=lv_obj_get_width(menu.notice_label);if(width>864)width=864;if(width<66)width=66;
-    lv_obj_set_width(menu.notice_label,width);lv_obj_set_width(menu.notice_box,width+36);lv_obj_set_x(menu.notice_box,(1280-width-36)/2);
-    lv_obj_move_foreground(menu.notice_box);
-}
-static void explain(const char *s)
-{settings_detail_dialog_show("Please check",s,"OK",NULL,NULL,NULL,NULL);}
-static void completed_notice(const char *s,bool ok)
-{
-    if(!page_03_menu_is_visible())return;
-    if(ok)notify(s);else {clear_notice();explain(s);}
-}
+static void explain(const char *message)
+{notify(UI_NOTICE_WARNING,message);}
 static lv_obj_t *label(lv_obj_t *p,int x,int y,int w,const char *s,const lv_font_t *f,uint32_t c)
 {lv_obj_t *o=lv_settings_label(p,s,x,y,f,c);lv_obj_set_width(o,w);lv_label_set_long_mode(o,LV_LABEL_LONG_WRAP);return o;}
 static lv_obj_t *text(lv_obj_t *p,int x,int y,int w,const char *s)
@@ -198,7 +174,7 @@ static workspace_model_t *draft(void)
 static bool save(workspace_model_t *m)
 {
     bool ok=m&&workspace_store_save(m);free(m);
-    if(ok){menu.workspace_wait=true;notify("Saving...");}else explain("Could not save. Wait for the current task or check device storage.");return ok;
+    if(ok)app_ui_runtime_notice_started(APP_UI_NOTICE_WORKSPACE_STORE,"Saving...");else notify(UI_NOTICE_ERROR,"Could not save. Wait for the current task or check device storage.");return ok;
 }
 static void capture_batch_active(void)
 {
@@ -215,13 +191,13 @@ static void reset_batch(void)
 static void tab_event(lv_event_t *e)
 {
     if(menu.saving||menu.batch_dirty||menu.user_edit){explain("Save or cancel your changes before switching sections.");return;}
-    if(workspace_service_applying()){explain("Wait for the profile to finish applying.");return;}
+    if(workspace_service_applying()){notify(UI_NOTICE_WARNING,"Wait for the profile to finish applying.");return;}
     clear_notice();menu.show_archives=false;menu.selected_close=0;
     menu.tab=(uintptr_t)lv_event_get_user_data(e);menu.sub=0;menu.selected_group=0;menu.record_pending=menu.verify_pick=false;menu.dirty=true;
 }
 static void sub_event(lv_event_t *e)
 {
-    if(workspace_service_applying()){explain("Wait for the profile to finish applying.");return;}
+    if(workspace_service_applying()){notify(UI_NOTICE_WARNING,"Wait for the profile to finish applying.");return;}
     if(menu.saving||menu.batch_dirty||menu.user_edit){explain("Save or cancel your changes first.");return;}
     clear_notice();menu.show_archives=false;
     menu.sub=(uintptr_t)lv_event_get_user_data(e);menu.selected_group=menu.selected_close=0;menu.record_pending=menu.verify_pick=false;menu.dirty=true;
@@ -309,7 +285,6 @@ static void render(void)
     for(unsigned i=0;i<6;i++){choose(menu.nav[i],i==menu.tab);lv_obj_t *l=lv_obj_get_child(menu.nav[i],0);lv_obj_set_style_text_color(l,lv_color_hex(i==menu.tab?BLUE:0x455D6B),0);lv_obj_set_style_text_font(l,i==menu.tab?&lv_font_instrument_sans_semibold_16:&lv_font_instrument_sans_medium_16,0);}
     if(menu.task_scroll){lv_obj_update_layout(menu.task_scroll);lv_obj_scroll_to_y(menu.task_scroll,menu.scroll_y[menu.tab][menu.sub],LV_ANIM_OFF);}
     menu.rendered_tab=menu.tab;menu.rendered_sub=menu.sub;menu.dirty=false;
-    if(menu.notice_box)lv_obj_move_foreground(menu.notice_box);
 }
 static void confirmed_back(void *unused)
 {(void)unused;menu.batch_dirty=menu.user_edit=false;workspace_service_cancel_apply();reset_batch();if(!ui_manager_pop_page())ui_manager_switch(UI_PAGE_MAIN);}
@@ -322,9 +297,9 @@ static void apply_profile(void *unused)
 {
     (void)unused;const workspace_user_t *u=user();if(!u||menu.selected_profile>=u->profile_count)return;
     const workspace_profile_t *profile=&u->profiles[menu.selected_profile];
-    if(profile->batch_enabled&&profile->batch==200){explain("This legacy profile uses 200, which is reserved for Batch OFF. Choose a valid batch and save a replacement profile.");return;}
-    if(!workspace_service_apply(&u->profiles[menu.selected_profile],app_clock_uptime_ms()))explain("The profile cannot be applied now. Finish counting and wait for the controller to be ready.");
-    else {menu.was_applying=true;notify("Applying profile...");}
+    if(profile->batch_enabled&&profile->batch==200){explain("Batch 200 means OFF. Save a replacement profile with 1-199.");return;}
+    if(!workspace_service_apply(&u->profiles[menu.selected_profile],app_clock_uptime_ms()))explain("Finish counting, then apply the profile again.");
+    else app_ui_runtime_notice_started(APP_UI_NOTICE_PROFILE_APPLY,"Applying profile...");
 }
 static void name_submit(const char *value,void *context)
 {
@@ -336,7 +311,7 @@ static void name_submit(const char *value,void *context)
 static void batch_submit(const char *value,void *unused)
 {
     (void)unused;char *end;unsigned long v=strtoul(value,&end,10);
-    if(!*value||*end||v<1||v>=200){explain("Enter 1-199. The controller uses 200 for Batch OFF. Use a value within the pocket's rated capacity.");return;}
+    if(!*value||*end||v<1||v>=200){explain("Enter 1-199, within the pocket capacity. 200 means OFF.");return;}
     for(unsigned i=1;i<menu.batch_count;i++)if(i!=menu.selected_batch&&menu.batches[i]==v){explain("This slot already exists.");return;}
     if(!menu.batch_dirty)capture_batch_active();
     if(menu.batch_active_edited&&menu.batches[menu.selected_batch]==menu.batch_active_edited)
@@ -344,7 +319,7 @@ static void batch_submit(const char *value,void *unused)
     menu.batches[menu.selected_batch]=v;menu.batch_dirty=menu.dirty=true;
 }
 static void photo_event(lv_event_t *e)
-{if(!workspace_store_import_avatar((uintptr_t)lv_event_get_user_data(e)))explain("Wait for the current photo task to finish.");else {menu.photo_wait=menu.workspace_wait=true;notify("Preparing photo...");}}
+{if(!workspace_store_import_avatar((uintptr_t)lv_event_get_user_data(e)))explain("Wait for the current photo task to finish.");else {menu.photo_wait=true;app_ui_runtime_notice_started(APP_UI_NOTICE_WORKSPACE_STORE,"Preparing photo...");}}
 static void close_photo(lv_event_t *e)
 {
     if(lv_event_get_target(e)!=menu.photo_sheet)return;
@@ -414,8 +389,8 @@ static void action(lv_event_t *event)
 {
     unsigned id=(uintptr_t)lv_event_get_user_data(event);const workspace_user_t *u=user();
     if(id==A_BACK){if(menu.saving){explain("The workspace is being saved. Please wait a moment.");return;}if(menu.batch_dirty||menu.user_edit||workspace_service_applying())settings_detail_dialog_show("Leave Menu?","Unsaved edits will be discarded. Remaining profile steps will stop.","Leave","Stay",confirmed_back,NULL,NULL);else confirmed_back(NULL);return;}
-    if(workspace_service_applying()){explain("Wait for the profile to finish applying, or use Back to stop remaining steps.");return;}
-    if(menu.saving){explain("The workspace is being saved. Please wait a moment.");return;}
+    if(workspace_service_applying()){notify(UI_NOTICE_WARNING,"Wait for the profile, or use Back to stop remaining steps.");return;}
+    if(menu.saving){notify(UI_NOTICE_WARNING,"The workspace is being saved. Please wait a moment.");return;}
     if((menu.batch_dirty||menu.user_edit)&&(id==A_SETTINGS||id==A_QUICK||id==A_HISTORY||id==A_PRINT_SETUP||id==A_BRIGHTNESS||id==601||id==600||id==A_STANDBY)){
         explain("Save or cancel your changes before leaving this task.");return;
     }
@@ -424,11 +399,11 @@ static void action(lv_event_t *event)
     if(id==A_USB_CLOSE){if(menu.photo_sheet)lv_obj_del(menu.photo_sheet);menu.photo_sheet=NULL;menu.scan_wait=menu.photo_wait=menu.photo_ready=false;return;}
     if(id==A_HISTORY){ui_manager_push_page(UI_PAGE_HISTORY);return;}if(id==A_PRINT_SETUP){ui_manager_push_page(UI_PAGE_PRINT_SETTING);return;}
     if(id==A_PRINT){if(app_command_runtime_count_start_busy()||print_config_pending()){explain("Finish counting and receipt settings before printing.");return;}page_01_print_btn_event_cb(event);return;}
-    if(id==A_QR){char payload[3072];if(app_command_runtime_count_start_busy()||!ui_qr_data_build_summary(payload,sizeof(payload))||!lv_qr_popup_show(payload))explain("Finish counting and wait for a complete currency summary before exporting.");else menu.qr_generation=lv_qr_popup_generation();return;}
+    if(id==A_QR){char payload[3072];if(app_command_runtime_count_start_busy()||!ui_qr_data_build_summary(payload,sizeof(payload))||!lv_qr_popup_show(payload))explain("Finish counting and wait for the complete summary.");else menu.qr_generation=lv_qr_popup_generation();return;}
     if(id==A_BRIGHTNESS){ui_manager_push_page(UI_PAGE_BRIGHTNESS_SETTING);return;}
     if(id==601){ui_manager_push_page(UI_PAGE_STANDBY_SETTING);return;}if(id==600){ui_manager_push_page(UI_PAGE_LIST);return;}
     if(id==A_STANDBY){if(app_command_runtime_count_start_busy()||standby_store_busy())explain("Finish the current operation before standby.");else ui_manager_push_page(UI_PAGE_STANDBY);return;}
-    if(id==A_GESTURES||id==A_LAYOUT){if(id==A_GESTURES){if(!gesture_service_set_enabled(!gesture_service_enabled()))explain("Could not save the gesture preference.");}else page_01_main_layout_set_enabled(!page_01_main_layout_is_enabled());menu.dirty=true;if(menu.quick)refresh_quick();return;}
+    if(id==A_GESTURES||id==A_LAYOUT){if(id==A_GESTURES){if(!gesture_service_set_enabled(!gesture_service_enabled()))notify(UI_NOTICE_ERROR,"Could not save the gesture preference.");}else page_01_main_layout_set_enabled(!page_01_main_layout_is_enabled());menu.dirty=true;if(menu.quick)refresh_quick();return;}
     if(id==307||id==308){menu.tab=id==307?3:5;menu.sub=0;menu.dirty=true;return;}
     if(id==510||id==511){if(id==510&&menu.batch_page)menu.batch_page--;if(id==511&&(menu.batch_page+1)*5<menu.batch_count)menu.batch_page++;menu.dirty=true;return;}
     if(id>=301&&id<=306){
@@ -436,7 +411,7 @@ static void action(lv_event_t *event)
         menu.sub=id==302?1:id==303?2:id==304?1:0;menu.selected_group=0;menu.dirty=true;return;
     }
     if(id==813)id=440+!machine_state_buzzer_enabled();
-    if(id>=400&&id<450){if(workspace_service_applying()||app_command_runtime_count_start_busy()){explain("Wait for the current operation to finish.");return;}unsigned kind=(id-400)/10,v=(id-400)%10;bool ok=false;
+    if(id>=400&&id<450){if(workspace_service_applying()||app_command_runtime_count_start_busy()){notify(UI_NOTICE_WARNING,"Finish the current operation before changing settings.");return;}unsigned kind=(id-400)/10,v=(id-400)%10;bool ok=false;
         switch(kind){
             case 0:ok=setting_service_request_speed(v);break;
             case 1:ok=setting_service_request_work_mode(v);break;
@@ -444,21 +419,21 @@ static void action(lv_event_t *event)
             case 3:ok=setting_service_request_fo_mode(v);break;
             case 4:ok=setting_service_request_beep(v);break;
         }
-        if(!ok)explain("The request could not be sent. Check the controller and try again.");else notify("Waiting for controller confirmation...");return;}
-    if(id==A_CANCEL_VERIFY){counting_cashbook_cancel_verify();menu.dirty=true;notify("Verification cancelled. Existing results are unchanged.");return;}
+        if(!ok)notify(UI_NOTICE_WARNING,"Setting not sent. Finish the current operation and try again.");else clear_notice();return;}
+    if(id==A_CANCEL_VERIFY){counting_cashbook_cancel_verify();menu.dirty=true;notify(UI_NOTICE_INFO,"Verification cancelled. Existing results are unchanged.");return;}
     if(record_action(id)||output_action(id))return;
     if(id==A_DIAGNOSTICS){settings_detail_dialog_show("Export support report?","Insert a USB drive. The report contains versions, confirmed settings and current reject codes only. It excludes serials, note images, amounts, names, photos and passwords.","Export","Cancel",support_export,NULL,NULL);return;}
     if(id>=450&&id<=452){static const uint8_t modes[]={MODE_MDC,MODE_SDC,MODE_CNT};settings_detail_dialog_show("Change count mode?","After the controller confirms, the current Main result will be cleared. Saved history and daily totals are preserved.","Change","Cancel",mode_confirm,NULL,(void *)(uintptr_t)modes[id-450]);return;}
     if(id==A_CAPACITY){char value[8];snprintf(value,sizeof(value),"%u",machine_state_reject_pocket_max());settings_detail_keyboard_show("Reject pocket / 30-100 notes",value,3,SETTINGS_DETAIL_KEYBOARD_UINT,capacity_done,NULL);return;}
     if(id==A_TIMEOUT){char value[8];snprintf(value,sizeof(value),"%u",standby_config()->minutes);settings_detail_keyboard_show("Standby / 0-60 minutes",value,2,SETTINGS_DETAIL_KEYBOARD_UINT,timeout_done,NULL);return;}
-    if(id==A_LANGUAGE){explain("This Menu uses English. Installed translations are managed in protected Settings > Display.");return;}
+    if(id==A_LANGUAGE){notify(UI_NOTICE_INFO,"Language is managed in Settings > Display.");return;}
     if(!workspace_store_ready()||workspace_store_busy()){explain(workspace_store_message());return;}
     if(id==500){reset_batch();menu.dirty=true;return;}
-    if(id==A_SAVE_BATCH){if(workspace_service_save_batches(menu.owner,menu.batches,menu.batch_count,menu.batch_active_original,menu.batch_active_edited)){menu.saving=1;menu.workspace_wait=true;notify("Saving...");}else explain("Could not save. Finish the current operation and check device storage or the controller.");return;}
+    if(id==A_SAVE_BATCH){if(workspace_service_save_batches(menu.owner,menu.batches,menu.batch_count,menu.batch_active_original,menu.batch_active_edited)){menu.saving=1;app_ui_runtime_notice_started(APP_UI_NOTICE_BATCH_SAVE,"Saving...");}else notify(UI_NOTICE_ERROR,"Save failed. Finish the current task and check storage.");return;}
     if(id==A_ADD_BATCH){if(menu.batch_count>=WORKSPACE_BATCHES){explain("Up to 10 slots, including OFF.");return;}if(!menu.batch_dirty)capture_batch_active();unsigned v=1;for(;;v++){bool used=false;for(unsigned i=1;i<menu.batch_count;i++)if(menu.batches[i]==v)used=true;if(!used)break;}menu.selected_batch=menu.batch_count;menu.batches[menu.batch_count++]=v;menu.batch_page=menu.selected_batch/5;menu.batch_dirty=menu.dirty=true;return;}
     if(id==A_EDIT_BATCH){if(!menu.selected_batch){explain("OFF is a fixed slot.");return;}char v[8];snprintf(v,sizeof(v),"%u",menu.batches[menu.selected_batch]);settings_detail_keyboard_show("Notes per batch (1-199)",v,3,SETTINGS_DETAIL_KEYBOARD_UINT,batch_submit,NULL);return;}
     if(id==A_DELETE_BATCH){if(!menu.selected_batch||menu.batch_count<=2){explain("Keep OFF and at least one numeric slot.");return;}if(!menu.batch_dirty)capture_batch_active();if(menu.batches[menu.selected_batch]==menu.batch_active_edited)menu.batch_active_original=menu.batch_active_edited=0;memmove(menu.batches+menu.selected_batch,menu.batches+menu.selected_batch+1,menu.batch_count-menu.selected_batch-1);menu.batch_count--;menu.selected_batch=menu.batch_page=0;menu.batch_dirty=menu.dirty=true;return;}
-    if(id==A_APPLY_BATCH){if(menu.batch_dirty){explain("Save the batch cycle first.");return;}if(app_command_runtime_count_start_busy()||workspace_service_applying()){explain("Finish the current operation first.");return;}unsigned n=menu.batches[menu.selected_batch];if(!setting_service_request_batch_switch(n!=0,n?n:200,machine_state_batch_enabled(),machine_state_batch_num()))explain("Batch could not be sent. Check the controller.");else notify("Waiting for Batch confirmation...");return;}
+    if(id==A_APPLY_BATCH){if(menu.batch_dirty){explain("Save the batch cycle first.");return;}if(app_command_runtime_count_start_busy()||workspace_service_applying()){notify(UI_NOTICE_WARNING,"Finish the current operation first.");return;}unsigned n=menu.batches[menu.selected_batch];if(!setting_service_request_batch_switch(n!=0,n?n:200,machine_state_batch_enabled(),machine_state_batch_num()))notify(UI_NOTICE_ERROR,"Batch could not be sent. Check the controller.");else clear_notice();return;}
     if(id==A_NEW_PROFILE){settings_detail_keyboard_show("Name this profile","",WORKSPACE_NAME,SETTINGS_DETAIL_KEYBOARD_TEXT,name_submit,(void *)1);return;}
     if(id==A_DELETE_PROFILE){if(!u||u->profile_count<=1){explain("Keep at least one counting profile.");return;}char s[120];snprintf(s,sizeof(s),"Delete %s? Current machine values will not change.",u->profiles[menu.selected_profile].name);settings_detail_dialog_show_ex(SETTINGS_DIALOG_DESTRUCTIVE,"Delete profile",s,"Delete","Cancel",delete_profile,NULL,NULL);return;}
     if(id==A_APPLY_PROFILE){settings_detail_dialog_show("Apply profile?","Speed, sorting, sound, Batch, ADD and start method will be confirmed one at a time. Currency is unchanged. A count-mode change clears the current Main result after confirmation; saved history remains.","Apply","Cancel",apply_profile,NULL,NULL);return;}
@@ -469,20 +444,19 @@ static void action(lv_event_t *event)
     if(id==A_EMPLOYEE_ID||id==A_TEAM){settings_detail_keyboard_show(id==A_EMPLOYEE_ID?"Employee ID (optional)":"Branch / team (optional)",id==A_EMPLOYEE_ID?menu.employee_id:menu.team,id==A_EMPLOYEE_ID?WORKSPACE_EMPLOYEE_ID:WORKSPACE_TEAM,SETTINGS_DETAIL_KEYBOARD_TEXT,name_submit,(void *)(uintptr_t)(id==A_EMPLOYEE_ID?2:3));return;}
     if(id==A_USER_CANCEL){menu.user_edit=false;menu.dirty=true;return;}
     if(id==A_EDIT_NAME){settings_detail_keyboard_show("Operator name",menu.user_name,WORKSPACE_NAME,SETTINGS_DETAIL_KEYBOARD_TEXT,name_submit,NULL);return;}
-    if(id==A_USB_SCAN){if(workspace_store_scan_usb()){menu.scan_wait=menu.workspace_wait=true;notify("Looking for USB photos...");}return;}
+    if(id==A_USB_SCAN){if(workspace_store_scan_usb()){menu.scan_wait=true;app_ui_runtime_notice_started(APP_UI_NOTICE_WORKSPACE_STORE,"Looking for USB photos...");}return;}
     if(id==602){if(!workspace_store_avatar()->present){explain("Choose a photo first.");return;}menu.avatar=*workspace_store_avatar();lv_obj_del(menu.photo_sheet);menu.photo_sheet=NULL;menu.dirty=true;return;}
     if(id==A_USER_SAVE){workspace_model_t *m=draft();if(!m)return;uint32_t new_id=menu.editing_user;
-        if(!new_id&&!workspace_add_user(m,menu.user_name,&new_id)){free(m);explain("Enter a unique name (1-24 characters). Up to 8 operators are supported.");return;}
+        if(!new_id&&!workspace_add_user(m,menu.user_name,&new_id)){free(m);explain("Use a unique name, 1-24 characters. Maximum 8 operators.");return;}
         workspace_user_t *v=workspace_find(m,new_id);if(!v){free(m);return;}
         snprintf(v->name,sizeof(v->name),"%s",menu.user_name);snprintf(v->employee_id,sizeof(v->employee_id),"%s",menu.employee_id);snprintf(v->team,sizeof(v->team),"%s",menu.team);v->avatar=menu.avatar;
-        if(!workspace_model_valid(m)){free(m);explain("Check the name and optional fields. Names and IDs must be unique. Employee IDs use letters, digits, - or _. Remove leading or trailing spaces.");return;}
+        if(!workspace_model_valid(m)){free(m);explain("Use unique names/IDs. IDs: letters, digits, - or _.");return;}
         unsigned n=menu.editing_user?menu.selected_user:m->user_count-1;if(save(m)){menu.saving=2;menu.selected_user=n;}return;}
-    if(id==A_USER_SWITCH){const char *reason=workspace_service_switch_blocker();if(reason){explain(reason);return;}const workspace_model_t *m=workspace_store_get();if(!workspace_service_switch(m->users[menu.selected_user].id))explain("The operator could not be switched.");else {menu.workspace_wait=true;notify("Switching workspace...");}return;}
+    if(id==A_USER_SWITCH){const char *reason=workspace_service_switch_blocker();if(reason){explain(reason);return;}const workspace_model_t *m=workspace_store_get();if(m->users[menu.selected_user].id==m->active_id)return;if(!workspace_service_switch(m->users[menu.selected_user].id))notify(UI_NOTICE_ERROR,"The operator could not be switched.");else app_ui_runtime_notice_started(APP_UI_NOTICE_WORKSPACE_STORE,"Switching workspace...");return;}
 }
 static void timer(lv_timer_t *t)
 {
     (void)t;if(!page_03_menu_is_visible())return;
-    if(menu.notice_box&&lv_tick_elaps(menu.notice_tick)>3500)clear_notice();
     lv_indev_t *input=lv_indev_get_next(NULL);
     if(input&&input->proc.state==LV_INDEV_STATE_PRESSED)return;
     if(menu.task_scroll&&lv_obj_is_scrolling(menu.task_scroll))return;
@@ -491,10 +465,7 @@ static void timer(lv_timer_t *t)
         if(memcmp(&current,&output_observed,sizeof(current))){menu.dirty=true;output_observed=current;}
         if(output_waiting&&!print_config_pending()){
             output_waiting=false;menu.dirty=true;
-            const print_config_request_result_t *result=print_config_last_result();
-            completed_notice(result->success?"Receipt setting confirmed.":result->timeout?
-                "Receipt setting timed out. The previous confirmed value is retained.":
-                "Receipt setting was rejected. The previous confirmed value is retained.",result->success);
+
         }
     }
     if(menu.quick)refresh_quick();
@@ -535,26 +506,19 @@ void ui_page_03_menu_refresh_data(uint32_t topics)
             menu.batch_dirty=false;
             /* The next save starts from the persisted edit; only ACK updates Main. */
             menu.batch_active_original=menu.batch_active_edited;
-            completed_notice(workspace_service_batch_save_message(),true);
-            menu.workspace_wait=false;
         }else if(workspace_store_last_success())menu.user_edit=false;
         menu.saving=0;
     }
-    bool applying=workspace_service_applying();
-    if(applying||menu.was_applying)notify(workspace_service_apply_message());
-    if(menu.workspace_wait&&!workspace_store_busy()){menu.workspace_wait=false;completed_notice(workspace_store_message(),workspace_store_last_success());}
-    menu.was_applying=applying;
-    if(menu.record_wait&&!cashbook_store_busy()){menu.record_wait=false;completed_notice(cashbook_store_message(),cashbook_store_last_success());}
     if((menu.scan_wait||menu.photo_wait)&&!workspace_store_busy()) {menu.scan_wait=menu.photo_wait=false;if(menu.user_edit&&page_03_menu_is_visible())menu.photo_ready=true;}
 }
 void page_03_menu_clear_batch_tip(void){clear_notice();}
-void page_03_menu_show_batch_saved_tip(void){notify("Batch confirmed by the controller.");menu.dirty=true;}
+void page_03_menu_show_batch_saved_tip(void){menu.dirty=true;}
 void page_03_menu_refresh_batch_number(void){menu.dirty=true;}
 void page_03_menu_refresh_batch_mode(void){menu.dirty=true;}
 bool ui_page_03_menu_resume(void)
 {if(!menu.root)return false;if(!menu.batch_dirty&&!menu.saving)reset_batch();lv_obj_clear_flag(menu.root,LV_OBJ_FLAG_HIDDEN);lv_obj_move_foreground(menu.root);lv_timer_resume(menu.timer);menu.dirty=true;render();return true;}
 void ui_page_03_menu_suspend(void)
-{if(!menu.root)return;if(menu.qr_generation&&menu.qr_generation==lv_qr_popup_generation())lv_qr_popup_hide();menu.qr_generation=0;if(menu.brightness_drag){backlight_service_set(menu.brightness_previous);menu.brightness_drag=false;}workspace_service_cancel_apply();settings_detail_keyboard_hide();settings_detail_dialog_hide();if(menu.quick)lv_obj_del(menu.quick);if(menu.photo_sheet)lv_obj_del(menu.photo_sheet);if(menu.user_sheet)lv_obj_del(menu.user_sheet);if(menu.record_sheet)lv_obj_del(menu.record_sheet);menu.user_sheet=menu.record_sheet=NULL;menu.quick=menu.photo_sheet=NULL;menu.scan_wait=menu.photo_wait=menu.photo_ready=false;clear_notice();menu.workspace_wait=menu.record_wait=false;lv_timer_pause(menu.timer);lv_obj_add_flag(menu.root,LV_OBJ_FLAG_HIDDEN);}
+{if(!menu.root)return;if(menu.qr_generation&&menu.qr_generation==lv_qr_popup_generation())lv_qr_popup_hide();menu.qr_generation=0;if(menu.brightness_drag){backlight_service_set(menu.brightness_previous);menu.brightness_drag=false;}workspace_service_cancel_apply();settings_detail_keyboard_hide();settings_detail_dialog_hide();if(menu.quick)lv_obj_del(menu.quick);if(menu.photo_sheet)lv_obj_del(menu.photo_sheet);if(menu.user_sheet)lv_obj_del(menu.user_sheet);if(menu.record_sheet)lv_obj_del(menu.record_sheet);menu.user_sheet=menu.record_sheet=NULL;menu.quick=menu.photo_sheet=NULL;menu.scan_wait=menu.photo_wait=menu.photo_ready=false;clear_notice();lv_timer_pause(menu.timer);lv_obj_add_flag(menu.root,LV_OBJ_FLAG_HIDDEN);}
 void ui_page_03_menu_destroy(void)
 {ui_page_03_menu_suspend();if(menu.timer)lv_timer_del(menu.timer);if(menu.root)lv_obj_del(menu.root);memset(&menu,0,sizeof(menu));}
 void page_03_menu_open_batch(void)

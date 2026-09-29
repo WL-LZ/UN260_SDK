@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #include "un260/lv_resources/ui_page_background.h"
 #include "page_32_innovation.h"
 #include "lv_port_indev.h"
@@ -317,9 +318,8 @@ static void innovation_prompt_new_bundle_cb(void *user_data)
     (void)user_data;
     innovation_prompt_close();
     if (multi_pass_verification_restart_from_latest()) {
-        innovation_prompt_single(ui_text_get(UI_TEXT_INNOVATION_NEW_BASELINE_TITLE),
-            ui_text_get(UI_TEXT_INNOVATION_NEW_BASELINE_BODY),
-            ui_text_get(UI_TEXT_INNOVATION_CONTINUE), INNOVATION_BLUE, NULL);
+        ui_notice_post(UI_NOTICE_INFO,"verification.status",ui_text_get(UI_TEXT_INNOVATION_NEW_BASELINE_TITLE),
+            ui_text_get(UI_TEXT_INNOVATION_NEW_BASELINE_BODY));
     }
 }
 
@@ -385,15 +385,13 @@ void page_32_innovation_notify_verification_event(
 
     if (event == NULL || event->kind == MULTI_PASS_CAPTURE_IGNORED) return;
     if (event->kind == MULTI_PASS_CAPTURE_ADD_REQUIRED) {
-        innovation_prompt_single(ui_text_get(UI_TEXT_INNOVATION_ADD_REQUIRED_TITLE),
-            ui_text_get(UI_TEXT_INNOVATION_ADD_REQUIRED_BODY),
-            ui_text_get(UI_TEXT_INNOVATION_UNDERSTOOD), INNOVATION_RED, NULL);
+        ui_notice_post(UI_NOTICE_WARNING,"verification.status",ui_text_get(UI_TEXT_INNOVATION_ADD_REQUIRED_TITLE),
+            ui_text_get(UI_TEXT_INNOVATION_ADD_REQUIRED_BODY));
         return;
     }
     if (event->kind == MULTI_PASS_CAPTURE_MEMORY_ERROR) {
-        innovation_prompt_single(ui_text_get(UI_TEXT_INNOVATION_SAVE_FAILED_TITLE),
-            ui_text_get(UI_TEXT_INNOVATION_SAVE_FAILED_BODY),
-            ui_text_get(UI_TEXT_INNOVATION_CLOSE), INNOVATION_RED, NULL);
+        ui_notice_post(UI_NOTICE_ERROR,"verification.status",ui_text_get(UI_TEXT_INNOVATION_SAVE_FAILED_TITLE),
+            ui_text_get(UI_TEXT_INNOVATION_SAVE_FAILED_BODY));
         return;
     }
     if (event->kind == MULTI_PASS_CAPTURE_REVIEW_BUNDLE) {
@@ -422,9 +420,7 @@ void page_32_innovation_notify_verification_event(
                 event->latest.accepted_pcs,
                 event->latest.reject_pcs,
                 (long long)event->latest.amount);
-    innovation_prompt_single(ui_text_get(UI_TEXT_INNOVATION_CAPTURED_TITLE), body,
-                             ui_text_get(UI_TEXT_INNOVATION_CONTINUE),
-                             INNOVATION_BLUE, NULL);
+    ui_notice_post(UI_NOTICE_SUCCESS,"verification.status",ui_text_get(UI_TEXT_INNOVATION_CAPTURED_TITLE),body);
 }
 
 static void innovation_transition_set_y(void *object, int32_t value)
@@ -1034,9 +1030,8 @@ static void innovation_begin_task(void)
     }
     g_page.pending_start_after_add_off = false;
     if (!ui_manager_pop_page()) ui_manager_switch(UI_PAGE_MAIN);
-    innovation_prompt_single(ui_text_get(UI_TEXT_INNOVATION_READY_TITLE),
-        ui_text_get(UI_TEXT_INNOVATION_READY_BODY),
-        ui_text_get(UI_TEXT_INNOVATION_START_PASS1), INNOVATION_BLUE, NULL);
+    ui_notice_post(UI_NOTICE_INFO,"verification.status",ui_text_get(UI_TEXT_INNOVATION_READY_TITLE),
+        ui_text_get(UI_TEXT_INNOVATION_READY_BODY));
 }
 
 static void innovation_primary_cb(lv_event_t *event)

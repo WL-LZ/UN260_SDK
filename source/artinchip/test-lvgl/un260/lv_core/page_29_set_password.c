@@ -1,5 +1,5 @@
+#include "un260/lv_components/ui_notice.h"
 #include "page_29_set_password.h"
-#include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_components/lv_pin_keypad.h"
 #include "un260/lv_core/lv_page_manager.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
@@ -82,20 +82,8 @@ static void password_setting_refresh_fields(void)
     }
 }
 
-static void password_setting_show_toast(const char *text, bool alarm)
-{
-    lv_print_toast_config_t cfg = lv_print_toast_get_default_config();
-
-    cfg.w = 320;
-    cfg.h = 92;
-    cfg.text = text;
-    cfg.show_loader = false;
-    cfg.align_center = true;
-    cfg.text_font = &lv_font_instrument_sans_medium_18;
-    cfg.loader_color = alarm ? lv_color_hex(0xC03A2B) : lv_color_hex(0x24B47E);
-    cfg.auto_hide_ms = 1600;
-    lv_print_toast_show_with_config(&cfg);
-}
+static void password_setting_show_toast(const char *text,ui_notice_kind_t kind)
+{ui_notice_post(kind,"settings.password","Password",text);}
 
 static void password_setting_close_keyboard(void *user_data)
 {
@@ -123,7 +111,7 @@ static void password_setting_keyboard_cb(const char* value, void* user_data)
     password_setting_close_keyboard(NULL);
     if(field<PASSWORD_FIELD_CONFIRM){
         active_field=field+1;password_setting_open_keyboard(active_field);
-    }else lv_label_set_text(password_frame.message,"PIN verified. Tap Save to apply the new password.");
+    }else ui_notice_post(UI_NOTICE_INFO,"settings.password","PIN verified","Tap Save to apply the new password.");
     password_setting_refresh_fields();
 }
 
@@ -166,36 +154,36 @@ static void password_setting_save_cb(lv_event_t* e)
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
 
     if (field_text[PASSWORD_FIELD_NEW][0] == '\0') {
-        password_setting_show_toast("Password cannot be empty", true);
+        password_setting_show_toast("Password cannot be empty", UI_NOTICE_WARNING);
         return;
     }
 
     for (unsigned i = 0; i < PASSWORD_FIELD_COUNT; ++i) {
         if (!lv_pin_input_is_complete(field_text[i])) {
-            password_setting_show_toast("Enter exactly 4 digits in each field.", true);
+            password_setting_show_toast("Enter exactly 4 digits in each field.", UI_NOTICE_WARNING);
             return;
         }
     }
 
     if (strcmp(field_text[PASSWORD_FIELD_CURRENT], user_cfg_password_get()) != 0) {
-        password_setting_show_toast("Incorrect current PIN.", true);
+        password_setting_show_toast("Incorrect current PIN.", UI_NOTICE_WARNING);
         return;
     }
 
     if (strcmp(field_text[PASSWORD_FIELD_NEW], field_text[PASSWORD_FIELD_CONFIRM]) != 0) {
-        password_setting_show_toast("Passwords do not match", true);
+        password_setting_show_toast("Passwords do not match", UI_NOTICE_WARNING);
         return;
     }
 
     if (!user_cfg_password_save(field_text[PASSWORD_FIELD_NEW])) {
-        password_setting_show_toast("Save failed", true);
+        password_setting_show_toast("Save failed", UI_NOTICE_ERROR);
         return;
     }
 
     memset(field_text, 0, sizeof(field_text));
     active_field = PASSWORD_FIELD_CURRENT;
     password_setting_refresh_fields();
-    password_setting_show_toast("Password saved", false);
+    password_setting_show_toast("Password saved", UI_NOTICE_SUCCESS);
 }
 
 static bool password_dirty(void)

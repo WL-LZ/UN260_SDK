@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "page_11_timeset.h"
 #include "lv_page_manager.h"
@@ -80,6 +81,7 @@ static void time_apply(lv_event_t *e){
  if(!time_dirty()||!machine_time_is_valid(&time_draft)||time_draft.year>2099)return;
  /* Existing software clock service; do not invent an RTC write or controller ACK. */
  machine_time_confirm(&time_draft);time_home=false;time_leave(NULL);
+ ui_notice_post(UI_NOTICE_SUCCESS,"settings.time","Date & time updated",NULL);
 }
 void ui_page_11_timeset_create(lv_obj_t *parent){
  if(time_frame.root)return;

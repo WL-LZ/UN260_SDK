@@ -1,4 +1,5 @@
 #include "page_09_cis_cala.h"
+#include "un260/lv_components/ui_notice.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "settings_detail_ui.h"
 #include "lv_page_manager.h"
@@ -94,13 +95,14 @@ static void cis_start(lv_event_t *e)
     if (state.cis_state == CIS_CALIB_RUNNING || state.cb_state == CB_CALIB_RUNNING) return;
     if (!work_mode_service_diagnostic_ready()) return;
     const char *blocker=app_command_runtime_calibration_blocker();
-    if(blocker){lv_label_set_text(status_detail,blocker);return;}
+    if(blocker){ui_notice_post(UI_NOTICE_WARNING,"calibration.action","Calibration unavailable",blocker);return;}
     send_failed = false;
     if (!diagnostic_calibration_begin(selected_white_balance ? CALIB_TARGET_CB : CALIB_TARGET_CIS,
                                       app_clock_uptime_ms())) return;
     if (!settings_detail_send_command(selected_white_balance ? 0x5F : 0x5B, &sub, 1)) {
         diagnostic_calibration_end_session();
         send_failed = true;
+        ui_notice_post(UI_NOTICE_ERROR,"calibration.action","Calibration not sent","Check the controller connection.");
         lv_label_set_text(status_title, "Could not start");
         lv_label_set_text(status_detail, "Check the controller connection, then try again.");
         return;

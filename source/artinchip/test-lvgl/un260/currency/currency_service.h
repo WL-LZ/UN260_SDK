@@ -7,6 +7,7 @@
 
 typedef struct {
     bool success;
+    bool timeout;
     uint8_t target_index;
     char target_code[4];
 } currency_switch_result_t;

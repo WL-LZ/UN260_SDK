@@ -53,8 +53,6 @@ static void smart_island_result_source_fade_finish_cb(lv_anim_t *animation)
 static void smart_island_result_timer_cb(lv_timer_t *timer)
 {
     LV_UNUSED(timer);
-    fault_popup_clear_pending();
-    fault_popup_reset_auto_retry();
     smart_island_result_stop_timer();
     smart_island_view_result_collapse();
 }
@@ -71,7 +69,7 @@ void smart_island_result_stop_timer(void)
 
 static void smart_island_result_present(void)
 {
-    smart_island_set_scene(SMART_ISLAND_SCENE_RESULT, NULL, NULL);
+    smart_island_set_scene(SMART_ISLAND_SCENE_RESULT);
     /* COUNTING and RESULT deliberately share one geometry.  Only content
      * changes here, so the shell never performs a second stretch. */
     smart_island_set_visual(SMART_ISLAND_VISUAL_COMPACT, false);
@@ -103,11 +101,6 @@ void smart_island_notify_count_start(void)
     smart_island_result_cancel_transition();
 
     g_si_ctx.lifecycle.count_session_active = true;
-    g_si_ctx.warning.level = SMART_ISLAND_WARNING_LEVEL_WARNING;
-    g_si_ctx.warning.resume_animation_pending = false;
-    g_si_ctx.warning.resume_counting = false;
-    smart_island_warning_fault_clear();
-    smart_island_warning_stop();
     g_si_ctx.text.result[0] = '\0';
     g_si_ctx.text.serial_ticker[0] = '\0';
     g_si_ctx.counting.pcs = counting_data_current()->total_pcs;
@@ -118,7 +111,7 @@ void smart_island_notify_count_start(void)
     g_si_ctx.counting.value_initialized = false;
     g_si_ctx.counting.multi_no_gate = false;
     g_si_ctx.counting.multi_revision = counting_multi_current()->revision;
-    smart_island_set_scene(SMART_ISLAND_SCENE_COUNTING, NULL, NULL);
+    smart_island_set_scene(SMART_ISLAND_SCENE_COUNTING);
     smart_island_set_visual(SMART_ISLAND_VISUAL_COMPACT, true);
     smart_island_view_update_counting();
     smart_island_view_message_pulse();
@@ -228,7 +221,6 @@ void smart_island_notify_count_reset(void)
     bool from_result = g_si_ctx.view.scene == SMART_ISLAND_SCENE_RESULT;
 
     g_si_ctx.lifecycle.count_session_active = false;
-    g_si_ctx.warning.resume_counting = false;
     smart_island_result_cancel_transition();
     smart_island_result_stop_timer();
     if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_COUNTING ||

@@ -1,6 +1,6 @@
+#include "un260/lv_components/ui_notice.h"
 #include "ui_screen_recording.h"
 
-#include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_components/lv_damped_button.h"
 #include "un260/font/manrope_fonts.h"
 #include "un260/lv_system/ui_text.h"
@@ -50,21 +50,8 @@ static void ui_screen_recording_fps_dialog_close(void)
     g_fps_panel = NULL;
 }
 
-static void ui_screen_recording_show_toast(const char *text, bool alarm)
-{
-    lv_print_toast_config_t toast_cfg = lv_print_toast_get_default_config();
-
-    toast_cfg.w = 390;
-    toast_cfg.h = 101;
-    toast_cfg.text = text;
-    toast_cfg.show_loader = false;
-    toast_cfg.align_center = true;
-    toast_cfg.use_text_area = false;
-    toast_cfg.loader_color = alarm ? lv_color_hex(0xC0392B)
-                                   : lv_color_hex(0x18A66A);
-    toast_cfg.auto_hide_ms = 1800;
-    lv_print_toast_show_with_config(&toast_cfg);
-}
+static void ui_screen_recording_show_toast(const char *text,ui_notice_kind_t kind)
+{ui_notice_post(kind,"capture.recording","Screen recording",text);}
 
 static void ui_screen_recording_apply_state(screen_recording_state_t state)
 {
@@ -96,13 +83,13 @@ static void ui_screen_recording_start(uint32_t fps)
     if (result == SCREEN_RECORDING_START_OK) {
         ui_screen_recording_apply_state(SCREEN_RECORDING_STARTING);
         ui_screen_recording_show_toast(
-            ui_text_get(UI_TEXT_WIDGET_SCREEN_RECORDING_STARTED), false);
+            ui_text_get(UI_TEXT_WIDGET_SCREEN_RECORDING_STARTED), UI_NOTICE_INFO);
     } else if (result == SCREEN_RECORDING_START_USB_NOT_READY) {
         ui_screen_recording_show_toast(
-            ui_text_get(UI_TEXT_WIDGET_SCREENSHOT_INSERT_USB), true);
+            ui_text_get(UI_TEXT_WIDGET_SCREENSHOT_INSERT_USB), UI_NOTICE_WARNING);
     } else if (result != SCREEN_RECORDING_START_BUSY) {
         ui_screen_recording_show_toast(
-            ui_text_get(UI_TEXT_WIDGET_SCREEN_RECORDING_FAILED), true);
+            ui_text_get(UI_TEXT_WIDGET_SCREEN_RECORDING_FAILED), UI_NOTICE_ERROR);
     }
 }
 
@@ -220,7 +207,7 @@ static void ui_screen_recording_click_cb(lv_event_t *event)
         screen_recording_service_request_stop();
         ui_screen_recording_apply_state(SCREEN_RECORDING_STOPPING);
         ui_screen_recording_show_toast(
-            ui_text_get(UI_TEXT_WIDGET_SCREEN_RECORDING_STOPPING), false);
+            ui_text_get(UI_TEXT_WIDGET_SCREEN_RECORDING_STOPPING), UI_NOTICE_INFO);
     } else if (state == SCREEN_RECORDING_IDLE) {
         ui_screen_recording_show_fps_dialog();
     }
@@ -261,10 +248,10 @@ void ui_screen_recording_indicator_poll(void)
     if (screen_recording_service_poll_completion(&completion)) {
         if (completion.result == SCREEN_RECORDING_COMPLETION_SAVED) {
             ui_screen_recording_show_toast(
-                ui_text_get(UI_TEXT_WIDGET_SCREEN_RECORDING_SAVED), false);
+                ui_text_get(UI_TEXT_WIDGET_SCREEN_RECORDING_SAVED), UI_NOTICE_SUCCESS);
         } else {
             ui_screen_recording_show_toast(
-                ui_text_get(UI_TEXT_WIDGET_SCREEN_RECORDING_FAILED), true);
+                ui_text_get(UI_TEXT_WIDGET_SCREEN_RECORDING_FAILED), UI_NOTICE_ERROR);
         }
         state = screen_recording_service_state();
     }

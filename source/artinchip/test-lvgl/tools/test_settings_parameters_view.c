@@ -1,3 +1,4 @@
+#include "test_notice_sink.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include <assert.h>
 #include <stdio.h>
@@ -20,7 +21,6 @@
 #include "un260/lv_core/page_36_display_test.h"
 #include "un260/lv_components/lv_nav_button.h"
 #include "un260/lv_components/lv_settings.h"
-#include "un260/lv_components/lv_print_toast.h"
 #include "un260/gesture/gesture_service.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/user_cfg.h"
@@ -33,7 +33,7 @@ static ui_page_t pushed_page;
 static bool send_ok = true, persist_ok = true, backlight_ok = true, overlay;
 static uint8_t last_command, last_payload[32], double_level = 2, flap = 1, reject_capacity = 50;
 static int brightness = 50;
-static char password[5] = "1111", toast[160];
+static char password[5] = "1111";
 static settings_detail_dialog_cb_t confirm_dialog;
 static void *dialog_data;
 static settings_detail_keyboard_cb_t keyboard_confirm;
@@ -72,8 +72,8 @@ const char *user_cfg_password_get(void) { return password; }
 bool user_cfg_password_save(const char *value) { if(!persist_ok)return false; memcpy(password,value,5);return true; }
 bool user_cfg_password_visibility_enabled(void) { return false; }
 bool user_cfg_password_visibility_save(bool visible) { (void)visible;return true; }
-lv_print_toast_config_t lv_print_toast_get_default_config(void) { return (lv_print_toast_config_t){0}; }
-void lv_print_toast_show_with_config(const lv_print_toast_config_t *cfg) { snprintf(toast,sizeof(toast),"%s",cfg->text); }
+
+
 void gesture_service_set_page_policy(uint32_t owner,bool (*drag)(void),bool (*handler)(gesture_action_t))
 { (void)owner;(void)drag;gesture_policy=handler; }
 void gesture_service_clear_page_policy(uint32_t owner) { (void)owner;gesture_policy=NULL; }
@@ -187,12 +187,14 @@ static void print_page_test(void)
     assert(print_config_take_status_reply(1,&result));ui_page_20_set_print_on_reply(&result);
     assert(last_payload[0]==3&&last_payload[1]==1&&last_payload[2]==2);
     assert(print_config_take_status_reply(0,&result));ui_page_20_set_print_on_reply(&result);
+    assert(test_notice_kind==UI_NOTICE_ERROR&&!ui_page_20_set_print_is_saving());
     print_config_value_t actual;print_config_get(&actual);assert(!strcmp(actual.head1,"UNION")&&actual.space_top==0&&actual.content==1);
     snapshot("print-partial-save");click("Save");assert(last_payload[0]==3);
     assert(print_config_take_status_reply(1,&result));ui_page_20_set_print_on_reply(&result);
     assert(last_payload[0]==1);
     assert(print_config_take_status_reply(1,&result));ui_page_20_set_print_on_reply(&result);
     print_config_get(&actual);assert(actual.space_top==2&&actual.content==2);
+    assert(test_notice_kind==UI_NOTICE_SUCCESS&&!ui_page_20_set_print_is_saving());
     assert(action_blocked(button("Save")));
     click("Summary");click("Cancel");
     assert(lv_obj_has_state(button("Serial"),LV_STATE_CHECKED));
@@ -234,6 +236,7 @@ static void cfd_page_test(void)
     assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);
     assert(action_notices==notices_before+1&&pops==pops_before);assert(gesture_policy(GESTURE_ACTION_HOME));
     advance(800);assert(cfd_service_take_update_timeout());ui_page_27_set_cfd_level_on_request_failed();
+    assert(test_notice_kind==UI_NOTICE_WARNING&&!overlay);
     assert(find_label(lv_scr_act(),"4"));snapshot("cfd-save-failed");click(ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE));
     reply[4]=4;reply[3]=2;ui_page_27_set_cfd_level_on_info(reply,sizeof(reply));assert(cfd_service_busy());
     reply[3]=1;ui_page_27_set_cfd_level_on_info(reply,sizeof(reply));assert(!cfd_service_busy());

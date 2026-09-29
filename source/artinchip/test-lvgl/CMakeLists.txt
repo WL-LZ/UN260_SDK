@@ -57,7 +57,21 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${UN260_ASSET_INP
              "${CMAKE_CURRENT_SOURCE_DIR}/tools/convert_lvgl_assets.py"
              "${CMAKE_CURRENT_SOURCE_DIR}/tools/retired_assets.py"
              "${CMAKE_CURRENT_SOURCE_DIR}/tools/retired_assets.json")
+execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_message_fonts.py --check
+                RESULT_VARIABLE MESSAGE_FONT_RESULT)
+if(NOT MESSAGE_FONT_RESULT EQUAL 0)
+    message(FATAL_ERROR "Message font subset needs regeneration")
+endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/aic_ui/generated_assets/assets.cmake)
+execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_machine_fault_assets.py
+                RESULT_VARIABLE MACHINE_GUIDE_RESULT)
+if(NOT MACHINE_GUIDE_RESULT EQUAL 0)
+    message(FATAL_ERROR "Machine guide asset generation failed")
+endif()
+file(GLOB MACHINE_GUIDE_INPUTS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/icon_sources/fault_guide/*.png")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${MACHINE_GUIDE_INPUTS}
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_machine_fault_assets.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/icon_sources/fault_guide/manifest.json")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_boot_d_assets.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/un260/lv_core/boot_anim/boot_theme_config.h"
@@ -116,9 +130,24 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_components/lv_settings.c
     un260/lv_components/lv_quick_controls.c
     un260/lv_core/settings_catalog.c
+    un260/machine_state/machine_fault.c
     un260/lv_components/lv_fault_popup.c
+    un260/lv_components/fault_guide/fault_guide_catalog.c
+    un260/lv_components/fault_guide/machine_fault_view.c
+    aic_ui/generated_fault_guide/machine_fault_assets.c
+    un260/protocol/machine_fault_reply.c
     un260/lv_components/lv_loading_orbit.c
-    un260/lv_components/lv_print_toast.c
+    un260/font/ui_message_font.c
+    un260/font/lv_font_message_cjk_12.c
+    un260/font/lv_font_message_cjk_14.c
+    un260/font/lv_font_message_cjk_16.c
+    un260/font/lv_font_message_cjk_18.c
+    un260/font/lv_font_message_cjk_20.c
+    un260/font/lv_font_message_cjk_22.c
+    un260/font/lv_font_message_cjk_24.c
+    un260/font/lv_font_message_cjk_28.c
+    un260/lv_components/ui_notice.c
+    un260/lv_components/ui_notice_state.c
     un260/lv_components/lv_loading_grid.c
     un260/lv_components/lv_debug_overlay.c
     un260/lv_components/lv_upgrade_popup.c
@@ -211,6 +240,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/protocol/protocol_rx_service.c
     un260/protocol/protocol_request.c
     un260/app_service/app_setting_reply_basic.c
+    un260/app_service/app_setting_notice.c
     un260/app_service/app_setting_reply_detail.c
     un260/protocol/startup_sync_reply.c
     un260/protocol/auxiliary_reply.c
@@ -431,9 +461,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_resources/page_01_start_icon.c
     un260/lv_resources/page_01_usb_icon.c
     un260/lv_resources/page_02_home_icon.c
-    un260/lv_resources/page_02_list_img.c
     un260/lv_resources/page_03_del_icon.c
-    un260/lv_resources/page_03_menu_bg_img.c
     un260/lv_resources/page_03_ok_icon.c
     un260/lv_resources/page_07_currency_bg_img.c
     #img_curr
@@ -489,6 +517,8 @@ endif()
 add_definitions(-DLVGL_DIR="L:${CMAKE_INSTALL_FULL_DATAROOTDIR}/lvgl_data/")
 
 if(DEFINED CMAKE_INSTALL_FULL_DATAROOTDIR)
+    install(FILES aic_ui/font/message/OFL.txt
+        DESTINATION ${CMAKE_INSTALL_FULL_DATAROOTDIR}/lvgl_data/licenses RENAME Message-CJK-OFL.txt)
 	install(FILES aic_ui/font/Roboto-OFL.txt aic_ui/font/OoohBaby-OFL.txt
 		DESTINATION ${CMAKE_INSTALL_FULL_DATAROOTDIR}/lvgl_data/boot_theme_d/licenses)
 	install(FILES aic_ui/font/OpenRunde-LICENSE.txt aic_ui/font/OoohBaby-OFL.txt
@@ -498,4 +528,9 @@ if(DEFINED CMAKE_INSTALL_FULL_DATAROOTDIR)
 		PATTERN "boot-light.bin" EXCLUDE
         PATTERN "menu_icons" EXCLUDE
         ${UN260_RETIRED_ASSET_PATTERNS})
+    install(CODE "execute_process(COMMAND \"${UN260_ASSET_PYTHON}\" \"${CMAKE_CURRENT_SOURCE_DIR}/tools/prune_fault_assets.py\"
+        --data-dir \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_DATAROOTDIR}/lvgl_data\" RESULT_VARIABLE PRUNE_FAULT_RESULT)
+        if(NOT PRUNE_FAULT_RESULT EQUAL 0)
+            message(FATAL_ERROR \"Old guide picture cleanup failed\")
+        endif()")
 endif() # CMAKE_INSTALL_FULL_DATAROOTDIR

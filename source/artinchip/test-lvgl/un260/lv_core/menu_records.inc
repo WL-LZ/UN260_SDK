@@ -7,14 +7,14 @@ static void record_commit(void *unused)
     (void)unused;
     if(cashbook_store_view_archived()){explain("Archived records are read only.");return;}
     if(record_command_revision!=cashbook_store_view()->sequence){
-        explain("The record changed while you were reviewing it. Check the current values and try again.");return;
+        explain("Record changed. Review the current values and try again.");return;
     }
     if(!cashbook_store_submit(&record_command))explain("Records are loading or being saved. Try again shortly.");
-    else {menu.record_wait=true;notify("Saving the record decision...");}
+    else app_ui_runtime_notice_started(APP_UI_NOTICE_RECORD_STORE,"Saving the record decision...");
 }
 static void record_request(cashbook_operation_t operation,uint32_t group,uint32_t run,uint32_t day,const char *title,const char *body)
 {
-    if(cashbook_store_view_archived()){explain("Archived periods are read only. Return to current records to make changes.");return;}
+    if(cashbook_store_view_archived()){explain("Archive is read only. Edit current records instead.");return;}
     record_command=(cashbook_command_t){.operation=operation,.group=group,.run=run,.day=day,.operator_id=user()?user()->id:0};
     record_command_revision=cashbook_store_view()->sequence;
     settings_detail_dialog_show(title,body,"Confirm","Cancel",record_commit,NULL,NULL);

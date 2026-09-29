@@ -1,3 +1,4 @@
+#include "test_notice_sink.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>

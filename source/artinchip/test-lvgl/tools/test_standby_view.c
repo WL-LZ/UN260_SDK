@@ -1,3 +1,4 @@
+#include "test_notice_sink.h"
 #include <assert.h>
 #include "aic_ui/compiled_asset.h"
 #include <stdio.h>
@@ -7,7 +8,7 @@
 static standby_config_t saved;
 static bool (*registered_drag)(void);
 static bool (*registered_action)(gesture_action_t);
-static bool store_busy, overlay;
+static bool store_busy, overlay, store_complete;
 static settings_detail_dialog_cb_t confirm_cb;
 void gesture_service_set_page_policy(uint32_t owner,bool(*drag)(void),bool(*action)(gesture_action_t)){assert(owner==UI_PAGE_STANDBY_SETTING);registered_drag=drag;registered_action=action;}
 void gesture_service_clear_page_policy(uint32_t owner){assert(owner==UI_PAGE_STANDBY_SETTING);registered_drag=NULL;registered_action=NULL;}
@@ -20,7 +21,8 @@ void standby_defaults(standby_config_t*c){memset(c,0,sizeof(*c));c->version=2;c-
 const standby_config_t*standby_config(void){return &saved;}
 bool standby_store_save(const standby_config_t*c){saved=*c;return true;}
 bool standby_store_busy(void){return store_busy;}
-bool standby_store_poll(char*m,unsigned n){(void)m;(void)n;return false;}
+bool standby_store_poll(char*m,unsigned n){if(!store_complete)return false;store_complete=false;snprintf(m,n,"Standby settings saved.");return true;}
+bool standby_store_last_success(void){return true;}
 bool standby_store_import(void){return false;}
 bool standby_store_delete(unsigned n){(void)n;return false;}
 static bool with_imports;
@@ -142,7 +144,7 @@ int main(void){standby_defaults(&saved);lv_init();mist=load("mist.bgra",1280*400
  assert(lv_obj_get_child_cnt(body)==2); /* mode selector and settings card only */
  assert(lv_obj_get_y(lv_obj_get_child(body,0))==0);
  current_page=UI_PAGE_STANDBY_SETTING;assert(ui_page_34_standby_request_back());assert(current_page==UI_PAGE_MAIN);
- notice_visible=true;notice_tick=lv_tick_get();lv_obj_clear_flag(note,LV_OBJ_FLAG_HIDDEN);lv_tick_inc(2499);settings_tick(NULL);assert(!lv_obj_has_flag(note,LV_OBJ_FLAG_HIDDEN));lv_tick_inc(1);settings_tick(NULL);assert(lv_obj_has_flag(note,LV_OBJ_FLAG_HIDDEN));
+ queue_save();assert(saving&&test_notice_kind==UI_NOTICE_PROGRESS);ui_notice_dismiss(NULL);assert(saving);store_complete=true;settings_tick(NULL);assert(!saving&&test_notice_kind==UI_NOTICE_SUCCESS);
  tab=2;render();assert(ui_page_34_standby_request_back());assert(tab==0);tab=4;assert(owns_single_drag());tab=0;draft.mode=1;render();snapshot("settings-type");assert_flat(page);
  lv_obj_t*probe=button(page,0,0,150,"Pressed",3,true);lv_obj_add_state(probe,LV_STATE_PRESSED);lv_obj_update_layout(probe);assert(lv_obj_get_style_shadow_width(probe,LV_PART_MAIN)==0);assert(lv_color_to32(lv_obj_get_style_bg_color(probe,LV_PART_MAIN))!=lv_color_to32(lv_color_hex(0x176FE8)));lv_obj_del(probe);
  tab=1;render();snapshot("timeout");assert_flat(page);tab=2;draft.layout[1][0].date_bits=15;render();snapshot("date");assert_flat(page);tab=3;draft.mode=0;render();snapshot("photos");assert_flat(page);assert(lv_obj_get_child_cnt(gallery)==4);lv_event_send(lv_obj_get_child(gallery,3),LV_EVENT_CLICKED,NULL);assert(draft.layout[0][draft.active[0]].photo==STANDBY_PHOTO_MIST);assert(!draft.layout[0][draft.active[0]].scheduled);scene_update(&preview,&draft,true);assert(preview.photo==STANDBY_PHOTO_MIST);render();snapshot("photos-mist");assert(!lv_obj_has_flag(body,LV_OBJ_FLAG_SCROLLABLE));with_imports=true;render();lv_obj_update_layout(page);lv_obj_scroll_to_y(gallery,100,LV_ANIM_OFF);assert(lv_obj_get_scroll_y(gallery)>0);assert(lv_obj_get_scroll_y(body)==0);snapshot("photos-scroll");with_imports=false;draft.mode=1;render();snapshot("palette");tab=4;render();snapshot("position");position_test();policy_test();ui_page_34_standby_destroy();assert(!registered_drag&&!registered_action);

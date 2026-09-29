@@ -1,3 +1,4 @@
+#include "test_notice_sink.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,7 +10,6 @@
 #include "un260/lv_system/ui_history_data.h"
 #include "un260/lv_system/machine_time.h"
 #include "un260/lv_system/ui_history_export_data.h"
-#include "un260/lv_components/lv_print_toast.h"
 #include "test_history_view_support.h"
 #include "un260/lv_core/page_19_history.c"
 
@@ -25,11 +25,11 @@ static storage_job_status_t test_status = STORAGE_JOB_SUCCEEDED;
 static storage_job_id_t test_commit_id = 1;
 static unsigned test_pops, test_deletes, test_exports, test_polls, test_selection_mutations;
 void ui_manager_push_page(ui_page_t page){assert(page==UI_PAGE_HISTORY);}
+bool ui_manager_is_prewarming_page(ui_page_t page){(void)page;return false;}
 static uint32_t test_deleted_ids[UI_HISTORY_MAX_RECORDS];
 static size_t test_deleted_count;
 static uint32_t test_exported_ids[UI_HISTORY_MAX_RECORDS];
 static size_t test_exported_count;
-static char test_toast[256];
 void machine_time_get(machine_time_value_t *out)
 { *out=(machine_time_value_t){.year=2026,.month=9,.day=11,.hour=12,.minute=30,.second=15}; }
 
@@ -121,6 +121,7 @@ bool ui_history_export_data_request_records(const uint32_t *ids, size_t count)
     assert(ids && count && count <= UI_HISTORY_MAX_RECORDS);
     test_exported_count = count;
     memcpy(test_exported_ids, ids, count * sizeof(*ids)); ++test_exports;
+    if(!test_export_ok)ui_notice_post(UI_NOTICE_ERROR,"export.history","Export failed",ui_text_get(UI_TEXT_SERIAL_UNAVAILABLE));
     return test_export_ok;
 }
 bool ui_history_export_data_request(void)
@@ -131,12 +132,9 @@ void perf_profile_unwatch_invalidation(const void *object) { (void)object; }
 uint64_t app_clock_monotonic_ms(void) { return lv_tick_get(); }
 uint64_t app_clock_monotonic_us(void) { return (uint64_t)lv_tick_get() * 1000U; }
 uint32_t app_clock_uptime_ms(void) { return lv_tick_get(); }
-lv_print_toast_config_t lv_print_toast_get_default_config(void)
-{ lv_print_toast_config_t config = {0}; return config; }
-void lv_print_toast_show_with_config(const lv_print_toast_config_t *config)
-{ snprintf(test_toast, sizeof(test_toast), "%s", config->text ? config->text : ""); }
-void lv_print_toast_show(const char *text)
-{ snprintf(test_toast, sizeof(test_toast), "%s", text ? text : ""); }
+
+
+
 
 /* Software decoder bridge reads the exact production compiled BGRA registry;
  * it does not synthesize icons or pretend to validate DMA/GE decoding. */
@@ -457,7 +455,7 @@ static void history_test_selection_and_delete(void)
     deletes = test_deletes;
     history_test_click(history_test_button(history->dialog, ui_text_get(UI_TEXT_HISTORY_APPLY)));
     assert(test_deletes == deletes && !history->dialog);
-    assert(!strcmp(test_toast, ui_text_get(UI_TEXT_HISTORY_SAVE_FAILED)));
+    assert(!strcmp(test_notice_detail, ui_text_get(UI_TEXT_HISTORY_SAVE_FAILED)));
     assert(lv_nav_button_request_back() == LV_NAV_BACK_HANDLED);
     assert(!history->selecting && !history->selected_count);
     unsigned count = test_store.record_count;
@@ -470,7 +468,7 @@ static void history_test_selection_and_delete(void)
     storage_job_id_t before_commit = test_commit_id;
     history_test_click(history_test_button(history->dialog, ui_text_get(UI_TEXT_HISTORY_APPLY)));
     assert(!history->dialog && test_store.record_count == count && test_store.total_notes_counted == 77);
-    assert(test_commit_id == before_commit && !strcmp(test_toast, ui_text_get(UI_TEXT_HISTORY_SAVE_FAILED)));
+    assert(test_commit_id == before_commit && !strcmp(test_notice_detail, ui_text_get(UI_TEXT_HISTORY_SAVE_FAILED)));
     test_clear_accept = true;
     puts("PASS: selection only current results, local ID state, confirmation cancel, incoming-record-safe deletion, stale-ID refusal and lifetime reset preserves reports");
 }
@@ -630,7 +628,7 @@ static void history_test_capacity_and_missing_detail(unsigned baseline_timers)
     history_test_fixtures(UI_HISTORY_MAX_RECORDS);
     ui_page_19_history_create(lv_scr_act());history_test_tick(100);
     assert(displayed_count()==100);
-    assert(!strcmp(lv_label_get_text(history->notice),ui_text_get(UI_TEXT_HISTORY_CAPACITY_FULL)));
+    assert(!strcmp(test_notice_detail,ui_text_get(UI_TEXT_HISTORY_CAPACITY_FULL)));
     history_test_bmp("history-100-full");
     history_test_row_number(0,100);history_test_row_number(99,1);
     assert(history_test_click_record(99)==901 && history->detail_mode);
@@ -654,7 +652,7 @@ static void history_test_capacity_and_missing_detail(unsigned baseline_timers)
     assert(!strcmp(history->input.currency,"USD") && displayed_count()==49);
     assert(lv_recycled_list_window(history->list)->offset==offset);
     assert(lv_obj_is_visible(history->list_panel));
-    assert(!strcmp(test_toast,ui_text_get(UI_TEXT_HISTORY_MISSING)));
+    assert(!strcmp(test_notice_detail,ui_text_get(UI_TEXT_HISTORY_MISSING)));
     for(unsigned i=0;i<3;++i)assert(!lv_obj_is_visible(history->sections[i].panel));
     history_test_bmp("history-missing-detail-return");
     ui_page_19_history_destroy();history_test_tick(300);

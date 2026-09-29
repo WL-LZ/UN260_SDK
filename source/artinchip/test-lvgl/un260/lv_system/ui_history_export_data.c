@@ -1,3 +1,5 @@
+#include "lvgl/lvgl.h"
+#include "un260/lv_components/ui_notice.h"
 #include "ui_history_export_data.h"
 
 #include <ctype.h>
@@ -11,14 +13,10 @@
 #include "un260/counting/counting_reject_reason.h"
 #include "un260/history/history_record_detail.h"
 #include "un260/history/history_export_text.h"
-#include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_system/ui_history_data.h"
 #include "un260/storage/usb_storage.h"
 
 #define UI_HISTORY_EXPORT_LOCK_MS          2000U
-#define UI_HISTORY_EXPORT_TEXT_EXPORTING   "Exporting..."
-#define UI_HISTORY_EXPORT_TEXT_COUNT_FIRST "Please Count First"
-#define UI_HISTORY_EXPORT_TEXT_FAILED      "Export Failed"
 #define UI_HISTORY_EXPORT_PATH_SIZE        256U
 
 typedef struct {
@@ -29,21 +27,8 @@ typedef struct {
 static bool g_history_export_lock = false;
 static lv_timer_t *g_history_export_unlock_timer = NULL;
 
-static void history_export_show_toast(const char *text, bool alarm)
-{
-    lv_print_toast_config_t toast_cfg = lv_print_toast_get_default_config();
-
-    toast_cfg.w = 320;
-    toast_cfg.h = 101;
-    toast_cfg.text = text ? text : (alarm ? UI_HISTORY_EXPORT_TEXT_FAILED : UI_HISTORY_EXPORT_TEXT_EXPORTING);
-    toast_cfg.show_loader = true;
-    toast_cfg.align_center = true;
-    toast_cfg.use_text_area = false;
-    toast_cfg.loader_color = alarm ? lv_color_hex(0xC0392B) : LV_PRINT_TOAST_DEFAULT_LOADER_COLOR;
-    toast_cfg.auto_hide_ms = UI_HISTORY_EXPORT_LOCK_MS;
-
-    lv_print_toast_show_with_config(&toast_cfg);
-}
+static void history_export_notice(ui_notice_kind_t kind,const char *text)
+{ui_notice_post(kind,"export.history","History export",text);}
 
 static void history_export_unlock_timer_cb(lv_timer_t *timer)
 {
@@ -547,11 +532,11 @@ bool ui_history_export_data_request_records(const uint32_t *record_nos,
     bool ok = false;
 
     if (g_history_export_lock) {
-        history_export_show_toast(UI_HISTORY_EXPORT_TEXT_EXPORTING, false);
+        history_export_notice(UI_NOTICE_INFO,"Wait a moment before exporting again.");
         return false;
     }
     if (record_nos == NULL || record_count == 0U) {
-        history_export_show_toast(UI_HISTORY_EXPORT_TEXT_COUNT_FIRST, true);
+        history_export_notice(UI_NOTICE_WARNING,"Select records to export.");
         return false;
     }
 
@@ -588,7 +573,7 @@ bool ui_history_export_data_request_records(const uint32_t *record_nos,
     if (!usb_storage_prepare()) goto cleanup;
 
     history_export_start_lock();
-    history_export_show_toast(UI_HISTORY_EXPORT_TEXT_EXPORTING, false);
+    history_export_notice(UI_NOTICE_PROGRESS,"Exporting records to USB...");
 
     for (i = 0; i < record_count; i++) {
         if (!history_export_write_selected_record(&snapshots[i],
@@ -602,8 +587,9 @@ bool ui_history_export_data_request_records(const uint32_t *record_nos,
 cleanup:
     if (!ok) {
         history_export_rollback_outputs(outputs, output_count);
-        history_export_show_toast(UI_HISTORY_EXPORT_TEXT_FAILED, true);
+        history_export_notice(UI_NOTICE_ERROR,"Export failed. Check selected records and USB drive.");
     }
+    if(ok)history_export_notice(UI_NOTICE_SUCCESS,"Records saved to USB.");
     free(snapshots);
     free(outputs);
     return ok;
@@ -617,7 +603,7 @@ bool ui_history_export_data_request(void)
     size_t i;
 
     if (store == NULL || store->record_count > UI_HISTORY_MAX_RECORDS) {
-        history_export_show_toast(UI_HISTORY_EXPORT_TEXT_FAILED, true);
+        history_export_notice(UI_NOTICE_ERROR,"Export failed. Check selected records and USB drive.");
         return false;
     }
     for (i = 0; i < store->record_count; i++) {

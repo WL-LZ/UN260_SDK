@@ -1,3 +1,4 @@
+#include "test_notice_sink.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include <assert.h>
 #include <stdio.h>
@@ -14,7 +15,6 @@
 #include "un260/lv_core/settings_detail_ui.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "test_settings_actions.h"
-#include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/ui_export_data.h"
 #include "un260/app_service/work_mode_service.h"
@@ -65,8 +65,8 @@ void screen_recording_service_request_stop(void){}
 void lv_debug_overlay_init(void){}
 void lv_debug_overlay_set_enabled(bool v){(void)v;}
 void perf_profile_set_enabled(bool v){(void)v;}
-lv_print_toast_config_t lv_print_toast_get_default_config(void){return (lv_print_toast_config_t){0};}
-void lv_print_toast_show_with_config(const lv_print_toast_config_t*c){(void)c;}
+
+
 ui_export_text_result_t ui_export_text_lines(const char*p,const char*const*l,size_t n){(void)p;(void)l;return n?UI_EXPORT_TEXT_OK:UI_EXPORT_TEXT_EMPTY;}
 
 static lv_color_t pixels[1280*400],buffer[1280*40];
@@ -84,7 +84,6 @@ static void snapshot(const char*n){
 }
 static lv_obj_t *label_find(lv_obj_t *o,const char *text){if(lv_obj_check_type(o,&lv_label_class)&&!strcmp(lv_label_get_text(o),text))return o;for(unsigned i=0;i<lv_obj_get_child_cnt(o);i++){lv_obj_t*f=label_find(lv_obj_get_child(o,i),text);if(f)return f;}return NULL;}
 static void click(const char *text){lv_obj_t*l=label_find(lv_scr_act(),text);assert(l);while(l&&!lv_obj_has_flag(l,LV_OBJ_FLAG_CLICKABLE))l=lv_obj_get_parent(l);assert(l);assert(!lv_obj_has_flag(l,LV_OBJ_FLAG_HIDDEN));lv_event_send(l,LV_EVENT_CLICKED,NULL);}
-static void dump_labels(lv_obj_t *o){if(lv_obj_check_type(o,&lv_label_class))fprintf(stderr,"LABEL %s\n",lv_label_get_text(o));for(unsigned i=0;i<lv_obj_get_child_cnt(o);i++)dump_labels(lv_obj_get_child(o,i));}
 static void tick(unsigned ms){for(unsigned i=0;i<ms;i+=20){lv_tick_inc(20);lv_timer_handler();}}
 static void calibration_test(void){
  unsigned before=sends;gate=false;ui_page_cis_calib_select(false);ui_page_cis_calib_create(lv_scr_act());snapshot("cis-ready");click("Start");assert(sends==before);gate=true;tick(220);click("Start");assert(sent_cmd==0x5B&&holds&1&&policy(GESTURE_ACTION_HOME));snapshot("cis-running");
@@ -112,9 +111,9 @@ static void aging_test(void){
  ui_page_26_set_aging_create(lv_scr_act());snapshot("aging-ready");click("Start test");assert(confirm);confirm(NULL);assert(sent_cmd==0x46&&holds&16);ui_page_26_set_aging_on_reply(0);assert(aging&&policy(GESTURE_ACTION_HOME));snapshot("aging-running");ui_page_26_set_aging_on_reply(2);assert(!aging&&!(holds&16));snapshot("aging-complete");ui_page_26_set_aging_destroy();assert(!policy);puts("PASS aging confirmation, running guard, legacy completion and timer cleanup");
 }
 static void stream_test(void){
- ui_page_28_get_image_create(lv_scr_act());snapshot("image-ready");click("Capture");assert(sent_cmd==0x47);uint8_t header[]={0,1,0,2,0,0},row[]={1,0,1,0xff,0xff,0,0};ui_page_28_get_image_on_frame(header,sizeof(header));ui_page_28_get_image_on_frame(row,sizeof(row));uint8_t end[]={0xff};ui_page_28_get_image_on_frame(end,1);assert(label_find(lv_scr_act(),"Transfer ended with missing image data. Capture again."));snapshot("image-missing");ui_page_28_get_image_destroy();
- ui_page_28_get_image_create(lv_scr_act());click("Capture");ui_page_28_get_image_on_frame(header,sizeof(header));ui_page_28_get_image_on_frame(row,sizeof(row));row[2]=2;ui_page_28_get_image_on_frame(row,sizeof(row));ui_page_28_get_image_on_frame(end,1);snapshot("image-complete");if(!label_find(lv_scr_act(),"Capture complete"))dump_labels(lv_scr_act());assert(label_find(lv_scr_act(),"Capture complete"));ui_page_28_get_image_destroy();
- ui_page_31_get_wave_create(lv_scr_act());snapshot("wave-ready");click("Capture");assert(sent_cmd==0x48);uint8_t values[257];for(unsigned channel=1;channel<=7;channel++){values[0]=channel;for(unsigned i=1;i<=256;i++)values[i]=(i*13)%256;ui_page_31_get_wave_on_frame(values,sizeof(values));}snapshot("wave-captured");assert(label_find(lv_scr_act(),"Capture complete - 7 channels received"));ui_page_31_get_wave_destroy();puts("PASS image completeness, waveform transfer and late-frame lifecycle");
+ ui_page_28_get_image_create(lv_scr_act());snapshot("image-ready");click("Capture");assert(sent_cmd==0x47);uint8_t header[]={0,1,0,2,0,0},row[]={1,0,1,0xff,0xff,0,0};ui_page_28_get_image_on_frame(header,sizeof(header));ui_page_28_get_image_on_frame(row,sizeof(row));uint8_t end[]={0xff};ui_page_28_get_image_on_frame(end,1);assert(test_notice_kind==UI_NOTICE_WARNING&&!strcmp(test_notice_key,"capture.image")&&!strcmp(test_notice_detail,"Image data incomplete. Capture again."));snapshot("image-missing");ui_page_28_get_image_destroy();
+ ui_page_28_get_image_create(lv_scr_act());click("Capture");ui_page_28_get_image_on_frame(header,sizeof(header));ui_page_28_get_image_on_frame(row,sizeof(row));row[2]=2;ui_page_28_get_image_on_frame(row,sizeof(row));ui_page_28_get_image_on_frame(end,1);snapshot("image-complete");assert(test_notice_kind==UI_NOTICE_SUCCESS&&!strcmp(test_notice_key,"capture.image")&&!strcmp(test_notice_detail,"Capture complete"));ui_page_28_get_image_destroy();
+ ui_page_31_get_wave_create(lv_scr_act());snapshot("wave-ready");click("Capture");assert(sent_cmd==0x48);uint8_t values[257];for(unsigned channel=1;channel<=7;channel++){values[0]=channel;for(unsigned i=1;i<=256;i++)values[i]=(i*13)%256;ui_page_31_get_wave_on_frame(values,sizeof(values));}snapshot("wave-captured");assert(test_notice_kind==UI_NOTICE_SUCCESS&&!strcmp(test_notice_key,"capture.wave")&&!strcmp(test_notice_detail,"Capture complete. 7 channels received."));ui_page_31_get_wave_destroy();puts("PASS image completeness, waveform transfer and late-frame lifecycle");
 }
 static lv_obj_t *debug_find_type(lv_obj_t *o,const lv_obj_class_t *type){
  if(lv_obj_check_type(o,type))return o;
@@ -154,8 +153,8 @@ static void failure_retry_test(void){
  gate=true;ui_page_12_sensor_create(lv_scr_act());snapshot("sensors-send-failed");assert(label_find(lv_scr_act(),"Could not send query. Retrying the controller connection."));gate=false;tick(320);assert(!label_find(lv_scr_act(),"Retry"));ui_page_12_sensor_destroy();
  ui_page_17_motor_test_create(lv_scr_act());click("Retry mode");ui_page_17_motor_test_destroy();
  gate=true;ui_page_26_set_aging_create(lv_scr_act());click("Start test");confirm(NULL);assert(label_find(lv_scr_act(),"Could not send"));gate=false;tick(220);click("Retry");ui_page_26_set_aging_destroy();
- gate=true;ui_page_28_get_image_create(lv_scr_act());click("Capture");snapshot("image-send-failed");assert(label_find(lv_scr_act(),"Could not send capture request. Try again."));gate=false;ui_page_28_get_image_poll(lv_tick_get());click("Retry");gate=true;ui_page_28_get_image_poll(lv_tick_get());assert(label_find(lv_scr_act(),"Could not send capture request. Try again."));ui_page_28_get_image_destroy();
- ui_page_31_get_wave_create(lv_scr_act());click("Capture");snapshot("wave-send-failed");assert(label_find(lv_scr_act(),"Could not send capture request. Try again."));gate=false;ui_page_31_get_wave_poll(lv_tick_get());click("Retry");ui_page_31_get_wave_destroy();
+ gate=true;ui_page_28_get_image_create(lv_scr_act());click("Capture");snapshot("image-send-failed");assert(test_notice_kind==UI_NOTICE_ERROR&&!strcmp(test_notice_detail,"Could not send capture request. Try again."));gate=false;ui_page_28_get_image_poll(lv_tick_get());click("Retry");gate=true;ui_page_28_get_image_poll(lv_tick_get());assert(test_notice_kind==UI_NOTICE_ERROR&&!strcmp(test_notice_detail,"Could not send capture request. Try again."));ui_page_28_get_image_destroy();
+ ui_page_31_get_wave_create(lv_scr_act());click("Capture");snapshot("wave-send-failed");assert(test_notice_kind==UI_NOTICE_ERROR&&!strcmp(test_notice_detail,"Could not send capture request. Try again."));gate=false;ui_page_31_get_wave_poll(lv_tick_get());click("Retry");ui_page_31_get_wave_destroy();
  ui_page_10_debug_create();debug_run_layout();snapshot("debug-mode-retry");click("Retry");ui_page_10_debug_destroy();assert(retries==6);
  gate=true;send_ok=true;ui_page_26_set_aging_create(lv_scr_act());click("Start test");confirm(NULL);ui_page_26_set_aging_on_timeout();unsigned before=sends;click("Start test");assert(sends==before&&(holds&16));snapshot("aging-timeout");ui_page_26_set_aging_destroy();ui_page_26_set_aging_on_reply(2);assert(!(holds&16));
  puts("PASS mode recovery, Sensor has no unrelated Retry, send failures and unknown aging result guard");

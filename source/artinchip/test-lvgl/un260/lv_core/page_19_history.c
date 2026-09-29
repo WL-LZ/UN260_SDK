@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #include "un260/lv_resources/ui_page_background.h"
 #include "page_19_history.h"
 #include "un260/lv_components/lv_popup_style.h"
@@ -10,7 +11,6 @@
 #include "un260/lv_components/lv_nav_button.h"
 #include "un260/lv_components/lv_settings.h"
 #include "un260/lv_components/lv_recycled_list.h"
-#include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_system/ui_history_data.h"
 #include "un260/lv_system/ui_history_export_data.h"
 #include "un260/lv_system/ui_lang.h"
@@ -41,7 +41,8 @@ typedef struct {
 } history_section_t;
 
 typedef struct {
-    lv_obj_t *root, *title, *subtitle, *summary, *notice, *lifetime, *lifetime_title;
+    lv_obj_t *root, *title, *subtitle, *summary, *lifetime, *lifetime_title;
+    unsigned notice_state;
     lv_obj_t *reset_total, *actions[4], *list_panel, *empty, *range, *sort, *unknown;
     lv_obj_t *dialog, *metadata;
     lv_recycled_list_t *list;
@@ -133,12 +134,8 @@ static lv_obj_t *button(lv_obj_t *parent,int x,int y,int w,int h,const char *tex
     if (!lv_obj_add_event_cb(obj,callback,LV_EVENT_CLICKED,context)) {lv_obj_del(obj);return NULL;}
     return obj;
 }
-static void toast(const char *text)
-{
-    lv_print_toast_config_t cfg=lv_print_toast_get_default_config();
-    cfg.text=text;cfg.w=480;cfg.h=110;cfg.show_loader=false;cfg.align_center=true;
-    cfg.auto_hide_ms=2200;lv_print_toast_show_with_config(&cfg);
-}
+static void toast(ui_notice_kind_t kind,const char *text)
+{ui_notice_post(kind,"history.feedback","History",text);}
 static const ui_history_record_t *record_find(uint32_t id)
 {
     const ui_history_store_t *store=ui_history_data_get();
@@ -543,8 +540,8 @@ static void multi_render(void)
 static void show_record(uint32_t id)
 {
     int index=record_index(id);
-    if (index<0 || !record_find(id)) {toast(tr(UI_TEXT_HISTORY_MISSING));return;}
-    if (!prepare_detail((unsigned)index) || !detail_create()) {toast(tr(UI_TEXT_SERIAL_UNAVAILABLE));return;}
+    if (index<0 || !record_find(id)) {toast(UI_NOTICE_WARNING,tr(UI_TEXT_HISTORY_MISSING));return;}
+    if (!prepare_detail((unsigned)index) || !detail_create()) {toast(UI_NOTICE_WARNING,tr(UI_TEXT_SERIAL_UNAVAILABLE));return;}
     history->tapping=false;lv_recycled_list_stop(history->list);
     history->current_id=id;history->detail_mode=true;
     history->multi_selected=-1;
@@ -610,7 +607,7 @@ static void refresh_header(void)
         }
         history_record_detail_t *detail=current_detail();
         text_set(history->summary,detail && (!detail->denoms_complete || !detail->serials_complete) ?
-            tr(UI_TEXT_HISTORY_PARTIAL) : "");text_set(history->notice,"");
+            tr(UI_TEXT_HISTORY_PARTIAL) : "");
         const ui_text_id_t ids[]={UI_TEXT_HISTORY_PREVIOUS,UI_TEXT_HISTORY_NEXT,UI_TEXT_HISTORY_EXPORT,UI_TEXT_HISTORY_BACK};
         for (unsigned i=0;i<4;++i) lv_damped_button_set_text(history->actions[i],tr(ids[i]));
         int position=-1;
@@ -645,19 +642,23 @@ static void refresh_header(void)
         text_set(history->title,tr(UI_TEXT_HISTORY_RECORDS));
         if (history->selecting) {
             snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_SELECTED_FMT),(unsigned)history->selected_count);
-            text_set(history->subtitle,text);text_set(history->notice,"");
+            text_set(history->subtitle,text);
         } else {
             snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_STORAGE_FMT),(unsigned)history->record_count,UI_HISTORY_MAX_RECORDS);
             text_set(history->subtitle,text);
-            if (!available) text_set(history->notice,tr(UI_TEXT_HISTORY_STORAGE_FAILED));
-            else if (status==STORAGE_JOB_FAILED) text_set(history->notice,tr(UI_TEXT_HISTORY_SAVE_FAILED));
-            else if (status==STORAGE_JOB_PENDING)
-                text_set(history->notice,tr(UI_TEXT_HISTORY_SAVING));
-            else if (history->unknown_count) {
-                snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_UNKNOWN_FMT),(unsigned)history->unknown_count);
-                text_set(history->notice,text);
-            } else text_set(history->notice,history->record_count>=UI_HISTORY_MAX_RECORDS ?
-                tr(UI_TEXT_HISTORY_CAPACITY_FULL) : "");
+            unsigned state=!available?1:status==STORAGE_JOB_FAILED?2:
+                status==STORAGE_JOB_PENDING?3:history->unknown_count?4:
+                history->record_count>=UI_HISTORY_MAX_RECORDS?5:0;
+            if(!ui_manager_is_prewarming_page(UI_PAGE_HISTORY)&&state!=history->notice_state){
+                unsigned previous=history->notice_state;history->notice_state=state;
+                if(state==1||state==2)ui_notice_post(UI_NOTICE_ERROR,"history.storage","History storage",tr(state==1?UI_TEXT_HISTORY_STORAGE_FAILED:UI_TEXT_HISTORY_SAVE_FAILED));
+                else if(state==3)ui_notice_post(UI_NOTICE_PROGRESS,"history.storage","History","Saving records...");
+                else {
+                    if(previous==3)ui_notice_post(UI_NOTICE_SUCCESS,"history.storage","History saved",NULL);
+                    if(state==4){snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_UNKNOWN_FMT),(unsigned)history->unknown_count);ui_notice_post(UI_NOTICE_INFO,"history.metadata","History",text);}
+                    else if(state==5)ui_notice_post(UI_NOTICE_WARNING,"history.metadata","History capacity reached",tr(UI_TEXT_HISTORY_CAPACITY_FULL));
+                }
+            }
         }
         if (history->reviewing_unknown) text_set(history->summary,tr(UI_TEXT_HISTORY_PARTIAL));
         else {
@@ -746,7 +747,7 @@ static void refresh_records(bool reset)
         if (i<0 || !record_find(id)) {
             /* An external deletion or retention rollover invalidates the ID,
              * not the user's filter/reading position. Do not recurse here. */
-            show_list_panels();toast(tr(UI_TEXT_HISTORY_MISSING));
+            show_list_panels();toast(UI_NOTICE_WARNING,tr(UI_TEXT_HISTORY_MISSING));
         } else if(record_find(id)->multi.enabled) {
             multi_render();
         } else if (prepare_detail((unsigned)i)) {
@@ -784,7 +785,7 @@ static void open_search(void)
     for (size_t i=0;i<history->record_count;++i) (void)prepare_detail((unsigned)i);
     history->search=page_19_history_search_create(history->root,&history->input,history->records,
         history->record_count,search_closed,NULL);
-    if (!history->search) toast(tr(UI_TEXT_SERIAL_UNAVAILABLE));
+    if (!history->search) toast(UI_NOTICE_WARNING,tr(UI_TEXT_SERIAL_UNAVAILABLE));
 }
 static void close_dialog(void)
 {
@@ -813,7 +814,7 @@ static void confirmation_apply(lv_event_t *event)
     }
     close_dialog();history->model_dirty=true;
     if (accepted) {history->selected_count=0;history->selecting=false;}
-    else toast(tr(UI_TEXT_HISTORY_SAVE_FAILED));
+    else toast(UI_NOTICE_ERROR,tr(UI_TEXT_HISTORY_SAVE_FAILED));
     refresh_records(false);
 }
 static void show_confirmation(bool clear_total)
@@ -850,7 +851,7 @@ static void show_confirmation(bool clear_total)
     lv_recycled_list_stop(history->list);history->tapping=false;
     return;
 failed:
-    close_dialog();toast(tr(UI_TEXT_SERIAL_UNAVAILABLE));
+    close_dialog();toast(UI_NOTICE_WARNING,tr(UI_TEXT_SERIAL_UNAVAILABLE));
 }
 static void sort_event(lv_event_t *event)
 {
@@ -880,8 +881,7 @@ static void action_event(lv_event_t *event)
     if (history->search || history->dialog) return;
     if (history->detail_mode) {
         if (action==2) {
-            if (!ui_history_export_data_request_records(&history->current_id,1))
-                toast(tr(UI_TEXT_SERIAL_UNAVAILABLE));
+            (void)ui_history_export_data_request_records(&history->current_id,1);
         } else {
             for (size_t i=0;i<displayed_count();++i) if (displayed_id(i)==history->current_id) {
                 if (action==0 && i) show_record(displayed_id((uint32_t)i-1));
@@ -904,8 +904,8 @@ static void action_event(lv_event_t *event)
         const uint32_t *ids=history->selecting ? history->selected_ids :
             history->reviewing_unknown ? history->unknown_ids : history->result_ids;
         size_t count=history->selecting ? history->selected_count : displayed_count();
-        if (!count || !ui_history_export_data_request_records(ids,count))
-            toast(tr(UI_TEXT_SERIAL_UNAVAILABLE));
+        if (!count) toast(UI_NOTICE_WARNING,tr(UI_TEXT_SERIAL_UNAVAILABLE));
+        else (void)ui_history_export_data_request_records(ids,count);
     } else if (history->selecting) show_confirmation(false);
     else {history->selecting=true;history->selected_count=0;refresh_records(false);}
 }
@@ -937,11 +937,10 @@ void ui_page_19_history_create(lv_obj_t *parent)
     history->metadata=surface(history->root,16,72,1248,38,10,0xFFFFFF);
     if(!history->metadata)goto failed;
     history->summary=label(history->metadata,16,9,360,28,&lv_font_instrument_sans_semibold_16,LV_SETTINGS_PRIMARY,LV_TEXT_ALIGN_LEFT);
-    history->notice=label(history->metadata,390,11,390,22,&lv_font_instrument_sans_medium_12,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
     history->lifetime_title=label(history->metadata,792,11,204,20,&lv_font_instrument_sans_medium_12,HISTORY_MUTED,LV_TEXT_ALIGN_RIGHT);
     history->lifetime=label(history->metadata,1008,8,106,28,&lv_font_instrument_sans_semibold_18,HISTORY_INK,LV_TEXT_ALIGN_RIGHT);
     history->reset_total=button(history->metadata,1130,3,108,32,tr(UI_TEXT_HISTORY_CLEAR_TOTAL),reset_event,NULL);
-    if (!history->title || !history->subtitle || !history->summary || !history->notice ||
+    if (!history->title || !history->subtitle || !history->summary ||
         !history->lifetime_title || !history->lifetime || !history->reset_total) goto failed;
     lv_obj_set_style_text_font(lv_damped_button_get_label(history->reset_total),&lv_font_instrument_sans_semibold_12,0);
     for (unsigned i=0;i<4;++i) {

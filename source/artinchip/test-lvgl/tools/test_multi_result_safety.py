@@ -36,7 +36,7 @@ def main():
         ("un260/lv_core/page_02_list.c", ["text_set", "list_monetary_result_supported", "row_bind", "commit"]),
         ("un260/lv_components/smart_island/smart_island_view.c",
          ["smart_island_get_currency_code", "smart_island_rebuild_scene_texts"]),
-        ("un260/lv_components/smart_island/smart_island_action.c", ["smart_island_show_qr_popup"]),
+        ("un260/lv_components/smart_island/smart_island_action.c", ["smart_island_show_qr_error_toast", "smart_island_show_qr_popup"]),
     ):
         source = (ROOT / path).read_text(encoding="utf-8")
         parts.extend(function(source, name) for name in names)
@@ -51,6 +51,9 @@ def main():
         for optimization in ("-O0", "-O2"):
             command = [os.environ.get("CC", "cc"), "-std=c11", optimization,
                        "-Wall", "-Wextra", "-Werror", "-Wno-misleading-indentation", f"-I{ROOT}", f"-I{work}"]
+            # Existing counting_cashbook.c checks an array address. Keep that
+            # unrelated warning visible while exercising notification migration.
+            if os.name == "nt": command += ["-Wno-error=address"]
             if os.name != "nt":
                 command += ["-fsanitize=undefined", "-fno-sanitize-recover=all"]
             subprocess.run(command + [str(ROOT / path) for path in sources]

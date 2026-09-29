@@ -18,6 +18,8 @@
 #include "un260/protocol/auxiliary_reply.h"
 #include "un260/protocol/startup_sync_reply.h"
 #include "un260/protocol/stream_data_reply.h"
+#include "un260/protocol/machine_fault_reply.h"
+#include "un260/lv_components/lv_fault_popup.h"
 
 static void handle_device_reply(uint8_t cmd, const uint8_t *buf, uint8_t len)
 {
@@ -69,6 +71,9 @@ static void handle_auxiliary_reply(uint8_t cmd, const uint8_t *buf, uint8_t len)
         uart_debug_printf("0x3C print detail frame\n");
         break;
     case AUXILIARY_REPLY_PRINT_DONE:
+        /* The documented three reply bytes have no defined transaction or
+         * success field. An unsolicited/late completion must not manufacture
+         * a success notice for the latest UI request. */
         uart_debug_printf("0x3C print done\n");
         break;
     case AUXILIARY_REPLY_PRINT_UNKNOWN:
@@ -103,11 +108,25 @@ static void handle_stream_data_reply(uint8_t cmd,
     }
 }
 
+static void handle_machine_state_reply(uint8_t cmd, const uint8_t *buf, uint8_t len)
+{
+    machine_fault_reply_t reply = machine_fault_reply_parse(cmd, buf, len);
+    if (reply.kind == MACHINE_FAULT_REPLY_SENSOR_SNAPSHOT)
+        fault_popup_report_sensor_mask(reply.mask);
+    else if (reply.kind == MACHINE_FAULT_REPLY_INVALID)
+        uart_debug_printf("0x%02X invalid machine-state reply len=%u\n", cmd, len);
+    /* 0x14 is occupancy, so it never creates or clears machine faults. */
+}
+
 bool app_protocol_runtime_handle_reply(uint8_t cmd,
                                        const uint8_t *buf,
                                        uint8_t len)
 {
     switch (cmd) {
+    case 0x02:
+    case 0x14:
+        handle_machine_state_reply(cmd, buf, len);
+        return true;
     case 0x17:
     case 0xA1:
     case 0xB0:

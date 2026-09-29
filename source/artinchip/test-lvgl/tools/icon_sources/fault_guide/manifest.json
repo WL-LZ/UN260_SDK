@@ -1,0 +1,53 @@
+{
+  "stage": [
+    510,
+    273
+  ],
+  "source": "Approved UN260 SVG model, 2026-09-29; no inferred component locations.",
+  "views": {
+    "front": [
+      113,
+      15,
+      254,
+      267
+    ],
+    "side": [
+      118,
+      19,
+      242,
+      264
+    ],
+    "top": [
+      115,
+      15,
+      250,
+      265
+    ],
+    "rear": [
+      112,
+      19,
+      256,
+      268
+    ]
+  },
+  "assets": [
+    "front",
+    "side",
+    "top",
+    "rear",
+    "lid_00",
+    "lid_01",
+    "lid_02",
+    "lid_03",
+    "lid_04",
+    "lid_05",
+    "lid_06",
+    "lid_07",
+    "lid_08",
+    "lid_09",
+    "lid_10",
+    "lid_11",
+    "rear_tray",
+    "rear_face"
+  ]
+}

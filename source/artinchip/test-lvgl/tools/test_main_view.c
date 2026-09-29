@@ -387,8 +387,9 @@ static void test_main(void)
     assert(multi_policy && !multi_policy(GESTURE_ACTION_RETURN));
     assert(multi_policy(GESTURE_ACTION_HOME));render();write_bmp("multi-back");
     assert(!multi_policy(GESTURE_ACTION_EXIT_PAGE));
-    smart_island_notify_warning("A long diagnostic message that must scroll without layout jumping during normal refresh");
+    smart_island_notify_warning("Diagnostic message transferred to the top notification service");
     tick(300);render();
+    assert(!strcmp(host_notice_detail,"Diagnostic message transferred to the top notification service"));
     lv_coord_t warning_width=lv_obj_get_width(g_si_ctx.objects.title);
     lv_coord_t warning_x=lv_obj_get_x(g_si_ctx.objects.title);
     smart_island_view_refresh_scene();render();
@@ -419,7 +420,8 @@ static void test_main(void)
     smart_island_notify_count_end("Count complete");tick(500);write_bmp("main-island-result");
     smart_island_restore_idle();tick(500);smart_island_open_action_page();tick(500);
     write_bmp("main-island-actions");smart_island_close();tick(500);
-    smart_island_notify_warning("Reject pocket full");tick(100);write_bmp("main-island-warning");
+    smart_island_notify_warning("Reject pocket full");tick(100);
+    assert(host_notice_kind==UI_NOTICE_WARNING && !strcmp(host_notice_detail,"Reject pocket full"));
     ui_main_destroy();assert(!page_01_main_is_created() && !detail_view);
 }
 

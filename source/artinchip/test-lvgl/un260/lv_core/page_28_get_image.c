@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "page_28_get_image.h"
 #include "un260/lv_components/lv_settings.h"
@@ -151,6 +152,12 @@ static void image_set_status(const char* text, lv_color_t color)
     image_render_status();
 }
 
+static void image_notice(ui_notice_kind_t kind,const char *text)
+{
+    image_set_status("",lv_color_hex(0x586B78));
+    ui_notice_post(kind,"capture.image","Image capture",text);
+}
+
 static void image_refresh_sources(void)
 {
     size_t selected_index = image_source_index(selected_image_id);
@@ -249,8 +256,7 @@ static bool image_prepare_one_buffer(uint8_t image_id, uint16_t width, uint16_t 
     if (image_id < 1 || image_id > IMAGE_SOURCE_COUNT) return false;
     if (width == 0 || height == 0 ||
         width > IMAGE_MAX_WIDTH || height > IMAGE_MAX_HEIGHT) {
-        image_set_status(ui_text_get(UI_TEXT_SETTINGS_IMAGE_GET_SIZE_ERROR),
-                         lv_color_hex(0xB63B32));
+        image_notice(UI_NOTICE_ERROR,ui_text_get(UI_TEXT_SETTINGS_IMAGE_GET_SIZE_ERROR));
         return false;
     }
 
@@ -265,8 +271,7 @@ static bool image_prepare_one_buffer(uint8_t image_id, uint16_t width, uint16_t 
     pixel_count = (size_t)width * height;
     item->buffer = (lv_color_t*)lv_mem_alloc(pixel_count * sizeof(lv_color_t));
     if (!item->buffer) {
-        image_set_status(ui_text_get(UI_TEXT_SETTINGS_IMAGE_GET_MEMORY_ERROR),
-                         lv_color_hex(0xB63B32));
+        image_notice(UI_NOTICE_ERROR,ui_text_get(UI_TEXT_SETTINGS_IMAGE_GET_MEMORY_ERROR));
         return false;
     }
 
@@ -313,7 +318,7 @@ static bool image_prepare_for_row(uint8_t image_id, uint16_t row, uint16_t pixel
 
     image_buffer_t *existing = &image_buffers[image_source_index(image_id)];
     if (existing->buffer && (existing->width != width || existing->height != height)) {
-        image_set_status("Inconsistent image dimensions. Capture again.", lv_color_hex(0xB63B32));
+        image_notice(UI_NOTICE_ERROR,"Inconsistent image dimensions. Capture again.");
         return false;
     }
     return image_prepare_one_buffer(image_id, width, height);
@@ -392,10 +397,9 @@ static void image_request_cb(lv_event_t* e)
         image_request_active = true;
         image_request_touch(now_ms);
         image_refresh_request_button(now_ms);
-        image_set_status(ui_text_get(UI_TEXT_SETTINGS_IMAGE_GET_WAITING),
-                         lv_color_hex(0x1462CC));
+        image_notice(UI_NOTICE_PROGRESS,ui_text_get(UI_TEXT_SETTINGS_IMAGE_GET_WAITING));
     } else {
-        image_set_status("Could not send capture request. Try again.",lv_color_hex(0xB63B32));
+        image_notice(UI_NOTICE_ERROR,"Could not send capture request. Try again.");
     }
 }
 
@@ -464,6 +468,7 @@ void ui_page_28_get_image_create(lv_obj_t *parent)
 
 void ui_page_28_get_image_destroy(void)
 {
+    if(image_request_active)ui_notice_clear("capture.image");
     uint32_t now_ms = app_clock_uptime_ms();
 
     if (image_request_active) {
@@ -514,7 +519,7 @@ void ui_page_28_get_image_on_frame(const uint8_t* data, uint16_t len)
         image_clear_buffer();
         if (!length || length > IMAGE_MAX_WIDTH) {
             image_request_finish(now_ms, true);
-            image_set_status("Unsupported image size", lv_color_hex(0xB63B32));
+            image_notice(UI_NOTICE_ERROR,"Unsupported image size");
             return;
         }
         reported_image_length = length;
@@ -535,8 +540,7 @@ void ui_page_28_get_image_on_frame(const uint8_t* data, uint16_t len)
         }
         image_buffer_t *selected = &image_buffers[image_source_index(selected_image_id)];
         bool complete = selected->buffer && selected->width && selected->rows_received == selected->width;
-        image_set_status(complete ? "Capture complete" : "Transfer ended with missing image data. Capture again.",
-                         lv_color_hex(complete ? 0x247650 : 0xA35B12));
+        image_notice(complete?UI_NOTICE_SUCCESS:UI_NOTICE_WARNING,complete?"Capture complete":"Image data incomplete. Capture again.");
         return;
     }
 
@@ -556,8 +560,7 @@ bool ui_page_28_get_image_poll(uint32_t now_ms)
 
     if (image_request_active && image_time_reached(now_ms, image_request_deadline)) {
         image_request_finish(now_ms, true);
-        image_set_status(ui_text_get(UI_TEXT_SETTINGS_IMAGE_GET_TIMEOUT),
-                         lv_color_hex(0xB63B32));
+        image_notice(UI_NOTICE_WARNING,ui_text_get(UI_TEXT_SETTINGS_IMAGE_GET_TIMEOUT));
         timed_out = true;
     } else {
         image_refresh_request_button(now_ms);

@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #include "page_23_set_flap.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "un260/lv_core/settings_detail_ui.h"
@@ -45,11 +46,11 @@ static void choose(lv_event_t *event)
     uint8_t previous = machine_state_flap_position();
     if (target == previous) return;
     if (!setting_service_request_flap_position(target, previous)) {
-        lv_label_set_text(frame.message, "Could not send the command. Please try again.");
+        ui_notice_post(UI_NOTICE_ERROR,"settings.flap","Flap position","Request not sent. Try again.");
         return;
     }
     pending = true;
-    /* Keep the footer stable during short ACK round trips; selection is locked. */
+    ui_notice_post(UI_NOTICE_PROGRESS,"settings.flap","Flap position","Waiting for controller...");
     refresh();
 }
 
@@ -71,7 +72,7 @@ void ui_page_23_set_flap_create(lv_obj_t *parent)
     for (unsigned i = 0; i < 2; ++i) {
         options[i]=lv_settings_segment(base,i,2,ui_text_get(names[i]),choose,(void *)(uintptr_t)positions[i]);
     }
-    lv_label_set_text(frame.message, pending ? "Waiting for controller." : "Select a position to move the flap.");
+    lv_label_set_text(frame.message, "");
     refresh();
 }
 
@@ -88,7 +89,5 @@ void ui_page_23_set_flap_on_reply(const setting_value_result_t *result)
     if (!result) return;
     pending = false;
     refresh();
-    const char *message=result->success ? "Position confirmed." :
-        result->timeout ? "No confirmation received." : "Controller rejected the command.";
-    if (frame.message&&strcmp(lv_label_get_text(frame.message),message))lv_label_set_text(frame.message,message);
+
 }

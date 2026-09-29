@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #include "page_26_set_aging.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "settings_detail_ui.h"
@@ -49,11 +50,13 @@ static void aging_confirm_start(void *user_data)
     if (start_pending || aging_view == AGING_VIEW_TIMEOUT || machine_state_aging_running() || !work_mode_service_diagnostic_ready()) return;
     if (!setting_service_request_aging_start()) {
         aging_view=AGING_VIEW_SEND_FAILED;
+        ui_notice_post(UI_NOTICE_ERROR,"settings.aging","Test request not sent","Check controller connection.");
         aging_refresh();
         return;
     }
     work_mode_service_hold_operation(WORK_MODE_OPERATION_AGING,true);
     start_pending=true;aging_view=AGING_VIEW_WAIT;
+    ui_notice_post(UI_NOTICE_PROGRESS,"settings.aging","Aging test","Waiting for controller...");
     aging_refresh();
 }
 static void aging_start(lv_event_t *e)
@@ -128,6 +131,9 @@ void ui_page_26_set_aging_on_reply(uint8_t result)
 {
     if (result!=0 && result!=1 && result!=2) return;
     start_pending=false;
+    ui_notice_post(result==0?UI_NOTICE_PROGRESS:result==2?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,
+        "settings.aging",result==0?"Aging test running":result==2?"Aging test completed":"Aging test rejected",
+        result==0?"Keep the transport path clear.":NULL);
     if(result==0) {machine_state_confirm_aging_running(true);aging_view=AGING_VIEW_RUNNING;}
     else {
         machine_state_confirm_aging_running(false);
@@ -139,6 +145,7 @@ void ui_page_26_set_aging_on_reply(uint8_t result)
 void ui_page_26_set_aging_on_timeout(void)
 {
     start_pending=false;aging_view=AGING_VIEW_TIMEOUT;
+    ui_notice_post(UI_NOTICE_WARNING,"settings.aging","Aging test unconfirmed","No reply. Check the machine before starting another test.");
     /* A missing response is not proof that the hardware stopped. */
     aging_refresh();
 }

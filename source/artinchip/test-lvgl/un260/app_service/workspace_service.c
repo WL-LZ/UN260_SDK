@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 static struct {bool active,waiting;unsigned step,confirmed;uint32_t since;workspace_profile_t target;char message[160];} apply;
+static workspace_apply_result_t apply_result;
 static struct {
     bool pending;
     uint32_t owner;
@@ -74,6 +75,7 @@ bool workspace_service_apply(const workspace_profile_t *p,uint32_t now)
     if(!p||workspace_service_switch_blocker()||!protocol_send_is_ready()||boot_service_get_stage()!=BOOT_STAGE_DONE)return false;
     if(p->mode>3||p->speed>2||p->sort>3||p->beep>1||p->add>1||p->work>1||p->batch>200||(p->batch_enabled&&(!p->batch||p->batch==200)))return false;
     apply.target=*p;if(!apply.target.mode)apply.target.mode=actual(6);apply.active=true;apply.waiting=false;apply.step=apply.confirmed=0;apply.since=now;
+    apply_result=WORKSPACE_APPLY_PENDING;
     snprintf(apply.message,sizeof(apply.message),"Applying profile...");return true;
 }
 static void finish_batch_save(void)
@@ -108,25 +110,26 @@ bool workspace_service_poll(uint32_t now)
         apply.waiting=false;apply.confirmed++;apply.step++;changed=true;
     }
     while(!apply.waiting&&apply.step<7&&actual(apply.step)==value(apply.step,&apply.target))apply.step++;
-    if(apply.step==7) {apply.active=false;snprintf(apply.message,sizeof(apply.message),"Profile applied. Device values confirmed.");return true;}
+    if(apply.step==7) {apply.active=false;apply_result=WORKSPACE_APPLY_SUCCEEDED;snprintf(apply.message,sizeof(apply.message),"Profile applied. Device values confirmed.");return true;}
     const char *blocked=machine_blocker();
     if(blocked||(apply.waiting&&(uint32_t)(now-apply.since)>1800)) {
         snprintf(apply.message,sizeof(apply.message),"Stopped at %s. %u changes confirmed. Check actual values before retrying.",steps[apply.step],apply.confirmed);
-        apply.active=false;return true;
+        apply.active=false;apply_result=WORKSPACE_APPLY_UNCONFIRMED;return true;
     }
     if(!apply.waiting) {
         if(!request(apply.step,value(apply.step,&apply.target))) {
             snprintf(apply.message,sizeof(apply.message),"%s could not be sent. %u changes confirmed; remaining steps were not sent.",steps[apply.step],apply.confirmed);
-            apply.active=false;return true;
+            apply.active=false;apply_result=WORKSPACE_APPLY_FAILED;return true;
         }
         apply.waiting=true;apply.since=now;snprintf(apply.message,sizeof(apply.message),"Waiting for %s confirmation...",steps[apply.step]);changed=true;
     }return changed;
 }
 bool workspace_service_applying(void){return apply.active;}
+workspace_apply_result_t workspace_service_apply_result(void){return apply_result;}
 void workspace_service_cancel_apply(void)
 {
     if(!apply.active)return;
-    apply.active=false;snprintf(apply.message,sizeof(apply.message),"Remaining steps cancelled. An already-sent command may still complete.");
+    apply.active=false;apply_result=WORKSPACE_APPLY_CANCELLED;snprintf(apply.message,sizeof(apply.message),"Remaining steps cancelled. An already-sent command may still complete.");
 }
 const char *workspace_service_apply_message(void){return apply.message;}
 bool workspace_service_quick_enabled(void)
@@ -177,3 +180,21 @@ bool workspace_service_save_batches(uint32_t owner,const uint8_t *values,
     return true;
 }
 const char *workspace_service_batch_save_message(void){return batch_save.message;}
+
+bool workspace_service_owns_command(uint8_t command)
+{
+    static const uint8_t commands[] = {0x16, 0x3A, 0x15, 0x06, 0x39, 0x38, 0x04};
+    return apply.active && apply.waiting && apply.step < sizeof(commands) && commands[apply.step] == command;
+}
+
+bool workspace_service_reject_command(uint8_t command)
+{
+    if (!workspace_service_owns_command(command)) return false;
+    snprintf(apply.message, sizeof(apply.message),
+        "%s rejected. %u changes confirmed; remaining steps not sent.",
+        steps[apply.step], apply.confirmed);
+    apply.active = false;
+    apply.waiting = false;
+    apply_result = WORKSPACE_APPLY_FAILED;
+    return true;
+}

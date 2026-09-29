@@ -1,7 +1,7 @@
 #include "un260/lv_components/smart_island/smart_island_internal.h"
 #include "un260/gesture/touch_feedback.h"
 #include "un260/lv_components/lv_fault_popup.h"
-#include "un260/lv_components/lv_print_toast.h"
+#include "un260/lv_components/ui_notice.h"
 #include "un260/lv_components/lv_qr_popup.h"
 #include "un260/lv_components/lv_capsule_pagination.h"
 #include "un260/lv_core/lv_page_manager.h"
@@ -243,8 +243,7 @@ static void smart_island_swipe_cb(lv_event_t *e)
         g_si_ctx.view.swipe.swiped = false;
     }
 
-    if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_WARNING ||
-        g_si_ctx.view.visual != SMART_ISLAND_VISUAL_EXPANDED ||
+    if (g_si_ctx.view.visual != SMART_ISLAND_VISUAL_EXPANDED ||
         g_si_ctx.view.anim_running) {
         return;
     }
@@ -327,14 +326,12 @@ void smart_island_click_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
 
-    if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_WARNING) {
+    if (fault_popup_get_pending_fault(NULL, NULL, NULL)) {
         if (g_si_ctx.action.ignore_click_once) {
             g_si_ctx.action.ignore_click_once = false;
             return;
         }
-        if (fault_popup_show_pending_now() || smart_island_warning_fault_show()) {
-            smart_island_warning_stop();
-        }
+        (void)fault_popup_show_pending_now();
         return;
     }
 
@@ -418,18 +415,8 @@ static void smart_island_action_btn_cb(lv_event_t *e)
 
 static void smart_island_show_qr_error_toast(const char *text)
 {
-    lv_print_toast_config_t toast_cfg = lv_print_toast_get_default_config();
-
-    toast_cfg.w = 320;
-    toast_cfg.h = 101;
-    toast_cfg.text = smart_island_text_or_default(text, UI_TEXT_WIDGET_QR_POPUP_NO_DATA);
-    toast_cfg.show_loader = true;
-    toast_cfg.align_center = true;
-    toast_cfg.use_text_area = false;
-    toast_cfg.loader_color = lv_color_hex(0xC0392B);
-    toast_cfg.auto_hide_ms = 2000;
-
-    lv_print_toast_show_with_config(&toast_cfg);
+    ui_notice_post(UI_NOTICE_WARNING, "export.qr", "QR export",
+        smart_island_text_or_default(text, UI_TEXT_WIDGET_QR_POPUP_NO_DATA));
 }
 
 static void smart_island_show_qr_popup(void)
@@ -437,15 +424,8 @@ static void smart_island_show_qr_popup(void)
     char qr_text[3072];
     if (currency_state_multi_selected() ||
         !counting_data_monetary_result_supported(counting_data_current())) {
-        lv_print_toast_config_t toast_cfg = lv_print_toast_get_default_config();
-        toast_cfg.x = 320;
-        toast_cfg.w = 640;
-        toast_cfg.h = 120;
-        toast_cfg.text = ui_text_get(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED);
-        toast_cfg.show_loader = false;
-        toast_cfg.align_center = true;
-        toast_cfg.auto_hide_ms = 3500;
-        lv_print_toast_show_with_config(&toast_cfg);
+        ui_notice_post(UI_NOTICE_WARNING, "export.qr", "QR export",
+            ui_text_get(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED));
         return;
     }
     if (!ui_qr_data_is_ready()) {

@@ -83,7 +83,7 @@ const char *app_command_runtime_diagnostic_run_blocker(void)
      * depend on ordinary count-ready sensors (the CIS bar occupies the path). */
     boot_stage_t boot=boot_service_get_stage();
     if(boot!=BOOT_STAGE_DONE&&boot!=BOOT_STAGE_FAIL)return "Wait for the self-check to finish.";
-    if(fault_popup_is_showing()||fault_popup_get_pending_fault(NULL,NULL,NULL))return "Resolve the machine error before running.";
+    if(fault_popup_is_showing())return "Close the machine guide before running.";
     return NULL;
 }
 bool app_command_runtime_request_diagnostic_run(void)

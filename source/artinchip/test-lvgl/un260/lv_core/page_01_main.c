@@ -25,7 +25,6 @@
 #include "un260/machine_state/machine_state.h"
 #include "un260/currency/currency_state.h"
 #include "un260/counting/counting_data_store.h"
-#include "un260/lv_components/lv_print_toast.h"
 #include "un260/lv_components/lv_components.h"
 #include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_components/lv_dma_snapshot_cache.h"
@@ -1186,7 +1185,7 @@ void ui_main_create(lv_obj_t *parent)
     ui_refresh_main_page();
     machine_time_init();
     s_time_timer = lv_timer_create(main_time_timer_cb, 1000, NULL);
-    lv_print_toast_create();
+
     ui_state_apply_common_runtime();
     if (!ui_manager_is_prewarming_page(UI_PAGE_MAIN))
         page_01_main_send_init_protocol();

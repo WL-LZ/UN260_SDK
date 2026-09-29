@@ -7,10 +7,19 @@ bool setting_service_request_beep(bool enabled){machine_state_confirm_buzzer(ena
 #include "un260/gesture/touch_feedback.h"
 #include "un260/lv_system/ui_qr_data.h"
 #include "un260/lv_core/page_18_pure.h"
+#include "un260/lv_components/ui_notice.h"
 
 /* Surrounding workflows are captured, never sent to hardware/storage. Main,
  * detail projection, styling, hit tests, fonts and Smart Island remain real. */
 static unsigned callbacks[16], pushes, protocol_calls, persisted_tabs;
+static unsigned host_notice_posts;
+static ui_notice_kind_t host_notice_kind;
+static char host_notice_detail[UI_NOTICE_DETAIL_CAPACITY];
+void ui_notice_post(ui_notice_kind_t kind,const char *key,const char *title,const char *detail)
+{
+    (void)key;(void)title;++host_notice_posts;host_notice_kind=kind;
+    snprintf(host_notice_detail,sizeof(host_notice_detail),"%s",detail?detail:"");
+}
 static bool start_busy, prewarming, touch_enabled, fault_auto;
 static bool host_fault_pending,host_fault_showing,host_transitioning;
 static ui_page_t destination;
@@ -84,21 +93,12 @@ void perf_profile_report_event_us(const char *group,const char *name,uint32_t us
 { (void)group;(void)name;(void)us; }
 void perf_profile_watch_invalidation(const void *object,const char *name) { (void)object;(void)name; }
 void perf_profile_unwatch_invalidation(const void *object) { (void)object; }
-void lv_print_toast_create(void) {}
-void lv_print_toast_show_with_config(const lv_print_toast_config_t *config) { (void)config; }
-lv_print_toast_config_t lv_print_toast_get_default_config(void)
-{ lv_print_toast_config_t config={0};return config; }
 bool fault_popup_get_auto_enabled(void) { return fault_auto; }
 void fault_popup_set_auto_enabled(bool enabled) { fault_auto=enabled; }
 bool fault_popup_get_pending_fault(fault_source_t *source,uint8_t *type,uint8_t *code)
 { (void)source;(void)type;(void)code;return host_fault_pending; }
 bool fault_popup_show_pending_now(void) { return false; }
 bool fault_popup_is_showing(void) { return host_fault_showing; }
-void fault_popup_schedule_auto_confirm(void) {}
-void fault_popup_clear_pending(void) {}
-void fault_popup_reset_auto_retry(void) {}
-void show_start_fault_popup(uint8_t type,uint8_t code) { (void)type;(void)code; }
-void show_runtime_fault_popup(uint8_t code) { (void)code; }
 bool touch_feedback_enabled(void) { return touch_enabled; }
 bool touch_feedback_set_enabled(bool enabled) { touch_enabled=enabled;return true; }
 bool ui_qr_data_is_ready(void) { return false; }

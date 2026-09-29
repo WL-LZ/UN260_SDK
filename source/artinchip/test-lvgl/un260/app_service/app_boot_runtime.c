@@ -239,6 +239,9 @@ void app_boot_runtime_handle_reply(counting_session_state_t *counting_session,
         return;
     }
 
+    /* Record every accepted requested step, including later recovery. The
+     * boot sequence owns when the collected failures become visible. */
+    fault_popup_record_boot_result(buf[4], reply.self_test_result);
     boot_selftest_list_set_result(reply.self_test_index, reply.self_test_result);
     boot_progress_set((uint8_t)(30 + reply.self_test_index * 10));
 
@@ -259,7 +262,7 @@ void app_boot_runtime_handle_reply(counting_session_state_t *counting_session,
         }
     } else if (reply.self_test_event == BOOT_SELF_TEST_EVENT_FAILURE) {
         app_boot_runtime_request_currency_list();
-        show_boot_fault_popup(reply.first_failure_step, reply.first_failure_result);
+        (void)fault_popup_show_pending_now();
     }
 }
 
@@ -285,10 +288,10 @@ void app_boot_runtime_poll(uint32_t now_ms, bool boot_page_active)
         app_boot_runtime_send_handshake(now_ms);
     } else if (action == BOOT_SERVICE_ACTION_HANDSHAKE_TIMEOUT) {
         show_boot_selftest_error_popup(
-            "Controller handshake timeout.\nPress CONFIRM to enter sensor page.");
+            "Controller handshake timed out.\nCheck the controller connection in diagnostics.");
     } else if (action == BOOT_SERVICE_ACTION_SELF_TEST_TIMEOUT) {
         show_boot_selftest_error_popup(
-            "Self-test timeout.\nPress CONFIRM to enter sensor page.");
+            "Self-test timed out.\nOpen diagnostics to inspect the incomplete checks.");
     }
 
     app_boot_runtime_poll_prewarm(now_ms);

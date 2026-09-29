@@ -58,6 +58,7 @@ bool currency_service_take_switch_timeout(currency_switch_result_t* result)
 
     memset(result, 0, sizeof(*result));
     result->success = false;
+    result->timeout = true;
     result->target_index = g_currency_switch_request.target_index;
     currency_service_copy_code(result->target_code, g_currency_switch_request.target_code);
     memset(&g_currency_switch_request, 0, sizeof(g_currency_switch_request));

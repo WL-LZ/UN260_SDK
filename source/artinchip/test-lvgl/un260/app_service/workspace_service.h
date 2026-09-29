@@ -7,6 +7,14 @@ const char *workspace_service_switch_blocker(void);
 bool workspace_service_switch(uint32_t id);
 bool workspace_service_apply(const workspace_profile_t *profile, uint32_t now_ms);
 bool workspace_service_applying(void);
+typedef enum {
+    WORKSPACE_APPLY_IDLE, WORKSPACE_APPLY_PENDING, WORKSPACE_APPLY_SUCCEEDED,
+    WORKSPACE_APPLY_FAILED, WORKSPACE_APPLY_UNCONFIRMED, WORKSPACE_APPLY_CANCELLED
+} workspace_apply_result_t;
+workspace_apply_result_t workspace_service_apply_result(void);
+bool workspace_service_owns_command(uint8_t command);
+/* Only a matched negative ACK for the current step may end the profile. */
+bool workspace_service_reject_command(uint8_t command);
 void workspace_service_cancel_apply(void);
 const char *workspace_service_apply_message(void);
 bool workspace_service_quick_enabled(void);

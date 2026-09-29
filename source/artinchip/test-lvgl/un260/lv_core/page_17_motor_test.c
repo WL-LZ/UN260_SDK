@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #include "page_17_motor_test.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "settings_detail_ui.h"
@@ -19,9 +20,8 @@ static void request(lv_event_t *e)
 {
     unsigned key=(uintptr_t)lv_event_get_user_data(e);
     if(!motor_test_service_request(key/2,key%2==0))
-        settings_detail_dialog_show("Command not accepted",
-            work_mode_service_diagnostic_ready()?"Wait for the current motor request or check the controller connection.":work_mode_service_status_text(),
-            "OK",NULL,NULL,NULL,NULL);
+        ui_notice_post(UI_NOTICE_WARNING,"settings.motor","Command not accepted",
+            work_mode_service_diagnostic_ready()?"Wait for the current motor request or check the controller connection.":work_mode_service_status_text());
     motor_tick(NULL);
 }
 static void retry(lv_event_t *e){(void)e;work_mode_service_retry();}

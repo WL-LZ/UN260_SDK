@@ -1,3 +1,4 @@
+#include "un260/lv_components/ui_notice.h"
 #include "page_22_set_double_note.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "un260/lv_core/settings_detail_ui.h"
@@ -43,11 +44,11 @@ static void choose(lv_event_t *event)
     uint8_t previous = machine_state_double_note_level();
     if (target == previous) return;
     if (!setting_service_request_double_note_level(target, previous)) {
-        lv_label_set_text(frame.message, "Could not send the change. Please try again.");
+        ui_notice_post(UI_NOTICE_ERROR,"settings.double_note","Double-note detection","Request not sent. Try again.");
         return;
     }
     pending = true;
-    /* Keep the footer stable during short ACK round trips; selection is locked. */
+    ui_notice_post(UI_NOTICE_PROGRESS,"settings.double_note","Double-note detection","Waiting for controller...");
     refresh();
 }
 
@@ -69,7 +70,7 @@ void ui_page_22_set_double_note_create(lv_obj_t *parent)
     for (unsigned i = 0; i < 3; ++i) {
         options[i] = lv_settings_segment(base,i,3,ui_text_get(names[i]),choose,(void *)(uintptr_t)(i+1));
     }
-    lv_label_set_text(frame.message, pending ? "Waiting for controller." : "Select a level to apply.");
+    lv_label_set_text(frame.message, "");
     refresh();
 }
 
@@ -94,7 +95,5 @@ void ui_page_22_set_double_note_on_reply(const setting_value_result_t *result)
     if (!result) return;
     pending = false;
     refresh();
-    const char *message=result->success ? "Change confirmed." :
-        result->timeout ? "No confirmation received. Previous level retained." : "Change rejected. Previous level retained.";
-    if(frame.message&&strcmp(lv_label_get_text(frame.message),message))lv_label_set_text(frame.message,message);
+
 }

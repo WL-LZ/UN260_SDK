@@ -1,3 +1,4 @@
+#include "test_notice_sink.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,6 +10,13 @@
 #include "un260/app_service/work_mode_service.h"
 #include "un260/app_service/app_auto_qr.h"
 #include "un260/lv_components/lv_fault_popup.h"
+#include "un260/lv_components/lv_modal_dialog.h"
+/* UI ownership is tested with real app_ui_runtime functions separately. These
+ * synchronous storage fixtures cannot model accepted asynchronous jobs. */
+static unsigned operation_starts;
+static app_ui_notice_operation_t operation_started;
+void app_ui_runtime_notice_started(app_ui_notice_operation_t operation,const char *detail)
+{(void)detail;operation_starts++;operation_started=operation;}
 static workspace_model_t model;
 static cashbook_t ledger;
 const cashbook_t *cashbook_store_view(void){return &ledger;}
@@ -94,6 +102,7 @@ const workspace_avatar_t *workspace_store_avatar(void){static workspace_avatar_t
 bool workspace_service_applying(void){return false;}
 void workspace_service_cancel_apply(void){}
 const char *workspace_service_apply_message(void){return "";}
+workspace_apply_result_t workspace_service_apply_result(void){return WORKSPACE_APPLY_IDLE;}
 bool workspace_service_quick_enabled(void){return workspace_active(&model)->quick_enabled;}
 const char *workspace_service_switch_blocker(void){return busy?"Busy":NULL;}
 bool workspace_service_switch(uint32_t id){if(busy)return false;model.active_id=id;revision++;return true;}
@@ -159,7 +168,7 @@ static lv_obj_t *find(lv_obj_t *p,const char *s)
 }
 static void click(const char *s)
 {
-    if(menu.notice_box){lv_obj_update_layout(menu.notice_box);lv_area_t toast;lv_obj_get_coords(menu.notice_box,&toast);point=(lv_point_t){(toast.x1+toast.x2)/2,(toast.y1+toast.y2)/2};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(120);assert(!menu.notice_box);}
+    ui_notice_dismiss(NULL);
     lv_obj_update_layout(lv_scr_act());lv_obj_t *o=find(lv_scr_act(),s);if(!o)fprintf(stderr,"Missing button: %s\n",s);assert(o);
     lv_area_t a;lv_obj_get_coords(o,&a);fprintf(stderr,"click %s @ %d,%d-%d,%d\n",s,a.x1,a.y1,a.x2,a.y2);assert(a.x1>=0&&a.x2<1280&&a.y1>=0&&a.y2<400);
     point=(lv_point_t){(a.x1+a.x2)/2,(a.y1+a.y2)/2};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);
@@ -242,7 +251,7 @@ int main(void)
     lv_init();lv_disp_draw_buf_t buf;lv_disp_draw_buf_init(&buf,draw_buffer,NULL,1280*64);lv_disp_drv_t d;lv_disp_drv_init(&d);d.hor_res=1280;d.ver_res=400;d.flush_cb=flush;d.draw_buf=&buf;lv_disp_t *display=lv_disp_drv_register(&d);assert(display);ui_scrollbar_init(display);
     lv_indev_drv_t in;lv_indev_drv_init(&in);in.type=LV_INDEV_TYPE_POINTER;in.read_cb=read_pointer;assert(lv_indev_drv_register(&in));
     lv_img_decoder_t *decoder=lv_img_decoder_create();lv_img_decoder_set_info_cb(decoder,asset_info);lv_img_decoder_set_open_cb(decoder,asset_open);lv_img_decoder_set_close_cb(decoder,asset_close);
-    ui_page_03_menu_create(lv_scr_act());tick(200);raster("menu-overview");assert(!menu.notice_box);
+    ui_page_03_menu_create(lv_scr_act());tick(200);raster("menu-overview");assert(!test_notice_visible);
     click("Quick");assert(menu.quick);click("Close");assert(!menu.quick);
     unsigned nav_before=nav_count;point=(lv_point_t){1233,37};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);assert(nav_count==nav_before+1);
     nav_before=nav_count;point=(lv_point_t){47,37};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);assert(nav_count==nav_before+1&&current==UI_PAGE_MAIN);current=UI_PAGE_MENU;
@@ -279,12 +288,12 @@ int main(void)
     click("Confirm singles");click("Confirm");assert(ledger.groups[2].confirmed);
     click("Close day");click("Confirm");assert(ledger.close_count==1);click("Day closes");raster("menu-day-closes");
     show_closed_day(1);tick(120);raster("menu-saved-close");click("Show saved totals QR");assert(lv_qr_popup_is_showing());raster("menu-saved-close-qr");lv_qr_popup_hide();click("Back to list");
-    click("History");raster("menu-history");assert(!find(menu.body,"Next"));click("Output");assert(!menu.notice_box);raster("menu-output");click("QR export");raster("menu-qr-export");
+    click("History");raster("menu-history");assert(!find(menu.body,"Next"));click("Output");assert(!test_notice_visible);raster("menu-output");click("QR export");raster("menu-qr-export");
     click("Preferences");assert(!find(menu.body,"Switch operator"));raster("menu-operators");click("New operator");assert(menu.user_edit);raster("menu-register");click("Enter a name");assert(settings_detail_overlay_is_open());raster("menu-name-keyboard");settings_detail_keyboard_hide();
     name_submit("Jordan",NULL);tick(120);click("Import USB photo");ui_page_03_menu_refresh_data(0);tick(120);assert(menu.photo_sheet);raster("menu-usb-empty");
     point=(lv_point_t){80,190};down=LV_INDEV_STATE_PRESSED;tick(40);down=LV_INDEV_STATE_RELEASED;tick(120);assert(!menu.photo_sheet);
     click("Create operator");ui_page_03_menu_refresh_data(0);tick(100);assert(model.user_count==3&&!menu.user_edit);
-    click("Interaction");raster("menu-interaction");click("Try Quick controls");assert(menu.quick);assert(!menu.notice_box);raster("menu-quick");
+    click("Interaction");raster("menu-interaction");click("Try Quick controls");assert(menu.quick);assert(!test_notice_visible);raster("menu-quick");
     lv_obj_t *quick_before=menu.quick;lv_obj_t *switch_before=menu.quick_switch[1];
     gestures=!gestures;tick(120);assert(menu.quick==quick_before&&menu.quick_switch[1]==switch_before);
     assert(lv_obj_has_state(switch_before,LV_STATE_CHECKED)==gestures);
@@ -296,10 +305,35 @@ int main(void)
     menu.tab=2;menu.sub=0;menu.selected_group=menu.selected_close=0;menu.dirty=true;tick(120);
     assert(lv_obj_has_state(find(menu.body,"Close day"),LV_STATE_DISABLED)&&!find(menu.body,"Confirm singles"));raster("menu-records-empty");
     ledger=*saved;free(saved);
-    notify("Saved");assert(menu.notice_box);lv_obj_update_layout(menu.notice_box);lv_area_t toast_area;lv_obj_get_coords(menu.notice_box,&toast_area);assert(toast_area.y1==342&&toast_area.y2<400);
-    ui_page_03_menu_refresh_data(0);tick(3600);assert(!menu.notice_box);ui_page_03_menu_refresh_data(0);tick(120);assert(!menu.notice_box);
-    record_success=false;menu.record_wait=true;ui_page_03_menu_refresh_data(0);assert(settings_detail_overlay_is_open());tick(4000);assert(settings_detail_overlay_is_open());settings_detail_dialog_hide();record_success=true;
-    ui_page_03_menu_suspend();notify("Hidden update");assert(!menu.notice_box);assert(ui_page_03_menu_resume());
+    notify(UI_NOTICE_SUCCESS,"Saved");assert(test_notice_visible&&test_notice_kind==UI_NOTICE_SUCCESS);
+    unsigned notice_count=test_notice_count;ui_page_03_menu_refresh_data(0);tick(3600);assert(test_notice_count==notice_count);
+    /* Page refresh cannot duplicate a storage result: the app owns it. */
+    record_success=false;ui_page_03_menu_refresh_data(0);assert(test_notice_count==notice_count);record_success=true;
+    export_records_confirm(NULL);assert(operation_starts&&operation_started==APP_UI_NOTICE_RECORD_STORE);
+    notify(UI_NOTICE_ERROR,"Setting rejected");assert(test_notice_visible&&!settings_detail_overlay_is_open());
+    ui_page_03_menu_suspend();notify(UI_NOTICE_INFO,"Hidden update");assert(!test_notice_visible);assert(ui_page_03_menu_resume());
+    /* Repeated show/hide and parent destruction balance independent owners. */
+    lv_modal_dialog_t first={0},second={0};
+    lv_modal_dialog_config_t decision={.title="Decision",.body="Review",.primary_text="Confirm",
+        .title_font=LV_FONT_DEFAULT,.body_font=LV_FONT_DEFAULT,.button_font=LV_FONT_DEFAULT};
+    assert(test_notice_dialog_holds==0);
+    assert(lv_modal_dialog_show(&first,lv_scr_act(),&decision));
+    assert(lv_modal_dialog_show(&first,lv_scr_act(),&decision));
+    assert(test_notice_dialog_holds==1);
+    assert(lv_modal_dialog_show(&second,lv_scr_act(),&decision));
+    lv_modal_dialog_hide(&first);lv_modal_dialog_hide(&first);assert(test_notice_dialog_holds==1);
+    lv_obj_del(second.root);assert(second.root==NULL&&test_notice_dialog_holds==0);
+    lv_obj_t *temporary=lv_obj_create(lv_scr_act());
+    assert(lv_modal_dialog_show(&first,temporary,&decision));assert(test_notice_dialog_holds==1);
+    settings_detail_dialog_show("Decision", "Review", "Confirm", "Cancel", NULL, NULL, NULL);
+    assert(test_notice_dialog_holds==2);
+    lv_obj_del(temporary);assert(first.root==NULL&&test_notice_dialog_holds==1);
+    settings_detail_dialog_hide();settings_detail_dialog_hide();assert(test_notice_dialog_holds==0);
+    settings_detail_dialog_show("Decision", "Review", "Confirm", "Cancel", NULL, NULL, NULL);
+    lv_obj_t *settings_root=lv_obj_get_child(lv_scr_act(),-1);assert(settings_root);
+    lv_obj_del(settings_root);
+    assert(!settings_detail_overlay_is_open()&&test_notice_dialog_holds==0);
+    lv_modal_dialog_destroy(&first);lv_modal_dialog_destroy(&second);
     puts("PASS Menu hierarchy: centered borderless ABC-color header, aligned utility buttons, fixed OFF, guarded drafts, empty records, current operator status, no persistent footer, scoped transient feedback, in-place Quick refresh");
     /* Full-page visual fixtures: not production sample data. */
     ui_page_03_menu_destroy();workspace_defaults(&model);strcpy(model.users[0].name,"Local operator");assert(workspace_add_user(&model,"Alex",&uid));strcpy(model.users[1].employee_id,"A-002");
