@@ -74,6 +74,18 @@ bool workspace_add_user(workspace_model_t *m,const char *name,uint32_t *id)
     workspace_user_t *u=&m->users[m->user_count++];memset(u,0,sizeof(*u));
     u->id=m->next_id++;strcpy(u->name,name);seed(u);if(id)*id=u->id;return true;
 }
+bool workspace_delete_user(workspace_model_t *m,uint32_t id)
+{
+    if(!workspace_model_valid(m)||m->user_count<=1||id==m->active_id)return false;
+    for(unsigned i=0;i<m->user_count;i++)if(m->users[i].id==id) {
+        if(i+1<m->user_count)
+            memmove(&m->users[i],&m->users[i+1],
+                    (m->user_count-i-1)*sizeof(m->users[0]));
+        memset(&m->users[--m->user_count],0,sizeof(m->users[0]));
+        return true;
+    }
+    return false;
+}
 bool workspace_add_profile(workspace_model_t *m,uint32_t user,const workspace_profile_t *profile)
 {
     workspace_user_t *u=workspace_find(m,user);

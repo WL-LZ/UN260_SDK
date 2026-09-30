@@ -41,6 +41,7 @@ bool workspace_model_valid(const workspace_model_t *model);
 const workspace_user_t *workspace_active(const workspace_model_t *model);
 workspace_user_t *workspace_find(workspace_model_t *model, uint32_t id);
 bool workspace_add_user(workspace_model_t *model, const char *name, uint32_t *id);
+bool workspace_delete_user(workspace_model_t *model, uint32_t id);
 bool workspace_add_profile(workspace_model_t *model, uint32_t user, const workspace_profile_t *profile);
 bool workspace_delete_profile(workspace_model_t *model, uint32_t user, uint32_t profile);
 /* Next saved slot; never mutate the actual machine state. */

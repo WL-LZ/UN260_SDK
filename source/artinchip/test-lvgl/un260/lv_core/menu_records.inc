@@ -95,10 +95,8 @@ static void records_detail(lv_obj_t *b)
         if(!chosen->result.complete)label(sheet,24,261,760,ui_tr("Incomplete result: review before counting."),&lv_font_instrument_sans_medium_13,ORANGE);
         lv_obj_t *confirm=button(sheet,24,282,184,38,ui_tr("Count this result"),A_CONFIRM_RUN,true);
         if(!chosen->result.complete||cashbook_closed(book,g->day)||g->excluded)lv_obj_add_state(confirm,LV_STATE_DISABLED);
-        button(sheet,220,282,172,38,chosen->candidate?ui_tr("Attach as recount"):ui_tr("Verify this group"),chosen->candidate?A_MERGE_RUN:653,false);
-        lv_obj_t *split=button(sheet,404,282,112,38,ui_tr("Split out"),A_SPLIT_RUN,false);if(total<2||cashbook_closed(book,g->day))lv_obj_add_state(split,LV_STATE_DISABLED);
-        button(sheet,528,282,112,38,g->excluded?ui_tr("Restore"):ui_tr("Exclude"),A_EXCLUDE_RUN,false);
-        button(sheet,652,282,164,38,ui_tr("Back to list"),650,false);
+        button(sheet,220,282,160,38,g->excluded?ui_tr("Restore"):ui_tr("Exclude"),A_EXCLUDE_RUN,false);
+        button(sheet,392,282,164,38,ui_tr("Back to list"),650,false);
         if(total>3){
             lv_obj_t *prev=button(sheet,724,213,40,34,"",651,false),*next=button(sheet,776,213,40,34,"",652,false);
             icon(prev,MICON("back",20),10,7,MUTED);icon(next,MICON("next",20),10,7,MUTED);
@@ -196,7 +194,7 @@ static void records_view(lv_obj_t *b)
         l=label(v,414,7,152,r->result.currencies==1?r->result.money[0].code:"MULTI",&lv_font_instrument_sans_medium_13,MUTED);lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_RIGHT,0);
         if(r->result.currencies==1)money_text(line,r->result.money[0].amount);else snprintf(line,sizeof(line),ui_trn("%u notes", (r->result.pcs)),r->result.pcs);
         l=label(v,414,22,152,line,&lv_font_instrument_sans_semibold_20,INK);lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_RIGHT,0);
-        l=label(v,576,22,130,g->excluded?ui_tr("Excluded"):g->review?ui_tr("Review recount"):g->confirmed?ui_tr("Confirmed"):ui_tr("To confirm"),&lv_font_instrument_sans_menumedium_14,g->excluded||(g->confirmed&&!g->review)?MUTED:ORANGE);lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_RIGHT,0);
+        l=label(v,576,22,130,g->excluded?ui_tr("Excluded"):g->review?ui_tr("Review"):g->confirmed?ui_tr("Confirmed"):ui_tr("To confirm"),&lv_font_instrument_sans_menumedium_14,g->excluded||(g->confirmed&&!g->review)?MUTED:ORANGE);lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_RIGHT,0);
         icon(v,MICON("next",18),719,20,MUTED);
     }
     if(!total){label(b,290,133,704,menu.sub==1?ui_tr("No recounts"):ui_tr("No counts to show"),&lv_font_instrument_sans_semibold_24,INK);}

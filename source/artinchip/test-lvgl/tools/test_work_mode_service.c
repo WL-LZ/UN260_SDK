@@ -4,6 +4,8 @@
 #include <string.h>
 #include "un260/storage/work_mode_store.h"
 
+const char *ui_tr(const char *msgid) { return msgid; }
+
 static uint32_t fake_now;
 static unsigned sent;
 static uint8_t wire_sent[128], confirmed;

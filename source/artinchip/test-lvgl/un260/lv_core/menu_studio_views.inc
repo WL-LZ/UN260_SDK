@@ -106,12 +106,13 @@ static void overview(void)
     avatar_size(person,16,17,48,u?&u->avatar:NULL,u?u->name:NULL,&menu.avatar_desc);
     lv_obj_t *name=label(person,76,21,174,u?u->name:ui_tr("Local operator"),&lv_font_instrument_sans_semibold_18,INK);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
     label(person,76,46,174,ui_tr("Current operator"),&lv_font_instrument_sans_medium_13,MUTED);
-    const char *titles[]={ui_tr("Print & export"),ui_tr("Reject guide")},*hints[]={ui_tr("Take a result with you"),""},*icons[]={MICON("output",25),MICON("reject",25)};
+    const char *titles[]={ui_tr("Print & export"),ui_tr("Reject guide")},*icons[]={MICON("output",25),MICON("reject",25)};
     const counting_sim_t *result=counting_data_current();snprintf(line,sizeof(line),ui_trn("%u notes to check", (result?result->err_expected:0)),result?result->err_expected:0);
     for(unsigned i=0;i<2;i++){
         lv_obj_t *v=button(b,966,94+i*107,266,95,"",i?308:307,false);palette(v,PANEL);lv_obj_set_style_radius(v,18,0);
         icon(v,icons[i],17,35,i?ORANGE:BLUE);label(v,55,26,179,titles[i],&lv_font_instrument_sans_semibold_18,INK);
-        label(v,55,53,184,i?line:hints[i],&lv_font_instrument_sans_medium_13,MUTED);icon(v,MICON("next",18),233,39,MUTED);
+        if(i)label(v,55,53,184,line,&lv_font_instrument_sans_medium_13,MUTED);
+        icon(v,MICON("next",18),233,39,MUTED);
     }
 }
 static void batch_view(lv_obj_t *b)
@@ -120,7 +121,6 @@ static void batch_view(lv_obj_t *b)
     heading(b,ui_tr("Batch presets"));char line[64];snprintf(line,sizeof(line),ui_tr("%u / 10 slots"),menu.batch_count);context(b,line,181);
     if(menu.batch_dirty){button(b,689,0,92,36,ui_tr("Cancel"),500,false);button(b,789,0,92,36,ui_tr("Save"),A_SAVE_BATCH,true);}
     lv_obj_t *add=button(b,916,0,112,36,ui_tr("Add slot"),A_ADD_BATCH,false);button_icon(add,MICON("plus",22),INK);if(menu.batch_count>=WORKSPACE_BATCHES)lv_obj_add_state(add,LV_STATE_DISABLED);
-    small(b,0,48,714,ui_tr("Select a slot. Apply it when you are ready."));
     for(unsigned j=0;j<5;j++){
         unsigned i=menu.batch_page*5+j;if(i>=menu.batch_count)break;
         lv_obj_t *v=lv_settings_button(b,j*145,77,j==4?134:135,128,"",false,pick_event,(void *)(uintptr_t)i);
@@ -142,7 +142,7 @@ static void batch_view(lv_obj_t *b)
     small(d,20,122,254,menu.selected_batch?ui_tr("Stops when the batch is complete."):ui_tr("Count continuously without a preset."));
     if(menu.selected_batch){lv_obj_t *edit=white_button(d,20,146,83,36,ui_tr("Edit"),A_EDIT_BATCH);button_icon(edit,MICON("edit",22),INK);lv_obj_t *remove=button(d,111,146,137,36,ui_tr("Remove"),A_DELETE_BATCH,false);lv_obj_set_style_bg_opa(remove,LV_OPA_TRANSP,0);lv_obj_set_style_text_color(remove,lv_color_hex(0xB33535),0);icon(remove,MICON("trash",22),9,7,0xB33535);lv_obj_align(lv_obj_get_child(remove,0),LV_ALIGN_LEFT_MID,40,0);if(menu.batch_count<=2)lv_obj_add_state(remove,LV_STATE_DISABLED);}
     bool active=!menu.batch_dirty&&(machine_state_batch_enabled()?menu.selected_batch&&menu.batches[menu.selected_batch]==machine_state_batch_num():!menu.selected_batch);
-    lv_obj_t *apply=button(d,20,186,254,44,active?ui_tr("In use"):ui_tr("Use this preset"),A_APPLY_BATCH,true);if(active)button_icon(apply,MICON("check",22),0x64717C);if(menu.batch_dirty||active)lv_obj_add_state(apply,LV_STATE_DISABLED);
+    lv_obj_t *apply=button(d,20,186,254,44,active?ui_tr("In use"):ui_tr("Use this preset"),A_APPLY_BATCH,true);if(active)button_icon(apply,MICON("check",22),0x64717C);if(active)lv_obj_add_state(apply,LV_STATE_DISABLED);
 }
 static bool profile_matches(const workspace_profile_t *p)
 {
@@ -206,7 +206,13 @@ static void operator_view(lv_obj_t *b)
     small(d,112,94,260,ui_tr("Employee ID"));text(d,112,116,260,*u->employee_id?u->employee_id:ui_tr("Not added"));
     small(d,389,94,259,ui_tr("Branch / team"));text(d,389,116,259,*u->team?u->team:ui_tr("Not added"));
     lv_obj_t *edit=white_button(d,112,184,151,44,ui_tr("Edit details"),A_EDIT_USER);header_content(edit,ui_tr("Edit details"),MICON("edit",22),INK);
-    bool active=u->id==m->active_id;lv_obj_t *sw=button(d,275,184,active?110:190,44,active?ui_tr("In use"):ui_tr("Switch operator"),A_USER_SWITCH,true);if(active){button_icon(sw,MICON("check",22),0x64717C);lv_obj_add_state(sw,LV_STATE_DISABLED);}
+    bool active=u->id==m->active_id;lv_obj_t *sw=button(d,275,184,190,44,active?ui_tr("In use"):ui_tr("Switch operator"),A_USER_SWITCH,true);if(active){button_icon(sw,MICON("check",22),0x64717C);lv_obj_add_state(sw,LV_STATE_DISABLED);}
+    lv_obj_t *del=white_button(d,477,184,171,44,ui_tr("Delete"),A_DELETE_USER);
+    button_icon(del,MICON("trash",22),0xB33535);
+    lv_obj_set_style_text_color(lv_obj_get_child(del,0),lv_color_hex(0xB33535),0);
+    if(active||m->user_count<=1)lv_obj_add_state(del,LV_STATE_DISABLED);
+    if(active&&m->user_count>1)
+        small(d,112,154,536,ui_tr("Switch to another operator before deleting this one."));
     if(menu.user_edit){
         menu.user_sheet=box(menu.root,0,0,1280,400,INK,0);lv_obj_set_style_bg_opa(menu.user_sheet,LV_OPA_30,0);lv_obj_add_flag(menu.user_sheet,LV_OBJ_FLAG_CLICKABLE);
         lv_obj_t *sheet=box(menu.user_sheet,180,28,920,344,0xFFFFFF,22);lv_obj_add_flag(sheet,LV_OBJ_FLAG_CLICKABLE);
@@ -241,13 +247,25 @@ static void interaction_view(lv_obj_t *b)
 }
 static void display_view(lv_obj_t *b)
 {
-    heading(b,ui_tr("Display & sound"));brightness(b,0,48,504,110);
-    lv_obj_t *left=box(b,6,172,492,53,0xFFFFFF,0);toggle(left,0,492,ui_tr("Machine sound"),NULL,machine_state_buzzer_enabled(),440+!machine_state_buzzer_enabled());
-    box(b,0,217,504,1,LINE,0);text(b,6,241,260,ui_tr("Standby delay"));
-    char duration[32];unsigned minutes=standby_config()->minutes;snprintf(duration,sizeof(duration),minutes?ui_tr("%u min"):ui_tr("Never"),minutes);field_button(b,359,228,139,duration,A_TIMEOUT);
+    heading(b,ui_tr("Display & sound"));
+    lv_obj_t *left=box(b,0,48,504,248,PANEL,20);
+    icon(left,MICON("volume",22),20,20,BLUE);
+    label(left,52,18,400,ui_tr("Sound"),&lv_font_instrument_sans_semibold_21,INK);
+    box(left,20,64,464,1,LINE,0);
+    lv_obj_t *sound=box(left,20,79,464,55,0xFFFFFF,12);
+    toggle(sound,2,464,ui_tr("Machine sound"),NULL,machine_state_buzzer_enabled(),440+!machine_state_buzzer_enabled());
+    box(left,20,151,464,1,LINE,0);
+    text(left,20,177,265,ui_tr("Standby delay"));
+    char duration[32];unsigned minutes=standby_config()->minutes;
+    snprintf(duration,sizeof(duration),minutes?ui_tr("%u min"):ui_tr("Never"),minutes);
+    field_button(left,325,165,159,duration,A_TIMEOUT);
     lv_obj_t *right=box(b,524,48,504,248,PANEL,20);
-    text(right,20,38,320,ui_tr("Interface language"));label(right,403,38,81,ui_lang_current()->name,&lv_font_instrument_sans_semibold_18,INK);
-    small(right,20,88,464,ui_tr("Manage installed languages in protected Settings."));
-    text(right,20,157,412,ui_tr("Taking a break?"));icon(right,MICON("power",22),462,155,PURPLE);
-    white_button(right,20,186,464,44,ui_tr("Enter standby"),A_STANDBY);
+    icon(right,MICON("screen",25),20,18,PURPLE);
+    label(right,52,18,390,ui_tr("Display"),&lv_font_instrument_sans_semibold_21,INK);
+    box(right,20,64,464,1,LINE,0);
+    text(right,20,90,285,ui_tr("Interface language"));
+    label(right,373,89,110,ui_lang_current()->name,&lv_font_instrument_sans_semibold_18,INK);
+    box(right,20,144,464,1,LINE,0);
+    icon(right,MICON("power",22),20,171,PURPLE);
+    white_button(right,58,162,426,48,ui_tr("Enter standby"),A_STANDBY);
 }

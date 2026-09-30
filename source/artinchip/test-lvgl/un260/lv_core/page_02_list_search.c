@@ -361,7 +361,7 @@ page_02_list_search_t *page_02_list_search_create(lv_obj_t *parent,
         ui_text_get(UI_TEXT_QUERY_DENOMINATION),&lv_font_instrument_sans_medium_14,
         search_filter_event,s,s->modes))goto failed;
     s->scope=search_label(s->root,542,22,248,34,&lv_font_instrument_sans_medium_12,
-                          SEARCH_MUTED,ui_text_get(UI_TEXT_SERIAL_SCOPE));
+                          SEARCH_MUTED,"");
     lv_obj_t *back=lv_nav_button_create(s->root,1152,16,108,42,search_close_event,s);
     if (!s->scope || !back) goto failed;
     lv_settings_damped_action_style(back,LV_SETTINGS_ACTION_SECONDARY);

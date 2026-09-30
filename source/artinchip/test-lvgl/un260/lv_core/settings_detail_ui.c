@@ -824,6 +824,8 @@ static void settings_keyboard_create_number_keys(lv_obj_t* parent, bool integer)
     if(integer) {
         settings_keyboard_create_action(card,34,285,310,48,ui_tr("Apply"),lv_color_hex(0x1462CC),settings_keyboard_commit_cb);
         lv_obj_t *close=settings_detail_create_button(card,792,14,36,36,"",lv_color_hex(0xFFFFFF),settings_keyboard_cancel_cb,NULL);
+        lv_obj_set_style_border_width(close,0,LV_PART_MAIN);
+        lv_obj_set_style_outline_width(close,0,LV_PART_MAIN);
         lv_obj_t *icon=lv_img_create(close);lv_img_set_src(icon,LVGL_DIR "pin_icons/close.png");lv_obj_center(icon);
         return;
     }

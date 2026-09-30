@@ -273,21 +273,18 @@ int main(void)
     unsigned nav_before=nav_count;point=(lv_point_t){1233,37};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);assert(nav_count==nav_before+1);
     nav_before=nav_count;point=(lv_point_t){47,37};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);assert(nav_count==nav_before+1&&current==UI_PAGE_MAIN);current=UI_PAGE_MENU;
     nav_before=nav_count;assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);assert(nav_count==nav_before+1);current=UI_PAGE_MENU;
-    click("Count");assert(menu.tab==1);assert(find(menu.body,"Edit")&&find(menu.body,"Remove"));raster("menu-batch");click("Add slot");assert(menu.batch_dirty);assert(lv_obj_has_state(find(menu.body,"Use this preset"),LV_STATE_DISABLED));assert(find(menu.body,"Save"));click("Cancel");assert(!menu.batch_dirty);
+    click("Count");assert(menu.tab==1);assert(find(menu.body,"Edit")&&find(menu.body,"Remove"));raster("menu-batch");click("Add slot");assert(menu.batch_dirty);assert(!lv_obj_has_state(find(menu.body,"Use this preset"),LV_STATE_DISABLED));assert(find(menu.body,"Save"));click("Cancel");assert(!menu.batch_dirty);
     menu.selected_batch=1;menu.dirty=true;tick(120);click("Edit");assert(settings_detail_overlay_is_open());check_numeric_keypad();raster("menu-batch-keypad");settings_detail_keyboard_hide();
     ui_page_03_menu_suspend();actual_state.batch_num=10;assert(ui_page_03_menu_resume());assert(menu.selected_batch==1);
-    batch_submit("12",NULL);batch_submit("13",NULL);
-    assert(menu.batch_active_original==10&&menu.batch_active_edited==13);
-    tick(120);click("Save");ui_page_03_menu_refresh_data(0);tick(120);
-    assert(batch_edit_saves==1&&batch_edit_previous==10&&batch_edit_target==13);
-    assert(!menu.batch_dirty&&actual_state.batch_num==10); /* Saving is not ACK. */
-    actual_state.batch_num=13;reset_batch();menu.selected_batch=2;batch_submit("60",NULL);
-    assert(menu.batch_active_original==13&&menu.batch_active_edited==13);
-    reset_batch();assert(menu.batches[2]==50); /* Cancel does not apply the draft. */
-    /* A controller ACK can change the active preset without recreating Menu. */
-    actual_state.batch_num=50;menu.selected_batch=2;batch_submit("60",NULL);
-    assert(menu.batch_active_original==50&&menu.batch_active_edited==60);
+    batch_submit("13",NULL);assert(menu.saving==4&&menu.batch_apply_target==13);
+    assert(batch_edit_saves==1&&batch_edit_previous==0&&batch_edit_target==0);
+    ui_page_03_menu_refresh_data(0);tick(120);
+    assert(!menu.batch_dirty&&actual_state.batch_num==13);
+    menu.selected_batch=2;batch_submit("60",NULL);ui_page_03_menu_refresh_data(0);tick(120);
+    assert(batch_edit_saves==2&&!menu.batch_dirty&&actual_state.batch_num==60);
     reset_batch();
+    click("Add slot");assert(menu.batch_count>=4);menu.selected_batch=2;menu.dirty=true;tick(120);
+    click("Remove");assert(menu.selected_batch==2&&menu.batch_page==0);click("Cancel");
     model.users[0].batches[1]=10;actual_state.batch_num=50;reset_batch();menu.dirty=true;tick(120);
     click("Profiles");raster("menu-profiles");click("Delete");assert(settings_detail_overlay_is_open());raster("menu-delete-confirm");click("Cancel");assert(model.users[0].profile_count==2);
     click("Delete");click("Delete");assert(model.users[0].profile_count==1);ui_page_03_menu_refresh_data(0);tick(100);assert(model.users[0].profile_count==1);assert(lv_obj_has_state(find(menu.body,"Delete"),LV_STATE_DISABLED));
@@ -319,6 +316,12 @@ int main(void)
     name_submit("Jordan",NULL);tick(120);click("Import USB photo");ui_page_03_menu_refresh_data(0);tick(120);assert(menu.photo_sheet);raster("menu-usb-empty");
     point=(lv_point_t){80,190};down=LV_INDEV_STATE_PRESSED;tick(40);down=LV_INDEV_STATE_RELEASED;tick(120);assert(!menu.photo_sheet);
     click("Create operator");ui_page_03_menu_refresh_data(0);tick(100);assert(model.user_count==3&&!menu.user_edit);
+    assert(find(menu.body,"Delete")&&!lv_obj_has_state(find(menu.body,"Delete"),LV_STATE_DISABLED));
+    click("Delete");assert(settings_detail_overlay_is_open());click("Cancel");assert(model.user_count==3);
+    click("Delete");assert(settings_detail_overlay_is_open());click("Delete");
+    ui_page_03_menu_refresh_data(0);tick(100);
+    assert(model.user_count==2&&menu.selected_user==0);
+    assert(lv_obj_has_state(find(menu.body,"Delete"),LV_STATE_DISABLED));
     click("Interaction");raster("menu-interaction");click("Try Quick controls");assert(menu.quick);assert(!test_notice_visible);raster("menu-quick");
     lv_obj_t *quick_before=menu.quick;lv_obj_t *switch_before=menu.quick_switch[1];
     gestures=!gestures;tick(120);assert(menu.quick==quick_before&&menu.quick_switch[1]==switch_before);

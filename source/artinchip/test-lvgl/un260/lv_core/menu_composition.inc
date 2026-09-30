@@ -18,45 +18,6 @@ static void segments(lv_obj_t *p,int x,int y,int w,int h,const char *const *name
         lv_obj_set_style_text_font(l,value==i?&lv_font_instrument_sans_semibold_16:&lv_font_instrument_sans_medium_16,0);
     }
 }
-static void brightness_event(lv_event_t *event)
-{
-    lv_obj_t *slider=lv_event_get_target(event);lv_event_code_t code=lv_event_get_code(event);
-    if(code==LV_EVENT_VALUE_CHANGED){
-        if(!menu.brightness_drag)menu.brightness_previous=backlight_service_level();
-        menu.brightness_drag=true;
-        if(!backlight_service_set(lv_slider_get_value(slider))){
-            lv_slider_set_value(slider,backlight_service_level(),LV_ANIM_OFF);
-            notify(UI_NOTICE_ERROR,UI_N_("The display did not accept the brightness change."));
-        }
-        if(menu.brightness_value&&backlight_service_max()>0)
-            lv_label_set_text_fmt(menu.brightness_value,"%d%%",backlight_service_level()*100/backlight_service_max());
-    }else if((code==LV_EVENT_RELEASED||code==LV_EVENT_PRESS_LOST)&&menu.brightness_drag){
-        bool ok=code==LV_EVENT_RELEASED&&backlight_service_save();
-        if(!ok){backlight_service_set(menu.brightness_previous);lv_slider_set_value(slider,backlight_service_level(),LV_ANIM_OFF);}
-        if(menu.brightness_value&&backlight_service_max()>0)
-            lv_label_set_text_fmt(menu.brightness_value,"%d%%",backlight_service_level()*100/backlight_service_max());
-        menu.brightness_drag=false;notify(ok?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,ok?UI_N_("Brightness saved."):UI_N_("Brightness restored; the change was not saved."));
-    }
-}
-static void brightness(lv_obj_t *p,int x,int y,int w,int h)
-{
-    lv_obj_t *card=box(p,x,y,w,h,PANEL,18);
-    icon(card,MICON("sun",22),20,22,BLUE);text(card,52,24,w-154,ui_tr("Screen brightness"));
-    char value[20];int max=backlight_service_max(),level=backlight_service_level();
-    if(max>0)snprintf(value,sizeof(value),"%d%%",level*100/max);else strcpy(value,"--");
-    menu.brightness_value=label(card,w-112,19,92,value,&lv_font_instrument_sans_semibold_29,INK);
-    lv_obj_set_style_text_align(menu.brightness_value,LV_TEXT_ALIGN_RIGHT,0);
-    lv_obj_t *slider=lv_slider_create(card);lv_obj_remove_style_all(slider);
-    lv_obj_set_pos(slider,20,h-33);lv_obj_set_size(slider,w-40,6);lv_obj_set_ext_click_area(slider,17);
-    lv_port_indev_set_drag_obj(slider,true);
-    lv_obj_set_style_radius(slider,LV_RADIUS_CIRCLE,LV_PART_MAIN);lv_obj_set_style_bg_color(slider,lv_color_hex(0xD5DDE3),LV_PART_MAIN);lv_obj_set_style_bg_opa(slider,LV_OPA_COVER,LV_PART_MAIN);
-    lv_obj_set_style_radius(slider,LV_RADIUS_CIRCLE,LV_PART_INDICATOR);lv_obj_set_style_bg_color(slider,lv_color_hex(BLUE),LV_PART_INDICATOR);lv_obj_set_style_bg_opa(slider,LV_OPA_COVER,LV_PART_INDICATOR);
-    lv_obj_set_style_radius(slider,LV_RADIUS_CIRCLE,LV_PART_KNOB);lv_obj_set_style_bg_color(slider,lv_color_hex(0xFFFFFF),LV_PART_KNOB);lv_obj_set_style_bg_opa(slider,LV_OPA_COVER,LV_PART_KNOB);
-    lv_obj_set_style_pad_all(slider,9,LV_PART_KNOB);lv_obj_set_style_shadow_width(slider,6,LV_PART_KNOB);lv_obj_set_style_shadow_opa(slider,LV_OPA_20,LV_PART_KNOB);
-    lv_slider_set_range(slider,max>9?max/10:1,max>0?max:100);lv_slider_set_value(slider,level,LV_ANIM_OFF);
-    if(max<=0)lv_obj_add_state(slider,LV_STATE_DISABLED);
-    lv_obj_add_event_cb(slider,brightness_event,LV_EVENT_ALL,NULL);
-}
 static uint32_t business_day(void)
 {
     if(menu.record_day)return menu.record_day;
@@ -108,5 +69,4 @@ static void currency_totals(lv_obj_t *p,int x,int y,int w,int h,uint32_t day)
         lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_RIGHT,0);
         if(i+1<n){lv_obj_t *rule=box(list,0,i*53+43,w-32,1,0xFFFFFF,0);lv_obj_set_style_bg_opa(rule,LV_OPA_20,0);}
     }
-    label(card,16,h-32,w-32,ui_tr("One selected result per group."),&lv_font_instrument_sans_medium_13,0xD9E7FB);
 }
