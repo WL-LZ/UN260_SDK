@@ -11,7 +11,6 @@
 #undef box
 #undef label
 #include "un260/app_service/app_fault_recovery.h"
-const lv_font_t *ui_message_font(const lv_font_t *base) { return base; }
 void ui_notice_set_suspended(uint32_t reason,bool value) {(void)reason;(void)value;}
 
 static void fault(uint8_t code)
@@ -33,21 +32,25 @@ int main(void)
     fixture(false);assert(currency_state_confirm_active_code("USD"));ui_main_create(lv_scr_act());tick(400);
     app_fault_recovery_init();fault_popup_set_auto_enabled(false);
     unsigned tx=protocol_calls;
-    fault(7);assert(protocol_calls==tx+1); /* legacy pocket begin handshake */
-    tick(18000);assert(protocol_calls==tx+2);
+    fault(7);assert(protocol_calls==tx); /* start fault does not clear by command */
+    tick(18000);assert(protocol_calls==tx);
     assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE);
-    fault(7);assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING && protocol_calls==tx+3);
+    fault(7);assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING && protocol_calls==tx);
     tick(1500);lv_coord_t x=lv_obj_get_x(g_si_ctx.objects.title);
-    fault(7);assert(lv_obj_get_x(g_si_ctx.objects.title)==x && protocol_calls==tx+3);
-    tick(18000);assert(protocol_calls==tx+4);
+    fault(7);assert(lv_obj_get_x(g_si_ctx.objects.title)==x && protocol_calls==tx);
+    tick(18000);assert(protocol_calls==tx);
     fault(7);app_fault_recovery_stacker_cleared();tx=protocol_calls;
     tick(18000);assert(protocol_calls==tx && g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE);
     /* Door fault repeats after a completed notice, without restarting a live one. */
     fault(9);tick(18000);assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE);
     fault(9);assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING);
-    /* No-note cannot capture that door identity or acknowledge it. */
+    /* No-note remains a yellow, keyed warning and never sends 0x3D. */
     app_fault_recovery_clear();fault_popup_report_start_no_note();tx=protocol_calls;
-    assert(!g_si_ctx.warning.fault.valid);tick(18000);app_fault_recovery_poll();assert(protocol_calls==tx);
+    assert(g_si_ctx.warning.fault.valid && g_si_ctx.warning.level==SMART_ISLAND_WARNING_LEVEL_WARNING);
+    assert(g_si_ctx.warning.fault.source==MACHINE_FAULT_START && g_si_ctx.warning.fault.code==2);
+    tick(18000);app_fault_recovery_poll();assert(protocol_calls==tx);
+    fault_popup_report_start_no_note();assert(g_si_ctx.warning.fault.valid);
+    assert(g_si_ctx.warning.level==SMART_ISLAND_WARNING_LEVEL_WARNING && protocol_calls==tx);
     /* The displayed identity survives unrelated unread boot faults. */
     fault_popup_record_boot_result(5,2);fault(7);
     assert(g_si_ctx.warning.fault.source==MACHINE_FAULT_START && g_si_ctx.warning.fault.code==7);
@@ -58,6 +61,12 @@ int main(void)
     assert(fault_popup_show_key((machine_fault_key_t){MACHINE_FAULT_START,2,7}));
     tx=protocol_calls;confirm(NULL);assert(protocol_calls==tx); /* local read acknowledgement */
     hide_fault_popup();machine_fault_clear();app_fault_recovery_clear();smart_island_faults_changed();
+    fault_popup_set_auto_enabled(true);
+    fault_popup_report_start_no_note();assert(fault_popup_is_showing());
+    tx=protocol_calls;confirm(NULL);assert(protocol_calls==tx&&!fault_popup_is_showing());
+    fault_popup_report_start_no_note();assert(fault_popup_is_showing());
+    confirm(NULL);assert(protocol_calls==tx&&!fault_popup_is_showing());
+    machine_fault_clear();smart_island_faults_changed();
     fault_popup_set_auto_enabled(false);fault(7);tx=protocol_calls;
     page_01_main_suspend();tick(18000);app_fault_recovery_poll();assert(protocol_calls==tx);
     smart_island_notify_warning("A settings warning while Main is hidden");

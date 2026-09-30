@@ -1,5 +1,9 @@
 {
   "zh-Hans": {
+    "Preset count reached": "预置数已满",
+    "Feeder · Preset count full": "进钞口 · 预置数已满",
+    "Remove banknotes from the feeder": "取出进钞口的纸币",
+    "Take the banknotes out of the feeder, then confirm to clear the preset stop.": "从进钞口取出纸币，然后点击确认清除预置满停机状态。",
     "Reject pocket": "退钞口",
     "Stacker pocket": "接钞口",
     "Empty the reject pocket": "取出退钞口钞票",

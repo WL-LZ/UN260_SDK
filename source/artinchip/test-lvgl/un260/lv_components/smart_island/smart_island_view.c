@@ -9,6 +9,7 @@
 #include "un260/currency/currency_metadata.h"
 #include "un260/font/scaled_font.h"
 #include "un260/font/main_fonts.h"
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/user_cfg.h"
 #include <string.h>
@@ -27,6 +28,7 @@ static uint8_t multi_symbol_pixels[1024];
 #define SMART_ISLAND_BG_COUNTING          0x111111
 #define SMART_ISLAND_BG_WARNING           0xF59E0B
 #define SMART_ISLAND_BG_ERROR             0xFF5A5F
+#define SMART_ISLAND_BG_PRESET            0x6D5BD0
 #define SMART_ISLAND_BG_SUCCESS           0x17A673
 #define SMART_ISLAND_BG_UPDATE            0x111111
 #define SMART_ISLAND_TEXT_LIGHT           0xFFFFFF
@@ -1040,9 +1042,10 @@ static void smart_island_apply_scene_style(void)
         break;
     case SMART_ISLAND_SCENE_WARNING:
         bg_hex =
-            (g_si_ctx.warning.level == SMART_ISLAND_WARNING_LEVEL_ERROR)
-            ? SMART_ISLAND_BG_ERROR
-            : SMART_ISLAND_BG_WARNING;
+            (g_si_ctx.warning.level == SMART_ISLAND_WARNING_LEVEL_PRESET)
+            ? SMART_ISLAND_BG_PRESET
+            : (g_si_ctx.warning.level == SMART_ISLAND_WARNING_LEVEL_ERROR)
+            ? SMART_ISLAND_BG_ERROR : SMART_ISLAND_BG_WARNING;
         title_color = lv_color_hex(SMART_ISLAND_TEXT_LIGHT);
         dot_color = lv_color_hex(SMART_ISLAND_DOT_NON_IDLE);
         show_time = false;
@@ -1632,7 +1635,7 @@ void smart_island_create(lv_obj_t *parent)
     lv_label_set_text(g_si_ctx.objects.title, ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_READY_TITLE));
     lv_obj_set_width(g_si_ctx.objects.title, SMART_ISLAND_W - 36 - 14);
     lv_obj_set_pos(g_si_ctx.objects.title, 36, 13);
-    lv_obj_set_style_text_font(g_si_ctx.objects.title, &lv_font_instrument_sans_semibold_14, 0);
+    lv_obj_set_style_text_font(g_si_ctx.objects.title, ui_message_font(&lv_font_instrument_sans_semibold_14), 0);
 
     g_si_ctx.objects.subtitle = lv_label_create(g_si_ctx.objects.root);
     lv_obj_add_flag(g_si_ctx.objects.subtitle, LV_OBJ_FLAG_HIDDEN);
@@ -1826,7 +1829,7 @@ void smart_island_create(lv_obj_t *parent)
     lv_label_set_long_mode(g_si_ctx.objects.expand_title, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(g_si_ctx.objects.expand_title, SMART_ISLAND_W - 24 - 12);
     lv_obj_set_pos(g_si_ctx.objects.expand_title, 20, 18);
-    lv_obj_set_style_text_font(g_si_ctx.objects.expand_title, &lv_font_instrument_sans_semibold_12, 0);
+    lv_obj_set_style_text_font(g_si_ctx.objects.expand_title, ui_message_font(&lv_font_instrument_sans_semibold_12), 0);
     lv_obj_set_style_text_color(g_si_ctx.objects.expand_title, lv_color_hex(SMART_ISLAND_TEXT_SUB), 0);
     lv_obj_add_flag(g_si_ctx.objects.expand_title, LV_OBJ_FLAG_HIDDEN);
 

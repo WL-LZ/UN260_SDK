@@ -1,4 +1,6 @@
 #include "ui_message_font.h"
+#include "main_fonts.h"
+#include "manrope_fonts.h"
 #include <stddef.h>
 
 LV_FONT_DECLARE(lv_font_message_cjk_12);
@@ -15,7 +17,9 @@ static const struct {
     const lv_font_t *fallback;
 } faces[] = {
     { &lv_font_instrument_sans_medium_12, &lv_font_message_cjk_12 },
+    { &lv_font_instrument_sans_semibold_12, &lv_font_message_cjk_12 },
     { &lv_font_instrument_sans_medium_14, &lv_font_message_cjk_14 },
+    { &lv_font_instrument_sans_semibold_14, &lv_font_message_cjk_14 },
     { &lv_font_instrument_sans_medium_16, &lv_font_message_cjk_16 },
     { &lv_font_instrument_sans_medium_18, &lv_font_message_cjk_18 },
     { &lv_font_instrument_sans_medium_24, &lv_font_message_cjk_24 },

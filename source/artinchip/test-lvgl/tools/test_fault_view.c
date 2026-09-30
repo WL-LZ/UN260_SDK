@@ -17,14 +17,20 @@ static uint32_t suspended;
 static unsigned notice_posts,notice_clears;
 static char last_notice_key[48],last_notice_title[192],last_notice_code[48];
 static unsigned island_posts;
+static smart_island_warning_level_t island_level;
 static char island_title[192];
 void smart_island_notify_warning_level(const char *value,smart_island_warning_level_t level)
-{(void)level;++island_posts;snprintf(island_title,sizeof(island_title),"%s",value);}
+{island_level=level;++island_posts;snprintf(island_title,sizeof(island_title),"%s",value);}
 void smart_island_notify_warning(const char *value){smart_island_notify_warning_level(value,SMART_ISLAND_WARNING_LEVEL_WARNING);}
 void smart_island_refresh_summary(void) {}
 void smart_island_faults_changed(void) {}
 void smart_island_notify_fault(const char *text,machine_fault_key_t key)
 {(void)key;smart_island_notify_warning_level(text,SMART_ISLAND_WARNING_LEVEL_ERROR);}
+void smart_island_notify_no_note(machine_fault_key_t key)
+{(void)key;smart_island_notify_warning_level("No banknotes detected",SMART_ISLAND_WARNING_LEVEL_WARNING);}
+void smart_island_notify_preset_full(machine_fault_key_t key)
+{(void)key;smart_island_notify_warning_level("Preset count reached",SMART_ISLAND_WARNING_LEVEL_PRESET);}
+bool app_fault_recovery_request_clear(machine_fault_key_t key){(void)key;return true;}
 void ui_notice_set_suspended(uint32_t reason,bool value) {if(value)suspended|=reason;else suspended&=~reason;}
 void ui_notice_post(ui_notice_kind_t kind,const char *key,const char *title,const char *detail)
 {
@@ -92,8 +98,8 @@ static void verify_layout(void)
 {
     lv_obj_update_layout(popup.overlay);
     verify_label_fonts(popup.overlay);
-    /* Queue titles use a separate 16 px face even when the queue is closed. */
-    verify_text_font(text(popup.guide.title),ui_message_font(&lv_font_instrument_sans_medium_16));
+    /* The stage contains only the machine view and its location label. */
+    assert(lv_obj_get_child_cnt(lv_obj_get_parent(popup.model.root))==2);
     assert(lv_obj_get_x(popup.card)==36 && lv_obj_get_y(popup.card)==15);
     assert(lv_obj_get_width(popup.model.root)==510&&lv_obj_get_height(popup.model.root)==273);
     assert(lv_obj_get_y(popup.title)+lv_obj_get_height(popup.title)<86);
@@ -114,14 +120,14 @@ int main(void)
     advance(3200);assert(popup.step==0&&popup.model.lid_frame==11);capture("upper-open");
     lv_event_send(popup.steps[1],LV_EVENT_CLICKED,NULL);assert(popup.step==1);advance(1500);capture("upper-remove");
     uint32_t elapsed=popup.model.elapsed_ms;fault_popup_report_runtime_fault(2);assert(popup.step==1&&popup.model.elapsed_ms==elapsed);
-    pause_play(NULL);advance(1000);assert(popup.model.elapsed_ms==elapsed&&popup.model.timer->paused);
+    advance(1000);assert(popup.model.elapsed_ms>elapsed&&!popup.model.timer->paused);
+    elapsed=popup.model.elapsed_ms;
     lv_obj_t *same_overlay=popup.overlay;
     ui_lang_set(LANGUAGE_CN);fault_popup_language_changed();
-    assert(popup.overlay==same_overlay&&popup.step==1&&!popup.model.playing&&popup.model.elapsed_ms==elapsed);
+    assert(popup.overlay==same_overlay&&popup.step==1&&popup.model.playing&&popup.model.elapsed_ms==elapsed);
     assert(!strcmp(lv_label_get_text(popup.title),"上通道卡钞"));verify_layout();
     ui_lang_set(LANGUAGE_EN);fault_popup_language_changed();
-    assert(popup.overlay==same_overlay&&popup.step==1&&!popup.model.playing&&popup.model.elapsed_ms==elapsed);
-    replay(NULL);assert(popup.model.playing&&popup.model.elapsed_ms==0);
+    assert(popup.overlay==same_overlay&&popup.step==1&&popup.model.playing&&popup.model.elapsed_ms==elapsed);
     click_confirm();assert(!fault_popup_is_showing()&&fault_popup_get_pending_fault(NULL,NULL,NULL)&&!suspended);
     fault_popup_report_runtime_fault(2);assert(!fault_popup_is_showing());
     assert(fault_popup_show_pending_now());assert(popup.step==0);click_confirm();
@@ -135,23 +141,22 @@ int main(void)
     fault_popup_report_sensor_mask((1U<<1)|(1U<<23));assert(machine_fault_count()==2);click_confirm();assert(popup.key.code==23);capture("encoders");click_confirm();
     fault_popup_report_sensor_mask((1U<<1)|(1U<<23));assert(!fault_popup_is_showing());
     fault_popup_report_sensor_mask(0);assert(!machine_fault_count());
-    fault_popup_report_sensor_mask((1U<<1)|(1U<<23));advance(1000);pause_play(NULL);
+    fault_popup_report_sensor_mask((1U<<1)|(1U<<23));advance(1000);
     elapsed=popup.model.elapsed_ms;
     fault_popup_report_sensor_mask(1U<<1);
-    assert(popup.key.code==1 && !popup.model.playing && popup.model.elapsed_ms==elapsed);
+    assert(popup.key.code==1 && popup.model.playing && popup.model.elapsed_ms==elapsed);
     fault_popup_report_sensor_mask((1U<<1)|(1U<<2));assert(popup.key.code==2 && popup.model.playing);
     fault_popup_report_sensor_mask(0);assert(!fault_popup_is_showing());
     fault_popup_record_runtime_notice(225);assert(fault_popup_show_pending_now());capture("unknown");
     for(unsigned step=1;step<8;++step)fault_popup_record_boot_result(step,2);
-    toggle_queue(NULL);assert(popup.queue);
-    lv_obj_update_layout(popup.queue);lv_obj_scroll_to_y(popup.queue,100,LV_ANIM_OFF);
-    lv_coord_t scroll_y=lv_obj_get_scroll_y(popup.queue);assert(scroll_y==100);
+    assert(popup.overlay);
+    same_overlay=popup.overlay;
     ui_lang_set(LANGUAGE_CN);fault_popup_language_changed();
-    assert(popup.queue&&lv_obj_get_scroll_y(popup.queue)==scroll_y);
+    assert(popup.overlay==same_overlay);
     ui_lang_set(LANGUAGE_EN);fault_popup_language_changed();
-    assert(popup.queue&&lv_obj_get_scroll_y(popup.queue)==scroll_y);
+    assert(popup.overlay==same_overlay);
     lv_obj_del(popup.overlay);assert(!popup.overlay&&!popup.model.timer&&!suspended);
-    assert(!popup.queue);assert(fault_popup_show_pending_now());assert(popup.step==0);hide_fault_popup();
+    assert(fault_popup_show_pending_now());assert(popup.step==0);hide_fault_popup();
     machine_fault_clear();
     fault_popup_set_auto_enabled(false);
     unsigned posted=island_posts, banners=notice_posts;
@@ -189,6 +194,16 @@ int main(void)
     current_page=UI_PAGE_MAIN;fault_popup_report_boot_result(5,2);click_confirm();
     assert(current_page==UI_PAGE_MAIN && navigations==2);
     machine_fault_clear();fault_popup_set_confirm_handler(NULL);
+    fault_popup_set_auto_enabled(true);
+    fault_popup_report_start_no_note();assert(fault_popup_is_showing());
+    click_confirm();assert(!fault_popup_is_showing()&&island_level==SMART_ISLAND_WARNING_LEVEL_WARNING);
+    fault_popup_report_start_no_note();assert(fault_popup_is_showing());
+    click_confirm();assert(!fault_popup_is_showing()&&island_level==SMART_ISLAND_WARNING_LEVEL_WARNING);
+    fault_popup_set_auto_enabled(false);posted=island_posts;
+    fault_popup_report_start_no_note();assert(!fault_popup_is_showing()&&island_posts==posted+1);
+    assert(island_level==SMART_ISLAND_WARNING_LEVEL_WARNING);
+    assert(fault_popup_show_key((machine_fault_key_t){MACHINE_FAULT_START,1,2}));
+    click_confirm();machine_fault_clear();fault_popup_set_auto_enabled(true);
     for(unsigned language=0;language<2;++language) {
     ui_lang_set(language?LANGUAGE_CN:LANGUAGE_EN);
     for(unsigned source=0;source<4;++source)for(unsigned code=1;code<(source==0?6:source==1?14:source==2?8:32);++code) {
@@ -199,6 +214,15 @@ int main(void)
     }
     }
     fault_popup_report_runtime_fault(2);advance(3200);capture("upper-open-zh");hide_fault_popup();
+    ui_lang_set(LANGUAGE_CN);
+    present((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4});
+    assert(!strcmp(lv_label_get_text(popup.title),"预置数已满"));
+    assert(popup.guide.steps[0].view==MF_FRONT);
+    advance(1500);capture("preset-full-zh");hide_fault_popup();
+    present((machine_fault_key_t){MACHINE_FAULT_BOOT,2,1});
+    assert(popup.guide.steps[0].view==MF_FRONT);capture("sensor-self-test-front");hide_fault_popup();
+    present((machine_fault_key_t){MACHINE_FAULT_BOOT,2,4});
+    assert(popup.guide.steps[0].view==MF_FRONT);hide_fault_popup();
     assert(lv_obj_get_child_cnt(lv_layer_top())==initial_children);
     advance(1000);assert(!popup.model.timer);
     puts("machine_fault_view: PASS (actual LVGL geometry, active-step loop, acknowledge, dedupe, multi-fault, independent recovery, deletion/recreation)");

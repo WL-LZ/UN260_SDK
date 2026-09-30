@@ -4,7 +4,7 @@
 
 typedef enum { MF_FRONT, MF_TOP, MF_REAR, MF_SIDE } mf_view_t;
 typedef enum { MF_MACHINE, MF_HOPPER, MF_REJECT, MF_STACKER, MF_PATH,
-               MF_ENCODERS, MF_IMAGEBOARD } mf_zone_t;
+               MF_ENCODERS, MF_IMAGEBOARD, MF_PRESET } mf_zone_t;
 typedef enum { MF_FOCUS, MF_OPEN, MF_REMOVE, MF_CLEAN, MF_CLOSE } mf_action_t;
 typedef struct { const char *key; } mf_text_t;
 typedef struct {

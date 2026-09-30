@@ -12,7 +12,7 @@ out = Path(os.environ.get('FAULT_OUTPUT', '/tmp/un260-fault-renders'))
 cache = Path('/tmp/un260-fault-host-cache')
 out.mkdir(parents=True, exist_ok=True)
 (cache / 'lvgl').mkdir(parents=True, exist_ok=True)
-fonts = ['instrument_sans_medium_' + str(n) for n in (12,14,16,18,24)] + ['instrument_sans_semibold_' + str(n) for n in (20,22,28)]
+fonts = ['instrument_sans_medium_' + str(n) for n in (12,14,16,18,24)] + ['instrument_sans_semibold_' + str(n) for n in (12,14,20,22,28)]
 def write_changed(path, text):
     if not path.exists() or path.read_text() != text:
         path.write_text(text)

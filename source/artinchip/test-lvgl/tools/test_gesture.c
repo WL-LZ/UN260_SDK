@@ -12,6 +12,11 @@ static int32_t ids[3];
 static uint8_t fingers;
 static unsigned home, back, returned;
 static bool password_modal;
+static bool fault_modal;
+bool fault_popup_is_showing(void){return fault_modal;}
+static bool island_fault;
+bool smart_island_fault_hit_test(const lv_point_t *point)
+{return island_fault&&point&&point->x>=450&&point->x<=830&&point->y<90;}
 bool ui_page_05_set_password_is_open(void){return password_modal;}
 bool ui_page_05_set_password_request_back(void){bool open=password_modal;password_modal=false;return open;}
 static lv_nav_back_result_t nav_result;
@@ -227,6 +232,20 @@ int main(void)
     assert(!queued);gesture_service_set_input_blocked(UI_PAGE_MAIN,false);
     assert(!sample(1,600,200,0));sample(0,600,200,0);
     password_modal=false;enabled=true;gesture_service_clear_pointer_policy(UI_PAGE_MAIN);
+    /* A fault raised while counting must receive the full press/release
+     * sequence, even though Main and its raw pointer policy remain gated. */
+    gesture_service_set_input_blocked(UI_PAGE_MAIN,true);
+    fault_modal=true;raw_before=raw_calls;
+    assert(!sample(1,1100,325,0));assert(!sample(1,1100,325,0));
+    assert(!sample(0,1100,325,0));assert(raw_calls==raw_before);
+    fault_modal=false;
+    assert(sample(1,1100,325,0));assert(sample(0,1100,325,0));
+    island_fault=true;
+    assert(!sample(1,600,40,0));assert(!sample(1,600,40,0));
+    assert(!sample(0,600,40,0));
+    assert(sample(1,1100,325,0));assert(sample(0,1100,325,0));
+    island_fault=false;
+    gesture_service_set_input_blocked(UI_PAGE_MAIN,false);
     /* Cancel even stationary holds immediately; never replay after unlock. */
     sample(1,500,200,0);unsigned cap=captures;
     gesture_service_set_input_blocked(UI_PAGE_MAIN,true);assert(captures==cap+1);
@@ -244,6 +263,6 @@ int main(void)
     page=UI_PAGE_MENU;assert(!sample(1,500,200,0));sample(0,500,200,0);
     page=UI_PAGE_MAIN;assert(sample(1,500,200,0));assert(sample(0,500,200,0));
     gesture_service_set_input_blocked(UI_PAGE_MAIN,false);
-    puts("PASS page touch gate: raw/modal/disabled-gesture coverage, hold drain, queued cancellation, hidden/recreated owner");
+    puts("PASS page touch gate: fault modal remains interactive; page, gestures and stale contacts remain blocked");
     puts("gesture: PASS (navigation without waiting for hint, cancellation, multi-touch and safety)");
 }

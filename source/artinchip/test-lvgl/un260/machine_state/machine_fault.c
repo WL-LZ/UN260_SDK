@@ -1,7 +1,7 @@
 #include "machine_fault.h"
 #include <string.h>
 
-/* 32 sensor bits + five boot checks + latest start/runtime reports. */
+/* 32 sensor bits + five boot checks + latest start/runtime/preset reports. */
 #define MACHINE_FAULT_CAPACITY 40U
 static machine_fault_record_t records[MACHINE_FAULT_CAPACITY];
 static size_t count;
@@ -29,6 +29,14 @@ void machine_fault_clear_source(machine_fault_source_t source)
     count = keep;
 }
 
+void machine_fault_clear_key(machine_fault_key_t key)
+{
+    size_t keep = 0;
+    for (size_t i = 0; i < count; ++i)
+        if (!machine_fault_key_equal(records[i].key, key)) records[keep++] = records[i];
+    count = keep;
+}
+
 void machine_fault_clear_code(machine_fault_source_t source, uint8_t code)
 {
     size_t keep = 0;
@@ -41,7 +49,8 @@ void machine_fault_clear_code(machine_fault_source_t source, uint8_t code)
 bool machine_fault_report(machine_fault_key_t key)
 {
     if (machine_fault_find(key, NULL)) return false;
-    if (key.source == MACHINE_FAULT_START || key.source == MACHINE_FAULT_RUNTIME)
+    if (key.source == MACHINE_FAULT_START || key.source == MACHINE_FAULT_RUNTIME ||
+        key.source == MACHINE_FAULT_PRESET)
         machine_fault_clear_source(key.source);
     if (count == MACHINE_FAULT_CAPACITY) return false;
     records[count++] = (machine_fault_record_t){ key, false };

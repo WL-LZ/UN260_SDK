@@ -8,6 +8,7 @@
 #include "un260/app_service/work_mode_service.h"
 #include "un260/lv_components/lv_components.h"
 #include "un260/lv_components/lv_fault_popup.h"
+#include "un260/app_service/app_fault_recovery.h"
 #include "un260/lv_components/smart_island.h"
 #include "un260/lv_core/lv_page_event.h"
 #include "un260/lv_core/page_03_menu.h"
@@ -109,6 +110,12 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
             page_03_batch_set_result(false, &result);
             app_setting_notice_result("settings.batch", UI_N_("Batch"), false);
             uart_debug_printf("Set batch num fail\n");
+        }
+        else if (status == 0x04)
+        {
+            if (len != 6) break;
+            app_fault_recovery_report((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4});
+            fault_popup_report_preset_full();
         }
         else if (status == 0x03)
         {

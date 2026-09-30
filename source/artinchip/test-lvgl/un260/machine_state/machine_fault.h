@@ -8,7 +8,8 @@ typedef enum {
     MACHINE_FAULT_BOOT = 0,
     MACHINE_FAULT_START,
     MACHINE_FAULT_RUNTIME,
-    MACHINE_FAULT_SENSOR
+    MACHINE_FAULT_SENSOR,
+    MACHINE_FAULT_PRESET
 } machine_fault_source_t;
 
 typedef struct {
@@ -33,6 +34,7 @@ size_t machine_fault_count(void);
 void machine_fault_clear(void);
 void machine_fault_clear_source(machine_fault_source_t source);
 void machine_fault_clear_code(machine_fault_source_t source, uint8_t code);
+void machine_fault_clear_key(machine_fault_key_t key);
 bool machine_fault_sensor_snapshot(uint32_t mask);
 bool machine_fault_key_equal(machine_fault_key_t a, machine_fault_key_t b);
 #endif

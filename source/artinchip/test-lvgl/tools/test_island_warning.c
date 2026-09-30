@@ -25,6 +25,19 @@ static void test_readable_warning(const char *message)
     assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE);
     assert(!g_si_ctx.warning.marquee_running);
 }
+static void test_preset_title_glyphs(void)
+{
+    ui_lang_set(LANGUAGE_CN);
+    smart_island_notify_preset_full((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4});
+    tick(300);render();
+    const char *title=lv_label_get_text(g_si_ctx.objects.title);
+    assert(!strcmp(title,"预置数已满"));
+    const lv_font_t *font=lv_obj_get_style_text_font(g_si_ctx.objects.title,0);
+    lv_font_glyph_dsc_t glyph;uint32_t offset=0,codepoint;
+    while((codepoint=_lv_txt_encoded_next(title,&offset))!=0)
+        assert(lv_font_get_glyph_dsc(font,&glyph,codepoint,0));
+    tick(4000);ui_lang_set(LANGUAGE_EN);
+}
 
 int main(void)
 {
@@ -40,6 +53,7 @@ int main(void)
     lv_img_decoder_set_close_cb(decoder,host_image_close);
     fixture(false);assert(currency_state_confirm_active_code("USD"));ui_main_create(lv_scr_act());tick(400);
     unsigned initial_timers=timers(), initial_posts=host_notice_posts, initial_tx=protocol_calls;
+    test_preset_title_glyphs();
     test_readable_warning("Mode timed out. Retry Start mode in Menu.");
     test_readable_warning("A much longer diagnostic warning must remain readable to the end");
     smart_island_notify_warning("Mode timed out. Retry Start mode in Menu.");tick(1200);

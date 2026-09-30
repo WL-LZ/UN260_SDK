@@ -35,10 +35,10 @@ static const entry_t runtime[] = {
 };
 static const entry_t boot[] = {
     E("Self-test failed","Exact location not reported",MF_FRONT,MF_MACHINE,GUIDE_SERVICE),
-    E("Sensor self-test failed","Exact location not reported",MF_TOP,MF_MACHINE,GUIDE_FOCUS),
+    E("Sensor self-test failed","Exact location not reported",MF_FRONT,MF_MACHINE,GUIDE_FOCUS),
     E("Motor self-test failed","Exact location not reported",MF_SIDE,MF_MACHINE,GUIDE_SERVICE),
     E("Solenoid self-test failed","Exact location not reported",MF_SIDE,MF_MACHINE,GUIDE_SERVICE),
-    E("Configuration read failed","Control system · No jam location",MF_REAR,MF_MACHINE,GUIDE_SERVICE),
+    E("Configuration read failed","Control system · No jam location",MF_FRONT,MF_MACHINE,GUIDE_SERVICE),
     E("Image board self-test failed","Internal side · Image board",MF_SIDE,MF_IMAGEBOARD,GUIDE_SERVICE)
 };
 
@@ -68,7 +68,13 @@ void fault_guide_lookup(machine_fault_key_t key, mf_guide_t *g)
 {
     if (!g) return;
     entry_t e = runtime[0];
-    if (key.source == MACHINE_FAULT_START) e = starts[key.type == 2 && key.code < sizeof(starts)/sizeof(starts[0]) ? key.code : 0];
+    if (key.source == MACHINE_FAULT_PRESET) {
+        e = (entry_t)E("Preset count reached","Feeder · Preset count full",MF_FRONT,MF_PRESET,GUIDE_FOCUS);
+    }
+    else if (key.source == MACHINE_FAULT_START && key.type == 1 && key.code == 2) {
+        e = (entry_t)E("No banknotes detected","Feeder · No jam location",MF_FRONT,MF_HOPPER,GUIDE_FOCUS);
+    }
+    else if (key.source == MACHINE_FAULT_START) e = starts[key.type == 2 && key.code < sizeof(starts)/sizeof(starts[0]) ? key.code : 0];
     else if (key.source == MACHINE_FAULT_RUNTIME) e = runtime[key.code < sizeof(runtime)/sizeof(runtime[0]) ? key.code : 0];
     else if (key.source == MACHINE_FAULT_BOOT) e = boot[key.code < sizeof(boot)/sizeof(boot[0]) ? key.code : 0];
     else if (key.source == MACHINE_FAULT_SENSOR) {
@@ -76,8 +82,8 @@ void fault_guide_lookup(machine_fault_key_t key, mf_guide_t *g)
         switch (key.code) {
         case 1: e.title=T("PS1 sensor fault"); e.location=T("Upper passage · PS1"); e.zone=MF_PATH; break;
         case 2: e.title=T("PS2 sensor fault"); e.location=T("Upper passage · PS2"); e.zone=MF_PATH; break;
-        case 3: e.title=T("PS5L sensor fault"); e.location=T("Rear lower passage · PS5L"); e.view=MF_REAR; e.zone=MF_PATH; break;
-        case 4: e.title=T("PS5R sensor fault"); e.location=T("Rear lower passage · PS5R"); e.view=MF_REAR; e.zone=MF_PATH; break;
+        case 3: e.title=T("PS5L sensor fault"); e.location=T("Rear lower passage · PS5L"); e.zone=MF_PATH; break;
+        case 4: e.title=T("PS5R sensor fault"); e.location=T("Rear lower passage · PS5R"); e.zone=MF_PATH; break;
         case 23: e=starts[13]; e.title=T("Encoder sensor fault"); break;
         case 31: e=boot[5]; e.title=T("Image board fault"); break;
         default:
@@ -85,9 +91,20 @@ void fault_guide_lookup(machine_fault_key_t key, mf_guide_t *g)
             e.title=T("Unrecognized self-test status");
             break;
         }
+        e.view=MF_FRONT;
     }
     memset(g, 0, sizeof(*g));
     g->title=e.title; g->location=e.location; g->step_count=1;
+    if (key.source == MACHINE_FAULT_PRESET) {
+        g->steps[0]=step(T("Remove notes"),T("Remove banknotes from the feeder"),
+            T("Take the banknotes out of the feeder, then confirm to clear the preset stop."),
+            MF_FRONT,MF_PRESET,MF_FOCUS); return;
+    }
+    if (key.source == MACHINE_FAULT_START && key.type == 1 && key.code == 2) {
+        g->steps[0]=step(T("Check feeder"),T("Place notes in the feeder"),
+            T("Check that banknotes are positioned in the feeder."),
+            MF_FRONT,MF_HOPPER,MF_FOCUS); return;
+    }
     if (e.kind == GUIDE_BOTH) {
         g->step_count=2; g->steps[0]=remove_notes(MF_REJECT); g->steps[1]=remove_notes(MF_STACKER); return;
     }
@@ -140,6 +157,7 @@ void fault_guide_format_code(machine_fault_key_t key, char *buffer, size_t size)
     case MACHINE_FAULT_BOOT: snprintf(buffer,size,"0x37/0x%02X/0x%02X",key.code,key.type); break;
     case MACHINE_FAULT_START: snprintf(buffer,size,"0x0A/0x%02X/0x%02X",key.type,key.code); break;
     case MACHINE_FAULT_SENSOR: snprintf(buffer,size,"0x02/bit%u",key.code); break;
+    case MACHINE_FAULT_PRESET: snprintf(buffer,size,"0x06/0x04"); break;
     default: snprintf(buffer,size,"0x0F/0x%02X",key.code); break;
     }
 }

@@ -47,7 +47,7 @@ def main():
     sources = [args.harness.resolve() if args.harness else ROOT / "tools/test_main_view.c",
                *[source.resolve() for source in args.extra_source], *compiled_asset_sources()]
     actual = [
-        "un260/font/scaled_font.c",
+        "un260/font/scaled_font.c", "un260/font/ui_message_font.c",
         "un260/device_info/device_info.c",
         "un260/gesture/gesture_guide.c", "un260/lv_components/lv_content_pager.c",
         "un260/lv_system/ui_main_layout.c",
@@ -83,6 +83,8 @@ def main():
         if not path.is_file():
             raise AssertionError(f"Actual font source missing: {path}")
         sources.append(path)
+    sources += [ROOT / f"un260/font/lv_font_message_cjk_{size}.c"
+                for size in (12, 14, 16, 18, 20, 22, 24, 28)]
     with tempfile.TemporaryDirectory(prefix="un260-main-view-") as tmp:
         work = Path(tmp)
         (work/'lv_drv_conf.h').write_text('/* Host rendering: no physical driver. */\n')

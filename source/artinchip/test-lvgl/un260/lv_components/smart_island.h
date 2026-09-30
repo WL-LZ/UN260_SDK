@@ -27,7 +27,8 @@ typedef enum {
 
 typedef enum {
     SMART_ISLAND_WARNING_LEVEL_WARNING = 0,
-    SMART_ISLAND_WARNING_LEVEL_ERROR
+    SMART_ISLAND_WARNING_LEVEL_ERROR,
+    SMART_ISLAND_WARNING_LEVEL_PRESET
 } smart_island_warning_level_t;
 
 typedef void (*smart_island_action_cb_t)(uint8_t action_id); //动作按钮回调
@@ -59,7 +60,11 @@ typedef enum { SMART_ISLAND_FAULT_BEGIN, SMART_ISLAND_FAULT_END, SMART_ISLAND_FA
 typedef void (*smart_island_fault_phase_cb_t)(machine_fault_key_t key, smart_island_fault_phase_t phase);
 void smart_island_register_fault_phase_cb(smart_island_fault_phase_cb_t callback);
 void smart_island_notify_fault(const char *text, machine_fault_key_t key);
+void smart_island_notify_no_note(machine_fault_key_t key);
+void smart_island_notify_preset_full(machine_fault_key_t key);
 void smart_island_faults_changed(void);
+/* During a counting input gate, only the visible fault island accepts a tap. */
+bool smart_island_fault_hit_test(const lv_point_t *point);
 void smart_island_restore_idle(void); //恢复默认待机态
 bool smart_island_is_expanded(void); //是否处于展开态
 

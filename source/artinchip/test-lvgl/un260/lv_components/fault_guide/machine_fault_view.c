@@ -50,6 +50,24 @@ static void draw_overlay(lv_event_t *event)
     if (!v) return;
     lv_draw_ctx_t *ctx=lv_event_get_draw_ctx(event);lv_area_t a;lv_obj_get_coords(v->overlay,&a);
     const mf_step_t *s=&v->step;
+    if (s->zone==MF_PRESET) {
+        unsigned t=v->elapsed_ms%3000U;
+        int lift=t<500U?0:t<2200U?(int)((t-500U)*27U/1700U):27;
+        for (int i=2;i>=0;--i) {
+            int x=vx(v,173+i*4),y=vy(v,61+i*5-lift);
+            int w=vs(v,126),h=vs(v,24);
+            rect(ctx,&a,x,y,w,h,3,0xB9D8C5,LV_OPA_COVER,0x386F59,1);
+            rect(ctx,&a,x+vs(v,8),y+vs(v,5),w-vs(v,16),h-vs(v,10),2,
+                 0xDDEADF,LV_OPA_COVER,0x7EA790,1);
+            line(ctx,&a,x+vs(v,22),y+vs(v,12),x+vs(v,45),y+vs(v,12),0x56836C,1);
+            line(ctx,&a,x+w-vs(v,47),y+vs(v,12),x+w-vs(v,23),y+vs(v,12),0x56836C,1);
+        }
+        int ax=vx(v,327),ay=vy(v,74);
+        line(ctx,&a,ax,ay,ax,ay-vs(v,32),0xBD6624,2);
+        line(ctx,&a,ax,ay-vs(v,32),ax-vs(v,6),ay-vs(v,25),0xBD6624,2);
+        line(ctx,&a,ax,ay-vs(v,32),ax+vs(v,6),ay-vs(v,25),0xBD6624,2);
+        return;
+    }
     if (s->view==MF_SIDE && s->zone==MF_ENCODERS) {
         focus(ctx,&a,v,184,112,64,64,true); focus(ctx,&a,v,249,113,44,44,true);
     } else if(s->view==MF_SIDE && s->zone==MF_IMAGEBOARD) focus(ctx,&a,v,151,181,69,79,false);

@@ -170,6 +170,12 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
     /* Keep the transition ahead of generic reply side effects. Returning
      * false retains this frame and holds the next START until history is safe. */
     if (cmd == 0x51) return app_command_runtime_handle_stacker_clear(buf, len);
+    if (cmd == 0x3D) {
+        if (protocol_frame_is_valid(buf, len) && len == 6 &&
+            (buf[4] == 0x01 || buf[4] == 0x02))
+            app_fault_recovery_handle_clear_result(buf[4]);
+        return true;
+    }
     /* Preflight BEFORE taking request results or invoking any dispatcher. A
      * retried frame therefore cannot duplicate protocol/UI side effects. */
     if (cmd == 0x0A && len >= 7 && buf[4] == 0x01 && buf[5] == 0x01 &&

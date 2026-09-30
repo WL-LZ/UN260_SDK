@@ -86,7 +86,7 @@ def required_by_size():
         if name not in legacy:
             raise SystemExit('Missing notice metadata: '+name)
         meta.update(translated_points({legacy[name]}))
-    return {12: sorted(popup), 14: sorted(catalog | popup | meta),
+    return {12: sorted(popup | titles), 14: sorted(catalog | popup | meta),
             16: sorted(titles), 18: sorted(all_points), 20: sorted(all_points),
             22: sorted(all_points), 24: sorted(catalog), 28: sorted(titles)}
 

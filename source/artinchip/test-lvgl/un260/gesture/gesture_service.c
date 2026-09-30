@@ -9,6 +9,8 @@
 #include "un260/lv_core/page_06_settings.h"
 #include "un260/lv_core/page_05_set_password.h"
 #include "un260/lv_components/lv_nav_button.h"
+#include "un260/lv_components/lv_fault_popup.h"
+#include "un260/lv_components/smart_island.h"
 #include "un260/lv_system/user_cfg.h"
 #include "un260/lv_drivers/uart_io.h"
 #include <stdio.h>
@@ -179,10 +181,15 @@ static bool gesture_pointer_event(lv_indev_t *indev, lv_event_code_t event,
 {
     LV_UNUSED(indev); LV_UNUSED(user_data);
     if (input_blocked() || g_blocked_contact) {
-        g_blocked_contact = count != 0 && event != LV_EVENT_RELEASED;
+        bool held_before_gate = g_blocked_contact;
+        if (held_before_gate)
+            g_blocked_contact = count != 0 && event != LV_EVENT_RELEASED;
         memset(&g_runtime, 0, sizeof(g_runtime));
         g_pointer_captured = false;
-        return true;
+        /* Keep the ordinary page locked during a run while the top-layer
+         * guide and the visible fault island remain operable for every fault. */
+        return held_before_gate ||
+            !(fault_popup_is_showing() || smart_island_fault_hit_test(point));
     }
     if(app_standby_runtime_touch(count > 0 && event != LV_EVENT_RELEASED)) {
         memset(&g_runtime, 0, sizeof(g_runtime));

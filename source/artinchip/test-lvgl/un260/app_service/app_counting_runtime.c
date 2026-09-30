@@ -136,6 +136,7 @@ static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t le
     page_02_list_report_reset();
     page_01_curr_img_refre();
     fault_popup_clear_runtime();
+    fault_popup_clear_preset();
     counting_history_session_start(buf, len);
     app_auto_qr_on_start();
     if (multi_pass_verification_is_active()) {

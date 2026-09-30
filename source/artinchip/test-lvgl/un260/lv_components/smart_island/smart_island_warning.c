@@ -41,6 +41,17 @@ void smart_island_faults_changed(void)
         smart_island_restore_idle();
 }
 
+bool smart_island_fault_hit_test(const lv_point_t *point)
+{
+    lv_obj_t *root=g_si_ctx.objects.root;
+    if(!point||!g_si_ctx.warning.fault.valid||
+       g_si_ctx.view.scene!=SMART_ISLAND_SCENE_WARNING||
+       !root||!lv_obj_is_valid(root)||!lv_obj_is_visible(root))return false;
+    lv_area_t area;lv_obj_get_coords(root,&area);
+    return point->x>=area.x1&&point->x<=area.x2&&
+           point->y>=area.y1&&point->y<=area.y2;
+}
+
 void smart_island_warning_fault_clear(void)
 {
     g_si_ctx.warning.fault.valid = false;
@@ -248,10 +259,11 @@ static void smart_island_warning_marquee_start(void)
         lv_anim_set_var(&animation, g_si_ctx.objects.title);
         lv_anim_set_exec_cb(&animation, smart_island_warning_anim_text_opa_cb);
         lv_anim_set_values(&animation, LV_OPA_COVER, LV_OPA_40);
-        lv_anim_set_time(&animation, SMART_ISLAND_WARNING_FLASH_TIME);
-        lv_anim_set_playback_time(&animation, SMART_ISLAND_WARNING_FLASH_TIME);
-        /* One initial cycle plus one repeat = two complete flashes. */
-        lv_anim_set_repeat_count(&animation, 1);
+        uint32_t flash_time = g_si_ctx.warning.level == SMART_ISLAND_WARNING_LEVEL_PRESET ? 420U : SMART_ISLAND_WARNING_FLASH_TIME;
+        lv_anim_set_time(&animation, flash_time);
+        lv_anim_set_playback_time(&animation, flash_time);
+        /* Preset uses three shorter pulses; other warnings use two flashes. */
+        lv_anim_set_repeat_count(&animation, g_si_ctx.warning.level == SMART_ISLAND_WARNING_LEVEL_PRESET ? 2 : 1);
         lv_anim_set_path_cb(&animation, lv_anim_path_linear);
         lv_anim_set_ready_cb(&animation, smart_island_warning_flash_finish_cb);
         lv_anim_start(&animation);
@@ -307,7 +319,7 @@ static void notify_warning(const char *warn_text,
 {
     char next_warning_text[sizeof(g_si_ctx.warning.text)];
 
-    if ((unsigned int)level > (unsigned int)SMART_ISLAND_WARNING_LEVEL_ERROR) {
+    if ((unsigned int)level > (unsigned int)SMART_ISLAND_WARNING_LEVEL_PRESET) {
         return;
     }
 
@@ -398,4 +410,12 @@ void smart_island_notify_warning_level(const char *text, smart_island_warning_le
 void smart_island_notify_fault(const char *text, machine_fault_key_t key)
 {
     notify_warning(text,SMART_ISLAND_WARNING_LEVEL_ERROR,&key);
+}
+void smart_island_notify_no_note(machine_fault_key_t key)
+{
+    notify_warning(ui_tr("No banknotes detected"),SMART_ISLAND_WARNING_LEVEL_WARNING,&key);
+}
+void smart_island_notify_preset_full(machine_fault_key_t key)
+{
+    notify_warning(UI_N_("Preset count reached"),SMART_ISLAND_WARNING_LEVEL_PRESET,&key);
 }
