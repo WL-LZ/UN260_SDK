@@ -146,12 +146,12 @@ static void test_main_quick(void)
     device_info_remote_versions_t versions={.main_app={2,6,19},.image_app={1,4,8}};
     device_info_confirm_remote_versions(&versions);page_01_main_quick_refresh_data(UI_DATA_TOPIC_DEVICE_VERSION);
     render();write_bmp("quick-controls");
-    click_object(quick.controls.switches[0]);assert(!page_01_main_layout_is_enabled());
-    click_object(quick.controls.switches[1]);assert(!host_gestures);
+    click_object(quick.controls.tiles[QUICK_LAYOUT]);assert(!page_01_main_layout_is_enabled());
+    click_object(quick.controls.tiles[QUICK_GESTURES]);assert(!host_gestures);
     assert(quick.active);write_bmp("quick-controls-off");
-    host_gesture_save_fails=true;click_object(quick.controls.switches[1]);
+    host_gesture_save_fails=true;click_object(quick.controls.tiles[QUICK_GESTURES]);
     assert(!host_gestures && !gesture_guide_is_open() && strstr(lv_label_get_text(quick.message),"Could not save"));
-    host_gesture_save_fails=false;click_object(quick.controls.switches[1]);assert(host_gestures);
+    host_gesture_save_fails=false;click_object(quick.controls.tiles[QUICK_GESTURES]);assert(host_gestures);
     tick(180);assert(gesture_guide_is_open());
     for(unsigned i=0;i<16;i++){
         lv_obj_t *overlay=lv_obj_get_child(lv_layer_top(),-1),*panel=lv_obj_get_child(overlay,0);
@@ -169,7 +169,7 @@ static void test_main_quick(void)
     tick(400);assert(lv_obj_get_scroll_x(guide_viewport)>500);
     tap(937,328);tick(220);assert(!gesture_guide_is_open()); /* original Got it button */
     quick_open_test();
-    click_object(quick.controls.switches[0]);assert(page_01_main_layout_is_enabled());
+    click_object(quick.controls.tiles[QUICK_LAYOUT]);assert(page_01_main_layout_is_enabled());
     unsigned clear=callbacks[CB_CLEAR];tap(1210,316);tick(200);
     assert(!quick.active && callbacks[CB_CLEAR]==clear); /* outside close cannot click through */
 #ifndef HOST_SKIN_FALLBACK
@@ -200,35 +200,60 @@ static void test_main_quick(void)
     quick_close_test();quick_open_test();
     host_fault_showing=true;tick(100);assert(!quick.active);
     host_fault_showing=false;host_fault_pending=false;
-    /* Gear opens the existing settings page, never the standby preview. */
-    quick_open_test();unsigned settings_nav=pushes;
-    host_standby_busy=true;tap(842,136);assert(quick.active && pushes==settings_nav);
-    host_standby_busy=false;
-    pointer(842,136,true);render();
-    lv_point_t settings_point={842,136};
-    lv_obj_t *settings_button=lv_indev_search_obj(quick.root,&settings_point);
-    assert(settings_button && lv_obj_has_state(settings_button,LV_STATE_PRESSED));
-    assert(lv_obj_get_style_bg_color(settings_button,0).full==lv_color_hex(0xD7E5F6).full);
-    write_bmp("quick-settings-pressed");pointer(842,136,false);
-    tick(220);assert(!quick.active && pushes==settings_nav+1 && destination==UI_PAGE_STANDBY_SETTING);
-    assert(quick.after_close==QC_POST_NONE);
+    /* Horizontal movement belongs to the shortcut strip, not the drawer. */
+    quick_open_test();lv_obj_scroll_to_x(quick.controls.viewport,450,LV_ANIM_OFF);
+    assert(lv_obj_get_scroll_x(quick.controls.viewport)>0 && quick.active);
+    quick_close_test();
 #ifndef HOST_SKIN_FALLBACK
     /* A late safety change must cancel pending navigation/tutorial, rather
      * than launching it over a fault or after leaving the page. */
-    quick_open_test();settings_nav=pushes;tap(842,136);host_fault_pending=true;
+    quick_open_test();lv_obj_scroll_to_x(quick.controls.viewport,450,LV_ANIM_OFF);
+    unsigned settings_nav=pushes;
+    click_object(quick.controls.tiles[QUICK_STANDBY]);host_fault_pending=true;
     tick(220);assert(pushes==settings_nav && !quick.active && quick.after_close==QC_POST_NONE);
     host_fault_pending=false;
     quick_open_test();host_gestures=false;qc_refresh();
-    click_object(quick.controls.switches[1]);assert(host_gestures);
+    click_object(quick.controls.tiles[QUICK_GESTURES]);assert(host_gestures);
     start_busy=true;tick(220);assert(!gesture_guide_is_open() && !quick.active);start_busy=false;
 #endif
-    quick_open_test();unsigned nav=pushes;host_standby_busy=true;tap(758,191);assert(pushes==nav && quick.active);
-    host_standby_busy=false;tap(758,191);tick(200);assert(pushes==nav+1 && destination==UI_PAGE_STANDBY);
+    quick_open_test();lv_obj_scroll_to_x(quick.controls.viewport,450,LV_ANIM_OFF);
+    unsigned nav=pushes;host_standby_busy=true;
+    click_object(quick.controls.tiles[QUICK_STANDBY]);assert(pushes==nav && quick.active);
+    host_standby_busy=false;click_object(quick.controls.tiles[QUICK_STANDBY]);tick(200);
+    assert(pushes==nav+1 && destination==UI_PAGE_STANDBY);
     assert(!quick.active && counting_data_current()->total_pcs==231);
     quick_open_test();page_01_main_suspend();tick(220);assert(!quick.active && !lv_obj_is_visible(quick.root));
     page_01_main_resume();quick_open_test();
+    quick_close_test();
+    lv_obj_t *pure_host=lv_obj_create(lv_scr_act());
+    lv_obj_set_size(pure_host,1280,400);
+    lv_obj_set_pos(pure_host,0,0);
+    page_01_main_quick_suspend();lv_obj_add_flag(main_page,LV_OBJ_FLAG_HIDDEN);
+    host_current_page=UI_PAGE_PURE;
+    page_01_main_quick_attach(pure_host,UI_PAGE_PURE);
+    host_pointer_policy=page_01_main_quick_pointer;
+    assert(lv_obj_get_parent(quick.grab)==pure_host);
+    host_quick_enabled=false; /* Pure must keep an exit even with Main Quick disabled. */
+    lv_obj_update_layout(lv_scr_act());
+    assert(lv_obj_is_visible(pure_host) && qc_safe());
+    tap(640,8);tick(240);assert(quick.active);
+    smart_island_set_pure_count_enabled(true);
+    click_object(quick.controls.tiles[QUICK_PURE]);tick(220);
+    assert(pure_exits==1 && !quick.active && host_current_page==UI_PAGE_MAIN);
+    host_current_page=UI_PAGE_PURE;
+    assert(!smart_island_pure_count_is_enabled());
+    assert(lv_quick_controls_execute(QUICK_PURE));
+    assert(pure_exits==2 && host_current_page==UI_PAGE_MAIN);
+    host_quick_enabled=true;
+    page_01_main_quick_attach(main_page,UI_PAGE_MAIN);
+    host_pointer_policy=page_01_main_pointer;
+    lv_obj_clear_flag(main_page,LV_OBJ_FLAG_HIDDEN);
+    lv_obj_del(pure_host);
+    assert(lv_obj_get_parent(quick.grab)==main_page);
+    smart_island_set_pure_count_enabled(false);
+    quick_open_test();
     quick_close_test();quick_test_recovery();quick_open_test();
     pointer(500,80,true);pointer(500,20,true);ui_main_destroy();pointer(500,20,false);tick(220);
     assert(!quick.main && !quick.root && !quick.timer && !host_pointer_policy);
-    puts("PASS quick controls: standby-settings shortcut/press feedback/safety cancellation, original animated gesture guide on successful enable only, unchanged exposed Main pixels throughout open/reverse/close, transparent click shield, opaque sheet, clamped endpoints, whole-sheet snapshots, warm reuse, native taps, reverse/up/outside close, no click-through, switches/failure, shared Menu content, standby guards, faults/count and teardown");
+    puts("PASS quick controls: horizontal shortcuts, gesture guide, animated drawer, safety cancellation, exposed Main pixels, click shield, warm capture, outside close, standby guard and teardown");
 }

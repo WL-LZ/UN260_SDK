@@ -59,6 +59,17 @@ static void ui_state_store_parse_line(ui_persist_state_t* state, const char* lin
         unsigned value; char tail;
         state->page01.layout.footer_swapped=
             sscanf(line+18,"%u %c",&value,&tail)==1 && value==1;
+    } else if (strncmp(line, "p01_quick_order=", 16) == 0) {
+        unsigned value[8],used=0;char tail;
+        if(sscanf(line+16,"%u,%u,%u,%u,%u,%u,%u,%u %c",
+            &value[0],&value[1],&value[2],&value[3],
+            &value[4],&value[5],&value[6],&value[7],&tail)==8){
+            for(unsigned i=0;i<8;i++){
+                if(value[i]>=8 || (used&(1U<<value[i])))return;
+                used|=1U<<value[i];
+            }
+            for(unsigned i=0;i<8;i++)state->page01.quick_order[i]=value[i];
+        }
     } else if (strncmp(line, "p07_view_mode=", 14) == 0) {
         state->page07.view_mode = atoi(line + 14);
     } else if (strncmp(line, "p07_fav_only=", 13) == 0) {
@@ -203,6 +214,11 @@ bool ui_state_store_save(const ui_persist_state_t* state)
             layout->left[0],layout->left[1],layout->left[2],layout->left[3],
             layout->right[0],layout->right[1],layout->right[2],layout->mirrored);
     fprintf(fp,"p01_layout_footer=%u\n",layout->footer_swapped);
+    fprintf(fp,"p01_quick_order=%u,%u,%u,%u,%u,%u,%u,%u\n",
+        state->page01.quick_order[0],state->page01.quick_order[1],
+        state->page01.quick_order[2],state->page01.quick_order[3],
+        state->page01.quick_order[4],state->page01.quick_order[5],
+        state->page01.quick_order[6],state->page01.quick_order[7]);
     fprintf(fp, "p07_view_mode=%d\n", state->page07.view_mode);
     fprintf(fp, "p07_fav_only=%d\n", state->page07.fav_only);
     fprintf(fp, "p07_selected_abs_idx=%d\n", state->page07.selected_abs_idx);

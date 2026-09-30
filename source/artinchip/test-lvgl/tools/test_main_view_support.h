@@ -26,6 +26,8 @@ void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title
 static bool start_busy, prewarming, touch_enabled, fault_auto;
 static bool host_fault_pending,host_fault_showing,host_transitioning;
 static ui_page_t destination;
+static ui_page_t host_current_page=UI_PAGE_MAIN;
+static unsigned pure_exits;
 static int saved_tab;
 static gesture_pointer_policy_t host_pointer_policy;
 static ui_main_layout_t host_saved_layout;
@@ -72,7 +74,7 @@ CAPTURE(page_01_bottom_speed_btn_event_cb, CB_SPEED)
 
 void ui_manager_push_page(ui_page_t page) { ++pushes; destination=page; }
 void ui_manager_switch(ui_page_t page) { destination=page; }
-ui_page_t ui_manager_get_current_page(void) { return UI_PAGE_MAIN; }
+ui_page_t ui_manager_get_current_page(void) { return host_current_page; }
 bool ui_manager_is_prewarming_page(ui_page_t page) { (void)page; return prewarming; }
 bool ui_manager_is_transitioning(void) { return host_transitioning; }
 bool app_command_runtime_count_start_busy(void) { return start_busy; }
@@ -88,6 +90,10 @@ void ui_state_apply_common_runtime(void) {}
 int ui_state_page01_detail_section_get(void) { return saved_tab; }
 void ui_state_save_page01_detail_section(void) { saved_tab=page_01_detail_section_get();++persisted_tabs; }
 void ui_state_save_popup_auto_state(void) {}
+void ui_state_quick_order_get(uint8_t order[8])
+{for(uint8_t i=0;i<8;i++)order[i]=i;}
+bool ui_state_quick_order_swap(uint8_t a,uint8_t b)
+{(void)a;(void)b;return true;}
 void ui_state_save_pure_count_state(void) {}
 bool ui_state_pure_count_is_enabled(void) { return false; }
 bool ui_export_data_request(void) { return true; }
@@ -116,5 +122,5 @@ bool touch_feedback_set_enabled(bool enabled) { touch_enabled=enabled;return tru
 bool ui_qr_data_is_ready(void) { return false; }
 bool ui_qr_data_build(char *buffer,size_t size) { (void)buffer;(void)size;return false; }
 bool lv_qr_popup_show(const char *text) { (void)text;return true; }
-void ui_page_18_pure_request_exit(void) {}
+void ui_page_18_pure_request_exit(void) { ++pure_exits;host_current_page=UI_PAGE_MAIN; }
 #endif

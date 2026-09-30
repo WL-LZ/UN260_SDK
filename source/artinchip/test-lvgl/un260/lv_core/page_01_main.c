@@ -1207,7 +1207,7 @@ void ui_main_create(lv_obj_t *parent)
     smart_island_create(main_page);
     smart_island_register_action_cb(page_01_smart_island_action_cb);
     smart_island_refresh_time();
-    page_01_main_quick_attach(main_page);
+    page_01_main_quick_attach(main_page,UI_PAGE_MAIN);
     lv_obj_t *layout_items[]={page_01_main_find_obj("mode_btn"),
         page_01_main_find_obj("setting_btn"),page_01_main_find_obj("list_btn"),
         page_01_main_find_obj("print_btn"),page_01_main_find_obj("menu_btn"),
@@ -1224,7 +1224,7 @@ void ui_main_create(lv_obj_t *parent)
 void ui_main_destroy(void)
 {
     gesture_service_clear_pointer_policy(UI_PAGE_MAIN);
-    page_01_main_quick_detach();s_quick_owns_pointer=false;
+    page_01_main_quick_detach_host(main_page);s_quick_owns_pointer=false;
     page_01_main_layout_detach();
     page_01_bottom_animations_stop();
     if (s_time_timer) { lv_timer_del(s_time_timer); s_time_timer = NULL; }
@@ -1347,6 +1347,7 @@ bool page_01_main_resume(void)
     resume_counting_sim();
     smart_island_create(main_page);
     smart_island_set_suspended(false);
+    page_01_main_quick_attach(main_page,UI_PAGE_MAIN);
     page_01_main_send_init_protocol();
     main_time_timer_cb(NULL);
     if (s_time_timer) lv_timer_resume(s_time_timer);

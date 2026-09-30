@@ -41,6 +41,7 @@ static void ui_state_set_defaults(void)
     s_ui_state.version = UI_STATE_STORE_VERSION;
     s_ui_state.page01.detail_section = PAGE_01_DETAIL_SECTION_A;
     ui_main_layout_default(&s_ui_state.page01.layout);
+    for(unsigned i=0;i<8;i++)s_ui_state.page01.quick_order[i]=i;
     s_ui_state.page07.view_mode = UI_STATE_CURR_VIEW_CARD;
     s_ui_state.page06.reserved06_enable = 1;
 }
@@ -83,6 +84,24 @@ void ui_state_save_popup_auto_state(void)
 {
     ui_state_ensure_loaded();
     ui_state_save_all();
+}
+void ui_state_quick_order_get(uint8_t order[8])
+{
+    ui_state_ensure_loaded();
+    if(order)memcpy(order,s_ui_state.page01.quick_order,8);
+}
+bool ui_state_quick_order_swap(uint8_t first,uint8_t second)
+{
+    if(first>=8||second>=8)return false;
+    ui_state_ensure_loaded();
+    uint8_t value=s_ui_state.page01.quick_order[first];
+    s_ui_state.page01.quick_order[first]=s_ui_state.page01.quick_order[second];
+    s_ui_state.page01.quick_order[second]=value;
+    ui_state_pull_common_runtime();
+    if(ui_state_store_save(&s_ui_state))return true;
+    s_ui_state.page01.quick_order[second]=s_ui_state.page01.quick_order[first];
+    s_ui_state.page01.quick_order[first]=value;
+    return false;
 }
 
 void ui_state_save_pure_count_state(void)

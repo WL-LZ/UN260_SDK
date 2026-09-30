@@ -233,17 +233,27 @@ static void operator_view(lv_obj_t *b)
 }
 static void interaction_view(lv_obj_t *b)
 {
-    heading(b,ui_tr("Interaction"));context(b,ui_tr("Your working preferences"),147);
-    lv_obj_t *left=box(b,0,48,504,248,PANEL,20),*rows=box(left,20,4,464,232,PANEL,0);
-    toggle(rows,12,464,ui_tr("Pull-down controls"),ui_tr("Can always be reopened from Menu."),workspace_service_quick_enabled(),A_QUICK_TOGGLE);
-    toggle(rows,88,464,ui_tr("Side / two-finger gestures"),ui_tr("Back buttons remain available."),gesture_service_enabled(),A_GESTURES);
-    toggle(rows,164,464,ui_tr("QR after counting"),ui_tr("Manual export is always available."),user()&&user()->qr_after_count,A_AUTO_QR);
-    box(rows,0,74,464,1,LINE,0);box(rows,0,150,464,1,LINE,0);
-    lv_obj_t *graphic=box(b,544,52,476,68,PANEL,18);
-    icon(graphic,MICON("screen",38),149,15,PURPLE);icon(graphic,MICON("down",38),217,15,PURPLE);icon(graphic,MICON("hand",38),285,15,PURPLE);
-    label(b,544,132,476,ui_tr("Quick access. Less interruption."),&lv_font_instrument_sans_semibold_22,INK);
-    lv_obj_t *hint=label(b,544,171,476,ui_tr("Adjust common controls without leaving the page you are working on."),&lv_font_instrument_sans_medium_15,MUTED);lv_obj_set_style_text_line_space(hint,6,0);
-    lv_obj_t *try_quick=button(b,544,248,476,44,ui_tr("Try Quick controls"),A_QUICK,false);header_content(try_quick,ui_tr("Try Quick controls"),MICON("quick",22),INK);
+    heading(b,ui_tr("Interaction"));
+    lv_obj_t *left=box(b,0,48,504,248,PANEL,20),*rows=box(left,20,8,464,232,PANEL,0);
+    toggle(rows,0,464,ui_tr("Pull-down controls"),ui_tr("Swipe down from Main"),workspace_service_quick_enabled(),A_QUICK_TOGGLE);
+    toggle(rows,57,464,ui_tr("Side / two-finger gestures"),ui_tr("Navigate by touch"),gesture_service_enabled(),A_GESTURES);
+    toggle(rows,114,464,ui_tr("QR after counting"),ui_tr("Show after a completed count"),user()&&user()->qr_after_count,A_AUTO_QR);
+    toggle(rows,171,464,ui_tr("Top popup"),ui_tr("Open faults automatically"),fault_popup_get_auto_enabled(),A_POPUP_TOGGLE);
+    for(unsigned i=1;i<4;i++)box(rows,0,i*57-3,464,1,LINE,0);
+    lv_obj_t *right=box(b,524,48,504,248,PANEL,20);
+    label(right,16,9,290,ui_tr("Shortcut order"),&lv_font_instrument_sans_semibold_17,INK);
+    small(right,16,32,468,ui_tr("Tap two shortcuts to swap positions."));
+    uint8_t order[QUICK_CONTROL_COUNT];ui_state_quick_order_get(order);
+    for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
+        char caption[68];snprintf(caption,sizeof(caption),"%02u  %s",i+1,lv_quick_controls_title(order[i]));
+        lv_obj_t *item=button(right,16+(i%2)*240,57+(i/2)*45,232,40,caption,A_QUICK_ORDER_BASE+i,false);
+        lv_obj_set_style_radius(item,10,0);
+        if(menu.quick_pick==i){
+            lv_obj_set_style_bg_color(item,lv_color_hex(0xE1EEFC),0);
+            lv_obj_set_style_border_color(item,lv_color_hex(BLUE),0);
+            lv_obj_set_style_border_width(item,2,0);
+        }
+    }
 }
 static void display_view(lv_obj_t *b)
 {

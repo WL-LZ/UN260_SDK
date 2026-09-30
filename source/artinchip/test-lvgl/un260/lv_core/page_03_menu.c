@@ -19,11 +19,13 @@
 #include "un260/storage/standby_store.h"
 #include "un260/lv_components/lv_settings.h"
 #include "un260/lv_components/lv_quick_controls.h"
+#include "un260/lv_components/lv_fault_popup.h"
 #include "un260/lv_components/lv_nav_button.h"
 #include "un260/lv_components/lv_qr_popup.h"
 #include "un260/lv_components/ui_scrollbar.h"
 #include "un260/lv_system/ui_history_data.h"
 #include "un260/lv_system/ui_qr_data.h"
+#include "un260/lv_system/ui_state_runtime.h"
 #include "un260/lv_system/app_clock.h"
 #include "un260/currency/currency_state.h"
 #include "un260/machine_state/machine_state.h"
@@ -55,7 +57,7 @@ enum {A_BACK=1,A_QUICK,A_SETTINGS,A_HISTORY,A_PRINT_SETUP,A_PRINT,A_QR,A_STANDBY
       A_GESTURES,A_LAYOUT,A_QUICK_TOGGLE,A_NEW_PROFILE,A_APPLY_PROFILE,
       A_DELETE_PROFILE,A_SAVE_BATCH,A_ADD_BATCH,A_EDIT_BATCH,A_DELETE_BATCH,A_APPLY_BATCH,
       A_NEW_USER,A_EDIT_NAME,A_USB_SCAN,A_USER_SAVE,A_USER_CANCEL,A_USER_SWITCH,A_USB_CLOSE,A_QUICK_CLOSE,
-      A_AUTO_QR,A_CAPACITY,A_LANGUAGE,A_TIMEOUT,A_BUSINESS_DAY,A_CLOSE_DAY,A_CONFIRM_RUN,A_MERGE_RUN,A_SPLIT_RUN,A_EXCLUDE_RUN,A_DIAGNOSTICS,A_ARCHIVES,A_ARCHIVE_PERIOD,A_EXPORT_RECORDS,A_CURRENT_RECORDS,A_CANCEL_VERIFY,A_EDIT_USER,A_EMPLOYEE_ID,A_TEAM,A_REMOVE_PHOTO,A_DELETE_USER};
+      A_AUTO_QR,A_CAPACITY,A_LANGUAGE,A_TIMEOUT,A_BUSINESS_DAY,A_CLOSE_DAY,A_CONFIRM_RUN,A_MERGE_RUN,A_SPLIT_RUN,A_EXCLUDE_RUN,A_DIAGNOSTICS,A_ARCHIVES,A_ARCHIVE_PERIOD,A_EXPORT_RECORDS,A_CURRENT_RECORDS,A_CANCEL_VERIFY,A_EDIT_USER,A_EMPLOYEE_ID,A_TEAM,A_REMOVE_PHOTO,A_DELETE_USER,A_POPUP_TOGGLE,A_QUICK_ORDER_BASE=900};
 static const char *const tabs[]={UI_N_("Overview"),UI_N_("Count"),UI_N_("Records"),UI_N_("Output"),UI_N_("Preferences"),UI_N_("Help")};
 static const char *const tab_icons[]={MICON("overview",19),MICON("layers",19),MICON("history",19),MICON("output",19),MICON("settings",19),MICON("help",19)};
 static const uint32_t accents[]={BLUE,ORANGE,TEAL,BLUE,PURPLE,TEAL};
@@ -73,8 +75,8 @@ static struct {
     uint8_t batch_apply_target;
     uint32_t selected_group,selected_run,selected_close,record_day,qr_generation;
     unsigned reject_code;
-    lv_obj_t *quick_switch[3],*quick_state[3];
-    bool quick_value[3];
+    lv_quick_controls_t quick_controls;
+    uint8_t quick_pick;
     uint8_t batches[WORKSPACE_BATCHES],batch_count;
     uint8_t batch_active_original,batch_active_edited;
     uint32_t owner,editing_user,deleting_user;
@@ -369,23 +371,18 @@ static void close_quick(lv_event_t *e)
 {if(lv_event_get_target(e)==menu.quick){lv_obj_del(menu.quick);menu.quick=NULL;}}
 static void refresh_quick(void)
 {
-    bool values[]={machine_state_buzzer_enabled(),gesture_service_enabled(),workspace_service_quick_enabled()};
-    for(unsigned i=0;i<3;i++){
-        if(!menu.quick_switch[i]||menu.quick_value[i]==values[i])continue;
-        menu.quick_value[i]=values[i];lv_obj_t *v=menu.quick_switch[i];lv_obj_t *knob=lv_obj_get_child(v,0);
-        lv_anim_del(v,NULL);lv_anim_del(knob,NULL);
-        if(values[i])lv_obj_add_state(v,LV_STATE_CHECKED);else lv_obj_clear_state(v,LV_STATE_CHECKED);
-        lv_obj_set_style_bg_color(v,lv_color_hex(values[i]?BLUE:0xB8C7D0),0);lv_obj_set_x(knob,values[i]?25:3);
-        lv_label_set_text(menu.quick_state[i],values[i]?ui_tr("On"):ui_tr("Off"));lv_obj_set_style_text_color(menu.quick_state[i],lv_color_hex(values[i]?BLUE:MUTED),0);
-    }
+    if(menu.quick)lv_quick_controls_refresh(&menu.quick_controls,lv_quick_controls_current_state());
 }
-static void quick_row(lv_obj_t *p,int y,const char *name,unsigned i,unsigned id,bool on)
+static void quick_tile(lv_event_t *event)
 {
-    text(p,0,y+9,241,name);
-    menu.quick_state[i]=label(p,249,y+12,35,on?ui_tr("On"):ui_tr("Off"),&lv_font_instrument_sans_menumedium_14,on?BLUE:MUTED);
-    lv_obj_t *v=lv_settings_toggle(p,287,y+6,on,action,(void *)(uintptr_t)id);menu.quick_switch[i]=v;
-    lv_obj_set_width(v,52);lv_anim_del(v,NULL);lv_obj_t *knob=lv_obj_get_child(v,0);lv_anim_del(knob,NULL);
-    lv_obj_set_style_bg_color(v,lv_color_hex(on?BLUE:0xB8C7D0),0);lv_obj_set_x(knob,on?25:3);menu.quick_value[i]=on;
+    unsigned id=(uintptr_t)lv_event_get_user_data(event);
+    if(id>=QUICK_CONTROL_COUNT)return;
+    if(id==QUICK_STANDBY||id==QUICK_PURE||id==QUICK_EXPORT||id==QUICK_QR){
+        lv_obj_del(menu.quick);menu.quick=NULL;
+    }
+    if(!lv_quick_controls_execute(id))explain(UI_N_("Quick action is unavailable right now."));
+    else refresh_quick();
+    menu.dirty=true;
 }
 static void open_quick(void)
 {
@@ -393,18 +390,13 @@ static void open_quick(void)
     clear_notice();
     menu.quick=box(menu.root,0,0,1280,400,INK,0);lv_obj_set_style_bg_opa(menu.quick,LV_OPA_30,0);lv_obj_add_flag(menu.quick,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(menu.quick,close_quick,LV_EVENT_CLICKED,NULL);
-    lv_obj_t *sheet=box(menu.quick,0,0,1280,255,0xFFFFFF,20);lv_obj_add_flag(sheet,LV_OBJ_FLAG_CLICKABLE);
-    icon(sheet,MICON("quick",25),28,25,PURPLE);label(sheet,65,22,900,ui_tr("Quick controls"),&lv_font_instrument_sans_semibold_26,INK);
-    lv_obj_t *close=button(sheet,1144,20,108,36,ui_tr("Close"),A_QUICK_CLOSE,false);lv_nav_button_mark_back(close);
-    const char *titles[]={ui_tr("Sound"),ui_tr("Interaction"),ui_tr("Taking a break")},*icons[]={MICON("volume",22),MICON("hand",22),MICON("power",22)};
-    for(unsigned i=0;i<3;i++){
-        int x=28+i*416;lv_obj_t *col=box(sheet,x,80,392,132,0xFFFFFF,0);
-        icon(col,icons[i],0,0,PURPLE);label(col,30,1,352,titles[i],&lv_font_instrument_sans_semibold_18,INK);
-        if(!i)quick_row(col,39,ui_tr("Machine sound"),0,813,machine_state_buzzer_enabled());
-        else if(i==1){quick_row(col,39,ui_tr("Side gestures"),1,A_GESTURES,gesture_service_enabled());quick_row(col,87,ui_tr("Pull-down"),2,A_QUICK_TOGGLE,workspace_service_quick_enabled());}
-        else{button(col,0,40,392,44,ui_tr("Standby"),A_STANDBY,false);small(col,0,98,392,ui_tr("Return to exactly where you left off."));}
-    }
-    small(sheet,28,227,1224,ui_tr("Quick controls are always reachable from Menu. Screen brightness stays in Display & sound."));
+    lv_obj_t *sheet=box(menu.quick,0,0,1280,280,0xF6F8FA,20);lv_obj_add_flag(sheet,LV_OBJ_FLAG_CLICKABLE);
+    label(sheet,24,18,700,ui_tr("Quick controls"),&lv_font_instrument_sans_semibold_28,INK);
+    small(sheet,24,53,800,ui_tr("Your shortcuts, in your order."));
+    lv_quick_controls_create(&menu.quick_controls,sheet,24,80,quick_tile);
+    lv_obj_t *close=button(sheet,1090,18,132,44,ui_tr("Close"),A_QUICK_CLOSE,false);lv_nav_button_mark_back(close);
+    box(sheet,598,263,52,4,0xBBC9D3,2);
+    refresh_quick();
 }
 
  #include "menu_record_actions.inc"
@@ -419,6 +411,21 @@ static void action(lv_event_t *event)
     }
     if(id==A_SETTINGS){ui_page_05_set_password_open();return;}if(id==A_QUICK){open_quick();return;}
     if(id==A_QUICK_CLOSE){if(menu.quick)lv_obj_del(menu.quick);menu.quick=NULL;return;}
+    if(id>=A_QUICK_ORDER_BASE&&id<A_QUICK_ORDER_BASE+QUICK_CONTROL_COUNT){
+        uint8_t position=id-A_QUICK_ORDER_BASE;
+        if(menu.quick_pick==255)menu.quick_pick=position;
+        else if(menu.quick_pick==position)menu.quick_pick=255;
+        else {
+            if(!ui_state_quick_order_swap(menu.quick_pick,position))
+                notify(UI_NOTICE_ERROR,UI_N_("Could not save shortcut order."));
+            menu.quick_pick=255;
+        }
+        menu.dirty=true;return;
+    }
+    if(id==A_POPUP_TOGGLE){
+        fault_popup_set_auto_enabled(!fault_popup_get_auto_enabled());
+        ui_state_save_popup_auto_state();menu.dirty=true;return;
+    }
     if(id==A_USB_CLOSE){if(menu.photo_sheet)lv_obj_del(menu.photo_sheet);menu.photo_sheet=NULL;menu.scan_wait=menu.photo_wait=menu.photo_ready=false;return;}
     if(id==A_HISTORY){ui_manager_push_page(UI_PAGE_HISTORY);return;}if(id==A_PRINT_SETUP){ui_manager_push_page(UI_PAGE_PRINT_SETTING);return;}
     if(id==A_PRINT){if(app_command_runtime_count_start_busy()||print_config_pending()){explain(UI_N_("Finish counting and receipt settings before printing."));return;}page_01_print_btn_event_cb(event);return;}
@@ -522,6 +529,7 @@ static void timer(lv_timer_t *t)
 void ui_page_03_menu_create(lv_obj_t *parent)
 {
     if(menu.root)return;
+    menu.quick_pick=255;
     menu.root=box(parent?parent:lv_scr_act(),0,0,1280,400,0xFFFFFF,0);
     lv_obj_t *back=lv_settings_back(menu.root,24,14,44,44,action,(void *)A_BACK);
     header_surface(back);lv_damped_button_set_exact_palette(back,lv_color_hex(PANEL),lv_color_hex(LINE));header_content(back,"",MICON("back",22),INK);

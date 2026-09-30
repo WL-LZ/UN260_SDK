@@ -1901,18 +1901,8 @@ void smart_island_create(lv_obj_t *parent)
     lv_obj_set_style_text_color(g_si_ctx.objects.quality_percent, lv_color_hex(SMART_ISLAND_RESULT_OK_COLOR), 0);
     lv_obj_add_flag(g_si_ctx.objects.quality_percent, LV_OBJ_FLAG_HIDDEN);
 
-    g_si_ctx.objects.page_action = lv_obj_create(g_si_ctx.objects.page_root);
-    lv_obj_remove_style_all(g_si_ctx.objects.page_action);
-    lv_obj_set_size(g_si_ctx.objects.page_action, SMART_ISLAND_W, SMART_ISLAND_ACTION_EXPAND_H);
-    smart_island_enable_gesture_on_obj(g_si_ctx.objects.page_action);
-    lv_obj_add_flag(g_si_ctx.objects.page_action, LV_OBJ_FLAG_HIDDEN);
-
-    g_si_ctx.objects.page_indicator = lv_capsule_pagination_create(g_si_ctx.objects.root);
-    if (g_si_ctx.objects.page_indicator && lv_obj_is_valid(g_si_ctx.objects.page_indicator)) {
-        lv_obj_align(g_si_ctx.objects.page_indicator, LV_ALIGN_BOTTOM_MID, 0, SMART_ISLAND_PAGE_INDICATOR_Y);
-        lv_obj_add_flag(g_si_ctx.objects.page_indicator, LV_OBJ_FLAG_HIDDEN);
-    }
-    smart_island_action_btn_create();
+    /* Quick Controls now owns all actions. The island creates only its
+     * information page, so no hidden action buttons can receive touches. */
 
     g_si_ctx.view.scene = SMART_ISLAND_SCENE_IDLE;
     g_si_ctx.view.visual = SMART_ISLAND_VISUAL_COMPACT;

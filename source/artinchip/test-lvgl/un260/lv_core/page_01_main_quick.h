@@ -1,10 +1,11 @@
 #ifndef PAGE_01_MAIN_QUICK_H
 #define PAGE_01_MAIN_QUICK_H
 #include "lvgl/lvgl.h"
-/* Main-owned transient overlay. No counting data, page stack or protocol
- * parsing belongs to this view. Host services remain authoritative. */
-void page_01_main_quick_attach(lv_obj_t *main);
+/* Main and Pure share one transient drawer. The visible page owns its pointer
+ * policy; the drawer keeps no counting data or page-stack state. */
+void page_01_main_quick_attach(lv_obj_t *host, uint32_t page);
 void page_01_main_quick_detach(void);
+void page_01_main_quick_detach_host(lv_obj_t *host);
 void page_01_main_quick_suspend(void);
 void page_01_main_quick_schedule_preload(void);
 void page_01_main_quick_refresh_data(uint32_t topics);

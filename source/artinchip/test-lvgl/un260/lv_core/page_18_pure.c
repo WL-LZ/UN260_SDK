@@ -1,6 +1,8 @@
 #include "page_18_pure.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/lv_page_event.h"
+#include "un260/lv_core/page_01_main_quick.h"
+#include "un260/gesture/gesture_service.h"
 #include "un260/lv_components/smart_island.h"
 #include "un260/lv_components/lv_damped_button.h"
 #include "un260/counting/counting_data_store.h"
@@ -357,6 +359,8 @@ void ui_page_18_pure_create(lv_obj_t* parent)
     }
 
     smart_island_create(g_pure_page.page);
+    page_01_main_quick_attach(g_pure_page.page,UI_PAGE_PURE);
+    gesture_service_set_pointer_policy(UI_PAGE_PURE,page_01_main_quick_pointer);
 }
 
 void ui_page_18_pure_request_exit(void)
@@ -385,6 +389,8 @@ void ui_page_18_pure_suspend(void)
     /* PURE and MAIN share one retained smart-island instance.  Keep the
      * component alive while this page is hidden so the next page only needs
      * to reparent it instead of rebuilding its complete object tree. */
+    gesture_service_clear_pointer_policy(UI_PAGE_PURE);
+    page_01_main_quick_suspend();
     smart_island_set_suspended(true);
     if (g_pure_page.refresh_timer != NULL) {
         lv_timer_pause(g_pure_page.refresh_timer);
@@ -407,6 +413,8 @@ bool ui_page_18_pure_resume(void)
      * synchronous resume. */
     smart_island_create(g_pure_page.page);
     smart_island_set_suspended(false);
+    page_01_main_quick_attach(g_pure_page.page,UI_PAGE_PURE);
+    gesture_service_set_pointer_policy(UI_PAGE_PURE,page_01_main_quick_pointer);
 
     language = ui_lang_get();
     if (g_pure_page.language != language) {
@@ -423,6 +431,8 @@ bool ui_page_18_pure_resume(void)
 
 void ui_page_18_pure_destroy(void)
 {
+    gesture_service_clear_pointer_policy(UI_PAGE_PURE);
+    page_01_main_quick_detach_host(g_pure_page.page);
     if (g_pure_page.refresh_timer) {
         lv_timer_del(g_pure_page.refresh_timer);
         g_pure_page.refresh_timer = NULL;

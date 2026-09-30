@@ -62,6 +62,7 @@ void smart_island_register_fault_phase_cb(smart_island_fault_phase_cb_t callback
 void smart_island_notify_fault(const char *text, machine_fault_key_t key);
 void smart_island_notify_no_note(machine_fault_key_t key);
 void smart_island_notify_preset_full(machine_fault_key_t key);
+void smart_island_show_qr_popup(void);
 void smart_island_faults_changed(void);
 /* During a counting input gate, only the visible fault island accepts a tap. */
 bool smart_island_fault_hit_test(const lv_point_t *point);

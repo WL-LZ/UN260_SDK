@@ -73,6 +73,22 @@ static ui_history_store_t history_fixture;
 static unsigned revision,nav_count,printed;
 static ui_page_t current=UI_PAGE_MENU;
 static bool busy,gestures=true,layout=true;
+static bool popup_auto=true,pure_count,touch_guide=true;
+static uint8_t quick_order[QUICK_CONTROL_COUNT]={0,1,2,3,4,5,6,7};
+const lv_font_t *ui_message_font(const lv_font_t *font){return font;}
+void ui_state_quick_order_get(uint8_t order[8]){memcpy(order,quick_order,8);}
+bool ui_state_quick_order_swap(uint8_t a,uint8_t b){uint8_t value=quick_order[a];quick_order[a]=quick_order[b];quick_order[b]=value;return true;}
+bool fault_popup_get_auto_enabled(void){return popup_auto;}
+void fault_popup_set_auto_enabled(bool value){popup_auto=value;}
+void ui_state_save_popup_auto_state(void){}
+bool smart_island_pure_count_is_enabled(void){return pure_count;}
+void smart_island_set_pure_count_enabled(bool value){pure_count=value;}
+void ui_state_save_pure_count_state(void){}
+bool touch_feedback_enabled(void){return touch_guide;}
+bool touch_feedback_set_enabled(bool value){touch_guide=value;return true;}
+bool ui_export_data_request(void){return true;}
+void smart_island_show_qr_popup(void){}
+void ui_page_18_pure_request_exit(void){}
 static bool auto_qr_blocked,auto_qr_waiting;
 bool ui_manager_is_transitioning(void){return false;}
 bool app_command_runtime_result_pending(void){return auto_qr_waiting;}
@@ -322,11 +338,12 @@ int main(void)
     ui_page_03_menu_refresh_data(0);tick(100);
     assert(model.user_count==2&&menu.selected_user==0);
     assert(lv_obj_has_state(find(menu.body,"Delete"),LV_STATE_DISABLED));
-    click("Interaction");raster("menu-interaction");click("Try Quick controls");assert(menu.quick);assert(!test_notice_visible);raster("menu-quick");
-    lv_obj_t *quick_before=menu.quick;lv_obj_t *switch_before=menu.quick_switch[1];
-    gestures=!gestures;tick(120);assert(menu.quick==quick_before&&menu.quick_switch[1]==switch_before);
-    assert(lv_obj_has_state(switch_before,LV_STATE_CHECKED)==gestures);
-    assert(lv_obj_get_x(lv_obj_get_child(switch_before,0))==(gestures?25:3));
+    click("Interaction");raster("menu-interaction");
+    click("01  Layout");click("08  Standby");assert(quick_order[0]==QUICK_STANDBY&&quick_order[7]==QUICK_LAYOUT);
+    click("Quick");assert(menu.quick);assert(!test_notice_visible);raster("menu-quick");
+    lv_obj_t *quick_before=menu.quick,*gesture_state=menu.quick_controls.states[QUICK_GESTURES];
+    gestures=!gestures;tick(120);assert(menu.quick==quick_before&&menu.quick_controls.states[QUICK_GESTURES]==gesture_state);
+    assert(!strcmp(lv_label_get_text(gesture_state),gestures?"On":"Off"));
     point=(lv_point_t){40,365};down=LV_INDEV_STATE_PRESSED;tick(40);down=LV_INDEV_STATE_RELEASED;tick(120);assert(!menu.quick);
     click("Display & sound");raster("menu-display-sound");
     click("Help");raster("menu-help-empty");click("All codes");raster("menu-help");click("Care");raster("menu-care");click("Device");raster("menu-device");ui_page_03_menu_suspend();assert(!page_03_menu_is_visible());assert(ui_page_03_menu_resume());assert(menu.tab==5);

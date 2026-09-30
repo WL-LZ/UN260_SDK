@@ -44,7 +44,6 @@ static void smart_island_expand_if_needed(bool anim_en);
 static void smart_island_swipe_cb(lv_event_t *event);
 static void smart_island_action_btn_cb(lv_event_t *event);
 static void smart_island_show_qr_error_toast(const char *text);
-static void smart_island_show_qr_popup(void);
 static void smart_island_page_slide_anim(smart_island_page_t old_page,
                                          smart_island_page_t new_page);
 static void smart_island_page_apply_now(smart_island_page_t page);
@@ -244,6 +243,8 @@ static void smart_island_swipe_cb(lv_event_t *e)
         g_si_ctx.view.swipe.swiped = false;
     }
 
+    if (g_si_ctx.objects.page_action == NULL) return;
+
     if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_WARNING ||
         g_si_ctx.view.visual != SMART_ISLAND_VISUAL_EXPANDED ||
         g_si_ctx.view.anim_running) {
@@ -423,7 +424,7 @@ static void smart_island_show_qr_error_toast(const char *text)
         smart_island_text_or_default(text, UI_TEXT_WIDGET_QR_POPUP_NO_DATA));
 }
 
-static void smart_island_show_qr_popup(void)
+void smart_island_show_qr_popup(void)
 {
     char qr_text[3072];
     if (currency_state_multi_selected() ||
@@ -882,6 +883,7 @@ void smart_island_action_btn_create(void)
 void smart_island_set_page(smart_island_page_t page, bool anim_en)
 {
     if ((unsigned int)page > (unsigned int)SMART_ISLAND_PAGE_ACTION) return;
+    page = SMART_ISLAND_PAGE_INFO;
 
     if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_RESULT) {
         g_si_ctx.view.page = SMART_ISLAND_PAGE_INFO;

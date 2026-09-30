@@ -21,12 +21,13 @@
 #include "un260/protocol/protocol_send.h"
 #include "un260/storage/standby_store.h"
 #include "un260/font/main_fonts.h"
+#include "un260/font/ui_message_font.h"
 #include <stdlib.h>
 #include <string.h>
 
 enum { SHEET_W=1280, SHEET_H=280, SHEET_Y=0, CLOSED_Y=-280 };
 typedef enum {
-    QC_POST_NONE, QC_POST_STANDBY, QC_POST_STANDBY_SETTINGS, QC_POST_GESTURE_GUIDE
+    QC_POST_NONE, QC_POST_STANDBY, QC_POST_PURE, QC_POST_GESTURE_GUIDE
 } qc_post_action_t;
 static struct {
     lv_obj_t *main,*root,*sheet,*grab,*message;
@@ -40,6 +41,7 @@ static struct {
     uint32_t tick;
     int y,origin_y;
     language_t language;
+    uint32_t page;
 } quick;
 
 /* Share cancellation across close/fault/suspend/teardown. Without the fade,
@@ -52,7 +54,7 @@ static void qc_text(lv_obj_t *o,const char *value)
 static bool qc_safe(void)
 {
     return quick.main && lv_obj_is_visible(quick.main) &&
-        ui_manager_get_current_page()==UI_PAGE_MAIN && !ui_manager_is_transitioning() &&
+        (uint32_t)ui_manager_get_current_page()==quick.page && !ui_manager_is_transitioning() &&
         !smart_island_is_expanded() &&
         !fault_popup_is_showing();
 }
@@ -84,7 +86,7 @@ static lv_obj_t *qc_label(lv_obj_t *p,int x,int y,int w,const char *value,const 
 {
     lv_obj_t *o=lv_label_create(p);lv_obj_set_pos(o,x,y);lv_obj_set_width(o,w);
     lv_label_set_long_mode(o,LV_LABEL_LONG_CLIP);lv_label_set_text(o,value);
-    lv_obj_set_style_text_font(o,font,0);lv_obj_set_style_text_color(o,lv_color_hex(color),0);
+    lv_obj_set_style_text_font(o,ui_message_font(font),0);lv_obj_set_style_text_color(o,lv_color_hex(color),0);
     return o;
 }
 static void qc_icon(lv_obj_t *p,int x,int y,const char *path)
@@ -92,7 +94,7 @@ static void qc_icon(lv_obj_t *p,int x,int y,const char *path)
 static void qc_refresh(void)
 {
     if(!quick.sheet)return;
-    lv_quick_controls_state_t state={.layout=page_01_main_layout_is_enabled(),.gestures=gesture_service_enabled(),.versions={device_info_is_valid()?device_info_main_app():NULL,device_info_is_valid()?device_info_image_app():NULL,device_info_display_app()}};
+    lv_quick_controls_state_t state=lv_quick_controls_current_state();
     if(lv_quick_controls_refresh(&quick.controls,state))quick.dirty=true;
 }
 static void qc_action(lv_event_t *event)
@@ -100,24 +102,19 @@ static void qc_action(lv_event_t *event)
     if(quick.moving || !quick.active)return;
     unsigned id=(uintptr_t)lv_event_get_user_data(event);
     if(!qc_safe()) { qc_close_now();return; }
-    if((id == 2 || id == 4) && !qc_operation_safe()) {
+    if((id == QUICK_STANDBY || id == QUICK_PURE) && !qc_operation_safe()) {
         qc_text(quick.message,qc_tr(UI_TEXT_QUICK_STANDBY_BUSY));return;
     }
-    if(id<2) {
-        if(id==0)page_01_main_layout_set_enabled(!page_01_main_layout_is_enabled());
-        else {
-            bool enable=!gesture_service_enabled();
-            if(!gesture_service_set_enabled(enable)) {
-                qc_text(quick.message,qc_tr(UI_TEXT_QUICK_SAVE_FAILED));qc_refresh();return;
-            }
-            if(enable)quick.after_close=QC_POST_GESTURE_GUIDE;
-        }
-        qc_text(quick.message,"");qc_refresh();quick.dirty=true;
-        if(quick.after_close==QC_POST_GESTURE_GUIDE)qc_settle(false);
-    } else if(id==2 || id==4) {
-        if(standby_store_busy()) { qc_text(quick.message,qc_tr(UI_TEXT_QUICK_STANDBY_BUSY));return; }
-        quick.after_close=id==2?QC_POST_STANDBY:QC_POST_STANDBY_SETTINGS;
-        qc_settle(false);
+    if(id==QUICK_STANDBY || id==QUICK_PURE) {
+        quick.after_close=id==QUICK_STANDBY?QC_POST_STANDBY:QC_POST_PURE;
+        qc_settle(false);return;
+    }
+    if(id<QUICK_CONTROL_COUNT) {
+        bool guide=id==QUICK_GESTURES && !gesture_service_enabled();
+        if(!lv_quick_controls_execute(id))qc_text(quick.message,qc_tr(UI_TEXT_QUICK_SAVE_FAILED));
+        else qc_text(quick.message,"");
+        qc_refresh();quick.dirty=true;
+        if(guide && gesture_service_enabled()) {quick.after_close=QC_POST_GESTURE_GUIDE;qc_settle(false);}
     } else qc_settle(false);
 }
 static void qc_build(void)
@@ -146,8 +143,8 @@ static void qc_build(void)
     lv_obj_set_style_bg_color(close,lv_color_hex(0xDDE6ED),LV_STATE_PRESSED);
     qc_icon(close,15,13,LVGL_DIR "quick_icons/up.png");
     qc_label(close,42,12,82,qc_tr(UI_TEXT_QUICK_CLOSE),&lv_font_instrument_sans_medium_16,0x1D2B34);
-    lv_obj_add_event_cb(close,qc_action,LV_EVENT_CLICKED,(void *)3);
-    quick.message=qc_label(quick.sheet,24,235,1170,"",&lv_font_instrument_sans_medium_14,0x946215);
+    lv_obj_add_event_cb(close,qc_action,LV_EVENT_CLICKED,(void *)255);
+    quick.message=qc_label(quick.sheet,24,244,1170,"",&lv_font_instrument_sans_medium_14,0x946215);
     lv_obj_t *grip=qc_box(quick.sheet,598,263,52,4,0xBBC9D3,2);lv_obj_clear_flag(grip,LV_OBJ_FLAG_CLICKABLE);
     /* Inner outline belongs to the captured sheet, never to the outside shield. */
     lv_obj_t *outline=qc_box(quick.sheet,-16,0,SHEET_W,SHEET_H,0xF6F8FA,22);
@@ -167,6 +164,11 @@ static void qc_position(int y)
 static bool qc_prepare(void)
 {
     qc_build();qc_refresh();
+    if(!quick.active && !quick.moving && quick.controls.viewport &&
+       lv_obj_get_scroll_x(quick.controls.viewport)!=0){
+        lv_obj_scroll_to_x(quick.controls.viewport,0,LV_ANIM_OFF);
+        quick.dirty=true;
+    }
     if(quick.prepared && !quick.dirty)return true;
     bool hidden=lv_obj_has_flag(quick.root,LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(quick.root,LV_OBJ_FLAG_HIDDEN);
@@ -207,8 +209,8 @@ static void qc_animation_done(lv_anim_t *unused)
          * Reuse existing workflows only after its overlay has been removed. */
         if(action==QC_POST_GESTURE_GUIDE) {
             if(gesture_service_enabled() && !gesture_guide_is_open())gesture_guide_show();
-        } else if((action==QC_POST_STANDBY || action==QC_POST_STANDBY_SETTINGS) && !standby_store_busy()) {
-            ui_manager_push_page(action==QC_POST_STANDBY?UI_PAGE_STANDBY:UI_PAGE_STANDBY_SETTING);
+        } else if(action==QC_POST_STANDBY || action==QC_POST_PURE) {
+            lv_quick_controls_execute(action==QC_POST_STANDBY?QUICK_STANDBY:QUICK_PURE);
         }
     }
 }
@@ -244,10 +246,19 @@ static void qc_timer_cb(lv_timer_t *timer)
         if(qc_safe() && !page_01_main_layout_is_editing())qc_prepare();
     }
 }
-void page_01_main_quick_attach(lv_obj_t *main)
+void page_01_main_quick_attach(lv_obj_t *host, uint32_t page)
 {
-    page_01_main_quick_detach();quick.main=main;quick.y=CLOSED_Y;
-    quick.grab=qc_box(main,610,2,60,4,0x9EAFBC,2);lv_obj_clear_flag(quick.grab,LV_OBJ_FLAG_CLICKABLE);
+    if(!host)return;
+    if(quick.main==host && quick.page==page)return;
+    if(quick.main) {
+        page_01_main_quick_suspend();
+        if(quick.root)lv_obj_set_parent(quick.root,host);
+        if(quick.grab)lv_obj_set_parent(quick.grab,host);
+        quick.main=host;quick.page=page;quick.dirty=true;
+        return;
+    }
+    quick.main=host;quick.page=page;quick.y=CLOSED_Y;
+    quick.grab=qc_box(host,610,2,60,4,0x9EAFBC,2);lv_obj_clear_flag(quick.grab,LV_OBJ_FLAG_CLICKABLE);
     quick.timer=lv_timer_create(qc_timer_cb,180,NULL);lv_timer_pause(quick.timer);
 }
 void page_01_main_quick_schedule_preload(void)
@@ -275,6 +286,8 @@ void page_01_main_quick_detach(void)
     if(quick.grab)lv_obj_del(quick.grab);
     memset(&quick,0,sizeof(quick));
 }
+void page_01_main_quick_detach_host(lv_obj_t *host)
+{ if(quick.main==host)page_01_main_quick_detach(); }
 bool page_01_main_quick_request_back(void)
 {
     if(!quick.active && !quick.moving)return false;
@@ -288,7 +301,7 @@ bool page_01_main_quick_pointer(lv_indev_t *indev,lv_event_code_t event,const lv
     quick.down=!released;if(point)quick.point=*point;
     if(quick.drain) { if(released)quick.drain=false;return true; }
     bool visible=quick.active || quick.moving;
-    if(!visible && !workspace_service_quick_enabled()) {
+    if(!visible && !workspace_service_quick_enabled() && quick.page!=UI_PAGE_PURE) {
         quick.candidate=false;return false;
     }
     if(!qc_safe() || (point && qc_foreign_layer(point))) {
