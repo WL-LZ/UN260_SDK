@@ -89,7 +89,7 @@ bool lv_quick_controls_create(lv_quick_controls_t *v,lv_obj_t *parent,int x,int 
         (QUICK_CONTROL_COUNT+QUICK_CONTROLS_PER_PAGE-1)/QUICK_CONTROLS_PER_PAGE);
     if(!v->pager)return false;
     v->viewport=lv_content_pager_get_viewport(v->pager);
-    lv_obj_clear_flag(v->viewport,LV_OBJ_FLAG_SCROLL_ELASTIC|LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_content_pager_set_circular(v->pager,true);
     lv_obj_add_flag(v->pager,LV_OBJ_FLAG_OVERFLOW_VISIBLE);
     lv_content_pager_set_indicator_position(v->pager,205,214);
     lv_obj_add_event_cb(v->viewport,cb,LV_EVENT_VALUE_CHANGED,(void *)QUICK_REORDER);
@@ -139,7 +139,7 @@ bool lv_quick_controls_create(lv_quick_controls_t *v,lv_obj_t *parent,int x,int 
     return true;
 }
 void lv_quick_controls_show_versions(lv_quick_controls_t *v,bool show)
-{ visible(v->version_panel,show);if(show)lv_obj_move_foreground(v->version_panel); }
+{ if(show)lv_quick_controls_finish(v);visible(v->version_panel,show);if(show)lv_obj_move_foreground(v->version_panel); }
 void lv_quick_controls_set_editing(lv_quick_controls_t *v,bool editing,int selected)
 {
     v->editing=editing;v->selected=selected;
@@ -228,12 +228,15 @@ static void release_pressed(lv_quick_controls_t *v)
 }
 uint8_t lv_quick_controls_page(const lv_quick_controls_t *v)
 {return v->pager?lv_content_pager_get_active(v->pager):0;}
+bool lv_quick_controls_finish(lv_quick_controls_t *v)
+{return v->pager && lv_content_pager_finish(v->pager);}
 bool lv_quick_controls_reset(lv_quick_controls_t *v)
 {
     if(!v->pager)return false;
-    bool changed=v->pointer_down || lv_quick_controls_page(v)!=0 || lv_obj_get_scroll_x(v->viewport)!=0;
+    bool changed=v->pointer_down || lv_quick_controls_page(v)!=0 || lv_content_pager_is_moving(v->pager);
     if(v->pointer_down)release_pressed(v);
-    v->pointer_down=v->pointer_swiping=v->pointer_drag=v->pointer_moved=v->pointer_vertical=false;
+    v->pointer_down=v->pointer_swiping=v->pointer_drag=v->pointer_moved=v->pointer_vertical=v->pointer_cancelled=false;
+    v->pointer_interrupted=false;
     lv_content_pager_set_active(v->pager,0,false);
     return changed;
 }
@@ -242,7 +245,8 @@ bool lv_quick_controls_take_vertical(lv_quick_controls_t *v,lv_point_t *start,ui
     if(!v->pointer_down || !v->pointer_vertical)return false;
     if(start)*start=v->pointer_start;
     if(tick)*tick=v->pointer_tick;
-    release_pressed(v);v->pointer_down=v->pointer_vertical=false;
+    lv_quick_controls_finish(v);
+    release_pressed(v);v->pointer_down=v->pointer_vertical=v->pointer_interrupted=false;
     return true;
 }
 bool lv_quick_controls_pointer(lv_quick_controls_t *v,lv_event_code_t event,const lv_point_t *point,uint8_t count)
@@ -252,44 +256,51 @@ bool lv_quick_controls_pointer(lv_quick_controls_t *v,lv_event_code_t event,cons
     if(!v->pointer_down){
         if(released || count!=1 || event!=LV_EVENT_PRESSED || !contains(v->viewport,point) ||
            !lv_obj_has_flag(v->version_panel,LV_OBJ_FLAG_HIDDEN))return false;
-        v->pointer_down=true;v->pointer_swiping=v->pointer_drag=v->pointer_moved=v->pointer_vertical=false;
-        v->pointer_start=*point;v->pointer_tick=lv_tick_get();v->pointer_page=lv_quick_controls_page(v);
-        v->pointer_tile=tile_at(v,point);v->pointer_selected=v->selected;
+        bool moving=lv_content_pager_is_moving(v->pager);
+        v->pointer_down=true;v->pointer_drag=v->pointer_vertical=v->pointer_cancelled=false;
+        v->pointer_swiping=false;v->pointer_moved=v->pointer_interrupted=moving;
+        v->pointer_start=*point;v->pointer_tick=lv_tick_get();
+        v->pointer_displacement=0;
+        v->pointer_tile=moving?-1:tile_at(v,point);v->pointer_selected=v->selected;
+        lv_content_pager_drag_begin(v->pager);
         if(!v->editing && v->pointer_tile>=0)lv_obj_add_state(v->tiles[v->pointer_tile],LV_STATE_PRESSED);
         return true;
     }
     int dx=point->x-v->pointer_start.x,dy=point->y-v->pointer_start.y;
+    if(v->pointer_cancelled){if(released)v->pointer_down=false;return true;}
     if(event==LV_EVENT_PRESS_LOST || (!released && count!=1)){
         release_pressed(v);v->pointer_moved=true;v->pointer_swiping=v->pointer_drag=false;
-        lv_content_pager_set_active(v->pager,v->pointer_page,false);
+        lv_content_pager_drag_end(v->pager,true);v->pointer_cancelled=true;
+        v->pointer_interrupted=false;
         if(event==LV_EVENT_PRESS_LOST)v->pointer_down=false;
         return true;
     }
     if(abs(dx)>8 || abs(dy)>8)v->pointer_moved=true;
-    if(!released && !v->pointer_swiping && !v->pointer_drag && v->pointer_moved){
+    if(!v->pointer_swiping && !v->pointer_drag && v->pointer_moved){
         /* Holding first deliberately selects a card drag. Ordinary horizontal
          * movement always pages, including while arranging shortcuts. */
-        if(v->editing && v->pointer_tile>=0 && lv_tick_elaps(v->pointer_tick)>=350){
+        if(!released && v->editing && v->pointer_tile>=0 && lv_tick_elaps(v->pointer_tick)>=350){
+            lv_quick_controls_finish(v);
             v->pointer_drag=true;v->pointer_vertical=false;lv_quick_controls_set_editing(v,true,v->pointer_tile);
-        } else if(abs(dx)>12 && abs(dx)>abs(dy))v->pointer_swiping=true;
-        else if(abs(dy)>=10 && abs(dy)>abs(dx))v->pointer_vertical=true;
+        } else if(!v->pointer_vertical && abs(dx)>12 && abs(dx)>abs(dy)){
+            v->pointer_swiping=true;
+            v->pointer_interrupted=false;
+        }
+        else if(!released && abs(dy)>=10 && abs(dy)>abs(dx))v->pointer_vertical=true;
     }
     if(v->pointer_moved)release_pressed(v);
-    if(v->pointer_swiping && !released){
-        int x=v->pointer_page*1230-dx;
-        int maximum=(lv_content_pager_get_count(v->pager)-1)*1230;
-        if(x<0)x=0;
-        if(x>maximum)x=maximum;
-        lv_obj_scroll_to_x(v->viewport,x,LV_ANIM_OFF);
+    if(!released && !v->pointer_swiping && !v->pointer_drag && !v->pointer_vertical)
+        lv_content_pager_drag_update(v->pager,0);
+    if(v->pointer_swiping && (!released || dx!=v->pointer_displacement)){
+        lv_content_pager_drag_update(v->pager,dx);
+        v->pointer_displacement=dx;
     }
     if(!released)return true;
+    if(!v->pointer_swiping && !v->pointer_interrupted)lv_quick_controls_finish(v);
     release_pressed(v);v->pointer_down=false;
-    if(v->pointer_swiping){
-        int page=v->pointer_page;
-        if(abs(dx)>=80 || (abs(dx)>=40 && lv_tick_elaps(v->pointer_tick)<=350))page+=dx<0?1:-1;
-        if(page<0)page=0;
-        if(page>=lv_content_pager_get_count(v->pager))page=lv_content_pager_get_count(v->pager)-1;
-        v->pointer_swiping=false;lv_content_pager_set_active(v->pager,page,false);
+    if(v->pointer_swiping || v->pointer_interrupted){
+        v->pointer_swiping=v->pointer_interrupted=false;
+        lv_content_pager_drag_end(v->pager,v->pointer_vertical);
     } else if(v->pointer_drag){
         int target=tile_at(v,point);v->pointer_drag=false;
         if(target>=0 && target!=v->pointer_tile){

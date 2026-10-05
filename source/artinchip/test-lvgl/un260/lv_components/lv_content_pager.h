@@ -15,4 +15,20 @@ bool lv_content_pager_set_active(lv_obj_t *pager, uint8_t index, bool animated);
 uint8_t lv_content_pager_get_active(lv_obj_t *pager);
 uint8_t lv_content_pager_get_count(lv_obj_t *pager);
 
+/* Optional circular, externally driven paging. The default native pager is
+ * unchanged. Enabling requires at least two pages; false means invalid input.
+ * Circular active/dots commit only when settling completes or finish is used. */
+bool lv_content_pager_set_circular(lv_obj_t *pager, bool enabled);
+/* Begin preserves an interrupted transition's visible offset. Updates use the
+ * total horizontal displacement since begin, in pixels (right is positive).
+ * These three functions return whether the circular pager accepted the call. */
+bool lv_content_pager_drag_begin(lv_obj_t *pager);
+bool lv_content_pager_drag_update(lv_obj_t *pager, int32_t displacement);
+bool lv_content_pager_drag_end(lv_obj_t *pager, bool cancelled);
+/* True while circular dragging/settling or a partial offset is present. */
+bool lv_content_pager_is_moving(lv_obj_t *pager);
+/* Synchronously settle circular paging to the chosen target, or nearest page during drag.
+ * Returns whether motion/geometry changed. Use before capturing a snapshot. */
+bool lv_content_pager_finish(lv_obj_t *pager);
+
 #endif

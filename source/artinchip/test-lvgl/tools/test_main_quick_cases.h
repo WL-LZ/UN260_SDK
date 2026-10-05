@@ -8,6 +8,7 @@ lv_obj_t *__wrap_lv_content_pager_create(lv_obj_t *p,lv_coord_t x,lv_coord_t y,l
     return __real_lv_content_pager_create(p,x,y,w,h,n);
 }
 #endif
+#include "un260/lv_components/lv_content_pager.h"
 static void quick_assert_clear_backdrop(void)
 {
     assert(lv_obj_get_style_bg_opa(quick.root,0)==LV_OPA_TRANSP);
@@ -63,11 +64,80 @@ static void quick_close_test(void)
 static void quick_flip_test(bool next)
 {
     bool top_enabled=ui_notice_get_enabled(),popup_enabled=fault_popup_get_auto_enabled();
+    uint8_t target=lv_quick_controls_page(&quick.controls)^1U;
     pointer(next?1050:150,110,true);
     pointer(next?550:850,110,true);
-    pointer(next?550:850,110,false);tick(80);render();
-    assert(quick.active&&!quick.moving&&lv_quick_controls_page(&quick.controls)==(next?1:0));
+    pointer(next?550:850,110,false);
+    assert(lv_content_pager_is_moving(quick.controls.pager));
+    tick(320);render();
+    assert(quick.active&&!quick.moving&&lv_quick_controls_page(&quick.controls)==target);
     assert(ui_notice_get_enabled()==top_enabled&&fault_popup_get_auto_enabled()==popup_enabled);
+}
+static void quick_clipped_background_test(void)
+{
+    /* Partial refresh must keep the first-column fills while their rounded
+     * rectangles cross the viewport edge. Sample the clear strip above text. */
+    pointer(1100,110,true);
+    const int offsets[]={40,100,180,260,180,100,40,0};
+    for(unsigned step=0;step<sizeof(offsets)/sizeof(offsets[0]);step++){
+        pointer(1100-offsets[step],110,true);lv_obj_update_layout(lv_scr_act());lv_refr_now(NULL);
+        lv_area_t viewport;lv_obj_get_coords(quick.controls.viewport,&viewport);
+        for(unsigned row=0;row<2;row++){
+            lv_obj_t *tile=quick.controls.tiles[quick.controls.state.order[row*4]];
+            lv_area_t area;lv_obj_get_coords(tile,&area);
+            int left=area.x1+14;if(left<viewport.x1)left=viewport.x1;
+            int right=area.x2-14;if(right>viewport.x2)right=viewport.x2;
+            assert(left<=right);int x=(left+right)/2,y=area.y1+15;
+            assert(framebuffer[y*1280+x].full==lv_color_hex(0xFFFFFF).full);
+        }
+        if(step==2)write_bmp("quick-swipe-clipped-column");
+    }
+    pointer(1100,110,false);tick(320);assert(lv_quick_controls_page(&quick.controls)==0);
+}
+static void quick_circular_motion_test(void)
+{
+    quick_clipped_background_test();
+    /* Both boundary directions and repeated laps use exactly nine cards. */
+    for(unsigned lap=0;lap<3;lap++){
+        quick_flip_test(false);quick_flip_test(true);
+        quick_flip_test(true);quick_flip_test(false);
+    }
+    assert(lv_quick_controls_page(&quick.controls)==0);
+    pointer(1050,110,true);pointer(990,110,true);tick(180);
+    pointer(990,110,false);assert(lv_content_pager_is_moving(quick.controls.pager));
+    tick(320);assert(lv_quick_controls_page(&quick.controls)==0);
+    /* Re-grabbing the decelerating page keeps its position and consumes the
+     * whole contact, so it cannot accidentally activate a moving shortcut. */
+    bool top=ui_notice_get_enabled(),popup=fault_popup_get_auto_enabled();
+    pointer(1050,110,true);pointer(550,110,true);pointer(550,110,false);tick(60);
+    lv_obj_update_layout(lv_scr_act());lv_area_t before,after;
+    lv_obj_get_coords(quick.controls.tiles[QUICK_LAYOUT],&before);
+    pointer(600,110,true);lv_obj_update_layout(lv_scr_act());
+    lv_obj_get_coords(quick.controls.tiles[QUICK_LAYOUT],&after);
+    assert(before.x1==after.x1);pointer(600,110,false);tick(320);
+    assert(top==ui_notice_get_enabled()&&popup==fault_popup_get_auto_enabled());
+    lv_quick_controls_reset(&quick.controls);
+    /* A closing sheet captures a settled page and cancels hidden work. */
+    pointer(1050,110,true);pointer(550,110,true);pointer(550,110,false);tick(40);
+    assert(lv_content_pager_is_moving(quick.controls.pager));
+    quick_close_test();assert(!lv_content_pager_is_moving(quick.controls.pager));
+    quick_open_test();assert(lv_quick_controls_page(&quick.controls)==0);
+    pointer(1050,110,true);pointer(550,110,true);pointer(550,110,false);tick(40);
+    pointer(500,140,true);pointer(500,15,true);pointer(500,15,false);tick(320);
+    assert(!quick.active&&!lv_content_pager_is_moving(quick.controls.pager));
+    quick_open_test();
+    /* Even a very short contact may arrive as press/release only. */
+    lv_point_t press={1000,110},release={940,110};
+    assert(lv_quick_controls_pointer(&quick.controls,LV_EVENT_PRESSED,&press,1));
+    lv_tick_inc(20);
+    assert(lv_quick_controls_pointer(&quick.controls,LV_EVENT_RELEASED,&release,0));
+    tick(320);assert(lv_quick_controls_page(&quick.controls)==1);
+    lv_quick_controls_reset(&quick.controls);
+    pointer(1000,110,true);
+    for(unsigned sample=0;sample<13;sample++)pointer(1000,110,true);
+    pointer(940,110,true);pointer(940,110,false);tick(320);
+    assert(lv_quick_controls_page(&quick.controls)==1);
+    lv_quick_controls_reset(&quick.controls);
 }
 static void quick_test_recovery(void)
 {
@@ -273,7 +343,8 @@ static void test_main_quick(void)
     /* Every page retains the same card geometry. Closing from page two uses
      * that live page's snapshot, then reopening resets pagination to page one. */
     quick_open_test();
-    assert(lv_obj_has_flag(quick.controls.viewport,LV_OBJ_FLAG_SCROLLABLE));
+    assert(!lv_obj_has_flag(quick.controls.viewport,LV_OBJ_FLAG_SCROLLABLE));
+    quick_circular_motion_test();
     quick_flip_test(true);unsigned page_captures=host_quick_captures;
     quick_close_test();quick_open_test();
     assert(lv_quick_controls_page(&quick.controls)==0);

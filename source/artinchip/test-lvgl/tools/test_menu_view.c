@@ -1,5 +1,6 @@
 #include "test_notice_sink.h"
 #include <assert.h>
+#include "un260/lv_components/lv_content_pager.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -204,9 +205,11 @@ static void tick(unsigned ms){for(unsigned i=0;i<ms;i+=20){lv_tick_inc(20);lv_ti
 static void menu_quick_flip(bool next)
 {
     bool top=ui_notice_get_enabled(),popup=popup_auto;
+    uint8_t target=lv_quick_controls_page(&menu.quick_controls)^1U;
     point=(lv_point_t){next?1050:150,110};down=LV_INDEV_STATE_PRESSED;tick(40);
-    point=(lv_point_t){next?550:850,110};tick(40);down=LV_INDEV_STATE_RELEASED;tick(80);
-    assert(menu.quick && lv_quick_controls_page(&menu.quick_controls)==(next?1:0));
+    point=(lv_point_t){next?550:850,110};tick(40);down=LV_INDEV_STATE_RELEASED;tick(40);
+    assert(lv_content_pager_is_moving(menu.quick_controls.pager));tick(320);
+    assert(menu.quick && lv_quick_controls_page(&menu.quick_controls)==target);
     assert(ui_notice_get_enabled()==top&&popup_auto==popup&&quick_navigation_blocked);
 }
 static lv_obj_t *find(lv_obj_t *p,const char *s)
@@ -428,6 +431,10 @@ int main(void)
     point=(lv_point_t){40,365};down=LV_INDEV_STATE_PRESSED;tick(40);down=LV_INDEV_STATE_RELEASED;tick(120);assert(!menu.quick);
     assert(!quick_pointer_policy&&!quick_navigation_blocked);
     click("Quick");assert(lv_quick_controls_page(&menu.quick_controls)==0);
+    for(unsigned lap=0;lap<2;lap++){
+        menu_quick_flip(false);menu_quick_flip(true);
+        menu_quick_flip(true);menu_quick_flip(false);
+    }
     menu_quick_flip(true);ui_page_03_menu_suspend();
     assert(!menu.quick&&!quick_pointer_policy&&!quick_navigation_blocked);
     assert(ui_page_03_menu_resume());click("Quick");assert(lv_quick_controls_page(&menu.quick_controls)==0);

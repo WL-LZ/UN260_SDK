@@ -21,11 +21,11 @@ typedef struct {
     lv_obj_t *device_button,*version_panel;
     lv_quick_controls_state_t state;bool initialized,editing;
     int selected;
-    bool pointer_down,pointer_swiping,pointer_drag,pointer_moved,pointer_vertical;
+    bool pointer_down,pointer_swiping,pointer_drag,pointer_moved,pointer_vertical,pointer_cancelled;
+    bool pointer_interrupted;
     lv_point_t pointer_start;
     uint32_t pointer_tick;
-    int pointer_tile,pointer_selected,drag_source,drag_target;
-    uint8_t pointer_page;
+    int pointer_tile,pointer_selected,pointer_displacement,drag_source,drag_target;
 } lv_quick_controls_t;
 bool lv_quick_controls_create(lv_quick_controls_t *,lv_obj_t *parent,int x,int y,lv_event_cb_t);
 bool lv_quick_controls_refresh(lv_quick_controls_t *,lv_quick_controls_state_t);
@@ -41,5 +41,7 @@ bool lv_quick_controls_pointer(lv_quick_controls_t *,lv_event_code_t,const lv_po
  * Other hosts can keep consuming vertical movement without an action. */
 bool lv_quick_controls_take_vertical(lv_quick_controls_t *,lv_point_t *start,uint32_t *tick);
 bool lv_quick_controls_reset(lv_quick_controls_t *);
+/* Settle pagination before the host captures or hides the live controls. */
+bool lv_quick_controls_finish(lv_quick_controls_t *);
 uint8_t lv_quick_controls_page(const lv_quick_controls_t *);
 #endif

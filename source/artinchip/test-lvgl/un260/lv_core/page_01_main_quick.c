@@ -254,6 +254,7 @@ static bool qc_prepare(void)
 {
     qc_build();qc_refresh();
     if(!quick.root)return false;
+    if(lv_quick_controls_finish(&quick.controls))quick.dirty=true;
     if(quick.prepared && !quick.dirty)return true;
     bool hidden=lv_obj_has_flag(quick.root,LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(quick.root,LV_OBJ_FLAG_HIDDEN);
