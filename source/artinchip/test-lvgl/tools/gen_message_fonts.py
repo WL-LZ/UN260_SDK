@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Maintain the message-only Noto CJK subset and LVGL 8.3 fallback bitmaps.
+"""Maintain the message/quick-control Noto CJK subset and LVGL 8.3 fallbacks.
 
 Normal builds consume committed C. Regeneration requires fontTools, Node and
 lv_font_conv; source TTC defaults to Debian/Ubuntu fonts-noto-cjk (SIL OFL 1.1).
@@ -16,7 +16,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SIZES = (12, 14, 16, 18, 20, 22, 24, 28)
 INPUTS = ('i18n/legacy_ids.json', 'i18n/locales.json',
           'un260/lv_components/lv_fault_popup.c',
-          'un260/lv_components/fault_guide/fault_guide_catalog.c')
+          'un260/lv_components/fault_guide/fault_guide_catalog.c',
+          'un260/lv_components/lv_quick_controls.c',
+          'un260/lv_core/page_01_main_quick.c')
 ASSETS = ROOT / 'aic_ui/font/message'
 
 LITERAL = r'"(?:\\.|[^"\\])*"'
@@ -57,12 +59,23 @@ def fault_keys(source):
     return keys
 
 
+def quick_codepoints():
+    legacy = json.loads((ROOT / INPUTS[0]).read_text(encoding='utf-8'))
+    keys = set()
+    for path in INPUTS[4:]:
+        source = (ROOT / path).read_text(encoding='utf-8')
+        keys.update(marked_keys(source))
+        keys.update(legacy[name] for name in re.findall(r'\bUI_TEXT_QUICK_\w+', source)
+                    if name in legacy)
+    return translated_points(keys)
+
+
 def required_codepoints():
     legacy = json.loads((ROOT / INPUTS[0]).read_text(encoding='utf-8'))
     keys = set(legacy.values())
     keys.update(marked_keys((ROOT / INPUTS[2]).read_text(encoding='utf-8')))
     keys.update(fault_keys((ROOT / INPUTS[3]).read_text(encoding='utf-8')))
-    return sorted(translated_points(keys))
+    return sorted(translated_points(keys) | quick_codepoints())
 
 def required_by_size():
     """Roles match ui_notice.c and lv_fault_popup.c; keep broad message sizes.
@@ -72,6 +85,7 @@ def required_by_size():
     Unicode list. The real-LVGL tests additionally walk each displayed label.
     """
     all_points = set(required_codepoints())
+    quick = quick_codepoints()
     popup = translated_points(marked_keys((ROOT / INPUTS[2]).read_text(encoding='utf-8')))
     catalog_source = (ROOT / INPUTS[3]).read_text(encoding='utf-8')
     catalog = translated_points(fault_keys(catalog_source))
@@ -86,9 +100,9 @@ def required_by_size():
         if name not in legacy:
             raise SystemExit('Missing notice metadata: '+name)
         meta.update(translated_points({legacy[name]}))
-    return {12: sorted(popup | titles), 14: sorted(catalog | popup | meta),
-            16: sorted(titles), 18: sorted(all_points), 20: sorted(all_points),
-            22: sorted(all_points), 24: sorted(catalog), 28: sorted(titles)}
+    return {12: sorted(popup | titles), 14: sorted(catalog | popup | meta | quick),
+            16: sorted(titles | quick), 18: sorted(all_points), 20: sorted(all_points),
+            22: sorted(all_points), 24: sorted(catalog | quick), 28: sorted(titles)}
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

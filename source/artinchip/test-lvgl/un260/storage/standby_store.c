@@ -23,6 +23,7 @@
 static standby_config_t saved;
 static bool initialized, busy, done, success, config_written;
 static bool last_success;
+static bool storage_ready=true;
 static pthread_t thread;
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 static struct { bool importing, deleting; unsigned photo; standby_config_t cfg; } job;
@@ -78,6 +79,20 @@ void standby_store_init(void) {
  }
 }
 const standby_config_t *standby_config(void){standby_store_init();return &saved;}
+static void storage_uncertain(void) {
+ pthread_mutex_lock(&lock);storage_ready=false;pthread_mutex_unlock(&lock);
+}
+bool standby_store_storage_ready(void) {
+ pthread_mutex_lock(&lock);bool ready=storage_ready;pthread_mutex_unlock(&lock);return ready;
+}
+static bool sync_local_directory(void) {
+ int d=open(DIR,O_RDONLY|O_DIRECTORY);
+ if(d<0){storage_uncertain();return false;}
+ bool ok=fsync(d)==0;
+ if(close(d))ok=false;
+ if(!ok)storage_uncertain();
+ return ok;
+}
 static bool atomic_write(const char *path,const void*data,size_t bytes) {
  char tmp[160];snprintf(tmp,sizeof(tmp),"%s.tmp",path);
  if(mkdir(DIR,0755)&&errno!=EEXIST)return false;
@@ -87,8 +102,20 @@ static bool atomic_write(const char *path,const void*data,size_t bytes) {
  if(ok&&fsync(fd))ok=false;
  if(close(fd))ok=false;
  if(ok&&rename(tmp,path))ok=false;
- if(ok){int d=open(DIR,O_RDONLY|O_DIRECTORY);if(d>=0){fsync(d);close(d);}}
+ if(ok)ok=sync_local_directory();
  if(!ok)unlink(tmp);
+ return ok;
+}
+static bool unlink_local_file(const char *path,bool *changed) {
+ if(unlink(path)==0){*changed=true;return true;}
+ if(errno==ENOENT)return true;
+ if(errno==EIO)storage_uncertain();
+ return false;
+}
+static bool delete_photo_files(unsigned photo) {
+ bool changed=false,ok=unlink_local_file(paths[photo]+2,&changed);
+ if(ok){char meta[160];snprintf(meta,sizeof(meta),"%s.source",paths[photo]+2);ok=unlink_local_file(meta,&changed);}
+ if(changed&&!sync_local_directory())ok=false;
  return ok;
 }
 bool standby_photo_exists(unsigned slot){struct stat s;return slot<6&&stat(paths[slot+3]+2,&s)==0&&S_ISREG(s.st_mode)&&s.st_size==(off_t)(4+PIXELS*4);}
@@ -97,10 +124,10 @@ static bool import_one(const char*path,unsigned slot,unsigned source) {
  int fd=open(path,O_RDONLY|O_NOFOLLOW);if(fd<0)return false;struct stat st;
  if(fstat(fd,&st)||!S_ISREG(st.st_mode)||st.st_size<24||st.st_size>5*1024*1024){close(fd);return false;}
  size_t size=(size_t)st.st_size;unsigned char*input=malloc(size);if(!input){close(fd);return false;}
- size_t n=0;while(n<size){ssize_t r=read(fd,input+n,size-n);if(r<0&&errno==EINTR)continue;if(r<=0)break;n+=(size_t)r;}close(fd);
+ size_t n=0;while(n<size){ssize_t r=read(fd,input+n,size-n);if(r<0&&errno==EINTR)continue;if(r<=0)break;n+=(size_t)r;}bool input_ok=n==size;if(close(fd))input_ok=false;
  bool ok=false;png_image image;memset(&image,0,sizeof(image));image.version=PNG_IMAGE_VERSION;
  unsigned char*rgba=NULL;unsigned char*out=NULL;
- if(n!=size||png_sig_cmp(input,0,8)||be32(input+16)<640||be32(input+16)>4096||be32(input+20)<200||be32(input+20)>2160)goto finish;
+ if(!input_ok||png_sig_cmp(input,0,8)||be32(input+16)<640||be32(input+16)>4096||be32(input+20)<200||be32(input+20)>2160)goto finish;
  if(!png_image_begin_read_from_memory(&image,input,size))goto finish;
  if(image.width>4096||image.height>2160)goto finish;
  image.format=PNG_FORMAT_RGBA;rgba=malloc(PNG_IMAGE_SIZE(image));out=malloc(4+PIXELS*4);if(!rgba||!out)goto finish;
@@ -121,7 +148,7 @@ finish:png_image_free(&image);free(input);free(rgba);free(out);return ok;
 }
 static bool imported_source(unsigned source){for(unsigned i=0;i<6;i++){if(!standby_photo_exists(i))continue;char p[160];snprintf(p,sizeof(p),"%s.source",paths[i+3]+2);FILE*f=fopen(p,"rb");unsigned value=0;if(f){size_t n=fread(&value,1,sizeof(value),f);fclose(f);if(n==sizeof(value)&&value==source)return true;}}return false;}
 static void* run(void*unused){(void)unused;bool ok;ui_message_t job_message;
- if(job.deleting){ok=atomic_write(CFG,&job.cfg,sizeof(job.cfg));config_written=ok;if(ok){ok=unlink(paths[job.photo]+2)==0||errno==ENOENT;char meta[160];snprintf(meta,sizeof(meta),"%s.source",paths[job.photo]+2);if(ok)unlink(meta);}ui_message_key(&job_message,ok?UI_N_("Imported photo deleted. Referenced layouts use daily rotation."):UI_N_("Delete failed. Please try again."));}
+ if(job.deleting){ok=atomic_write(CFG,&job.cfg,sizeof(job.cfg));config_written=ok;if(ok)ok=delete_photo_files(job.photo);ui_message_key(&job_message,ok?UI_N_("Imported photo deleted. Referenced layouts use daily rotation."):UI_N_("Delete failed. Please try again."));}
  else if(job.importing){unsigned found=0,added=0,failed=0;
   if(!usb_storage_prepare()){ok=false;ui_message_key(&job_message,UI_N_("USB is not available. Insert a drive and try again."));}
   else {for(unsigned i=1;i<=99;i++){

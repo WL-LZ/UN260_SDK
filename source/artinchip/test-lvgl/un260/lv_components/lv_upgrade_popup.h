@@ -7,6 +7,7 @@
 
 void lv_upgrade_popup_process_detect(const ui_upgrade_detect_info_t* detect_info);
 void lv_upgrade_popup_show_result(bool success, const char* desc_text);
+void lv_upgrade_popup_show_restart_required(const char* desc_text);
 bool lv_upgrade_popup_is_showing(void);
 void lv_upgrade_popup_refresh_text(void);
 

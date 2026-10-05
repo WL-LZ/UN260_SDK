@@ -13,7 +13,9 @@ typedef enum {
     UI_UPGRADE_STAGE_SYNC,
     UI_UPGRADE_STAGE_FINISH,
     UI_UPGRADE_STAGE_SUCCESS,
-    UI_UPGRADE_STAGE_FAIL
+    UI_UPGRADE_STAGE_FAIL,
+    /* The continuation is ready; the complete update has not finished. */
+    UI_UPGRADE_STAGE_RESTART_REQUIRED
 } ui_upgrade_stage_t;
 
 typedef enum {
@@ -29,7 +31,9 @@ typedef enum {
     UI_UPGRADE_START_SCRIPT_NOT_FOUND,
     UI_UPGRADE_START_PACKAGE_NOT_READY,
     UI_UPGRADE_START_STATUS_CLEANUP_FAILED,
-    UI_UPGRADE_START_FORK_FAILED
+    UI_UPGRADE_START_FORK_FAILED,
+    UI_UPGRADE_START_DATA_BUSY,
+    UI_UPGRADE_START_DATA_SAVE_FAILED
 } ui_upgrade_start_result_t;
 
 typedef struct {
@@ -51,7 +55,12 @@ typedef struct {
 
 void ui_upgrade_service_reset(void);
 void ui_upgrade_service_detect(ui_upgrade_detect_info_t* info);
+/* The last detection found a readable full UPK; installation rechecks its targets. */
+bool ui_upgrade_service_can_reinstall(void);
 ui_upgrade_start_result_t ui_upgrade_service_start(void);
+/* Accepted storage jobs keep running when the pre-launch wait is cancelled. */
+bool ui_upgrade_service_is_preparing_data(void);
+bool ui_upgrade_service_cancel_prepare(void);
 void ui_upgrade_service_poll(ui_upgrade_service_status_t* status);
 void ui_upgrade_service_reboot(void);
 

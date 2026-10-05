@@ -145,10 +145,6 @@ static void smart_island_warning_finish_commit(void)
     bool resume_counting = g_si_ctx.warning.resume_counting;
 
     smart_island_warning_stop();
-    if (fault_popup_is_showing()) {
-        return;
-    }
-
     bool is_fault = g_si_ctx.warning.fault.valid;
     machine_fault_key_t key = warning_key();
     if (resume_counting && g_si_ctx.lifecycle.count_session_active) {
@@ -342,9 +338,7 @@ static void notify_warning(const char *warn_text,
         }
         if (!g_si_ctx.warning.marquee_running && !g_si_ctx.warning.collapse_running) {
             smart_island_warning_apply_static_layout();
-            if (!fault_popup_is_showing()) {
-                smart_island_warning_marquee_start();
-            }
+            smart_island_warning_marquee_start();
         }
         return;
     }

@@ -5,12 +5,14 @@ from pathlib import Path
 import tarfile
 import tempfile
 from build_delta import load
-from build_unified import BRIDGE, NESTED, REQUEST, APPROVED
+from build_unified import BRIDGE, NESTED, REQUEST, APPROVED, POLICY_V2, POLICY_V3
+from build_storage_bootstrap import POLICY_COMPONENTS
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--unified', required=True)
 parser.add_argument('--full', required=True)
 parser.add_argument('--target', required=True)
+parser.add_argument('--migration-policy', choices=(APPROVED, POLICY_V2, POLICY_V3))
 args = parser.parse_args()
 meta, outer = load(args.unified)
 full_meta, full = load(args.full)
@@ -27,7 +29,14 @@ with tempfile.TemporaryDirectory(prefix='un260-release-check-') as directory:
     nested = Path(directory) / 'migration.upk'
     nested.write_bytes(outer[NESTED + 'migration.upk'][0])
     migration_meta, migration = load(nested)
-    assert migration_meta['storage_migration'] == APPROVED
+    selected_policy = migration_meta['storage_migration']
+    assert selected_policy in (APPROVED, POLICY_V2, POLICY_V3)
+    if args.migration_policy is not None:
+        assert selected_policy == args.migration_policy
+    if selected_policy in (POLICY_V2, POLICY_V3):
+        marker = b'UN260_STORAGE_POLICY_V3' if selected_policy == POLICY_V3 else b'UN260_STORAGE_POLICY_V2'
+        for name in POLICY_COMPONENTS:
+            assert marker in migration[name][0], name
     for name, value in migration.items():
         assert value == full[name]
 for name in BRIDGE:

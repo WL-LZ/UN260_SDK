@@ -15,6 +15,56 @@ void fault_popup_resolve_key(machine_fault_key_t k){machine_fault_clear_key(k);+
 void smart_island_register_fault_phase_cb(smart_island_fault_phase_cb_t cb){phase=cb;}
 int protocol_send(uint8_t cmd,const uint8_t *data,uint16_t size){assert(cmd==0x3D&&size==1&&*data==1);++tx;return fail?-1:0;}
 static void elapsed(uint32_t ms){now+=ms;app_fault_recovery_poll();}
+static void test_latched_popup_modes(void)
+{
+ for(unsigned automatic=0;automatic<2;++automatic)for(unsigned outcome=0;outcome<3;++outcome){
+  app_fault_recovery_clear();machine_fault_clear();modal=false;auto_popup=automatic!=0;
+  key=(machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,2};machine_fault_report(key);app_fault_recovery_report(key);
+  unsigned before=tx,old_shown=shown,old_repeated=repeated,old_resolved=resolved;
+  phase(key,SMART_ISLAND_FAULT_BEGIN);auto_popup=!automatic;
+  phase(key,SMART_ISLAND_FAULT_END);
+  assert(tx==before+(automatic?0U:1U)); /* The report owns this animation's clear policy. */
+  if(automatic)assert(app_fault_recovery_request_clear(key));
+  assert(tx==before+1);
+  if(outcome==0)app_fault_recovery_handle_clear_result(1);
+  else if(outcome==1)app_fault_recovery_handle_clear_result(2);
+  else elapsed(3000);
+  assert(tx==before+1); /* A result/timeout never itself retries the command. */
+  if(outcome==0){
+   assert(!machine_fault_find(key,NULL)&&resolved==old_resolved+1);
+   assert(shown==old_shown&&repeated==old_repeated);
+  }else{
+   assert(machine_fault_find(key,NULL)&&resolved==old_resolved);
+   assert(shown==old_shown+(automatic?1U:0U));
+   assert(repeated==old_repeated+(automatic?0U:1U));
+   phase(key,SMART_ISLAND_FAULT_END);
+   assert(tx==before+(automatic?1U:2U));
+  }
+ }
+ /* A newer report cannot overwrite the presentation mode of an older pending clear. */
+ for(unsigned outcome=0;outcome<2;++outcome){
+  app_fault_recovery_clear();machine_fault_clear();auto_popup=false;
+  machine_fault_key_t older={MACHINE_FAULT_RUNTIME,0,2},newer={MACHINE_FAULT_PRESET,0,4};
+  key=older;machine_fault_report(older);app_fault_recovery_report(older);
+  unsigned before=tx,old_shown=shown,old_repeated=repeated;
+  phase(older,SMART_ISLAND_FAULT_END);assert(tx==before+1);
+  auto_popup=true;machine_fault_report(newer);app_fault_recovery_report(newer);
+  if(outcome==0)app_fault_recovery_handle_clear_result(2);else elapsed(3000);
+  assert(tx==before+1&&shown==old_shown&&repeated==old_repeated+1);
+  assert(machine_fault_find(older,NULL)&&machine_fault_find(newer,NULL));
+  phase(newer,SMART_ISLAND_FAULT_END);assert(tx==before+1);
+ }
+ /* An explicit inspection of a key other than the current report captures
+  * the preference at command dispatch, then keeps it through a later toggle. */
+ app_fault_recovery_clear();machine_fault_clear();auto_popup=false;
+ key=(machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,2};machine_fault_report(key);
+ app_fault_recovery_report((machine_fault_key_t){MACHINE_FAULT_START,2,9});
+ auto_popup=true;unsigned before=tx,old_shown=shown,old_repeated=repeated;
+ assert(app_fault_recovery_request_clear(key));auto_popup=false;
+ app_fault_recovery_handle_clear_result(2);
+ assert(tx==before+1&&shown==old_shown+1&&repeated==old_repeated&&machine_fault_find(key,NULL));
+ app_fault_recovery_clear();machine_fault_clear();
+}
 int main(void){
  app_fault_recovery_init();auto_popup=false;
  machine_fault_key_t jam={MACHINE_FAULT_RUNTIME,0,2};
@@ -47,5 +97,6 @@ int main(void){
  elapsed(3000);assert(repeated>=2&&machine_fault_find(jam,NULL));
  modal=true;assert(!app_fault_recovery_prepare_start());modal=false;
  assert(shown==0);
- puts("PASS recovery service: jam/preset clear whitelist, no-command faults, failure, result and timeout");
+ test_latched_popup_modes();
+ puts("PASS recovery service: jam/preset whitelist, report mode latched across Popup toggles, pending mode survives new reports and late failure/timeout, success-only resolve, no-command faults and send failure");
 }

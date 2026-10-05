@@ -6,7 +6,8 @@ typedef machine_fault_source_t fault_source_t;
 #define FAULT_SRC_START_COUNT MACHINE_FAULT_START
 #define FAULT_SRC_RUNTIME MACHINE_FAULT_RUNTIME
 #define FAULT_SRC_SENSOR MACHINE_FAULT_SENSOR
-/* UI-thread entry points. Confirm requests controller alarm clear for the selected issue. */
+/* UI-thread entry points. Confirm acknowledges the viewed report; only
+ * clearable runtime jams/preset reports request controller alarm clear. */
 /* Application navigation policy may consume a confirmation after the record
  * is acknowledged. Returning true means the handler owns closing/navigation. */
 typedef bool (*fault_popup_confirm_handler_t)(machine_fault_key_t key);
@@ -14,6 +15,8 @@ void fault_popup_set_confirm_handler(fault_popup_confirm_handler_t handler);
 void hide_fault_popup(void);
 bool fault_popup_is_showing(void);
 void fault_popup_language_changed(void);
+/* Preference for subsequent reports. Does not present/acknowledge old faults
+ * or change an already visible guide; explicit viewing uses show_key/pending. */
 void fault_popup_set_auto_enabled(bool enabled);
 bool fault_popup_get_auto_enabled(void);
 void fault_popup_report_start_fault(uint8_t type, uint8_t code);

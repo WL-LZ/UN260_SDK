@@ -376,21 +376,7 @@ static void smart_island_action_btn_cb(lv_event_t *e)
     action_id = g_si_ctx.action.ids[page_index];
 
     if (action_id == SMART_ISLAND_ACTION_FUNC4) {
-        bool enabled = smart_island_pure_count_is_enabled();
-        smart_island_set_pure_count_enabled(!enabled);
-        ui_state_save_pure_count_state();
-        smart_island_action_item_apply(page_index);
-
-        if (!enabled) {
-            smart_island_close();
-            ui_manager_push_page(UI_PAGE_PURE);
-        } else {
-            if (ui_manager_get_current_page() == UI_PAGE_PURE) {
-                ui_page_18_pure_request_exit();
-            } else {
-                ui_manager_switch(UI_PAGE_MAIN);
-            }
-        }
+        if (ui_page_18_pure_toggle_theme()) smart_island_action_item_apply(page_index);
         return;
     }
 

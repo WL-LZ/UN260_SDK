@@ -8,6 +8,7 @@
 typedef struct {
     lv_obj_t *root;
     lv_obj_t *viewport;
+    lv_obj_t *indicator;
     lv_obj_t *pages[CONTENT_PAGER_MAX_PAGES];
     lv_obj_t *dots[CONTENT_PAGER_MAX_PAGES];
     uint8_t count;
@@ -101,6 +102,7 @@ lv_obj_t *lv_content_pager_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
     }
     if (page_count > 1) {
         indicator = lv_obj_create(context->root);
+        context->indicator=indicator;
         lv_obj_remove_style_all(indicator);
         lv_obj_clear_flag(indicator,LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_size(indicator, 20 + page_count * 14, 16);
@@ -131,6 +133,19 @@ lv_obj_t *lv_content_pager_get_page(lv_obj_t *pager, uint8_t index)
 {
     content_pager_context_t *context = pager_find(pager);
     return context != NULL && index < context->count ? context->pages[index] : NULL;
+}
+lv_obj_t *lv_content_pager_get_viewport(lv_obj_t *pager)
+{
+    content_pager_context_t *context=pager_find(pager);
+    return context?context->viewport:NULL;
+}
+void lv_content_pager_set_indicator_position(lv_obj_t *pager,lv_coord_t x,lv_coord_t y)
+{
+    content_pager_context_t *context=pager_find(pager);
+    if(context && context->indicator){
+        lv_obj_set_align(context->indicator,LV_ALIGN_TOP_LEFT);
+        lv_obj_set_pos(context->indicator,x,y);
+    }
 }
 
 bool lv_content_pager_set_active(lv_obj_t *pager, uint8_t index, bool animated)

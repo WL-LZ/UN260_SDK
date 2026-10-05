@@ -31,36 +31,40 @@ code = r'''
 #include <stdbool.h>
 #include <stdio.h>
 #include "un260/lv_core/lv_page_manager.h"
-static bool scope_active, collection_page;
+#define UI_N_(s) s
+static bool scope_active, collection_page, pure_theme;
 static int collection_mode, switches, refreshes;
 static ui_page_t current;
 #define DATA_COLLECT_MODE_NONE 0
 static void work_mode_service_set_diagnostic(bool active){scope_active=active;}
 static bool work_mode_service_diagnostic_active(void){return scope_active;}
+static bool smart_island_pure_count_is_enabled(void){return pure_theme;}
 static bool page_06_settings_is_collection(void){return collection_page;}
 static int data_collection_state_mode(void){return collection_mode;}
 static void data_collection_state_set_status(const char *s){assert(s&&s[0]);}
 static void page_06_data_collection_refresh(void){refreshes++;}
 ui_page_t ui_manager_get_current_page(void){return current;}
-void ui_manager_switch(ui_page_t page){assert(page==UI_PAGE_MAIN);switches++;current=page;}
+void ui_manager_switch(ui_page_t page){assert(page==(pure_theme?UI_PAGE_PURE:UI_PAGE_MAIN));switches++;current=page;}
 '''
 code += scope + '\nstatic void count_started(void){\n' + decision + '\n}\n'
 code += r'''
 int main(void){
- for(int page=0;page<UI_PAGE_COUNT;page++){
+ for(int theme=0;theme<2;theme++)for(int page=0;page<UI_PAGE_COUNT;page++){
   bool expected=page==UI_PAGE_CIS_CALIB||page==UI_PAGE_DEBUG||page==UI_PAGE_SENSOR||
    page==UI_PAGE_IMAGE_GET||page==UI_PAGE_WAVE_GET||page==UI_PAGE_MOTOR_TEST||page==UI_PAGE_AGING_SETTING;
-  current=page;collection_page=false;collection_mode=0;switches=0;
+  current=page;pure_theme=theme;collection_page=false;collection_mode=0;switches=0;
   ui_manager_update_diagnostic_scope(page);assert(scope_active==expected);
   count_started();assert(switches==(expected||page==UI_PAGE_PURE?0:1));
+  if(!expected)assert(current==(page==UI_PAGE_PURE||pure_theme?UI_PAGE_PURE:UI_PAGE_MAIN));
  }
+ pure_theme=false;
  current=UI_PAGE_SETTING;collection_page=true;switches=0;
  ui_manager_update_diagnostic_scope(current);assert(scope_active);
  count_started();assert(switches==0); /* Before choosing a collection mode. */
  collection_mode=1;count_started();assert(refreshes==1&&switches==0);
  collection_page=false;collection_mode=0;ui_manager_update_diagnostic_scope(UI_PAGE_SETTING);
  assert(!scope_active);count_started();assert(switches==1);
- puts("PASS diagnostic page whitelist before operation, collection subpage, normal/Pure routing and exit reset");
+ puts("PASS diagnostic whitelist and collection guards; hardware start retains Main/Pure theme including Standby overlay");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='un260-settings-scope-') as temp:

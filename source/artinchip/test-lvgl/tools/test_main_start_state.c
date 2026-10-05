@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#define UI_N_(text) text
 
 typedef struct { bool pending; } protocol_request_t;
 typedef struct { bool start_confirmed; int phase; } counting_session_state_t;

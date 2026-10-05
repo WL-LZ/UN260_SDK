@@ -6,6 +6,10 @@
 /* UI-thread API. Strings are copied, so stack/localized strings are safe. */
 void ui_notice_init(void);
 void ui_notice_deinit(void);
+/* Presentation preference only. Disabling drops current/queued cards without
+ * cancelling their operations; enabling does not replay hidden results. */
+void ui_notice_set_enabled(bool enabled);
+bool ui_notice_get_enabled(void);
 bool ui_notice_show(const ui_notice_config_t *config);
 /* Queue pressure/duplicate suppression only affect presentation, never the
  * operation. Callers must use their service result as the business authority. */

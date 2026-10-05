@@ -12,6 +12,15 @@ bool app_command_runtime_request_diagnostic_run(void);
 /* Pending command or a controller-confirmed counting session. */
 bool app_command_runtime_count_start_busy(void);
 bool app_command_runtime_result_pending(void);
+typedef enum {
+    APP_UI_UPGRADE_READY = 0,
+    APP_UI_UPGRADE_WAIT,
+    APP_UI_UPGRADE_BUSY,
+    APP_UI_UPGRADE_FAILED,
+} app_ui_upgrade_readiness_t;
+/* UI-thread, nonblocking: freeze current results into their owning history
+ * queue, then wait for local writes. Does not clear controller/counting data. */
+app_ui_upgrade_readiness_t app_command_runtime_prepare_ui_upgrade(void);
 bool app_command_runtime_clear_counting_data(const char *reason);
 void app_command_runtime_process_frames(void);
 /* A frame is indivisible. Zero budget dispatches at most one ready frame.

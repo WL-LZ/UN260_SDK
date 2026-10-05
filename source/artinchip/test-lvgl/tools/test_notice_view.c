@@ -84,6 +84,61 @@ static void font_coverage(void)
     puts("message_fonts: PASS (per-role CJK coverage at eight sizes, English metrics unchanged)");
 }
 
+static void test_top_popup_switch(void)
+{
+    unsigned children=lv_obj_get_child_cnt(lv_layer_top());
+    assert(ui_notice_get_enabled());
+    ui_notice_set_enabled(false);
+    ui_notice_config_t ignored={.kind=UI_NOTICE_INFO,.key="ignored",.title="Ignored while disabled"};
+    assert(!ui_notice_show(&ignored) && !notice.object && !notice.timer);
+    ui_notice_post_text(UI_NOTICE_SUCCESS,"menu","Confirm","Saved");
+    ui_notice_post(UI_NOTICE_ERROR,"export","Export failed",NULL);
+    assert(!notice.state.has_active && !notice.state.queued_count && !ui_notice_is_visible());
+    ui_notice_set_enabled(true);
+    assert(!ui_notice_is_visible() && !notice.state.has_active);
+    /* Switching off during entry immediately stops the animation and all queued work. */
+    ui_notice_post(UI_NOTICE_PROGRESS,"running","Applying settings",NULL);
+    advance(80);
+    assert(notice.animating && lv_anim_get(notice.object,animation_exec));
+    ui_notice_post(UI_NOTICE_PROGRESS,"queued","Another task",NULL);
+    assert(notice.state.queued_count);
+    ui_notice_set_enabled(false);
+    assert(!ui_notice_is_visible() && !notice.state.has_active && !notice.state.queued_count);
+    assert(notice.timer->paused && !lv_anim_get(notice.object,animation_exec));
+    advance(6000);
+    ui_notice_set_enabled(true);
+    assert(!ui_notice_is_visible() && notice.timer->paused);
+    /* Dialog/fault blockers retain ownership across switch changes. */
+    ui_notice_dialog_acquire();
+    ui_notice_set_suspended(UI_NOTICE_SUSPEND_FAULT,true);
+    ui_notice_set_enabled(false);
+    ui_notice_post(UI_NOTICE_SUCCESS,"ignored","Saved",NULL);
+    ui_notice_set_enabled(true);
+    ui_notice_post(UI_NOTICE_PROGRESS,"blocked","Waiting for the device",NULL);
+    assert(!ui_notice_is_visible() && notice.state.has_active);
+    ui_notice_dialog_release();
+    assert(!ui_notice_is_visible());
+    ui_notice_set_suspended(UI_NOTICE_SUSPEND_FAULT,false);
+    assert(ui_notice_is_visible());
+    advance(420);
+    lv_event_send(notice.object,LV_EVENT_PRESSED,NULL);
+    assert(notice.held && notice.timer->paused);
+    ui_notice_set_enabled(false);
+    assert(!notice.held && !notice.animating && !notice.state.has_active);
+    lv_event_send(notice.object,LV_EVENT_RELEASED,NULL);
+    assert(!ui_notice_is_visible() && notice.timer->paused);
+    /* Deleting/recreating the view cannot silently turn Top popup back on. */
+    ui_notice_deinit();
+    assert(!ui_notice_get_enabled() && lv_obj_get_child_cnt(lv_layer_top())==children);
+    ui_notice_post(UI_NOTICE_SUCCESS,"menu","Saved",NULL);
+    assert(!notice.object && !notice.timer && !ui_notice_is_visible());
+    ui_notice_set_enabled(true);
+    ui_notice_post(UI_NOTICE_SUCCESS,"fresh","A new result",NULL);
+    assert(ui_notice_is_visible() && !strcmp(notice.state.active.key,"fresh"));
+    ui_notice_deinit();
+    assert(lv_obj_get_child_cnt(lv_layer_top())==children);
+}
+
 int main(void)
 {
     static lv_disp_draw_buf_t draw_buffer;
@@ -95,6 +150,7 @@ int main(void)
     driver.hor_res = 1280; driver.ver_res = 400;
     driver.draw_buf = &draw_buffer; driver.flush_cb = flush;
     assert(lv_disp_drv_register(&driver));
+    test_top_popup_switch();
     assert(NOTICE_ENTER_MS == NOTICE_EXIT_MS && NOTICE_EXIT_MS == 240);
     backdrop();
     unsigned children = lv_obj_get_child_cnt(lv_layer_top());
@@ -215,6 +271,6 @@ int main(void)
     }
     assert(lv_obj_get_child_cnt(lv_layer_top()) == children);
     assert(lv_anim_count_running() == 0);
-    puts("ui_notice_view: PASS (actual LVGL geometry, draw, dismissal, pause, task results, deletion/recreation)");
+    puts("ui_notice_view: PASS (Top popup off during entry/press, queue clearing, no replay, independent blockers, deletion/recreation, actual LVGL draw and lifecycle)");
     return 0;
 }

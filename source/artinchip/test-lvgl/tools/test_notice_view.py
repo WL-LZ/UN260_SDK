@@ -5,6 +5,7 @@ import concurrent.futures
 import hashlib
 import json
 import os
+import re
 import subprocess
 
 root = Path(__file__).resolve().parents[1]
@@ -16,6 +17,8 @@ out.mkdir(parents=True, exist_ok=True)
 fonts = ['instrument_sans_semibold_22', 'instrument_sans_semibold_20', 'instrument_sans_semibold_28',
          'instrument_sans_medium_12', 'instrument_sans_medium_14', 'instrument_sans_medium_16',
          'instrument_sans_medium_18', 'instrument_sans_medium_24']
+fonts = sorted(set(fonts) | set(re.findall(r'\blv_font_(instrument_sans_\w+)',
+    (root / 'un260/font/ui_message_font.c').read_text())))
 
 def write_changed(path, text):
     if not path.exists() or path.read_text() != text:

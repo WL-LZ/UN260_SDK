@@ -119,6 +119,22 @@ storage_job_status_t storage_worker_status(storage_job_id_t id)
     return result;
 }
 
+storage_job_status_t storage_worker_pending_status(void)
+{
+    storage_job_status_t result = STORAGE_JOB_SUCCEEDED;
+    pthread_mutex_lock(&g_lock);
+    for (unsigned i = 0; i < STORAGE_WORKER_CAPACITY; ++i) {
+        if (g_jobs[i].status == STORAGE_JOB_FAILED) {
+            result = STORAGE_JOB_FAILED;
+            break;
+        }
+        if (g_jobs[i].status == STORAGE_JOB_PENDING)
+            result = STORAGE_JOB_PENDING;
+    }
+    pthread_mutex_unlock(&g_lock);
+    return result;
+}
+
 storage_job_status_t storage_worker_wait(storage_job_id_t id)
 {
     storage_job_t *job;

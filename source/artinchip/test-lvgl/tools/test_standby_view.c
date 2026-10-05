@@ -31,11 +31,13 @@ const char*standby_photo_path(unsigned n){const char*paths[]={"L:/usr/local/shar
 void machine_time_get(machine_time_value_t*t){*t=(machine_time_value_t){2026,9,30,9,41,0};}
 bool machine_time_is_valid(const machine_time_value_t*t){return t->year>=2024;}
 static ui_page_t current_page=UI_PAGE_MAIN;
+static ui_page_t standby_return_page=UI_PAGE_MAIN;
+static bool transition_block, navigation_rejected;
 void ui_manager_switch(ui_page_t p){current_page=p;}
-bool ui_manager_pop_page(void){current_page=UI_PAGE_MAIN;return true;}
-void ui_manager_push_page(ui_page_t p){current_page=p;if(p==UI_PAGE_STANDBY)app_standby_runtime_enter();}
+bool ui_manager_pop_page(void){current_page=standby_return_page;return true;}
+void ui_manager_push_page(ui_page_t p){if(navigation_rejected)return;if(p==UI_PAGE_STANDBY)standby_return_page=current_page;current_page=p;if(p==UI_PAGE_STANDBY)app_standby_runtime_enter();}
 ui_page_t ui_manager_get_current_page(void){return current_page;}
-bool ui_manager_is_transitioning(void){return false;}
+bool ui_manager_is_transitioning(void){return transition_block;}
 bool settings_detail_dialog_show(const char*a,const char*b,const char*c,const char*d,settings_detail_dialog_cb_t e,settings_detail_dialog_cb_t f,void*g){(void)a;(void)b;(void)c;(void)d;confirm_cb=e;(void)f;(void)g;return true;}
 bool settings_detail_dialog_show_ex(settings_detail_dialog_kind_t kind,
  const char*a,const char*b,const char*c,const char*d,settings_detail_dialog_cb_t e,settings_detail_dialog_cb_t f,void*g){
@@ -47,13 +49,16 @@ bool settings_detail_keyboard_show(const char*a,const char*b,uint16_t c,settings
 void settings_detail_keyboard_hide(void){}
 lv_obj_t*settings_detail_create_button(lv_obj_t*p,lv_coord_t x,lv_coord_t y,lv_coord_t w,lv_coord_t h,const char*t,lv_color_t c,lv_event_cb_t cb,void*u){lv_obj_t*b=lv_btn_create(p);lv_obj_set_pos(b,x,y);lv_obj_set_size(b,w,h);lv_obj_set_style_bg_color(b,c,0);lv_obj_set_style_bg_opa(b,255,0);lv_obj_t*l=lv_label_create(b);lv_label_set_text(l,t);lv_obj_set_style_text_font(l,&lv_font_instrument_sans_medium_16,0);lv_obj_center(l);lv_obj_add_event_cb(b,cb,LV_EVENT_CLICKED,u);return b;}
 #include "un260/app_service/app_standby_runtime.c"
-static bool counting_block, fault_block;
-bool lv_upgrade_popup_is_showing(void){return false;}
-bool lv_qr_popup_is_showing(void){return false;}
+#include "un260/machine_state/machine_fault.c"
+static bool counting_block, fault_block, aging_block, upgrade_block, qr_block;
+static unsigned fault_presentations;
+bool lv_upgrade_popup_is_showing(void){return upgrade_block;}
+bool lv_qr_popup_is_showing(void){return qr_block;}
 void standby_store_init(void){}
 bool app_command_runtime_count_start_busy(void){return counting_block;}
-bool machine_state_aging_running(void){return false;}
+bool machine_state_aging_running(void){return aging_block;}
 bool fault_popup_is_showing(void){return fault_block;}
+bool fault_popup_show_pending_now(void){if(!machine_fault_first_unread(NULL))return false;fault_presentations++;fault_block=true;return true;}
 bool fault_popup_get_pending_fault(fault_source_t*a,uint8_t*b,uint8_t*c){(void)a;(void)b;(void)c;return false;}
 static void runtime_test(void){
  saved.minutes=1;app_standby_runtime_poll(100);app_standby_runtime_poll(60099);assert(current_page==UI_PAGE_MAIN);
@@ -71,6 +76,46 @@ static void runtime_test(void){
  current_page=UI_PAGE_MAIN;app_standby_runtime_touch(true);ui_manager_push_page(UI_PAGE_STANDBY);assert(app_standby_runtime_touch(true));assert(!wake);assert(app_standby_runtime_touch(false));assert(!wake);assert(app_standby_runtime_touch(true));assert(wake);app_standby_runtime_touch(false);app_standby_runtime_poll(base+60002);assert(current_page==UI_PAGE_MAIN);
  app_standby_runtime_protocol_activity();base=activity;app_standby_runtime_poll(base+59999);assert(current_page==UI_PAGE_MAIN);app_standby_runtime_poll(base+60000);assert(current_page==UI_PAGE_STANDBY);app_standby_runtime_protocol_activity();app_standby_runtime_poll(base+60001);assert(current_page==UI_PAGE_MAIN);
  puts("PASS idle threshold, busy/fault/settings gates, wake contact capture, Never");
+}
+static void standby_request_test(void){
+ current_page=UI_PAGE_PURE;touching=false;capture=false;saved.minutes=1;
+ machine_fault_key_t no_notes={MACHINE_FAULT_START,1,2};
+ assert(machine_fault_report(no_notes));
+ assert(app_standby_runtime_blocker()&&app_standby_runtime_needs_fault_review());
+ app_standby_runtime_poll(2000000);assert(current_page==UI_PAGE_PURE&&fault_presentations==0);
+ assert(!app_standby_runtime_request()&&fault_presentations==1&&fault_block);
+ assert(!app_standby_runtime_needs_fault_review());
+ machine_fault_acknowledge(no_notes);
+ fault_block=false;
+ assert(machine_fault_count()==1&&!app_standby_runtime_blocker());
+ assert(app_standby_runtime_request()&&current_page==UI_PAGE_STANDBY);
+ app_standby_runtime_protocol_activity();app_standby_runtime_poll(2000001);
+ assert(current_page==UI_PAGE_PURE&&machine_fault_find(no_notes,NULL));
+ /* The same acknowledged report must not poison the next idle entry. */
+ app_standby_runtime_poll(2060001);assert(current_page==UI_PAGE_STANDBY);
+ assert(app_standby_runtime_touch(true));app_standby_runtime_poll(2060002);
+ assert(current_page==UI_PAGE_PURE);assert(app_standby_runtime_touch(false));
+ bool *guards[]={&counting_block,&aging_block,&fault_block,&upgrade_block,&qr_block,&store_busy,&transition_block};
+ const char *terms[]={"counting","aging","guide","update","QR","resources","page"};
+ for(unsigned i=0;i<sizeof(guards)/sizeof(guards[0]);i++){
+  *guards[i]=true;assert(strstr(app_standby_runtime_blocker(),terms[i]));
+  assert(!app_standby_runtime_request()&&current_page==UI_PAGE_PURE);
+  *guards[i]=false;
+ }
+ machine_fault_clear();assert(machine_fault_report(no_notes));
+ /* A hidden unread guide must never cover another modal or interrupt an
+  * active operation just because explicit standby was requested. */
+ for(unsigned i=0;i<sizeof(guards)/sizeof(guards[0]);i++){
+  if(guards[i]==&store_busy)continue;
+  *guards[i]=true;assert(!app_standby_runtime_needs_fault_review());
+  assert(!app_standby_runtime_request()&&fault_presentations==1);*guards[i]=false;
+ }
+ assert(!app_standby_runtime_request()&&fault_presentations==2&&fault_block);
+ machine_fault_acknowledge(no_notes);fault_block=false;
+ navigation_rejected=true;assert(!app_standby_runtime_request());navigation_rejected=false;
+ assert(current_page==UI_PAGE_PURE&&machine_fault_find(no_notes,NULL));
+ machine_fault_clear();current_page=UI_PAGE_MAIN;standby_return_page=UI_PAGE_MAIN;
+ puts("PASS PURE standby: unread/acknowledged records, preserved faults, explicit/idle entry, original-theme wake, real busy reasons, rejected navigation");
 }
 static lv_color_t pixels[1280*400],buffer[1280*40];
 static void flush(lv_disp_drv_t*d,const lv_area_t*a,lv_color_t*p){for(int y=a->y1;y<=a->y2;y++)memcpy(pixels+y*1280+a->x1,p+(y-a->y1)*(a->x2-a->x1+1),(a->x2-a->x1+1)*4);lv_disp_flush_ready(d);}
@@ -162,6 +207,6 @@ int main(void){standby_defaults(&saved);lv_init();mist=load("mist.bgra",1280*400
  lv_obj_t*probe=button(page,0,0,150,"Pressed",3,true);lv_obj_add_state(probe,LV_STATE_PRESSED);lv_obj_update_layout(probe);assert(lv_obj_get_style_shadow_width(probe,LV_PART_MAIN)==0);assert(lv_color_to32(lv_obj_get_style_bg_color(probe,LV_PART_MAIN))!=lv_color_to32(lv_color_hex(0x176FE8)));lv_obj_del(probe);
  tab=1;render();snapshot("timeout");assert_flat(page);tab=2;draft.layout[1][0].date_bits=15;render();snapshot("date");assert_flat(page);tab=3;draft.mode=0;render();snapshot("photos");assert_flat(page);assert(lv_obj_get_child_cnt(gallery)==4);lv_event_send(lv_obj_get_child(gallery,3),LV_EVENT_CLICKED,NULL);assert(draft.layout[0][draft.active[0]].photo==STANDBY_PHOTO_MIST);assert(!draft.layout[0][draft.active[0]].scheduled);scene_update(&preview,&draft,true);assert(preview.photo==STANDBY_PHOTO_MIST);render();snapshot("photos-mist");assert(!lv_obj_has_flag(body,LV_OBJ_FLAG_SCROLLABLE));with_imports=true;render();lv_obj_update_layout(page);lv_obj_scroll_to_y(gallery,100,LV_ANIM_OFF);assert(lv_obj_get_scroll_y(gallery)>0);assert(lv_obj_get_scroll_y(body)==0);snapshot("photos-scroll");with_imports=false;draft.mode=1;render();snapshot("palette");tab=4;render();snapshot("position");position_test();policy_test();ui_page_34_standby_destroy();assert(!registered_drag&&!registered_action);
  ui_page_35_standby_create(lv_scr_act());advance_fade(300);snapshot("standby-photo");ui_page_35_standby_destroy();saved.mode=1;ui_page_35_standby_create(lv_scr_act());advance_fade(300);snapshot("standby-type");ui_page_35_standby_destroy();
- for(unsigned i=0;i<10;i++){ui_page_34_standby_create(lv_scr_act());ui_page_34_standby_destroy();}assert(!page&&!settings_timer&&!clock_timer);runtime_test();fade_test();puts("PASS actual LVGL standby view renders and repeated lifecycle");return 0;}
+ for(unsigned i=0;i<10;i++){ui_page_34_standby_create(lv_scr_act());ui_page_34_standby_destroy();}assert(!page&&!settings_timer&&!clock_timer);runtime_test();standby_request_test();fade_test();puts("PASS actual LVGL standby view renders and repeated lifecycle");return 0;}
 
 const ui_message_t *standby_store_message_info(void){static ui_message_t m;ui_message_key(&m,"Standby settings saved.");return &m;}

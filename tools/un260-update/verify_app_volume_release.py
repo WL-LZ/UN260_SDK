@@ -5,7 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 from build_delta import load
-from build_storage_bootstrap import APPROVED, PATHS
+from build_storage_bootstrap import APPROVED, POLICY_V2, POLICY_V3, PATHS, POLICY_COMPONENTS
 
 
 def verify(images, target, migration):
@@ -35,7 +35,12 @@ def verify(images, target, migration):
         assert ('usr/local/bin/test_lvgl' not in files and 'etc/un260/package-version' not in files)
     assert 'storage_migration' not in full_meta
     assert 'storage_migration' not in loaded['bootstrap'][0]
-    assert loaded['migration'][0]['storage_migration'] == APPROVED
+    policy = loaded['migration'][0]['storage_migration']
+    assert policy in (APPROVED, POLICY_V2, POLICY_V3)
+    if policy in (POLICY_V2, POLICY_V3):
+        marker = b'UN260_STORAGE_POLICY_V3' if policy == POLICY_V3 else b'UN260_STORAGE_POLICY_V2'
+        for name in POLICY_COMPONENTS:
+            assert marker in full[name][0], name
     assert loaded['migration'][0]['package_type'] == 'storage-migration'
     helper = full['usr/local/bin/un260_app_storage'][0].decode()
     assert 'APPROVED=' + APPROVED in helper

@@ -17,7 +17,7 @@
 #include "tools/test_page_background_asset.h"
 #include "actual_upgrade_pointer.h"
 
-static unsigned sends, pops, homes, starts, resets, results, detects;
+static unsigned sends, pops, homes, starts, resets, results, detects, restart_results;
 static uint8_t sent_cmd;
 static bool transport_ready = true, send_ok = true, popup;
 static bool (*policy)(gesture_action_t);
@@ -26,6 +26,13 @@ static void *confirm_data;
 static ui_upgrade_service_status_t actual;
 static ui_upgrade_detect_info_t detected;
 static ui_upgrade_start_result_t start_result;
+static bool preparing_data;
+bool ui_upgrade_service_is_preparing_data(void) { return preparing_data; }
+bool ui_upgrade_service_cancel_prepare(void) {
+    if (!preparing_data) return false;
+    preparing_data=false;actual=(ui_upgrade_service_status_t){0};
+    upgrade_session_end(UPGRADE_SESSION_UI);return true;
+}
 bool protocol_send_is_ready(void) { return transport_ready; }
 int protocol_send(uint8_t cmd, const uint8_t *data, uint16_t length) {
     assert(length == 1 && data[0] == 1); sends++; sent_cmd = cmd; return send_ok ? 6 : -1;
@@ -63,6 +70,9 @@ ui_upgrade_start_result_t ui_upgrade_service_start(void) {
 }
 void lv_upgrade_popup_show_result(bool success, const char *description) {
     (void)success; (void)description; results++; popup = true;
+}
+void lv_upgrade_popup_show_restart_required(const char *description) {
+    assert(strstr(description,"USB drive connected"));restart_results++;popup=true;
 }
 bool lv_upgrade_popup_is_showing(void) { return popup; }
 const char *ui_text_get(ui_text_id_t id) { (void)id; return "Back"; }
@@ -160,6 +170,28 @@ static void ui_update_tests(void) {
     assert(results==1&&find(lv_scr_act(),"100%"));snapshot("ui-complete");popup=false;
     ui_upgrade_service_reset();tick(600);assert(results==1&&find(lv_scr_act(),"100%"));
     ui_page_16_ui_upgrade_destroy();ui_page_16_ui_upgrade_create(lv_scr_act());assert(results==1);
+    click("Start update");assert(actual.running);
+    upgrade_session_end(UPGRADE_SESSION_UI);
+    actual=(ui_upgrade_service_status_t){.finished=true,.success=false,.progress=96,.stage=UI_UPGRADE_STAGE_RESTART_REQUIRED};
+    strcpy(actual.result_text,"Keep the USB drive connected and restart to finish the update.");
+    tick(220);assert(restart_results==1&&results==1);
+    assert(find(lv_scr_act(),"Restart to continue")&&find(lv_scr_act(),"96%"));
+    snapshot("ui-restart-required");popup=false;
+    tick(500);assert(restart_results==1&&results==1);
+    assert(upgrade_session_begin(UPGRADE_SESSION_UI));popup=true;
+    tick(220);assert(find(lv_scr_act(),"Restart to continue"));
+    assert(!find(lv_scr_act(),"Update result unknown")&&!find(lv_scr_act(),"Another update is active"));
+    assert(action_blocked(button("Start update"))&&find(lv_scr_act(),"96%"));
+    upgrade_session_end(UPGRADE_SESSION_UI);popup=false;
+    ui_page_16_ui_upgrade_destroy();ui_upgrade_service_reset();ui_page_16_ui_upgrade_create(lv_scr_act());
+    detected.package_hash_status=UI_UPGRADE_PACKAGE_HASH_MATCH;tick(1100);
+    assert(find(lv_scr_act(),"Same as installed")&&!action_blocked(button("Start update")));
+    preparing_data=true;click("Start update");
+    assert(actual.running&&!action_blocked(button("Back")));
+    unsigned before_pops=pops;click("Back");
+    assert(pops==before_pops+1&&!preparing_data&&!actual.running);
+    assert(upgrade_session_owner()==UPGRADE_SESSION_NONE);
+    ui_page_16_ui_upgrade_destroy();ui_page_16_ui_upgrade_create(lv_scr_act());
     /* An updater-monitor failure holds the UI owner without presenting success. */
     assert(upgrade_session_begin(UPGRADE_SESSION_UI));
     actual=(ui_upgrade_service_status_t){.finished=true,.success=false,.progress=100,.stage=UI_UPGRADE_STAGE_FAIL};

@@ -20,6 +20,25 @@ stat() { echo UNEXPECTED_STAT >&2; return 127; }
 tail() { echo UNEXPECTED_TAIL >&2; return 127; }
 '''
 
+REAL_GUARD_PROGRESS = r'''
+GUARDED=1
+USB_GUARDED=1
+APP_GUARDED=1
+SYNC_TOOL=$ROOT_PREFIX/usr/local/bin/un260_storage_sync
+exec 7< "$ROOT_PREFIX" 8< "$USB_MNT" 9< "$APP_VOLUME_DIR"
+# Host directories replace mount identity/NAND only. Native held-fd checks,
+# syncfs, hashes, transactions and the final markers remain real.
+usb_barrier() { "$SYNC_TOOL" --fd 8 "$USB_MNT"; }
+: > "$ROOT_PREFIX/progress.trace"
+mv() {
+    command mv "$@" || return
+    case "$*" in *"$STATUS_TEMP"*)
+        tr '\n' '|' < "$STATUS_FILE" >> "$ROOT_PREFIX/progress.trace"
+        printf '\n' >> "$ROOT_PREFIX/progress.trace" ;;
+    esac
+}
+'''
+
 
 class UnifiedTests(Base):
     def setUp(self):
@@ -29,10 +48,16 @@ class UnifiedTests(Base):
         # Emulate the migration boundary; real helper is independently covered
         # by test_app_storage fault injection and bounded native MTD reads.
         self.files['usr/local/bin/un260_app_storage'] = (
-            ('#!/bin/sh\n# UN260_STORAGE_SYNC_1 UN260_MTD_STREAM_1 UN260_APP_VOLUME_V1\n'
+            ('#!/bin/sh\n# UN260_STORAGE_SYNC_1 UN260_MTD_STREAM_1 UN260_APP_VOLUME_V1 UN260_STORAGE_POLICY_V2 UN260_STORAGE_POLICY_V3\n'
              'if [ "$1" = --migrate ]; then\n'
              ' echo migrate >> "%s/migration-calls"\n'
-             ' [ ! -f "%s/fail-migration" ] || exit 1\nfi\nexit 0\n' % (self.p, self.p)).encode(), 0o755)
+             ' [ ! -f "%s/fail-migration" ] || exit 1\n'
+             ' mkdir -p "%s/etc/un260/app-storage"\n'
+             ' echo owned > "%s/etc/un260/app-storage/active"\n'
+             'fi\n'
+             'if [ "$1" = --verify-layout ]; then\n'
+             ' [ ! -f "%s/fail-layout" ] || exit 1\nfi\nexit 0\n' %
+             (self.p, self.p, self.root, self.root, self.p)).encode(), 0o755)
         self.pack()
         self.unified = self.p / 'UN260_UPDATE.upk'
         build(self.full, self.unified, APPROVED)
@@ -40,7 +65,7 @@ class UnifiedTests(Base):
 
     def boot(self, ok=True, extra=''):
         # setup functions source current updater exactly as next boot would.
-        return self.run_update(package=self.unified, extra='UNIFIED_RESUME=1\n' + extra, ok=ok)
+        return self.run_update(package=self.unified, extra='APP_VOLUME=0\nprepare_app_storage\nUNIFIED_RESUME=1\n' + extra, ok=ok)
 
     def bridge(self):
         self.run_update(package=self.unified, source=self.old)
@@ -232,11 +257,287 @@ mkdir() {
         self.boot(extra=NO_OPTIONAL_TOOLS)
         self.assertEqual((self.vol / 'test_lvgl').read_bytes(), self.files[APP][0])
 
+    @unittest.skipUnless(os.environ.get('UN260_TEST_R7_UPDATER'), 'requires frozen delivered R7 updater')
+    def test_real_r7_bridge_failure_then_explicit_new_package_and_boot(self):
+        r7 = Path(os.environ['UN260_TEST_R7_UPDATER'])
+        self.assertEqual(hashlib.sha256(r7.read_bytes()).hexdigest(),
+                         '3ec13ccaf10d6991f8ca4f0e1e503d0ff2fd49e6b8f9cd00905532b1b13750ed')
+        self.run_update(package=self.unified, source=r7, managed=0)
+        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'old app')
+        (self.p / 'fail-migration').touch()
+        self.boot(ok=False)
+        before = (self.root / REQUEST).read_bytes()
+        self.files[APP] = (b'REPAIRED AFTER R7 FAILURE', 0o755)
+        self.pack(); build(self.full, self.unified, APPROVED)
+        self.run_update(package=self.unified, source=r7, managed=0)
+        self.assertNotEqual((self.root / REQUEST).read_bytes(), before)
+        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'old app')
+        (self.p / 'fail-migration').unlink()
+        self.boot()
+        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), self.files[APP][0])
+        self.assertIn('success=1', (self.root / 'status').read_text())
+
     def test_current_updater_bootstraps_same_small_subset(self):
-        self.run_update(package=self.unified)
+        self.run_update(package=self.unified, managed=0)
         self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'old app')
         self.assertFalse((self.root / 'var/lib/un260-updater/transaction').exists())
+        self.assertIn('stage=restart', (self.root / 'status').read_text())
+        self.assertIn('success=-1', (self.root / 'status').read_text())
+        self.assertIn('result=pending', (self.root / 'result').read_text())
+        self.assertFalse((self.root / 'var/lib/un260-updater/installed.fnv64').exists())
         self.boot()
+
+    def test_managed_volume_installs_one_public_package_without_migration(self):
+        self.run_update(package=self.unified, extra=NO_OPTIONAL_TOOLS)
+        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), self.files[APP][0])
+        self.assertFalse((self.p / 'migration-calls').exists())
+        self.assertIn('success=1', (self.root / 'status').read_text())
+        self.assertEqual((self.root / 'var/lib/un260-updater/installed.fnv64').read_text().strip(),
+                         ui_fingerprint(self.unified.read_bytes()))
+
+    def progress_rows(self):
+        return [dict(field.split('=', 1) for field in row.rstrip('|').split('|'))
+                for row in (self.root / 'progress.trace').read_text().splitlines()]
+
+    def assert_final_progress(self):
+        rows = self.progress_rows()
+        values = [int(row['progress']) for row in rows]
+        self.assertEqual(values, sorted(values), rows)
+        self.assertEqual([row['stage'] for row in rows[-2:]], ['finish', 'success'])
+        self.assertEqual(values[-2:], [96, 100])
+        self.assertTrue(all(value < 96 for value in values[:-2]), rows)
+        self.assertEqual(sum(row['stage'] == 'finish' for row in rows), 1)
+        self.assertIn('result=success', (self.usb / 'UN260_UPDATE_RESULT.txt').read_text())
+        # USB log is copied BEFORE its final barrier; its pending wording is
+        # also present after a fully successful operation, not failure evidence.
+        self.assertIn('final USB flush pending', (self.usb / 'ui_update.log').read_text())
+        self.assertTrue((self.root / 'var/lib/un260-updater/unified.completed').is_file())
+
+    def test_unified_progress_changed_and_nochange_with_real_guard(self):
+        self.run_update(package=self.unified, extra=REAL_GUARD_PROGRESS)
+        self.assert_final_progress()
+        self.assertFalse((self.p / 'migration-calls').exists())
+        _, log = self.run_update(package=self.unified, extra=REAL_GUARD_PROGRESS)
+        self.assert_final_progress()
+        self.assertIn('Install plan: changed=0', log)
+        self.assertFalse((self.p / 'migration-calls').exists())
+
+    def test_boot_migration_progress_with_real_guard(self):
+        self.bridge()
+        self.boot(extra=REAL_GUARD_PROGRESS)
+        self.assert_final_progress()
+        self.assertEqual((self.p / 'migration-calls').read_text().splitlines(), ['migrate'])
+
+    def test_tiny_bridge_restart_progress_with_real_guard(self):
+        self.run_update(package=self.unified, managed=0, extra=REAL_GUARD_PROGRESS)
+        rows = self.progress_rows()
+        values = [int(row['progress']) for row in rows]
+        self.assertEqual(values, sorted(values), rows)
+        self.assertEqual([row['stage'] for row in rows[-2:]], ['finish', 'restart'])
+        self.assertEqual(values[-2:], [96, 96])
+        self.assertTrue(all(value < 96 for value in values[:-2]), rows)
+        self.assertEqual(rows[-1]['success'], '-1')
+        self.assertFalse((self.root / 'var/lib/un260-updater/unified.completed').exists())
+        self.assertFalse((self.root / 'var/lib/un260-updater/installed.fnv64').exists())
+        self.assertIn('result=pending', (self.usb / 'UN260_UPDATE_RESULT.txt').read_text())
+
+    def test_unified_failure_retains_mapped_progress_with_real_guard(self):
+        (self.p / 'fail-layout').touch()
+        self.run_update(package=self.unified, extra=REAL_GUARD_PROGRESS, ok=False)
+        rows = self.progress_rows()
+        self.assertEqual(rows[-1]['stage'], 'fail')
+        self.assertEqual(rows[-1]['progress'], rows[-2]['progress'])
+        self.assertGreaterEqual(int(rows[-1]['progress']), 65)
+        self.assertLess(int(rows[-1]['progress']), 96)
+        self.assertNotIn('finish', [row['stage'] for row in rows])
+        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'old app')
+        self.assertFalse((self.root / 'var/lib/un260-updater/unified.completed').exists())
+
+    def interrupted_old_progress_retry(self, committed):
+        old = Path(os.environ['UN260_TEST_PRE_PROGRESS_UPDATER'])
+        self.assertEqual(hashlib.sha256(old.read_bytes()).hexdigest(),
+                         '95097e98778baa4fff3e5aee9668a04d46786485d266b0b6edfe3413594e3447')
+        self.run_update(package=self.unified, extra=REAL_GUARD_PROGRESS)
+        # Same archive, but an installed file needs repair; the old managed
+        # bridge reaches 96 before this application's transaction even starts.
+        (self.vol / 'test_lvgl').write_bytes(b'DAMAGED CURRENT APP')
+        if committed:
+            interrupt = r'''
+rm() {
+    case "$*" in *test_lvgl.un260-old*)
+        [ ! -f "$JOURNAL/committed" ] || exit 88 ;;
+    esac
+    command rm "$@"
+}
+'''
+        else:
+            interrupt = r'''
+mv() {
+    command mv "$@" || return
+    case "$*" in *test_lvgl.un260-new*) exit 88 ;; esac
+    case "$*" in *"$STATUS_TEMP"*)
+        tr '\n' '|' < "$STATUS_FILE" >> "$ROOT_PREFIX/progress.trace"
+        printf '\n' >> "$ROOT_PREFIX/progress.trace" ;;
+    esac
+}
+'''
+        result, _ = self.run_update(package=self.unified, source=old,
+                                    extra=REAL_GUARD_PROGRESS + interrupt, ok=None)
+        self.assertEqual(result.returncode, 88, result.stderr)
+        self.assertIn('96', [row['progress'] for row in self.progress_rows()])
+        journal = self.root / 'var/lib/un260-updater/transaction'
+        self.assertTrue(journal.is_dir())
+        self.assertEqual((journal / 'committed').exists(), committed)
+        self.run_update(package=self.unified, extra=REAL_GUARD_PROGRESS,
+                        action='recover_transaction\ninstall_bundle')
+        self.assert_final_progress()
+        self.assertFalse(journal.exists())
+        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), self.files[APP][0])
+        self.assertFalse((self.p / 'migration-calls').exists())
+        self.assertEqual((self.root / 'var/lib/un260-updater/installed.fnv64').read_text().strip(),
+                         ui_fingerprint(self.unified.read_bytes()))
+
+    @unittest.skipUnless(os.environ.get('UN260_TEST_PRE_PROGRESS_UPDATER'), 'requires frozen pre-fix updater')
+    def test_old_96_uncommitted_interruption_recovers_then_retries(self):
+        self.interrupted_old_progress_retry(False)
+
+    @unittest.skipUnless(os.environ.get('UN260_TEST_PRE_PROGRESS_UPDATER'), 'requires frozen pre-fix updater')
+    def test_old_96_committed_interruption_recovers_then_retries(self):
+        self.interrupted_old_progress_retry(True)
+
+    @unittest.skipUnless(os.environ.get('UN260_TEST_PRE_PROGRESS_UPDATER'), 'requires frozen pre-fix updater')
+    def test_old_running_updater_installs_fix_then_new_progress_applies(self):
+        old = Path(os.environ['UN260_TEST_PRE_PROGRESS_UPDATER'])
+        self.assertEqual(hashlib.sha256(old.read_bytes()).hexdigest(),
+                         '95097e98778baa4fff3e5aee9668a04d46786485d266b0b6edfe3413594e3447')
+        self.run_update(package=self.unified, source=old, extra=REAL_GUARD_PROGRESS)
+        rows = self.progress_rows()
+        values = [int(row['progress']) for row in rows]
+        self.assertEqual(values[-1], 100)
+        first_96 = values.index(96)
+        self.assertTrue(any(value < 96 for value in values[first_96+1:]))
+        self.assertEqual(rows[-1]['success'], '1')
+        self.assertEqual((self.root / 'usr/bin/ui_update.sh').read_bytes(),
+                         self.files['usr/bin/ui_update.sh'][0])
+        self.assertEqual((self.root / 'var/lib/un260-updater/installed.fnv64').read_text().strip(),
+                         ui_fingerprint(self.unified.read_bytes()))
+        request_hash = hashlib.sha256((self.root / REQUEST).read_bytes()).hexdigest()
+        self.assertEqual((self.root / 'var/lib/un260-updater/unified.completed').read_text().strip(), request_hash)
+        self.run_update(package=self.unified, source=self.root / 'usr/bin/ui_update.sh',
+                        extra=REAL_GUARD_PROGRESS)
+        self.assert_final_progress()
+        self.assertFalse((self.p / 'migration-calls').exists())
+
+    def test_explicit_new_package_replaces_failed_request_after_recovery(self):
+        self.bridge()
+        previous = (self.root / REQUEST).read_bytes()
+        self.files[APP] = (b'ANOTHER APP', 0o755)
+        self.pack()
+        build(self.full, self.unified, APPROVED)
+        self.boot(ok=False)
+        self.assertEqual((self.root / REQUEST).read_bytes(), previous)
+        self.run_update(package=self.unified)
+        self.assertNotEqual((self.root / REQUEST).read_bytes(), previous)
+        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'ANOTHER APP')
+        self.assertFalse((self.p / 'migration-calls').exists())
+
+    def test_final_layout_failure_rolls_back_application_and_never_completes(self):
+        (self.p / 'fail-layout').touch()
+        self.run_update(package=self.unified, ok=False)
+        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'old app')
+        self.assertFalse((self.root / 'var/lib/un260-updater/unified.completed').exists())
+        self.assertNotIn('success=1', (self.root / 'status').read_text())
+        (self.p / 'fail-layout').unlink()
+        self.run_update(package=self.unified)
+        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), self.files[APP][0])
+
+    def test_same_package_repairs_changed_content_and_mode(self):
+        self.run_update(package=self.unified)
+        (self.vol / 'test_lvgl').write_bytes(b'BROKEN APP')
+        (self.root / 'usr/local/lib/liblvgl.so').chmod(0o644)
+        self.run_update(package=self.unified)
+        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), self.files[APP][0])
+        self.assertEqual((self.root / 'usr/local/lib/liblvgl.so').stat().st_mode & 0o777, 0o755)
+
+    def owned_resource_package(self):
+        self.files['usr/local/share/lvgl_data/current.png'] = (b'CURRENT RESOURCE', 0o644)
+        self.pack()
+        with tarfile.open(self.full) as source:
+            entries = [(item, source.extractfile(item).read() if item.isfile() else None)
+                       for item in source.getmembers()]
+        with tarfile.open(self.full, 'w:gz', format=tarfile.USTAR_FORMAT) as target:
+            directory = tarfile.TarInfo('payload/usr/local/share/lvgl_data')
+            directory.type = tarfile.DIRTYPE; directory.mode = 0o755
+            target.addfile(directory)
+            for item, data in entries:
+                if item.name == 'install.tsv':
+                    data = b''.join(line + b'\n' for line in data.splitlines()
+                                    if b'|usr/local/share/lvgl_data/' not in line)
+                    data += b'tree|0755|usr/local/share/lvgl_data\n'
+                    item.size = len(data)
+                target.addfile(item, io.BytesIO(data) if data is not None else None)
+        build(self.full, self.unified, APPROVED)
+
+    def test_owned_static_tree_converges_and_failed_final_check_restores_retired_files(self):
+        self.owned_resource_package()
+        stale = self.root / 'usr/local/share/lvgl_data/retired/old.png'
+        stale.parent.mkdir(parents=True); stale.write_bytes(b'OLD STATIC RESOURCE')
+        user_image = self.root / 'etc/ui_state/standby_photo.bin'
+        user_image.write_bytes(b'USER PHOTO')
+        calibration = self.root / 'etc/pointercal'
+        calibration.write_bytes(b'CALIBRATION')
+        (self.p / 'fail-layout').touch()
+        self.run_update(package=self.unified, ok=False)
+        self.assertEqual(stale.read_bytes(), b'OLD STATIC RESOURCE')
+        self.assertFalse((stale.parents[1] / 'current.png').exists())
+        self.assertEqual(user_image.read_bytes(), b'USER PHOTO')
+        self.assertEqual(calibration.read_bytes(), b'CALIBRATION')
+        (self.p / 'fail-layout').unlink()
+        self.run_update(package=self.unified)
+        self.assertFalse(stale.exists())
+        self.assertEqual((stale.parents[1] / 'current.png').read_bytes(), b'CURRENT RESOURCE')
+        stale.write_bytes(b'REINTRODUCED STATIC RESOURCE')
+        self.run_update(package=self.unified)
+        self.assertFalse(stale.exists())
+        self.assertEqual(user_image.read_bytes(), b'USER PHOTO')
+        self.assertEqual(calibration.read_bytes(), b'CALIBRATION')
+
+    def test_owned_static_tree_refuses_symlink_before_application_changes(self):
+        self.owned_resource_package()
+        resource = self.root / 'usr/local/share/lvgl_data/custom.png'
+        resource.parent.mkdir(parents=True)
+        resource.symlink_to(self.business)
+        self.run_update(package=self.unified, ok=False)
+        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'old app')
+        self.assertIn('Unsupported installed static resource entry', (self.root / 'status').read_text())
+
+    def test_final_verification_detects_post_copy_corruption_and_rolls_back(self):
+        self.run_update(package=self.unified, ok=False, extra='''
+mv() {
+    command mv "$@" || return $?
+    case "$*" in *test_lvgl.un260-new*) printf CORRUPT > "$APP_VOLUME_DIR/test_lvgl" ;; esac
+}''')
+        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'old app')
+        self.assertIn('Installed target checksum differs', (self.root / 'status').read_text())
+        self.assertFalse((self.root / 'var/lib/un260-updater/unified.completed').exists())
+
+    def test_failed_transaction_recovered_before_explicit_new_package(self):
+        self.bridge()
+        old_request = (self.root / REQUEST).read_bytes()
+        journal = self.root / 'var/lib/un260-updater/transaction'
+        journal.mkdir(parents=True)
+        (journal / 'state').write_text('1|usr/local/lib/liblvgl.so\n')
+        library = self.root / 'usr/local/lib/liblvgl.so'
+        old_link = library.with_name(library.name + '.un260-old')
+        os.link(library, old_link)
+        library.unlink(); library.write_bytes(b'INTERRUPTED REPLACEMENT')
+        self.files[APP] = (b'RETRIED NEW APP', 0o755)
+        self.pack(); build(self.full, self.unified, APPROVED)
+        self.run_update(package=self.unified, action='recover_transaction; install_bundle')
+        self.assertNotEqual((self.root / REQUEST).read_bytes(), old_request)
+        self.assertEqual(library.read_bytes(), self.files['usr/local/lib/liblvgl.so'][0])
+        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'RETRIED NEW APP')
+        self.assertFalse(old_link.exists()); self.assertFalse(journal.exists())
 
     def test_changed_request_or_wrong_usb_refused(self):
         self.bridge()

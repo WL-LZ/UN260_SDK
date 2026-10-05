@@ -53,14 +53,20 @@ int main(int argc,char **argv){
   assert(!memcmp(&before,&g_ui_upgrade_service,sizeof(before)));
  }
  load(argv[1],"success");assert(g_ui_upgrade_service.status.progress==100&&g_ui_upgrade_service.status.finished&&g_ui_upgrade_service.status.success);
+ reset();load(argv[1],"restart");
+ assert(g_ui_upgrade_service.status.progress==96&&g_ui_upgrade_service.status.finished&&!g_ui_upgrade_service.status.success);
+ assert(g_ui_upgrade_service.status.stage==UI_UPGRADE_STAGE_RESTART_REQUIRED);
+ assert(strstr(g_ui_upgrade_service.status.result_text,"USB drive connected"));
+ reset();load(argv[1],"restart_empty");
+ assert(g_ui_upgrade_service.status.stage==UI_UPGRADE_STAGE_RESTART_REQUIRED&&!g_ui_upgrade_service.status.success);
  reset();load(argv[1],"step6");load(argv[1],"failure");
  assert(g_ui_upgrade_service.status.progress==34&&g_ui_upgrade_service.status.finished&&!g_ui_upgrade_service.status.success);
  reset();load(argv[1],"step6");
  ui_upgrade_service_ctx_t before=g_ui_upgrade_service;
- for(unsigned i=0;i<8;++i){char name[32];snprintf(name,sizeof(name),"invalid%u",i);load(argv[1],name);assert(!memcmp(&before,&g_ui_upgrade_service,sizeof(before)));}
+ for(unsigned i=0;i<11;++i){char name[32];snprintf(name,sizeof(name),"invalid%u",i);load(argv[1],name);assert(!memcmp(&before,&g_ui_upgrade_service,sizeof(before)));}
  load(argv[1],"missing");assert(g_ui_upgrade_service.status.progress==70&&!g_ui_upgrade_service.status.finished);
  load(argv[1],"step6");assert(g_ui_upgrade_service.status.progress==70); /* cannot move backwards */
- puts("PASS actual shell -> C: all intermediate stages, blank/absent pending result, completion/failure, malformed/partial rejection, unchanged cache, monotonic progress");
+ puts("PASS actual shell -> C: intermediate stages, restart-required without final success, blank/absent pending, completion/failure, malformed rejection and monotonic progress");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='un260-upgrade-progress-') as temp:
@@ -69,14 +75,17 @@ with tempfile.TemporaryDirectory(prefix='un260-upgrade-progress-') as temp:
            (18,'verify','verify_manifest',''),(24,'verify','verify_checksum',''),(34,'preflight','preflight',''),
            (60,'install','install',''),(90,'install','install',''),(92,'sync','sync',''),(96,'finish','finish','')]
     shell=writer+'\nLAST_STAGE=none\nPHASE_TIME=0\nSTART_TIME=0\nLOG="$1/log"\nSTATUS_TEMP="$1/temp"\n'
-    for name,(p,stage,step,result) in [*((f'step{i}',c) for i,c in enumerate(cases)),('success',(100,'success','success','1')),('failure',(34,'fail','fail','0'))]:
+    for name,(p,stage,step,result) in [*((f'step{i}',c) for i,c in enumerate(cases)),('success',(100,'success','success','1')),('failure',(34,'fail','fail','0')),('restart',(96,'restart','restart','-1')),('restart_empty',(96,'restart','restart',''))]:
         shell+=f'STATUS_FILE="$1/{name}"\nwrite_status {p} {stage} {step} "{result}" "" || exit 1\n'
     subprocess.run(['sh','-c',shell,'writer',str(w)],check=True)
     base=(w/'step6').read_text()
     bad=[base.replace('success=','success=bad'),base.replace('success=','success=2'),
          base.replace('stage=install','stage=success'),base.replace('stage=install','stage=fail'),
          base.replace('success=','success=1'),base.replace('success=','success=0'),
-         base.rstrip('\n'),base.replace('progress=60','progress=101')]
+         base.rstrip('\n'),base.replace('progress=60','progress=101'),
+         (w/'restart').read_text().replace('success=-1','success=1'),
+         (w/'restart').read_text().replace('success=-1','success=0'),
+         (w/'restart').read_text().replace('success=-1','success=-2')]
     for i,text in enumerate(bad):(w/f'invalid{i}').write_text(text)
     (w/'missing').write_text(base.replace('success=\n','').replace('progress=60','progress=70'))
     (w/'test.c').write_text(header+helpers+test)

@@ -19,22 +19,34 @@
 #include "un260/lv_system/ui_lang.h"
 #include "un260/machine_state/machine_state.h"
 #include "un260/protocol/protocol_send.h"
-#include "un260/storage/standby_store.h"
+#include "un260/app_service/app_standby_runtime.h"
+#include "un260/lv_system/ui_state_runtime.h"
+#include "un260/lv_system/ui_i18n.h"
+#include "un260/counting/counting_data_store.h"
+#include "un260/currency/currency_state.h"
 #include "un260/font/main_fonts.h"
 #include "un260/font/ui_message_font.h"
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
-enum { SHEET_W=1280, SHEET_H=280, SHEET_Y=0, CLOSED_Y=-280 };
+LV_FONT_DECLARE(lv_font_instrument_sans_semibold_25);
+LV_FONT_DECLARE(lv_font_instrument_sans_medium_13);
+enum { SHEET_W=1280, SHEET_H=328, SHEET_Y=0, CLOSED_Y=-328 };
+enum { QC_ARRANGE=240, QC_CANCEL, QC_DONE, QC_CLOSE };
 typedef enum {
     QC_POST_NONE, QC_POST_STANDBY, QC_POST_PURE, QC_POST_GESTURE_GUIDE
 } qc_post_action_t;
 static struct {
-    lv_obj_t *main,*root,*sheet,*grab,*message;
+    lv_obj_t *main,*root,*sheet,*grab,*message,*page_label,*context;
+    lv_obj_t *arrange,*cancel,*done,*close;
+    bool arranging;
+    int selected;
+    uint8_t order[QUICK_CONTROL_COUNT];
     lv_quick_controls_t controls;
     lv_dma_static_surface_t surface;
     lv_timer_t *timer;
-    bool active,moving,opening,prepared,dirty,down,candidate,dragging,drain,tap_grab;
+    bool active,moving,opening,prepared,dirty,down,candidate,dragging,drain,tap_grab,navigation_blocked;
     bool from_open;
     qc_post_action_t after_close;
     lv_point_t start,point;
@@ -58,7 +70,7 @@ static bool qc_safe(void)
         !smart_island_is_expanded() &&
         !fault_popup_is_showing();
 }
-static bool qc_operation_safe(void)
+static bool qc_guide_safe(void)
 {
     return !app_command_runtime_count_start_busy() && !machine_state_aging_running() &&
         !fault_popup_get_pending_fault(NULL,NULL,NULL);
@@ -91,31 +103,97 @@ static lv_obj_t *qc_label(lv_obj_t *p,int x,int y,int w,const char *value,const 
 }
 static void qc_icon(lv_obj_t *p,int x,int y,const char *path)
 { lv_obj_t *o=lv_img_create(p);lv_img_set_src(o,path);lv_obj_set_pos(o,x,y); }
+static void qc_visible(lv_obj_t *o,bool show)
+{ if(show)lv_obj_clear_flag(o,LV_OBJ_FLAG_HIDDEN);else lv_obj_add_flag(o,LV_OBJ_FLAG_HIDDEN); }
 static void qc_refresh(void)
 {
     if(!quick.sheet)return;
     lv_quick_controls_state_t state=lv_quick_controls_current_state();
+    if(quick.arranging)memcpy(state.order,quick.order,sizeof(state.order));
     if(lv_quick_controls_refresh(&quick.controls,state))quick.dirty=true;
+    qc_text(quick.page_label,ui_tr(quick.page==UI_PAGE_PURE?UI_N_("Pure"):UI_N_("Main")));
+    char code[4],text[48];currency_state_get_effective_code(code);
+    const counting_sim_t *data=counting_data_current();
+    snprintf(text,sizeof(text),"%s   |   %d pcs",currency_state_display_code(code),data?data->total_pcs:0);
+    qc_text(quick.context,text);
+}
+static void qc_edit(bool edit)
+{
+    quick.arranging=edit;quick.selected=-1;
+    if(edit)ui_state_quick_order_get(quick.order);
+    lv_quick_controls_show_versions(&quick.controls,false);
+    qc_visible(quick.arrange,!edit);qc_visible(quick.close,!edit);
+    qc_visible(quick.cancel,edit);qc_visible(quick.done,edit);qc_visible(quick.context,!edit);
+    lv_quick_controls_set_editing(&quick.controls,edit,-1);
+    qc_text(quick.message,edit?ui_tr("Drag or tap two shortcuts to swap."):"");
+    qc_refresh();quick.dirty=true;
+}
+static void qc_swap(unsigned first,unsigned second)
+{
+    unsigned a=0,b=0;
+    for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
+        if(quick.order[i]==first)a=i;
+        if(quick.order[i]==second)b=i;
+    }
+    uint8_t id=quick.order[a];quick.order[a]=quick.order[b];quick.order[b]=id;
+    quick.selected=-1;qc_refresh();
+    lv_quick_controls_set_editing(&quick.controls,true,-1);quick.dirty=true;
+}
+static void qc_pick(unsigned id)
+{
+    if(quick.selected>=0 && quick.selected!=(int)id)qc_swap(quick.selected,id);
+    else {
+        quick.selected=quick.selected==(int)id?-1:(int)id;
+        lv_quick_controls_set_editing(&quick.controls,true,quick.selected);quick.dirty=true;
+    }
 }
 static void qc_action(lv_event_t *event)
 {
     if(quick.moving || !quick.active)return;
     unsigned id=(uintptr_t)lv_event_get_user_data(event);
     if(!qc_safe()) { qc_close_now();return; }
-    if((id == QUICK_STANDBY || id == QUICK_PURE) && !qc_operation_safe()) {
-        qc_text(quick.message,qc_tr(UI_TEXT_QUICK_STANDBY_BUSY));return;
+    if(id==QC_ARRANGE){qc_edit(true);return;}
+    if(id==QC_CANCEL){qc_edit(false);return;}
+    if(id==QC_DONE){
+        if(ui_state_quick_order_save(quick.order))qc_edit(false);
+        else qc_text(quick.message,ui_tr("Could not save shortcut order."));
+        return;
     }
-    if(id==QUICK_STANDBY || id==QUICK_PURE) {
+    if(id==QUICK_DEVICE_INFO || id==QUICK_DEVICE_CLOSE){
+        bool show=id==QUICK_DEVICE_INFO && lv_obj_has_flag(quick.controls.version_panel,LV_OBJ_FLAG_HIDDEN);
+        lv_quick_controls_show_versions(&quick.controls,show);quick.dirty=true;return;
+    }
+    if(id==QUICK_REORDER){
+        if(quick.arranging)qc_swap(quick.controls.drag_source,quick.controls.drag_target);
+        return;
+    }
+    if(id>=QUICK_CONTROL_COUNT){qc_settle(false);return;}
+    if(quick.arranging){qc_pick(id);return;}
+    if(id==QUICK_STANDBY){
+        const char *reason=app_standby_runtime_blocker();
+        if(reason && !app_standby_runtime_needs_fault_review()){
+            qc_text(quick.message,ui_tr(reason));return;
+        }
+    }
+    if(id==QUICK_STANDBY || id==QUICK_PURE){
         quick.after_close=id==QUICK_STANDBY?QC_POST_STANDBY:QC_POST_PURE;
         qc_settle(false);return;
     }
-    if(id<QUICK_CONTROL_COUNT) {
-        bool guide=id==QUICK_GESTURES && !gesture_service_enabled();
-        if(!lv_quick_controls_execute(id))qc_text(quick.message,qc_tr(UI_TEXT_QUICK_SAVE_FAILED));
-        else qc_text(quick.message,"");
-        qc_refresh();quick.dirty=true;
-        if(guide && gesture_service_enabled()) {quick.after_close=QC_POST_GESTURE_GUIDE;qc_settle(false);}
-    } else qc_settle(false);
+    bool guide=id==QUICK_GESTURES && !gesture_service_enabled() && quick.page!=UI_PAGE_PURE;
+    if(!lv_quick_controls_execute(id) && id!=QUICK_EXPORT)
+        qc_text(quick.message,qc_tr(UI_TEXT_QUICK_SAVE_FAILED));
+    else qc_text(quick.message,"");
+    qc_refresh();quick.dirty=true;
+    if(guide && gesture_service_enabled()){quick.after_close=QC_POST_GESTURE_GUIDE;qc_settle(false);}
+}
+static lv_obj_t *qc_button(int x,int w,const char *text,const char *image,unsigned action,bool filled)
+{
+    lv_obj_t *o=qc_box(quick.sheet,x,11,w,44,filled?0xE4ECF2:0xF0F4F7,10);
+    lv_obj_set_style_bg_color(o,lv_color_hex(0xDBE6EF),LV_STATE_PRESSED);
+    if(image)qc_icon(o,15,14,image);
+    lv_obj_t *label=qc_label(o,image?40:8,12,w-(image?48:16),text,&lv_font_instrument_sans_medium_14,0x253D4C);
+    if(!image)lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_CENTER,0);
+    lv_obj_add_event_cb(o,qc_action,LV_EVENT_CLICKED,(void *)(uintptr_t)action);return o;
 }
 static void qc_build(void)
 {
@@ -130,28 +208,39 @@ static void qc_build(void)
      * Only the opaque sheet moves; its parent stays transparent throughout. */
     lv_obj_set_style_bg_opa(quick.root,LV_OPA_TRANSP,0);
     lv_obj_add_flag(quick.root,LV_OBJ_FLAG_HIDDEN);
-    quick.sheet=qc_box(quick.root,0,SHEET_Y,SHEET_W,SHEET_H,0xF6F8FA,22);
-    lv_obj_set_style_pad_left(quick.sheet,16,0);
-    /* Flush top and side edges; only the lower corners remain rounded. The
-     * cap is part of this subtree, so it moves in the same raster as the text. */
-    lv_obj_t *cap=qc_box(quick.sheet,-16,0,SHEET_W,22,0xF6F8FA,0);
+    quick.sheet=qc_box(quick.root,0,SHEET_Y,SHEET_W,SHEET_H,0xF0F4F7,22);
+    /* All child coordinates are physical display coordinates: no implicit
+     * padding/border offsets between this sheet and its captured image. */
+    lv_obj_t *cap=qc_box(quick.sheet,0,0,SHEET_W,22,0xF0F4F7,0);
     lv_obj_clear_flag(cap,LV_OBJ_FLAG_CLICKABLE);
-    qc_label(quick.sheet,24,18,700,qc_tr(UI_TEXT_QUICK_TITLE),&lv_font_instrument_sans_semibold_28,0x1D2B34);
-    qc_label(quick.sheet,24,53,800,qc_tr(UI_TEXT_QUICK_SUBTITLE),&lv_font_instrument_sans_medium_14,0x586B77);
-    lv_quick_controls_create(&quick.controls,quick.sheet,24,80,qc_action);
-    lv_obj_t *close=qc_box(quick.sheet,1090,18,132,44,0xEAF0F4,12);
-    lv_obj_set_style_bg_color(close,lv_color_hex(0xDDE6ED),LV_STATE_PRESSED);
-    qc_icon(close,15,13,LVGL_DIR "quick_icons/up.png");
-    qc_label(close,42,12,82,qc_tr(UI_TEXT_QUICK_CLOSE),&lv_font_instrument_sans_medium_16,0x1D2B34);
-    lv_obj_add_event_cb(close,qc_action,LV_EVENT_CLICKED,(void *)255);
-    quick.message=qc_label(quick.sheet,24,244,1170,"",&lv_font_instrument_sans_medium_14,0x946215);
-    lv_obj_t *grip=qc_box(quick.sheet,598,263,52,4,0xBBC9D3,2);lv_obj_clear_flag(grip,LV_OBJ_FLAG_CLICKABLE);
-    /* Inner outline belongs to the captured sheet, never to the outside shield. */
-    lv_obj_t *outline=qc_box(quick.sheet,-16,0,SHEET_W,SHEET_H,0xF6F8FA,22);
+    qc_icon(quick.sheet,27,22,LVGL_DIR "quick_icons/settings.png");
+    qc_label(quick.sheet,63,17,184,qc_tr(UI_TEXT_QUICK_TITLE),&lv_font_instrument_sans_semibold_25,0x253D4C);
+    lv_obj_t *divider=qc_box(quick.sheet,245,25,1,16,0xCDDBE4,0);
+    lv_obj_clear_flag(divider,LV_OBJ_FLAG_CLICKABLE);
+    quick.page_label=qc_label(quick.sheet,264,25,90,"",&lv_font_instrument_sans_medium_13,0x718B9B);
+    if(!lv_quick_controls_create(&quick.controls,quick.sheet,25,65,qc_action)){
+        lv_obj_del(quick.root);quick.root=quick.sheet=NULL;
+        quick.message=quick.page_label=quick.context=NULL;
+        quick.arrange=quick.cancel=quick.done=quick.close=NULL;
+        memset(&quick.controls,0,sizeof(quick.controls));
+        quick.arranging=false;quick.selected=-1;qc_close_now();return;
+    }
+    quick.arrange=qc_button(1011,118,ui_tr("Arrange"),LVGL_DIR "quick_icons/arrange.png",QC_ARRANGE,false);
+    quick.close=qc_button(1143,112,qc_tr(UI_TEXT_QUICK_CLOSE),LVGL_DIR "quick_icons/up.png",QC_CLOSE,true);
+    quick.cancel=qc_button(1041,100,ui_tr("Cancel"),NULL,QC_CANCEL,false);
+    quick.done=qc_button(1155,100,ui_tr("Done"),NULL,QC_DONE,true);
+    qc_visible(quick.cancel,false);qc_visible(quick.done,false);
+    quick.message=qc_label(quick.sheet,510,282,490,"",&lv_font_instrument_sans_medium_13,0x946215);
+    lv_obj_set_style_text_align(quick.message,LV_TEXT_ALIGN_CENTER,0);
+    quick.context=qc_label(quick.sheet,1020,282,235,"",&lv_font_instrument_sans_medium_13,0x7B919F);
+    lv_obj_set_style_text_align(quick.context,LV_TEXT_ALIGN_RIGHT,0);
+    lv_obj_t *grip=qc_box(quick.sheet,614,314,54,4,0xBDCEDB,2);lv_obj_clear_flag(grip,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *outline=qc_box(quick.sheet,0,0,SHEET_W,SHEET_H,0xF0F4F7,22);
     lv_obj_set_style_bg_opa(outline,LV_OPA_TRANSP,0);
-    lv_obj_set_style_border_width(outline,2,0);
-    lv_obj_set_style_border_color(outline,lv_color_hex(0xDFE7ED),0);
+    lv_obj_set_style_border_width(outline,1,0);
+    lv_obj_set_style_border_color(outline,lv_color_hex(0xE1E8EE),0);
     lv_obj_clear_flag(outline,LV_OBJ_FLAG_CLICKABLE);
+    quick.selected=-1;
     quick.dirty=true;qc_refresh();
 }
 static void qc_position(int y)
@@ -164,11 +253,7 @@ static void qc_position(int y)
 static bool qc_prepare(void)
 {
     qc_build();qc_refresh();
-    if(!quick.active && !quick.moving && quick.controls.viewport &&
-       lv_obj_get_scroll_x(quick.controls.viewport)!=0){
-        lv_obj_scroll_to_x(quick.controls.viewport,0,LV_ANIM_OFF);
-        quick.dirty=true;
-    }
+    if(!quick.root)return false;
     if(quick.prepared && !quick.dirty)return true;
     bool hidden=lv_obj_has_flag(quick.root,LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(quick.root,LV_OBJ_FLAG_HIDDEN);
@@ -185,9 +270,17 @@ static bool qc_prepare(void)
 static void qc_animation_exec(void *unused,int32_t y) { (void)unused;qc_position(y); }
 static void qc_close_now(void)
 {
+    if(quick.navigation_blocked){
+        gesture_service_set_navigation_blocked(quick.page,false);quick.navigation_blocked=false;
+    }
     lv_anim_del(&quick,qc_animation_exec);
     quick.active=quick.moving=quick.dragging=quick.candidate=false;
     quick.after_close=QC_POST_NONE;
+    if(quick.arranging)qc_edit(false);
+    if(lv_quick_controls_reset(&quick.controls))quick.dirty=true;
+    if(quick.sheet && !lv_obj_has_flag(quick.controls.version_panel,LV_OBJ_FLAG_HIDDEN)){
+        lv_quick_controls_show_versions(&quick.controls,false);quick.dirty=true;
+    }
     quick.drain=quick.down;
     if(quick.root)lv_obj_add_flag(quick.root,LV_OBJ_FLAG_HIDDEN);
     qc_position(CLOSED_Y);
@@ -202,25 +295,38 @@ static void qc_animation_done(lv_anim_t *unused)
         if(quick.surface.image)lv_obj_add_flag(quick.surface.image,LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(quick.sheet,LV_OBJ_FLAG_HIDDEN);qc_refresh();
     } else {
-        qc_post_action_t action=qc_safe() && qc_operation_safe() && !qc_foreign_layer(&quick.point)?
+        qc_post_action_t action=qc_safe() && !qc_foreign_layer(&quick.point)?
             quick.after_close:QC_POST_NONE;
         qc_close_now();
         /* Do not layer the tutorial or a new page over the moving drawer.
          * Reuse existing workflows only after its overlay has been removed. */
         if(action==QC_POST_GESTURE_GUIDE) {
-            if(gesture_service_enabled() && !gesture_guide_is_open())gesture_guide_show();
+            if(qc_guide_safe() && gesture_service_enabled() && !gesture_guide_is_open())gesture_guide_show();
         } else if(action==QC_POST_STANDBY || action==QC_POST_PURE) {
-            lv_quick_controls_execute(action==QC_POST_STANDBY?QUICK_STANDBY:QUICK_PURE);
+            bool ok=lv_quick_controls_execute(action==QC_POST_STANDBY?QUICK_STANDBY:QUICK_PURE);
+            if(!ok && qc_safe()){
+                const char *reason=action==QC_POST_STANDBY?app_standby_runtime_blocker():NULL;
+                qc_text(quick.message,reason?ui_tr(reason):qc_tr(UI_TEXT_QUICK_SAVE_FAILED));
+                qc_settle(true);
+            }
         }
     }
 }
 static void qc_settle(bool open)
 {
     if(!quick.root)return;
+    if(!open && quick.arranging)qc_edit(false);
+    if(!open && !lv_obj_has_flag(quick.controls.version_panel,LV_OBJ_FLAG_HIDDEN)){
+        lv_quick_controls_show_versions(&quick.controls,false);quick.dirty=true;
+    }
     lv_anim_del(&quick,qc_animation_exec);quick.opening=open;quick.dragging=false;
     int from=quick.moving?quick.y:(quick.active?SHEET_Y:CLOSED_Y);
     /* Refresh only once per transition, never from the animation callback. */
     bool captured=quick.moving?quick.prepared:qc_prepare();
+    if(!quick.root)return;
+    if(open && quick.page==UI_PAGE_MAIN && !quick.navigation_blocked){
+        gesture_service_set_navigation_blocked(quick.page,true);quick.navigation_blocked=true;
+    }
     quick.moving=true;lv_obj_clear_flag(quick.root,LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(quick.sheet,LV_OBJ_FLAG_HIDDEN);
     /* The live fallback needs the same count/fault guard as the DMA path. */
@@ -314,6 +420,13 @@ bool page_01_main_quick_pointer(lv_indev_t *indev,lv_event_code_t event,const lv
         quick.candidate=false;return false;
     }
     if(quick.moving && !quick.dragging)return true;
+    if(quick.active && !quick.dragging && lv_quick_controls_pointer(&quick.controls,event,&quick.point,count)){
+        quick.dirty=true;
+        if(!quick.arranging && lv_quick_controls_take_vertical(&quick.controls,&quick.start,&quick.tick)){
+            quick.candidate=true;quick.from_open=true;quick.origin_y=SHEET_Y;quick.tap_grab=false;
+        } else {quick.candidate=false;return true;}
+    }
+
     if(!was_down && !released && event==LV_EVENT_PRESSED) {
         quick.start=quick.point;quick.tick=lv_tick_get();quick.from_open=quick.active;
         quick.tap_grab=!quick.active && point->y<16 && point->x>=580 && point->x<=700;
@@ -333,6 +446,7 @@ bool page_01_main_quick_pointer(lv_indev_t *indev,lv_event_code_t event,const lv
         quick.dragging=true;quick.opening=!quick.from_open;
         if(!quick.from_open)qc_request_versions();
         qc_prepare();quick.moving=true;
+        if(!quick.root){quick.moving=quick.candidate=false;quick.drain=true;return true;}
         lv_obj_move_foreground(quick.root);lv_obj_clear_flag(quick.root,LV_OBJ_FLAG_HIDDEN);
         if(quick.surface.image && quick.prepared)lv_obj_clear_flag(quick.surface.image,LV_OBJ_FLAG_HIDDEN);
         lv_timer_set_period(quick.timer,50);lv_timer_reset(quick.timer);lv_timer_resume(quick.timer);
@@ -349,7 +463,7 @@ bool page_01_main_quick_pointer(lv_indev_t *indev,lv_event_code_t event,const lv
     if(released) {
         bool tap=quick.tap_grab && abs(dx)<10 && abs(dy)<10;
         quick.candidate=false;quick.tap_grab=false;
-        if(tap) { qc_request_versions();qc_build();lv_obj_move_foreground(quick.root);qc_settle(true);return true; }
+        if(tap) { qc_request_versions();qc_build();if(quick.root){lv_obj_move_foreground(quick.root);qc_settle(true);}return true; }
     }
     return quick.tap_grab;
 }

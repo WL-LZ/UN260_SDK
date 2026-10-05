@@ -39,7 +39,13 @@ static ui_page_t g_pending_origin;
 static bool g_pending;
 static gesture_action_t g_pending_action;
 static uint64_t g_input_blocked_pages;
+static uint64_t g_navigation_blocked_pages;
 static bool g_blocked_contact;
+static bool navigation_blocked(ui_page_t page)
+{
+    uint32_t owner = (uint32_t)page;
+    return owner < 64 && (g_navigation_blocked_pages & (UINT64_C(1) << owner)) != 0;
+}
 static bool input_blocked(void)
 {
     uint32_t page = (uint32_t)ui_manager_get_current_page();
@@ -84,6 +90,7 @@ static bool gesture_page_is_safe(ui_page_t page)
 }
 static bool gesture_action_allowed(ui_page_t page, gesture_action_t action)
 {
+    if(navigation_blocked(page)) return false;
     if(action == GESTURE_ACTION_EXIT_PAGE)
         return page != UI_PAGE_BOOT_ANIM && page != UI_PAGE_BOOT;
     /* Maintenance pages keep their own in-progress/unsaved guards. Motor's
@@ -132,7 +139,8 @@ static void gesture_navigate_async(void *user_data)
 
 static void gesture_queue(void)
 {
-    if(g_pending || g_runtime.origin != ui_manager_get_current_page()) return;
+    if(g_pending || g_runtime.origin != ui_manager_get_current_page() ||
+       !gesture_action_allowed(g_runtime.origin, g_runtime.action)) return;
     g_pending_origin = g_runtime.origin;
     g_pending_tick = lv_tick_get();
     g_pending_action = g_runtime.action;
@@ -149,6 +157,28 @@ static void gesture_queue(void)
 static uint32_t g_pointer_owner;
 static gesture_pointer_policy_t g_pointer_policy;
 static bool g_pointer_captured;
+
+void gesture_service_set_navigation_blocked(uint32_t owner, bool blocked)
+{
+    if(owner >= 64) return;
+    uint64_t bit = UINT64_C(1) << owner;
+    if(!blocked) { g_navigation_blocked_pages &= ~bit; return; }
+    g_navigation_blocked_pages |= bit;
+    if(g_pending && (uint32_t)g_pending_origin == owner) {
+        lv_async_call_cancel(gesture_navigate_async, (void *)(uintptr_t)g_pending_action);
+        g_pending = false;
+    }
+    if(owner != (uint32_t)ui_manager_get_current_page()) return;
+    /* Keep a captured contact consumed, so changing this policy cannot turn
+     * the remainder of a navigation drag into a widget click. */
+    if(g_runtime.captured) {
+        g_runtime.cancelled = true;
+        g_runtime.triggered = false;
+    } else {
+        memset(&g_runtime, 0, sizeof(g_runtime));
+    }
+    touch_feedback_edge_hint(0, 0, 0);
+}
 
 void gesture_service_set_input_blocked(uint32_t owner, bool blocked)
 {
@@ -215,6 +245,12 @@ static bool gesture_pointer_event(lv_indev_t *indev, lv_event_code_t event,
         if(g_runtime.triggered && !g_runtime.cancelled) gesture_queue();
         memset(&g_runtime, 0, sizeof(g_runtime));
         return captured;
+    }
+    if(navigation_blocked(ui_manager_get_current_page())) {
+        /* Page-owned pointer gestures already ran above. Keep global
+         * multi-finger contacts from turning into an ordinary widget click. */
+        if(count > 1) g_runtime.captured = g_runtime.cancelled = true;
+        return g_runtime.captured;
     }
     /* A page may own a single drag, but a second contact transfers ownership
      * to the global recognizer. Never drop captured/releasing sequences. */

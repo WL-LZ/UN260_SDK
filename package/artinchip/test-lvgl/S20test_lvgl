@@ -2,6 +2,8 @@
 #
 # Start test_lvgl....
 #
+# UN260_STORAGE_POLICY_V2: failed migration may return to a verified legacy app.
+# UN260_STORAGE_POLICY_V3: backup-bound enrollment and older journal recovery.
 
 
 DAEMON="/usr/local/bin/test_lvgl"
@@ -240,7 +242,14 @@ start_ready() {
           done
           if ! /usr/bin/ui_update.sh --continue-unified >> "$STARTUP_LOG" 2>&1; then
               echo 'Unified upgrade paused; keep the same USB and inspect ui_update.log'
-              return 1
+              # Return only to a stable, verified installed application. This
+              # does not complete the request or discard recovery evidence.
+              if ! /usr/local/bin/un260_app_storage --can-launch-current >> "$STARTUP_LOG" 2>&1; then
+                  echo 'Starting test_lvgl: Fail (upgrade recovery required)'
+                  return 1
+              fi
+              echo 'Unified upgrade incomplete; returning to installed UI for maintenance; USB retry remains pending'
+              boot_trace unified_current_fallback
           fi
       fi
 

@@ -45,12 +45,13 @@ void uart_debug_printf(const char *s,...){(void)s;}
 #define data_collection_state_mode() 0
 #define ui_manager_get_current_page() UI_PAGE_MAIN
 #define work_mode_service_diagnostic_active() false
+#define smart_island_pure_count_is_enabled() false
 #define app_counting_runtime_main_page_active() true
 #define ui_history_total_notes_counted_get() 0
 #define lv_tick_get() 100
 '''
 noops = '''app_fault_recovery_clear diagnostic_calibration_feed_started currency_state_begin_count_session
-page_02_list_report_reset page_01_curr_img_refre fault_popup_clear_runtime counting_history_session_start
+page_02_list_report_reset page_01_curr_img_refre fault_popup_clear_runtime fault_popup_clear_preset counting_history_session_start
 app_auto_qr_on_start multi_pass_verification_on_count_start multi_pass_verification_get_view
 page_32_innovation_notify_verification_event data_collection_state_set_status page_06_data_collection_refresh
 ui_manager_switch smart_island_notify_count_start app_counting_runtime_refresh_compact counting_history_append_frame

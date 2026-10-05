@@ -3,12 +3,14 @@
 from pathlib import Path
 import subprocess
 import tempfile
+import re
 
 root=Path(__file__).resolve().parents[1]
 source=(root/'un260/lv_core/lv_page_manager.c').read_text()
 def function(name):
-    start=source.index(name+'(')
-    start=source.rfind('\n',0,start)+1
+    match=re.search(r'^(?:static )?[\w *]+\b'+name+r'\([^;]*?\)\s*\{',source,re.M)
+    assert match,name
+    start=match.start()
     brace=source.index('{',start)
     depth=1
     end=brace+1
@@ -38,10 +40,18 @@ static unsigned session_resets;
 static void ui_manager_reset_navigation_sessions(void){session_resets++;}
 #define uart_debug_printf(...) ((void)0)
 static bool ui_manager_page_is_registered(ui_page_t p){return p>=0 && p<UI_PAGE_COUNT;}
+typedef struct {bool navigation_root;} ui_page_registration_t;
 '''
+roots=[]
+registry=source[source.index('static const ui_page_registration_t g_page_registry'):]
+for match in re.finditer(r'\[(UI_PAGE_\w+)\]\s*=\s*\{([^}]+)\}',registry):
+    if '.navigation_root = true' in match.group(2): roots.append(match.group(1))
+assert set(roots)=={'UI_PAGE_MAIN','UI_PAGE_PURE'}
+code+='static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT]={'+','.join('['+page+']={true}' for page in roots)+'};\n'
 # Keep diagnostic arguments evaluated in the stub build for -Werror.
 code=code.replace('#define uart_debug_printf(...) ((void)0)',
                   'static void uart_debug_printf(const char *fmt,...){(void)fmt;}')
+code+=function('ui_manager_is_navigation_root')
 code+=function('ui_manager_history_on_commit')
 code+=function('ui_manager_navigation_on_leave')
 code+=r'''
@@ -106,6 +116,26 @@ int main(void){
     g_page_switch_committing=false;ui_manager_push_page((ui_page_t)999);
     assert(g_page_manager.current==UI_PAGE_MAIN && g_page_manager.stack_top==-1);
     puts("PASS: Main root invariant, List/Settings/Print reproduction, nested LIFO, direct Home, guards");
+    /* Selecting another theme drops the old theme's stack and temporary
+     * Home bookmark. Pure cannot be popped or suspended back into Main. */
+    ui_manager_push_page(UI_PAGE_SETTING);assert(ui_manager_suspend_to_home());
+    assert(g_home_bookmark_valid);
+    ui_manager_push_page(UI_PAGE_PURE);
+    assert(g_page_manager.current==UI_PAGE_PURE&&g_page_manager.stack_top==-1);
+    assert(!g_home_bookmark_valid&&!ui_manager_restore_from_home());
+    assert(!ui_manager_pop_page()&&g_page_manager.current==UI_PAGE_PURE);
+    assert(!ui_manager_suspend_to_home()&&g_page_manager.current==UI_PAGE_PURE);
+    for(unsigned i=0;i<20;i++) {
+        ui_manager_push_page(UI_PAGE_STANDBY);
+        assert(g_page_manager.stack_top==0);
+        if(i%2)assert(ui_manager_pop_page()); /* Touch wake. */
+        else ui_manager_switch(UI_PAGE_PURE); /* Hardware Start wake. */
+        assert(g_page_manager.current==UI_PAGE_PURE&&g_page_manager.stack_top==-1);
+    }
+    ui_manager_switch(UI_PAGE_MAIN);
+    assert(!g_home_bookmark_valid&&g_page_manager.stack_top==-1);
+    assert(!ui_manager_restore_from_home());
+    puts("PASS independent Pure root: old history/bookmark discarded, no Back/Home exit, repeated Standby/Start wake bounded");
 }
 '''
 work=Path(tempfile.mkdtemp(prefix='un260-navigation-test-'))

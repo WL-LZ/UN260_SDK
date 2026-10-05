@@ -47,6 +47,8 @@ bool standby_store_save(const standby_config_t *cfg);
 bool standby_store_import(void);
 bool standby_store_delete(unsigned photo);
 bool standby_store_busy(void);
+/* A local mutation with uncertain durability blocks upgrade until next boot. */
+bool standby_store_storage_ready(void);
 /* Poll on UI thread. Completed jobs never hold references to a page. */
 bool standby_store_poll(char *message, unsigned capacity);
 /* UI-thread result of the last completed poll; not a live worker flag. */

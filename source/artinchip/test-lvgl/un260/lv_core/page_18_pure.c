@@ -9,6 +9,7 @@
 #include "un260/currency/currency_state.h"
 #include "un260/lv_system/ui_lang.h"
 #include "un260/lv_system/ui_text.h"
+#include "un260/lv_system/ui_state_runtime.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -38,7 +39,6 @@ typedef struct {
     char displayed_pcs[32];
     int displayed_reject;
     bool values_valid;
-    bool exiting;
 } pure_page_context_t;
 
 static pure_page_context_t g_pure_page = {
@@ -361,27 +361,27 @@ void ui_page_18_pure_create(lv_obj_t* parent)
     smart_island_create(g_pure_page.page);
     page_01_main_quick_attach(g_pure_page.page,UI_PAGE_PURE);
     gesture_service_set_pointer_policy(UI_PAGE_PURE,page_01_main_quick_pointer);
+    gesture_service_set_navigation_blocked(UI_PAGE_PURE,true);
 }
 
-void ui_page_18_pure_request_exit(void)
+bool ui_page_18_pure_toggle_theme(void)
 {
-    if (g_pure_page.page == NULL || !lv_obj_is_valid(g_pure_page.page)) {
-        ui_manager_switch(UI_PAGE_MAIN);
-        return;
-    }
-
-    if (g_pure_page.exiting) {
-        return;
-    }
-
-    g_pure_page.exiting = true;
+    if (ui_manager_is_transitioning()) return false;
+    /* The visible theme is authoritative. A preference left enabled by an
+     * older navigation path must not turn Enter PURE into a no-op. */
+    ui_page_t target = ui_manager_get_current_page() == UI_PAGE_PURE ?
+        UI_PAGE_MAIN : UI_PAGE_PURE;
     smart_island_close();
-    ui_manager_switch(UI_PAGE_MAIN);
-    g_pure_page.exiting = false;
+    ui_manager_switch(target);
+    if (ui_manager_get_current_page() != target) return false;
+    smart_island_set_pure_count_enabled(target == UI_PAGE_PURE);
+    ui_state_save_pure_count_state();
+    return true;
 }
 
 void ui_page_18_pure_suspend(void)
 {
+    gesture_service_set_navigation_blocked(UI_PAGE_PURE,false);
     if (g_pure_page.page == NULL || !lv_obj_is_valid(g_pure_page.page)) {
         return;
     }
@@ -415,6 +415,7 @@ bool ui_page_18_pure_resume(void)
     smart_island_set_suspended(false);
     page_01_main_quick_attach(g_pure_page.page,UI_PAGE_PURE);
     gesture_service_set_pointer_policy(UI_PAGE_PURE,page_01_main_quick_pointer);
+    gesture_service_set_navigation_blocked(UI_PAGE_PURE,true);
 
     language = ui_lang_get();
     if (g_pure_page.language != language) {
@@ -425,12 +426,12 @@ bool ui_page_18_pure_resume(void)
     if (g_pure_page.refresh_timer != NULL) {
         lv_timer_resume(g_pure_page.refresh_timer);
     }
-    g_pure_page.exiting = false;
     return true;
 }
 
 void ui_page_18_pure_destroy(void)
 {
+    gesture_service_set_navigation_blocked(UI_PAGE_PURE,false);
     gesture_service_clear_pointer_policy(UI_PAGE_PURE);
     page_01_main_quick_detach_host(g_pure_page.page);
     if (g_pure_page.refresh_timer) {

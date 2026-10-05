@@ -26,6 +26,9 @@ typedef struct {
 /* UI-thread-owned projection of controller reports. Acknowledging never
  * changes controller state; only a later report removes active records. */
 bool machine_fault_report(machine_fault_key_t key);
+/* A new controller event makes an existing report unread again. Continuous
+ * boot/sensor snapshots retain their acknowledgement until recovery. */
+bool machine_fault_report_event(machine_fault_key_t key);
 void machine_fault_acknowledge(machine_fault_key_t key);
 bool machine_fault_find(machine_fault_key_t key, machine_fault_record_t *out);
 bool machine_fault_at(size_t index, machine_fault_record_t *out);

@@ -160,7 +160,10 @@ static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t le
         page_06_data_collection_refresh();
     } else if (ui_manager_get_current_page() != UI_PAGE_PURE &&
                !work_mode_service_diagnostic_active()) {
-        ui_manager_switch(UI_PAGE_MAIN);
+        /* An unsolicited hardware start can arrive while the theme is
+         * covered by Standby. Resume that theme instead of treating the
+         * visible overlay as proof that Main was selected. */
+        ui_manager_switch(smart_island_pure_count_is_enabled() ? UI_PAGE_PURE : UI_PAGE_MAIN);
     }
     smart_island_notify_count_start();
 }

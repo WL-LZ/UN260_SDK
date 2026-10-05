@@ -74,9 +74,20 @@ static unsigned revision,nav_count,printed;
 static ui_page_t current=UI_PAGE_MENU;
 static bool busy,gestures=true,layout=true;
 static bool popup_auto=true,pure_count,touch_guide=true;
-static uint8_t quick_order[QUICK_CONTROL_COUNT]={0,1,2,3,4,5,6,7};
+static bool top_popup_save_fails;
+bool ui_state_top_popup_set_enabled(bool enabled)
+{if(top_popup_save_fails)return false;ui_notice_set_enabled(enabled);return true;}
+static uint8_t quick_order[QUICK_CONTROL_COUNT]={0,1,2,3,4,5,6,7,8};
+static gesture_pointer_policy_t quick_pointer_policy;
+static bool quick_navigation_blocked;
+void gesture_service_set_pointer_policy(uint32_t owner,gesture_pointer_policy_t cb)
+{assert(owner==UI_PAGE_MENU);quick_pointer_policy=cb;}
+void gesture_service_clear_pointer_policy(uint32_t owner)
+{assert(owner==UI_PAGE_MENU);quick_pointer_policy=NULL;}
+void gesture_service_set_navigation_blocked(uint32_t owner,bool blocked)
+{assert(owner==UI_PAGE_MENU);quick_navigation_blocked=blocked;}
 const lv_font_t *ui_message_font(const lv_font_t *font){return font;}
-void ui_state_quick_order_get(uint8_t order[8]){memcpy(order,quick_order,8);}
+void ui_state_quick_order_get(uint8_t order[QUICK_CONTROL_COUNT]){memcpy(order,quick_order,sizeof(quick_order));}
 bool ui_state_quick_order_swap(uint8_t a,uint8_t b){uint8_t value=quick_order[a];quick_order[a]=quick_order[b];quick_order[b]=value;return true;}
 bool fault_popup_get_auto_enabled(void){return popup_auto;}
 void fault_popup_set_auto_enabled(bool value){popup_auto=value;}
@@ -88,7 +99,10 @@ bool touch_feedback_enabled(void){return touch_guide;}
 bool touch_feedback_set_enabled(bool value){touch_guide=value;return true;}
 bool ui_export_data_request(void){return true;}
 void smart_island_show_qr_popup(void){}
-void ui_page_18_pure_request_exit(void){}
+bool ui_page_18_pure_toggle_theme(void){pure_count=current!=UI_PAGE_PURE;ui_manager_switch(pure_count?UI_PAGE_PURE:UI_PAGE_MAIN);return true;}
+const char *app_standby_runtime_blocker(void){return busy?"Finish counting before standby.":NULL;}
+bool app_standby_runtime_needs_fault_review(void){return false;}
+bool app_standby_runtime_request(void){if(app_standby_runtime_blocker())return false;ui_manager_push_page(UI_PAGE_STANDBY);return true;}
 static bool auto_qr_blocked,auto_qr_waiting;
 bool ui_manager_is_transitioning(void){return false;}
 bool app_command_runtime_result_pending(void){return auto_qr_waiting;}
@@ -175,8 +189,26 @@ uint32_t app_clock_uptime_ms(void){return lv_tick_get();}
 uint64_t app_clock_monotonic_us(void){return (uint64_t)lv_tick_get()*1000;}
 static void flush(lv_disp_drv_t *d,const lv_area_t *a,lv_color_t *p)
 {assert(a->x1>=0&&a->x2<1280&&a->y1>=0&&a->y2<400);for(int y=a->y1;y<=a->y2;y++)memcpy(framebuffer+y*1280+a->x1,p+(y-a->y1)*lv_area_get_width(a),lv_area_get_width(a)*4);lv_disp_flush_ready(d);}
-static void read_pointer(lv_indev_drv_t *d,lv_indev_data_t *p){(void)d;p->point=point;p->state=down;}
+static void read_pointer(lv_indev_drv_t *d,lv_indev_data_t *p)
+{
+    (void)d;static bool contact_down,captured;p->point=point;p->state=down;
+    bool pressed=down==LV_INDEV_STATE_PRESSED;
+    lv_event_code_t event=pressed?(contact_down?LV_EVENT_PRESSING:LV_EVENT_PRESSED):LV_EVENT_RELEASED;
+    bool owned=quick_pointer_policy && quick_pointer_policy(lv_indev_get_next(NULL),event,&point,pressed?1:0);
+    if(owned)captured=true;
+    if(captured)p->state=LV_INDEV_STATE_RELEASED;
+    if(!pressed)captured=false;
+    contact_down=pressed;
+}
 static void tick(unsigned ms){for(unsigned i=0;i<ms;i+=20){lv_tick_inc(20);lv_timer_handler();}}
+static void menu_quick_flip(bool next)
+{
+    bool top=ui_notice_get_enabled(),popup=popup_auto;
+    point=(lv_point_t){next?1050:150,110};down=LV_INDEV_STATE_PRESSED;tick(40);
+    point=(lv_point_t){next?550:850,110};tick(40);down=LV_INDEV_STATE_RELEASED;tick(80);
+    assert(menu.quick && lv_quick_controls_page(&menu.quick_controls)==(next?1:0));
+    assert(ui_notice_get_enabled()==top&&popup_auto==popup&&quick_navigation_blocked);
+}
 static lv_obj_t *find(lv_obj_t *p,const char *s)
 {
     if(!p||!lv_obj_is_visible(p))return NULL;
@@ -339,11 +371,66 @@ int main(void)
     assert(model.user_count==2&&menu.selected_user==0);
     assert(lv_obj_has_state(find(menu.body,"Delete"),LV_STATE_DISABLED));
     click("Interaction");raster("menu-interaction");
-    click("01  Layout");click("08  Standby");assert(quick_order[0]==QUICK_STANDBY&&quick_order[7]==QUICK_LAYOUT);
+    lv_obj_t *interaction_rows=find(menu.body,"Top popup"),*top_toggle=NULL;assert(interaction_rows);
+    for(unsigned i=0;i<lv_obj_get_child_cnt(interaction_rows);i++){
+        lv_obj_t *o=lv_obj_get_child(interaction_rows,i);
+        if(lv_obj_get_x(o)==412 && lv_obj_get_y(o)==177 && lv_obj_has_flag(o,LV_OBJ_FLAG_CLICKABLE))top_toggle=o;
+    }
+    assert(top_toggle);top_popup_save_fails=true;
+    lv_event_send(top_toggle,LV_EVENT_CLICKED,NULL);tick(120);
+    assert(ui_notice_get_enabled()&&popup_auto);
+    top_popup_save_fails=false;interaction_rows=find(menu.body,"Top popup");top_toggle=NULL;
+    for(unsigned i=0;i<lv_obj_get_child_cnt(interaction_rows);i++){
+        lv_obj_t *o=lv_obj_get_child(interaction_rows,i);
+        if(lv_obj_get_x(o)==412 && lv_obj_get_y(o)==177 && lv_obj_has_flag(o,LV_OBJ_FLAG_CLICKABLE))top_toggle=o;
+    }
+    assert(top_toggle);lv_event_send(top_toggle,LV_EVENT_CLICKED,NULL);tick(120);
+    assert(!ui_notice_get_enabled()&&popup_auto);
+    click("01  Layout edit");click("08  Standby");assert(quick_order[0]==QUICK_STANDBY&&quick_order[7]==QUICK_LAYOUT);
     click("Quick");assert(menu.quick);assert(!test_notice_visible);raster("menu-quick");
-    lv_obj_t *quick_before=menu.quick,*gesture_state=menu.quick_controls.states[QUICK_GESTURES];
-    gestures=!gestures;tick(120);assert(menu.quick==quick_before&&menu.quick_controls.states[QUICK_GESTURES]==gesture_state);
-    assert(!strcmp(lv_label_get_text(gesture_state),gestures?"On":"Off"));
+    assert(quick_pointer_policy&&quick_navigation_blocked);
+    lv_obj_t *quick_sheet=lv_obj_get_child(menu.quick,0);
+    assert(lv_obj_get_width(quick_sheet)==1280&&lv_obj_get_height(quick_sheet)==328);
+    lv_obj_t *page_indicator=lv_obj_get_child(menu.quick_controls.pager,1);lv_area_t indicator_bounds;
+    lv_obj_get_coords(page_indicator,&indicator_bounds);
+    assert(indicator_bounds.x1==230&&indicator_bounds.y1==279&&indicator_bounds.x2<320&&indicator_bounds.y2<311);
+    assert(lv_obj_get_child_cnt(page_indicator)==2&&lv_obj_is_visible(page_indicator));
+    for(unsigned i=0;i<QUICK_CONTROLS_PER_PAGE;i++){
+        lv_area_t bounds;lv_obj_get_coords(menu.quick_controls.tiles[i],&bounds);
+        assert(lv_area_get_width(&bounds)==299&&lv_area_get_height(&bounds)==96);
+        assert(bounds.x1>=25&&bounds.x2<1255&&bounds.y1>=65&&bounds.y2<267);
+    }
+    assert(lv_obj_has_flag(menu.quick_controls.version_panel,LV_OBJ_FLAG_HIDDEN));
+    assert(find(menu.quick,"Popup"));
+    lv_event_send(menu.quick_controls.tiles[QUICK_POPUP],LV_EVENT_CLICKED,NULL);tick(30);
+    assert(!popup_auto&&!ui_notice_get_enabled());
+    menu_quick_flip(true);raster("menu-quick-page-2");
+    lv_area_t top_bounds;lv_obj_get_coords(menu.quick_controls.tiles[QUICK_TOP_POPUP],&top_bounds);
+    assert(top_bounds.x1==25&&top_bounds.y1==65&&lv_area_get_width(&top_bounds)==299&&lv_area_get_height(&top_bounds)==96);
+    click("Top popup");
+    assert(!popup_auto&&ui_notice_get_enabled());
+    assert(lv_obj_get_x(menu.quick_controls.knobs[QUICK_TOP_POPUP])==24);
+    top_popup_save_fails=true;
+    click("Top popup");
+    assert(!popup_auto&&ui_notice_get_enabled()&&lv_obj_get_x(menu.quick_controls.knobs[QUICK_TOP_POPUP])==24);
+    top_popup_save_fails=false;
+    menu_quick_flip(false);
+    lv_event_send(menu.quick_controls.tiles[QUICK_POPUP],LV_EVENT_CLICKED,NULL);tick(30);assert(popup_auto);
+    lv_event_send(menu.quick_controls.device_button,LV_EVENT_CLICKED,NULL);tick(30);
+    assert(!lv_obj_has_flag(menu.quick_controls.version_panel,LV_OBJ_FLAG_HIDDEN));raster("menu-quick-device");
+    lv_obj_t *device_close=lv_obj_get_child(menu.quick_controls.version_panel,1);
+    assert(lv_obj_get_width(device_close)==44&&lv_obj_get_height(device_close)==44);
+    lv_event_send(device_close,LV_EVENT_CLICKED,NULL);tick(30);
+    assert(lv_obj_has_flag(menu.quick_controls.version_panel,LV_OBJ_FLAG_HIDDEN));
+    lv_obj_t *quick_before=menu.quick,*gesture_state=menu.quick_controls.switches[QUICK_GESTURES];
+    gestures=!gestures;tick(120);assert(menu.quick==quick_before&&menu.quick_controls.switches[QUICK_GESTURES]==gesture_state);
+    assert(lv_obj_get_x(menu.quick_controls.knobs[QUICK_GESTURES])==(gestures?24:4));
+    point=(lv_point_t){40,365};down=LV_INDEV_STATE_PRESSED;tick(40);down=LV_INDEV_STATE_RELEASED;tick(120);assert(!menu.quick);
+    assert(!quick_pointer_policy&&!quick_navigation_blocked);
+    click("Quick");assert(lv_quick_controls_page(&menu.quick_controls)==0);
+    menu_quick_flip(true);ui_page_03_menu_suspend();
+    assert(!menu.quick&&!quick_pointer_policy&&!quick_navigation_blocked);
+    assert(ui_page_03_menu_resume());click("Quick");assert(lv_quick_controls_page(&menu.quick_controls)==0);
     point=(lv_point_t){40,365};down=LV_INDEV_STATE_PRESSED;tick(40);down=LV_INDEV_STATE_RELEASED;tick(120);assert(!menu.quick);
     click("Display & sound");raster("menu-display-sound");
     click("Help");raster("menu-help-empty");click("All codes");raster("menu-help");click("Care");raster("menu-care");click("Device");raster("menu-device");ui_page_03_menu_suspend();assert(!page_03_menu_is_visible());assert(ui_page_03_menu_resume());assert(menu.tab==5);

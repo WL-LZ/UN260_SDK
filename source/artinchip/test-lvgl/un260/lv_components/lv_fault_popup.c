@@ -190,22 +190,18 @@ void fault_popup_language_changed(void)
 }
 static void report(machine_fault_key_t key,bool allow_auto)
 {
-    bool fresh=machine_fault_report(key);
-    if(!fresh){
-        if(allow_auto && !popup.overlay) {
-            if(auto_enabled && key.source==MACHINE_FAULT_START && key.type==1 && key.code==2)
-                present(key);
-            else if(!auto_enabled)post_island_notice(key);
-        }
-        return;
+    bool event=key.source==MACHINE_FAULT_START;
+    bool changed=event?machine_fault_report_event(key):machine_fault_report(key);
+    if(changed){
+        smart_island_faults_changed();
+        smart_island_refresh_summary();
     }
-    smart_island_faults_changed();
-    smart_island_refresh_summary();
+    /* The island receives controller reports in either Popup mode. Popup only
+     * selects automatic guide opening; Top popup belongs to ui_notice. */
+    if(allow_auto)post_island_notice(key);
+    if(!changed && !event)return;
     if(allow_auto && auto_enabled)present(key);
     else if(popup.overlay && !machine_fault_find(popup.key,NULL))present(key);
-    else {
-        if(allow_auto && !auto_enabled)post_island_notice(key);
-    }
 }
 static void refresh_after_clear(void)
 {
@@ -218,8 +214,7 @@ static void refresh_after_clear(void)
 }
 void fault_popup_set_auto_enabled(bool enabled)
 {
-    auto_enabled=enabled;machine_fault_record_t record;
-    if(enabled && !popup.overlay && machine_fault_first_unread(&record))present(record.key);
+    auto_enabled=enabled;
 }
 bool fault_popup_get_auto_enabled(void) {return auto_enabled;}
 void fault_popup_report_start_fault(uint8_t type,uint8_t code) {report((machine_fault_key_t){MACHINE_FAULT_START,type,code},true);}
@@ -275,8 +270,8 @@ void fault_popup_report_sensor_mask(uint32_t mask)
     /* A recovered bit must not restart another fault's current step or open
      * unrelated unread reports. Only a newly asserted bit raises a popup. */
     if(fresh.code<32) {
+        post_island_notice(fresh);
         if(auto_enabled && (!popup.overlay || !machine_fault_key_equal(popup.key,fresh)))present(fresh);
-        else if(!auto_enabled)post_island_notice(fresh);
     }
 }
 bool fault_popup_show_key(machine_fault_key_t key)

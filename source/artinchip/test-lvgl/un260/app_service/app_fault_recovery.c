@@ -10,7 +10,7 @@
  * completed island animation use this sender. */
 static struct {
     machine_fault_key_t key, pending_key;
-    bool valid, needs_clear, pending;
+    bool valid, needs_clear, pending, auto_popup, pending_auto_popup;
     uint32_t sent_tick;
 } recovery;
 
@@ -30,6 +30,8 @@ static bool send_clear(machine_fault_key_t key)
     const uint8_t payload = 0x01;
     if (protocol_send(0x3D, &payload, 1) < 0) return false;
     recovery.pending_key = key;
+    recovery.pending_auto_popup = recovery.valid && machine_fault_key_equal(recovery.key,key)
+        ? recovery.auto_popup : fault_popup_get_auto_enabled();
     recovery.pending = true;
     recovery.sent_tick = app_clock_uptime_ms();
     return true;
@@ -49,7 +51,7 @@ static void notice_phase(machine_fault_key_t key, smart_island_fault_phase_t pha
 {
     if (phase != SMART_ISLAND_FAULT_END || !recovery.valid ||
         !machine_fault_key_equal(key, recovery.key) || !clearable(key) ||
-        fault_popup_get_auto_enabled() || fault_popup_is_showing() ||
+        recovery.auto_popup || fault_popup_is_showing() ||
         !machine_fault_find(key, NULL)) return;
     if (!app_fault_recovery_request_clear(key))
         fault_popup_repeat_notice(key);
@@ -78,15 +80,20 @@ void app_fault_recovery_report(machine_fault_key_t key)
         (key.source == MACHINE_FAULT_RUNTIME && key.code >= 1 && key.code <= 7) ||
         key.source == MACHINE_FAULT_PRESET;
     if (!known) { recovery.valid = false; return; }
+    bool new_report = !recovery.valid || !machine_fault_key_equal(recovery.key,key) ||
+        key.source == MACHINE_FAULT_START || !machine_fault_find(key,NULL);
     recovery.key = key;
     recovery.valid = true;
     recovery.needs_clear = clearable(key);
+    /* A preference change applies to the next controller report, not to the
+     * animation/clear request already handling this report. */
+    if (new_report) recovery.auto_popup = fault_popup_get_auto_enabled();
 }
 
-static void present_unresolved(machine_fault_key_t key)
+static void present_unresolved(machine_fault_key_t key,bool auto_popup)
 {
     if (!machine_fault_find(key, NULL)) return;
-    if (fault_popup_get_auto_enabled())
+    if (auto_popup)
         (void)fault_popup_show_key(key);
     else
         fault_popup_repeat_notice(key);
@@ -104,7 +111,7 @@ void app_fault_recovery_handle_clear_result(uint8_t result)
         }
         if (clearable(key)) fault_popup_resolve_key(key);
     } else {
-        present_unresolved(key);
+        present_unresolved(key,recovery.pending_auto_popup);
     }
 }
 
@@ -114,7 +121,7 @@ void app_fault_recovery_poll(void)
         (uint32_t)(app_clock_uptime_ms() - recovery.sent_tick) < 3000U) return;
     machine_fault_key_t key = recovery.pending_key;
     recovery.pending = false;
-    present_unresolved(key);
+    present_unresolved(key,recovery.pending_auto_popup);
 }
 
 bool app_fault_recovery_prepare_start(void)

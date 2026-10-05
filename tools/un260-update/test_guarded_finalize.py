@@ -11,14 +11,16 @@ SHELL = ['busybox', 'sh'] if os.environ.get('TEST_BUSYBOX') == '1' else ['sh']
 UPDATER = SDK / 'target/d211/d213_devkitf/rootfs_overlay/usr/bin/ui_update.sh'
 
 class FinalizeTests(unittest.TestCase):
-    def run_fixture(self, fail_flush=False):
+    def run_fixture(self, fail_flush=False, unified=False):
         with tempfile.TemporaryDirectory() as temp:
             p = Path(temp); root=p/'root'; usb=p/'usb'; root.mkdir(); usb.mkdir()
+            app=p/'app'; app.mkdir()
             script=p/'run.sh'
             script.write_text(f'''UN260_UPDATER_LIBRARY_ONLY=1
 . '{UPDATER}'
 ROOT_PREFIX='{root}'
 USB_MNT='{usb}'
+APP_VOLUME_DIR='{app}'
 SYNC_TOOL='{native_tool()}'
 LOG='{p}/log'
 RESULT_FILE='{p}/result'
@@ -31,7 +33,9 @@ BUNDLE_FNV=1234567890abcdef
 package_version=test-r2
 GUARDED=1
 USB_GUARDED=1
-exec 7< "$ROOT_PREFIX" 8< "$USB_MNT"
+APP_GUARDED=1
+UNIFIED_COMMIT={'1' * 64 if unified else "''"}
+exec 7< "$ROOT_PREFIX" 8< "$USB_MNT" 9< "$APP_VOLUME_DIR"
 # Real syncfs fd guard, synthetic mount identity only. Inject one final error.
 usb_calls=0
 usb_barrier() {{
@@ -42,21 +46,27 @@ usb_barrier() {{
 printf 'test log\n' > "$LOG"
 finish_success 'Upgrade complete'
 ''')
-            r = subprocess.run(SHELL+[str(script)], capture_output=True, text=True)
+            r = subprocess.run(SHELL+[str(script)], capture_output=True, text=True, timeout=20)
             status = (p/'status').read_text()
             self.assertEqual(r.returncode == 0, not fail_flush, r.stderr)
             if fail_flush:
                 self.assertIn('success=0', status)
                 self.assertIn('USB finalization failed', status)
                 self.assertFalse((root/'state/installed.fnv64').exists())
+                self.assertFalse((root/'state/unified.completed').exists())
             else:
                 self.assertIn('progress=100', status)
                 self.assertIn('success=1', status)
                 self.assertIn('result=success', (usb/'UN260_UPDATE_RESULT.txt').read_text())
                 self.assertIn('test log', (usb/'ui_update.log').read_text())
                 self.assertEqual((root/'state/installed.fnv64').read_text(), '1234567890abcdef\n')
+                if unified:
+                    self.assertEqual((root/'state/unified.completed').read_text(), '1' * 64 + '\n')
+                    self.assertFalse((root/'state/unified.completed.tmp').exists())
 
     def test_durable_reports_precede_success(self): self.run_fixture()
     def test_final_flush_failure_blocks_success_and_hash_marker(self): self.run_fixture(True)
+    def test_unified_commit_with_all_three_held_descriptors(self): self.run_fixture(unified=True)
+    def test_unified_flush_failure_does_not_publish_completed(self): self.run_fixture(True, True)
 
 if __name__ == '__main__': unittest.main()

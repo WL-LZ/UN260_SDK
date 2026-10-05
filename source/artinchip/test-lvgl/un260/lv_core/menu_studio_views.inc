@@ -238,7 +238,7 @@ static void interaction_view(lv_obj_t *b)
     toggle(rows,0,464,ui_tr("Pull-down controls"),ui_tr("Swipe down from Main"),workspace_service_quick_enabled(),A_QUICK_TOGGLE);
     toggle(rows,57,464,ui_tr("Side / two-finger gestures"),ui_tr("Navigate by touch"),gesture_service_enabled(),A_GESTURES);
     toggle(rows,114,464,ui_tr("QR after counting"),ui_tr("Show after a completed count"),user()&&user()->qr_after_count,A_AUTO_QR);
-    toggle(rows,171,464,ui_tr("Top popup"),ui_tr("Open faults automatically"),fault_popup_get_auto_enabled(),A_POPUP_TOGGLE);
+    toggle(rows,171,464,ui_tr("Top popup"),NULL,ui_notice_get_enabled(),A_TOP_POPUP_TOGGLE);
     for(unsigned i=1;i<4;i++)box(rows,0,i*57-3,464,1,LINE,0);
     lv_obj_t *right=box(b,524,48,504,248,PANEL,20);
     label(right,16,9,290,ui_tr("Shortcut order"),&lv_font_instrument_sans_semibold_17,INK);
@@ -246,7 +246,7 @@ static void interaction_view(lv_obj_t *b)
     uint8_t order[QUICK_CONTROL_COUNT];ui_state_quick_order_get(order);
     for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
         char caption[68];snprintf(caption,sizeof(caption),"%02u  %s",i+1,lv_quick_controls_title(order[i]));
-        lv_obj_t *item=button(right,16+(i%2)*240,57+(i/2)*45,232,40,caption,A_QUICK_ORDER_BASE+i,false);
+        lv_obj_t *item=button(right,16+(i%2)*240,57+(i/2)*36,232,32,caption,A_QUICK_ORDER_BASE+i,false);
         lv_obj_set_style_radius(item,10,0);
         if(menu.quick_pick==i){
             lv_obj_set_style_bg_color(item,lv_color_hex(0xE1EEFC),0);

@@ -8,6 +8,11 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[2] / 'source/artinchip/test-lvgl'
+I18N_SOURCES = [ROOT / name for name in (
+    'un260/lv_system/ui_i18n.c', 'un260/lv_system/ui_lang.c',
+    'un260/lv_system/ui_update_message.c', 'un260/storage/ui_locale_store.c',
+    'i18n/generated/lv_i18n.c',
+)]
 # Reuse the established fake framebuffer/real UNIX socket harness, not an
 # alternative implementation of the display ownership protocol.
 tree = ast.parse((ROOT / 'tools/test_boot_light.py').read_text())
@@ -26,6 +31,7 @@ with tempfile.TemporaryDirectory(prefix='un260-upgrade-handoff-') as directory:
         defines.append('-D' + name + '="' + str(value) + '"')
     subprocess.run(['cc', '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-fsanitize=undefined',
                     '-fno-sanitize-recover=all', '-I' + str(ROOT), *defines, str(source),
+                    *(str(item) for item in I18N_SOURCES),
                     '-Wl,--wrap=open', '-Wl,--wrap=ioctl', '-Wl,--wrap=sendmsg', '-lz', '-o', str(executable)], check=True)
     fb = path / 'fb'; fb.write_bytes(bytes(1280 * 400 * 4 * 2))
     (path / 'status').write_text('progress=34\nstage=fail\nsuccess=0\nmessage=USB missing\n')

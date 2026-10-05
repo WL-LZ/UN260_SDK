@@ -36,6 +36,11 @@ typedef bool (*gesture_pointer_policy_t)(lv_indev_t *, lv_event_code_t,
                                          const lv_point_t *, uint8_t);
 void gesture_service_set_pointer_policy(uint32_t owner, gesture_pointer_policy_t policy);
 void gesture_service_clear_pointer_policy(uint32_t owner);
+/* Page-scoped navigation policy, independent of ordinary touch and the raw
+ * pointer policy (for example a pull-down panel). Block before activation and
+ * release on suspend/destroy. Blocking cancels queued/in-flight navigation;
+ * an already captured contact stays consumed until every finger lifts. */
+void gesture_service_set_navigation_blocked(uint32_t owner, bool blocked);
 /* UI-thread, page-scoped input gate. Blocks the page and queued gestures,
  * while a machine fault guide or fault island remains touchable. Unlocking never
  * replays a contact held during the gate. Owners must release explicitly. */

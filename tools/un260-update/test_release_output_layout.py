@@ -55,14 +55,14 @@ elif '--output' in args:
         self.assertEqual(self.fixed.read_bytes(), b'PINNED R7 MUST NOT CHANGE')
         return result
 
-    def test_two_public_packages_and_repeat_build_does_not_touch_fixed_r7(self):
+    def test_one_current_unified_package_and_repeat_build_preserves_fixed_r7(self):
         self.run_hook(); self.run_hook()
         self.assertEqual({p.name for p in self.images.glob('*.upk')},
                          {self.fixed.name, 'UN260_UPDATE.upk'})
         self.assertEqual({p.name for p in self.internal.glob('*.upk')},
                          {'UN260_APPLICATION.upk', 'UN260_STORAGE_BOOTSTRAP.upk',
                           'UN260_UPDATE_BASE.upk', 'UN260_UPDATE_DELTA.upk', 'UN260_FIRST_MIGRATION.upk'})
-        self.assertEqual((self.images / 'UN260_UPDATE.upk').read_bytes(), b'application-builder')
+        self.assertEqual((self.images / 'UN260_UPDATE.upk').read_bytes(), b'build_unified.py')
         self.assertEqual((self.internal / 'UN260_FIRST_MIGRATION.upk').read_bytes(), b'build_unified.py')
         subprocess.run(['sha256sum', '-c', 'UN260_UPDATE.upk.sha256'], cwd=self.images, check=True, capture_output=True)
         self.assertFalse((self.images / 'UN260_UNIFIED_UPDATE.upk').exists())

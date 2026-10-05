@@ -7,6 +7,7 @@ void ui_page_18_pure_create(lv_obj_t* parent);
 void ui_page_18_pure_destroy(void);
 bool ui_page_18_pure_resume(void);
 void ui_page_18_pure_suspend(void);
-void ui_page_18_pure_request_exit(void);
+/* Switch between the counting themes; update preference only after navigation. */
+bool ui_page_18_pure_toggle_theme(void);
 
 #endif

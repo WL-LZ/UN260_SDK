@@ -64,6 +64,7 @@ static const char *stage_title(ui_upgrade_stage_t stage)
     case UI_UPGRADE_STAGE_FINISH: return ui_tr("Finishing update");
     case UI_UPGRADE_STAGE_SUCCESS: return ui_tr("Update complete");
     case UI_UPGRADE_STAGE_FAIL: return ui_tr("Update not completed");
+    case UI_UPGRADE_STAGE_RESTART_REQUIRED: return ui_tr("Restart to continue");
     default: return ui_tr("Waiting for update status");
     }
 }
@@ -73,14 +74,17 @@ static void render(void)
     if (!page.frame.root) return;
     bool running = page.actual.running;
     bool finished = page.actual.finished && !running;
+    bool restart_required = finished && page.actual.stage == UI_UPGRADE_STAGE_RESTART_REQUIRED;
+    bool result_owned = finished && upgrade_session_owner() == UPGRADE_SESSION_UI &&
+        (page.actual.stage == UI_UPGRADE_STAGE_SUCCESS || restart_required);
     const char *title = page.uncertain ? ui_tr("Update result unknown") :
-        page.blocked ? ui_tr("Another update is active") : page.start_error ? ui_tr("Update could not start") :
+        page.blocked && !result_owned ? ui_tr("Another update is active") : page.start_error ? ui_tr("Update could not start") :
         running || finished ? stage_title(page.actual.stage) :
         package_ready() ? ui_tr("Ready to update") : ui_tr("Prepare an update package");
     const char *detail = page.uncertain ?
         (page.actual.result_text[0] ? page.actual.result_text :
          ui_tr("The updater process result could not be confirmed. Keep power connected.")) :
-        page.blocked ? ui_tr("Wait for the other update to finish. Its result may still be unknown.") :
+        page.blocked && !result_owned ? ui_tr("Wait for the other update to finish. Its result may still be unknown.") :
         page.start_error ? ui_tr(page.start_error) :
         finished ? page.actual.result_text :
         running ? page.actual.step_text : preparation_text();
@@ -88,6 +92,7 @@ static void render(void)
         (page.actual.success ? ui_tr("The update completed successfully.") : ui_tr("The update did not complete. Check the package.")) :
         ui_tr("Waiting for the updater to report its next step.");
     uint32_t tone = page.uncertain ? 0x946321 :
+        restart_required ? 0x946321 :
         page.start_error || (finished && !page.actual.success) ? 0xB1393E :
         finished ? 0x287953 : 0x1D2B34;
     lv_label_set_text(page.phase, title);
@@ -101,11 +106,12 @@ static void render(void)
         page.detected.package_hash_status == UI_UPGRADE_PACKAGE_HASH_ERROR ? ui_tr("Cannot verify") : ui_tr("Not verified"));
     if (running || page.blocked || !package_ready()) settings_detail_action_block(page.start, running ? UI_N_("The update is in progress. Keep power connected.") : page.blocked ? UI_N_("Resolve the update error before starting another update.") : UI_N_("Insert a USB drive containing a valid update package."));
     else settings_detail_action_block(page.start, NULL);
-    if (running) settings_detail_action_block(page.frame.back, running ? UI_N_("The update is in progress. Keep power connected.") : page.blocked ? UI_N_("Resolve the update error before starting another update.") : UI_N_("Insert a USB drive containing a valid update package."));
+    if (running && !ui_upgrade_service_is_preparing_data()) settings_detail_action_block(page.frame.back, UI_N_("The update is in progress. Keep power connected."));
     else settings_detail_action_block(page.frame.back, NULL);
     lv_label_set_text(page.frame.message, page.uncertain ?
         ui_tr("Update result unknown. Keep power connected.") : running ?
         ui_tr("Keep power connected. Do not remove the USB drive.") :
+        restart_required ? ui_tr("Keep the USB drive connected and restart to finish the update.") :
         finished && page.actual.success ? ui_tr("Restart the device to use the updated UI.") :
         ui_tr("The update package is kept on the USB drive."));
 
@@ -152,7 +158,9 @@ static void refresh(lv_timer_t *timer)
     upgrade_session_owner_t owner = upgrade_session_owner();
     bool blocked = owner != UPGRADE_SESSION_NONE &&
         (owner != UPGRADE_SESSION_UI || !actual.running);
-    bool uncertain = owner == UPGRADE_SESSION_UI && !actual.running;
+    bool result_owned = actual.finished &&
+        (actual.stage == UI_UPGRADE_STAGE_SUCCESS || actual.stage == UI_UPGRADE_STAGE_RESTART_REQUIRED);
+    bool uncertain = owner == UPGRADE_SESSION_UI && !actual.running && !result_owned;
     changed |= page.blocked != blocked || page.uncertain != uncertain;
     page.blocked = blocked;
     page.uncertain = uncertain;
@@ -175,7 +183,9 @@ static void refresh(lv_timer_t *timer)
     if (changed) render();
     if (actual.finished && !actual.running && !page.uncertain && !result_presented) {
         result_presented = true;
-        lv_upgrade_popup_show_result(actual.success, actual.result_text);
+        if (actual.stage == UI_UPGRADE_STAGE_RESTART_REQUIRED)
+            lv_upgrade_popup_show_restart_required(actual.result_text);
+        else lv_upgrade_popup_show_result(actual.success, actual.result_text);
     }
 }
 
@@ -188,6 +198,13 @@ static void leave_page(void *unused)
 
 static void request_back(bool home)
 {
+    if (ui_upgrade_service_is_preparing_data() && !lv_upgrade_popup_is_showing() &&
+        !settings_detail_overlay_is_open()) {
+        (void)ui_upgrade_service_cancel_prepare();
+        page.home_requested = home;
+        leave_page(NULL);
+        return;
+    }
     if (page.actual.running || lv_upgrade_popup_is_showing() || settings_detail_overlay_is_open()) return;
     page.home_requested = home;
     if (page.uncertain) {
@@ -236,9 +253,11 @@ static void start_clicked(lv_event_t *event)
     case UI_UPGRADE_START_PACKAGE_NOT_READY: page.start_error = UI_N_("The update package is not ready. Check the USB drive and file."); break;
     case UI_UPGRADE_START_STATUS_CLEANUP_FAILED: page.start_error = UI_N_("Previous update status could not be cleared. Contact service support."); break;
     case UI_UPGRADE_START_FORK_FAILED: page.start_error = UI_N_("The updater could not start. Try again when the device is idle."); break;
+    case UI_UPGRADE_START_DATA_BUSY: page.start_error = UI_N_("Counting is in progress. Stop counting before updating."); break;
+    case UI_UPGRADE_START_DATA_SAVE_FAILED: page.start_error = UI_N_("Records could not be saved. Please try again."); break;
     }
     if(result!=UI_UPGRADE_START_OK)ui_notice_post_text(
-        result==UI_UPGRADE_START_BUSY||result==UI_UPGRADE_START_PACKAGE_NOT_READY?UI_NOTICE_WARNING:UI_NOTICE_ERROR,
+        result==UI_UPGRADE_START_BUSY||result==UI_UPGRADE_START_DATA_BUSY||result==UI_UPGRADE_START_PACKAGE_NOT_READY?UI_NOTICE_WARNING:UI_NOTICE_ERROR,
         "upgrade.ui",UI_N_("UI update not started"),page.start_error);
     refresh(NULL);
     render();

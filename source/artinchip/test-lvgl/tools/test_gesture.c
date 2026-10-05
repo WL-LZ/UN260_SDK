@@ -263,6 +263,42 @@ int main(void)
     page=UI_PAGE_MENU;assert(!sample(1,500,200,0));sample(0,500,200,0);
     page=UI_PAGE_MAIN;assert(sample(1,500,200,0));assert(sample(0,500,200,0));
     gesture_service_set_input_blocked(UI_PAGE_MAIN,false);
+    /* Independent themes opt out of navigation without losing their own
+     * pointer gestures or buttons. Hidden owners never affect another page. */
+    gesture_service_set_navigation_blocked(UI_PAGE_PURE,true);
+    page=UI_PAGE_MENU;before=back;
+    sample(1,5,180,0);sample(1,130,180,0);release();assert(back==before+1);
+    page=UI_PAGE_PURE;
+    unsigned pure_home=home,pure_back=back,pure_return=returned,pure_esc=esc_calls;
+    for(int side=0;side<2;++side) {
+        assert(!sample(1,side?1275:5,180,0));
+        assert(!sample(1,side?1150:130,180,0));
+        assert(!sample(0,0,0,0));assert(!queued);
+    }
+    for(int up=0;up<2;++up) {
+        assert(sample(2,400,up?300:100,0));
+        assert(sample(2,400,up?100:300,0));
+        assert(sample(1,400,up?100:300,0));
+        assert(sample(0,0,0,0));assert(!queued);
+    }
+    assert(home==pure_home&&back==pure_back&&returned==pure_return&&esc_calls==pure_esc);
+    raw_owned=true;raw_before=raw_calls;
+    gesture_service_set_pointer_policy(UI_PAGE_PURE,raw_policy);
+    assert(sample(1,600,0,0));assert(sample(1,600,260,0));assert(sample(0,600,260,0));
+    assert(raw_calls==raw_before+3&&!queued); /* Pull-down policy remains live. */
+    gesture_service_clear_pointer_policy(UI_PAGE_PURE);
+    assert(!sample(1,600,200,0));assert(!sample(0,600,200,0)); /* Ordinary taps. */
+    gesture_service_set_navigation_blocked(UI_PAGE_PURE,false);
+    sample(1,5,180,0);sample(1,130,180,0);sample(0,0,0,0);assert(queued);
+    gesture_service_set_navigation_blocked(UI_PAGE_PURE,true);
+    assert(!queued);gesture_service_set_navigation_blocked(UI_PAGE_PURE,false);
+    drain();assert(back==pure_back); /* Unblocking never replays queued work. */
+    sample(1,5,180,0);assert(sample(1,130,180,0));
+    gesture_service_set_navigation_blocked(UI_PAGE_PURE,true);
+    gesture_service_set_navigation_blocked(UI_PAGE_PURE,false);
+    assert(sample(1,140,180,0));assert(sample(0,140,180,0));drain();assert(back==pure_back);
+    sample(1,5,180,0);sample(1,130,180,0);sample(0,0,0,0);drain();assert(back==pure_back+1);
+    puts("PASS independent theme navigation: edges/Home/Return blocked, raw panel/taps live, pending and held gestures cancelled");
     puts("PASS page touch gate: fault modal remains interactive; page, gestures and stale contacts remain blocked");
     puts("gesture: PASS (navigation without waiting for hint, cancellation, multi-touch and safety)");
 }

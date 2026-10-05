@@ -9,7 +9,7 @@ root=Path(__file__).resolve().parents[1]
 lvgl = lvgl_source(root)
 parts=['tools/test_menu_view.c','un260/workspace/workspace_model.c','un260/workspace/cashbook.c','un260/counting/counting_reject_reason.c','un260/lv_components/lv_settings.c','un260/lv_components/lv_quick_controls.c','un260/lv_components/lv_damped_button.c','un260/lv_components/lv_nav_button.c','un260/lv_components/lv_modal_dialog.c','un260/lv_components/lv_popup_style.c','un260/lv_components/lv_alnum_keyboard.c','un260/lv_components/lv_qr_popup.c','un260/lv_components/qrcodegen.c','un260/lv_components/ui_scrollbar.c','un260/lv_core/settings_detail_ui.c','un260/lv_system/ui_lang.c','un260/lv_system/ui_text_widget.c','un260/lv_system/ui_text_page.c']
 inspected=parts+['un260/lv_core/page_03_menu.c']+['un260/lv_core/'+p.name for p in (root/'un260/lv_core').glob('menu_*.inc')]
-parts+=['un260/app_service/support_report.c','un260/app_service/app_auto_qr.c']
+parts+=['un260/app_service/support_report.c','un260/app_service/app_auto_qr.c','un260/lv_components/lv_content_pager.c']
 fonts=sorted(set(re.findall(r'lv_font_(instrument_sans_[a-z]+_\d+)','\n'.join((root/p).read_text() for p in inspected))))
 out=Path(os.environ.get('MENU_OUTPUT','/tmp/un260-menu-renders'));out.mkdir(exist_ok=True)
 cache=Path('/tmp/un260-menu-host-cache');cache.mkdir(exist_ok=True)

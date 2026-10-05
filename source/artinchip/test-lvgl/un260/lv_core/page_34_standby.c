@@ -206,7 +206,7 @@ static void hex_input(const char*s,void*u){(void)u;if(*s=='#')s++;bool digits=tr
 static void action(lv_event_t*e){int id=(int)(intptr_t)lv_event_get_user_data(e);if(standby_store_busy()){ui_notice_post_text(UI_NOTICE_WARNING,"settings.standby",UI_N_("Please wait"),UI_N_("A file operation is in progress."));return;}
  if(id==1)ui_page_34_standby_request_back();
  else if(id==2)queue_save();
- else if(id==3){ui_manager_push_page(UI_PAGE_STANDBY);}
+ else if(id==3){const char*reason=app_standby_runtime_blocker();if(reason&&!app_standby_runtime_needs_fault_review())ui_notice_post_text(UI_NOTICE_WARNING,"settings.standby",UI_N_("Standby"),reason);else (void)app_standby_runtime_request();}
  else if(id>=10&&id<=14){tab=id-10;if(tab==4)selected=0;redraw=true;}
  else if(id==20||id==21){draft.mode=id-20;queue_save();}
  else if(id>=30&&id<=32){draft.active[draft.mode]=id-30;queue_save();}

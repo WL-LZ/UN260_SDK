@@ -1,6 +1,7 @@
 #include "un260/lv_system/ui_state_store.h"
 
 #include <errno.h>
+#include <ctype.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,7 +39,25 @@ static bool ui_state_store_ensure_dir(void)
     return false;
 }
 
-static void ui_state_store_parse_line(ui_persist_state_t* state, const char* line)
+static bool ui_state_store_parse_quick_order(ui_persist_state_t *state,const char *value)
+{
+    uint8_t order[UI_STATE_QUICK_CONTROL_COUNT];unsigned count=0,used=0;
+    for(;;){
+        char *end;
+        if(count>=UI_STATE_QUICK_CONTROL_COUNT || !isdigit((unsigned char)*value))return false;
+        errno=0;unsigned long id=strtoul(value,&end,10);
+        if(errno || id>=UI_STATE_QUICK_CONTROL_COUNT || (used&(1U<<id)))return false;
+        order[count++]=(uint8_t)id;used|=1U<<id;value=end;
+        if(*value==','){++value;continue;}
+        while(isspace((unsigned char)*value))++value;
+        if(*value)return false;
+        break;
+    }
+    if(count==8 && used==0xFFU)order[count++]=8;
+    if(count!=UI_STATE_QUICK_CONTROL_COUNT)return false;
+    memcpy(state->page01.quick_order,order,sizeof(order));return true;
+}
+static void ui_state_store_parse_line(ui_persist_state_t* state, const char* line,bool *quick_order_v2)
 {
     if (strncmp(line, "magic=", 6) == 0) {
         state->magic = (unsigned int)strtoul(line + 6, NULL, 0);
@@ -60,16 +79,9 @@ static void ui_state_store_parse_line(ui_persist_state_t* state, const char* lin
         state->page01.layout.footer_swapped=
             sscanf(line+18,"%u %c",&value,&tail)==1 && value==1;
     } else if (strncmp(line, "p01_quick_order=", 16) == 0) {
-        unsigned value[8],used=0;char tail;
-        if(sscanf(line+16,"%u,%u,%u,%u,%u,%u,%u,%u %c",
-            &value[0],&value[1],&value[2],&value[3],
-            &value[4],&value[5],&value[6],&value[7],&tail)==8){
-            for(unsigned i=0;i<8;i++){
-                if(value[i]>=8 || (used&(1U<<value[i])))return;
-                used|=1U<<value[i];
-            }
-            for(unsigned i=0;i<8;i++)state->page01.quick_order[i]=value[i];
-        }
+        if(!*quick_order_v2)(void)ui_state_store_parse_quick_order(state,line+16);
+    } else if (strncmp(line,"p01_quick_order_v2=",19)==0) {
+        if(ui_state_store_parse_quick_order(state,line+19))*quick_order_v2=true;
     } else if (strncmp(line, "p07_view_mode=", 14) == 0) {
         state->page07.view_mode = atoi(line + 14);
     } else if (strncmp(line, "p07_fav_only=", 13) == 0) {
@@ -96,6 +108,10 @@ static void ui_state_store_parse_line(ui_persist_state_t* state, const char* lin
         state->page06.reserved06_enable = atoi(line + 13);
     } else if (strncmp(line, "p18_reserved=", 13) == 0) {
         state->page18.reserved18_enable = atoi(line + 13);
+    } else if (strncmp(line, "top_popup_enabled=", 18) == 0) {
+        unsigned value;char tail;
+        if(sscanf(line+18,"%u %c",&value,&tail)==1 && value<2)
+            state->top_popup_enabled=value!=0;
     }
 }
 
@@ -104,9 +120,11 @@ bool ui_state_store_load(ui_persist_state_t* state)
     ui_persist_state_t loaded_state;
     FILE* fp;
     char line[128];
+    bool quick_order_v2=false;
 
     if (!state) return false;
     loaded_state = *state;
+    loaded_state.top_popup_enabled = true;
     ui_main_layout_default(&loaded_state.page01.layout);
     loaded_state.magic = 0;
     loaded_state.version = 0;
@@ -119,7 +137,7 @@ bool ui_state_store_load(ui_persist_state_t* state)
     }
 
     while (fgets(line, sizeof(line), fp)) {
-        ui_state_store_parse_line(&loaded_state, line);
+        ui_state_store_parse_line(&loaded_state, line,&quick_order_v2);
     }
     if (ferror(fp)) {
         printf("[ui_state] read failed: %s\n", strerror(errno));
@@ -214,11 +232,17 @@ bool ui_state_store_save(const ui_persist_state_t* state)
             layout->left[0],layout->left[1],layout->left[2],layout->left[3],
             layout->right[0],layout->right[1],layout->right[2],layout->mirrored);
     fprintf(fp,"p01_layout_footer=%u\n",layout->footer_swapped);
-    fprintf(fp,"p01_quick_order=%u,%u,%u,%u,%u,%u,%u,%u\n",
-        state->page01.quick_order[0],state->page01.quick_order[1],
-        state->page01.quick_order[2],state->page01.quick_order[3],
-        state->page01.quick_order[4],state->page01.quick_order[5],
-        state->page01.quick_order[6],state->page01.quick_order[7]);
+    /* Preserve the eight-action projection for an older application rollback. */
+    fputs("p01_quick_order=",fp);
+    unsigned written=0;
+    for(unsigned i=0;i<UI_STATE_QUICK_CONTROL_COUNT;i++){
+        if(state->page01.quick_order[i]>=8)continue;
+        fprintf(fp,"%s%u",written++?",":"",state->page01.quick_order[i]);
+    }
+    fputs("\np01_quick_order_v2=",fp);
+    for(unsigned i=0;i<UI_STATE_QUICK_CONTROL_COUNT;i++)
+        fprintf(fp,"%s%u",i?",":"",state->page01.quick_order[i]);
+    fputc('\n',fp);
     fprintf(fp, "p07_view_mode=%d\n", state->page07.view_mode);
     fprintf(fp, "p07_fav_only=%d\n", state->page07.fav_only);
     fprintf(fp, "p07_selected_abs_idx=%d\n", state->page07.selected_abs_idx);
@@ -229,6 +253,7 @@ bool ui_state_store_save(const ui_persist_state_t* state)
     fprintf(fp, "p05_reserved=%d\n", state->page05.reserved05_enable);
     fprintf(fp, "p06_reserved=%d\n", state->page06.reserved06_enable);
     fprintf(fp, "p18_reserved=%d\n", state->page18.reserved18_enable);
+    fprintf(fp, "top_popup_enabled=%u\n", state->top_popup_enabled?1U:0U);
 
     if (ferror(fp)) {
         printf("[ui_state] write failed: %s\n", strerror(errno));

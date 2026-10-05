@@ -15,6 +15,7 @@
 #define NOTICE_SPINNER_MS 40
 
 static uint32_t dialog_hold_count;
+static bool enabled = true;
 
 static struct {
     ui_notice_state_t state;
@@ -237,7 +238,7 @@ static void timer_event(lv_timer_t *timer)
     uint32_t now = lv_tick_get(), elapsed = now - notice.last_tick;
     LV_UNUSED(timer);
     notice.last_tick = now;
-    if (!notice.visible || notice.suspended || notice.held || notice.animating) return;
+    if (!enabled || !notice.visible || notice.suspended || notice.held || notice.animating) return;
     if (ui_notice_state_elapse(&notice.state, elapsed)) {
         ui_notice_dismiss(NULL);
         return;
@@ -255,7 +256,7 @@ static void timer_event(lv_timer_t *timer)
 static void service_start(void)
 {
     uint32_t period;
-    if (!notice.timer || !notice.visible || notice.suspended || notice.animating || notice.held) return;
+    if (!enabled || !notice.timer || !notice.visible || notice.suspended || notice.animating || notice.held) return;
     period = notice.shown.kind == UI_NOTICE_PROGRESS ? NOTICE_SPINNER_MS : notice.state.active.remaining_ms;
     if (!period) period = 1;
     notice.last_tick = lv_tick_get();
@@ -300,6 +301,7 @@ static void event(lv_event_t *e)
 
 void ui_notice_init(void)
 {
+    if (!enabled) return;
     if (dialog_hold_count) notice.suspended |= UI_NOTICE_SUSPEND_DIALOG;
     if (!notice.initialized) {
         ui_notice_state_init(&notice.state);
@@ -320,7 +322,7 @@ void ui_notice_init(void)
 
 static void present(bool with_animation)
 {
-    if (!notice.object || notice.suspended) return;
+    if (!enabled || !notice.object || notice.suspended) return;
     if (!notice.state.has_active) {
         service_stop();
         lv_anim_del(notice.object, animation_exec);
@@ -344,6 +346,7 @@ bool ui_notice_show(const ui_notice_config_t *config)
 {
     bool accepted, was_visible;
     uint32_t revision;
+    if (!enabled) return false;
     ui_notice_init();
     consume_visible_time();
     revision = notice.state.has_active ? notice.state.active.revision : 0;
@@ -416,8 +419,24 @@ void ui_notice_set_suspended(uint32_t reason, bool suspended)
 
 bool ui_notice_is_visible(void)
 {
-    return notice.visible && !notice.suspended;
+    return enabled && notice.visible && !notice.suspended;
 }
+
+void ui_notice_set_enabled(bool value)
+{
+    if (enabled == value) return;
+    enabled = value;
+    if (enabled) return;
+    service_stop();
+    if (notice.object) {
+        lv_anim_del(notice.object, animation_exec);
+        lv_obj_add_flag(notice.object, LV_OBJ_FLAG_HIDDEN);
+    }
+    ui_notice_state_init(&notice.state);
+    notice.visible = notice.animating = notice.leaving = notice.held = false;
+}
+
+bool ui_notice_get_enabled(void) { return enabled; }
 
 void ui_notice_dialog_acquire(void)
 {

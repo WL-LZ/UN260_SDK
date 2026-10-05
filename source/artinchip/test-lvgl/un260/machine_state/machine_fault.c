@@ -63,6 +63,18 @@ void machine_fault_acknowledge(machine_fault_key_t key)
         if (machine_fault_key_equal(records[i].key, key)) records[i].acknowledged = true;
 }
 
+bool machine_fault_report_event(machine_fault_key_t key)
+{
+    if (machine_fault_report(key)) return true;
+    for (size_t i = 0; i < count; ++i) {
+        if (!machine_fault_key_equal(records[i].key, key)) continue;
+        bool changed = records[i].acknowledged;
+        records[i].acknowledged = false;
+        return changed;
+    }
+    return false;
+}
+
 bool machine_fault_at(size_t index, machine_fault_record_t *out)
 {
     if (index >= count) return false;

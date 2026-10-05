@@ -167,8 +167,25 @@ int main(void)
     fault_popup_clear_runtime();
     fault_popup_report_sensor_mask((1U<<1)|(1U<<23));assert(!fault_popup_is_showing()&&island_posts==posted+3);
     fault_popup_report_sensor_mask((1U<<1)|(1U<<23));assert(island_posts==posted+3);
-    fault_popup_set_auto_enabled(true);assert(fault_popup_is_showing());
+    fault_popup_set_auto_enabled(true);
+    machine_fault_record_t retained_sensor;
+    assert(!fault_popup_is_showing() && island_posts==posted+3 && machine_fault_count()==2);
+    assert(machine_fault_first_unread(&retained_sensor) && retained_sensor.key.source==MACHINE_FAULT_SENSOR);
+    fault_popup_set_auto_enabled(true); /* Restoring an already-enabled preference is inert. */
+    fault_popup_report_sensor_mask((1U<<1)|(1U<<23));
+    assert(!fault_popup_is_showing() && island_posts==posted+3);
+    assert(fault_popup_show_pending_now()); /* Explicit island inspection remains available. */
     click_confirm();click_confirm();assert(island_posts==posted+4);
+    fault_popup_report_sensor_mask((1U<<1)|(1U<<2)|(1U<<23));
+    assert(fault_popup_is_showing() && popup.key.code==2 && island_posts==posted+5);
+    assert(machine_fault_find((machine_fault_key_t){MACHINE_FAULT_SENSOR,0,1},&retained_sensor) && retained_sensor.acknowledged);
+    assert(machine_fault_find((machine_fault_key_t){MACHINE_FAULT_SENSOR,0,2},&retained_sensor) && !retained_sensor.acknowledged);
+    same_overlay=popup.overlay;elapsed=popup.model.elapsed_ms;
+    fault_popup_set_auto_enabled(false);
+    assert(popup.overlay==same_overlay && popup.model.elapsed_ms==elapsed && island_posts==posted+5);
+    assert(machine_fault_find((machine_fault_key_t){MACHINE_FAULT_SENSOR,0,2},&retained_sensor) && !retained_sensor.acknowledged);
+    fault_popup_set_auto_enabled(true);
+    assert(popup.overlay==same_overlay && popup.model.elapsed_ms==elapsed && island_posts==posted+5);
     fault_popup_report_sensor_mask(0);
     fault_popup_set_auto_enabled(false);fault_popup_report_runtime_fault(2);posted=island_posts;
     fault_popup_record_runtime_notice(225);assert(island_posts==posted&&!fault_popup_is_showing());
@@ -204,6 +221,46 @@ int main(void)
     assert(island_level==SMART_ISLAND_WARNING_LEVEL_WARNING);
     assert(fault_popup_show_key((machine_fault_key_t){MACHINE_FAULT_START,1,2}));
     click_confirm();machine_fault_clear();fault_popup_set_auto_enabled(true);
+    /* Each new START report reopens an acknowledged door fault; an already
+     * visible guide keeps its selected step and animation progress. */
+    const machine_fault_key_t door={MACHINE_FAULT_START,2,9};
+    posted=island_posts;
+    fault_popup_report_start_fault(2,9);
+    assert(fault_popup_is_showing() && island_posts==posted+1);
+    for(unsigned attempt=0;attempt<3;++attempt) {
+        click_confirm();
+        machine_fault_record_t record;
+        assert(!fault_popup_is_showing() && machine_fault_find(door,&record) && record.acknowledged);
+        posted=island_posts;
+        fault_popup_report_start_fault(2,9);
+        assert(fault_popup_is_showing() && island_posts==posted+1);
+        assert(machine_fault_find(door,&record) && !record.acknowledged);
+    }
+    lv_event_send(popup.steps[1],LV_EVENT_CLICKED,NULL);advance(1500);
+    same_overlay=popup.overlay;elapsed=popup.model.elapsed_ms;posted=island_posts;
+    fault_popup_report_start_fault(2,9);
+    assert(popup.overlay==same_overlay && popup.step==1 && popup.model.elapsed_ms==elapsed);
+    assert(island_posts==posted+1);
+    click_confirm();
+    fault_popup_set_auto_enabled(false);posted=island_posts;
+    fault_popup_report_start_fault(2,9);
+    assert(!fault_popup_is_showing() && island_posts==posted+1);
+    posted=island_posts;
+    fault_popup_set_auto_enabled(true);
+    machine_fault_record_t retained_door;
+    assert(!fault_popup_is_showing() && island_posts==posted && machine_fault_find(door,&retained_door) && !retained_door.acknowledged);
+    fault_popup_set_auto_enabled(false);fault_popup_set_auto_enabled(true);
+    assert(!fault_popup_is_showing() && island_posts==posted);
+    fault_popup_report_start_fault(2,9);
+    assert(fault_popup_is_showing() && island_posts==posted+1);
+    lv_event_send(popup.steps[1],LV_EVENT_CLICKED,NULL);advance(800);
+    same_overlay=popup.overlay;elapsed=popup.model.elapsed_ms;posted=island_posts;
+    fault_popup_set_auto_enabled(false);fault_popup_set_auto_enabled(true);
+    assert(popup.overlay==same_overlay && popup.step==1 && popup.model.elapsed_ms==elapsed && island_posts==posted);
+    assert(machine_fault_find(door,&retained_door) && !retained_door.acknowledged);
+    click_confirm();
+    assert(machine_fault_find(door,NULL));
+    fault_popup_clear_runtime();fault_popup_set_auto_enabled(true);
     for(unsigned language=0;language<2;++language) {
     ui_lang_set(language?LANGUAGE_CN:LANGUAGE_EN);
     for(unsigned source=0;source<4;++source)for(unsigned code=1;code<(source==0?6:source==1?14:source==2?8:32);++code) {
@@ -225,6 +282,6 @@ int main(void)
     assert(popup.guide.steps[0].view==MF_FRONT);hide_fault_popup();
     assert(lv_obj_get_child_cnt(lv_layer_top())==initial_children);
     advance(1000);assert(!popup.model.timer);
-    puts("machine_fault_view: PASS (actual LVGL geometry, active-step loop, acknowledge, dedupe, multi-fault, independent recovery, deletion/recreation)");
+    puts("machine_fault_view: PASS (Popup preference never opens old START/sensor reports, new reports still open, toggles preserve live guide/read status, repeated START after Confirm, actual LVGL geometry, multi-fault and lifecycle)");
     return 0;
 }

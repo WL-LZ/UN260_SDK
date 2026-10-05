@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """One legacy-compatible USB bundle. Only tiny bridge files go to rootfs.
 
-The nested migration is armed for ONE explicitly reviewed NAND fingerprint.
-No automatic widening to other layouts/content is allowed.
+The v3 migration preserves the exact unused legacy partition before enrollment.
+Managed devices use the same package without rebuilding their application volume.
 """
 import argparse
 import hashlib
@@ -11,7 +11,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 from build_delta import load
-from build_storage_bootstrap import build as build_migration, PATHS, APPROVED
+from build_storage_bootstrap import build as build_migration, PATHS, APPROVED, POLICY_V2, POLICY_V3
 
 REQUEST = 'etc/un260/unified-request'
 DISPLAY = 'usr/local/bin/un260_upgrade_display'
@@ -20,8 +20,8 @@ BRIDGE = PATHS + (DISPLAY, REQUEST)
 
 
 def build(full, output, approved):
-    if approved != APPROVED:
-        raise ValueError('An exact reviewed fingerprint is required')
+    if approved not in (APPROVED, POLICY_V2, POLICY_V3):
+        raise ValueError('An explicit supported migration policy is required')
     metadata, files = load(full)
     for name in PATHS + (DISPLAY,):
         if name not in files or files[name][1] != 0o755:
@@ -33,7 +33,7 @@ def build(full, output, approved):
             raise ValueError('Missing boot continuation: ' + name)
     with tempfile.TemporaryDirectory(prefix='un260-unified-build-') as temp:
         migration = Path(temp) / 'migration.upk'
-        build_migration(full, migration, True)
+        build_migration(full, migration, True, policy=approved)
         nested = {'migration': migration.read_bytes(), 'application': Path(full).read_bytes()}
     payload = {name: files[name] for name in PATHS + (DISPLAY,)}
     payload[REQUEST] = (''.join(hashlib.sha256(nested[n]).hexdigest() + '\n'
@@ -79,6 +79,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--full', required=True)
     parser.add_argument('--output', required=True)
-    parser.add_argument('--approved-fingerprint', required=True)
+    policy = parser.add_mutually_exclusive_group(required=True)
+    policy.add_argument('--approved-fingerprint', choices=(APPROVED,), help='Legacy exact fingerprint')
+    policy.add_argument('--migration-policy', choices=(APPROVED, POLICY_V2, POLICY_V3))
     args = parser.parse_args()
-    build(args.full, args.output, args.approved_fingerprint)
+    build(args.full, args.output, args.migration_policy or args.approved_fingerprint)

@@ -16,6 +16,10 @@ static unsigned callbacks[16], pushes, protocol_calls, persisted_tabs;
 static unsigned host_notice_posts;
 static ui_notice_kind_t host_notice_kind;
 static char host_notice_detail[UI_NOTICE_DETAIL_CAPACITY];
+#ifndef HOST_REAL_NOTICE
+static bool host_top_popup_enabled=true;
+bool ui_notice_get_enabled(void){return host_top_popup_enabled;}
+void ui_notice_set_enabled(bool enabled){host_top_popup_enabled=enabled;}
 void ui_notice_post(ui_notice_kind_t kind,const char *key,const char *title,const char *detail)
 {
     (void)key;(void)title;++host_notice_posts;host_notice_kind=kind;
@@ -23,6 +27,10 @@ void ui_notice_post(ui_notice_kind_t kind,const char *key,const char *title,cons
 }
 void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title,const char *detail)
 {ui_notice_post(kind,key,ui_tr(title),ui_tr(detail));}
+#endif
+static bool host_top_popup_save_fails;
+bool ui_state_top_popup_set_enabled(bool enabled)
+{if(host_top_popup_save_fails)return false;ui_notice_set_enabled(enabled);return true;}
 static bool start_busy, prewarming, touch_enabled, fault_auto;
 static bool host_fault_pending,host_fault_showing,host_transitioning;
 static ui_page_t destination;
@@ -35,6 +43,7 @@ static bool host_layout_initialized,host_save_fails;
 static unsigned host_layout_saves;
 static bool host_gestures=true,host_gesture_save_fails,host_standby_busy;
 #ifndef HOST_REAL_GESTURE
+void gesture_service_set_navigation_blocked(uint32_t owner,bool blocked){(void)owner;(void)blocked;}
 void gesture_service_set_input_blocked(uint32_t owner,bool blocked){(void)owner;(void)blocked;}
 bool gesture_service_enabled(void) { return host_gestures; }
 bool gesture_service_set_enabled(bool enabled)
@@ -46,6 +55,17 @@ void gesture_service_clear_pointer_policy(uint32_t owner)
 { (void)owner;host_pointer_policy=NULL; }
 #endif
 bool standby_store_busy(void) { return host_standby_busy; }
+const char *app_standby_runtime_blocker(void)
+{
+    if(start_busy)return "Operation in progress. Try standby when it finishes.";
+    if(host_fault_pending||host_fault_showing)return "Review the pending fault before standby.";
+    if(host_standby_busy)return "Standby resources are busy. Try again shortly.";
+    return NULL;
+}
+bool app_standby_runtime_request(void)
+{if(app_standby_runtime_blocker())return false;++pushes;destination=UI_PAGE_STANDBY;return true;}
+bool app_standby_runtime_needs_fault_review(void)
+{return !start_busy && !host_fault_showing && host_fault_pending;}
 void ui_state_main_layout_get(ui_main_layout_t *layout)
 {
     if (!host_layout_initialized) { ui_main_layout_default(&host_saved_layout);host_layout_initialized=true; }
@@ -90,8 +110,12 @@ void ui_state_apply_common_runtime(void) {}
 int ui_state_page01_detail_section_get(void) { return saved_tab; }
 void ui_state_save_page01_detail_section(void) { saved_tab=page_01_detail_section_get();++persisted_tabs; }
 void ui_state_save_popup_auto_state(void) {}
-void ui_state_quick_order_get(uint8_t order[8])
-{for(uint8_t i=0;i<8;i++)order[i]=i;}
+static uint8_t host_quick_order[UI_STATE_QUICK_CONTROL_COUNT]={0,1,3,4,2,5,6,7,8};
+static bool host_order_save_fails;
+void ui_state_quick_order_get(uint8_t order[UI_STATE_QUICK_CONTROL_COUNT])
+{memcpy(order,host_quick_order,sizeof(host_quick_order));}
+bool ui_state_quick_order_save(const uint8_t order[UI_STATE_QUICK_CONTROL_COUNT])
+{if(host_order_save_fails)return false;memcpy(host_quick_order,order,sizeof(host_quick_order));return true;}
 bool ui_state_quick_order_swap(uint8_t a,uint8_t b)
 {(void)a;(void)b;return true;}
 void ui_state_save_pure_count_state(void) {}
@@ -122,5 +146,11 @@ bool touch_feedback_set_enabled(bool enabled) { touch_enabled=enabled;return tru
 bool ui_qr_data_is_ready(void) { return false; }
 bool ui_qr_data_build(char *buffer,size_t size) { (void)buffer;(void)size;return false; }
 bool lv_qr_popup_show(const char *text) { (void)text;return true; }
-void ui_page_18_pure_request_exit(void) { ++pure_exits;host_current_page=UI_PAGE_MAIN; }
+bool ui_page_18_pure_toggle_theme(void)
+{
+    if(host_transitioning)return false;
+    if(host_current_page==UI_PAGE_PURE){++pure_exits;host_current_page=UI_PAGE_MAIN;}
+    else {++pushes;destination=UI_PAGE_PURE;host_current_page=UI_PAGE_PURE;}
+    smart_island_set_pure_count_enabled(host_current_page==UI_PAGE_PURE);return true;
+}
 #endif

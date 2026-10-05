@@ -2,7 +2,8 @@
 # Versioned, opt-in application volume. Boot/ordinary updates NEVER format NAND.
 # UN260_STORAGE_SYNC_1: verify durable USB backup before initializing NAND.
 # UN260_MTD_STREAM_1: MTD read errors are not fingerprint mismatches.
-# The one reviewed fingerprint is data-only (2048-byte pages, excluding OOB).
+# UN260_STORAGE_POLICY_V2: reviewed legacy data or a completely erased partition.
+# UN260_STORAGE_POLICY_V3: explicit migration of a durably backed-up legacy partition.
 SYS=/sys
 PROC=/proc
 DEV=/dev
@@ -11,7 +12,14 @@ VOLUME=/mnt/un260-app
 STATE=/etc/un260/app-storage
 APP=/usr/local/bin/test_lvgl
 LOCK=/tmp/un260-updater.lock
+UPDATER_STATE=/var/lib/un260-updater
 APPROVED=e19b211e20f31ce8d82c1e40b6fe3feca04e758f887c17beb976e444ab964b17
+ERASED_HASH=6c4633a17904a401a250503371083b283d373e70956e500218b0b7601853b3eb
+POLICY_V2=un260-reviewed-or-erased-v2
+POLICY_V3=un260-backed-up-legacy-v3
+SOURCE_HASH=
+JOURNAL_VERSION=1
+MIGRATION_ID=
 OWNER=UN260_APP_VOLUME_V1
 RAW_BYTES=39845888
 GUARDED=0
@@ -43,12 +51,17 @@ digest()
     echo "$digest_hash" | grep -Eq '^[0-9a-f]{64}$' || return 1
     printf '%s\n' "$digest_hash"
 }
-verify_current_nand()
+read_current_nand()
 {
     [ "$("$SYNC_TOOL" --probe-stream)" = UN260_STORAGE_STREAM_1 ] || die 'Install streaming-read repair package before migration'
     current_nand_hash=$("$SYNC_TOOL" --hash-stream "$DEV/mtd11" "$RAW_BYTES") ||
         die 'NAND read/hash failed; fingerprint not evaluated, nothing erased'
-    [ "$current_nand_hash" = "$APPROVED" ] || die 'NAND fingerprint differs from reviewed backup; nothing erased'
+    echo "$current_nand_hash" | grep -Eq '^[0-9a-f]{64}$' || die 'Invalid NAND digest; nothing erased'
+}
+verify_current_nand()
+{
+    read_current_nand
+    [ "$current_nand_hash" = "$SOURCE_HASH" ] || die 'NAND changed after source identification; nothing erased'
 }
 size() { wc -c < "$1" | tr -d ' '; }
 regular() { [ -f "$1" ] && [ ! -L "$1" ]; }
@@ -59,6 +72,117 @@ safe_path()
         [ ! -L "$sp" ] || return 1
         sp=$(dirname "$sp")
     done
+}
+known_source()
+{
+    [ "$1" = "$APPROVED" ] || [ "$1" = "$ERASED_HASH" ]
+}
+valid_hash()
+{
+    echo "$1" | grep -Eq '^[0-9a-f]{64}$'
+}
+valid_id()
+{
+    echo "$1" | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+}
+new_id()
+{
+    MIGRATION_ID=$(cat "$PROC/sys/kernel/random/uuid") || die 'Cannot allocate backup identity'
+    valid_id "$MIGRATION_ID" || die 'Invalid backup identity'
+}
+backup_path()
+{
+    backup=$USB/UN260_APP_STORAGE_BACKUP_$SOURCE_HASH
+    if [ "$JOURNAL_VERSION" != 1 ]; then backup=${backup}_$MIGRATION_ID; fi
+    safe_path "$backup" || die 'Unsafe backup path'
+}
+copy_nand()
+{
+    dd if="$DEV/mtd11" of="$1" bs=131072 count=$(((RAW_BYTES + 131071) / 131072)) || die 'NAND read failed; no format'
+    [ "$(size "$1")" = "$RAW_BYTES" ] || die 'Incomplete NAND backup; nothing erased'
+    [ "$(digest "$1")" = "$SOURCE_HASH" ] || die 'NAND backup differs from initial read; nothing erased'
+}
+export_unknown()
+{
+    new_id
+    diagnostic=$USB/UN260_STORAGE_DIAGNOSTIC_$MIGRATION_ID
+    safe_path "$diagnostic" || die 'Unsafe diagnostic path'
+    mkdir "$diagnostic" || die 'Cannot create unique diagnostic directory'
+    copy_nand "$diagnostic/mtd11.data.bin"
+    {
+        printf 'diagnostic_only=1\nsource_sha256=%s\nbytes=%s\napp_sha256=%s\n' "$SOURCE_HASH" "$RAW_BYTES" "$OLD_APP_HASH"
+        printf 'mtd11=ubisystem\nmtd10=ubiroot\nroot_bytes=67108864\nerasesize=131072\nwritesize=2048\n'
+        cat "$PROC/mounts"
+    } > "$diagnostic/layout.txt" || die 'Cannot write diagnostic layout'
+    if [ -f "$PROC/mtd" ]; then cat "$PROC/mtd" >> "$diagnostic/layout.txt" || die 'Cannot copy partition layout'; fi
+    layout_hash=$(digest "$diagnostic/layout.txt") || die 'Cannot hash diagnostic layout'
+    printf '%s  mtd11.data.bin\n%s  layout.txt\n' "$SOURCE_HASH" "$layout_hash" > "$diagnostic/SHA256SUMS" || die 'Cannot write diagnostic checksums'
+    checks_hash=$(digest "$diagnostic/SHA256SUMS") || die 'Cannot hash diagnostic checksums'
+    sync
+    [ "$(backup_digest "$diagnostic/mtd11.data.bin")" = "$SOURCE_HASH" ] &&
+        [ "$(backup_digest "$diagnostic/layout.txt")" = "$layout_hash" ] &&
+        [ "$(backup_digest "$diagnostic/SHA256SUMS")" = "$checks_hash" ] || die 'Diagnostic USB readback failed; export incomplete'
+    sync
+    echo "APP_STORAGE: diagnostic exported and verified: $diagnostic" >&2
+    die 'NAND fingerprint differs from migration policy; backup preserved, nothing erased'
+}
+elf_executable()
+{
+    regular "$1" && [ -x "$1" ] || return 1
+    [ "$(size "$1")" -ge 52 ] || return 1
+    elf_magic=$(dd if="$1" bs=7 count=1 2>/dev/null) || return 1
+    case "$elf_magic" in
+        "$(printf '\177ELF\001\001\001')") return 0 ;;
+        "$(printf '\177ELF\002\001\001')") [ "$(size "$1")" -ge 64 ] ;;
+        *) return 1 ;;
+    esac
+}
+idle_install_state()
+{
+    safe_path "$STATE" && safe_path "$APP" && safe_path "$UPDATER_STATE" && safe_path "$LOCK" || return 1
+    for legacy_state in active.tmp pending pending.tmp; do
+        [ ! -e "$STATE/$legacy_state" ] && [ ! -L "$STATE/$legacy_state" ] || return 1
+    done
+    [ ! -e "$UPDATER_STATE/transaction" ] && [ ! -L "$UPDATER_STATE/transaction" ] &&
+        [ ! -e "$LOCK" ] && [ ! -L "$LOCK" ] || return 1
+    for legacy_artifact in "$APP".un260-*; do
+        [ ! -e "$legacy_artifact" ] && [ ! -L "$legacy_artifact" ] || return 1
+    done
+}
+can_launch_legacy()
+{
+    idle_install_state && [ ! -e "$STATE/active" ] && [ ! -L "$STATE/active" ] && elf_executable "$APP"
+}
+verify_layout()
+{
+    # Query only: do not attach, mount, recover transactions or change markers.
+    safe_path "$STATE" && safe_path "$APP" && safe_path "$VOLUME" || return 1
+    regular "$STATE/active" && [ "$(cat "$STATE/active")" = "$OWNER" ] || return 1
+    for query_state in pending pending.tmp active.tmp; do
+        [ ! -e "$STATE/$query_state" ] && [ ! -L "$STATE/$query_state" ] || return 1
+    done
+    geometry
+    regular "$APP" && [ -x "$APP" ] && [ "$(digest "$APP")" = "$(launcher | sha256sum | awk '{print $1}')" ] || return 1
+    find_ubi
+    [ -n "$UBI" ] || return 1
+    find_volume
+    [ -n "$VOL" ] || return 1
+    awk -v p="$VOLUME" -v d="$DEV/$VOL" -v n="$UBI:un260_app" '
+        $2==p {count++; if (($1==d || $1==n) && $3=="ubifs" && $4 ~ /(^|,)rw(,|$)/) ok=1}
+        ($1==d || $1==n) && $2!=p {elsewhere=1}
+        END {exit !(count==1 && ok && !elsewhere)}' "$PROC/mounts" || return 1
+    owner_check
+    elf_executable "$VOLUME/test_lvgl"
+}
+can_launch_current()
+{
+    idle_install_state || return 1
+    if [ ! -e "$STATE/active" ] && [ ! -L "$STATE/active" ]; then elf_executable "$APP"; return $?; fi
+    safe_path "$VOLUME" || return 1
+    for current_artifact in "$VOLUME/test_lvgl".un260-* "$VOLUME/test_lvgl.migration-new"; do
+        [ ! -e "$current_artifact" ] && [ ! -L "$current_artifact" ] || return 1
+    done
+    verify_layout
 }
 geometry()
 {
@@ -129,19 +253,66 @@ owner_check()
 }
 save_phase()
 {
-    printf '%s\n%s\n%s\n' "$APPROVED" "$1" "${OLD_APP_HASH:--}" > "$STATE/pending.tmp" || die 'Cannot write migration journal'
+    if [ "$JOURNAL_VERSION" != 1 ]; then
+        journal_policy=$POLICY_V2
+        [ "$JOURNAL_VERSION" != 3 ] || journal_policy=$POLICY_V3
+        printf '%s\n%s\n%s\n%s\n%s\n' "$journal_policy" "$SOURCE_HASH" "$1" "$OLD_APP_HASH" "$MIGRATION_ID" > "$STATE/pending.tmp" || die 'Cannot write migration journal'
+    else
+        printf '%s\n%s\n%s\n' "$SOURCE_HASH" "$1" "$OLD_APP_HASH" > "$STATE/pending.tmp" || die 'Cannot write migration journal'
+    fi
     sync
     mv -f "$STATE/pending.tmp" "$STATE/pending" || die 'Cannot publish migration journal'
     sync
 }
 load_pending()
 {
-    regular "$STATE/pending" || die 'Invalid migration journal'
-    [ "$(sed -n '1p' "$STATE/pending")" = "$APPROVED" ] || die 'Unapproved migration journal'
-    PHASE=$(sed -n '2p' "$STATE/pending")
-    OLD_APP_HASH=$(sed -n '3p' "$STATE/pending")
+    journal_path=${1:-$STATE/pending}
+    regular "$journal_path" || die 'Invalid migration journal'
+    journal_header=$(sed -n '1p' "$journal_path")
+    if [ "$journal_header" = "$POLICY_V2" ] || [ "$journal_header" = "$POLICY_V3" ]; then
+        [ "$(wc -l < "$journal_path" | tr -d ' ')" = 5 ] && [ "$(awk 'END {print NR}' "$journal_path")" = 5 ] || die 'Invalid versioned migration journal'
+        JOURNAL_VERSION=2
+        [ "$journal_header" != "$POLICY_V3" ] || JOURNAL_VERSION=3
+        SOURCE_HASH=$(sed -n '2p' "$journal_path")
+        PHASE=$(sed -n '3p' "$journal_path")
+        OLD_APP_HASH=$(sed -n '4p' "$journal_path")
+        MIGRATION_ID=$(sed -n '5p' "$journal_path")
+        valid_hash "$SOURCE_HASH" && valid_id "$MIGRATION_ID" || die 'Invalid source or identity in migration journal'
+        if [ "$JOURNAL_VERSION" = 2 ]; then known_source "$SOURCE_HASH" || die 'Unapproved v2 migration journal'; fi
+    else
+        [ "$journal_header" = "$APPROVED" ] && [ "$(wc -l < "$journal_path" | tr -d ' ')" = 3 ] &&
+            [ "$(awk 'END {print NR}' "$journal_path")" = 3 ] || die 'Unapproved migration journal'
+        JOURNAL_VERSION=1
+        SOURCE_HASH=$APPROVED
+        MIGRATION_ID=
+        PHASE=$(sed -n '2p' "$journal_path")
+        OLD_APP_HASH=$(sed -n '3p' "$journal_path")
+    fi
     case "$PHASE" in formatting|volume-ready|app-ready) ;; *) die 'Invalid migration phase' ;; esac
     echo "$OLD_APP_HASH" | grep -Eq '^[0-9a-f]{64}$' || die 'Invalid original app hash'
+}
+prepare_initial_orphan()
+{
+    # No format is permitted before pending has been published and flushed.
+    # Recover only that initial unpublished intent, with the original source
+    # and executable still intact. Later/malformed state remains for service.
+    [ ! -e "$STATE/pending" ] && [ ! -e "$STATE/active" ] && [ ! -e "$STATE/active.tmp" ] || die 'Unpublished migration conflicts with installed state'
+    safe_path "$UPDATER_STATE" || die 'Unsafe updater state path'
+    [ ! -e "$UPDATER_STATE/transaction" ] && [ ! -L "$UPDATER_STATE/transaction" ] || die 'Unpublished migration has a file transaction'
+    for orphan_artifact in "$APP".un260-*; do
+        [ ! -e "$orphan_artifact" ] && [ ! -L "$orphan_artifact" ] || die 'Unpublished migration has application artifacts'
+    done
+    orphan_hash=$(digest "$STATE/pending.tmp") || die 'Cannot hash unpublished migration'
+    load_pending "$STATE/pending.tmp"
+    [ "$PHASE" = formatting ] || die 'Unpublished migration is not an initial formatting intent'
+    elf_executable "$APP" && [ "$(digest "$APP")" = "$OLD_APP_HASH" ] || die 'Original executable changed after unpublished migration'
+    geometry
+    legacy_unattached
+    verify_current_nand
+    [ "$(digest "$APP")" = "$OLD_APP_HASH" ] && [ "$(digest "$STATE/pending.tmp")" = "$orphan_hash" ] || die 'Unpublished migration changed during recovery'
+    rm -f "$STATE/pending.tmp" || die 'Cannot retire unpublished migration intent'
+    sync
+    echo 'APP_STORAGE: unpublished initial migration retired; original NAND and application unchanged'
 }
 launcher()
 {
@@ -187,6 +358,9 @@ prepare()
     for sf in pending pending.tmp active active.tmp; do
         safe_path "$STATE/$sf" || die 'Unsafe storage metadata path'
     done
+    if [ -e "$STATE/pending.tmp" ] && [ ! -e "$STATE/pending" ]; then
+        prepare_initial_orphan
+    fi
     if [ -e "$STATE/pending" ]; then
         load_pending
         if [ "$PHASE" = app-ready ]; then
@@ -219,11 +393,68 @@ require_usb()
     usbdev=$(awk -v p="$USB" '$2==p && $4 ~ /(^|,)rw(,|$)/ {print $1}' "$PROC/mounts")
     case "$usbdev" in "$DEV"/sd*) [ -b "$usbdev" ] || die 'USB is not a block device' ;; *) die 'Insert a mounted writable USB drive' ;; esac
 }
+legacy_unattached()
+{
+    find_ubi
+    [ -z "$UBI" ] || die 'mtd11 already attached; manual review required, nothing erased'
+    partition_unmounted
+    awk -v d="$DEV" -v p="$VOLUME" '
+        $1==d"/mtd11" || $1==d"/mtdblock11" || $1=="mtd11" || $1=="mtd:ubisystem" ||
+        $1=="ubisystem" || $2==p {found=1}
+        END {exit found}' "$PROC/mounts" || die 'Legacy partition or app path is mounted; nothing erased'
+}
+partition_unmounted()
+{
+    # UBI attachments are checked separately; reject direct MTD mounts even
+    # when a pending format is being resumed. Never format a mounted device.
+    awk -v d="$DEV" '
+        $1==d"/mtd11" || $1==d"/mtdblock11" || $1=="mtd11" || $1=="mtd:ubisystem" || $1=="ubisystem" {found=1}
+        END {exit found}' "$PROC/mounts" || die 'Legacy partition is mounted; nothing erased'
+    for mounted_source in $(awk '{print $1}' "$PROC/mounts"); do
+        case "$mounted_source" in
+            "$DEV"/*)
+                mounted_target=$(readlink -f "$mounted_source") || die 'Cannot identify mounted device; nothing erased'
+                case "$mounted_target" in "$DEV/mtd11"|"$DEV/mtdblock11") die 'Legacy partition is mounted through an alias; nothing erased' ;; esac
+                ;;
+        esac
+    done
+}
+write_backup_layout()
+{
+    safe_path "$backup/layout.txt" && safe_path "$backup/SHA256SUMS" || die 'Unsafe backup metadata path'
+    [ ! -e "$backup/layout.txt" ] && [ ! -e "$backup/SHA256SUMS" ] || die 'Existing migration metadata; preserve for review'
+    {
+        printf 'policy=%s\nsource_sha256=%s\nmigration_id=%s\nbytes=%s\napp_sha256=%s\n' "$POLICY_V3" "$SOURCE_HASH" "$MIGRATION_ID" "$RAW_BYTES" "$OLD_APP_HASH"
+        printf 'mtd11=ubisystem\nmtd10=ubiroot\nroot_bytes=67108864\nerasesize=131072\nwritesize=2048\n'
+        printf 'business_data=/etc/ui_state; retained in ubiroot\n'
+        cat "$PROC/mounts"
+        if [ -f "$PROC/mtd" ]; then cat "$PROC/mtd"; fi
+    } > "$backup/layout.txt" || die 'Cannot write migration layout'
+    layout_hash=$(digest "$backup/layout.txt") || die 'Cannot hash migration layout'
+    printf '%s  mtd11.data.bin\n%s  %s\n%s  layout.txt\n' "$SOURCE_HASH" "$OLD_APP_HASH" "$(basename "$app_backup")" "$layout_hash" > "$backup/SHA256SUMS" || die 'Cannot write migration checksums'
+}
+verify_backup_layout()
+{
+    safe_path "$backup/layout.txt" && safe_path "$backup/SHA256SUMS" && regular "$backup/layout.txt" && regular "$backup/SHA256SUMS" || die 'Resume requires original migration metadata'
+    expected_layout=$(printf 'policy=%s\nsource_sha256=%s\nmigration_id=%s\nbytes=%s\napp_sha256=%s\nmtd11=ubisystem\nmtd10=ubiroot\nroot_bytes=67108864\nerasesize=131072\nwritesize=2048\n' "$POLICY_V3" "$SOURCE_HASH" "$MIGRATION_ID" "$RAW_BYTES" "$OLD_APP_HASH")
+    [ "$(sed -n '1,10p' "$backup/layout.txt")" = "$expected_layout" ] || die 'Migration metadata identity mismatch'
+    layout_hash=$(digest "$backup/layout.txt") || die 'Cannot hash migration layout'
+    expected_checks=$(printf '%s  mtd11.data.bin\n%s  %s\n%s  layout.txt\n' "$SOURCE_HASH" "$OLD_APP_HASH" "$(basename "$app_backup")" "$layout_hash")
+    [ "$(cat "$backup/SHA256SUMS")" = "$expected_checks" ] && [ "$(wc -l < "$backup/SHA256SUMS" | tr -d ' ')" = 3 ] || die 'Migration backup checksum metadata mismatch'
+    checks_hash=$(digest "$backup/SHA256SUMS") || die 'Cannot hash migration checksums'
+    [ "$(backup_digest "$backup/layout.txt")" = "$layout_hash" ] && [ "$(backup_digest "$backup/SHA256SUMS")" = "$checks_hash" ] || die 'Direct USB migration metadata readback failed'
+}
 migrate()
 {
-    [ "$1" = "$APPROVED" ] || die 'This partition was not reviewed/approved'
+    migration_policy=$1
+    [ "$migration_policy" = "$APPROVED" ] || [ "$migration_policy" = "$POLICY_V2" ] || [ "$migration_policy" = "$POLICY_V3" ] || die 'This migration policy was not reviewed/approved'
     parent=$(awk '$1=="PPid:" {print $2}' "$PROC/$$/status")
     regular "$LOCK/pid" && [ "$(cat "$LOCK/pid")" = "$parent" ] || die 'Migration must run under the updater lock'
+    if [ -e "$STATE/pending" ]; then
+        safe_path "$STATE/pending" || die 'Unsafe storage metadata path'
+        load_pending
+        [ "$JOURNAL_VERSION" != 3 ] || [ "$migration_policy" = "$POLICY_V3" ] || die 'Older migration request does not authorize v3 journal'
+    fi
     prepare
     [ ! -e "$STATE/active" ] || { echo 'APP_STORAGE: already migrated'; return 0; }
     geometry
@@ -233,15 +464,39 @@ migrate()
         USB_GUARDED=1
         sync
     fi
-    for cmd in ubiformat ubiattach ubimkvol dd sha256sum; do command -v "$cmd" >/dev/null || die "Required tool missing: $cmd"; done
-    backup=$USB/UN260_APP_STORAGE_BACKUP_$APPROVED
-    safe_path "$backup" || die 'Unsafe backup path'
-    mkdir -p "$backup" "$STATE" || die 'Cannot create backup/state directory'
+    for cmd in ubiformat ubiattach ubimkvol dd sha256sum readlink; do command -v "$cmd" >/dev/null || die "Required tool missing: $cmd"; done
+    fresh_migration=0
     if [ -e "$STATE/pending" ]; then
         load_pending
+        [ "$JOURNAL_VERSION" != 3 ] || [ "$migration_policy" = "$POLICY_V3" ] || die 'Older migration request does not authorize v3 journal'
+        [ "$migration_policy" = "$POLICY_V2" ] || [ "$migration_policy" = "$POLICY_V3" ] || [ "$SOURCE_HASH" = "$APPROVED" ] || die 'Legacy migration request does not authorize erased NAND'
+        backup_path
     else
         regular "$APP" || die 'Original executable missing'
         OLD_APP_HASH=$(digest "$APP") || die 'Cannot hash original executable; nothing erased'
+        legacy_unattached
+        free=$(df -Pk "$USB" | awk 'NR==2 {print $4}')
+        case "$free" in ''|*[!0-9]*) die 'Cannot read USB capacity' ;; esac
+        [ "$free" -ge 65536 ] || die 'Need at least 64 MiB USB backup space'
+        read_current_nand
+        SOURCE_HASH=$current_nand_hash
+        if [ "$SOURCE_HASH" != "$APPROVED" ] && [ "$migration_policy" != "$POLICY_V3" ]; then
+            [ "$migration_policy" = "$POLICY_V2" ] && [ "$SOURCE_HASH" = "$ERASED_HASH" ] || export_unknown
+        fi
+        if [ "$migration_policy" = "$POLICY_V2" ] || [ "$migration_policy" = "$POLICY_V3" ]; then
+            JOURNAL_VERSION=2
+            [ "$migration_policy" != "$POLICY_V3" ] || JOURNAL_VERSION=3
+            new_id
+            backup_path
+            mkdir "$backup" || die 'Cannot create unique migration backup directory'
+        else
+            JOURNAL_VERSION=1
+            MIGRATION_ID=
+            backup_path
+            mkdir -p "$backup" || die 'Cannot create migration backup directory'
+        fi
+        mkdir -p "$STATE" || die 'Cannot create migration state directory'
+        fresh_migration=1
     fi
     # One USB can service machines with different installed UI versions. Keep
     # each distinct executable by content hash; never overwrite another backup.
@@ -250,23 +505,18 @@ migrate()
         app_backup=$backup/test_lvgl.before
     fi
     if [ -e "$STATE/pending" ]; then
-        load_pending
         regular "$backup/mtd11.data.bin" && [ "$(size "$backup/mtd11.data.bin")" = "$RAW_BYTES" ] &&
-            [ "$(digest "$backup/mtd11.data.bin")" = "$APPROVED" ] || die 'Resume requires the original verified USB backup'
+            [ "$(digest "$backup/mtd11.data.bin")" = "$SOURCE_HASH" ] || die 'Resume requires the original verified USB backup'
     else
-        find_ubi
-        [ -z "$UBI" ] || die 'mtd11 already attached; manual review required, nothing erased'
-        free=$(df -Pk "$USB" | awk 'NR==2 {print $4}')
-        case "$free" in ''|*[!0-9]*) die 'Cannot read USB capacity' ;; esac
-        [ "$free" -ge 65536 ] || die 'Need at least 64 MiB USB backup space'
         if [ -e "$backup/mtd11.data.bin" ]; then
             regular "$backup/mtd11.data.bin" && [ "$(size "$backup/mtd11.data.bin")" = "$RAW_BYTES" ] &&
-                [ "$(digest "$backup/mtd11.data.bin")" = "$APPROVED" ] || die 'Existing backup differs; preserve for review'
+                [ "$(digest "$backup/mtd11.data.bin")" = "$SOURCE_HASH" ] || die 'Existing backup differs; preserve for review'
         else
             safe_path "$backup/mtd11.data.tmp" || die 'Unsafe backup temporary path'
-            dd if="$DEV/mtd11" of="$backup/mtd11.data.tmp" bs=131072 count=304 || die 'NAND read failed; no format'
+            if [ ! -e "$backup/mtd11.data.tmp" ]; then copy_nand "$backup/mtd11.data.tmp"; fi
+            regular "$backup/mtd11.data.tmp" || die 'Invalid temporary NAND backup'
             [ "$(size "$backup/mtd11.data.tmp")" = "$RAW_BYTES" ] &&
-                [ "$(digest "$backup/mtd11.data.tmp")" = "$APPROVED" ] || die 'Unknown partition data; backup kept, nothing erased'
+                [ "$(digest "$backup/mtd11.data.tmp")" = "$SOURCE_HASH" ] || die 'Temporary NAND backup differs; preserve for review'
             sync
             mv "$backup/mtd11.data.tmp" "$backup/mtd11.data.bin" || die 'Cannot publish NAND backup'
         fi
@@ -280,25 +530,34 @@ migrate()
             mv "$app_backup.tmp" "$app_backup" || die 'Cannot publish app backup'
         fi
         regular "$app_backup" && [ "$(digest "$app_backup")" = "$OLD_APP_HASH" ] || die 'Existing app backup differs'
+        if [ "$JOURNAL_VERSION" = 3 ]; then write_backup_layout; fi
         sync
-        save_phase formatting
-        PHASE=formatting
     fi
     # Includes resume after interruption: page-cache hashes are not evidence
     # that a USB backup reached the device. Refuse initialization on any error.
     sync
-    [ "$(backup_digest "$backup/mtd11.data.bin")" = "$APPROVED" ] &&
+    [ "$(backup_digest "$backup/mtd11.data.bin")" = "$SOURCE_HASH" ] &&
         [ "$(backup_digest "$app_backup")" = "$OLD_APP_HASH" ] ||
         die 'Direct USB backup readback failed; nothing further initialized'
+    if [ "$JOURNAL_VERSION" = 3 ]; then verify_backup_layout; fi
     sync
+    if [ "$fresh_migration" = 1 ]; then
+        # Bind the durable intent to this device's current bytes only after the
+        # USB originals survive direct readback. Resume uses that same intent.
+        verify_current_nand
+        legacy_unattached
+        save_phase formatting
+        PHASE=formatting
+    fi
     if [ "$PHASE" = formatting ]; then
+        partition_unmounted
         find_ubi
         if [ -z "$UBI" ]; then
             # A previous attempt may have completed format before losing power.
             if ubiattach "$DEV/ubi_ctrl" -m 11; then
                 find_ubi
             else
-                echo 'APP_STORAGE: formatting ONLY approved mtd11; backup verified'
+                echo "APP_STORAGE: formatting ONLY identified mtd11; source=$SOURCE_HASH backup=$backup verified"
                 ubiformat "$DEV/mtd11" -y || die 'Format interrupted; preserve backup and migration journal'
                 ubiattach "$DEV/ubi_ctrl" -m 11 || die 'Cannot attach newly formatted mtd11'
                 find_ubi
@@ -350,6 +609,9 @@ migrate()
 
 # Tests load definitions and override filesystem/device operations explicitly.
 if [ "${UN260_STORAGE_LIBRARY_ONLY:-0}" = 1 ]; then return 0; fi
+if [ "${1:-}" = --can-launch-legacy ]; then [ "$#" = 1 ] && can_launch_legacy; exit $?; fi
+if [ "${1:-}" = --can-launch-current ]; then [ "$#" = 1 ] && can_launch_current; exit $?; fi
+if [ "${1:-}" = --verify-layout ]; then [ "$#" = 1 ] && verify_layout; exit $?; fi
 [ -x "$SYNC_TOOL" ] && [ "$("$SYNC_TOOL" --probe)" = UN260_STORAGE_SYNC_1 ] || die 'Storage writeback guard missing'
 exec 7< / || die 'Cannot track root writes'
 GUARDED=1
@@ -363,5 +625,5 @@ case "${1:-}" in
         exec 7<&- 8<&- 9<&-
         exec "$VOLUME/test_lvgl" "$@"
         ;;
-    *) die 'Usage: un260_app_storage --prepare | --launch | --migrate REVIEWED_HASH' ;;
+    *) die 'Usage: un260_app_storage --prepare | --verify-layout | --can-launch-current | --can-launch-legacy | --launch | --migrate POLICY' ;;
 esac

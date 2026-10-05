@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "un260/lv_components/lv_fault_popup.h"
+#include "un260/lv_components/ui_notice.h"
 #include "un260/lv_components/smart_island.h"
 #include "un260/lv_core/page_01_main.h"
 
@@ -41,9 +42,11 @@ static void ui_state_set_defaults(void)
     s_ui_state.version = UI_STATE_STORE_VERSION;
     s_ui_state.page01.detail_section = PAGE_01_DETAIL_SECTION_A;
     ui_main_layout_default(&s_ui_state.page01.layout);
-    for(unsigned i=0;i<8;i++)s_ui_state.page01.quick_order[i]=i;
+    static const uint8_t default_order[UI_STATE_QUICK_CONTROL_COUNT]={0,1,3,4,2,5,6,7,8};
+    memcpy(s_ui_state.page01.quick_order,default_order,sizeof(default_order));
     s_ui_state.page07.view_mode = UI_STATE_CURR_VIEW_CARD;
     s_ui_state.page06.reserved06_enable = 1;
+    s_ui_state.top_popup_enabled = true;
 }
 
 static void ui_state_ensure_loaded(void)
@@ -63,6 +66,7 @@ static void ui_state_pull_common_runtime(void)
         ui_state_normalize_detail_section((int)page_01_detail_section_get());
     s_ui_state.page06.reserved06_enable = fault_popup_get_auto_enabled() ? 1 : 0;
     s_ui_state.page18.reserved18_enable = smart_island_pure_count_is_enabled() ? 1 : 0;
+    s_ui_state.top_popup_enabled = ui_notice_get_enabled();
 }
 
 static void ui_state_save_all(void)
@@ -78,6 +82,7 @@ void ui_state_apply_common_runtime(void)
         (page_01_detail_section_t)s_ui_state.page01.detail_section, false);
     fault_popup_set_auto_enabled(s_ui_state.page06.reserved06_enable != 0);
     smart_island_set_pure_count_enabled(s_ui_state.page18.reserved18_enable != 0);
+    ui_notice_set_enabled(s_ui_state.top_popup_enabled);
 }
 
 void ui_state_save_popup_auto_state(void)
@@ -85,23 +90,44 @@ void ui_state_save_popup_auto_state(void)
     ui_state_ensure_loaded();
     ui_state_save_all();
 }
-void ui_state_quick_order_get(uint8_t order[8])
+bool ui_state_top_popup_set_enabled(bool enabled)
 {
     ui_state_ensure_loaded();
-    if(order)memcpy(order,s_ui_state.page01.quick_order,8);
+    ui_state_pull_common_runtime();
+    ui_persist_state_t next=s_ui_state;
+    next.top_popup_enabled=enabled;
+    if(!ui_state_store_save(&next))return false;
+    s_ui_state=next;
+    ui_notice_set_enabled(enabled);
+    return true;
+}
+void ui_state_quick_order_get(uint8_t order[UI_STATE_QUICK_CONTROL_COUNT])
+{
+    ui_state_ensure_loaded();
+    if(order)memcpy(order,s_ui_state.page01.quick_order,sizeof(s_ui_state.page01.quick_order));
+}
+bool ui_state_quick_order_save(const uint8_t order[UI_STATE_QUICK_CONTROL_COUNT])
+{
+    unsigned used=0;
+    if(!order)return false;
+    for(unsigned i=0;i<UI_STATE_QUICK_CONTROL_COUNT;i++){
+        if(order[i]>=UI_STATE_QUICK_CONTROL_COUNT || (used&(1U<<order[i])))return false;
+        used|=1U<<order[i];
+    }
+    ui_state_ensure_loaded();
+    ui_state_pull_common_runtime();
+    ui_persist_state_t next=s_ui_state;
+    memcpy(next.page01.quick_order,order,sizeof(next.page01.quick_order));
+    if(!ui_state_store_save(&next))return false;
+    s_ui_state=next;
+    return true;
 }
 bool ui_state_quick_order_swap(uint8_t first,uint8_t second)
 {
-    if(first>=8||second>=8)return false;
-    ui_state_ensure_loaded();
-    uint8_t value=s_ui_state.page01.quick_order[first];
-    s_ui_state.page01.quick_order[first]=s_ui_state.page01.quick_order[second];
-    s_ui_state.page01.quick_order[second]=value;
-    ui_state_pull_common_runtime();
-    if(ui_state_store_save(&s_ui_state))return true;
-    s_ui_state.page01.quick_order[second]=s_ui_state.page01.quick_order[first];
-    s_ui_state.page01.quick_order[first]=value;
-    return false;
+    if(first>=UI_STATE_QUICK_CONTROL_COUNT||second>=UI_STATE_QUICK_CONTROL_COUNT)return false;
+    uint8_t order[UI_STATE_QUICK_CONTROL_COUNT];ui_state_quick_order_get(order);
+    uint8_t value=order[first];order[first]=order[second];order[second]=value;
+    return ui_state_quick_order_save(order);
 }
 
 void ui_state_save_pure_count_state(void)

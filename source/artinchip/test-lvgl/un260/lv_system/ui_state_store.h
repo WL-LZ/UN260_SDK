@@ -9,6 +9,7 @@
 
 #define UI_STATE_STORE_MAGIC   0x55495354U
 #define UI_STATE_STORE_VERSION 1U
+#define UI_STATE_QUICK_CONTROL_COUNT 9U
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,7 +31,7 @@ typedef struct {
 typedef struct {
     int detail_section;
     ui_main_layout_t layout;
-    uint8_t quick_order[8];
+    uint8_t quick_order[UI_STATE_QUICK_CONTROL_COUNT];
 } ui_state_page01_t;
 
 typedef struct {
@@ -45,6 +46,7 @@ typedef struct {
     ui_state_common_page_t page05;
     ui_state_common_page_t page06;
     ui_state_page18_t page18;
+    bool top_popup_enabled;
 } ui_persist_state_t;
 
 bool ui_state_store_load(ui_persist_state_t* state);

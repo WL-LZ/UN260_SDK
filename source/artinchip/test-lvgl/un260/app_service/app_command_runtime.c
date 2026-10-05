@@ -41,6 +41,9 @@
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/protocol/protocol_frame.h"
 #include "un260/protocol/protocol_frame_queue.h"
+#include "un260/storage/cashbook_store.h"
+#include "un260/storage/workspace_store.h"
+#include "un260/storage/standby_store.h"
 
 #define APP_COMMAND_MAX_FRAMES_PER_TICK 64
 #define APP_COMMAND_FRAME_BUDGET_US 2000U
@@ -94,7 +97,8 @@ bool app_command_runtime_request_diagnostic_run(void)
 }
 bool app_command_runtime_request_count_start(void)
 {
-    if (app_command_runtime_count_start_busy() || counting_action_clear_pending() ||
+    if (upgrade_session_owner() != UPGRADE_SESSION_NONE ||
+        app_command_runtime_count_start_busy() || counting_action_clear_pending() ||
         !counting_history_can_start()) return false;
     if (!app_fault_recovery_prepare_start()) return false;
     if (!counting_action_request_start()) {
@@ -114,6 +118,40 @@ bool app_command_runtime_count_start_busy(void)
 {
     return counting_action_start_pending() || g_counting_session.start_confirmed ||
         g_counting_session.phase == COUNTING_SESSION_ACTIVE;
+}
+
+app_ui_upgrade_readiness_t app_command_runtime_prepare_ui_upgrade(void)
+{
+    if (app_command_runtime_count_start_busy() || counting_action_clear_pending() ||
+        counting_multi_current()->counting)
+        return APP_UI_UPGRADE_BUSY;
+    if (ui_history_data_is_initialized() && !ui_history_data_is_available())
+        return APP_UI_UPGRADE_FAILED;
+    if (g_deferred_frame_valid || protocol_frame_queue_has_pending() ||
+        counting_multi_query_busy() || counting_multi_extra_busy())
+        return APP_UI_UPGRADE_WAIT;
+    if (!ui_history_data_is_initialized()) return APP_UI_UPGRADE_WAIT;
+
+    uint32_t now_ms = app_clock_uptime_ms();
+    if (cashbook_store_busy() || workspace_store_busy() || standby_store_busy())
+        return APP_UI_UPGRADE_WAIT;
+    if (!cashbook_store_ready() || !workspace_store_ready() ||
+        !standby_store_storage_ready())
+        return APP_UI_UPGRADE_FAILED;
+
+    bool captured = counting_history_prepare_reset(&g_counting_session,
+                                                   counting_data_mutable(), now_ms);
+    (void)counting_history_poll_commit(&g_counting_session,
+                                       counting_data_mutable(), now_ms);
+    storage_job_status_t history = ui_history_data_status();
+    storage_job_status_t writes = storage_worker_pending_status();
+    if (history == STORAGE_JOB_FAILED || writes == STORAGE_JOB_FAILED)
+        return APP_UI_UPGRADE_FAILED;
+    if (!captured || !counting_history_is_idle() || history == STORAGE_JOB_PENDING ||
+        writes == STORAGE_JOB_PENDING || cashbook_store_busy() || workspace_store_busy() ||
+        standby_store_busy())
+        return APP_UI_UPGRADE_WAIT;
+    return APP_UI_UPGRADE_READY;
 }
 
 bool app_command_runtime_clear_counting_data(const char *reason)

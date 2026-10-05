@@ -60,12 +60,13 @@ done
 "$BUILDER" "${BUILD_ARGS[@]}"
 python3 "$SDK_ROOT/tools/un260-update/build_storage_bootstrap.py" --full "$OUTPUT_PACKAGE" \
     --output "${INTERNAL_DIR}/UN260_STORAGE_BOOTSTRAP.upk"
-# First migration remains an explicit service package. Do not publish its tiny
-# bridge manifest as the routine update: old installed updaters would report
-# success before replacing the application and require boot continuation again.
+# One public package handles both legacy enrollment and managed-volume updates.
+# Its tiny bridge remains compatible with installed R7/R8 updaters; the current
+# updater routes managed devices directly to the same final application.
+MIGRATION_POLICY=${UN260_MIGRATION_POLICY:-${UN260_MIGRATION_APPROVED:-un260-backed-up-legacy-v3}}
 python3 "$SDK_ROOT/tools/un260-update/build_unified.py" --full "$OUTPUT_PACKAGE" \
     --output "$MIGRATION_PACKAGE" \
-    --approved-fingerprint "${UN260_MIGRATION_APPROVED:-e19b211e20f31ce8d82c1e40b6fe3feca04e758f887c17beb976e444ab964b17}"
+    --migration-policy "$MIGRATION_POLICY"
 
 # Pin the first full package made by this upgraded builder. Do not silently
 # move this baseline on later development builds. First deployment uses FULL.
@@ -78,22 +79,22 @@ python3 "$SDK_ROOT/tools/un260-update/build_delta.py" --base "$BASELINE" --full 
     --output "${INTERNAL_DIR}/UN260_UPDATE_DELTA.upk"
 
 python3 "$SDK_ROOT/tools/un260-update/verify_unified_release.py" \
-    --unified "$MIGRATION_PACKAGE" --full "$OUTPUT_PACKAGE" --target "$TARGET_DIR"
+    --unified "$MIGRATION_PACKAGE" --full "$OUTPUT_PACKAGE" --target "$TARGET_DIR" \
+    --migration-policy "$MIGRATION_POLICY"
 python3 "$SDK_ROOT/tools/un260-update/verify_direct_release.py" \
     --package "$OUTPUT_PACKAGE" --target "$TARGET_DIR"
 BASE_VERSION=$(python3 "$SDK_ROOT/tools/un260-update/release_version.py" --base)
 python3 "$SDK_ROOT/tools/un260-update/verify_factory_release.py" \
     --image "${BINARIES_DIR}/d211_d213_devkitf_page_2k_block_128k_v${BASE_VERSION}.img" \
     --application "$OUTPUT_PACKAGE" --target "$TARGET_DIR"
-# Publish only a verified normal full package, with a matching public checksum.
-# The existing on-device updater already supports this format on enrolled boards.
+# Publish the verified unified package and its matching public checksum.
 for PUBLISH_PATH in "$PUBLIC_PACKAGE" "$PUBLIC_PACKAGE.tmp" "$PUBLIC_PACKAGE.sha256" "$PUBLIC_PACKAGE.sha256.tmp"; do
     [ ! -L "$PUBLISH_PATH" ] || { echo "Refusing symlinked release output: $PUBLISH_PATH" >&2; exit 1; }
 done
-cp "$OUTPUT_PACKAGE" "$PUBLIC_PACKAGE.tmp"
-cmp -s "$OUTPUT_PACKAGE" "$PUBLIC_PACKAGE.tmp"
+cp "$MIGRATION_PACKAGE" "$PUBLIC_PACKAGE.tmp"
+cmp -s "$MIGRATION_PACKAGE" "$PUBLIC_PACKAGE.tmp"
 mv -f "$PUBLIC_PACKAGE.tmp" "$PUBLIC_PACKAGE"
 (cd "$BINARIES_DIR" && sha256sum UN260_UPDATE.upk) > "$PUBLIC_PACKAGE.sha256.tmp"
 mv -f "$PUBLIC_PACKAGE.sha256.tmp" "$PUBLIC_PACKAGE.sha256"
-echo "UN260 direct U-disk update is ready: $PUBLIC_PACKAGE"
-echo "First migration only (not routine updates): $MIGRATION_PACKAGE"
+echo "UN260 unified U-disk update is ready: $PUBLIC_PACKAGE"
+echo "Verified internal application: $OUTPUT_PACKAGE"

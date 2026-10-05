@@ -46,12 +46,13 @@ static bool g_page_switch_committing;
 static lv_timer_t *g_page_input_unlock_timer;
 static uint64_t g_transition_input_owners;
 static void ui_manager_reset_navigation_sessions(void);
+static bool ui_manager_is_navigation_root(ui_page_t page);
 
-/* Main is the navigation root, never an intermediate history entry that can
- * later resurrect List/Debug behind an unrelated Settings navigation. */
+/* A theme root ends its old navigation session; it must never become an
+ * intermediate history entry that can resurrect an unrelated page. */
 static void ui_manager_history_on_commit(ui_page_t page)
 {
-    if(page != UI_PAGE_MAIN) return;
+    if(!ui_manager_is_navigation_root(page)) return;
     if(!g_temporary_home){
         g_home_bookmark_valid=false;
         ui_manager_reset_navigation_sessions();
@@ -63,7 +64,7 @@ static void ui_manager_history_on_commit(ui_page_t page)
 }
 static void ui_manager_navigation_on_leave(ui_page_t from,ui_page_t to)
 {
-    if(from==UI_PAGE_MAIN&&to!=UI_PAGE_MAIN&&g_home_bookmark_valid&&!g_restoring_home){
+    if(ui_manager_is_navigation_root(from)&&to!=from&&g_home_bookmark_valid&&!g_restoring_home){
         g_home_bookmark_valid=false;
         ui_manager_reset_navigation_sessions();
     }
@@ -117,6 +118,7 @@ typedef struct {
      * Cached objects/data remain allocated; Back within a session preserves
      * context. Pages opt in without coupling the manager to their widgets. */
     void (*reset_navigation)(void);
+    bool navigation_root;
 } ui_page_registration_t;
 
 static uint8_t ui_manager_predecode_static_images(
@@ -203,6 +205,7 @@ static const char *const g_page_names[UI_PAGE_COUNT] = {
 static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
     [UI_PAGE_BOOT_ANIM] = { ui_page_00_boot_anim_create, ui_page_00_boot_anim_destroy },
     [UI_PAGE_MAIN] = {
+        .navigation_root = true,
         .create = ui_manager_create_main,
         .destroy = ui_main_destroy,
         .resume = page_01_main_resume,
@@ -268,6 +271,7 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
     [UI_PAGE_UI_UPGRADE] = { ui_page_16_ui_upgrade_create, ui_page_16_ui_upgrade_destroy },
     [UI_PAGE_MOTOR_TEST] = { ui_page_17_motor_test_create, ui_page_17_motor_test_destroy },
     [UI_PAGE_PURE] = {
+        .navigation_root = true,
         .create = ui_page_18_pure_create,
         .destroy = ui_page_18_pure_destroy,
         .resume = ui_page_18_pure_resume,
@@ -275,6 +279,8 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .cache_policy = UI_PAGE_RETAINED,
         .static_images = g_page_pure_static_images,
         .static_image_count = UI_ARRAY_SIZE(g_page_pure_static_images),
+        .data_topics = UI_DATA_TOPIC_DEVICE_VERSION,
+        .refresh_data = page_01_main_quick_refresh_data,
     },
     [UI_PAGE_HISTORY] = {
         .create = ui_page_19_history_create,
@@ -324,6 +330,11 @@ static bool ui_manager_page_is_registered(ui_page_t page)
 {
     return page >= UI_PAGE_BOOT_ANIM && page < UI_PAGE_COUNT &&
            g_page_registry[page].create != NULL;
+}
+
+static bool ui_manager_is_navigation_root(ui_page_t page)
+{
+    return ui_manager_page_is_registered(page) && g_page_registry[page].navigation_root;
 }
 
 //销毁当前页面
@@ -611,7 +622,7 @@ void ui_manager_push_page(ui_page_t page)
     if (g_page_switch_committing || page == g_page_manager.current ||
         !ui_manager_page_is_registered(page)) return;
 
-    if(page == UI_PAGE_MAIN) {
+    if(ui_manager_is_navigation_root(page)) {
         ui_manager_switch(page);
         return;
     }
@@ -716,8 +727,8 @@ bool ui_manager_pop_page(void)
 
     if (g_page_switch_committing) return false;
 
-    if(g_page_manager.current == UI_PAGE_MAIN) {
-        ui_manager_history_on_commit(UI_PAGE_MAIN);
+    if(ui_manager_is_navigation_root(g_page_manager.current)) {
+        ui_manager_history_on_commit(g_page_manager.current);
         return false;
     }
 
@@ -748,7 +759,7 @@ void ui_manager_clear_stack(void)
 
 bool ui_manager_suspend_to_home(void)
 {
-    if(g_page_switch_committing||g_page_manager.current==UI_PAGE_MAIN||
+    if(g_page_switch_committing||ui_manager_is_navigation_root(g_page_manager.current)||
        !ui_manager_page_is_registered(g_page_manager.current))return false;
     ui_page_manager_context_t saved=g_page_manager;
     g_temporary_home=true;

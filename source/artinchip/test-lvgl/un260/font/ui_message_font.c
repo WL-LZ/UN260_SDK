@@ -3,6 +3,8 @@
 #include "manrope_fonts.h"
 #include <stddef.h>
 
+LV_FONT_DECLARE(lv_font_instrument_sans_semibold_25);
+
 LV_FONT_DECLARE(lv_font_message_cjk_12);
 LV_FONT_DECLARE(lv_font_message_cjk_14);
 LV_FONT_DECLARE(lv_font_message_cjk_16);
@@ -18,6 +20,7 @@ static const struct {
 } faces[] = {
     { &lv_font_instrument_sans_medium_12, &lv_font_message_cjk_12 },
     { &lv_font_instrument_sans_semibold_12, &lv_font_message_cjk_12 },
+    { &lv_font_instrument_sans_medium_13, &lv_font_message_cjk_14 },
     { &lv_font_instrument_sans_medium_14, &lv_font_message_cjk_14 },
     { &lv_font_instrument_sans_semibold_14, &lv_font_message_cjk_14 },
     { &lv_font_instrument_sans_medium_16, &lv_font_message_cjk_16 },
@@ -25,6 +28,7 @@ static const struct {
     { &lv_font_instrument_sans_medium_24, &lv_font_message_cjk_24 },
     { &lv_font_instrument_sans_semibold_20, &lv_font_message_cjk_20 },
     { &lv_font_instrument_sans_semibold_22, &lv_font_message_cjk_22 },
+    { &lv_font_instrument_sans_semibold_25, &lv_font_message_cjk_24 },
     { &lv_font_instrument_sans_semibold_28, &lv_font_message_cjk_28 }
 };
 

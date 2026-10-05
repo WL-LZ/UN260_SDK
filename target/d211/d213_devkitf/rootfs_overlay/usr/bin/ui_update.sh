@@ -2,6 +2,8 @@
 # UN260_APP_VOLUME_V1: logical app path maps to its owned UBIFS volume.
 # UN260_STORAGE_SYNC_1: held-fd writeback barriers before reporting success.
 # UN260_UNIFIED_1: one USB bundle, persistent opt-in, automatic boot continuation.
+# UN260_STORAGE_POLICY_V2: reviewed or erased enrollment and journal compatibility.
+# UN260_STORAGE_POLICY_V3: backed-up legacy enrollment and journal compatibility.
 
 USB_MNT=/mnt/usb
 UPDATE_DIR=$USB_MNT/update
@@ -58,6 +60,13 @@ UNIFIED_RESUME=0
 VERIFY_ONLY=0
 UNIFIED_COMMIT=""
 UNIFIED_BRIDGE=0
+UNIFIED_PROGRESS_BASE=0
+UNIFIED_PROGRESS_SPAN=100
+UNIFIED_PROGRESS_SCALE=100
+STORAGE_POLICY_V2=un260-reviewed-or-erased-v2
+STORAGE_POLICY_V3=un260-backed-up-legacy-v3
+OWNED_STATIC_TREE=usr/local/share/lvgl_data
+PRUNE_STATIC_TREE=0
 
 local_barrier()
 {
@@ -86,14 +95,28 @@ backup_digest()
 finish_success()
 {
     completion_message=$1
-    if [ "$UNIFIED_BRIDGE" = 1 ]; then
+    if [ "$UNIFIED_BRIDGE" = 1 ] && [ "$UNIFIED_RUNNING" = 0 ]; then
         completion_message='Bridge ready; restart with the SAME USB to finish the upgrade'
     fi
-    write_status 96 finish finish "" "Keep USB and power connected; finalizing update"
+    if [ "$UNIFIED_RUNNING" = 0 ]; then
+        write_status 96 finish finish "" "Keep USB and power connected; finalizing update"
+    fi
     cleanup_usb_work || fail_update 'Installed files verified; USB cleanup failed'
     local_barrier && usb_barrier || fail_update 'Installed files verified; storage flush failed'
     # An inner phase is not completion of the user's one-package operation.
-    [ "$UNIFIED_RUNNING" = 0 ] || return 0
+    if [ "$UNIFIED_RUNNING" = 1 ]; then
+        write_status 100 sync sync "" ""
+        return 0
+    fi
+    if [ "$UNIFIED_BRIDGE" = 1 ]; then
+        write_result pending "$completion_message" "$package_version" || fail_update 'Cannot write bridge result'
+        if [ "$GUARDED" = 1 ]; then
+            cp "$LOG" "$USB_MNT/ui_update.log" &&
+            cp "$RESULT_FILE" "$USB_MNT/UN260_UPDATE_RESULT.txt" && usb_barrier || fail_update 'Bridge ready; USB finalization failed'
+        fi
+        write_status 96 restart restart -1 "$completion_message" || exit 1
+        return 0
+    fi
     echo "Update verified: version=$package_version; final USB flush pending" >> "$LOG"
     write_result success "$completion_message" "$package_version" || fail_update 'Cannot write update result'
     if [ "$GUARDED" = 1 ]; then
@@ -128,6 +151,11 @@ write_status()
     step="$3"
     success="$4"
     message="$5"
+    # Each inner package reports local progress in its assigned part of the
+    # same operation. Failure already receives the last published value.
+    if [ "$UNIFIED_RUNNING" = 1 ] && [ "$stage" != fail ]; then
+        progress=$((UNIFIED_PROGRESS_BASE + progress * UNIFIED_PROGRESS_SPAN / UNIFIED_PROGRESS_SCALE))
+    fi
     if [ "$stage" != "$LAST_STAGE" ]; then
         now=$(date +%s)
         echo "UPGRADE_TIME stage=$LAST_STAGE seconds=$((now-PHASE_TIME)) elapsed=$((now-START_TIME))" >> "$LOG"
@@ -242,7 +270,7 @@ cleanup_usb_work()
     [ "$GUARDED" = 0 ] || usb_barrier || return 1
     rm -rf "$STAGE_DIR" "$BACKUP_DIR" || return 1
     rm -f "$ARCHIVE_LIST" "$ARCHIVE_TYPES" "$SEEN_TARGETS" \
-        "$CHECKSUM_TARGETS" "$PAYLOAD_FILES" "$PLAN_FILE" "$PLAN_FILE.tree"
+        "$CHECKSUM_TARGETS" "$PAYLOAD_FILES" "$PLAN_FILE" "$PLAN_FILE.tree" "$PLAN_FILE.retired" "$PLAN_FILE.verify"
 }
 
 # Recover original inode links without copying a large executable into a full
@@ -463,6 +491,7 @@ validate_install_manifest()
     ROOT_PEAK_REQUIRED_KB=0
     APP_PEAK_REQUIRED_KB=0
     INSTALL_TOTAL_BYTES=0
+    PRUNE_STATIC_TREE=0
     manifest_count=0
     : > "$SEEN_TARGETS"
     : > "$PLAN_FILE"
@@ -479,6 +508,10 @@ validate_install_manifest()
                 ;;
             tree)
                 [ -d "$STAGE_DIR/payload/$rel" ] || fail_update "Missing payload tree"
+                if [ "$package_schema" = 1 ] && [ "$rel" = "$OWNED_STATIC_TREE" ] &&
+                    [ -z "${storage_migration:-}" ] && [ "$(manifest_value package_type)" != ui-unified ]; then
+                    PRUNE_STATIC_TREE=1
+                fi
                 find "$STAGE_DIR/payload/$rel" -type f | sort > "$PLAN_FILE.tree" ||
                     fail_update "Cannot enumerate payload tree"
                 while IFS= read -r tree_file; do
@@ -511,7 +544,84 @@ validate_install_manifest()
         [ "$manifest_count" -le "$manifest_limit" ] || fail_update "Too many manifest entries"
     done < "$STAGE_DIR/install.tsv"
     [ "$manifest_count" -gt 0 ] || [ "$package_schema" = 2 ] || fail_update "Empty install manifest"
+    if [ "$PRUNE_STATIC_TREE" = 1 ]; then plan_retired_static_files; fi
     echo "Install plan: changed=$INSTALL_ENTRY_COUNT unchanged=$SKIPPED_COUNT bytes=$INSTALL_TOTAL_BYTES root_staged=${ROOT_PEAK_REQUIRED_KB}KB" >> "$LOG"
+}
+
+plan_retired_static_files()
+{
+    static_root=$ROOT_PREFIX/$OWNED_STATIC_TREE
+    [ ! -L "$static_root" ] || fail_update 'Unsafe installed static resource tree'
+    [ -e "$static_root" ] || return 0
+    [ -d "$static_root" ] || fail_update 'Installed static resource tree is not a directory'
+    if find "$static_root" ! -type f ! -type d | grep -q .; then
+        fail_update 'Unsupported installed static resource entry'
+    fi
+    find "$static_root" -type f | sort > "$PLAN_FILE.retired" || fail_update 'Cannot enumerate installed static resources'
+    while IFS= read -r static_file; do
+        static_rel=${static_file#"$ROOT_PREFIX/"}
+        grep -Fx "$static_rel" "$SEEN_TARGETS" >/dev/null && continue
+        safe_destination "$static_rel" || fail_update 'Unsafe retired static resource'
+        for suffix in old new restore; do
+            [ ! -e "$static_file.un260-$suffix" ] && [ ! -L "$static_file.un260-$suffix" ] || fail_update 'Unrecovered static resource artifact'
+        done
+        static_hash=$(checked_digest "$static_file") || fail_update 'Cannot read retired static resource'
+        static_bytes=$(wc -c < "$static_file" | tr -d ' ')
+        case "$static_bytes" in ''|*[!0-9]*) fail_update 'Cannot measure retired static resource' ;; esac
+        BACKUP_REQUIRED_KB=$((BACKUP_REQUIRED_KB + (static_bytes+1023)/1024+4))
+        printf 'delete|0644|%s|-|%s|0\n' "$static_rel" "$static_hash" >> "$PLAN_FILE"
+        INSTALL_ENTRY_COUNT=$((INSTALL_ENTRY_COUNT+1))
+        [ "$INSTALL_ENTRY_COUNT" -le 8192 ] || fail_update 'Too many changed files'
+    done < "$PLAN_FILE.retired"
+}
+
+verify_installed_file()
+{
+    verified_rel=$1
+    verified_mode=$2
+    safe_destination "$verified_rel" || fail_update 'Installed destination changed before verification'
+    verified_dest=$(destination_for "$verified_rel")
+    verified_hash=$(checked_digest "$verified_dest") || fail_update 'Cannot read installed target'
+    if [ "$PAYLOAD_VERIFIED" = 1 ]; then
+        expected_hash=$(awk -v p="payload/$verified_rel" '$2==p {print $1}' "$STAGE_DIR/checksums.sha256")
+    else
+        expected_hash=$(checked_digest "$STAGE_DIR/payload/$verified_rel") || fail_update 'Cannot read expected target'
+    fi
+    [ "$verified_hash" = "$expected_hash" ] || fail_update 'Installed target checksum differs from package'
+    verified_permissions=$(LC_ALL=C ls -ld "$verified_dest" | awk '{print $1}')
+    case "$verified_mode" in 0755) expected_permissions=-rwxr-xr-x ;; *) expected_permissions=-rw-r--r-- ;; esac
+    [ "$verified_permissions" = "$expected_permissions" ] || fail_update 'Installed target permissions differ from package'
+}
+
+verify_installed_targets()
+{
+    while IFS='|' read -r verified_kind verified_mode verified_path verified_extra; do
+        case "$verified_kind" in
+            file) verify_installed_file "$verified_path" "$verified_mode" ;;
+            tree)
+                find "$STAGE_DIR/payload/$verified_path" -type f | sort > "$PLAN_FILE.verify" || fail_update 'Cannot enumerate expected installed tree'
+                while IFS= read -r verified_file; do
+                    verify_installed_file "${verified_file#"$STAGE_DIR/payload/"}" 0644
+                done < "$PLAN_FILE.verify"
+                ;;
+            delete) [ ! -e "$ROOT_PREFIX/$verified_path" ] && [ ! -L "$ROOT_PREFIX/$verified_path" ] || fail_update 'Retired target still exists' ;;
+        esac
+    done < "$STAGE_DIR/install.tsv"
+    if [ "$PRUNE_STATIC_TREE" = 1 ] && [ -d "$ROOT_PREFIX/$OWNED_STATIC_TREE" ]; then
+        [ ! -L "$ROOT_PREFIX/$OWNED_STATIC_TREE" ] || fail_update 'Installed static resource tree changed during upgrade'
+        if find "$ROOT_PREFIX/$OWNED_STATIC_TREE" ! -type f ! -type d | grep -q .; then
+            fail_update 'Installed static resource entry changed during upgrade'
+        fi
+        find "$ROOT_PREFIX/$OWNED_STATIC_TREE" -type f | sort > "$PLAN_FILE.verify" || fail_update 'Cannot verify installed static resources'
+        while IFS= read -r verified_file; do
+            case "$verified_file" in *.un260-old|*.un260-new|*.un260-restore) continue ;; esac
+            grep -Fx "${verified_file#"$ROOT_PREFIX/"}" "$SEEN_TARGETS" >/dev/null || fail_update 'Installed static resources differ from package'
+        done < "$PLAN_FILE.verify"
+    fi
+    if [ "$UNIFIED_RUNNING" = 1 ] && [ "$UNIFIED_BRIDGE" = 0 ] && [ -z "${storage_migration:-}" ]; then
+        [ "$APP_VOLUME" = 1 ] || fail_update 'Final application volume is not active'
+        sh "$ROOT_PREFIX/usr/local/bin/un260_app_storage" --verify-layout >> "$LOG" 2>&1 || fail_update 'Final application storage layout verification failed'
+    fi
 }
 
 validate_storage_space()
@@ -615,23 +725,27 @@ execute_plan()
 {
     validate_install_manifest
     if [ -n "${storage_migration:-}" ]; then
-        # A migration package only repeats the small bootstrap components.
-        # Never mix partition initialization with an app/dependency replacement.
-        [ "$package_schema" = 1 ] && [ "$(manifest_value package_type)" = storage-migration ] || fail_update 'Invalid migration package'
-        while IFS= read -r migration_rel; do
-            case "$migration_rel" in usr/local/bin/un260_storage_sync|usr/local/bin/un260_resource_cleanup|usr/local/bin/un260_app_storage|usr/bin/ui_update.sh|etc/init.d/S00lvgl) ;;
-                *) fail_update 'Migration package must not replace application or business data' ;;
-            esac
-        done < "$SEEN_TARGETS"
+        validate_migration_plan
         validate_storage_space
         [ -f "$ROOT_PREFIX/usr/local/bin/un260_app_storage" ] || fail_update 'Install storage bootstrap first'
         grep -q 'UN260_STORAGE_SYNC_1' "$ROOT_PREFIX/usr/local/bin/un260_app_storage" || fail_update 'Install guarded bootstrap before migration'
         grep -q 'UN260_MTD_STREAM_1' "$ROOT_PREFIX/usr/local/bin/un260_app_storage" || fail_update 'Install streaming-read repair package before migration'
+        if [ "$storage_migration" = "$STORAGE_POLICY_V2" ]; then
+            if ! grep -q 'UN260_STORAGE_POLICY_V2' "$ROOT_PREFIX/usr/local/bin/un260_app_storage"; then
+                echo 'Install the matching storage compatibility bridge before migration' >> "$LOG"
+                fail_update 'Storage recovery component too old'
+            fi
+        fi
+        if [ "$storage_migration" = "$STORAGE_POLICY_V3" ]; then
+            grep -q 'UN260_STORAGE_POLICY_V3' "$ROOT_PREFIX/usr/local/bin/un260_app_storage" || fail_update 'Install matching backed-up legacy storage bridge before migration'
+        fi
         sh "$ROOT_PREFIX/usr/local/bin/un260_app_storage" --migrate "$storage_migration" >> "$LOG" 2>&1 || fail_update 'Storage migration paused; keep USB backup and log; no IMG required for diagnosis'
         prepare_app_storage || fail_update 'Cannot prepare migrated application volume'
     fi
     run_resource_maintenance
     if [ "$INSTALL_ENTRY_COUNT" = 0 ]; then
+        write_status 94 verify verify_installed "" "Verifying installed files and storage layout"
+        verify_installed_targets
         finish_success 'All files already match; no replacements required'
         return 0
     fi
@@ -658,12 +772,27 @@ execute_plan()
     done < "$PLAN_FILE"
     write_status 92 sync "sync" "" ""
     local_barrier && usb_barrier || fail_update 'Storage flush failed before commit'
+    write_status 94 verify verify_installed "" "Verifying installed files and storage layout"
+    verify_installed_targets
     : > "$JOURNAL/committed" || fail_update "Cannot persist transaction commit"
     local_barrier || fail_update 'Cannot flush transaction commit'
     recover_transaction || fail_update "Committed; cleanup requires recovery"
     TRANSACTION_STARTED=0
     trap - HUP INT TERM
     finish_success 'Upgrade completed successfully; reboot is required'
+}
+
+validate_migration_plan()
+{
+    [ "$package_schema" = 1 ] && [ "$(manifest_value package_type)" = storage-migration ] || fail_update 'Invalid migration package'
+    case "$storage_migration" in "$STORAGE_POLICY_V2"|"$STORAGE_POLICY_V3"|e19b211e20f31ce8d82c1e40b6fe3feca04e758f887c17beb976e444ab964b17) ;;
+        *) fail_update 'Unsupported storage migration policy' ;;
+    esac
+    while IFS= read -r migration_rel; do
+        case "$migration_rel" in usr/local/bin/un260_storage_sync|usr/local/bin/un260_resource_cleanup|usr/local/bin/un260_app_storage|usr/bin/ui_update.sh|etc/init.d/S00lvgl) ;;
+            *) fail_update 'Migration package must not replace application or business data' ;;
+        esac
+    done < "$SEEN_TARGETS"
 }
 
 prepare_usb_work()
@@ -774,6 +903,42 @@ record_installed_bundle()
     mv -f "$INSTALLED_HASH_PATH.tmp.$$" "$INSTALLED_HASH_PATH"
 }
 
+validate_storage_policy_components()
+{
+    # A v2 journal must never be handed to a v1 helper. Check all package
+    # routes, including the outer bridge before its early execute_plan path.
+    policy_v2_required=0
+    installed_helper=$ROOT_PREFIX/usr/local/bin/un260_app_storage
+    if [ -f "$installed_helper" ] && grep -q 'UN260_STORAGE_POLICY_V2' "$installed_helper"; then
+        policy_v2_required=1
+    fi
+    if [ "$(manifest_value storage_migration)" = "$STORAGE_POLICY_V2" ]; then
+        policy_v2_required=1
+    fi
+    payload_helper=$STAGE_DIR/payload/usr/local/bin/un260_app_storage
+    policy_markers=UN260_STORAGE_POLICY_V2
+    if { [ -f "$installed_helper" ] && grep -q 'UN260_STORAGE_POLICY_V3' "$installed_helper"; } ||
+        { [ -f "$payload_helper" ] && grep -q 'UN260_STORAGE_POLICY_V3' "$payload_helper"; } ||
+        [ "$(manifest_value storage_migration)" = "$STORAGE_POLICY_V3" ]; then
+        policy_v2_required=1
+        policy_markers='UN260_STORAGE_POLICY_V2 UN260_STORAGE_POLICY_V3'
+    fi
+    if [ -f "$payload_helper" ] && grep -q 'UN260_STORAGE_POLICY_V2' "$payload_helper"; then
+        policy_v2_required=1
+    fi
+    [ "$policy_v2_required" = 1 ] || return 0
+    for policy_component in usr/local/bin/un260_app_storage usr/bin/ui_update.sh etc/init.d/S00lvgl; do
+        if [ -e "$STAGE_DIR/payload/$policy_component" ]; then
+            for policy_marker in $policy_markers; do
+                if ! grep -q "$policy_marker" "$STAGE_DIR/payload/$policy_component"; then
+                    echo 'Package would downgrade storage recovery; use matching compatibility components' >> "$LOG"
+                    fail_update 'Storage recovery component too old'
+                fi
+            done
+        fi
+    done
+}
+
 install_bundle()
 {
     # Capture the original USB archive, never an inner package later moved or
@@ -827,14 +992,18 @@ install_bundle()
 
     write_status 24 verify "verify_checksum" "" ""
     validate_payload_checksums
+    validate_storage_policy_components
     if [ "$UNIFIED_RESUME" = 1 ] && [ "$UNIFIED_RUNNING" = 0 ]; then
         [ "$(manifest_value package_type)" = ui-unified ] || fail_update 'Keep the same unified USB package used before restart'
     fi
     if [ "$(manifest_value package_type)" = ui-unified ]; then
         [ "$UNIFIED_RUNNING" = 0 ] && [ "$VERIFY_ONLY" = 0 ] || fail_update 'Nested unified packages are forbidden'
+        storage_migration=""
         validate_unified_bridge
         if [ "$UNIFIED_RESUME" = 1 ]; then
             continue_unified
+        elif [ "$APP_VOLUME" = 1 ]; then
+            complete_unified_explicit
         else
             # Old and new installers use this same tiny first-pass manifest.
             # No app, nested package or partition initialization reaches root.
@@ -868,8 +1037,9 @@ install_bundle()
     fi
     if [ "$package_schema" = 2 ]; then validate_delta_baseline; fi
     if [ "$VERIFY_ONLY" = 1 ]; then
-        [ "$package_schema" = 1 ] && [ -z "$storage_migration" ] || fail_update 'Unified application must be a normal full package'
+        [ "$package_schema" = 1 ] || fail_update 'Unified inner package must use full schema'
         validate_install_manifest
+        if [ -n "$storage_migration" ]; then validate_migration_plan; fi
         return 0
     fi
     if [ "$DELTA_ALREADY_APPLIED" = 1 ]; then
@@ -929,15 +1099,46 @@ continue_unified()
         bridge_installed_hash=$(checked_digest "$ROOT_PREFIX/$bridge_rel") || fail_update 'Cannot read installed bridge component'
         bridge_payload_hash=$(checked_digest "$STAGE_DIR/payload/$bridge_rel") || fail_update 'Cannot read packaged bridge component'
         [ "$bridge_installed_hash" = "$bridge_payload_hash" ] || fail_update 'Bridge is incomplete; run this same package then restart'
+        case "$bridge_rel" in "$UNIFIED_REQUEST") bridge_mode=0644 ;; *) bridge_mode=0755 ;; esac
+        verify_installed_file "$bridge_rel" "$bridge_mode"
     done < "$SEEN_TARGETS"
+    stage_unified_packages "$ROOT_PREFIX/$UNIFIED_REQUEST"
+    UNIFIED_RUNNING=1
+    install_unified_inner_packages
+}
+
+complete_unified_explicit()
+{
+    # A manual UI retry is allowed to install a new request after the old file
+    # transaction has recovered. Boot continuation remains bound to its request.
+    UNIFIED_COMMIT=$(checked_digest "$STAGE_DIR/payload/$UNIFIED_REQUEST") || fail_update 'Cannot read packaged continuation request'
+    stage_unified_packages "$STAGE_DIR/payload/$UNIFIED_REQUEST"
+    UNIFIED_RUNNING=1
+    UNIFIED_BRIDGE=1
+    unified_progress_phase 24 10 100
+    execute_plan
+    UNIFIED_BRIDGE=0
+    install_unified_inner_packages
+}
+
+unified_progress_phase()
+{
+    UNIFIED_PROGRESS_BASE=$1
+    UNIFIED_PROGRESS_SPAN=$2
+    UNIFIED_PROGRESS_SCALE=$3
+}
+
+stage_unified_packages()
+{
+    unified_request_path=$1
     unified_work=$UPDATE_DIR/.un260_unified
     [ ! -L "$unified_work" ] || fail_update 'Unsafe unified staging directory'
     mkdir -p "$unified_work" || fail_update 'Cannot create unified staging'
     # Request has exactly two ordered digest lines, not executable shell input.
-    [ "$(wc -l < "$ROOT_PREFIX/$UNIFIED_REQUEST" | tr -d ' ')" = 2 ] || fail_update 'Invalid continuation request'
+    [ "$(wc -l < "$unified_request_path" | tr -d ' ')" = 2 ] || fail_update 'Invalid continuation request'
     for inner in migration application; do
         if [ "$inner" = migration ]; then line=1; else line=2; fi
-        expected=$(sed -n "${line}p" "$ROOT_PREFIX/$UNIFIED_REQUEST")
+        expected=$(sed -n "${line}p" "$unified_request_path")
         echo "$expected" | grep -Eq '^[0-9a-f]{64}$' || fail_update 'Invalid inner package digest'
         inner_src=$STAGE_DIR/payload/usr/local/share/un260-unified/$inner.upk
         [ "$(checked_digest "$inner_src")" = "$expected" ] || fail_update 'Inner package digest mismatch'
@@ -945,16 +1146,36 @@ continue_unified()
         mv -f "$inner_src" "$unified_work/$inner.upk" || fail_update 'Cannot retain inner package on USB'
     done
     usb_barrier || fail_update 'Cannot persist unified staging'
-    UNIFIED_RUNNING=1
+}
+
+install_unified_inner_packages()
+{
     BUNDLE_PATH=$unified_work/application.upk
     VERIFY_ONLY=1
+    unified_progress_phase 34 12 24
     install_bundle
+    [ -z "$storage_migration" ] || fail_update 'Unified application must be a normal full package'
+    grep -Fx usr/local/bin/test_lvgl "$SEEN_TARGETS" >/dev/null &&
+        grep -Fx usr/local/lib/liblvgl.so "$SEEN_TARGETS" >/dev/null || fail_update 'Unified application is missing a core runtime target'
+    if [ "$(manifest_value package_type)" = ui ]; then
+        [ "$PRUNE_STATIC_TREE" = 1 ] || fail_update 'Unified application must own its complete static resource tree'
+    fi
+    BUNDLE_PATH=$unified_work/migration.upk
+    unified_progress_phase 46 4 24
+    install_bundle
+    [ -n "$storage_migration" ] || fail_update 'Unified migration package is missing its policy'
     VERIFY_ONLY=0
     # Only after the entire final application package passes validation may
     # the separately journaled, fingerprint-approved migration run.
-    BUNDLE_PATH=$unified_work/migration.upk
-    install_bundle
+    if [ "$APP_VOLUME" = 0 ]; then
+        BUNDLE_PATH=$unified_work/migration.upk
+        unified_progress_phase 50 15 100
+        install_bundle
+    else
+        echo 'Unified routing: existing managed application volume; no partition initialization' >> "$LOG"
+    fi
     BUNDLE_PATH=$unified_work/application.upk
+    unified_progress_phase 65 29 100
     install_bundle
     rm -f "$unified_work/migration.upk" "$unified_work/application.upk" && rmdir "$unified_work" || fail_update 'Cannot clean unified staging'
     UNIFIED_RUNNING=0

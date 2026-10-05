@@ -5,6 +5,9 @@
 #include "un260/lv_components/ui_notice.h"
 #include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_system/ui_text.h"
+#include "un260/app_service/app_command_runtime.h"
+#include "un260/app_service/upgrade_session.h"
+#include "un260/lv_system/app_clock.h"
 
 #include "lvgl/lvgl.h"
 #include <stdbool.h>
@@ -32,6 +35,7 @@
 #define UPGRADE_POPUP_STATUS_TIMER_MS     100
 #define UPGRADE_POPUP_RESULT_DELAY_MS     400
 #define UPGRADE_POPUP_REBOOT_DELAY_MS     1000
+#define UPGRADE_POPUP_DATA_WAIT_TIMEOUT_MS 30000U
 #define UPGRADE_POPUP_SHOW_TIME_MS        400
 #define UPGRADE_POPUP_HIDE_TIME_MS        300
 
@@ -41,6 +45,7 @@ typedef enum {
     UPGRADE_POPUP_STATE_PROGRESS,
     UPGRADE_POPUP_STATE_SUCCESS,
     UPGRADE_POPUP_STATE_FAIL,
+    UPGRADE_POPUP_STATE_RESTART,
 } upgrade_popup_state_t;
 
 typedef enum {
@@ -79,6 +84,7 @@ typedef struct {
     lv_obj_t* progress_phase_label;
     int displayed_progress;
     ui_upgrade_stage_t progress_stage;
+    bool displaying_save_wait;
 
     lv_obj_t* success_icon_wrap;
     lv_obj_t* success_icon;
@@ -104,6 +110,10 @@ typedef struct {
 
     upgrade_popup_state_t state;
     bool result_success;
+    bool result_restart_required;
+    bool reboot_reserved;
+    bool reboot_clear_sent;
+    uint32_t reboot_prepare_started_ms;
     char result_text[128];
     bool prompt_hiding;
     bool hide_to_prompt;
@@ -150,6 +160,8 @@ static const char* upgrade_popup_stage_text(ui_upgrade_stage_t stage)
         return ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_PROGRESS_STEP_FINISH);
     case UI_UPGRADE_STAGE_SUCCESS:
         return ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_SUCCESS_TITLE);
+    case UI_UPGRADE_STAGE_RESTART_REQUIRED:
+        return ui_tr("Restart to continue");
     case UI_UPGRADE_STAGE_FAIL:
         return ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_PROGRESS_STEP_VERIFY_FAIL);
     default:
@@ -169,6 +181,7 @@ static unsigned int upgrade_popup_stage_rank(ui_upgrade_stage_t stage)
     case UI_UPGRADE_STAGE_FINISH:
     case UI_UPGRADE_STAGE_SUCCESS:
     case UI_UPGRADE_STAGE_FAIL: return 5;
+    case UI_UPGRADE_STAGE_RESTART_REQUIRED: return 5;
     default: return 0;
     }
 }
@@ -487,8 +500,14 @@ static void upgrade_popup_on_confirm_click(lv_event_t* e)
         lv_obj_add_state(g_upgrade_popup.prompt_btn_confirm, LV_STATE_DISABLED);
     }
 
-    if (ui_upgrade_service_start() != UI_UPGRADE_START_OK) {
-        upgrade_popup_show_fail(ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_FAIL_START_SCRIPT));
+    ui_upgrade_start_result_t start_result = ui_upgrade_service_start();
+    if (start_result != UI_UPGRADE_START_OK) {
+        const char *message = start_result == UI_UPGRADE_START_DATA_BUSY ?
+                              ui_tr("Counting is in progress. Stop counting before updating.") :
+                              start_result == UI_UPGRADE_START_DATA_SAVE_FAILED ?
+                              ui_tr("Records could not be saved. Please try again.") :
+                              ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_FAIL_START_SCRIPT);
+        upgrade_popup_show_fail(message);
         return;
     }
 
@@ -501,7 +520,33 @@ static void upgrade_popup_on_confirm_click(lv_event_t* e)
 
 static void upgrade_popup_reboot_timer_cb(lv_timer_t* timer)
 {
-    (void)timer;
+    app_ui_upgrade_readiness_t readiness = app_command_runtime_prepare_ui_upgrade();
+    bool timed_out = readiness == APP_UI_UPGRADE_WAIT &&
+        (uint32_t)(app_clock_uptime_ms() - g_upgrade_popup.reboot_prepare_started_ms) >=
+        UPGRADE_POPUP_DATA_WAIT_TIMEOUT_MS;
+    if (readiness == APP_UI_UPGRADE_WAIT && !timed_out) return;
+    if (readiness != APP_UI_UPGRADE_READY) {
+        upgrade_session_end(UPGRADE_SESSION_UI);
+        g_upgrade_popup.reboot_reserved = false;
+        lv_timer_del(timer);
+        g_upgrade_popup.reboot_timer = NULL;
+        upgrade_popup_show_fail(timed_out ?
+                                ui_tr("Saving records timed out. Please try again.") :
+                                readiness == APP_UI_UPGRADE_BUSY ?
+                                ui_tr("Counting is in progress. Stop counting before updating.") :
+                                ui_tr("Records could not be saved. Please try again."));
+        return;
+    }
+    if (!g_upgrade_popup.reboot_clear_sent) {
+        uint8_t clear_cmd = 0x01;
+        (void)settings_detail_send_command(0x3B, &clear_cmd, 1);
+        g_upgrade_popup.reboot_clear_sent = true;
+        if (g_upgrade_popup.success_btn_later)
+            lv_obj_add_state(g_upgrade_popup.success_btn_later, LV_STATE_DISABLED);
+        lv_timer_set_period(timer, UPGRADE_POPUP_REBOOT_DELAY_MS);
+        return;
+    }
+    lv_timer_del(timer);
     g_upgrade_popup.reboot_timer = NULL;
     ui_upgrade_service_reboot();
 }
@@ -514,30 +559,41 @@ static void upgrade_popup_on_reboot_later_click(lv_event_t* e)
         lv_timer_del(g_upgrade_popup.reboot_timer);
         g_upgrade_popup.reboot_timer = NULL;
     }
+    if (g_upgrade_popup.reboot_reserved) {
+        upgrade_session_end(UPGRADE_SESSION_UI);
+        g_upgrade_popup.reboot_reserved = false;
+    }
 
     upgrade_popup_hide();
 }
 
 static void upgrade_popup_on_reboot_click(lv_event_t* e)
 {
-    uint8_t clear_cmd = 0x01;
-
     (void)e;
+
+    if (g_upgrade_popup.reboot_reserved) return;
+    if (!upgrade_session_begin(UPGRADE_SESSION_UI)) {
+        upgrade_popup_show_fail(ui_tr("Another upgrade is already in progress. Please wait for it to finish."));
+        return;
+    }
+    g_upgrade_popup.reboot_reserved = true;
+    g_upgrade_popup.reboot_clear_sent = false;
+    g_upgrade_popup.reboot_prepare_started_ms = app_clock_uptime_ms();
 
     if (g_upgrade_popup.success_btn) {
         lv_obj_add_state(g_upgrade_popup.success_btn, LV_STATE_DISABLED);
     }
-
-    (void)settings_detail_send_command(0x3B, &clear_cmd, 1);
 
     if (g_upgrade_popup.reboot_timer) {
         lv_timer_del(g_upgrade_popup.reboot_timer);
     }
 
     g_upgrade_popup.reboot_timer =
-        lv_timer_create(upgrade_popup_reboot_timer_cb, UPGRADE_POPUP_REBOOT_DELAY_MS, NULL);
-    if (g_upgrade_popup.reboot_timer) {
-        lv_timer_set_repeat_count(g_upgrade_popup.reboot_timer, 1);
+        lv_timer_create(upgrade_popup_reboot_timer_cb, UPGRADE_POPUP_STATUS_TIMER_MS, NULL);
+    if (!g_upgrade_popup.reboot_timer) {
+        upgrade_session_end(UPGRADE_SESSION_UI);
+        g_upgrade_popup.reboot_reserved = false;
+        upgrade_popup_show_fail(ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_FAIL_START_SCRIPT));
     }
 }
 
@@ -552,7 +608,9 @@ static void upgrade_popup_on_retry_click(lv_event_t* e)
 
     g_upgrade_popup.hide_to_prompt =
         detect_info.package_found &&
-        detect_info.package_hash_status == UI_UPGRADE_PACKAGE_HASH_DIFFERENT;
+        (detect_info.package_hash_status == UI_UPGRADE_PACKAGE_HASH_DIFFERENT ||
+         (detect_info.package_hash_status == UI_UPGRADE_PACKAGE_HASH_MATCH &&
+          ui_upgrade_service_can_reinstall()));
     upgrade_popup_hide();
 }
 
@@ -884,6 +942,7 @@ static void upgrade_popup_run_state_anim(upgrade_popup_state_t state)
                                            g_upgrade_popup.progress_content_group);
         break;
 
+    case UPGRADE_POPUP_STATE_RESTART:
     case UPGRADE_POPUP_STATE_SUCCESS:
         upgrade_popup_run_dialog_enter_anim(g_upgrade_popup.success_card);
         upgrade_popup_start_fade_in_up(g_upgrade_popup.success_title_group, 80);
@@ -932,6 +991,7 @@ static void upgrade_popup_set_state(upgrade_popup_state_t state)
         upgrade_popup_run_state_anim(state);
         break;
 
+    case UPGRADE_POPUP_STATE_RESTART:
     case UPGRADE_POPUP_STATE_SUCCESS:
         upgrade_popup_reset_card_pos(g_upgrade_popup.success_card);
         lv_obj_clear_flag(g_upgrade_popup.success_card, LV_OBJ_FLAG_HIDDEN);
@@ -978,6 +1038,9 @@ static void upgrade_popup_build(void)
 
 static void upgrade_popup_destroy(void)
 {
+    if (g_upgrade_popup.reboot_reserved) {
+        upgrade_session_end(UPGRADE_SESSION_UI);
+    }
     if (g_upgrade_popup.status_timer) {
         lv_timer_del(g_upgrade_popup.status_timer);
     }
@@ -1133,10 +1196,15 @@ static void upgrade_popup_refresh_text_internal(void) //刷新升级弹窗当前
         lv_label_set_text(g_upgrade_popup.success_tag, ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_TAG));
     }
     if (g_upgrade_popup.success_title) {
-        lv_label_set_text(g_upgrade_popup.success_title, ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_SUCCESS_TITLE));
+        lv_label_set_text(g_upgrade_popup.success_title,
+                          g_upgrade_popup.state == UPGRADE_POPUP_STATE_RESTART ?
+                          ui_tr("Restart to continue") : ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_SUCCESS_TITLE));
     }
     if (g_upgrade_popup.success_desc) {
-        lv_label_set_text(g_upgrade_popup.success_desc, ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_SUCCESS_DESC));
+        lv_label_set_text(g_upgrade_popup.success_desc,
+                          g_upgrade_popup.state == UPGRADE_POPUP_STATE_RESTART ?
+                          ui_tr("Keep the USB drive connected and restart to finish the update.") :
+                          ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_SUCCESS_DESC));
     }
     if (g_upgrade_popup.success_btn_later) {
         upgrade_popup_btn_set_text(g_upgrade_popup.success_btn_later,
@@ -1176,6 +1244,10 @@ static void upgrade_popup_prepare_result_popup(void)
         lv_timer_del(g_upgrade_popup.reboot_timer);
         g_upgrade_popup.reboot_timer = NULL;
     }
+    if (g_upgrade_popup.reboot_reserved) {
+        upgrade_session_end(UPGRADE_SESSION_UI);
+        g_upgrade_popup.reboot_reserved = false;
+    }
 
     if (g_upgrade_popup.success_btn) {
         lv_obj_clear_state(g_upgrade_popup.success_btn, LV_STATE_DISABLED);
@@ -1208,7 +1280,8 @@ static void upgrade_popup_hide(void)
         icon_obj = g_upgrade_popup.prompt_icon;
         title_obj = g_upgrade_popup.prompt_title_group;
         content_obj = g_upgrade_popup.prompt_content_group;
-    } else if (g_upgrade_popup.state == UPGRADE_POPUP_STATE_SUCCESS) {
+    } else if (g_upgrade_popup.state == UPGRADE_POPUP_STATE_SUCCESS ||
+               g_upgrade_popup.state == UPGRADE_POPUP_STATE_RESTART) {
         card = g_upgrade_popup.success_card;
         icon_obj = g_upgrade_popup.success_icon_wrap;
         title_obj = g_upgrade_popup.success_title_group;
@@ -1339,7 +1412,9 @@ static void upgrade_popup_result_timer_cb(lv_timer_t* timer)
     (void)timer;
     g_upgrade_popup.result_timer = NULL;
 
-    if (g_upgrade_popup.result_success) {
+    if (g_upgrade_popup.result_restart_required) {
+        lv_upgrade_popup_show_restart_required(g_upgrade_popup.result_text);
+    } else if (g_upgrade_popup.result_success) {
         upgrade_popup_show_success();
     } else {
         upgrade_popup_show_fail(g_upgrade_popup.result_text[0] != '\0' ?
@@ -1365,15 +1440,19 @@ static void upgrade_popup_status_timer_cb(lv_timer_t* timer)
 
     lv_obj_set_style_bg_color(g_upgrade_popup.progress_bar, bar_color, LV_PART_INDICATOR);
     upgrade_popup_set_real_progress(status.progress);
-    if (status.stage != g_upgrade_popup.progress_stage) {
+    bool saving_records = ui_upgrade_service_is_preparing_data();
+    if (status.stage != g_upgrade_popup.progress_stage ||
+        saving_records != g_upgrade_popup.displaying_save_wait) {
         g_upgrade_popup.progress_stage = status.stage;
+        g_upgrade_popup.displaying_save_wait = saving_records;
         lv_label_set_text(g_upgrade_popup.progress_step,
-                          upgrade_popup_stage_text(status.stage));
+                          saving_records ? ui_tr("Saving records") : upgrade_popup_stage_text(status.stage));
         upgrade_popup_update_phase_label(status.stage);
     }
 
     if (status.finished && g_upgrade_popup.result_timer == NULL) {
         g_upgrade_popup.result_success = status.success;
+        g_upgrade_popup.result_restart_required = status.stage == UI_UPGRADE_STAGE_RESTART_REQUIRED;
         lv_snprintf(g_upgrade_popup.result_text,
                     sizeof(g_upgrade_popup.result_text),
                     "%s", status.result_text);
@@ -1387,6 +1466,8 @@ static void upgrade_popup_status_timer_cb(lv_timer_t* timer)
 
 static void upgrade_popup_show_success(void)
 {
+    lv_label_set_text(g_upgrade_popup.success_icon, LV_SYMBOL_UPLOAD);
+    lv_label_set_text(g_upgrade_popup.success_title, ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_SUCCESS_TITLE));
     if (g_upgrade_popup.status_timer) {
         lv_timer_pause(g_upgrade_popup.status_timer);
     }
@@ -1455,7 +1536,8 @@ void lv_upgrade_popup_process_detect(const ui_upgrade_detect_info_t* detect_info
                     UI_N_("This update is already installed."));
             }
 
-            if (g_upgrade_popup.state == UPGRADE_POPUP_STATE_PROMPT) {
+            if (g_upgrade_popup.state == UPGRADE_POPUP_STATE_PROMPT &&
+                !ui_upgrade_service_can_reinstall()) {
                 upgrade_popup_hide();
             }
             g_upgrade_popup_detect_latched = true;
@@ -1505,6 +1587,24 @@ void lv_upgrade_popup_show_result(bool success, const char* desc_text)
     }
 
     upgrade_popup_show_fail(desc_text);
+}
+
+void lv_upgrade_popup_show_restart_required(const char* desc_text)
+{
+    upgrade_popup_prepare_result_popup();
+    if (g_upgrade_popup.status_timer) lv_timer_pause(g_upgrade_popup.status_timer);
+    if (g_upgrade_popup.result_timer) {
+        lv_timer_del(g_upgrade_popup.result_timer);
+        g_upgrade_popup.result_timer = NULL;
+    }
+    g_upgrade_popup.progress_stage = UI_UPGRADE_STAGE_RESTART_REQUIRED;
+    upgrade_popup_update_phase_label(UI_UPGRADE_STAGE_RESTART_REQUIRED);
+    lv_label_set_text(g_upgrade_popup.success_icon, LV_SYMBOL_REFRESH);
+    lv_label_set_text(g_upgrade_popup.success_title, ui_tr("Restart to continue"));
+    lv_label_set_text(g_upgrade_popup.success_desc,
+                      desc_text && desc_text[0] ? desc_text :
+                      ui_tr("Keep the USB drive connected and restart to finish the update."));
+    upgrade_popup_set_state(UPGRADE_POPUP_STATE_RESTART);
 }
 
 void lv_upgrade_popup_refresh_text(void) //刷新升级弹窗语言文本

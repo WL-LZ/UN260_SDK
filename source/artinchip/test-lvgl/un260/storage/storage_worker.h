@@ -27,6 +27,9 @@ bool storage_worker_init(void);
 bool storage_worker_submit(storage_job_run_t run, const void *snapshot,
                            size_t size, storage_job_id_t *id);
 storage_job_status_t storage_worker_status(storage_job_id_t id);
+/* Nonblocking durability gate for all accepted jobs. SUCCEEDED also means an
+ * empty lane; FAILED takes precedence over PENDING. No job is released. */
+storage_job_status_t storage_worker_pending_status(void);
 bool storage_worker_retry(storage_job_id_t id);
 bool storage_worker_release(storage_job_id_t id);
 bool storage_worker_copy_completed(storage_job_id_t id, void *out, size_t size);

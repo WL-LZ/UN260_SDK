@@ -48,6 +48,8 @@ class VolumeUpdaterTests(unittest.TestCase):
         self.temp.cleanup()
 
     def run_update(self, package=None, extra='', action='install_bundle', ok=True, source=None, managed=1):
+        if os.environ.get('TEST_BUSYBOX') == '1':
+            extra = 'tar() { busybox tar "$@"; }\n' + extra
         runner = self.p / 'run.sh'
         runner.write_text('''set -eu
 UN260_UPDATER_LIBRARY_ONLY=1

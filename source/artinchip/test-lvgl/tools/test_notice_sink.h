@@ -9,12 +9,16 @@
 static unsigned test_notice_count;
 static unsigned test_notice_dialog_holds;
 static bool test_notice_visible;
+static bool test_notice_enabled=true;
+bool ui_notice_get_enabled(void){return test_notice_enabled;}
+void ui_notice_set_enabled(bool enabled){test_notice_enabled=enabled;if(!enabled)test_notice_visible=false;}
 static ui_notice_kind_t test_notice_kind;
 static char test_notice_key[UI_NOTICE_KEY_CAPACITY];
 static char test_notice_title[UI_NOTICE_TITLE_CAPACITY];
 static char test_notice_detail[UI_NOTICE_DETAIL_CAPACITY];
 void ui_notice_post(ui_notice_kind_t kind,const char *key,const char *title,const char *detail)
 {
+    if(!test_notice_enabled)return;
     test_notice_count++;test_notice_visible=true;test_notice_kind=kind;
     snprintf(test_notice_key,sizeof(test_notice_key),"%s",key?key:"");
     snprintf(test_notice_title,sizeof(test_notice_title),"%s",title?title:"");

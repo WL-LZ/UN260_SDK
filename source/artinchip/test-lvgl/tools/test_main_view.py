@@ -206,6 +206,7 @@ const gesture_definition_t *gesture_service_definition(size_t index) {
                    f"-I{ROOT / 'aic_ui'}", f"-I{lvgl}", f"-DLV_CONF_PATH={conf}"]
         if args.sanitize != "none": command += [f"-fsanitize={args.sanitize}", "-fno-sanitize-recover=all"]
         if args.skin_fallback: command += ["-DHOST_SKIN_FALLBACK=1"]
+        if "lv_content_pager_create" in args.wrap: command += ["-DHOST_PAGER_FAILURE_INJECTION=1"]
         if args.layout_default_disabled: command += ["-DUI_MAIN_LAYOUT_EDIT_DEFAULT_ENABLED=0"]
         objects = [work / f"source-{index}.o" for index in range(len(sources))]
         def compile_source(item):

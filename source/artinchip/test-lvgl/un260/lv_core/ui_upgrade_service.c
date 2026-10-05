@@ -18,6 +18,8 @@
 
 #include "un260/storage/usb_storage.h"
 #include "un260/app_service/upgrade_session.h"
+#include "un260/app_service/app_command_runtime.h"
+#include "un260/lv_system/app_clock.h"
 
 #define UI_UPGRADE_BUNDLE_FILE_PATH    USB_STORAGE_MOUNT_POINT "/update/UN260_UPDATE.upk"
 #define UI_UPGRADE_DELTA_FILE_PATH     USB_STORAGE_MOUNT_POINT "/update/UN260_UPDATE_DELTA.upk"
@@ -27,6 +29,7 @@
 #define UI_UPGRADE_STATUS_FILE_PATH    "/tmp/ui_update.status"
 #define UI_UPGRADE_INSTALLED_HASH_PATH "/var/lib/un260-updater/installed.fnv64"
 #define UI_UPGRADE_STATUS_MAX_SIZE     512U
+#define UI_UPGRADE_DATA_WAIT_TIMEOUT_MS 30000U
 
 typedef struct {
     bool valid;
@@ -42,6 +45,8 @@ typedef struct {
     bool running;
     bool finished;
     bool success;
+    bool preparing_data;
+    uint32_t data_prepare_started_ms;
     pid_t child_pid;
     char status_content[UI_UPGRADE_STATUS_MAX_SIZE];
     size_t status_content_len;
@@ -53,6 +58,7 @@ static bool g_ui_upgrade_running_hash_ready = false;
 static uint64_t g_ui_upgrade_running_hash = 0;
 static ui_upgrade_hash_cache_t g_ui_upgrade_pkg_hash_cache;
 static bool g_ui_upgrade_bundle_selected = false;
+static bool g_ui_upgrade_full_bundle_selected = false;
 
 static bool ui_upgrade_service_file_exists(const char* path)
 {
@@ -241,6 +247,7 @@ static ui_upgrade_stage_t ui_upgrade_service_stage_from_name(const char* stage_n
     if (strcmp(stage_name, "finish") == 0) return UI_UPGRADE_STAGE_FINISH;
     if (strcmp(stage_name, "success") == 0) return UI_UPGRADE_STAGE_SUCCESS;
     if (strcmp(stage_name, "fail") == 0) return UI_UPGRADE_STAGE_FAIL;
+    if (strcmp(stage_name, "restart") == 0) return UI_UPGRADE_STAGE_RESTART_REQUIRED;
     return UI_UPGRADE_STAGE_NONE;
 }
 
@@ -331,7 +338,7 @@ static void ui_upgrade_service_load_status_file(void)
             /* The updater emits an empty result until it reaches a terminal
              * stage. Accept that pending state without discarding progress. */
             if (line[8] != '\0' &&
-                !ui_upgrade_service_parse_int(line + 8, 0, 1, &success)) {
+                !ui_upgrade_service_parse_int(line + 8, -1, 1, &success)) {
                 return;
             }
         }
@@ -365,7 +372,15 @@ static void ui_upgrade_service_load_status_file(void)
                  sizeof(g_ui_upgrade_service.status.result_text), "%s", result_text);
     }
 
-    if (success == 1) {
+    if (stage == UI_UPGRADE_STAGE_RESTART_REQUIRED) {
+        ui_upgrade_service_set_status(false, true, false, progress < 100 ? progress : 99,
+                                      UI_UPGRADE_STAGE_RESTART_REQUIRED,
+                                      UI_N_("Restart to continue"),
+                                      UI_N_("Keep the USB drive connected and restart to finish the update."));
+        g_ui_upgrade_service.running = false;
+        g_ui_upgrade_service.finished = true;
+        g_ui_upgrade_service.success = false;
+    } else if (success == 1) {
         ui_upgrade_service_set_status(false, true, true, 100,
                                       UI_UPGRADE_STAGE_SUCCESS,
                                       UI_N_("Upgrade complete"),
@@ -425,7 +440,9 @@ static void ui_upgrade_service_update_child_state(void)
     if (g_ui_upgrade_service.status.finished) {
         /* Never let an early success file override a failed/signalled writer.
          * An explicit failure file remains authoritative even on exit code 0. */
-        if (g_ui_upgrade_service.status.success && !exited_ok) {
+        if ((g_ui_upgrade_service.status.success ||
+             g_ui_upgrade_service.status.stage == UI_UPGRADE_STAGE_RESTART_REQUIRED) &&
+            !exited_ok) {
             g_ui_upgrade_service.success = false;
             ui_upgrade_service_set_status(false, true, false,
                                           g_ui_upgrade_service.status.progress,
@@ -437,11 +454,12 @@ static void ui_upgrade_service_update_child_state(void)
     }
 
     if (exited_ok) {
-        g_ui_upgrade_service.success = true;
-        ui_upgrade_service_set_status(false, true, true, 100,
-                                      UI_UPGRADE_STAGE_SUCCESS,
-                                      UI_N_("Upgrade complete"),
-                                      UI_N_("The system has been updated successfully. Rebooting the device is recommended."));
+        g_ui_upgrade_service.success = false;
+        ui_upgrade_service_set_status(false, true, false,
+                                      g_ui_upgrade_service.status.progress,
+                                      UI_UPGRADE_STAGE_FAIL,
+                                      "Update result unknown",
+                                      UI_N_("The updater did not report a completed result. Check the update result before retrying."));
     } else {
         g_ui_upgrade_service.success = false;
         ui_upgrade_service_set_status(false, true, false, 12,
@@ -461,6 +479,7 @@ void ui_upgrade_service_reset(void)
     memset(&g_ui_upgrade_service, 0, sizeof(g_ui_upgrade_service));
     ui_upgrade_service_hash_cache_clear(&g_ui_upgrade_pkg_hash_cache);
     g_ui_upgrade_bundle_selected = false;
+    g_ui_upgrade_full_bundle_selected = false;
     g_ui_upgrade_service.child_pid = -1;
     ui_upgrade_service_set_status(false, false, false, 0,
                                   UI_UPGRADE_STAGE_NONE, "", "");
@@ -469,6 +488,7 @@ void ui_upgrade_service_reset(void)
 void ui_upgrade_service_detect(ui_upgrade_detect_info_t* info)
 {
     usb_storage_status_t storage_status;
+    bool full_bundle_found;
     bool bundle_found;
     bool legacy_found;
     const char* package_path = NULL;
@@ -478,7 +498,8 @@ void ui_upgrade_service_detect(ui_upgrade_detect_info_t* info)
     usb_storage_refresh(&storage_status);
     info->usb_present = storage_status.device_present;
     info->usb_mounted = storage_status.mounted;
-    const char *bundle_path = ui_upgrade_service_file_exists(UI_UPGRADE_BUNDLE_FILE_PATH) ?
+    full_bundle_found = ui_upgrade_service_file_exists(UI_UPGRADE_BUNDLE_FILE_PATH);
+    const char *bundle_path = full_bundle_found ?
                               UI_UPGRADE_BUNDLE_FILE_PATH : UI_UPGRADE_DELTA_FILE_PATH;
     bundle_found = info->usb_present && info->usb_mounted &&
                    ui_upgrade_service_file_exists(bundle_path);
@@ -487,6 +508,7 @@ void ui_upgrade_service_detect(ui_upgrade_detect_info_t* info)
     info->package_found = bundle_found || legacy_found;
     info->package_hash_status = UI_UPGRADE_PACKAGE_HASH_NOT_CHECKED;
     g_ui_upgrade_bundle_selected = bundle_found;
+    g_ui_upgrade_full_bundle_selected = bundle_found && full_bundle_found;
 
     if (info->package_found) {
         package_path = bundle_found ? bundle_path :
@@ -499,16 +521,16 @@ void ui_upgrade_service_detect(ui_upgrade_detect_info_t* info)
     }
 }
 
-ui_upgrade_start_result_t ui_upgrade_service_start(void)
+bool ui_upgrade_service_can_reinstall(void)
+{
+    return g_ui_upgrade_full_bundle_selected && g_ui_upgrade_pkg_hash_cache.valid;
+}
+
+static ui_upgrade_start_result_t ui_upgrade_service_launch(void)
 {
     ui_upgrade_detect_info_t detect_info;
     pid_t pid;
 
-    if (g_ui_upgrade_service.running ||
-        g_ui_upgrade_service.child_pid > 0 ||
-        upgrade_session_owner() != UPGRADE_SESSION_NONE) {
-        return UI_UPGRADE_START_BUSY;
-    }
     if (!ui_upgrade_service_file_exists(UI_UPGRADE_SCRIPT_PATH)) {
         return UI_UPGRADE_START_SCRIPT_NOT_FOUND;
     }
@@ -526,10 +548,8 @@ ui_upgrade_start_result_t ui_upgrade_service_start(void)
         return UI_UPGRADE_START_STATUS_CLEANUP_FAILED;
     }
 
-    if (!upgrade_session_begin(UPGRADE_SESSION_UI)) return UI_UPGRADE_START_BUSY;
     pid = fork();
     if (pid < 0) {
-        upgrade_session_end(UPGRADE_SESSION_UI);
         return UI_UPGRADE_START_FORK_FAILED;
     }
 
@@ -565,9 +585,104 @@ ui_upgrade_start_result_t ui_upgrade_service_start(void)
     return UI_UPGRADE_START_OK;
 }
 
+ui_upgrade_start_result_t ui_upgrade_service_start(void)
+{
+    ui_upgrade_detect_info_t detect_info;
+    app_ui_upgrade_readiness_t readiness;
+    ui_upgrade_start_result_t result;
+
+    if (g_ui_upgrade_service.running ||
+        g_ui_upgrade_service.child_pid > 0 ||
+        upgrade_session_owner() != UPGRADE_SESSION_NONE) {
+        return UI_UPGRADE_START_BUSY;
+    }
+    if (!ui_upgrade_service_file_exists(UI_UPGRADE_SCRIPT_PATH)) {
+        return UI_UPGRADE_START_SCRIPT_NOT_FOUND;
+    }
+    ui_upgrade_service_detect(&detect_info);
+    if (!detect_info.usb_present || !detect_info.usb_mounted ||
+        !detect_info.package_found ||
+        (detect_info.package_hash_status != UI_UPGRADE_PACKAGE_HASH_MATCH &&
+         detect_info.package_hash_status != UI_UPGRADE_PACKAGE_HASH_DIFFERENT)) {
+        return UI_UPGRADE_START_PACKAGE_NOT_READY;
+    }
+    if (!upgrade_session_begin(UPGRADE_SESSION_UI)) return UI_UPGRADE_START_BUSY;
+
+    readiness = app_command_runtime_prepare_ui_upgrade();
+    if (readiness == APP_UI_UPGRADE_WAIT) {
+        g_ui_upgrade_service.running = true;
+        g_ui_upgrade_service.finished = false;
+        g_ui_upgrade_service.success = false;
+        g_ui_upgrade_service.preparing_data = true;
+        g_ui_upgrade_service.data_prepare_started_ms = app_clock_uptime_ms();
+        g_ui_upgrade_service.child_pid = -1;
+        ui_upgrade_service_set_status(true, false, false, 0,
+                                      UI_UPGRADE_STAGE_PREPARE,
+                                      UI_N_("Saving records"), "");
+        return UI_UPGRADE_START_OK;
+    }
+    if (readiness != APP_UI_UPGRADE_READY) {
+        upgrade_session_end(UPGRADE_SESSION_UI);
+        return readiness == APP_UI_UPGRADE_BUSY ? UI_UPGRADE_START_DATA_BUSY :
+                                                 UI_UPGRADE_START_DATA_SAVE_FAILED;
+    }
+    result = ui_upgrade_service_launch();
+    if (result != UI_UPGRADE_START_OK) upgrade_session_end(UPGRADE_SESSION_UI);
+    return result;
+}
+
+bool ui_upgrade_service_is_preparing_data(void)
+{
+    return g_ui_upgrade_service.preparing_data;
+}
+
+bool ui_upgrade_service_cancel_prepare(void)
+{
+    if (!g_ui_upgrade_service.preparing_data) return false;
+    g_ui_upgrade_service.preparing_data = false;
+    g_ui_upgrade_service.running = false;
+    g_ui_upgrade_service.finished = false;
+    g_ui_upgrade_service.success = false;
+    upgrade_session_end(UPGRADE_SESSION_UI);
+    ui_upgrade_service_set_status(false, false, false, 0, UI_UPGRADE_STAGE_NONE, "", "");
+    return true;
+}
+
+static void ui_upgrade_service_prepare_data_poll(void)
+{
+    app_ui_upgrade_readiness_t readiness;
+    ui_upgrade_start_result_t result;
+    const char *message;
+
+    if (!g_ui_upgrade_service.preparing_data) return;
+    readiness = app_command_runtime_prepare_ui_upgrade();
+    if (readiness == APP_UI_UPGRADE_WAIT) {
+        if ((uint32_t)(app_clock_uptime_ms() - g_ui_upgrade_service.data_prepare_started_ms) <
+            UI_UPGRADE_DATA_WAIT_TIMEOUT_MS) return;
+        message = UI_N_("Saving records timed out. Please try again.");
+    } else message = NULL;
+    g_ui_upgrade_service.preparing_data = false;
+    if (readiness == APP_UI_UPGRADE_READY) {
+        result = ui_upgrade_service_launch();
+        if (result == UI_UPGRADE_START_OK) return;
+        message = UI_N_("The upgrade could not be started. Please check the USB drive and try again.");
+    } else if (message == NULL) {
+        message = readiness == APP_UI_UPGRADE_BUSY ?
+                  UI_N_("Counting is in progress. Stop counting before updating.") :
+                  UI_N_("Records could not be saved. Please try again.");
+    }
+    upgrade_session_end(UPGRADE_SESSION_UI);
+    g_ui_upgrade_service.running = false;
+    g_ui_upgrade_service.finished = true;
+    g_ui_upgrade_service.success = false;
+    ui_upgrade_service_set_status(false, true, false, 0,
+                                  UI_UPGRADE_STAGE_FAIL, "", message);
+}
+
 void ui_upgrade_service_poll(ui_upgrade_service_status_t* status)
 {
-    if (g_ui_upgrade_service.running) {
+    ui_upgrade_service_prepare_data_poll();
+    if (g_ui_upgrade_service.running && g_ui_upgrade_service.child_pid > 0) {
         ui_upgrade_service_load_status_file();
     }
     ui_upgrade_service_update_child_state();
@@ -581,9 +696,10 @@ void ui_upgrade_service_poll(ui_upgrade_service_status_t* status)
             status->running = true;
             status->finished = false;
             status->success = false;
-            if (status->stage == UI_UPGRADE_STAGE_SUCCESS) {
+            if (status->stage == UI_UPGRADE_STAGE_SUCCESS ||
+                status->stage == UI_UPGRADE_STAGE_RESTART_REQUIRED) {
                 status->stage = UI_UPGRADE_STAGE_FINISH;
-                status->progress = 99;
+                if (status->progress == 100) status->progress = 99;
                 snprintf(status->step_text, sizeof(status->step_text), "%s",ui_tr("Finalizing update"));
                 snprintf(status->result_text, sizeof(status->result_text),
                          "%s",ui_tr("Keep the USB drive and power connected until the updater exits."));

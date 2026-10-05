@@ -1,101 +1,47 @@
 # UN260 U-disk update package
 
-The new update flow uses one file on the U disk:
+The current R8 release has one operator package for supported legacy, enrolled,
+factory-provisioned and retrying devices:
 
 ```text
 update/UN260_UPDATE.upk
 ```
 
-R7 supports two deployment routes; see [FACTORY_FLEET.md](FACTORY_FLEET.md).
-Fresh compatible boards use a factory IMG with a pre-enrolled application
-volume, with no follow-up USB migration. **Routine updates on enrolled boards
-now use a normal full UPK: clicking Upgrade installs the application immediately;
-Reboot only starts the new version.** Same-USB boot continuation belongs only
-to the separate first-migration package. An old IMG does not acquire
-the new storage layout merely because it has an `.img` extension.
-
-## Build a package
-
-For the UN260 `d213_devkitf` target, a normal SDK build now creates the package
-automatically:
+See [FACTORY_FLEET.md](FACTORY_FLEET.md) for data ownership, recovery and hardware
+boundaries. Current updaters reuse an existing healthy application volume and
+install the full application directly. Legacy enrollment installs the small
+compatible bridge, then completes with the same USB package after restart.
+Bridge readiness is pending; success belongs to verified final completion.
 
 ```sh
-make -j8
+make test-lvgl-rebuild
+UN260_UPDATE_VERSION=1.0.0-r8-unified-20261005 make
 ```
 
-The result is written to:
+The public result is
+`output/d211_d213_devkitf/images/UN260_UPDATE.upk`, with its SHA-256 file.
+`images/un260_internal/` contains the full application, nested migration,
+bootstrap and delta build artifacts. Operators do not switch between them.
+The fixed archived R7 migration package is preserved, not published as current.
 
-```text
-output/d211_d213_devkitf/images/UN260_UPDATE.upk
-```
+The full inner application includes `test_lvgl`, `liblvgl.so`, owned `lvgl_data`,
+the updater, startup, storage/display helpers and version metadata. The builder
+accepts allowlisted root-relative extras from `update_extra_root`; it rejects
+symlinks, traversal and protected local state. Package checksums provide
+integrity, not publisher authentication.
 
-Internal application/bootstrap/delta archives and the pinned delta baseline are
-stored under `images/un260_internal/`, not beside the public UPK. The current
-`UN260_FIRST_MIGRATION.upk` in that directory is only for reviewed, not-yet-enrolled
-devices (copy and rename to USB `update/UN260_UPDATE.upk` for that one operation).
-It must not be distributed for routine upgrades. The redundant
-`UN260_UNIFIED_UPDATE.upk` alias is no longer generated. An archived
-`UN260_STORAGE_EXPANSION_R7_20260929.upk` is a fixed old-device migration fallback
-(including its R7 application), never a normal build output. To use it, copy it
-to the USB as `update/UN260_UPDATE.upk`. Keep an independent release backup:
-removing the whole output directory also removes archives stored there.
+V3 migration preserves the unused historical mtd11 bytes, original application
+and layout before initializing the supported 38 MiB application partition.
+Direct readback, durable barriers, stable source checks and source/UUID-bound
+recovery are mandatory. Boot alone never formats NAND. Older journal formats
+remain supported. Existing active volumes are verified and reused.
 
-The default package version combines the image version and current Git revision.
-Set an explicit release version when required:
+Local records, settings and imported photos under `/etc/ui_state`, plus touch
+calibration, are preserved. Full application resources converge transactionally
+to the package inventory. Reinstalling the same package remains an explicit user
+action and verifies actual files rather than trusting an installed fingerprint.
 
-```sh
-UN260_UPDATE_VERSION=1.2.0 make -j8
-```
-
-The full application builder can still run independently for development.
-Full `make` validates matching IMG/resources and publishes these same full-package
-bytes as the routine `UN260_UPDATE.upk`; it no longer publishes the migration wrapper:
-
-```sh
-./tools/un260-update/build_un260_update.sh \
-  --version 1.0.0 \
-  --output /home/pc/Desktop/UN260_APPLICATION.upk
-```
-
-The fixed core payload always contains `test_lvgl`, `liblvgl.so`, the complete
-`lvgl_data` resource directory, `ui_update.sh`, `S00lvgl`, and a package version
-marker.
-
-Files placed under the following board directory are automatically added by a
-normal `make` using their rootfs-relative paths:
-
-```text
-target/d211/d213_devkitf/update_extra_root/
-```
-
-For example,
-`target/d211/d213_devkitf/update_extra_root/etc/un260/example.conf` is installed
-as `/etc/un260/example.conf`. Only allowlisted paths are accepted.
-
-Additional rootfs-relative files may be supplied using a controlled staging
-directory:
-
-```sh
-./tools/un260-update/build_un260_update.sh \
-  --version 1.0.1 \
-  --output /home/pc/Desktop/UN260_APPLICATION.upk \
-  --extra-root /home/pc/Desktop/un260-extra-root
-```
-
-Only allowlisted UN260 application, library, resource, and configuration paths
-are accepted. Symbolic links and path traversal are rejected.
-
-## Device behavior
-
-The device validates package format, product, schema, path policy, archive entry
-types, package identifier, and the SHA-256 checksum of every payload file before
-installing. Existing targets are backed up on the U disk. File replacement is
-atomic and a failed transaction is rolled back.
-
-Loose legacy `test_lvgl`/library/resource updates are rejected on managed
-application-volume devices. Do not distribute internal bootstrap/migration/
-application/delta files as a sequence of operator upgrades.
-
-This package provides integrity checking, not cryptographic publisher
-authentication. A production signing key and signature verifier can be added in
-a later schema revision.
+Do not remove migration markers, transactions or USB backups to force success.
+Unreadable hardware, failed writeback, missing media, capacity failures and
+unsupported layouts stop with diagnostics. Host tests and a full cross build
+are followed by board validation; a UPK cannot repair an inaccessible boot path.

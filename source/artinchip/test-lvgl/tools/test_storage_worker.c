@@ -98,6 +98,7 @@ int main(void)
     size_t before_allocations;
     memset(small, 1, sizeof(small));
     assert(storage_worker_shutdown());
+    assert(storage_worker_pending_status() == STORAGE_JOB_SUCCEEDED);
     assert(!storage_worker_submit(run_snapshot, small, sizeof(small), &rejected));
     assert(allocation_calls == 0 && rejected == UINT64_C(987654));
     assert(storage_worker_init() && storage_worker_init());
@@ -112,6 +113,7 @@ int main(void)
     hold_worker(true);
     assert(storage_worker_submit(run_snapshot, small, sizeof(small), &ids[0]));
     wait_entered();
+    assert(storage_worker_pending_status() == STORAGE_JOB_PENDING);
     fail_allocation = true;
     assert(!storage_worker_submit(run_snapshot, small, sizeof(small), &rejected));
     assert(rejected == UINT64_C(987654) && allocated_bytes == sizeof(small));
@@ -134,6 +136,7 @@ int main(void)
     atomic_store(&fail_run, true);
     hold_worker(false);
     assert(storage_worker_wait(ids[0]) == STORAGE_JOB_FAILED);
+    assert(storage_worker_pending_status() == STORAGE_JOB_FAILED);
     assert(atomic_load(&run_count) == 1);
     assert(!storage_worker_release(ids[0]) && !storage_worker_shutdown());
     assert(!storage_worker_copy_completed(ids[0], copied, sizeof(copied)));
@@ -142,6 +145,7 @@ int main(void)
     atomic_store(&fail_run, false);
     assert(storage_worker_retry(ids[0]));
     assert(storage_worker_wait(ids[STORAGE_WORKER_CAPACITY - 1]) == STORAGE_JOB_SUCCEEDED);
+    assert(storage_worker_pending_status() == STORAGE_JOB_SUCCEEDED);
     assert(allocation_calls == before_allocations);
     assert(atomic_load(&run_count) == STORAGE_WORKER_CAPACITY + 1U);
     assert(order[0] == 1);
