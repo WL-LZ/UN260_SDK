@@ -1,4 +1,5 @@
 #include "protocol_rx_service.h"
+#include "un260/app_service/runtime_guard.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -75,6 +76,7 @@ static void *protocol_rx_service_thread(void *arg)
         if (len < 0) {
             int error_code = errno;
 
+            runtime_guard_fault(RUNTIME_FAULT_UART_RX);
             receive_errors++;
             if (receive_errors == 1 ||
                 (receive_errors % PROTOCOL_RX_ERROR_REPORT_STEP) == 0) {
@@ -100,6 +102,7 @@ static void *protocol_rx_service_thread(void *arg)
             if (result == PROTOCOL_FRAME_PARSE_READY) {
                 char prefix[32];
 
+                runtime_guard_rx(frame.data, frame.len);
                 if (!protocol_rx_service_enqueue(&frame)) goto stopped;
                 snprintf(prefix, sizeof(prefix), "RX[%u]: ",
                          (unsigned int)frame.len);

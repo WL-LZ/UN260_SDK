@@ -1,3 +1,4 @@
+#include "runtime_guard.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "app_counting_runtime.h"
 #include "app_fault_recovery.h"
@@ -646,6 +647,11 @@ void app_counting_runtime_handle_detail(uint8_t cmd,
                                                buf,
                                                len,
                                                &hooks);
+    if (result == COUNTING_DETAIL_REPLY_MEMORY_ERROR) {
+        /* Do not silently treat an incomplete serial/reject model as a valid
+         * count. The external guard retains received frames for reconciliation. */
+        runtime_guard_fault(RUNTIME_FAULT_COUNT_MEMORY);
+    }
     if (cmd == 0x0C && result == COUNTING_DETAIL_REPLY_START) {
         page_02_list_section_mark_dirty(PAGE_02_SECTION_C);
     }

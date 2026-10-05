@@ -12,14 +12,9 @@
 /* 打开串口 */
 int uart_open(const char *device)
 {
-    int fd = open(device, O_RDWR | O_NOCTTY | O_NDELAY);
+    int fd = open(device, O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
     if (fd < 0) {
         perror("uart_open");
-        return -1;
-    }
-    if (fcntl(fd, F_SETFL, 0) < 0) {  // 阻塞模式
-        perror("uart_open fcntl");
-        close(fd);
         return -1;
     }
     return fd;
@@ -50,10 +45,10 @@ int uart_config(int fd, int baud, int dataBit, char parity, int stopBit)
     }
 
     /* cfmakeraw 的等效配置，使用内核 termios2 ABI 支持非标准速率。 */
-    tty.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
+    tty.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON | IXOFF | IXANY);
     tty.c_oflag &= ~OPOST;
     tty.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
-    tty.c_cflag &= ~(CSIZE | PARENB);
+    tty.c_cflag &= ~(CSIZE | PARENB | CRTSCTS);
     tty.c_cflag |= (CLOCAL | CREAD);
 
     // 数据位

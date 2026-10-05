@@ -46,9 +46,9 @@ static void verify(int fd, unsigned rate, tcflag_t speed)
     assert((tty.c_cflag & CBAUD) == speed);
     assert(((tty.c_cflag >> IBSHIFT) & CBAUD) == speed);
     assert((tty.c_cflag & CSIZE) == CS8);
-    assert(!(tty.c_cflag & (PARENB | CSTOPB)));
+    assert(!(tty.c_cflag & (PARENB | CSTOPB | CRTSCTS)));
     assert((tty.c_cflag & (CLOCAL | CREAD)) == (CLOCAL | CREAD));
-    assert(!(tty.c_iflag & (IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON)));
+    assert(!(tty.c_iflag & (IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON | IXOFF | IXANY)));
     assert(!(tty.c_oflag & OPOST));
     assert(!(tty.c_lflag & (ECHO | ECHONL | ICANON | ISIG | IEXTEN)));
     assert(tty.c_cc[VMIN] == 1 && tty.c_cc[VTIME] == 1);
@@ -60,8 +60,14 @@ int main(void)
     assert(master >= 0 && grantpt(master) == 0 && unlockpt(master) == 0);
     char *name = ptsname(master);
     assert(name);
-    int slave = open(name, O_RDWR | O_NOCTTY);
+    int slave = uart_open(name);
     assert(slave >= 0);
+    assert(fcntl(slave,F_GETFL)&O_NONBLOCK);
+    assert(fcntl(slave,F_GETFD)&FD_CLOEXEC);
+    struct termios2 inherited;
+    assert(ioctl(slave,TCGETS2,&inherited)==0);
+    inherited.c_cflag|=CRTSCTS;inherited.c_iflag|=IXOFF|IXANY;
+    assert(ioctl(slave,TCSETS2,&inherited)==0);
     const int rates[] = {9600, 115200, 500000, 512000, 921600, 115200, 512000};
     const tcflag_t speeds[] = {B9600, B115200, B500000, BOTHER, B921600, B115200, BOTHER};
     for (unsigned i = 0; i < sizeof(rates) / sizeof(rates[0]); ++i) {

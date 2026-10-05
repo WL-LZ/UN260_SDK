@@ -6,6 +6,7 @@ root=Path(__file__).resolve().parents[1]
 runtime=re.sub(r'^#include[^\n]*\n','',(root/'un260/app_service/app_boot_runtime.c').read_text(),flags=re.M)
 fixture=r'''
 #include <assert.h>
+#define UI_N_(text) (text)
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -19,7 +20,8 @@ UI_PAGE_INNOVATION_CENTER,UI_PAGE_CURR,UI_PAGE_MAIN,UI_PAGE_SENSOR} ui_page_t;
 typedef struct {void *user_data;} lv_timer_t;
 static uint32_t now;static ui_page_t page=UI_PAGE_BOOT;
 static bool intro,pure,timer_live;static unsigned sends,faults,switches;
-static unsigned recorded;
+static unsigned recorded,hidden;
+static void hide_fault_popup(void){hidden++;}
 static uint8_t last_cmd,last_value;static lv_timer_t timer_storage;
 static uint32_t app_clock_uptime_ms(void){return now;}
 static uint32_t lv_tick_get(void){return now;}
@@ -64,7 +66,13 @@ int main(int argc,char **argv){
  if(i<4)assert(faults==0);
  app_boot_runtime_handle_reply(&session,0x37,r,7);assert(recorded==(unsigned)i+1);}
  assert(last_cmd==0x56);
- if(!strcmp(argv[1],"failure")){assert(faults==1&&!timer_live&&machine_fault_count()==2);puts("PASS independent selftest failures, deferred until sequence end");return 0;}
+ if(!strcmp(argv[1],"failure")){assert(faults==1&&!timer_live&&machine_fault_count()==2);unsigned before_confirm=sends;
+ assert(app_boot_runtime_confirm_fault((machine_fault_key_t){MACHINE_FAULT_BOOT,2,1}));
+ assert(page==UI_PAGE_SENSOR&&hidden==1&&switches==1);
+ app_boot_runtime_poll(now,false);now+=60000;app_boot_runtime_poll(now,false);
+ assert(sends==before_confirm&&!timer_live);
+ assert(!app_boot_runtime_confirm_fault((machine_fault_key_t){MACHINE_FAULT_BOOT,2,1}));
+ puts("PASS boot fault Confirm to Sensors, canceled boot timers and duplicate confirmation guard");return 0;}
  assert(machine_fault_count()==0);
  assert(timer_live);
  if(!strcmp(argv[1],"leave"))page=UI_PAGE_SENSOR;

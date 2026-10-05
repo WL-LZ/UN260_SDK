@@ -1,0 +1,91 @@
+--- a/src/draw/lv_draw_mask.c
++++ b/src/draw/lv_draw_mask.c
+@@ -55,7 +55,7 @@
+ static void circ_init(lv_point_t * c, lv_coord_t * tmp, lv_coord_t radius);
+ static bool circ_cont(lv_point_t * c);
+ static void circ_next(lv_point_t * c, lv_coord_t * tmp);
+-static void circ_calc_aa4(_lv_draw_mask_radius_circle_dsc_t * c, lv_coord_t radius);
++static bool circ_calc_aa4(_lv_draw_mask_radius_circle_dsc_t * c, lv_coord_t radius);
+ static lv_opa_t * get_next_line(_lv_draw_mask_radius_circle_dsc_t * c, lv_coord_t y, lv_coord_t * len,
+                                 lv_coord_t * x_start);
+ LV_ATTRIBUTE_FAST_MEM static inline lv_opa_t mask_mix(lv_opa_t mask_act, lv_opa_t mask_new);
+@@ -220,6 +220,7 @@
+             else {
+                 radius_p->circle->used_cnt--;
+             }
++            radius_p->circle = NULL;
+         }
+     }
+     else if(pdsc->type == LV_DRAW_MASK_TYPE_POLYGON) {
+@@ -514,7 +515,7 @@
+ 
+     if(!entry) {
+         entry = lv_mem_alloc(sizeof(_lv_draw_mask_radius_circle_dsc_t));
+-        LV_ASSERT_MALLOC(entry);
++        if(entry == NULL) { param->circle = NULL; return; }
+         lv_memset_00(entry, sizeof(_lv_draw_mask_radius_circle_dsc_t));
+         entry->life = -1;
+     }
+@@ -526,7 +527,11 @@
+ 
+     param->circle = entry;
+ 
+-    circ_calc_aa4(param->circle, radius);
++    if(!circ_calc_aa4(param->circle, radius)) {
++        if(entry->life < 0) { lv_mem_free(entry->buf); lv_mem_free(entry); }
++        else entry->used_cnt--;
++        param->circle = NULL;
++    }
+ }
+ 
+ /**
+@@ -1356,16 +1361,18 @@
+     c->y++;
+ }
+ 
+-static void circ_calc_aa4(_lv_draw_mask_radius_circle_dsc_t * c, lv_coord_t radius)
+-{
+-    if(radius == 0) return;
++static bool circ_calc_aa4(_lv_draw_mask_radius_circle_dsc_t * c, lv_coord_t radius)
++{
++    if(radius == 0) return true;
++    /* Publish a replacement only after both allocations succeed. A failed
++     * cache miss must not invalidate a reusable circle or leak its lease. */
++    uint8_t *buffer = lv_mem_alloc(radius * 6 + 6);
++    if(buffer == NULL) return false;
++    lv_coord_t *cir_x = radius > 1 ? lv_mem_buf_get((radius + 1) * 4 * sizeof(lv_coord_t)) : NULL;
++    if(radius > 1 && cir_x == NULL) { lv_mem_free(buffer); return false; }
++    if(c->buf) lv_mem_free(c->buf);
++    c->buf = buffer;
+     c->radius = radius;
+-
+-    /*Allocate buffers*/
+-    if(c->buf) lv_mem_free(c->buf);
+-
+-    c->buf = lv_mem_alloc(radius * 6 + 6);  /*Use uint16_t for opa_start_on_y and x_start_on_y*/
+-    LV_ASSERT_MALLOC(c->buf);
+     c->cir_opa = c->buf;
+     c->opa_start_on_y = (uint16_t *)(c->buf + 2 * radius + 2);
+     c->x_start_on_y = (uint16_t *)(c->buf + 4 * radius + 4);
+@@ -1376,10 +1383,9 @@
+         c->opa_start_on_y[0] = 0;
+         c->opa_start_on_y[1] = 1;
+         c->x_start_on_y[0] = 0;
+-        return;
+-    }
+-
+-    lv_coord_t * cir_x = lv_mem_buf_get((radius + 1) * 2 * 2 * sizeof(lv_coord_t));
++        return true;
++    }
++
+     lv_coord_t * cir_y = &cir_x[(radius + 1) * 2];
+ 
+     uint32_t y_8th_cnt = 0;
+@@ -1502,6 +1508,7 @@
+     }
+ 
+     lv_mem_buf_release(cir_x);
++    return true;
+ }
+ 
+ static lv_opa_t * get_next_line(_lv_draw_mask_radius_circle_dsc_t * c, lv_coord_t y, lv_coord_t * len,

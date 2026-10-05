@@ -40,6 +40,17 @@ static void upgrade_text(uint8_t *pixels,unsigned stride,int x,int y,const char 
 }
 static void upgrade_render(uint8_t *pixels,unsigned stride)
 {
+    const char *fault=getenv("UN260_RUNTIME_FAULT_DISPLAY");
+    if(fault && !strcmp(fault,"1")) {
+        /* Minimal Latin emergency font remains usable without LVGL/assets. */
+        upgrade_rect(pixels,stride,0,0,1280,400,0xfff3f5f6);
+        upgrade_text(pixels,stride,64,42,"UN260 PROTECTION MODE",4,0xffb76313);
+        upgrade_text(pixels,stride,64,116,"STOP FEEDING BANKNOTES",4,0xff20313b);
+        upgrade_text(pixels,stride,64,184,"KEEP NOTES SEPARATE AND RECOUNT",3,0xff20313b);
+        upgrade_text(pixels,stride,64,242,"COUNT AND CONTROLLER STATE REQUIRE CHECKING",3,0xff20313b);
+        upgrade_text(pixels,stride,64,320,"CONTACT SERVICE  DO NOT RESUME COUNTING",3,0xff576c79);
+        return;
+    }
     int progress=0,failed=0,success=0;
     char line[256],message[160];
     snprintf(message,sizeof(message),"%s",upgrade_copy(UI_N_("CHECKING THE SAME USB PACKAGE")));

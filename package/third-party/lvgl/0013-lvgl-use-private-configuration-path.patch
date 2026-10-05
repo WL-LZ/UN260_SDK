@@ -1,0 +1,31 @@
+From: Codex <codex@openai.com>
+Date: Mon, 5 Oct 2026 15:00:00 +0800
+Subject: [PATCH] lvgl: honor a private configuration path in CMake
+
+Use LV_CONF_PATH for the library compilation without propagating its private
+font selection to the application's headers. This lets the application keep
+its font payloads while the library retains its default font and avoids
+duplicating application-owned bitmaps in constrained firmware upgrades.
+
+diff --git a/env_support/cmake/custom.cmake b/env_support/cmake/custom.cmake
+--- a/env_support/cmake/custom.cmake
++++ b/env_support/cmake/custom.cmake
+@@ -8,7 +8,7 @@ option(LV_CONF_INCLUDE_SIMPLE
+ 
+ # Option to set LV_CONF_PATH, if set parent path LV_CONF_DIR is added to
+ # includes
+-option(LV_CONF_PATH "Path defined for lv_conf.h")
++set(LV_CONF_PATH "" CACHE FILEPATH "Path defined for lv_conf.h")
+-get_filename_component(LV_CONF_DIR ${LV_CONF_PATH} DIRECTORY)
++get_filename_component(LV_CONF_DIR "${LV_CONF_PATH}" DIRECTORY)
+ 
+ # Option to build shared libraries (as opposed to static), default: OFF
+@@ -33,6 +33,8 @@
+ target_compile_definitions(
+   lvgl PUBLIC $<$<BOOL:${LV_LVGL_H_INCLUDE_SIMPLE}>:LV_LVGL_H_INCLUDE_SIMPLE>
+               $<$<BOOL:${LV_CONF_INCLUDE_SIMPLE}>:LV_CONF_INCLUDE_SIMPLE>)
++target_compile_definitions(lvgl PRIVATE
++  $<$<BOOL:${LV_CONF_PATH}>:LV_CONF_PATH=${LV_CONF_PATH}>)
+ 
+ # Include root and optional parent path of LV_CONF_PATH
+ target_include_directories(lvgl SYSTEM PUBLIC ${LVGL_ROOT_DIR} ${LV_CONF_DIR})

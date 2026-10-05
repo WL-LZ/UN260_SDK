@@ -22,6 +22,11 @@
     #define LV_FS_POSIX_CACHE_SIZE 0
 #endif
 
+#define LV_ASSERT_HANDLER_INCLUDE <stdlib.h>
+/* LVGL cannot continue after a failed allocation. The external guard records
+ * SIGABRT and holds counting for reconciliation, instead of spinning forever. */
+#define LV_ASSERT_HANDLER abort();
+
 #define LV_MEM_CUSTOM 1
 #if LV_MEM_CUSTOM == 1
     #define LV_MEM_CUSTOM_INCLUDE <stdlib.h>   /*Header for the dynamic memory function*/

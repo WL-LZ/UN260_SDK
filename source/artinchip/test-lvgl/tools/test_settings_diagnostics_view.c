@@ -101,6 +101,23 @@ static void calibration_test(void){
 static void sensor_test(void){
  sensor_state_clear();ui_page_12_sensor_create(lv_scr_act());assert(sent_cmd==0x1D);snapshot("sensors-waiting");for(unsigned i=0;i<11;i++)sensor_state_set_voltage(i,16+i*18);tick(320);snapshot("sensors-live");assert(label_find(lv_scr_act(),"0.206 V"));ui_page_12_sensor_destroy();unsigned before=sends;tick(500);assert(sends==before);puts("PASS sensor polling, received values and timer cleanup");
 }
+static void sensor_stress_test(void){
+ for(unsigned round=0;round<12;round++){
+  sensor_state_clear();ui_page_12_sensor_create(lv_scr_act());
+  lv_obj_t *root=lv_obj_get_child(lv_scr_act(),lv_obj_get_child_cnt(lv_scr_act())-1);
+  for(unsigned step=0;step<12;step++){
+   uint8_t reply[]={0xfd,0xdf,7,0x1d,0,0,0};
+   diagnostic_reply_dispatch(0x1d,reply,sizeof(reply),lv_tick_get(),NULL);
+   for(unsigned channel=1;channel<=11;channel++){
+    reply[4]=channel;reply[5]=(round+step+channel)*7;
+    diagnostic_reply_dispatch(0x1d,reply,sizeof(reply),lv_tick_get(),NULL);
+   }
+   lv_obj_set_y(root,step%2?-20:0);tick(320);
+  }
+  ui_page_12_sensor_destroy();unsigned before=sends;tick(500);assert(sends==before);
+ }
+ puts("PASS Sensors 12 recreate/destroy cycles, 144 protocol updates, top-edge clipping and timer cleanup");
+}
 static void motor_test(void){
  ui_page_17_motor_test_create(lv_scr_act());snapshot("motors-ready");click("Forward");
  motor_test_service_poll(lv_tick_get());assert(sent_cmd==0x52&&holds&2);
@@ -145,7 +162,7 @@ static void debug_test(void){
  debug_key(kb,10);debug_key(kb,11);assert(!strcmp(lv_textarea_get_text(input),"FD DF AB "));
  debug_key(kb,17);assert(!strcmp(lv_textarea_get_text(input),"FD DF "));
  /* Actions use logical key IDs, independent of the displayed language. */
- const char **original_map=lv_btnmatrix_get_map_array(kb);
+ const char **original_map=lv_btnmatrix_get_map(kb);
  static const char *translated_map[]={"1","2","3","4","5","6","\n","7","8","9","0","A","B","\n","C","D","E","F","Supprimer","Effacer",""};
  lv_btnmatrix_set_map(kb,translated_map);
  debug_key(kb,10);debug_key(kb,11);debug_key(kb,16);
@@ -172,7 +189,7 @@ static void failure_retry_test(void){
 int main(void){
  lv_init();lv_disp_draw_buf_t db;lv_disp_draw_buf_init(&db,buffer,NULL,1280*40);lv_disp_drv_t dd;lv_disp_drv_init(&dd);dd.hor_res=1280;dd.ver_res=400;dd.draw_buf=&db;dd.flush_cb=flush;lv_disp_drv_register(&dd);
  lv_img_decoder_t*dec=lv_img_decoder_create();lv_img_decoder_set_info_cb(dec,info);lv_img_decoder_set_open_cb(dec,image_open);
- calibration_test();sensor_test();motor_test();aging_test();stream_test();debug_test();failure_retry_test();
+ calibration_test();sensor_test();sensor_stress_test();motor_test();aging_test();stream_test();debug_test();failure_retry_test();
  for(unsigned i=0;i<4;i++){ui_page_12_sensor_create(lv_scr_act());ui_page_12_sensor_destroy();ui_page_10_debug_create();ui_page_10_debug_destroy();ui_page_28_get_image_create(lv_scr_act());ui_page_28_get_image_destroy();ui_page_31_get_wave_create(lv_scr_act());ui_page_31_get_wave_destroy();}
  puts("PASS actual LVGL diagnostic details suite");return 0;
 }

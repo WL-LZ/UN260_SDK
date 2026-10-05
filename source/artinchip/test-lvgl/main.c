@@ -1,4 +1,5 @@
 #include "un260/lv_components/ui_notice.h"
+#include "un260/app_service/runtime_guard.h"
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,7 +34,7 @@
 #include "un260/storage/ui_factory_reset_store.h"
 
 //-------------------- 主函数 --------------------
-int main(void) {
+static int application_main(void) {
     app_startup_trace_mark("main_enter");
     /* Resume an acknowledged local reset before input, backlight, preferences,
      * history or any storage writer is initialized, in both startup paths. */
@@ -127,6 +128,7 @@ int main(void) {
     bool history_load_reported = false;
     uint32_t visual_commit_tick = app_clock_uptime_ms() - LV_DISP_DEF_REFR_PERIOD;
     while (1) {
+        runtime_guard_heartbeat();
         uint64_t wake_sequence = app_runtime_wakeup_snapshot();
         uint64_t loop_start_us = app_clock_monotonic_us();
         ui_page_00_boot_anim_poll();
@@ -261,3 +263,5 @@ int main(void) {
 
     return 0;
 }
+
+int main(void) { return runtime_guard_run(application_main); }

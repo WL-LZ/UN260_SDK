@@ -204,12 +204,14 @@ int main(void)
     if(flock(lease,LOCK_EX|LOCK_NB))goto done;
 #endif
     unlink(BOOT_LIGHT_READY);
+#ifndef UN260_UPDATE_DISPLAY
     assets=malloc(ASSET_BYTES);
     if(!assets)goto done;
     uLongf length=ASSET_BYTES;
     if(uncompress(assets,&length,boot_light_packed,sizeof(boot_light_packed))!=Z_OK||length!=ASSET_BYTES)goto done;
     canvas=malloc(ACTIVE_BYTES);
     if(!canvas)goto done;
+#endif
     trace("assets_ready");
     fb=open("/dev/fb0",O_RDWR|O_CLOEXEC);
     if(fb<0||ioctl(fb,FBIOGET_FSCREENINFO,&fix)||ioctl(fb,FBIOGET_VSCREENINFO,&var))goto done;

@@ -32,6 +32,8 @@ void uart_debug_set_fd(int fd) { debug_fd = fd; }
 void uart_printf(int fd, const char *fmt, ...) { (void)fd; (void)fmt; }
 void uart_log_hex(int fd, const char *prefix, const uint8_t *data, size_t len, size_t limit)
 { (void)fd; (void)prefix; (void)data; (void)len; (void)limit; }
+void uart_tx_reset(int fd) { assert(fd == 4); }
+bool uart_tx_is_healthy(int fd) { return fd == 4; }
 int uart_send(int fd, const char *data, int len)
 { assert(fd == 4 && len >= 6 && (uint8_t)data[0] == 0xFD); return len; }
 void protocol_frame_queue_clear(void) {}

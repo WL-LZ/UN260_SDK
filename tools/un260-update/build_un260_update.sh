@@ -77,7 +77,7 @@ is_fixed_target()
 
     case "$rel" in
         usr/local/bin/test_lvgl|usr/local/lib/liblvgl.so|usr/local/share/lvgl_data/*|\
-        usr/bin/ui_update.sh|etc/init.d/S00lvgl|etc/un260/package-version|usr/local/bin/un260_unpack|usr/local/bin/un260_storage_sync|usr/local/bin/un260_upgrade_display|usr/local/bin/un260_resource_cleanup|usr/local/bin/un260_app_storage)
+        usr/bin/ui_update.sh|etc/init.d/S00lvgl|etc/un260/package-version|usr/local/bin/un260_unpack|usr/local/bin/un260_storage_sync|usr/local/bin/un260_upgrade_display|usr/local/bin/un260_runtime_recover|usr/local/bin/un260_resource_cleanup|usr/local/bin/un260_app_storage)
             return 0
             ;;
     esac
@@ -189,6 +189,7 @@ find "$PKG_ROOT/payload/usr/local/share/lvgl_data" -type f -exec chmod 0644 {} +
 copy_payload_file "$LVGL_LIB_PATH" "usr/local/lib/liblvgl.so" 0755
 copy_payload_file "$TARGET_ROOT/usr/local/bin/un260_storage_sync" "usr/local/bin/un260_storage_sync" 0755
 copy_payload_file "$TARGET_ROOT/usr/local/bin/un260_upgrade_display" "usr/local/bin/un260_upgrade_display" 0755
+copy_payload_file "$TARGET_ROOT/usr/local/bin/un260_runtime_recover" "usr/local/bin/un260_runtime_recover" 0755
 copy_payload_file "$UPDATER_PATH" "usr/bin/ui_update.sh" 0755
 copy_payload_file "$STARTUP_PATH" "etc/init.d/S00lvgl" 0755
 copy_payload_file "$APP_PATH" "usr/local/bin/test_lvgl" 0755
@@ -222,6 +223,8 @@ if [[ -n "$EXTRA_ROOT" ]]; then
 fi
 
 printf 'file|0755|usr/local/lib/liblvgl.so\n' >> "$INSTALL_MANIFEST"
+printf 'file|0755|usr/local/bin/un260_upgrade_display\n' >> "$INSTALL_MANIFEST"
+printf 'file|0755|usr/local/bin/un260_runtime_recover\n' >> "$INSTALL_MANIFEST"
 printf 'file|0755|usr/bin/ui_update.sh\n' >> "$INSTALL_MANIFEST"
 printf 'file|0755|usr/local/bin/un260_resource_cleanup\n' >> "$INSTALL_MANIFEST"
 printf 'file|0755|usr/local/bin/un260_app_storage\n' >> "$INSTALL_MANIFEST"

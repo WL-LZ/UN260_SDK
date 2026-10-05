@@ -123,6 +123,7 @@ add_executable(un260_boot_light un260/lv_drivers/boot_light.c un260/lv_system/ba
 target_link_libraries(un260_boot_light z)
 install(TARGETS un260_boot_light RUNTIME DESTINATION bin)
 add_executable(${PROJECT_NAME} main.c
+    un260/app_service/runtime_guard.c
     un260/font/lv_font_standby_112.c
     un260/font/scaled_font.c
     un260/storage/standby_store.c
@@ -586,3 +587,8 @@ if(DEFINED CMAKE_INSTALL_FULL_DATAROOTDIR)
             message(FATAL_ERROR \"Old guide picture cleanup failed\")
         endif()")
 endif() # CMAKE_INSTALL_FULL_DATAROOTDIR
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE UN260_RUNTIME_GUARD_ENABLED=1)
+add_executable(un260_runtime_recover tools/un260_runtime_recover.c un260/app_service/runtime_guard.c)
+target_compile_definitions(un260_runtime_recover PRIVATE UN260_RUNTIME_GUARD_ENABLED=1)
+install(TARGETS un260_runtime_recover RUNTIME DESTINATION bin)

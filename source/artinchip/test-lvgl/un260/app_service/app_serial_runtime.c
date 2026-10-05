@@ -1,4 +1,5 @@
 #include "app_serial_runtime.h"
+#include "runtime_guard.h"
 
 #include <stdio.h>
 
@@ -25,7 +26,7 @@ static bool g_bridge_started;
 
 bool protocol_send_is_ready(void)
 {
-    return fd4 >= 0;
+    return fd4 >= 0 && uart_tx_is_healthy(fd4) && !runtime_guard_has_fault();
 }
 
 int protocol_send(uint8_t cmd_g, const uint8_t *cmd_s, uint16_t cmd_s_len)
@@ -91,6 +92,7 @@ bool app_serial_runtime_start(void)
         app_serial_runtime_stop();
         return false;
     }
+    uart_tx_reset(fd4);
     printf("UART配置完成\n");
     uart_debug_set_fd(fd6);
 

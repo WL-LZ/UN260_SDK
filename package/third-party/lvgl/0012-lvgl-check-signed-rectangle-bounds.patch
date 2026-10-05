@@ -1,0 +1,30 @@
+From: Codex <codex@openai.com>
+Date: Mon, 5 Oct 2026 15:00:00 +0800
+Subject: [PATCH] lvgl: check signed rectangle bounds before drawing
+
+The D211 T-HEAD GCC 10.2 toolchain miscompiles the short width/height
+comparison at -O1: it loads the endpoints unsigned, subtracts them, and
+branches without narrowing the difference back to lv_coord_t. A valid
+rectangle crossing zero is therefore rejected before the software/GE
+backend can clip it. Its children still draw, making card backgrounds
+and borders disappear while they pass the left screen edge.
+
+Check endpoint ordering directly in the common rectangle entry point.
+This keeps signed coordinates, normal clipping, backend selection and
+the existing lv_coord_t ABI intact, including large-coordinate builds.
+
+diff --git a/src/draw/lv_draw_rect.c b/src/draw/lv_draw_rect.c
+--- a/src/draw/lv_draw_rect.c
++++ b/src/draw/lv_draw_rect.c
+@@ -63,7 +63,10 @@ void lv_draw_rect(lv_draw_ctx_t * draw_ctx, const lv_draw_rect_dsc_t * dsc, const lv
+ {
+-    if(lv_area_get_height(coords) < 1 || lv_area_get_width(coords) < 1) return;
++    /* Test the signed bounds directly. The D211 T-HEAD GCC 10.2 toolchain
++     * miscompiles the narrowed width/height comparison at -O1 when an area
++     * crosses zero, skipping a visible rectangle before clipping it. */
++    if(coords->x1 > coords->x2 || coords->y1 > coords->y2) return;
+ 
+     draw_ctx->draw_rect(draw_ctx, dsc, coords);
+ 
+     LV_ASSERT_MEM_INTEGRITY();
+ }

@@ -1,5 +1,6 @@
 #include "un260/lv_system/ui_i18n.h"
 #include "app_command_runtime.h"
+#include "runtime_guard.h"
 #include "ui_factory_reset_service.h"
 #include "touch_calibration_service.h"
 #include "app_fault_recovery.h"
@@ -160,6 +161,8 @@ app_ui_upgrade_readiness_t app_command_runtime_prepare_ui_upgrade(void)
 
 bool app_command_runtime_clear_counting_data(const char *reason)
 {
+    /* Preserve the current model when the controller channel is uncertain. */
+    if (!protocol_send_is_ready() || runtime_guard_has_fault()) return false;
     if (!app_counting_runtime_reset_session(&g_counting_session, reason)) {
         smart_island_notify_warning_level(UI_N_("History full: clear deferred"),
                                            SMART_ISLAND_WARNING_LEVEL_ERROR);
@@ -371,6 +374,11 @@ uint32_t app_command_runtime_process_frames_budget(uint32_t budget_us)
             g_deferred_frame_blocked = true;
             break;
         }
+        const counting_sim_t *count = counting_data_current();
+        runtime_guard_count(count->total_pcs, count->total_amount,
+                            g_counting_session.phase,
+                            app_command_runtime_count_start_busy(),
+                            app_command_runtime_result_pending(), count->multi_currency_result);
         g_deferred_frame_valid = false;
         g_deferred_frame_blocked = false;
         g_deferred_frame_warning_reported = false;
