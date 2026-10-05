@@ -96,7 +96,7 @@ static const section_layout_t layouts[PAGE_02_SECTION_COUNT] = {
       LVGL_DIR "list_icons/barcode_24.png", LVGL_DIR "list_icons/barcode_36.png", 0x0074F8 },
     { PAGE_02_SECTION_C, 830, 326, {10,58,110}, {44,40,170},
       {LV_TEXT_ALIGN_LEFT,LV_TEXT_ALIGN_RIGHT,LV_TEXT_ALIGN_LEFT},
-      UI_TEXT_LIST_REJECT_ANALYSIS, {UI_TEXT_PAGE01_DETAIL_COL_NO,
+      UI_TEXT_LIST_REJECT_TITLE, {UI_TEXT_PAGE01_DETAIL_COL_NO,
       UI_TEXT_PAGE01_DETAIL_COL_PCS,UI_TEXT_LIST_COL_REASON},
       LVGL_DIR "list_icons/warning_circle_24.png", LVGL_DIR "list_icons/warning_circle_36.png", 0xF85820 },
 };

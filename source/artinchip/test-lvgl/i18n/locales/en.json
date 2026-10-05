@@ -2434,6 +2434,7 @@
     "UI_TEXT_LIST_PRINT": "PRINT",
     "UI_TEXT_LIST_RANGE_FMT": "%u-%u of %u",
     "UI_TEXT_LIST_REJECT_ANALYSIS": "Reject analysis",
+    "UI_TEXT_LIST_REJECT_TITLE": "Reject",
     "UI_TEXT_LIST_SCROLL": "SCROLL",
     "UI_TEXT_LIST_SERIAL_NUMBERS": "Serial numbers",
     "UI_TEXT_LIST_TOTAL": "TOTAL",

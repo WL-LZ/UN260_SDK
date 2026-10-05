@@ -842,6 +842,7 @@
     "UI_TEXT_LIST_PRINT": "打印",
     "UI_TEXT_LIST_RANGE_FMT": "%u-%u / 共%u条",
     "UI_TEXT_LIST_REJECT_ANALYSIS": "拒钞分析",
+    "UI_TEXT_LIST_REJECT_TITLE": "拒钞",
     "UI_TEXT_LIST_SCROLL": "滑动",
     "UI_TEXT_LIST_SERIAL_NUMBERS": "冠字号",
     "UI_TEXT_LIST_TOTAL": "合计",
