@@ -30,10 +30,17 @@
 #include "un260/lv_drivers/startup_devices.h"
 #include "un260/lv_drivers/startup_visual.h"
 #include "aic_ui/render_scratch.h"
+#include "un260/storage/ui_factory_reset_store.h"
 
 //-------------------- 主函数 --------------------
 int main(void) {
     app_startup_trace_mark("main_enter");
+    /* Resume an acknowledged local reset before input, backlight, preferences,
+     * history or any storage writer is initialized, in both startup paths. */
+    if (!ui_factory_reset_store_resume()) {
+        fprintf(stderr, "Factory reset recovery failed; configuration was not loaded\n");
+        return 1;
+    }
 #if !UI_BOOT_EARLY_ENABLED
     if (!startup_devices_prepare()) return 1;
 #endif
@@ -45,6 +52,11 @@ int main(void) {
     ui_scrollbar_init(lv_disp_get_default());
     app_startup_trace_mark("display_initialized");
     backlight_service_init();
+    if (ui_factory_reset_store_startup_pending() &&
+        (!backlight_service_restore_factory_default() || !ui_factory_reset_store_finish_startup())) {
+        fprintf(stderr, "Factory reset platform defaults not confirmed; restart required\n");
+        return 1;
+    }
     app_startup_trace_mark("backlight_initialized");
 #if !UI_BOOT_EARLY_ENABLED
     lv_port_indev_init();

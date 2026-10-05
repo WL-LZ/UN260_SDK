@@ -1,5 +1,7 @@
 #include "un260/lv_system/ui_i18n.h"
 #include "app_standby_runtime.h"
+#include "ui_factory_reset_service.h"
+#include "touch_calibration_service.h"
 #include "un260/lv_components/ui_notice.h"
 #include "app_command_runtime.h"
 #include "un260/storage/standby_store.h"
@@ -14,6 +16,8 @@ static uint32_t activity;
 static bool initialized,capture,wake,touching,armed;
 static const char *standby_operation_blocker(void)
 {
+ if(ui_factory_reset_blocks_navigation())return UI_N_("Complete the factory reset and restart before standby.");
+ if(touch_calibration_busy())return UI_N_("Finish or cancel the touchscreen calibration before standby.");
  if(app_command_runtime_count_start_busy())return UI_N_("Finish counting before standby.");
  if(machine_state_aging_running())return UI_N_("Stop the aging test before standby.");
  /* Acknowledged records remain available for inspection until a controller
@@ -44,6 +48,7 @@ bool app_standby_runtime_request(void)
 }
 bool app_standby_runtime_needs_fault_review(void)
 {
+ if(ui_factory_reset_blocks_navigation()||touch_calibration_busy())return false;
  return !ui_manager_is_transitioning()&&!app_command_runtime_count_start_busy()&&
   !machine_state_aging_running()&&!fault_popup_is_showing()&&
   !lv_upgrade_popup_is_showing()&&!lv_qr_popup_is_showing()&&

@@ -12,6 +12,9 @@
 static unsigned sends,pops;static uint8_t last_command,last_sub;static ui_page_t requested;
 static bool white_selected,overlay;static settings_detail_dialog_cb_t discard;
 static bool diagnostic_scope,diagnostic_ready=true,machine_running;
+static bool host_touch_calibrated,host_touch_enabled;
+bool touch_calibration_calibrated(void){return host_touch_calibrated;}
+bool touch_calibration_enabled(void){return host_touch_enabled;}
 void work_mode_service_set_diagnostic(bool active){diagnostic_scope=active;}
 bool work_mode_service_diagnostic_ready(void){return diagnostic_ready;}
 const char *work_mode_service_status_text(void){return diagnostic_ready?"Manual mode confirmed":"Waiting for controller mode";}
@@ -71,10 +74,10 @@ static void assert_partial_matches_full(void){
  assert(!memcmp(partial,pixels,sizeof(pixels)));free(partial);
 }
 static void click_label(lv_obj_t *o,const char *text){lv_obj_t*l=label_find(o,text);assert(l);while(l&&!lv_obj_has_flag(l,LV_OBJ_FLAG_CLICKABLE))l=lv_obj_get_parent(l);assert(l);lv_event_send(l,LV_EVENT_CLICKED,NULL);}
-static void catalog_test(void){size_t n;const settings_node_t*c=settings_catalog(&n);assert(settings_catalog_validate(c,n));unsigned leaves=0;for(size_t i=0;i<n;i++)leaves+=c[i].kind==SETTINGS_DETAIL;assert(leaves==26);
+static void catalog_test(void){size_t n;const settings_node_t*c=settings_catalog(&n);assert(settings_catalog_validate(c,n));unsigned leaves=0;for(size_t i=0;i<n;i++)leaves+=c[i].kind==SETTINGS_DETAIL;assert(leaves==27);
  settings_node_t t[]={{"root",NULL,"Root",NULL,NULL,SETTINGS_CATEGORY,0},{"group","root","Group",NULL,NULL,SETTINGS_DIRECTORY,0},{"third","group","Third",NULL,NULL,SETTINGS_DIRECTORY,0},{"leaf","third","Leaf",NULL,NULL,SETTINGS_DETAIL,1}};
  assert(settings_catalog_validate(t,4));t[2].parent="third";assert(!settings_catalog_validate(t,4));t[2].parent="missing";assert(!settings_catalog_validate(t,4));t[2].parent="group";t[3].id="root";assert(!settings_catalog_validate(t,4));t[3].id="leaf";t[3].kind=SETTINGS_DIRECTORY;assert(!settings_catalog_validate(t,4));
- puts("PASS catalog: 26 details, unique IDs, parent validation, cycle/depth guards and third-level support");}
+ puts("PASS catalog: 27 details, unique IDs, parent validation, cycle/depth guards and third-level support");}
 static void grouped_test(void){
  lv_obj_t *list=lv_settings_list(lv_scr_act(),240,84,1016,274),*group=lv_settings_group(list);
  lv_obj_t *rows[7];
@@ -159,6 +162,13 @@ static void directory_test(void){
  assert(!strcmp(lv_label_get_text(brightness_value),"75%"));ui_page_06_settings_resume();assert(!strcmp(lv_label_get_text(brightness_value),"60%"));light_level=75;
  click_label(sidebar,"Maintenance");assert(scope_is("maintenance"));assert(lv_obj_get_child_cnt(grid)==4);snapshot("maintenance");
  click_label(grid,"Calibration");assert(scope_is("calibration"));assert(lv_obj_get_child_cnt(grid)==1);snapshot("calibration");assert(sends==0);
+ lv_obj_t *touch_value=value_labels[find("touch")-catalog];assert(touch_value&&!strcmp(lv_label_get_text(touch_value),"Not calibrated"));
+ host_touch_calibrated=true;settings_poll(NULL);assert(!strcmp(lv_label_get_text(touch_value),"Disabled"));
+ host_touch_enabled=true;settings_poll(NULL);assert(!strcmp(lv_label_get_text(touch_value),"Enabled"));
+ click_label(grid,"Touch calibration");assert(requested==UI_PAGE_TOUCH_CALIBRATION&&sends==0);
+ assert(ui_page_06_settings_resume()&&scope_is("calibration"));
+ host_touch_calibrated=host_touch_enabled=false;
+ puts("PASS touch calibration settings entry: default/disabled/enabled summary, isolated navigation and exact parent return");
  click_label(grid,"White balance");assert(white_selected&&requested==UI_PAGE_CIS_CALIB&&sends==0);assert(ui_page_06_settings_resume());assert(scope_is("calibration"));assert(page_06_settings_back_sub_page());assert(scope_is("maintenance"));
  click_label(sidebar,"Counting");snapshot("counting");click_label(sidebar,"Data");snapshot("data");click_label(grid,"Upgrade");snapshot("upgrade");assert(page_06_settings_back_sub_page());
  click_label(grid,"Data collection");assert(!sidebar&&!grid&&dc_btn_all&&diagnostic_scope);

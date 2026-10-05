@@ -108,6 +108,12 @@ static bool save_model(void)
     if(success&&fsync(dir)){success=false;uncertain_save=true;}
     close(dir);if(!success)unlink(STORE ".tmp");return success;
 }
+bool workspace_store_factory_reset_preferences(void)
+{
+    if (busy) return false;
+    if (!load_model() || !workspace_restore_preferences(&transaction)) return false;
+    return save_model();
+}
 static void image_path(char *path,size_t n,unsigned image)
 {
     if(!image)snprintf(path,n,WORKSPACE_USB_DIRECTORY "/avatar.png");

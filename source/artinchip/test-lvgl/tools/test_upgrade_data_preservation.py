@@ -19,6 +19,7 @@ head = r'''
 #include "un260/app_service/app_command_runtime.h"
 #include "un260/counting/counting_session_state.h"
 #include "un260/storage/storage_worker.h"
+#include "tools/test_maintenance_state.h"
 static counting_session_state_t g_counting_session;
 static bool start_pending, clear_pending, g_deferred_frame_valid, frames, query;
 static bool initialized=true, available=true, cash_busy, workspace_busy, standby_busy;
@@ -72,6 +73,14 @@ static bool capture(counting_session_state_t *s,const void *d,uint32_t now){
 test = r'''
 int main(void){
  g_counting_session.history_record.valid=true;
+ bool *maintenance[]={&host_factory_reset_blocked,&host_touch_calibration_busy};
+ for(unsigned i=0;i<sizeof(maintenance)/sizeof(maintenance[0]);i++){
+  *maintenance[i]=true;
+  assert(app_command_runtime_prepare_ui_upgrade()==APP_UI_UPGRADE_BUSY);
+  assert(!app_command_runtime_request_count_start()&&!starts&&!refreshes);
+  assert(!captures&&g_counting_session.history_record.valid);
+  *maintenance[i]=false;
+ }
  start_pending=true;assert(app_command_runtime_prepare_ui_upgrade()==APP_UI_UPGRADE_BUSY);
  start_pending=false;multi.counting=true;assert(app_command_runtime_prepare_ui_upgrade()==APP_UI_UPGRADE_BUSY);
  multi.counting=false;g_deferred_frame_valid=true;assert(app_command_runtime_prepare_ui_upgrade()==APP_UI_UPGRADE_WAIT);

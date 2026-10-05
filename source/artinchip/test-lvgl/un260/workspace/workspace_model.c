@@ -1,5 +1,6 @@
 #include "workspace_model.h"
 #include <string.h>
+#include <stdlib.h>
 #include <strings.h>
 #include <limits.h>
 #include <stddef.h>
@@ -47,6 +48,26 @@ void workspace_defaults(workspace_model_t *m)
 {
     memset(m,0,sizeof(*m));m->version=3;m->next_id=2;m->active_id=1;m->user_count=1;
     m->users[0].id=1;strcpy(m->users[0].name,"Local operator");seed(&m->users[0]);
+}
+bool workspace_restore_preferences(workspace_model_t *m)
+{
+    if (!workspace_model_valid(m)) return false;
+    workspace_model_t *defaults = calloc(1, sizeof(*defaults));
+    if (!defaults) return false;
+    workspace_defaults(defaults);
+    const workspace_user_t *initial = &defaults->users[0];
+    for (unsigned i = 0; i < m->user_count; ++i) {
+        workspace_user_t *u = &m->users[i];
+        u->quick_enabled = initial->quick_enabled;
+        u->qr_after_count = initial->qr_after_count;
+        u->batch_count = initial->batch_count;
+        memcpy(u->batches, initial->batches, sizeof(u->batches));
+        u->profile_count = initial->profile_count;
+        memcpy(u->profiles, initial->profiles, sizeof(u->profiles));
+    }
+    m->active_id = m->users[0].id;
+    free(defaults);
+    return workspace_model_valid(m);
 }
 bool workspace_model_valid(const workspace_model_t *m)
 {

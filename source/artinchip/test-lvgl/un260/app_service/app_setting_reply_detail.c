@@ -1,6 +1,7 @@
 #include "un260/lv_system/ui_i18n.h"
 #include "app_setting_reply.h"
 #include "app_setting_notice.h"
+#include "ui_factory_reset_service.h"
 
 #include "un260/app_service/setting_service.h"
 #include "un260/lv_core/page_20_set_print.h"
@@ -237,6 +238,7 @@ bool app_setting_reply_handle_detail(uint8_t cmd,
 
             uart_debug_printf("0x44 factory setting reply: res=0x%02X\n", buf[4]);
             if (setting_service_take_factory_result(buf[4], &result)) {
+                ui_factory_reset_on_controller_result(result.success);
                 ui_page_30_set_factory_on_reply(result.success ? 0x01 : 0x02);
             } else {
                 uart_debug_printf("0x44 factory setting reply ignored: no matching request\n");

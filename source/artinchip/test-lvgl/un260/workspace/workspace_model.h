@@ -36,6 +36,8 @@ typedef struct {
     workspace_user_t users[WORKSPACE_USERS];
 } workspace_model_t;
 void workspace_defaults(workspace_model_t *model);
+/* Restore per-operator controls without reusing IDs or deleting identity data. */
+bool workspace_restore_preferences(workspace_model_t *model);
 bool workspace_name_valid(const char *name);
 bool workspace_model_valid(const workspace_model_t *model);
 const workspace_user_t *workspace_active(const workspace_model_t *model);

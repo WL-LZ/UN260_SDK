@@ -20,6 +20,8 @@
 #include "page_33_set_brightness.h"
 #include "page_34_standby.h"
 #include "page_36_display_test.h"
+#include "page_37_touch_calibration.h"
+#include "un260/app_service/ui_factory_reset_service.h"
 #include "un260/lv_drivers/uart_io.h"
 
 #define UI_PAGE_STACK_CAPACITY 10
@@ -188,6 +190,7 @@ static const char *const g_page_names[UI_PAGE_COUNT] = {
     [UI_PAGE_STANDBY_SETTING] = "STANDBY_SETTING",
     [UI_PAGE_STANDBY] = "STANDBY",
     [UI_PAGE_DISPLAY_TEST] = "DISPLAY_TEST",
+    [UI_PAGE_TOUCH_CALIBRATION] = "TOUCH_CALIBRATION",
     [UI_PAGE_LANGUAGE_SETTING] = "LANGUAGE",
     [UI_PAGE_DOUBLE_NOTE_SETTING] = "DOUBLE_NOTE",
     [UI_PAGE_FLAP_SETTING] = "FLAP",
@@ -296,6 +299,7 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
     [UI_PAGE_STANDBY_SETTING] = { ui_page_34_standby_create, ui_page_34_standby_destroy },
     [UI_PAGE_STANDBY] = { ui_page_35_standby_create, ui_page_35_standby_destroy },
     [UI_PAGE_DISPLAY_TEST] = { ui_page_36_display_test_create, ui_page_36_display_test_destroy },
+    [UI_PAGE_TOUCH_CALIBRATION] = { ui_page_37_touch_calibration_create, ui_page_37_touch_calibration_destroy },
     [UI_PAGE_LANGUAGE_SETTING] = { ui_page_21_set_language_create, ui_page_21_set_language_destroy },
     [UI_PAGE_DOUBLE_NOTE_SETTING] = { ui_page_22_set_double_note_create, ui_page_22_set_double_note_destroy },
     [UI_PAGE_FLAP_SETTING] = { ui_page_23_set_flap_create, ui_page_23_set_flap_destroy },
@@ -514,6 +518,7 @@ static void ui_manager_notify_page_switch(ui_page_t from, ui_page_t to)
 
 void ui_manager_switch(ui_page_t page)
 {
+    if (ui_factory_reset_blocks_navigation()) return;
     /* Legacy route now opens a modal without disturbing the visible page or
      * its history. The PIN is never a resumable navigation destination. */
     if(page==UI_PAGE_SET_PASSAGE){ui_page_05_set_password_open();return;}
@@ -617,6 +622,7 @@ void ui_manager_init(void) {
 
 void ui_manager_push_page(ui_page_t page)
 {
+    if (ui_factory_reset_blocks_navigation()) return;
     int i;
 
     if (g_page_switch_committing || page == g_page_manager.current ||
@@ -645,6 +651,7 @@ void ui_manager_push_page(ui_page_t page)
 
 bool ui_manager_adopt_precreated_page(ui_page_t page)
 {
+    if (ui_factory_reset_blocks_navigation()) return false;
     int i;
     ui_page_t from = g_page_manager.current;
     perf_profile_page_switch_sample_t sample = {
@@ -723,6 +730,7 @@ bool ui_manager_is_prewarming_page(ui_page_t page)
 
 bool ui_manager_pop_page(void)
 {
+    if (ui_factory_reset_blocks_navigation()) return false;
     ui_page_t previous_page;
 
     if (g_page_switch_committing) return false;
@@ -759,6 +767,7 @@ void ui_manager_clear_stack(void)
 
 bool ui_manager_suspend_to_home(void)
 {
+    if (ui_factory_reset_blocks_navigation()) return false;
     if(g_page_switch_committing||ui_manager_is_navigation_root(g_page_manager.current)||
        !ui_manager_page_is_registered(g_page_manager.current))return false;
     ui_page_manager_context_t saved=g_page_manager;
@@ -772,6 +781,7 @@ bool ui_manager_suspend_to_home(void)
 }
 bool ui_manager_restore_from_home(void)
 {
+    if (ui_factory_reset_blocks_navigation()) return false;
     if(g_page_switch_committing||g_page_manager.current!=UI_PAGE_MAIN||
        !g_home_bookmark_valid||!ui_manager_page_is_registered(g_home_bookmark.current))return false;
     ui_page_manager_context_t saved=g_page_manager;

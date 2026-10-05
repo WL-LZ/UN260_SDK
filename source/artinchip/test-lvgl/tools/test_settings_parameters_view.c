@@ -17,6 +17,7 @@
 #include "un260/lv_core/page_27_set_cfd_level.h"
 #include "un260/lv_core/page_29_set_password.h"
 #include "un260/lv_core/page_30_set_factory.h"
+#include "un260/app_service/ui_factory_reset_service.h"
 #include "un260/lv_core/page_33_set_brightness.h"
 #include "un260/lv_core/page_36_display_test.h"
 #include "un260/lv_components/lv_nav_button.h"
@@ -56,7 +57,19 @@ bool setting_service_request_reject_pocket_max(uint8_t target,uint8_t previous)
 { assert(previous==reject_capacity); return settings_detail_send_command(0x33,&target,1); }
 void setting_service_clear_double_note_level_request(void) {}
 void setting_service_clear_reject_pocket_max_request(void) {}
-bool setting_service_request_factory_reset(void) { uint8_t value=1; return settings_detail_send_command(0x44,&value,1); }
+static ui_factory_reset_phase_t factory_phase;
+ui_factory_reset_phase_t ui_factory_reset_get_phase(void) { return factory_phase; }
+bool ui_factory_reset_blocks_navigation(void) { return factory_phase != UI_FACTORY_RESET_IDLE; }
+const char *ui_factory_reset_blocker(void) { return NULL; }
+bool ui_factory_reset_request(void) {
+    uint8_t value=1;
+    if (!settings_detail_send_command(0x44,&value,1)) return false;
+    factory_phase=UI_FACTORY_RESET_WAIT_CONTROLLER; return true;
+}
+bool ui_factory_reset_retry_local(void) {
+    if (factory_phase != UI_FACTORY_RESET_LOCAL_FAILED) return false;
+    factory_phase=UI_FACTORY_RESET_SAVING; return true;
+}
 void currency_state_get_active_code(char out[4]) { memcpy(out,"CNY",4); }
 bool ui_manager_pop_page(void) { pops++; return true; }
 void ui_manager_push_page(ui_page_t page) { pushed_page=page; }
@@ -338,10 +351,24 @@ static void factory_test(void)
     unsigned notices_before=action_notices,pops_before=pops;
     assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);
     assert(action_notices==notices_before+1&&pops==pops_before);
-    assert(gesture_policy(GESTURE_ACTION_HOME));ui_page_30_set_factory_on_reply(0);settings_detail_dialog_hide();
-    click(ui_text_get(UI_TEXT_SETTINGS_FACTORY_START));accept();ui_page_30_set_factory_on_reply(1);accept();
+    assert(gesture_policy(GESTURE_ACTION_HOME));
+    factory_phase=UI_FACTORY_RESET_IDLE;ui_page_30_set_factory_on_reply(0);settings_detail_dialog_hide();
+    click(ui_text_get(UI_TEXT_SETTINGS_FACTORY_START));accept();
+    factory_phase=UI_FACTORY_RESET_IDLE;ui_page_30_set_factory_on_timeout();
+    assert(!overlay); /* Timeout leaves UI defaults and restart untouched. */
+    click(ui_text_get(UI_TEXT_SETTINGS_FACTORY_START));accept();
+    unsigned factory_sends=sends;
+    factory_phase=UI_FACTORY_RESET_SAVING;ui_page_30_set_factory_on_reply(1);
+    assert(!overlay&&last_command==0x44&&reboots==0);
+    ui_page_30_set_factory_destroy();ui_page_30_set_factory_create(lv_scr_act());snapshot("factory-saving");
+    assert(!overlay&&gesture_policy(GESTURE_ACTION_HOME));
+    factory_phase=UI_FACTORY_RESET_LOCAL_FAILED;ui_page_30_set_factory_on_local_result(false);
+    assert(overlay);snapshot("factory-local-failed");accept();assert(factory_phase==UI_FACTORY_RESET_SAVING&&sends==factory_sends);
+    factory_phase=UI_FACTORY_RESET_RESTART_REQUIRED;ui_page_30_set_factory_on_local_result(true);
+    ui_page_30_set_factory_destroy();ui_page_30_set_factory_create(lv_scr_act());
+    assert(overlay);snapshot("factory-restart");accept();
     assert(last_command==0x3B&&reboots==0);ui_page_30_set_factory_destroy();advance(1001);assert(reboots==1);
-    puts("PASS reset explicit confirmation, pending navigation lock, failure retry, success-only restart");
+    puts("PASS reset explicit confirmation, controller failure/timeout, local persistence failure/retry without resend, saving/restart view reconstruction and success-only restart");
 }
 
 static void color_calibration_test(void)

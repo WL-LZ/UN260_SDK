@@ -95,6 +95,25 @@ bool backlight_service_save(void)
     close(fd);
     return ok;
 }
+bool backlight_service_restore_factory_default(void)
+{
+    if (!g_device[0] || g_max < 2) return false;
+    char path[360];
+    snprintf(path, sizeof(path), "%s/device/of_node/default-brightness-level", g_device);
+    unsigned char bytes[5];
+    FILE *fp = fopen(path, "rb");
+    if (!fp) return false;
+    size_t count = fread(bytes, 1, sizeof(bytes), fp);
+    bool ok = count == 4 && !ferror(fp);
+    if (fclose(fp)) ok = false;
+    if (!ok) return false;
+    /* pwm-backlight exposes brightness as an index into brightness-levels,
+     * and assigns this big-endian DT value as its initial brightness. */
+    unsigned level = ((unsigned)bytes[0] << 24) | ((unsigned)bytes[1] << 16) |
+                     ((unsigned)bytes[2] << 8) | bytes[3];
+    if (level < 1 || level > (unsigned)g_max) return false;
+    return backlight_service_set((int)level) && backlight_service_save();
+}
 void backlight_service_init(void)
 {
     if(!backlight_service_probe()) {

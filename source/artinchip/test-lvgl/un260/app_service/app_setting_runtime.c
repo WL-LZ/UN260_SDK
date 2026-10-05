@@ -1,6 +1,7 @@
 #include "un260/lv_system/ui_i18n.h"
 #include "app_setting_runtime.h"
 #include "app_setting_notice.h"
+#include "ui_factory_reset_service.h"
 #include "un260/lv_components/ui_notice.h"
 
 #include <stddef.h>
@@ -113,6 +114,7 @@ bool app_setting_runtime_handle_reply(uint8_t cmd, uint8_t *buf, uint8_t len)
 
 void app_setting_runtime_poll(uint32_t now_ms)
 {
+    ui_factory_reset_poll();
     uint32_t basic_timeouts;
     setting_batch_result_t batch_result;
     setting_value_result_t value_result;
@@ -212,6 +214,7 @@ void app_setting_runtime_poll(uint32_t now_ms)
 
     if (setting_service_take_factory_timeout(&action_result)) {
         uart_debug_printf("factory reset request timeout\n");
+        ui_factory_reset_on_controller_timeout();
         ui_page_30_set_factory_on_timeout();
     }
 

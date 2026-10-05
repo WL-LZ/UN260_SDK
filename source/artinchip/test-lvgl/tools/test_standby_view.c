@@ -1,5 +1,6 @@
 #include "test_notice_sink.h"
 #include <assert.h>
+#include "tools/test_maintenance_state.h"
 #include "aic_ui/compiled_asset.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -95,8 +96,8 @@ static void standby_request_test(void){
  app_standby_runtime_poll(2060001);assert(current_page==UI_PAGE_STANDBY);
  assert(app_standby_runtime_touch(true));app_standby_runtime_poll(2060002);
  assert(current_page==UI_PAGE_PURE);assert(app_standby_runtime_touch(false));
- bool *guards[]={&counting_block,&aging_block,&fault_block,&upgrade_block,&qr_block,&store_busy,&transition_block};
- const char *terms[]={"counting","aging","guide","update","QR","resources","page"};
+ bool *guards[]={&counting_block,&aging_block,&fault_block,&upgrade_block,&qr_block,&store_busy,&transition_block,&host_factory_reset_blocked,&host_touch_calibration_busy};
+ const char *terms[]={"counting","aging","guide","update","QR","resources","page","factory reset","calibration"};
  for(unsigned i=0;i<sizeof(guards)/sizeof(guards[0]);i++){
   *guards[i]=true;assert(strstr(app_standby_runtime_blocker(),terms[i]));
   assert(!app_standby_runtime_request()&&current_page==UI_PAGE_PURE);

@@ -6,6 +6,7 @@
 #include "lv_port_indev.h"
 
 #include "lvgl/lvgl.h"
+#include "un260/app_service/touch_calibration_service.h"
 #if USE_EVDEV != 0 || USE_BSD_EVDEV
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,6 +56,54 @@ static uint8_t g_touch_count;
 static touch_frame_t g_mt_frame;
 static lv_indev_t *g_pointer_indev;
 static bool g_raw_down, g_contact_captured;
+
+static void evdev_map_point(int raw_x, int raw_y, int width, int height, int *x, int *y)
+{
+    if(touch_calibration_transform(raw_x, raw_y, x, y)) return;
+#if EVDEV_SWAP_AXES
+    *x = raw_y; *y = raw_x;
+#else
+    *x = raw_x; *y = raw_y;
+#endif
+#if EVDEV_CALIBRATE
+    *x = map(*x, EVDEV_HOR_MIN, EVDEV_HOR_MAX, 0, width);
+    *y = map(*y, EVDEV_VER_MIN, EVDEV_VER_MAX, 0, height);
+#else
+    LV_UNUSED(width); LV_UNUSED(height);
+#endif
+}
+
+static void evdev_calibration_init(void)
+{
+    touch_calibration_source_t source = {0};
+#if USE_TSLIB == 0
+    struct input_absinfo x, y;
+    struct input_id id = {0};
+    char name[80] = {0};
+    bool has_x = ioctl(evdev_fd, EVIOCGABS(ABS_MT_POSITION_X), &x) == 0 && x.maximum > x.minimum;
+    if(!has_x) has_x = ioctl(evdev_fd, EVIOCGABS(ABS_X), &x) == 0 && x.maximum > x.minimum;
+    bool has_y = ioctl(evdev_fd, EVIOCGABS(ABS_MT_POSITION_Y), &y) == 0 && y.maximum > y.minimum;
+    if(!has_y) has_y = ioctl(evdev_fd, EVIOCGABS(ABS_Y), &y) == 0 && y.maximum > y.minimum;
+    if(has_x && has_y && g_pointer_indev && g_pointer_indev->driver->disp &&
+       ioctl(evdev_fd, EVIOCGID, &id) == 0 && ioctl(evdev_fd, EVIOCGNAME(sizeof(name)), name) >= 0) {
+        source.width = g_pointer_indev->driver->disp->driver->hor_res;
+        source.height = g_pointer_indev->driver->disp->driver->ver_res;
+        source.x_min = x.minimum; source.x_max = x.maximum;
+        source.y_min = y.minimum; source.y_max = y.maximum;
+        uint32_t signature = 2166136261U;
+        const unsigned char *bytes = (const unsigned char *)&id;
+        for(size_t i = 0; i < sizeof(id); ++i) signature = (signature ^ bytes[i]) * 16777619U;
+        for(size_t i = 0; i < sizeof(name) && name[i]; ++i)
+            signature = (signature ^ (unsigned char)name[i]) * 16777619U;
+        signature = (signature ^ EVDEV_SWAP_AXES) * 16777619U;
+        signature = (signature ^ EVDEV_CALIBRATE) * 16777619U;
+        source.device_signature = signature ? signature : 1;
+    }
+#endif
+    /* RTP-tslib already supplies its own linear filter. Keep that fallback
+     * usable without applying or sampling a second calibration on top. */
+    touch_calibration_input_init(&source);
+}
 
 static void evdev_seed_slot_positions(void)
 {
@@ -233,15 +282,9 @@ uint8_t lv_port_indev_touch_points(lv_point_t *points, int32_t *ids, uint8_t cap
     int height = g_pointer_indev->driver->disp->driver->ver_res;
     uint8_t count = g_mt_frame.count < capacity ? g_mt_frame.count : capacity;
     for(uint8_t i = 0; i < count; ++i) {
-#if EVDEV_SWAP_AXES
-        int x = g_mt_frame.contacts[i].y, y = g_mt_frame.contacts[i].x;
-#else
-        int x = g_mt_frame.contacts[i].x, y = g_mt_frame.contacts[i].y;
-#endif
-#if EVDEV_CALIBRATE
-        x = map(x, EVDEV_HOR_MIN, EVDEV_HOR_MAX, 0, width);
-        y = map(y, EVDEV_VER_MIN, EVDEV_VER_MAX, 0, height);
-#endif
+        int x, y;
+        evdev_map_point(g_mt_frame.contacts[i].x, g_mt_frame.contacts[i].y,
+                        width, height, &x, &y);
         points[i].x = x < 0 ? 0 : x >= width ? width - 1 : x;
         points[i].y = y < 0 ? 0 : y >= height ? height - 1 : y;
         ids[i] = g_mt_frame.contacts[i].id;
@@ -334,6 +377,9 @@ bool evdev_set_file(const char* dev_name)
  */
 void evdev_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
 {
+    /* This read runs even without a new physical report. A hidden calibration
+     * page cannot orphan an accepted writer or postpone confirmed state. */
+    touch_calibration_poll(lv_tick_get());
 #if USE_TSLIB == 0
     struct input_event in;
     bool frame_ready = false;
@@ -483,13 +529,15 @@ void evdev_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
 #endif
     /*Store the collected data*/
 
-#if EVDEV_CALIBRATE
-    data->point.x = map(evdev_root_x, EVDEV_HOR_MIN, EVDEV_HOR_MAX, 0, drv->disp->driver->hor_res);
-    data->point.y = map(evdev_root_y, EVDEV_VER_MIN, EVDEV_VER_MAX, 0, drv->disp->driver->ver_res);
+#if EVDEV_SWAP_AXES
+    int raw_x = evdev_root_y, raw_y = evdev_root_x;
 #else
-    data->point.x = evdev_root_x;
-    data->point.y = evdev_root_y;
+    int raw_x = evdev_root_x, raw_y = evdev_root_y;
 #endif
+    int mapped_x, mapped_y;
+    evdev_map_point(raw_x, raw_y, drv->disp->driver->hor_res,
+                    drv->disp->driver->ver_res, &mapped_x, &mapped_y);
+    data->point.x = mapped_x; data->point.y = mapped_y;
 
     if(evdev_press_cancelled) {
         data->state = LV_INDEV_STATE_REL;
@@ -520,7 +568,11 @@ void evdev_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
         lv_event_code_t event = down ? (g_raw_down ? LV_EVENT_PRESSING : LV_EVENT_PRESSED)
                                     : LV_EVENT_RELEASED;
         bool capture = false;
-        if(g_pointer_observer)
+        /* The service samples the pre-clipped hardware coordinates. Every
+         * contact/centroid uses the same confirmed transform above. */
+        capture = touch_calibration_input_feed(raw_x, raw_y, mapped_y, g_touch_count,
+                                               g_mt_frame.recovery, lv_tick_get());
+        if(!capture && g_pointer_observer)
             capture = g_pointer_observer(g_pointer_indev, event, &data->point,
                                          g_touch_count, g_pointer_observer_data);
         if(capture && !g_contact_captured) {
@@ -561,6 +613,7 @@ void lv_port_indev_init(void)
 
     /* Register the driver in LVGL and save the created input device object */
     g_pointer_indev = lv_indev_drv_register(&indev_drv);
+    evdev_calibration_init();
 }
 
 #endif

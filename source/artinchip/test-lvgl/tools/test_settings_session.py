@@ -21,7 +21,9 @@ def function(source, name):
     return source[match.start():end]
 
 registry = manager[manager.index("static const ui_page_registration_t g_page_registry"):]
-entry = registry[registry.index("[UI_PAGE_SETTING]"):registry.index("[UI_PAGE_SET_PASSAGE]")]
+entry_match = re.search(r'\[UI_PAGE_SETTING\]\s*=\s*\{(.*?)^\s*\}', registry, re.M | re.S)
+assert entry_match, "Settings registration missing"
+entry = entry_match.group(1)
 assert ".reset_navigation = ui_page_06_settings_reset_navigation" in entry
 for name in ("ui_manager_switch", "ui_manager_adopt_precreated_page"):
     assert "ui_manager_history_on_commit(page)" in function(manager, name)

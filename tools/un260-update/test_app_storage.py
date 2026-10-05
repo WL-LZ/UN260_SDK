@@ -46,7 +46,8 @@ class StorageTests(unittest.TestCase):
         self.user.parent.mkdir(parents=True); self.user.write_bytes(b'USER-DATA')
         self.business_files = {}
         for name in ('count_history/record.bin', 'cashbook/book.json', 'workspace/draft.json',
-                     'standby/photo.bin', 'photos/local.png', 'configs/settings.json'):
+                     'standby/photo.bin', 'photos/local.png', 'configs/settings.json',
+                     'touch_calibration.cfg'):
             item = self.user.parent / name
             item.parent.mkdir(parents=True, exist_ok=True)
             item.write_bytes(('PRESERVE ' + name).encode())

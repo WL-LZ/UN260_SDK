@@ -22,6 +22,8 @@
 #include "un260/lv_components/lv_upgrade_popup.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/ui_upgrade_service.h"
+#include "ui_factory_reset_service.h"
+#include "touch_calibration_service.h"
 #include "un260/lv_system/counting_ui_runtime.h"
 #include "un260/lv_system/ui_screenshot.h"
 #include "un260/lv_system/ui_screen_recording.h"
@@ -139,6 +141,7 @@ static void app_ui_runtime_poll_upgrade(uint32_t now_ms)
 {
     ui_upgrade_detect_info_t detect_info;
     ui_page_t current_page = ui_manager_get_current_page();
+    if (ui_factory_reset_blocks_navigation() || touch_calibration_busy()) return;
     /* Do not offer an upgrade while a photo/config transaction owns storage. */
     if (standby_store_busy() || workspace_store_busy() || cashbook_store_busy()) return;
 

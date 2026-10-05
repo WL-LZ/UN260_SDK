@@ -126,6 +126,7 @@ bool workspace_service_poll(uint32_t now)
     }return changed;
 }
 bool workspace_service_applying(void){return apply.active;}
+bool workspace_service_settings_busy(void){return apply.active || batch_save.pending;}
 workspace_apply_result_t workspace_service_apply_result(void){return apply_result;}
 void workspace_service_cancel_apply(void)
 {

@@ -12,6 +12,7 @@ code=r'''
 #include "un260/app_service/upgrade_session.h"
 #include "un260/lv_components/smart_island.h"
 #include "un260/counting/counting_action_service.h"
+#include "tools/test_maintenance_state.h"
 static uint64_t now;static unsigned tx,refresh,resolved,repeated;static uint8_t cmds[64];
 static bool history_ready=true,busy,modal;static uint8_t fail_cmd;
 static upgrade_session_owner_t session_owner=UPGRADE_SESSION_NONE;
@@ -34,7 +35,7 @@ int protocol_send(uint8_t cmd,const uint8_t *data,uint16_t len){assert(len==1&&*
 static void reset(void){
  counting_action_cancel_all();app_fault_recovery_clear();machine_fault_clear();
  now=0;tx=refresh=resolved=repeated=0;history_ready=true;busy=modal=false;fail_cmd=0;
- session_owner=UPGRADE_SESSION_NONE;
+ session_owner=UPGRADE_SESSION_NONE;host_factory_reset_blocked=false;host_touch_calibration_busy=false;
 }
 static void report(machine_fault_key_t key){
  assert(machine_fault_report(key));app_fault_recovery_report(key);
@@ -127,6 +128,18 @@ static void upgrade_start_gate(void){
   assert(tx==2&&cmds[0]==0x3D&&cmds[1]==0x0A&&refresh==1);
  }
 }
+static void maintenance_start_gate(void){
+ bool *owners[]={&host_factory_reset_blocked,&host_touch_calibration_busy};
+ for(unsigned i=0;i<sizeof(owners)/sizeof(owners[0]);++i){
+  reset();machine_fault_key_t jam={MACHINE_FAULT_RUNTIME,0,2};report(jam);
+  *owners[i]=true;
+  assert(!app_command_runtime_request_count_start()&&!tx&&!refresh&&!counting_action_start_pending());
+  assert(machine_fault_find(jam,NULL));
+  *owners[i]=false;
+  assert(app_command_runtime_request_count_start());
+  assert(tx==2&&cmds[0]==0x3D&&cmds[1]==0x0A&&refresh==1);
+ }
+}
 int main(void){
  app_fault_recovery_init();
  /* START faults, including open channels and full pockets, are outside 3D's whitelist. */
@@ -135,7 +148,7 @@ int main(void){
  for(uint8_t code=6;code<=7;++code)direct_start((machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,code});
  for(uint8_t code=1;code<=5;++code)clear_before_start((machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,code});
  clear_before_start((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4});
- start_gates();clear_failures();send_and_clear_guards();upgrade_start_gate();
+ start_gates();clear_failures();send_and_clear_guards();upgrade_start_gate();maintenance_start_gate();
  puts("PASS real START wire: door/full/no-note direct 0A; runtime jam/preset 3D before 0A; controller/image/UI upgrade blocks both commands, release resumes; send failure, busy/history/modal/clear guards; 1s Clear/5s Start timeouts; clear reject/timeout and pending-key isolation");
 }
 '''

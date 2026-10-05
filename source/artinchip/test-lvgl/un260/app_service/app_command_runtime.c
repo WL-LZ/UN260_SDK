@@ -1,5 +1,7 @@
 #include "un260/lv_system/ui_i18n.h"
 #include "app_command_runtime.h"
+#include "ui_factory_reset_service.h"
+#include "touch_calibration_service.h"
 #include "app_fault_recovery.h"
 #include "motor_test_service.h"
 #include "work_mode_service.h"
@@ -97,6 +99,7 @@ bool app_command_runtime_request_diagnostic_run(void)
 }
 bool app_command_runtime_request_count_start(void)
 {
+    if (ui_factory_reset_blocks_navigation() || touch_calibration_busy()) return false;
     if (upgrade_session_owner() != UPGRADE_SESSION_NONE ||
         app_command_runtime_count_start_busy() || counting_action_clear_pending() ||
         !counting_history_can_start()) return false;
@@ -122,6 +125,7 @@ bool app_command_runtime_count_start_busy(void)
 
 app_ui_upgrade_readiness_t app_command_runtime_prepare_ui_upgrade(void)
 {
+    if (ui_factory_reset_blocks_navigation() || touch_calibration_busy()) return APP_UI_UPGRADE_BUSY;
     if (app_command_runtime_count_start_busy() || counting_action_clear_pending() ||
         counting_multi_current()->counting)
         return APP_UI_UPGRADE_BUSY;

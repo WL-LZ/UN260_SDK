@@ -34,6 +34,9 @@ class VolumeUpdaterTests(unittest.TestCase):
         self.launcher = self.root / APP; self.launcher.write_bytes(b'FIXED LAUNCHER'); self.launcher.chmod(0o755)
         self.business = self.root / 'etc/ui_state/count_history/record'
         self.business.parent.mkdir(parents=True); self.business.write_bytes(b'BUSINESS')
+        self.calibration = self.root / 'etc/ui_state/touch_calibration.cfg'
+        self.calibration_bytes = b'UN260-CALIBRATION-V1\0source+matrix+enabled+crc'
+        self.calibration.write_bytes(self.calibration_bytes)
         self.base = self.p / 'base.upk'; archive(self.base, self.files, metadata_extra=CAPABILITY)
         self.files[APP] = (b'NEW APP' + b'x' * (2 * 1024 * 1024), 0o755)
         self.files['usr/local/lib/liblvgl.so'] = (b'new library', 0o755)
@@ -45,6 +48,7 @@ class VolumeUpdaterTests(unittest.TestCase):
     def tearDown(self):
         self.assertEqual(self.launcher.read_bytes(), b'FIXED LAUNCHER')
         self.assertEqual(self.business.read_bytes(), b'BUSINESS')
+        self.assertEqual(self.calibration.read_bytes(), self.calibration_bytes)
         self.temp.cleanup()
 
     def run_update(self, package=None, extra='', action='install_bundle', ok=True, source=None, managed=1):

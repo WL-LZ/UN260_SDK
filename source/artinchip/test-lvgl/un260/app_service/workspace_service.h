@@ -8,6 +8,7 @@ const char *workspace_service_switch_blocker(void);
 bool workspace_service_switch(uint32_t id);
 bool workspace_service_apply(const workspace_profile_t *profile, uint32_t now_ms);
 bool workspace_service_applying(void);
+bool workspace_service_settings_busy(void);
 typedef enum {
     WORKSPACE_APPLY_IDLE, WORKSPACE_APPLY_PENDING, WORKSPACE_APPLY_SUCCEEDED,
     WORKSPACE_APPLY_FAILED, WORKSPACE_APPLY_UNCONFIRMED, WORKSPACE_APPLY_CANCELLED

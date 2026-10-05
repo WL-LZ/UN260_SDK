@@ -324,6 +324,12 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_core/page_19_history_search.c
     un260/lv_core/page_33_set_brightness.c
     un260/lv_core/page_36_display_test.c
+    un260/input/touch_calibration_math.c
+    un260/storage/touch_calibration_store.c
+    un260/app_service/touch_calibration_service.c
+    un260/storage/ui_factory_reset_store.c
+    un260/app_service/ui_factory_reset_service.c
+    un260/lv_core/page_37_touch_calibration.c
     un260/lv_core/page_20_set_print.c
     un260/lv_core/page_21_set_language.c
     un260/lv_core/page_22_set_double_note.c

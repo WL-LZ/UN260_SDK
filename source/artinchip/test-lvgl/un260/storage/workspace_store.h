@@ -5,6 +5,9 @@
 /* One independent bounded worker: image decoding cannot block history FIFO.
  * All API calls except the worker itself run on the application/UI thread. */
 void workspace_store_init(void);
+/* Exclusive factory-reset worker / startup only. Reuses the sealed codec and
+ * atomic writer; the live cached model stays unchanged until the restart. */
+bool workspace_store_factory_reset_preferences(void);
 bool workspace_store_poll(void);
 bool workspace_store_ready(void);
 bool workspace_store_busy(void);

@@ -20,6 +20,11 @@ def function(name):
         end+=1
     return source[start:end]
 
+for owner in ('ui_manager_switch','ui_manager_adopt_precreated_page'):
+    body=function(owner);opening=body.index('{')
+    first=body[opening+1:].lstrip().splitlines()[0]
+    assert first.startswith('if (ui_factory_reset_blocks_navigation())'), owner
+
 # Both normal transitions and precreated-page adoption must commit root history.
 assert source.count('ui_manager_history_on_commit(page);\n    g_page_manager.current = page;')==2
 events=(root/'un260/lv_core/lv_page_event.c').read_text()
@@ -30,6 +35,7 @@ code=r'''
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include "tools/test_maintenance_state.h"
 #define UI_PAGE_STACK_CAPACITY 10
 #define UI_PAGE_INVALID ((ui_page_t)-1)
 typedef struct { ui_page_t current,stack[10];int stack_top; } ui_page_manager_context_t;
@@ -55,13 +61,32 @@ code+=function('ui_manager_is_navigation_root')
 code+=function('ui_manager_history_on_commit')
 code+=function('ui_manager_navigation_on_leave')
 code+=r'''
-void ui_manager_switch(ui_page_t p){if(g_page_switch_committing || !ui_manager_page_is_registered(p))return;
+void ui_manager_switch(ui_page_t p){if(ui_factory_reset_blocks_navigation() || g_page_switch_committing || !ui_manager_page_is_registered(p))return;
 ui_manager_navigation_on_leave(g_page_manager.current,p);ui_manager_history_on_commit(p);g_page_manager.current=p;}
 '''
 for name in ('ui_manager_push_page','ui_manager_pop_page','ui_manager_clear_stack','ui_manager_suspend_to_home','ui_manager_restore_from_home'):
     code+=function(name)
 code+=r'''
 int main(void){
+    /* While reset is pending, successful, or failed, its owner exposes the
+     * same navigation lock. All real history helpers leave both chains intact. */
+    ui_manager_push_page(UI_PAGE_SETTING);ui_manager_push_page(UI_PAGE_FACTORY_SETTING);
+    g_home_bookmark=g_page_manager;g_home_bookmark_valid=true;
+    ui_page_manager_context_t frozen=g_page_manager,bookmark=g_home_bookmark;
+    unsigned resets=session_resets;
+    host_factory_reset_blocked=true;
+    for(unsigned page=0;page<UI_PAGE_COUNT;page++){
+        ui_manager_push_page((ui_page_t)page);ui_manager_switch((ui_page_t)page);
+        assert(!memcmp(&g_page_manager,&frozen,sizeof(frozen)));
+    }
+    assert(!ui_manager_pop_page());assert(!ui_manager_suspend_to_home());
+    assert(!ui_manager_restore_from_home());
+    assert(!memcmp(&g_page_manager,&frozen,sizeof(frozen)));
+    assert(!memcmp(&g_home_bookmark,&bookmark,sizeof(bookmark))&&g_home_bookmark_valid);
+    assert(session_resets==resets&&!g_temporary_home&&!g_restoring_home);
+    host_factory_reset_blocked=false;ui_manager_switch(UI_PAGE_MAIN);
+    assert(g_page_manager.stack_top==-1&&!g_home_bookmark_valid);
+    puts("PASS factory-reset navigation lock: every push/direct route, Back/Home/Return preserve current page, stacks and bookmark; unlocked routes resume");
     /* Reproduce the old List -> Main -> Settings -> Print -> back bug. */
     ui_manager_push_page(UI_PAGE_LIST);
     assert(g_page_manager.stack_top==0);

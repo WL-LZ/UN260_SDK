@@ -3,6 +3,7 @@
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "page_06_settings.h"
 #include "settings_catalog.h"
+#include "un260/app_service/touch_calibration_service.h"
 #include "settings_detail_ui.h"
 #include "lv_page_manager.h"
 #include "lv_page_event.h"
@@ -131,6 +132,7 @@ static void value_for(const settings_node_t *n,char *out,size_t cap){
   else snprintf(out,cap,"%s",ui_tr("Unavailable"));
  }
  else if(!strcmp(n->id,"standby")){unsigned m=standby_config()->minutes;snprintf(out,cap,m?ui_tr("%u min"):ui_tr("Never"),m);}
+ else if(!strcmp(n->id,"touch"))snprintf(out,cap,"%s",ui_tr(touch_calibration_calibrated()?touch_calibration_enabled()?"Enabled":"Disabled":"Not calibrated"));
  else if(!strcmp(n->id,"reject"))snprintf(out,cap,ui_tr("%u PCS"),machine_state_reject_pocket_max());
  else if(!strcmp(n->id,"double"))snprintf(out,cap,ui_tr("Level %u"),machine_state_double_note_level());
 }
