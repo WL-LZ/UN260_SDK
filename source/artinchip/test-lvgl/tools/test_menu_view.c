@@ -225,6 +225,15 @@ static void click(const char *s)
     lv_area_t a;lv_obj_get_coords(o,&a);fprintf(stderr,"click %s @ %d,%d-%d,%d\n",s,a.x1,a.y1,a.x2,a.y2);assert(a.x1>=0&&a.x2<1280&&a.y1>=0&&a.y2<400);
     point=(lv_point_t){(a.x1+a.x2)/2,(a.y1+a.y2)/2};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);
 }
+static lv_obj_t *find_setting_row(lv_obj_t *p,const char *title)
+{
+    if(lv_obj_check_type(p,&lv_label_class)&&!strcmp(lv_label_get_text(p),title)&&
+       !lv_obj_has_flag(lv_obj_get_parent(p),LV_OBJ_FLAG_CLICKABLE))return lv_obj_get_parent(p);
+    for(unsigned i=0;i<lv_obj_get_child_cnt(p);i++){
+        lv_obj_t *row=find_setting_row(lv_obj_get_child(p,i),title);if(row)return row;
+    }
+    return NULL;
+}
 static void check_header(void)
 {
     lv_obj_t *tray=lv_obj_get_parent(menu.nav[0]);lv_area_t t;
@@ -374,7 +383,7 @@ int main(void)
     assert(model.user_count==2&&menu.selected_user==0);
     assert(lv_obj_has_state(find(menu.body,"Delete"),LV_STATE_DISABLED));
     click("Interaction");raster("menu-interaction");
-    lv_obj_t *interaction_rows=find(menu.body,"Top popup"),*top_toggle=NULL;assert(interaction_rows);
+    lv_obj_t *interaction_rows=find_setting_row(menu.body,"Top popup"),*top_toggle=NULL;assert(interaction_rows);
     for(unsigned i=0;i<lv_obj_get_child_cnt(interaction_rows);i++){
         lv_obj_t *o=lv_obj_get_child(interaction_rows,i);
         if(lv_obj_get_x(o)==412 && lv_obj_get_y(o)==177 && lv_obj_has_flag(o,LV_OBJ_FLAG_CLICKABLE))top_toggle=o;
@@ -382,14 +391,14 @@ int main(void)
     assert(top_toggle);top_popup_save_fails=true;
     lv_event_send(top_toggle,LV_EVENT_CLICKED,NULL);tick(120);
     assert(ui_notice_get_enabled()&&popup_auto);
-    top_popup_save_fails=false;interaction_rows=find(menu.body,"Top popup");top_toggle=NULL;
+    top_popup_save_fails=false;interaction_rows=find_setting_row(menu.body,"Top popup");top_toggle=NULL;
     for(unsigned i=0;i<lv_obj_get_child_cnt(interaction_rows);i++){
         lv_obj_t *o=lv_obj_get_child(interaction_rows,i);
         if(lv_obj_get_x(o)==412 && lv_obj_get_y(o)==177 && lv_obj_has_flag(o,LV_OBJ_FLAG_CLICKABLE))top_toggle=o;
     }
     assert(top_toggle);lv_event_send(top_toggle,LV_EVENT_CLICKED,NULL);tick(120);
     assert(!ui_notice_get_enabled()&&popup_auto);
-    click("01  Layout edit");click("08  Standby");assert(quick_order[0]==QUICK_STANDBY&&quick_order[7]==QUICK_LAYOUT);
+    click("Layout edit");raster("menu-shortcut-selected");click("Standby");assert(quick_order[0]==QUICK_STANDBY&&quick_order[7]==QUICK_LAYOUT);
     click("Quick");assert(menu.quick);assert(!test_notice_visible);raster("menu-quick");
     assert(quick_pointer_policy&&quick_navigation_blocked);
     lv_obj_t *quick_sheet=lv_obj_get_child(menu.quick,0);

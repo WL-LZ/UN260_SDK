@@ -245,14 +245,21 @@ static void interaction_view(lv_obj_t *b)
     small(right,16,32,468,ui_tr("Tap two shortcuts to swap positions."));
     uint8_t order[QUICK_CONTROL_COUNT];ui_state_quick_order_get(order);
     for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
-        char caption[68];snprintf(caption,sizeof(caption),"%02u  %s",i+1,lv_quick_controls_title(order[i]));
-        lv_obj_t *item=button(right,16+(i%2)*240,57+(i/2)*36,232,32,caption,A_QUICK_ORDER_BASE+i,false);
-        lv_obj_set_style_radius(item,10,0);
-        if(menu.quick_pick==i){
-            lv_obj_set_style_bg_color(item,lv_color_hex(0xE1EEFC),0);
-            lv_obj_set_style_border_color(item,lv_color_hex(BLUE),0);
-            lv_obj_set_style_border_width(item,2,0);
-        }
+        bool selected=menu.quick_pick==i;
+        lv_obj_t *item=button(right,16+(i%2)*240,57+(i/2)*36,232,32,
+            lv_quick_controls_title(order[i]),A_QUICK_ORDER_BASE+i,false);
+        lv_obj_set_style_radius(item,9,0);
+        border(item,selected?BLUE:0xDFE5EB);
+        palette(item,selected?0xE1EEFC:0xFFFFFF);
+        lv_obj_t *title=lv_obj_get_child(item,0);
+        lv_obj_set_width(title,178);lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
+        lv_obj_set_style_text_align(title,LV_TEXT_ALIGN_LEFT,0);
+        lv_obj_align(title,LV_ALIGN_LEFT_MID,42,0);
+        char number[4];snprintf(number,sizeof(number),"%02u",i+1);
+        lv_obj_t *badge=box(item,7,4,26,22,selected?0xC9DFF8:0xEFF3F7,6);
+        lv_obj_t *index=label(badge,5,0,18,number,&lv_font_instrument_sans_medium_12,selected?BLUE:MUTED);
+        lv_obj_set_style_text_align(index,LV_TEXT_ALIGN_LEFT,0);
+        lv_obj_align(index,LV_ALIGN_LEFT_MID,5,0);
     }
 }
 static void display_view(lv_obj_t *b)
@@ -263,14 +270,18 @@ static void display_view(lv_obj_t *b)
     label(left,52,18,400,ui_tr("Sound"),&lv_font_instrument_sans_semibold_21,INK);
     box(left,20,64,464,1,LINE,0);
     lv_obj_t *sound=box(left,20,79,464,55,0xFFFFFF,12);
-    toggle(sound,2,464,ui_tr("Machine sound"),NULL,machine_state_buzzer_enabled(),440+!machine_state_buzzer_enabled());
+    lv_obj_t *sound_row=box(sound,14,7,436,40,0xFFFFFF,0);
+    toggle(sound_row,0,436,ui_tr("Machine sound"),NULL,machine_state_buzzer_enabled(),440+!machine_state_buzzer_enabled());
     box(left,20,151,464,1,LINE,0);
     text(left,20,177,265,ui_tr("Standby delay"));
     char duration[32];unsigned minutes=standby_config()->minutes;
     snprintf(duration,sizeof(duration),minutes?ui_tr("%u min"):ui_tr("Never"),minutes);
     field_button(left,325,165,159,duration,A_TIMEOUT);
     lv_obj_t *right=box(b,524,48,504,248,PANEL,20);
-    icon(right,MICON("screen",25),20,18,PURPLE);
+    /* Full-screen display outline, without a desktop stand. */
+    lv_obj_t *screen=box(right,20,22,25,18,PURPLE,4);
+    lv_obj_t *glass=box(screen,2,2,21,14,PANEL,2);
+    box(glass,2,10,17,2,0xD9CCF1,1);
     label(right,52,18,390,ui_tr("Display"),&lv_font_instrument_sans_semibold_21,INK);
     box(right,20,64,464,1,LINE,0);
     text(right,20,90,285,ui_tr("Interface language"));
