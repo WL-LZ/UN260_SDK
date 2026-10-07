@@ -114,6 +114,7 @@ static void help_view(lv_obj_t *b)
         const char *filter[]={ui_tr("Current"),ui_tr("All codes")};segments(b,818,0,210,38,filter,2,menu.reject_all,810);
         context(b,ui_tr("Code / cause / action"),180);
         lv_obj_t *list=scroll(b,0,48,330,248);menu.task_scroll=list;
+        int item_width=ui_scrollbar_content_width(list);
         unsigned row=0,first=256;
         for(unsigned code=0;code<256;code++){
             if(menu.reject_all?code>=0x32:!counts[code])continue;
@@ -123,12 +124,12 @@ static void help_view(lv_obj_t *b)
         for(unsigned code=0;code<256;code++){
             if(menu.reject_all?code>=0x32:!counts[code])continue;
             bool selected=menu.reject_code==code;
-            lv_obj_t *v=lv_settings_button(list,0,row++*58,322,52,"",false,reject_pick,(void *)(uintptr_t)code);
+            lv_obj_t *v=lv_settings_button(list,0,row++*58,item_width,52,"",false,reject_pick,(void *)(uintptr_t)code);
             palette(v,selected?HEADER_SURFACE:PANEL);lv_obj_set_style_border_width(v,0,0);lv_obj_set_style_radius(v,12,0);
             if(selected)box(v,0,10,3,32,BLUE,2);
             char line[100];snprintf(line,sizeof(line),"%02X  %s",code,ui_tr(counting_reject_guide_get(code)->title));
-            lv_obj_t *l=label(v,12,9,298,line,&lv_font_instrument_sans_semibold_16,selected?BLUE:INK);lv_label_set_long_mode(l,LV_LABEL_LONG_DOT);
-            snprintf(line,sizeof(line),counts[code]?ui_trn("%s / %u notes", (counts[code])):"%s",ui_text_counting_reject_reason(code),counts[code]);label(v,12,31,298,line,&lv_font_instrument_sans_medium_13,MUTED);
+            lv_obj_t *l=label(v,12,9,item_width-24,line,&lv_font_instrument_sans_semibold_16,selected?BLUE:INK);lv_label_set_long_mode(l,LV_LABEL_LONG_DOT);
+            snprintf(line,sizeof(line),counts[code]?ui_trn("%s / %u notes", (counts[code])):"%s",ui_text_counting_reject_reason(code),counts[code]);label(v,12,31,item_width-24,line,&lv_font_instrument_sans_medium_13,MUTED);
         }
         if(!row){label(list,14,28,294,ui_tr("No current rejects"),&lv_font_instrument_sans_semibold_21,INK);small(list,14,70,294,ui_tr("Select All codes to browse the guide."));}
         lv_obj_t *detail=box(b,350,48,678,248,PANEL,20);

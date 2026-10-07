@@ -7,6 +7,7 @@ static lv_theme_t scrollbar_theme;
 
 lv_coord_t ui_scrollbar_content_width(lv_obj_t *viewport)
 {
+    if(viewport)lv_obj_update_layout(viewport);
     return viewport ? LV_MAX(0,lv_obj_get_content_width(viewport)-UI_SCROLLBAR_GUTTER) : 0;
 }
 

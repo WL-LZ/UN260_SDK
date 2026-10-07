@@ -102,10 +102,10 @@ static void password_setting_keyboard_cb(const char* value, void* user_data)
     if (field >= PASSWORD_FIELD_COUNT || !lv_pin_input_is_complete(value)) return;
     if(field!=active_field)return;
     if(field==PASSWORD_FIELD_CURRENT&&strcmp(value,user_cfg_password_get())){
-        lv_pin_keypad_set_status(&password_setting_keypad,ui_tr("Incorrect current PIN. Try again."));return;
+        lv_pin_keypad_clear(&password_setting_keypad);lv_pin_keypad_set_error(&password_setting_keypad,ui_tr("Incorrect current PIN. Try again."));return;
     }
     if(field==PASSWORD_FIELD_CONFIRM&&strcmp(value,field_text[PASSWORD_FIELD_NEW])){
-        lv_pin_keypad_set_status(&password_setting_keypad,ui_tr("PINs do not match. Re-enter the new PIN."));return;
+        lv_pin_keypad_clear(&password_setting_keypad);lv_pin_keypad_set_error(&password_setting_keypad,ui_tr("PINs do not match. Re-enter the new PIN."));return;
     }
     lv_snprintf(field_text[field], sizeof(field_text[field]), "%s", value);
     for(unsigned i=field+1;i<PASSWORD_FIELD_COUNT;i++)memset(field_text[i],0,sizeof(field_text[i]));
@@ -123,6 +123,8 @@ static void password_setting_open_keyboard(password_field_t field)
         .eyebrow = ui_tr("CHANGE PASSWORD"),
         .title = ui_tr(field_titles[field]),
         .prompt = ui_tr(field_prompts[field]),
+        .auto_confirm = true,
+        .compact = true,
         .confirm_cb = password_setting_keyboard_cb,
         .cancel_cb = password_setting_close_keyboard,
         .user_data = (void *)(uintptr_t)field,
@@ -131,7 +133,7 @@ static void password_setting_open_keyboard(password_field_t field)
     };
     active_field = field;
     password_setting_refresh_fields();
-    if (!lv_pin_keypad_create(&password_setting_keypad, password_setting_content, 80, 76))
+    if (!lv_pin_keypad_create(&password_setting_keypad, password_setting_content, 215, 18))
         return;
     if (lv_pin_keypad_show(&password_setting_keypad, &config, field_text[field])) {
         lv_obj_add_flag(password_setting_form, LV_OBJ_FLAG_HIDDEN);

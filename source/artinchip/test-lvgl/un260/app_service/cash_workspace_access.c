@@ -16,10 +16,15 @@ static uint32_t actor(void){const workspace_user_t *u=workspace_active(workspace
 bool cash_access_required(cash_access_action_t action)
 {(void)action;return !workspace_store_ready()||workspace_store_get()->management_protected;}
 void cash_access_cancel(void){access.action=0;access.deadline=0;}
+uint32_t cash_access_retry_delay_ms(void)
+{
+    int32_t remaining=(int32_t)(access.blocked_until-app_clock_uptime_ms());
+    return access.blocked_until&&remaining>0?(uint32_t)remaining:0;
+}
 bool cash_access_verify(cash_access_action_t action,const char *pin)
 {
     cash_access_cancel();uint32_t now=app_clock_uptime_ms();
-    if(access.blocked_until&&(int32_t)(now-access.blocked_until)<0)return false;
+    if(cash_access_retry_delay_ms())return false;
     const char *expected=user_cfg_password_get();
     if(!expected||strlen(expected)!=4||!pin||strlen(pin)!=4||strcmp(expected,pin)){
         if(++access.failures>=5){access.failures=0;access.blocked_until=now+30000;}return false;

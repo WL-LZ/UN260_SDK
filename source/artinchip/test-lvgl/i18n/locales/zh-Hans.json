@@ -1,5 +1,6 @@
 {
   "zh-Hans": {
+    "Try again in %u seconds.": "请在 %u 秒后重试。",
     "#FF5A5F %d# #FFFFFF Suspect# #737373 |# #FF5A5F %d# #FFFFFF Damaged#": "#FF5A5F %d# #FFFFFF 可疑# #737373 |# #FF5A5F %d# #FFFFFF 破损#",
     "#FFFFFF PCS# #60A5FA %d# #737373 |# #FFFFFF Amount# #60A5FA %.0f#": "#FFFFFF 张数# #60A5FA %d# #737373 |# #FFFFFF 金额# #60A5FA %.0f#",
     "%d + %dR\n%lld\nSN %d": "%d 正常 + %d 拒钞\n%lld\n冠字号 %d",

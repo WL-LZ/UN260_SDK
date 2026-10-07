@@ -61,12 +61,13 @@ static void currency_totals(lv_obj_t *p,int x,int y,int w,int h,uint32_t day)
         cashbook_money_t first=totals[i];memmove(totals+1,totals,i*sizeof(*totals));totals[0]=first;break;
     }
     lv_obj_t *list=scroll(card,16,46,w-32,h-98);
+    int content_width=ui_scrollbar_content_width(list);
     for(unsigned i=0;i<n;i++){
-        label(list,0,i*53,w-32,totals[i].code,&lv_font_instrument_sans_menumedium_14,0xFFFFFF);
+        label(list,0,i*53,content_width,totals[i].code,&lv_font_instrument_sans_menumedium_14,0xFFFFFF);
         char s[32];snprintf(s,sizeof(s),ui_trn("%u notes", (totals[i].pcs)),totals[i].pcs);label(list,0,i*53+20,85,s,&lv_font_instrument_sans_medium_12,0xD9E7FB);
         money_text(s,totals[i].amount);
-        lv_obj_t *l=label(list,70,i*53+3,w-102,s,strlen(s)>12?&lv_font_instrument_sans_semibold_18:&lv_font_instrument_sans_semibold_24,0xFFFFFF);
+        lv_obj_t *l=label(list,70,i*53+3,content_width-70,s,strlen(s)>12?&lv_font_instrument_sans_semibold_18:&lv_font_instrument_sans_semibold_24,0xFFFFFF);
         lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_RIGHT,0);
-        if(i+1<n){lv_obj_t *rule=box(list,0,i*53+43,w-32,1,0xFFFFFF,0);lv_obj_set_style_bg_opa(rule,LV_OPA_20,0);}
+        if(i+1<n){lv_obj_t *rule=box(list,0,i*53+43,content_width,1,0xFFFFFF,0);lv_obj_set_style_bg_opa(rule,LV_OPA_20,0);}
     }
 }

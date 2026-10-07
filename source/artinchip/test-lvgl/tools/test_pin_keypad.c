@@ -31,6 +31,10 @@ void lv_nav_button_mark_back(lv_obj_t *button){assert(lv_obj_is_valid(button));}
 #include "../un260/lv_core/page_05_set_password.c"
 #include "../un260/lv_core/page_29_set_password.c"
 
+const char *ui_tr(const char *text){return text;}
+void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title,const char *detail)
+{(void)kind;(void)key;snprintf(toast_text,sizeof(toast_text),"%s",detail&&*detail?detail:title);}
+
 static unsigned confirmed, cancelled;
 static char confirmed_pin[5];
 
@@ -158,6 +162,10 @@ static void test_component(void)
     lv_pin_keypad_show(&keypad,&config,"1");
     assert(keypad.blink->paused&&keypad.keys[11]->x==486);
     assert(lv_obj_has_flag(keypad.eye,LV_OBJ_FLAG_HIDDEN));
+    unsigned before=confirmed;
+    type_pin(&keypad,"234");assert(confirmed==before+1);
+    press_key(&keypad,5);assert(confirmed==before+1);
+    confirmed=before;
     config.compact=false;config.auto_confirm=false;
     lv_pin_keypad_show(&keypad,&config,"1");
     assert(!keypad.blink->paused&&keypad.root->w==1120);
@@ -307,7 +315,7 @@ static void test_visibility(void)
     lv_pin_keypad_destroy(&keypad);
     lv_obj_del(parent);
 
-    /* First-concept login always masks; the full change-PIN editor keeps its preference. */
+    /* All authentication/change-PIN pages use the same compact masked keypad. */
     parent=lv_obj_create(NULL);
     ui_page_05_set_password_create(parent);
     assert(!g_password_page.keypad.digits_visible);
@@ -319,11 +327,12 @@ static void test_visibility(void)
         bool before=saved_visibility;
         if(!lv_pin_keypad_is_visible(&password_setting_keypad))click(field_cards[i]);
         assert(active_field==(password_field_t)i);
-        assert(password_setting_keypad.digits_visible == before);
-        click(password_setting_keypad.eye);
-        assert(saved_visibility != before);
+        assert(!password_setting_keypad.digits_visible);
+        assert(password_setting_keypad.compact&&password_setting_keypad.auto_confirm);
+        assert(lv_obj_has_flag(password_setting_keypad.eye,LV_OBJ_FLAG_HIDDEN));
+        assert(saved_visibility == before);
         type_pin(&password_setting_keypad,i==0?"1111":"0022");
-        press_key(&password_setting_keypad,11);
+
     }
     assert(!lv_pin_keypad_is_visible(&password_setting_keypad));
     assert(!save_count);
@@ -344,7 +353,7 @@ static void enter_field(password_field_t field, const char *pin)
     assert(strcmp(password_setting_keypad.title->text,field_titles[field])==0);
     lv_pin_keypad_clear(&password_setting_keypad);
     type_pin(&password_setting_keypad,pin);
-    press_key(&password_setting_keypad,11);
+
     assert_empty(&password_setting_keypad);
     assert(lv_pin_keypad_is_visible(&password_setting_keypad)==(field<PASSWORD_FIELD_CONFIRM));
     assert(lv_obj_has_flag(password_setting_form,LV_OBJ_FLAG_HIDDEN)==(field<PASSWORD_FIELD_CONFIRM));
@@ -362,14 +371,16 @@ static void test_change_password_page(void)
     lv_obj_t *screen=lv_obj_create(NULL);
     ui_page_29_set_password_create(screen);
     click(field_cards[PASSWORD_FIELD_CURRENT]);type_pin(&password_setting_keypad,"9999");
-    press_key(&password_setting_keypad,11);
+
     assert(active_field==PASSWORD_FIELD_CURRENT&&!field_text[PASSWORD_FIELD_CURRENT][0]);
     assert(strstr(password_setting_keypad.status->text,"Incorrect current PIN"));
+    assert_empty(&password_setting_keypad);
     enter_field(PASSWORD_FIELD_CURRENT,"1111");
     enter_field(PASSWORD_FIELD_NEW,"0022");
-    type_pin(&password_setting_keypad,"0033");press_key(&password_setting_keypad,11);
+    type_pin(&password_setting_keypad,"0033");
     assert(active_field==PASSWORD_FIELD_CONFIRM&&!field_text[PASSWORD_FIELD_CONFIRM][0]);
     assert(strstr(password_setting_keypad.status->text,"do not match"));
+    assert_empty(&password_setting_keypad);
     enter_field(PASSWORD_FIELD_CONFIRM,"0022");
     assert(save_count == 0); /* Field confirmation alone never changes auth. */
     assert(pin_gesture_policy && pin_gesture_policy(GESTURE_ACTION_HOME));

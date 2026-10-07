@@ -33,9 +33,12 @@ const char *cash_tools_current_blocker(void){return NULL;}
 const char *cash_tools_write_blocker(void){return NULL;}
 unsigned cash_tools_current_count(void){return current_currencies;}
 bool cash_tools_current(unsigned i,cash_snapshot_t *s){if(i>=current_currencies)return false;cash_tools_history(0,s);if(i){strcpy(s->code,"CNY");s->amount=500*CASH_SCALE;}return true;}
-bool cash_access_required(cash_access_action_t a){(void)a;return false;}
-bool cash_access_verify(cash_access_action_t a,const char *p){(void)a;return p&&*p;}
+static bool require_pin;
+static unsigned pin_attempts;
+bool cash_access_required(cash_access_action_t a){(void)a;return require_pin;}
+bool cash_access_verify(cash_access_action_t a,const char *p){(void)a;++pin_attempts;return p&&!strcmp(p,"2468");}
 void cash_access_cancel(void){}
+uint32_t cash_access_retry_delay_ms(void){return 0;}
 static const char *delete_blocker;
 const char *cash_workspace_delete_blocker(uint32_t id){(void)id;return delete_blocker;}
 bool cashbook_store_check_operator(uint32_t id){return id!=0;}
@@ -95,7 +98,15 @@ int main(void){
  lv_obj_t *person=find(lv_scr_act(),"Temporary");assert(person);lv_event_send(person,LV_EVENT_CLICKED,NULL);tick(100);
  click("Operator details");delete_blocker="Checking operator records...";cash_click("Delete operator");assert(lv_obj_has_state(cash_button(lv_scr_act(),"Delete"),LV_STATE_DISABLED));assert(lv_obj_get_style_text_color(lv_obj_get_child(cash_button(lv_scr_act(),"Delete"),0),0).full==lv_color_hex(0x627583).full);
  delete_blocker="Linked records prevent deletion.";tick(300);assert(find(lv_scr_act(),delete_blocker));raster("operator-delete-linked");cash_click("Cancel");assert(workspace_find(&model,disposable));
- click("Operator details");delete_blocker=NULL;cash_click("Delete operator");raster("operator-delete-confirm");cash_click("Delete");tick(300);assert(!workspace_find(&model,disposable));
+ click("Operator details");delete_blocker=NULL;cash_click("Delete operator");raster("operator-delete-confirm");require_pin=true;cash_click("Delete");
+ assert(workspace_find(&model,disposable));assert(find(lv_scr_act(),"Management authorization"));
+ assert(lv_obj_get_x(find(lv_scr_act(),"Clear"))==486);
+ assert(lv_obj_get_style_border_width(find(lv_scr_act(),"1"),0)==0);
+ cash_click("1");cash_click("1");cash_click("1");assert(pin_attempts==0);
+ cash_click("1");assert(pin_attempts==1&&workspace_find(&model,disposable));
+ assert(find(lv_scr_act(),"Incorrect password. Try again."));raster("operator-pin-invalid");
+ cash_click("2");cash_click("4");cash_click("6");cash_click("8");tick(300);
+ assert(pin_attempts==2&&!workspace_find(&model,disposable));require_pin=false;
  ui_operators_destroy();
  model.disabled[1]=1;revision++;ui_operators_create(lv_scr_act());tick(200);
  lv_obj_t *disabled_person=find(lv_scr_act(),"N");assert(disabled_person);lv_event_send(disabled_person,LV_EVENT_CLICKED,NULL);tick(100);

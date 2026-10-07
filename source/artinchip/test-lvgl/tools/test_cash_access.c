@@ -35,7 +35,8 @@ int main(void)
     workspace_defaults(&model);model.operators_enabled=1;model.management_protected=1;
     assert(cash_access_required(CASH_ACCESS_ENTRY));
     for(unsigned i=0;i<5;++i)assert(!cash_access_verify(CASH_ACCESS_ENTRY,"0000"));
-    assert(!cash_access_verify(CASH_ACCESS_ENTRY,"2468"));now=30001;
+    assert(cash_access_retry_delay_ms()==30000);
+    assert(!cash_access_verify(CASH_ACCESS_ENTRY,"2468"));now=10000;assert(cash_access_retry_delay_ms()==20000);now=30001;assert(!cash_access_retry_delay_ms());
     assert(cash_access_verify(CASH_ACCESS_ENTRY,"2468"));assert(cash_access_consume(CASH_ACCESS_ENTRY));assert(!cash_access_consume(CASH_ACCESS_ENTRY));
     assert(cash_access_verify(CASH_ACCESS_ENTRY,"2468"));now+=30001;assert(!cash_access_consume(CASH_ACCESS_ENTRY));
     assert(cash_access_verify(CASH_ACCESS_ENTRY,"2468"));uint32_t id;assert(workspace_add_user(&model,"Second",&id));model.active_id=id;assert(!cash_access_consume(CASH_ACCESS_ENTRY));

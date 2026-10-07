@@ -1,5 +1,6 @@
 {
   "ko": {
+    "Try again in %u seconds.": "%u초 후 다시 시도하세요.",
     "#FF5A5F %d# #FFFFFF Suspect# #737373 |# #FF5A5F %d# #FFFFFF Damaged#": "#FF5A5F %d# #FFFFFF 의심# #737373 |# #FF5A5F %d# #FFFFFF 손상#",
     "#FFFFFF PCS# #60A5FA %d# #737373 |# #FFFFFF Amount# #60A5FA %.0f#": "#FFFFFF 매수# #60A5FA %d# #737373 |# #FFFFFF 금액# #60A5FA %.0f#",
     "%d + %dR\n%lld\nSN %d": "%d 정상 + %d 거부\n%lld\nSN %d",

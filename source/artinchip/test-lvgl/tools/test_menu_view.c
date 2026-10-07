@@ -393,8 +393,18 @@ int main(void)
         assert(workspace_add_profile(&model,model.active_id,&extra));
     }
     click("Profiles");assert(menu.task_scroll);
+    workspace_profile_t match=current_profile();assert(profile_matches(&match));
+    match.beep=!match.beep;assert(!profile_matches(&match));
+    match=current_profile();match.mode=0;assert(profile_matches(&match));
+    for(unsigned i=0;i<lv_obj_get_child_cnt(menu.task_scroll);++i){
+        lv_obj_t *card=lv_obj_get_child(menu.task_scroll,i);
+        assert(lv_obj_get_x(card)+lv_obj_get_width(card)<=ui_scrollbar_content_width(menu.task_scroll));
+    }
     lv_obj_scroll_to_y(menu.task_scroll,500,LV_ANIM_OFF);tick(120);click("Profile 8");assert(menu.selected_profile==7&&lv_obj_get_scroll_y(menu.task_scroll)>200);raster("menu-profiles-scrolled");
     click("Records");raster("menu-records");
+    uint32_t prior_day=business_day();
+    record_date_done("20260925",NULL);assert(settings_detail_overlay_is_open());
+    assert(business_day()==prior_day);click("Cancel");assert(business_day()==prior_day);
     menu.selected_group=1;menu.selected_run=2;menu.dirty=true;tick(120);raster("menu-recount-detail");
     click("Count this result");click("Confirm");assert(ledger.groups[0].selected==2);click("Back to list");
     click("Confirm singles");click("Confirm");assert(ledger.groups[2].confirmed);
@@ -534,6 +544,19 @@ int main(void)
         char filename[80];snprintf(filename,sizeof(filename),"studio-%s",shots[tab][sub]);raster(filename);
         assert(lv_obj_get_y(menu.body)==76&&lv_obj_get_height(menu.body)==296);
     }
+    menu.tab=5;menu.sub=0;menu.reject_all=true;
+    menu.tab=4;menu.sub=1;menu.dirty=true;tick(100);
+    assert(menu.task_scroll);
+    for(unsigned i=0;i<QUICK_CONTROL_COUNT;++i){
+        lv_obj_t *item=lv_obj_get_child(menu.task_scroll,i);
+        assert(lv_obj_get_x(item)+lv_obj_get_width(item)<=ui_scrollbar_content_width(menu.task_scroll));
+        assert(lv_obj_get_style_border_width(item,0)==0);
+        assert(lv_obj_get_style_text_align(lv_obj_get_child(item,0),0)==LV_TEXT_ALIGN_LEFT);
+    }
+    lv_obj_scroll_to_y(menu.task_scroll,100,LV_ANIM_OFF);tick(200);
+    lv_coord_t shortcut_y=lv_obj_get_scroll_y(menu.task_scroll);assert(shortcut_y>0);
+    lv_event_send(lv_obj_get_child(menu.task_scroll,QUICK_CONTROL_COUNT-1),LV_EVENT_CLICKED,NULL);tick(200);
+    assert(lv_obj_get_scroll_y(menu.task_scroll)==shortcut_y);raster("shortcuts-selected-scrolled");
     menu.tab=5;menu.sub=0;menu.reject_all=true;
     for(unsigned code=0;code<0x32;code++){menu.reject_code=code;menu.dirty=true;tick(100);
         const counting_reject_guide_t *guide=counting_reject_guide_get(code);assert(guide&&*guide->title&&*guide->meaning&&*guide->causes&&*guide->action);

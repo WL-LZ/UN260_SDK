@@ -66,9 +66,9 @@ static lv_obj_t *overlay(cash_view_t *v,const char *title)
 
 static void pin_cancel(void *context){close_overlay(context);}
 static void pin_confirm(const char *pin,void *context)
-{cash_view_t *v=context;if(!cash_access_verify(CASH_ACCESS_ENTRY,pin)){lv_pin_keypad_clear(&v->pin);lv_pin_keypad_set_error(&v->pin,ui_tr("Incorrect PIN or temporarily locked. Try again later."));return;}void (*fn)(void)=authorized_action;authorized_action=NULL;lv_pin_keypad_hide(&v->pin);if(fn)fn();}
+{cash_view_t *v=context;if(!cash_access_verify(CASH_ACCESS_ENTRY,pin)){lv_pin_keypad_clear(&v->pin);char message[96];uint32_t delay=cash_access_retry_delay_ms();if(delay)snprintf(message,sizeof(message),ui_tr("Try again in %u seconds."),(unsigned)((delay+999)/1000));else snprintf(message,sizeof(message),"%s",ui_tr("Incorrect password. Try again."));lv_pin_keypad_set_error(&v->pin,message);return;}void (*fn)(void)=authorized_action;authorized_action=NULL;lv_pin_keypad_hide(&v->pin);if(fn)fn();}
 static void authorize(cash_view_t *v,void (*fn)(void))
-{if(!cash_access_required(CASH_ACCESS_ENTRY)){fn();return;}close_overlay(v);authorized_action=fn;lv_pin_keypad_create(&v->pin,v->root,215,18);lv_pin_keypad_config_t c={.title=ui_tr("Management authorization"),.prompt=ui_tr("Authorize this action without changing operator."),.confirm_cb=pin_confirm,.cancel_cb=pin_cancel,.user_data=v,.compact=true};lv_pin_keypad_show(&v->pin,&c,"");}
+{if(!cash_access_required(CASH_ACCESS_ENTRY)){fn();return;}close_overlay(v);authorized_action=fn;lv_pin_keypad_create(&v->pin,v->root,215,18);lv_pin_keypad_config_t c={.title=ui_tr("Management authorization"),.prompt=ui_tr("Authorize this action without changing operator."),.confirm_cb=pin_confirm,.cancel_cb=pin_cancel,.user_data=v,.compact=true,.auto_confirm=true};lv_pin_keypad_show(&v->pin,&c,"");}
 static void currency_picker(cash_view_t *v,bool target)
 {currency_target=target;choice_count=cash_tools_currencies(currency_choices,64);lv_obj_t *o=overlay(v,ui_tr("Select currency"));v->auxiliary_overlay=true;for(unsigned i=0;i<12&&choice_page*12+i<choice_count;++i){unsigned n=choice_page*12+i;button(v,o,26+(i%4)*142,86+(i/4)*65,132,52,currency_choices[n],A_CURRENCY_ITEM+n,0);}button(v,o,354,304,112,42,"<",A_PREV,0);button(v,o,480,304,112,42,">",A_NEXT,0);}
 static void apply_import(cash_view_t *v,unsigned index)

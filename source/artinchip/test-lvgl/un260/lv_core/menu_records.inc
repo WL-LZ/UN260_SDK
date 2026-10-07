@@ -23,8 +23,7 @@ static void record_date_done(const char *value,void *unused)
 {
     (void)unused;char *end;unsigned long day=strtoul(value,&end,10);
     if(strlen(value)!=8||*end||day>UINT32_MAX||!cashbook_day_valid(day)){explain(UI_N_("Enter a valid business date as YYYYMMDD, for example 20260923."));return;}
-    menu.record_day=(uint32_t)day;
-    if(cashbook_store_view_archived()){menu.dirty=true;return;}
+    if(cashbook_store_view_archived()){menu.record_day=(uint32_t)day;menu.dirty=true;return;}
     record_request(CASHBOOK_SET_DAY,0,0,(uint32_t)day,ui_tr("Set business date?"),
         ui_tr("Undated, unconfirmed counts will be assigned to this date. Original count timestamps stay unchanged. Device time is not changed."));
 }

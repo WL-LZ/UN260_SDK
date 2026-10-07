@@ -169,12 +169,13 @@ static void pin_key_event(lv_event_t *event)
         }
         return;
     }
+    size_t previous_length=keypad->input.length;
     if (key == 10) lv_pin_input_backspace(&keypad->input);
     else if (key < 10) lv_pin_input_push(&keypad->input, key);
     else return;
     lv_pin_keypad_set_status(keypad, NULL);
     pin_refresh(keypad);
-    if(keypad->auto_confirm&&keypad->input.length==LV_PIN_DIGITS&&keypad->confirm_cb){
+    if(keypad->auto_confirm&&previous_length<LV_PIN_DIGITS&&keypad->input.length==LV_PIN_DIGITS&&keypad->confirm_cb){
         char value[LV_PIN_DIGITS+1];
         lv_pin_keypad_confirm_cb_t callback=keypad->confirm_cb;
         void *user_data=keypad->user_data;
@@ -256,7 +257,7 @@ static void pin_apply_layout(lv_pin_keypad_t *keypad, bool compact)
     static const lv_coord_t row_h[4]={65,65,64,65};
     for(unsigned i=0;i<12;i++){
         /* Keep key identity/callbacks stable; the side panel orders Clear,0,erase. */
-        unsigned slot=compact&&keypad->auto_confirm?(i==9?11:i==11?9:i):i;
+        unsigned slot=keypad->auto_confirm?(i==9?11:i==11?9:i):i;
         lv_coord_t col=(lv_coord_t)(slot%3),row=(lv_coord_t)(slot/3);
         bool utility=compact&&(i==9||i==11);
         lv_obj_t *button=keypad->keys[i];
@@ -268,7 +269,7 @@ static void pin_apply_layout(lv_pin_keypad_t *keypad, bool compact)
             LV_SETTINGS_PRIMARY:LV_SETTINGS_CONTROL_SURFACE),lv_color_hex(compact?
             0xE2E9EE:i==11&&!keypad->auto_confirm?
             LV_SETTINGS_PRIMARY_PRESSED:LV_SETTINGS_CONTROL_PRESSED));
-        lv_obj_set_style_border_width(button,compact&&!utility?1:0,0);
+        lv_obj_set_style_border_width(button,0,0);
         lv_obj_set_style_border_color(button,lv_color_hex(0xE9EDF0),0);
         lv_obj_t *label=lv_damped_button_get_label(button);
         lv_obj_set_style_text_font(label,compact?(utility?

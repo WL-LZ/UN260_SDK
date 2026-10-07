@@ -147,21 +147,22 @@ static void batch_view(lv_obj_t *b)
 static bool profile_matches(const workspace_profile_t *p)
 {
     workspace_profile_t c=current_profile();
-    return p->speed==c.speed&&p->work==c.work&&p->add==c.add&&p->sort==c.sort&&p->mode==c.mode&&p->batch_enabled==c.batch_enabled&&(!p->batch_enabled||p->batch==c.batch);
+    return p->speed==c.speed&&p->work==c.work&&p->add==c.add&&p->sort==c.sort&&p->beep==c.beep&&(!p->mode||p->mode==c.mode)&&p->batch_enabled==c.batch_enabled&&(!p->batch_enabled||p->batch==c.batch);
 }
 static void profiles_view(lv_obj_t *b)
 {
     heading(b,ui_tr("Counting profiles"));lv_obj_t *add=button(b,887,0,141,36,ui_tr("Save current"),A_NEW_PROFILE,false);button_icon(add,MICON("plus",22),INK);
     const workspace_user_t *u=user();if(!u)return;if(menu.selected_profile>=u->profile_count)menu.selected_profile=u->profile_count-1;
     lv_obj_t *list=scroll(b,0,48,586,248);menu.task_scroll=list;
+    int item_width=ui_scrollbar_content_width(list)-3;
     for(unsigned i=0;i<u->profile_count;i++){
         const workspace_profile_t *p=&u->profiles[i];bool selected=i==menu.selected_profile;
-        lv_obj_t *v=lv_settings_button(list,3,2+i*80,580,72,"",false,pick_event,(void *)(uintptr_t)i);palette(v,selected?HEADER_SURFACE:PANEL);lv_obj_set_style_border_width(v,0,0);lv_obj_set_style_radius(v,14,0);
+        lv_obj_t *v=lv_settings_button(list,3,2+i*80,item_width,72,"",false,pick_event,(void *)(uintptr_t)i);palette(v,selected?HEADER_SURFACE:PANEL);lv_obj_set_style_border_width(v,0,0);lv_obj_set_style_radius(v,14,0);
         if(selected)box(v,0,9,3,54,BLUE,2);
         icon(v,p->batch_enabled?MICON("layers",22):p->work&&p->speed==0?MICON("shield",22):MICON("note",22),16,25,MUTED);
-        lv_obj_t *name=label(v,52,13,485,p->name,&lv_font_instrument_sans_semibold_18,INK);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
+        lv_obj_t *name=label(v,52,13,item_width-95,p->name,&lv_font_instrument_sans_semibold_18,INK);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
         char hint[96];snprintf(hint,sizeof(hint),"%s / %s",p->mode==2?ui_tr("Single denomination"):p->mode==3?ui_tr("Piece counting"):ui_tr("Mixed notes"),p->batch_enabled?ui_tr("Batch counting"):p->work?ui_tr("Manual start"):ui_tr("Continuous counting"));
-        small(v,52,41,485,hint);icon(v,MICON("next",22),542,25,BLUE);
+        small(v,52,41,item_width-95,hint);icon(v,MICON("next",22),item_width-38,25,BLUE);
     }
     const workspace_profile_t *p=&u->profiles[menu.selected_profile];lv_obj_t *d=box(b,606,48,422,248,PANEL,20);
     lv_obj_t *name=label(d,20,18,382,p->name,&lv_font_instrument_sans_semibold_21,INK);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
@@ -200,16 +201,17 @@ static void interaction_view(lv_obj_t *b)
     small(right,16,32,468,ui_tr("Tap two shortcuts to swap positions."));
     lv_obj_t *shortcuts=box(right,16,57,472,175,PANEL,0);
     lv_obj_add_flag(shortcuts,LV_OBJ_FLAG_SCROLLABLE|LV_OBJ_FLAG_USER_4);lv_obj_set_scroll_dir(shortcuts,LV_DIR_VER);lv_port_indev_set_drag_obj(shortcuts,true);
+    menu.task_scroll=shortcuts;
+    int item_width=(ui_scrollbar_content_width(shortcuts)-8)/2;
     uint8_t order[QUICK_CONTROL_COUNT];ui_state_quick_order_get(order);
     for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
         bool selected=menu.quick_pick==i;
-        lv_obj_t *item=button(shortcuts,(i%2)*240,(i/2)*36,232,32,
+        lv_obj_t *item=button(shortcuts,(i%2)*(item_width+8),(i/2)*36,item_width,32,
             lv_quick_controls_title(order[i]),A_QUICK_ORDER_BASE+i,false);
         lv_obj_set_style_radius(item,9,0);
-        border(item,selected?BLUE:0xDFE5EB);
         palette(item,selected?0xE1EEFC:0xFFFFFF);
         lv_obj_t *title=lv_obj_get_child(item,0);
-        lv_obj_set_width(title,178);lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
+        lv_obj_set_width(title,item_width-54);lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
         lv_obj_set_style_text_align(title,LV_TEXT_ALIGN_LEFT,0);
         lv_obj_align(title,LV_ALIGN_LEFT_MID,42,0);
         char number[4];snprintf(number,sizeof(number),"%02u",i+1);

@@ -1,0 +1,9 @@
+需求：审查Menu所有入口与子页，减少无意义阻塞，符合Main/List/Settings的浅色、圆角、清晰层级。
+覆盖：Overview；Count的Batch/Profiles/Options；Records的Daily totals/History/Day closes；Output的Print/QR；Preferences的Operators/Interaction/Display & sound；Help的Reject/Care/Device；Menu Quick、返回、保护设置、键盘/确认窗、隐藏恢复。
+逐页检查项：数据来源及币种、选中与生效分离、草稿取消、异步ACK/超时、持久化失败、权限、滚动/语言/边界、按钮可用状态、页面销毁/回调。
+已发现：Profiles的profile_matches漏比beep，可能错误显示In use；Shortcut无滚动条槽；Quick上下文pcs硬编码待改语言。
+原则：主控确认后才改真实设置；本地偏好只按自身依赖阻塞；真实交易/存储写入/危险动作保护保留；不以取消错误提示掩盖失败。
+参考：https://www.nngroup.com/articles/ten-usability-heuristics/ （一致性、状态反馈、错误预防、可识别操作）。不宣称采用某产品已验证的业务实现。
+状态：逐页代码审查与主机回归完成，见06逐页结果及交付README。
+
+结果：本轮逐页审查结论见06_Menu逐页审查结果.txt。新增根因修复：配置档声音/Keep current判断、业务日期取消、滚动条宽度与动态数量本地化。

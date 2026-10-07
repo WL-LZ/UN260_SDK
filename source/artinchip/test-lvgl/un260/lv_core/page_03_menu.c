@@ -253,6 +253,8 @@ static void profile_summary(lv_obj_t *p,const workspace_profile_t *v,int y)
         int x=20+(i%3)*132,top=y+(i/3)*51;
         small(p,x,top,125,titles[i]);text(p,x,top+20,125,values[i]);
     }
+    small(p,20,y+105,125,ui_tr("Sound"));
+    text(p,152,y+101,250,ui_tr(v->beep?UI_N_("On"):UI_N_("Off")));
 }
 static workspace_profile_t current_profile(void)
 {
@@ -394,7 +396,9 @@ static void refresh_quick(void)
     lv_quick_controls_refresh(&menu.quick_controls,lv_quick_controls_current_state());
     char code[4],value[48];currency_state_get_effective_code(code);
     const counting_sim_t *data=counting_data_current();
-    snprintf(value,sizeof(value),"%s   |   %d pcs",currency_state_display_code(code),data?data->total_pcs:0);
+    char quantity[32];unsigned notes=data?data->total_pcs:0;
+    snprintf(quantity,sizeof(quantity),ui_trn("%u notes",notes),notes);
+    snprintf(value,sizeof(value),"%s   |   %s",currency_state_display_code(code),quantity);
     if(strcmp(lv_label_get_text(menu.quick_context),value))
         lv_label_set_text(menu.quick_context,value);
 }
