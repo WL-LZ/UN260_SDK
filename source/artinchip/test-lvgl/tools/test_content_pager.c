@@ -6,6 +6,7 @@
 #include <string.h>
 #include "lvgl/lvgl.h"
 #include "un260/lv_components/lv_content_pager.h"
+#include "un260/lv_components/lv_capsule_pagination.h"
 
 #define SCREEN_WIDTH 1024
 #define SCREEN_HEIGHT 400
@@ -328,6 +329,48 @@ static void test_delete_and_context_reuse(void)
     lv_mem_monitor(&after);assert(after.free_size==before.free_size);
     puts("PASS lifetime: allocation failure, in-flight delete, eight-context exhaustion/reuse and unchanged memory after repeated reconstruction");
 }
+static void test_retarget_during_settle(void)
+{
+    fixture_t f=fixture(10,20,300,180,3,true);
+    lv_content_pager_set_active(f.root,1,true);advance(60);render();
+    int x=lv_obj_get_x(f.pages[0]);assert(x<0 && x>-300);
+    lv_content_pager_set_active(f.root,1,true);render();assert(lv_obj_get_x(f.pages[0])==x);
+    /* Repeated target must not prolong the original timeline. */
+    advance(220);centered(&f,1);
+    lv_content_pager_set_active(f.root,2,true);advance(60);render();x=lv_obj_get_x(f.pages[1]);
+    lv_content_pager_set_active(f.root,1,true);render();assert(lv_obj_get_x(f.pages[1])==x);
+    animate(&f,300);centered(&f,1);
+    lv_content_pager_set_active(f.root,2,true);advance(60);render();x=lv_obj_get_x(f.pages[1]);
+    lv_content_pager_set_active(f.root,0,true);render();assert(lv_obj_get_x(f.pages[1])==x);
+    animate(&f,550);centered(&f,0);
+    /* Explicit snapshot finalization discards any old deferred destination. */
+    lv_content_pager_set_active(f.root,1,true);advance(50);
+    lv_content_pager_set_active(f.root,2,true);lv_content_pager_finish(f.root);
+    centered(&f,1);advance(600);centered(&f,1);
+    lv_obj_del(f.root);
+    puts("PASS animated retarget: repeated target keeps timeline, reverse retains pixels, third target waits, explicit finish cancels stale work");
+}
+
+static void test_capsule_repeat(void)
+{
+    lv_obj_t *root=lv_capsule_pagination_create(lv_scr_act());assert(root);
+    assert(lv_capsule_pagination_set_count(root,3));render();
+    lv_obj_t *dot=lv_obj_get_child(root,1);
+    int small=lv_obj_get_width(dot),large=lv_obj_get_width(lv_obj_get_child(root,0));
+    assert(lv_capsule_pagination_set_active_page(root,1));advance(80);render();
+    int width=lv_obj_get_width(dot);assert(width>small && width<large);
+    assert(lv_capsule_pagination_set_active_page(root,1));render();assert(lv_obj_get_width(dot)==width);
+    advance(240);render();assert(lv_obj_get_width(dot)==large && lv_anim_count_running()==0);
+    assert(lv_capsule_pagination_set_active_page(root,2));advance(80);render();
+    width=lv_obj_get_width(dot);assert(lv_capsule_pagination_set_active_page(root,1));render();assert(lv_obj_get_width(dot)==width);
+    advance(320);render();assert(lv_obj_get_width(dot)==large);
+    assert(lv_capsule_pagination_set_active_page(root,2));advance(40);
+    assert(lv_capsule_pagination_set_active_page_now(root,2));render();
+    assert(lv_obj_get_width(lv_obj_get_child(root,2))==large);
+    lv_obj_del(root);advance(400);assert(lv_anim_count_running()==0);
+    puts("PASS capsule repeat/reverse: same target retains width and deadline, reverse retains width, explicit now and deletion remain immediate");
+}
+
 int main(void)
 {
     setvbuf(stdout,NULL,_IONBF,0);lv_init();
@@ -341,7 +384,7 @@ int main(void)
     assert(!lv_content_pager_set_circular(NULL,true) && !lv_content_pager_drag_begin(NULL));
     assert(!lv_content_pager_drag_update(NULL,10) && !lv_content_pager_drag_end(NULL,false));
     assert(!lv_content_pager_is_moving(NULL) && !lv_content_pager_finish(NULL));
-    test_cycles();test_release_and_resistance();test_interrupt_finish_and_reset();test_default_native_pager();test_delete_and_context_reuse();
+    test_capsule_repeat();test_retarget_during_settle();test_cycles();test_release_and_resistance();test_interrupt_finish_and_reset();test_default_native_pager();test_delete_and_context_reuse();
     lv_indev_delete(input);lv_deinit();
     puts("PASS content pager public API on real LVGL; board input latency and display performance require board validation");
 }

@@ -55,18 +55,18 @@ static void refresh(void)
     for (unsigned scene = 0; scene < CFD_SCENE_COUNT; ++scene) {
         if (scene == selected_scene) lv_obj_add_state(profiles[scene], LV_STATE_CHECKED);
         else lv_obj_clear_state(profiles[scene], LV_STATE_CHECKED);
-        if (!ready || busy || loading) settings_detail_action_block(profiles[scene], busy || saving ? UI_N_("Wait for the current controller request to finish.") : !ready || loading ? UI_N_("Detection levels have not finished loading.") : UI_N_("No changes to update."));
-        else settings_detail_action_block(profiles[scene], NULL);
+        if (!ready || busy || loading) settings_detail_action_wait(profiles[scene], busy || saving ? UI_N_("Wait for the current controller request to finish.") : !ready || loading ? UI_N_("Detection levels have not finished loading.") : UI_N_("No changes to update."));
+        else settings_detail_action_wait(profiles[scene], NULL);
     }
     for(unsigned item=0;item<CFD_ITEM_COUNT;item++)for(unsigned level=0;level<CFD_LEVEL_MAX;level++){
         lv_obj_t *o=cells[item][level];
         if(ready&&draft.levels[selected_scene][item]==level+1)lv_obj_add_state(o,LV_STATE_CHECKED);else lv_obj_clear_state(o,LV_STATE_CHECKED);
-        if(!ready||busy||loading)settings_detail_action_block(o, busy || saving ? UI_N_("Wait for the current controller request to finish.") : !ready || loading ? UI_N_("Detection levels have not finished loading.") : UI_N_("No changes to update."));else settings_detail_action_block(o, NULL);
+        if(!ready||busy||loading)settings_detail_action_wait(o, busy || saving ? UI_N_("Wait for the current controller request to finish.") : !ready || loading ? UI_N_("Detection levels have not finished loading.") : UI_N_("No changes to update."));else settings_detail_action_wait(o, NULL);
     }
-    if (!dirty() || busy) settings_detail_action_block(save_button, busy || saving ? UI_N_("Wait for the current controller request to finish.") : !ready || loading ? UI_N_("Detection levels have not finished loading.") : UI_N_("No changes to update."));
-    else settings_detail_action_block(save_button, NULL);
-    if (saving) settings_detail_action_block(frame.back, busy || saving ? UI_N_("Wait for the current controller request to finish.") : !ready || loading ? UI_N_("Detection levels have not finished loading.") : UI_N_("No changes to update."));
-    else settings_detail_action_block(frame.back, NULL);
+    if (!dirty() || busy) settings_detail_action_wait(save_button, busy || saving ? UI_N_("Wait for the current controller request to finish.") : !ready || loading ? UI_N_("Detection levels have not finished loading.") : UI_N_("No changes to update."));
+    else settings_detail_action_wait(save_button, NULL);
+    if (saving) settings_detail_action_wait(frame.back, busy || saving ? UI_N_("Wait for the current controller request to finish.") : !ready || loading ? UI_N_("Detection levels have not finished loading.") : UI_N_("No changes to update."));
+    else settings_detail_action_wait(frame.back, NULL);
     if (ready || busy) lv_obj_add_flag(retry_button, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_clear_flag(retry_button, LV_OBJ_FLAG_HIDDEN);
 }

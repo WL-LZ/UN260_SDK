@@ -31,6 +31,8 @@ int backlight_service_level(void) { return 60; }
 int backlight_service_max(void) { return 100; }
 void settings_detail_action_block(lv_obj_t *button,const char *reason)
 { if(reason)lv_obj_add_state(button,LV_STATE_DISABLED);else lv_obj_clear_state(button,LV_STATE_DISABLED); }
+void settings_detail_action_wait(lv_obj_t *button,const char *reason)
+{ settings_detail_action_block(button,reason); }
 bool ui_manager_pop_page(void) { ++display_back_requests; return true; }
 #ifndef HOST_ISLAND_ONLY
 #include "un260/lv_core/page_36_display_test.c"

@@ -35,7 +35,7 @@ LV_FONT_DECLARE(lv_font_instrument_sans_medium_13);
 enum { SHEET_W=1280, SHEET_H=328, SHEET_Y=0, CLOSED_Y=-328 };
 enum { QC_ARRANGE=240, QC_CANCEL, QC_DONE, QC_CLOSE };
 typedef enum {
-    QC_POST_NONE, QC_POST_STANDBY, QC_POST_PURE, QC_POST_GESTURE_GUIDE
+    QC_POST_NONE, QC_POST_STANDBY, QC_POST_PURE, QC_POST_GESTURE_GUIDE, QC_POST_TOOL=100
 } qc_post_action_t;
 static struct {
     lv_obj_t *main,*root,*sheet,*grab,*message,*page_label,*context;
@@ -169,6 +169,7 @@ static void qc_action(lv_event_t *event)
     }
     if(id>=QUICK_CONTROL_COUNT){qc_settle(false);return;}
     if(quick.arranging){qc_pick(id);return;}
+    if(id>=QUICK_CALCULATOR&&id<=QUICK_OPERATORS){quick.after_close=(qc_post_action_t)(QC_POST_TOOL+id);qc_settle(false);return;}
     if(id==QUICK_STANDBY){
         const char *reason=app_standby_runtime_blocker();
         if(reason && !app_standby_runtime_needs_fault_review()){
@@ -301,7 +302,8 @@ static void qc_animation_done(lv_anim_t *unused)
         qc_close_now();
         /* Do not layer the tutorial or a new page over the moving drawer.
          * Reuse existing workflows only after its overlay has been removed. */
-        if(action==QC_POST_GESTURE_GUIDE) {
+        if(action>=QC_POST_TOOL){(void)lv_quick_controls_execute((quick_control_action_t)(action-QC_POST_TOOL));}
+        else if(action==QC_POST_GESTURE_GUIDE) {
             if(qc_guide_safe() && gesture_service_enabled() && !gesture_guide_is_open())gesture_guide_show();
         } else if(action==QC_POST_STANDBY || action==QC_POST_PURE) {
             bool ok=lv_quick_controls_execute(action==QC_POST_STANDBY?QUICK_STANDBY:QUICK_PURE);

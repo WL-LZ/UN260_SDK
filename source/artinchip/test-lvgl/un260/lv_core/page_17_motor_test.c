@@ -38,8 +38,8 @@ static void motor_tick(lv_timer_t *timer)
         const char *text=ui_tr(phase_text[s.phase]);
         if(strcmp(lv_label_get_text(status[i]),text))lv_label_set_text(status[i],text);
         lv_obj_set_style_text_color(status[i],lv_color_hex(s.phase>=MOTOR_UNCONFIRMED?0xA35B12:s.running?0x1462CC:0x586B78),0);
-        if(s.pending||s.queued||s.running||!work_mode_service_diagnostic_ready())settings_detail_action_block(forward[i], !work_mode_service_diagnostic_ready() ? work_mode_service_status_msgid() : s.running ? UI_N_("This motor is already running.") : UI_N_("Wait for the current motor command to finish."));
-        else settings_detail_action_block(forward[i], NULL);
+        if(s.pending||s.queued||s.running||!work_mode_service_diagnostic_ready())settings_detail_action_wait(forward[i], !work_mode_service_diagnostic_ready() ? work_mode_service_status_msgid() : s.running ? UI_N_("This motor is already running.") : UI_N_("Wait for the current motor command to finish."));
+        else settings_detail_action_wait(forward[i], NULL);
     }
     const char *text=work_mode_service_diagnostic_ready()?ui_tr("Stops are confirmed one at a time. Keep the path clear."):work_mode_service_status_text();
     if(strcmp(lv_label_get_text(motor_frame.message),text))lv_label_set_text(motor_frame.message,text);

@@ -4,6 +4,10 @@
 
 static machine_time_value_t g_machine_time = { 2024, 10, 26, 11, 28, 30 };
 static bool g_machine_time_paused = false;
+static bool g_machine_time_confirmed;
+static uint32_t g_confirmation_revision;
+uint32_t machine_time_confirmation_revision(void) { return g_confirmation_revision; }
+bool machine_time_is_confirmed(void) { return g_machine_time_confirmed; }
 static lv_timer_t* g_machine_time_timer = NULL;
 
 static bool is_leap(uint16_t year)
@@ -55,6 +59,8 @@ void machine_time_confirm(const machine_time_value_t* value)
     confirmed = *value;
     machine_time_normalize(&confirmed);
     g_machine_time = confirmed;
+    g_machine_time_confirmed = machine_time_is_valid(value);
+    ++g_confirmation_revision;
 }
 
 void machine_time_get(machine_time_value_t* value)

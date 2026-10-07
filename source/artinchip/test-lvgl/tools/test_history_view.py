@@ -17,6 +17,7 @@ from test_list_view import compiled_asset_sources
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPONENTS = [
+    "un260/workspace/workspace_model.c",
     "tools/test_search_modes.c",
     "un260/lv_components/ui_multi_detail.c",
     "un260/lv_core/page_02_list_search.c",

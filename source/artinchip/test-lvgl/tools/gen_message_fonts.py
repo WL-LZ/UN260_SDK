@@ -18,7 +18,9 @@ INPUTS = ('i18n/legacy_ids.json', 'i18n/locales.json',
           'un260/lv_components/lv_fault_popup.c',
           'un260/lv_components/fault_guide/fault_guide_catalog.c',
           'un260/lv_components/lv_quick_controls.c',
-          'un260/lv_core/page_01_main_quick.c')
+          'un260/lv_core/page_01_main_quick.c',
+          'un260/lv_core/page_cash_tools.c',
+          'un260/lv_core/page_operators.c')
 ASSETS = ROOT / 'aic_ui/font/message'
 
 LITERAL = r'"(?:\\.|[^"\\])*"'
@@ -62,12 +64,14 @@ def fault_keys(source):
 def quick_codepoints():
     legacy = json.loads((ROOT / INPUTS[0]).read_text(encoding='utf-8'))
     keys = set()
+    literals = set()
     for path in INPUTS[4:]:
         source = (ROOT / path).read_text(encoding='utf-8')
         keys.update(marked_keys(source))
+        literals.update(literal_codepoints(source))
         keys.update(legacy[name] for name in re.findall(r'\bUI_TEXT_QUICK_\w+', source)
                     if name in legacy)
-    return translated_points(keys)
+    return translated_points(keys) | literals
 
 
 def required_codepoints():
@@ -100,8 +104,9 @@ def required_by_size():
         if name not in legacy:
             raise SystemExit('Missing notice metadata: '+name)
         meta.update(translated_points({legacy[name]}))
-    return {12: sorted(popup | titles), 14: sorted(catalog | popup | meta | quick),
-            16: sorted(titles | quick), 18: sorted(all_points), 20: sorted(all_points),
+    # Compact notice body/title now need broad message coverage at 12/16px.
+    return {12: sorted(all_points), 14: sorted(catalog | popup | meta | quick),
+            16: sorted(all_points), 18: sorted(all_points), 20: sorted(all_points),
             22: sorted(all_points), 24: sorted(catalog | quick), 28: sorted(titles)}
 
 def main():

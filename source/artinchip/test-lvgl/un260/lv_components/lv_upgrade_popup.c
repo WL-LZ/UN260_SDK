@@ -1307,83 +1307,36 @@ static void upgrade_popup_hide(void)
     lv_anim_del(content_obj, upgrade_popup_anim_opa_cb);
     lv_anim_del(content_obj, upgrade_popup_anim_translate_y_cb);
 
-    lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_opa(card, LV_OPA_COVER, 0);
-    lv_obj_set_style_shadow_opa(card, LV_OPA_10, 0);
-    lv_obj_set_style_translate_y(card, 0, 0);
-    lv_obj_set_style_opa(icon_obj, LV_OPA_COVER, 0);
-    lv_obj_set_style_translate_y(icon_obj, 0, 0);
-    lv_obj_set_style_opa(title_obj, LV_OPA_COVER, 0);
-    lv_obj_set_style_translate_y(title_obj, 0, 0);
-    lv_obj_set_style_opa(content_obj, LV_OPA_COVER, 0);
-    lv_obj_set_style_translate_y(content_obj, 0, 0);
+    /* Closing during entry must retain every part's current visual value.
+     * Only the final scheduled motion owns deletion, never an early reset. */
+    lv_obj_t *parts[] = {card, icon_obj, title_obj, content_obj};
+    bool started = true;
+    for (unsigned i = 0; i < sizeof(parts) / sizeof(parts[0]); ++i) {
+        lv_anim_init(&a);
+        lv_anim_set_var(&a, parts[i]);
+        lv_anim_set_exec_cb(&a, i == 0 ? upgrade_popup_anim_card_opa_cb : upgrade_popup_anim_opa_cb);
+        lv_anim_set_values(&a, i == 0 ? lv_obj_get_style_bg_opa(parts[i], 0) :
+                           lv_obj_get_style_opa(parts[i], 0), LV_OPA_0);
+        lv_anim_set_time(&a, UPGRADE_POPUP_HIDE_TIME_MS);
+        lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
+        if (!lv_anim_start(&a)) started = false;
 
-    lv_anim_init(&a);
-    lv_anim_set_var(&a, card);
-    lv_anim_set_exec_cb(&a, upgrade_popup_anim_card_opa_cb);
-    lv_anim_set_values(&a, LV_OPA_COVER, LV_OPA_0);
-    lv_anim_set_time(&a, UPGRADE_POPUP_HIDE_TIME_MS);
-    lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
-    lv_anim_set_ready_cb(&a, g_upgrade_popup.state == UPGRADE_POPUP_STATE_PROMPT ?
-                         upgrade_popup_prompt_hide_ready_cb :
-                         upgrade_popup_result_hide_ready_cb);
-    lv_anim_start(&a);
-
-    lv_anim_init(&a);
-    lv_anim_set_var(&a, card);
-    lv_anim_set_exec_cb(&a, upgrade_popup_anim_translate_y_cb);
-    lv_anim_set_values(&a, 0, -10);
-    lv_anim_set_time(&a, UPGRADE_POPUP_HIDE_TIME_MS);
-    lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
-    lv_anim_start(&a);
-
-    lv_anim_init(&a);
-    lv_anim_set_var(&a, icon_obj);
-    lv_anim_set_exec_cb(&a, upgrade_popup_anim_opa_cb);
-    lv_anim_set_values(&a, LV_OPA_COVER, LV_OPA_0);
-    lv_anim_set_time(&a, UPGRADE_POPUP_HIDE_TIME_MS);
-    lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
-    lv_anim_start(&a);
-
-    lv_anim_init(&a);
-    lv_anim_set_var(&a, icon_obj);
-    lv_anim_set_exec_cb(&a, upgrade_popup_anim_translate_y_cb);
-    lv_anim_set_values(&a, 0, -10);
-    lv_anim_set_time(&a, UPGRADE_POPUP_HIDE_TIME_MS);
-    lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
-    lv_anim_start(&a);
-
-    lv_anim_init(&a);
-    lv_anim_set_var(&a, title_obj);
-    lv_anim_set_exec_cb(&a, upgrade_popup_anim_opa_cb);
-    lv_anim_set_values(&a, LV_OPA_COVER, LV_OPA_0);
-    lv_anim_set_time(&a, UPGRADE_POPUP_HIDE_TIME_MS);
-    lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
-    lv_anim_start(&a);
-
-    lv_anim_init(&a);
-    lv_anim_set_var(&a, title_obj);
-    lv_anim_set_exec_cb(&a, upgrade_popup_anim_translate_y_cb);
-    lv_anim_set_values(&a, 0, -10);
-    lv_anim_set_time(&a, UPGRADE_POPUP_HIDE_TIME_MS);
-    lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
-    lv_anim_start(&a);
-
-    lv_anim_init(&a);
-    lv_anim_set_var(&a, content_obj);
-    lv_anim_set_exec_cb(&a, upgrade_popup_anim_opa_cb);
-    lv_anim_set_values(&a, LV_OPA_COVER, LV_OPA_0);
-    lv_anim_set_time(&a, UPGRADE_POPUP_HIDE_TIME_MS);
-    lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
-    lv_anim_start(&a);
-
-    lv_anim_init(&a);
-    lv_anim_set_var(&a, content_obj);
-    lv_anim_set_exec_cb(&a, upgrade_popup_anim_translate_y_cb);
-    lv_anim_set_values(&a, 0, -10);
-    lv_anim_set_time(&a, UPGRADE_POPUP_HIDE_TIME_MS);
-    lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
-    lv_anim_start(&a);
+        lv_anim_init(&a);
+        lv_anim_set_var(&a, parts[i]);
+        lv_anim_set_exec_cb(&a, upgrade_popup_anim_translate_y_cb);
+        lv_anim_set_values(&a, lv_obj_get_style_translate_y(parts[i], 0), -10);
+        lv_anim_set_time(&a, UPGRADE_POPUP_HIDE_TIME_MS);
+        lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
+        if (i == 3)
+            lv_anim_set_ready_cb(&a, g_upgrade_popup.state == UPGRADE_POPUP_STATE_PROMPT ?
+                                 upgrade_popup_prompt_hide_ready_cb : upgrade_popup_result_hide_ready_cb);
+        if (!lv_anim_start(&a)) started = false;
+    }
+    /* Allocation failure must not leave a permanently non-interactive card. */
+    if (!started) {
+        if (g_upgrade_popup.state == UPGRADE_POPUP_STATE_PROMPT) upgrade_popup_prompt_hide_ready_cb(NULL);
+        else upgrade_popup_result_hide_ready_cb(NULL);
+    }
 }
 
 static void upgrade_popup_prompt_hide_ready_cb(lv_anim_t* a)

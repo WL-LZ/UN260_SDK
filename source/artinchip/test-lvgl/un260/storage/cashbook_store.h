@@ -2,6 +2,9 @@
 #ifndef UN260_CASHBOOK_STORE_H
 #define UN260_CASHBOOK_STORE_H
 #include "un260/workspace/cashbook.h"
+typedef enum { CASHBOOK_REF_UNKNOWN, CASHBOOK_REF_CHECKING, CASHBOOK_REF_CLEAR, CASHBOOK_REF_USED, CASHBOOK_REF_FAILED } cashbook_reference_t;
+bool cashbook_store_check_operator(uint32_t id);
+cashbook_reference_t cashbook_store_operator_reference(uint32_t id);
 void cashbook_store_init(void);
 bool cashbook_store_poll(void);
 bool cashbook_store_ready(void);

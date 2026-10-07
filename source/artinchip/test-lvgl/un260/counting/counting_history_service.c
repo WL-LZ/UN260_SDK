@@ -24,7 +24,7 @@ static size_t g_session_log_len;
 typedef struct {
     ui_history_record_t record;
     storage_job_id_t job;
-    uint32_t multi_group;
+    uint32_t multi_group, generation;
     cashbook_result_t cashbook;
 } counting_history_snapshot_t;
 static counting_history_snapshot_t g_snapshots[COUNTING_HISTORY_PENDING_CAPACITY];
@@ -35,6 +35,7 @@ static bool g_uncaptured_pending;
 static bool g_failure_reported;
 static uint32_t g_multi_generation, g_submitted_group, g_submitted_id, g_submitted_pcs;
 static ui_history_record_t g_multi_snapshot;
+static uint32_t g_current_generation=1, g_current_record;
 static uint32_t g_operator_id;
 static uint32_t g_operator_group;
 static char g_operator_name[25];
@@ -104,6 +105,7 @@ void counting_history_append_frame(const char *tag,
 
 void counting_history_session_start(const uint8_t *buf, uint8_t len)
 {
+    ++g_current_generation;g_current_record=0;
     counting_cashbook_on_start();
     const workspace_user_t *operator=workspace_store_ready()?workspace_active(workspace_store_get()):NULL;
     g_operator_id=operator?operator->id:0;
@@ -242,6 +244,7 @@ static counting_history_commit_result_t capture_multi(counting_session_state_t *
         /* MULTI updates replace one retained group, even with ADD off.
          * Late details or later passes must not relabel its first operator. */
         bool same_group=g_operator_group==m->group_generation;
+        s->generation=g_current_generation;
         s->record.operator_id=same_group?g_multi_snapshot.operator_id:g_operator_id;
         snprintf(s->record.operator_name,sizeof(s->record.operator_name),"%s",same_group?g_multi_snapshot.operator_name:g_operator_name);
         g_operator_group=m->group_generation;
@@ -291,6 +294,7 @@ counting_history_commit_result_t counting_history_try_commit(
         g_uncaptured_pending = true;
         return COUNTING_HISTORY_COMMIT_FAILED;
     }
+    snapshot->generation=g_current_generation;
     snapshot->record.operator_id=g_operator_id;
     snprintf(snapshot->record.operator_name,sizeof(snapshot->record.operator_name),"%s",g_operator_name);
     counting_cashbook_capture(&snapshot->cashbook,&snapshot->record,sim_data);
@@ -316,6 +320,7 @@ counting_history_commit_result_t counting_history_poll_commit(
     while (g_snapshot_count > 0 && g_snapshots[0].job != 0 &&
            ui_history_commit_status(g_snapshots[0].job) == STORAGE_JOB_SUCCEEDED &&
            counting_cashbook_commit(&g_snapshots[0].cashbook)) {
+        if(g_snapshots[0].generation==g_current_generation)g_current_record=g_snapshots[0].cashbook.source;
         memmove(g_snapshots, g_snapshots + 1,
                 (--g_snapshot_count) * sizeof(g_snapshots[0]));
         saved = true;
@@ -406,3 +411,6 @@ bool counting_history_prepare_start(counting_session_state_t *session,
      * live frame behind it. Admission control still applies to UI requests. */
     return counting_history_prepare_reset(session, sim_data, now_ms);
 }
+
+uint32_t counting_history_current_record(void){return counting_history_is_idle()?g_current_record:0;}
+void counting_history_current_invalidate(void){++g_current_generation;g_current_record=0;}

@@ -15,6 +15,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--lvgl-dir', type=Path, default=Path(os.environ.get('LVGL_SOURCE', root.parents[1] / 'third-party/lvgl-8.3.2')))
     parser.add_argument('--sanitize', choices=('none', 'undefined', 'address,undefined'), default='address,undefined')
+    parser.add_argument('--harness', type=Path, help='Standalone real-LVGL motion harness')
     args = parser.parse_args()
     lvgl = args.lvgl_dir.resolve()
     compiler = os.environ.get('CC') or shutil.which('cc') or shutil.which('gcc')
@@ -39,9 +40,10 @@ def main():
 #define LV_USE_THEME_BASIC 0
 #define LV_USE_THEME_MONO 0
 #define LV_USE_LOG 0
+#define LV_USE_ASSERT_MALLOC 0
 #endif
 ''')
-    sources = [root / 'tools/test_content_pager.c', root / 'un260/lv_components/lv_content_pager.c']
+    sources = [args.harness.resolve()] if args.harness else [root / 'tools/test_content_pager.c', root / 'un260/lv_components/lv_content_pager.c', root / 'un260/lv_components/lv_capsule_pagination.c']
     sources += sorted(p for p in (lvgl / 'src').rglob('*.c') if p.name != 'qrcodegen.c')
     flags = [compiler, '-std=gnu11', '-O1', '-g', '-Wall', '-Wextra', '-no-pie',
              '-I' + str(cache), '-I' + str(root), '-I' + str(lvgl), '-DLV_CONF_PATH=' + str(conf)]

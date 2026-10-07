@@ -310,6 +310,8 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
 
     case 0x38:
         if (work_mode_service_handle_reply(buf, len)) {
+            if (work_mode_service_take_user_confirmation())
+                app_setting_notice_result("settings.work_mode", UI_N_("Start"), true);
             page_01_bottom_a_refresh_work(len == 6);
             page_03_update_menu_button_states_refresh();
             smart_island_refresh_summary();

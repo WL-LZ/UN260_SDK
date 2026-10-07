@@ -15,7 +15,7 @@ typedef enum { FAILURE_NONE, FAILURE_LOAD, FAILURE_SAVE, FAILURE_SEND, FAILURE_R
 static struct {
     bool initialized, stopped, loaded, diagnostic, actual_valid, busy;
     bool deferred_sync, failure_event, controller_seen, retry_manual;
-    bool session_restore;
+    bool session_restore, user_confirmation, reset_pending;
     uint8_t actual, sync_mode, target;
     uint32_t operations, request_tick, guard_tick;
     bool guard_active, late_request;
@@ -33,6 +33,7 @@ static bool records_equal(const work_mode_record_t *a, const work_mode_record_t 
 
 static void fail(failure_t reason)
 {
+    state.user_confirmation = false;
     state.failure = reason;
     state.failure_event = true;
     state.phase = WORK_MODE_FAILED;
@@ -126,6 +127,9 @@ void work_mode_service_set_diagnostic(bool active)
     state.phase = active ? WORK_MODE_WAITING_SYNC : WORK_MODE_RESTORING;
 }
 
+bool work_mode_service_operation_active(void) { return state.operations != 0; }
+void work_mode_service_set_reset_pending(bool pending) { state.reset_pending = pending; }
+
 void work_mode_service_hold_operation(uint32_t owner, bool active)
 {
     if (active) state.operations |= owner;
@@ -156,7 +160,7 @@ bool work_mode_service_request(uint8_t mode)
     bool explicit_retry = state.failure == FAILURE_SEND ||
         state.failure == FAILURE_REPLY || state.failure == FAILURE_TIMEOUT;
     if (mode > WORK_MODE_MANUAL || !state.loaded || !state.controller_seen ||
-        state.stopped || state.diagnostic || state.request != REQUEST_NONE ||
+        state.stopped || state.reset_pending || state.diagnostic || state.request != REQUEST_NONE ||
         (!state.actual_valid && !explicit_retry) ||
         (state.record.restore_pending && !explicit_retry) ||
         (state.failure != FAILURE_NONE && !explicit_retry)) return false;
@@ -169,6 +173,7 @@ bool work_mode_service_request(uint8_t mode)
         state.failure = FAILURE_NONE;
         state.failure_event = false;
     }
+    state.user_confirmation = false;
     return send_mode(mode, REQUEST_USER, now);
 }
 
@@ -222,6 +227,7 @@ bool work_mode_service_handle_reply(const uint8_t *frame, uint8_t length)
     if (completed == REQUEST_USER) {
         state.record.preferred_valid = true;
         state.record.preferred = actual;
+        state.user_confirmation = true;
     }
     return true;
 }
@@ -249,6 +255,7 @@ void work_mode_service_poll(uint32_t now, bool machine_busy)
     if (state.stopped) return;
     state.busy = machine_busy;
     poll_store();
+    if (state.reset_pending) return;
     if (state.request != REQUEST_NONE &&
         (int32_t)(now - state.request_tick) >= (int32_t)REQUEST_TIMEOUT_MS) {
         state.late_request = state.request == REQUEST_MANUAL;
@@ -328,10 +335,18 @@ void work_mode_service_retry(void)
 
 void work_mode_service_stop(void)
 {
+    state.user_confirmation = false;
     state.stopped = true;
     state.request = REQUEST_NONE;
     state.actual_valid = false;
     /* Do not erase the persisted recovery journal on application shutdown. */
+}
+
+bool work_mode_service_take_user_confirmation(void)
+{
+    bool result = state.user_confirmation;
+    state.user_confirmation = false;
+    return result;
 }
 
 bool work_mode_service_take_failure(void)

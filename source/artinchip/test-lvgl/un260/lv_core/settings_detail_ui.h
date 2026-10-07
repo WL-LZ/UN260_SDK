@@ -9,6 +9,7 @@ typedef enum {
     SETTINGS_DETAIL_KEYBOARD_NUM = 0,
     SETTINGS_DETAIL_KEYBOARD_TEXT,
     SETTINGS_DETAIL_KEYBOARD_UINT, /* Unsigned integer, PIN-layout number pad. */
+    SETTINGS_DETAIL_KEYBOARD_DECIMAL, /* Non-negative amount/rate. */
 } settings_detail_keyboard_mode_t;
 
 typedef void (*settings_detail_keyboard_cb_t)(const char* value, void* user_data);
@@ -62,6 +63,8 @@ void settings_detail_add_run(lv_obj_t *page);
 /* reason is an English message ID (UI_N_), translated when displayed.
  * It must remain valid until cleared or the button is deleted. */
 void settings_detail_action_block(lv_obj_t *button, const char *reason);
+/* Normal pending/no-change state: page status explains it; no warning dialog. */
+void settings_detail_action_wait(lv_obj_t *button, const char *reason);
 bool settings_detail_keyboard_show(const char* title,
                                    const char* init_value,
                                    uint16_t max_len,

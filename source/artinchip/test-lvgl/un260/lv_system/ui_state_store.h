@@ -9,7 +9,7 @@
 
 #define UI_STATE_STORE_MAGIC   0x55495354U
 #define UI_STATE_STORE_VERSION 1U
-#define UI_STATE_QUICK_CONTROL_COUNT 9U
+#define UI_STATE_QUICK_CONTROL_COUNT 13U
 
 #ifdef __cplusplus
 extern "C" {

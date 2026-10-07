@@ -28,14 +28,21 @@ static bool employee_valid(const char *s)
 workspace_user_t *workspace_find(workspace_model_t *m, uint32_t id)
 {
     if (!m || m->user_count > WORKSPACE_USERS) return NULL;
+    if(id==0)return &m->shared;
     for (unsigned i=0; i<m->user_count; ++i) if (m->users[i].id==id) return &m->users[i];
     return NULL;
 }
 const workspace_user_t *workspace_active(const workspace_model_t *m)
 {
     if (!m || m->user_count > WORKSPACE_USERS) return NULL;
-    for (unsigned i=0; i<m->user_count; ++i) if (m->users[i].id==m->active_id) return &m->users[i];
+    if(!m->operators_enabled)return &m->shared;
+    for (unsigned i=0; i<m->user_count; ++i) if (m->users[i].id==m->active_id&&!m->disabled[i]) return &m->users[i];
     return NULL;
+}
+const char *workspace_record_name(const workspace_model_t *m,uint32_t id,const char *snapshot)
+{
+    if(m&&id&&m->user_count<=WORKSPACE_USERS)for(unsigned i=0;i<m->user_count;++i)if(m->users[i].id==id)return m->users[i].name;
+    return snapshot?snapshot:"";
 }
 static void seed(workspace_user_t *u)
 {
@@ -46,8 +53,9 @@ static void seed(workspace_user_t *u)
 }
 void workspace_defaults(workspace_model_t *m)
 {
-    memset(m,0,sizeof(*m));m->version=3;m->next_id=2;m->active_id=1;m->user_count=1;
+    memset(m,0,sizeof(*m));m->version=4;m->next_id=2;m->active_id=1;m->user_count=1;
     m->users[0].id=1;strcpy(m->users[0].name,"Local operator");seed(&m->users[0]);
+    m->shared=m->users[0];m->shared.id=0;strcpy(m->shared.name,"Device workspace");
 }
 bool workspace_restore_preferences(workspace_model_t *m)
 {
@@ -56,8 +64,8 @@ bool workspace_restore_preferences(workspace_model_t *m)
     if (!defaults) return false;
     workspace_defaults(defaults);
     const workspace_user_t *initial = &defaults->users[0];
-    for (unsigned i = 0; i < m->user_count; ++i) {
-        workspace_user_t *u = &m->users[i];
+    for (unsigned i = 0; i <= m->user_count; ++i) {
+        workspace_user_t *u = i==m->user_count?&m->shared:&m->users[i];
         u->quick_enabled = initial->quick_enabled;
         u->qr_after_count = initial->qr_after_count;
         u->batch_count = initial->batch_count;
@@ -65,18 +73,17 @@ bool workspace_restore_preferences(workspace_model_t *m)
         u->profile_count = initial->profile_count;
         memcpy(u->profiles, initial->profiles, sizeof(u->profiles));
     }
-    m->active_id = m->users[0].id;
     free(defaults);
     return workspace_model_valid(m);
 }
 bool workspace_model_valid(const workspace_model_t *m)
 {
-    if (!m || m->version!=3 || !m->next_id || !m->user_count || m->user_count>WORKSPACE_USERS || !workspace_active(m))return false;
-    for(unsigned i=0;i<m->user_count;i++) {
-        const workspace_user_t *u=&m->users[i];
-        if(!u->id||u->id>=m->next_id||!workspace_name_valid(u->name)||!employee_valid(u->employee_id)||!optional_valid(u->team,WORKSPACE_TEAM)||u->quick_enabled>1||u->qr_after_count>1||u->avatar.present>1||
+    if (!m || m->operators_enabled>1 || m->management_protected>1 || m->version!=4 || m->shared.id!=0 || !m->next_id || !m->user_count || m->user_count>WORKSPACE_USERS || !workspace_active(m))return false;
+    for(unsigned i=0;i<=m->user_count;i++) {
+        const workspace_user_t *u=i==m->user_count?&m->shared:&m->users[i];
+        if((i<m->user_count&&(!u->id||m->disabled[i]>1))||u->id>=m->next_id||!workspace_name_valid(u->name)||!employee_valid(u->employee_id)||!optional_valid(u->team,WORKSPACE_TEAM)||u->quick_enabled>1||u->qr_after_count>1||u->avatar.present>1||
            !u->profile_count||u->profile_count>WORKSPACE_PROFILES||u->batch_count<2||u->batch_count>WORKSPACE_BATCHES||u->batches[0])return false;
-        for(unsigned j=0;j<i;j++)if(m->users[j].id==u->id||!strcasecmp(m->users[j].name,u->name)||(*u->employee_id&&!strcasecmp(m->users[j].employee_id,u->employee_id)))return false;
+        for(unsigned j=0;i<m->user_count&&j<i;j++)if(m->users[j].id==u->id||!strcasecmp(m->users[j].name,u->name)||(*u->employee_id&&!strcasecmp(m->users[j].employee_id,u->employee_id)))return false;
         for(unsigned j=1;j<u->batch_count;j++) {
             if(!u->batches[j]||u->batches[j]>200)return false;
             for(unsigned k=0;k<j;k++)if(u->batches[j]==u->batches[k])return false;
@@ -88,6 +95,18 @@ bool workspace_model_valid(const workspace_model_t *m)
         }
     }return true;
 }
+bool workspace_set_operators_enabled(workspace_model_t *m,bool enabled)
+{
+    if(!workspace_model_valid(m))return false;
+    if(!enabled){m->operators_enabled=0;return true;}
+    uint32_t first=0;
+    for(unsigned i=0;i<m->user_count;++i)if(!m->disabled[i]){
+        if(m->users[i].id==m->active_id){m->operators_enabled=1;return true;}
+        if(!first)first=m->users[i].id;
+    }
+    if(!first)return false;
+    m->active_id=first;m->operators_enabled=1;return true;
+}
 bool workspace_add_user(workspace_model_t *m,const char *name,uint32_t *id)
 {
     if(!workspace_model_valid(m)||!workspace_name_valid(name)||m->user_count==WORKSPACE_USERS||m->next_id==UINT32_MAX)return false;
@@ -95,14 +114,23 @@ bool workspace_add_user(workspace_model_t *m,const char *name,uint32_t *id)
     workspace_user_t *u=&m->users[m->user_count++];memset(u,0,sizeof(*u));
     u->id=m->next_id++;strcpy(u->name,name);seed(u);if(id)*id=u->id;return true;
 }
-bool workspace_delete_user(workspace_model_t *m,uint32_t id)
+bool workspace_remove_user(workspace_model_t *m,uint32_t id)
+{
+    if(!workspace_model_valid(m)||m->user_count<=1||(m->operators_enabled&&id==m->active_id))return false;
+    for(unsigned i=0;i<m->user_count;++i)if(m->users[i].id==id){
+        memmove(m->users+i,m->users+i+1,(m->user_count-i-1)*sizeof(m->users[0]));
+        memmove(m->disabled+i,m->disabled+i+1,m->user_count-i-1);
+        --m->user_count;memset(&m->users[m->user_count],0,sizeof(m->users[0]));m->disabled[m->user_count]=0;
+        if(m->active_id==id)m->active_id=m->users[0].id;
+        return true;
+    }
+    return false;
+}
+bool workspace_disable_user(workspace_model_t *m,uint32_t id)
 {
     if(!workspace_model_valid(m)||m->user_count<=1||id==m->active_id)return false;
     for(unsigned i=0;i<m->user_count;i++)if(m->users[i].id==id) {
-        if(i+1<m->user_count)
-            memmove(&m->users[i],&m->users[i+1],
-                    (m->user_count-i-1)*sizeof(m->users[0]));
-        memset(&m->users[--m->user_count],0,sizeof(m->users[0]));
+        m->disabled[i]=1;
         return true;
     }
     return false;

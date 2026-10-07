@@ -65,3 +65,20 @@ lv_obj_t *lv_nav_home_icon_create(lv_obj_t *parent)
     lv_obj_clear_flag(icon, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
     return icon;
 }
+
+lv_obj_t *lv_nav_back_text_button_create(lv_obj_t *parent,lv_coord_t x,lv_coord_t y,
+    const lv_font_t *font,lv_event_cb_t cb,void *user_data)
+{
+    const lv_damped_button_style_t style={
+        .normal_color=0xE9EEF4,.pressed_color=0xDDE4EB,
+        .disabled_color=0xF0F2F5,.text_color=0x20313B,
+        .disabled_text_color=0xADB7BD,.radius=12
+    };
+    lv_obj_t *button=lv_damped_button_create(parent,&style,ui_tr("Back"),font);
+    if(!button)return NULL;
+    lv_obj_set_pos(button,x,y);lv_obj_set_size(button,76,42);
+    lv_obj_set_style_border_width(button,0,0);lv_obj_set_style_shadow_width(button,0,0);
+    lv_obj_t *label=lv_damped_button_get_label(button);lv_obj_set_size(label,60,font->line_height);lv_label_set_long_mode(label,LV_LABEL_LONG_DOT);lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_CENTER,0);lv_obj_center(label);
+    if(cb){lv_obj_add_event_cb(button,cb,LV_EVENT_CLICKED,user_data);lv_nav_button_mark_back(button);}
+    return button;
+}

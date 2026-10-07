@@ -188,7 +188,8 @@ static bool capsule_pagination_set_active_core(lv_obj_t *pagination, uint8_t ind
     old_index = ctx->active_index;
 
     if (old_index == new_index) {
-        capsule_pagination_dot_apply_state(ctx->dots[new_index], true);
+        /* Repeated animated projection must retain the in-flight width. */
+        if (!anim_en) capsule_pagination_dot_apply_state(ctx->dots[new_index], true);
         return true;
     }
 

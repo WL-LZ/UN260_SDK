@@ -1,3 +1,6 @@
+#include "un260/app_service/app_local_setting.h"
+#include "un260/lv_core/page_19_history.h"
+#include "un260/lv_core/page_cash_tools.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "lv_quick_controls.h"
 #include "lv_settings.h"
@@ -28,13 +31,13 @@ LV_FONT_DECLARE(lv_font_instrument_sans_semibold_20);
 
 static const char *const titles[QUICK_CONTROL_COUNT]={
     UI_N_("Layout edit"),UI_N_("Gestures"),UI_N_("Pure count"),UI_N_("Popup"),
-    UI_N_("Touch guide"),UI_N_("Export"),UI_N_("QR code"),UI_N_("Standby"),UI_N_("Top popup")};
+    UI_N_("Touch guide"),UI_N_("Export"),UI_N_("QR code"),UI_N_("Standby"),UI_N_("Top popup"),UI_N_("Calculator"),UI_N_("Cash journal"),UI_N_("History"),UI_N_("Operators")};
 static const char *const subtitles[QUICK_CONTROL_COUNT]={
     UI_N_("Long-press on Main"),UI_N_("Swipe navigation"),UI_N_("Focused counting"),
     UI_N_("Auto-open fault guide"),UI_N_("Show touch points"),UI_N_("Current result to USB"),
-    UI_N_("Share current result"),UI_N_("Touch screen to wake"),UI_N_("Show operation messages")};
+    UI_N_("Share current result"),UI_N_("Touch screen to wake"),UI_N_("Show operation messages"),UI_N_("Calculate and convert"),UI_N_("Confirm actual cash movement"),UI_N_("Saved counting results"),UI_N_("Identity and preferences")};
 static const char *const icons[QUICK_CONTROL_COUNT]={
-    "layout", "gesture", "pure", "popup", "touch", "export", "qr", "standby", "popup"};
+    "layout", "gesture", "pure", "popup", "touch", "export", "qr", "standby", "popup", "calculator", "journal", "history", "operators"};
 static bool is_switch(unsigned id)
 { return id==QUICK_LAYOUT || id==QUICK_GESTURES || id==QUICK_POPUP || id==QUICK_TOUCH || id==QUICK_TOP_POPUP; }
 static bool action_enabled(const lv_quick_controls_state_t *s,unsigned id)
@@ -195,17 +198,20 @@ bool lv_quick_controls_refresh(lv_quick_controls_t *v,lv_quick_controls_state_t 
 bool lv_quick_controls_execute(quick_control_action_t action)
 {
     switch(action){
-        case QUICK_LAYOUT:page_01_main_layout_set_enabled(!page_01_main_layout_is_enabled());return true;
-        case QUICK_GESTURES:return gesture_service_set_enabled(!gesture_service_enabled());
+        case QUICK_LAYOUT:return app_local_setting_apply(APP_LOCAL_LAYOUT,!page_01_main_layout_is_enabled(),0);
+        case QUICK_GESTURES:return app_local_setting_apply(APP_LOCAL_GESTURES,!gesture_service_enabled(),0);
         case QUICK_PURE:return ui_page_18_pure_toggle_theme();
         case QUICK_POPUP:
-            fault_popup_set_auto_enabled(!fault_popup_get_auto_enabled());
-            ui_state_save_popup_auto_state();return true;
-        case QUICK_TOP_POPUP:return ui_state_top_popup_set_enabled(!ui_notice_get_enabled());
-        case QUICK_TOUCH:return touch_feedback_set_enabled(!touch_feedback_enabled());
+            return app_local_setting_apply(APP_LOCAL_FAULT_POPUP,!fault_popup_get_auto_enabled(),0);
+        case QUICK_TOP_POPUP:return app_local_setting_apply(APP_LOCAL_TOP_POPUP,!ui_notice_get_enabled(),0);
+        case QUICK_TOUCH:return app_local_setting_apply(APP_LOCAL_TOUCH,!touch_feedback_enabled(),0);
         case QUICK_EXPORT:return ui_export_data_request();
         case QUICK_QR:smart_island_show_qr_popup();return true;
         case QUICK_STANDBY:return app_standby_runtime_request();
+        case QUICK_CALCULATOR:ui_manager_push_page(UI_PAGE_CALCULATOR);return true;
+        case QUICK_CASH_JOURNAL:ui_cash_journal_filter_operator(0);ui_manager_push_page(UI_PAGE_CASH_JOURNAL);return true;
+        case QUICK_HISTORY:ui_page_19_history_open_all();return true;
+        case QUICK_OPERATORS:ui_manager_push_page(UI_PAGE_OPERATORS);return true;
         default:return false;
     }
 }

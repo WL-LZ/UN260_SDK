@@ -54,8 +54,10 @@ void app_setting_notice_result(const char *key, const char *title, bool success)
         return;
     }
     if (!app_setting_notice_allowed(key)) return;
-    ui_notice_post_text(success ? UI_NOTICE_SUCCESS : UI_NOTICE_ERROR, key, title,
-        success ? UI_N_("Setting saved.") : UI_N_("Setting rejected. Previous value retained."));
+    const char *detail = success ?
+        (notice_command(key) == 0x38 ? UI_N_("Start mode confirmed") : UI_N_("Setting saved.")) :
+        UI_N_("Setting rejected. Previous value retained.");
+    ui_notice_post_text(success ? UI_NOTICE_SUCCESS : UI_NOTICE_ERROR, key, title, detail);
 }
 void app_setting_notice_timeout(const char *key, const char *title)
 {

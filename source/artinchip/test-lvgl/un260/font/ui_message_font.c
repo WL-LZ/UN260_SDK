@@ -14,17 +14,28 @@ LV_FONT_DECLARE(lv_font_message_cjk_22);
 LV_FONT_DECLARE(lv_font_message_cjk_24);
 LV_FONT_DECLARE(lv_font_message_cjk_28);
 
+LV_FONT_DECLARE(lv_font_instrument_sans_medium_15);
+LV_FONT_DECLARE(lv_font_instrument_sans_medium_17);
+LV_FONT_DECLARE(lv_font_instrument_sans_semibold_18);
+LV_FONT_DECLARE(lv_font_instrument_sans_semibold_24);
+
 static const struct {
     const lv_font_t *base;
     const lv_font_t *fallback;
 } faces[] = {
+    { &lv_font_instrument_sans_medium_15, &lv_font_message_cjk_16 },
+    { &lv_font_instrument_sans_medium_17, &lv_font_message_cjk_18 },
+    { &lv_font_instrument_sans_semibold_18, &lv_font_message_cjk_18 },
+    { &lv_font_instrument_sans_semibold_24, &lv_font_message_cjk_24 },
     { &lv_font_instrument_sans_medium_12, &lv_font_message_cjk_12 },
     { &lv_font_instrument_sans_semibold_12, &lv_font_message_cjk_12 },
     { &lv_font_instrument_sans_medium_13, &lv_font_message_cjk_14 },
     { &lv_font_instrument_sans_medium_14, &lv_font_message_cjk_14 },
     { &lv_font_instrument_sans_semibold_14, &lv_font_message_cjk_14 },
+    { &lv_font_instrument_sans_semibold_16, &lv_font_message_cjk_16 },
     { &lv_font_instrument_sans_medium_16, &lv_font_message_cjk_16 },
     { &lv_font_instrument_sans_medium_18, &lv_font_message_cjk_18 },
+    { &lv_font_instrument_sans_medium_20, &lv_font_message_cjk_20 },
     { &lv_font_instrument_sans_medium_24, &lv_font_message_cjk_24 },
     { &lv_font_instrument_sans_semibold_20, &lv_font_message_cjk_20 },
     { &lv_font_instrument_sans_semibold_22, &lv_font_message_cjk_22 },

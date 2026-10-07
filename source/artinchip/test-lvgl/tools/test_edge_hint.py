@@ -133,6 +133,9 @@ int main(void) {
     touch_feedback_edge_hint(1,120,200);
     touch_feedback_edge_hint(0,0,0);
     tick+=400;edge_hint_return_step(g_edge_timer);
+    assert(g_edge_elapsed==0); /* First captured extent must be drawn first. */
+    lv_event_t first={g_edge_hint,&ctx};edge_hint_draw(&first);
+    tick+=400;edge_hint_return_step(g_edge_timer);
     assert(g_edge_elapsed==32 && !g_edge_hint->hidden && g_edge_returning);
     tick+=100;edge_hint_return_step(g_edge_timer);
     assert(g_edge_elapsed==32); /* No timer-only completion without a drawn frame. */

@@ -1,4 +1,5 @@
 #include "un260/lv_system/ui_i18n.h"
+#include "un260/font/ui_message_font.h"
 #include "lv_alnum_keyboard.h"
 #include "lv_popup_style.h"
 #include "lv_damped_button.h"
@@ -13,7 +14,7 @@
 #define KEYBOARD_HEIGHT 400
 #define PANEL_WIDTH 1030
 #define PANEL_HEIGHT 304
-#define BUTTON_COUNT 43
+#define BUTTON_COUNT 44
 #define CHARACTER_COUNT 36
 #define KEY_COLOR 0xF1F4F5
 #define ACTION_COLOR 0x1462CC
@@ -71,7 +72,7 @@ static lv_obj_t *label_create(lv_obj_t *parent, const char *text,
     lv_obj_remove_style_all(label);
     lv_obj_set_pos(label, x, y);
     lv_obj_set_size(label, width, height);
-    lv_obj_set_style_text_font(label, font, 0);
+    lv_obj_set_style_text_font(label, ui_message_font(font), 0);
     lv_obj_set_style_text_color(label, lv_color_hex(color), 0);
     lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
     lv_label_set_text(label, text ? text : "");
@@ -212,6 +213,13 @@ static void key_event(lv_event_t *event)
     refresh_text(keyboard);
 }
 
+static void space_event(lv_event_t *event)
+{
+    lv_alnum_keyboard_t *keyboard=lv_event_get_user_data(event);
+    if(!lv_alnum_keyboard_is_visible(keyboard)||keyboard->choice_mode)return;
+    size_t length=strlen(keyboard->text);if(length>=keyboard->max_length)return;
+    keyboard->text[length]=' ';keyboard->text[length+1]=0;refresh_text(keyboard);
+}
 static void symbols_event(lv_event_t *event)
 {
     static const char letters[] = "1234567890QWERTYUIOPASDFGHJKLZXCVBNM";
@@ -332,7 +340,7 @@ static lv_obj_t *button_create(lv_alnum_keyboard_t *keyboard, lv_obj_t *parent,
         color, color, 0xEFF2F4, (color == ACTION_COLOR || color == 0x1875E8) ? 0xFFFFFF : TEXT_COLOR,
         MUTED_COLOR, 12
     };
-    lv_obj_t *button = lv_damped_button_create(parent, &style, text, font);
+    lv_obj_t *button = lv_damped_button_create(parent, &style, text, ui_message_font(font));
     if (!button || !lv_damped_button_get_label(button)) {
         if (button) lv_obj_del(button);
         return NULL;
@@ -342,7 +350,7 @@ static lv_obj_t *button_create(lv_alnum_keyboard_t *keyboard, lv_obj_t *parent,
     lv_obj_set_style_border_width(button, 1, 0);
     lv_obj_set_style_border_color(button, lv_color_hex(LINE_COLOR), 0);
     lv_obj_set_style_border_opa(button, LV_OPA_COVER, 0);
-    if(callback == key_event || callback == clear_event || callback == backspace_event || callback == symbols_event) {
+    if(callback == key_event || callback == clear_event || callback == backspace_event || callback == space_event || callback == symbols_event) {
         lv_obj_set_style_shadow_color(button,lv_color_hex(0xAEBCC7),0);
         lv_obj_set_style_shadow_width(button,2,0);
         lv_obj_set_style_shadow_ofs_y(button,2,0);
@@ -381,7 +389,7 @@ lv_alnum_keyboard_t *lv_alnum_keyboard_create(lv_obj_t *parent,
         return NULL;
     }
 
-    lv_obj_t *panel = plain(keyboard->root, 125, 48, PANEL_WIDTH, PANEL_HEIGHT,
+    lv_obj_t *panel = plain(keyboard->root, 125, config->symbols?22:48, PANEL_WIDTH, config->symbols?356:PANEL_HEIGHT,
                             config->modern ? 0xE8EFF4 : 0xF6F8F9, config->modern ? 24 : 16);
     if (!panel) goto failed;
     keyboard->panel=panel;
@@ -426,6 +434,7 @@ lv_alnum_keyboard_t *lv_alnum_keyboard_create(lv_obj_t *parent,
         !button_create(keyboard, panel, config->apply_text, &lv_font_instrument_sans_semibold_20,
                        824, 36, 186, 44, ACTION_COLOR, apply_event)) goto failed;
     if (config->symbols) {
+        if(!button_create(keyboard,panel,ui_tr("Space"),&lv_font_instrument_sans_medium_18,267,296,480,44,KEY_COLOR,space_event))goto failed;
         keyboard->symbols = button_create(keyboard, panel, "#+=",
             &lv_font_instrument_sans_medium_18, 20, 245, 74, 44,
             KEY_COLOR, symbols_event);

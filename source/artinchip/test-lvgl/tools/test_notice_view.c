@@ -48,6 +48,7 @@ static void capture(const char *name)
 
 static void backdrop(void)
 {
+    lv_obj_set_style_bg_opa(lv_scr_act(), LV_OPA_COVER, 0);
     lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(0xF9FAFB), 0);
     lv_obj_t *heading = lv_label_create(lv_scr_act());
     lv_label_set_text(heading, "Menu     Preferences     Receipt");
@@ -57,6 +58,7 @@ static void backdrop(void)
         lv_obj_t *card = lv_obj_create(lv_scr_act());
         lv_obj_set_pos(card, 28 + 312 * i, 102);
         lv_obj_set_size(card, 288, 264);
+        lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
         lv_obj_set_style_bg_color(card, lv_color_hex(0xE8EDF0), 0);
         lv_obj_set_style_border_width(card, 0, 0);
     }
@@ -139,6 +141,48 @@ static void test_top_popup_switch(void)
     assert(lv_obj_get_child_cnt(lv_layer_top())==children);
 }
 
+static void test_interrupted_notice(void)
+{
+    const unsigned times[] = {0,20,80,200,360};
+    for (unsigned i=0;i<sizeof(times)/sizeof(times[0]);++i) {
+        ui_notice_post(UI_NOTICE_PROGRESS,"fast","Receipt settings","Applying settings...");
+        advance(times[i]);lv_obj_update_layout(notice.object);
+        lv_coord_t y=lv_obj_get_y(notice.object);lv_opa_t alpha=notice.opacity;
+        lv_anim_t *motion=lv_anim_get(notice.object,animation_exec);
+        assert(motion && notice.animating);
+        ui_notice_post(UI_NOTICE_SUCCESS,"fast","Receipt settings","Setting saved.");
+        lv_obj_update_layout(notice.object);
+        assert(notice.animating && lv_anim_get(notice.object,animation_exec)==motion);
+        assert(lv_obj_get_y(notice.object)==y && notice.opacity==alpha);
+        advance(420-times[i]);
+        assert(!notice.animating && notice.opacity==LV_OPA_COVER && lv_obj_get_y(notice.object)==NOTICE_Y);
+        assert(notice.state.active.remaining_ms>1600); /* Starts after entry. */
+        ui_notice_clear("fast");
+    }
+    ui_notice_post(UI_NOTICE_PROGRESS,"active","Working",NULL);advance(80);
+    ui_notice_post(UI_NOTICE_INFO,"queued","Queued",NULL);
+    lv_anim_t *motion=lv_anim_get(notice.object,animation_exec);lv_opa_t alpha=notice.opacity;
+    ui_notice_clear("queued");
+    assert(notice.animating && lv_anim_get(notice.object,animation_exec)==motion && notice.opacity==alpha);
+    advance(420);ui_notice_dismiss(NULL);advance(80);lv_obj_update_layout(notice.object);
+    lv_coord_t y=lv_obj_get_y(notice.object);alpha=notice.opacity;
+    ui_notice_post(UI_NOTICE_SUCCESS,"active","Done",NULL);lv_obj_update_layout(notice.object);
+    assert(notice.animating && !notice.leaving && notice.opacity==alpha && lv_obj_get_y(notice.object)==y);
+    advance(420);ui_notice_clear(NULL);
+    ui_notice_dialog_acquire();ui_notice_dialog_acquire();
+    ui_notice_post(UI_NOTICE_PROGRESS,"blocked","Working",NULL);
+    ui_notice_post(UI_NOTICE_SUCCESS,"blocked","Saved",NULL);
+    ui_notice_dialog_release();assert(!notice.visible);
+    ui_notice_dialog_release();assert(notice.animating && notice.opacity==LV_OPA_TRANSP);
+    advance(80);assert(notice.opacity>0 && notice.opacity<LV_OPA_COVER);
+    ui_notice_set_suspended(UI_NOTICE_SUSPEND_FAULT,true);
+    ui_notice_set_suspended(UI_NOTICE_SUSPEND_FAULT,false);
+    assert(notice.animating);advance(420);
+    assert(notice.opacity==LV_OPA_COVER && lv_obj_get_y(notice.object)==NOTICE_Y);
+    ui_notice_deinit();
+    puts("PASS notice motion: 0/20/80/200/360ms ACK, queued removal, exit reversal, nested dialog/fault resume, full visible lifetime");
+}
+
 int main(void)
 {
     static lv_disp_draw_buf_t draw_buffer;
@@ -151,26 +195,25 @@ int main(void)
     driver.draw_buf = &draw_buffer; driver.flush_cb = flush;
     assert(lv_disp_drv_register(&driver));
     test_top_popup_switch();
-    assert(NOTICE_ENTER_MS == NOTICE_EXIT_MS && NOTICE_EXIT_MS == 240);
+    test_interrupted_notice();
+    assert(NOTICE_ENTER_MS == 380 && NOTICE_EXIT_MS == 180);
     backdrop();
     unsigned children = lv_obj_get_child_cnt(lv_layer_top());
     ui_notice_post(UI_NOTICE_SUCCESS, "receipt", "Receipt settings", "Saved");
     advance(420);
     assert(ui_notice_is_visible());
-    assert(lv_obj_get_x(notice.object) == 265 && lv_obj_get_y(notice.object) == 14);
+    assert(lv_obj_get_x(notice.object) == 460 && lv_obj_get_y(notice.object) == 12);
     assert(lv_obj_get_child_cnt(lv_layer_top()) == children + 1);
     assert(lv_obj_get_child_cnt(notice.object) == 0);
     capture("success");
-    assert(lv_color_to32(pixels[35*1280+850])==lv_color_to32(lv_color_hex(0xECEFF1)));
-    assert(lv_color_to32(pixels[113*1280+850])==lv_color_to32(lv_color_hex(0xECEFF1)));
-    assert(lv_color_to32(pixels[14*1280+850])==lv_color_to32(lv_color_white()));
+    assert(lv_obj_get_width(notice.object) == 360 && lv_obj_get_height(notice.object) == 72);
+    assert(notice.opacity == LV_OPA_COVER);
+    assert(lv_color_to32(pixels[70*1280+780]) == lv_color_to32(lv_color_hex(0xF5F7FA)));
     lv_event_send(notice.object, LV_EVENT_CLICKED, NULL);
     advance(100);
     assert(ui_notice_is_visible() && notice.leaving);
-    assert(lv_obj_get_y(notice.object) < 14);
+    assert(lv_obj_get_y(notice.object) <= 12 && notice.opacity < LV_OPA_COVER);
     capture("dismiss-animation");
-    int sample_y=lv_obj_get_y(notice.object)+99;
-    if(sample_y>=0)assert(lv_color_to32(pixels[sample_y*1280+850])==lv_color_to32(lv_color_hex(0xECEFF1)));
     advance(200);
     assert(!ui_notice_is_visible() && notice.timer->paused);
     assert(!lv_anim_get(notice.object, animation_exec));
@@ -194,7 +237,8 @@ int main(void)
     ui_notice_set_suspended(UI_NOTICE_SUSPEND_FAULT, false);
     assert(!ui_notice_is_visible());
     ui_notice_set_suspended(UI_NOTICE_SUSPEND_MODAL, false);
-    assert(ui_notice_is_visible() && !notice.timer->paused);
+    assert(ui_notice_is_visible() && notice.animating && notice.timer->paused);
+    advance(420);
     ui_notice_dismiss(NULL); advance(260);
     ui_notice_post(UI_NOTICE_PROGRESS, "export", "Exporting records", "Keep the USB drive connected.");
     assert(!ui_notice_is_visible());
@@ -216,9 +260,11 @@ int main(void)
     /* Tapping during entry must continue from the current position. */
     ui_notice_post(UI_NOTICE_INFO, "early", "Information", NULL);
     advance(100);
+    lv_obj_update_layout(notice.object);
     lv_coord_t entry_y = lv_obj_get_y(notice.object);
+    lv_opa_t entry_opacity = notice.opacity;
     ui_notice_dismiss(NULL);
-    assert(lv_obj_get_y(notice.object) == entry_y);
+    assert(lv_obj_get_y(notice.object) == entry_y && notice.opacity == entry_opacity);
     advance(260);
     assert(!ui_notice_is_visible());
 
@@ -229,6 +275,8 @@ int main(void)
     advance(10000);
     assert(notice.state.active.remaining_ms == remaining);
     ui_notice_set_suspended(UI_NOTICE_SUSPEND_STANDBY, false);
+    assert(notice.animating && notice.opacity == LV_OPA_TRANSP);
+    advance(420);
     advance(remaining - 100);
     assert(ui_notice_is_visible() && !notice.leaving);
     advance(400);
@@ -257,6 +305,37 @@ int main(void)
     assert(notice.object==same_object&&notice.state.active.revision==locale_revision&&notice.state.active.remaining_ms==locale_remaining&&notice.state.active.repeats==locale_repeats);
     ui_notice_dismiss("locale");ui_lang_set(LANGUAGE_EN);ui_notice_language_changed();advance(300);
     ui_notice_post_text(UI_NOTICE_PROGRESS,"locale","Confirm","Saved");assert(!ui_notice_is_visible());
+    /* Render all full localized catalog strings at the selected compact width. */
+    ui_notice_clear(NULL);
+    ui_notice_post(UI_NOTICE_WARNING, "wrap", "Update result unknown",
+        "Keep power connected. The update may still be running. Check the machine before starting another test.");
+    advance(420);
+    assert(notice.detail_height > ui_message_font(&lv_font_instrument_sans_medium_12)->line_height);
+    assert(lv_obj_get_x(notice.object) == 460 && lv_obj_get_y(notice.object) == 12);
+    assert(notice.copy_y >= 12 && notice.copy_y + notice.title_height + 2 + notice.detail_height <= notice.height - 12);
+    capture("long-warning");
+    ui_notice_clear("wrap");
+    ui_notice_post(UI_NOTICE_PROGRESS, "replace", "Start", "Waiting for controller...");
+    advance(420);
+    lv_obj_t *shared = notice.object;
+    ui_notice_post(UI_NOTICE_SUCCESS, "replace", "Start", "Start mode confirmed");
+    assert(notice.object == shared && !notice.animating && notice.opacity == LV_OPA_COVER);
+    assert(lv_obj_get_x(notice.object) == 460 && lv_obj_get_y(notice.object) == 12);
+    capture("start-confirmed");
+    ui_notice_clear("replace");
+    char huge[UI_NOTICE_DETAIL_CAPACITY];
+    memset(huge, 'W', sizeof(huge)-1); huge[sizeof(huge)-1] = 0;
+    ui_notice_post(UI_NOTICE_WARNING,"capacity",huge,huge); advance(420);
+    assert(notice.title_height <= 2 * notice.title_font->line_height + 2);
+    assert(notice.height + NOTICE_Y + NOTICE_SHADOW_EXTENT < 400);
+    assert(!strcmp(notice.detail, huge));
+    capture("capacity-wrap"); ui_notice_clear("capacity");
+    /* Wide backdrop reveals shadow damage/trails when a large card contracts. */
+    ui_notice_post(UI_NOTICE_WARNING,"contract","Notice","Long explanation with enough words to require several lines and a taller card. The existing result has not been changed.");
+    advance(420); int taller = notice.height;
+    ui_notice_post(UI_NOTICE_SUCCESS,"contract","Saved",NULL);
+    assert(notice.height <= taller && notice.height == NOTICE_HEIGHT);
+    capture("contracted"); ui_notice_clear("contract");
     language = 1;
     ui_notice_post(UI_NOTICE_SUCCESS, "receipt", "打印设置", "已保存");
     advance(420); capture("success-cn"); ui_notice_clear("receipt");
@@ -271,6 +350,6 @@ int main(void)
     }
     assert(lv_obj_get_child_cnt(lv_layer_top()) == children);
     assert(lv_anim_count_running() == 0);
-    puts("ui_notice_view: PASS (Top popup off during entry/press, queue clearing, no replay, independent blockers, deletion/recreation, actual LVGL draw and lifecycle)");
+    puts("ui_notice_view: PASS (compact geometry/wrapping/fade/update, Top popup off during entry/press, queue clearing, no replay, independent blockers, deletion/recreation, actual LVGL draw and lifecycle)");
     return 0;
 }

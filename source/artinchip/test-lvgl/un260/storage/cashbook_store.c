@@ -31,12 +31,14 @@ static cashbook_command_t command,failed_command;
 static uint32_t failed_sequence;
 static bool rejected;
 static bool initialized,busy,complete,success,ready,loading,fatal;
-typedef enum {JOB_COMMAND,JOB_ARCHIVE,JOB_SCAN,JOB_VIEW,JOB_EXPORT} job_t;
+typedef enum {JOB_COMMAND,JOB_ARCHIVE,JOB_SCAN,JOB_VIEW,JOB_EXPORT,JOB_REFERENCE} job_t;
 static job_t job;
 static cashbook_t *archive_view,*view_draft;
 static cashbook_archive_t archives[CASHBOOK_ARCHIVES],archive_draft[CASHBOOK_ARCHIVES];
 static unsigned archive_count,archive_draft_count;
 static uint32_t archive_id;
+static uint32_t reference_id,reference_sequence;
+static cashbook_reference_t reference_state,reference_result;
 static char message[320],result[320];
 static ui_message_t message_info,result_info;
 static uint32_t crc(const void *data,size_t n)
@@ -86,6 +88,7 @@ static bool append(void)
     return ok;
 }
 #include "cashbook_archives.inc"
+#include "cashbook_reference.inc"
 static void *work(void *unused)
 {
     (void)unused;bool ok;
@@ -94,6 +97,7 @@ static void *work(void *unused)
     else if(job==JOB_SCAN)ok=scan_archives();
     else if(job==JOB_VIEW)ok=read_archive();
     else if(job==JOB_EXPORT)ok=export_view();
+    else if(job==JOB_REFERENCE){ok=check_operator_reference();ui_message_key(&result_info,ok?UI_N_("Records ready."):UI_N_("Records could not be verified. Retry before deleting."));}
     else{
         *draft=*published;
         ok=cashbook_apply(draft,&command,result,sizeof(result));ui_message_key(&result_info,result);
@@ -128,6 +132,7 @@ bool cashbook_store_poll(void)
     if(job==JOB_VIEW){if(success){free(archive_view);archive_view=view_draft;view_draft=NULL;}else{free(view_draft);view_draft=NULL;}}
     if(!success&&(loading||fatal))ready=false;
     if(!loading&&job==JOB_COMMAND){rejected=!success;if(rejected){failed_command=command;failed_sequence=published->sequence;}}
+    if(job==JOB_REFERENCE)reference_state=success?reference_result:CASHBOOK_REF_FAILED;
     loading=false;message_info=result_info;return true;
 }
 bool cashbook_store_ready(void){return ready;}
@@ -148,6 +153,18 @@ void cashbook_store_close_view(void){if(!busy){free(archive_view);archive_view=N
 unsigned cashbook_store_archives(const cashbook_archive_t **items){if(items)*items=archives;return archive_count;}
 static bool start_job(job_t next,const char *status)
 {if(!ready||busy)return false;job=next;fatal=false;ui_message_key(&message_info,status);return begin();}
+cashbook_reference_t cashbook_store_operator_reference(uint32_t id)
+{
+    if(!ready||id!=reference_id||reference_sequence!=published->sequence)return CASHBOOK_REF_UNKNOWN;
+    return reference_state;
+}
+bool cashbook_store_check_operator(uint32_t id)
+{
+    if(!id||!ready||busy)return false;
+    reference_id=id;reference_sequence=published->sequence;reference_state=CASHBOOK_REF_CHECKING;
+    if(start_job(JOB_REFERENCE,UI_N_("Checking operator records...")))return true;
+    reference_state=CASHBOOK_REF_FAILED;return false;
+}
 bool cashbook_store_scan_archives(void){return start_job(JOB_SCAN,UI_N_("Looking for archived periods..."));}
 bool cashbook_store_open_archive(uint32_t id)
 {

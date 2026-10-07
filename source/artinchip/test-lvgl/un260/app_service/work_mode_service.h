@@ -23,6 +23,9 @@ typedef struct {
 void work_mode_service_init(void);
 void work_mode_service_poll(uint32_t now_ms, bool machine_busy);
 void work_mode_service_stop(void);
+bool work_mode_service_operation_active(void);
+/* Pause mode recovery only while a controller reset owns the transport. */
+void work_mode_service_set_reset_pending(bool pending);
 /* Called on real navigation commits, never off-screen page prewarming.
  * Changing active does not transmit synchronously, so multiple owner changes
  * within one page transition coalesce before the next UI poll. */
@@ -50,6 +53,9 @@ bool work_mode_service_request(uint8_t mode);
 /* Frame is already CRC checked by the protocol parser. Accepts only 6-byte
  * mode echoes or 7-byte 02+mode controller synchronization frames. */
 bool work_mode_service_handle_reply(const uint8_t *frame, uint8_t length);
+/* One matching user-request ACK, never boot sync or diagnostic restore.
+ * Confirms the controller value; storage still follows its normal lifecycle. */
+bool work_mode_service_take_user_confirmation(void);
 bool work_mode_service_take_failure(void);
 
 #endif

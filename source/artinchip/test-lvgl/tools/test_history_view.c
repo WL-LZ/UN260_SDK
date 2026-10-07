@@ -12,6 +12,8 @@
 #include "un260/lv_system/ui_history_export_data.h"
 #include "test_history_view_support.h"
 #include "un260/lv_core/page_19_history.c"
+static workspace_model_t operator_model;
+const workspace_model_t *workspace_store_get(void){return &operator_model;}
 
 /* The real page and parser are compiled unchanged. Only history IO, navigation
  * and export side effects are replaced by deterministic host fixtures. */
@@ -824,6 +826,14 @@ int main(void)
     assert(history->detail_mode&&history->current_id==requested&&external_record);
     ui_page_19_history_destroy();ui_lang_set(LANGUAGE_EN);assert(history_test_timers()==baseline_timers);
     puts("PASS Menu history deep-link: stable ID, caller Back, retained resume with language rebuild");
+    history_test_fixtures(3);test_store.records[0].operator_id=1;test_store.records[1].operator_id=2;test_store.records[2].operator_id=1;
+    ui_page_19_history_open_operator(1);ui_page_19_history_create(lv_scr_act());history_test_tick(100);assert(history->record_count==2&&test_store.record_count==3);
+    ui_page_19_history_suspend();ui_page_19_history_open_all();assert(ui_page_19_history_resume());history_test_tick(100);assert(history->record_count==3&&!history->operator_filter&&test_store.records[1].operator_id==2);ui_page_19_history_destroy();
+    workspace_defaults(&operator_model);strcpy(operator_model.users[0].name,"Renamed Operator");strcpy(test_store.records[0].operator_name,"Original Operator");
+    ui_page_19_history_open_record(test_store.records[0].record_no);ui_page_19_history_create(lv_scr_act());history_test_tick(100);assert(strstr(lv_label_get_text(history->subtitle),"Renamed Operator"));assert(!strcmp(test_store.records[0].operator_name,"Original Operator")&&test_store.records[0].operator_id==1);ui_page_19_history_destroy();
+    puts("PASS operator scope and rename: stable ID, current display name, immutable original snapshot, global counts unchanged");
     puts("PASS: actual History LVGL empty/full smoke and timer ownership");
     return 0;
 }
+
+void counting_history_current_invalidate(void){}

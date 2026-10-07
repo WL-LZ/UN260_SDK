@@ -8,7 +8,9 @@ void settings_detail_action_block(lv_obj_t *button,const char *reason)
 { lv_settings_action_block(button,reason,action_explanation); }
 static bool action_blocked(lv_obj_t *button)
 {
-    assert(!lv_obj_has_state(button,LV_STATE_DISABLED));
     return lv_settings_action_block_reason(button)!=NULL;
 }
 bool ui_manager_suspend_to_home(void){ui_manager_switch(UI_PAGE_MAIN);return true;}
+
+void settings_detail_action_wait(lv_obj_t *button,const char *reason)
+{ lv_settings_action_block(button,reason,NULL);if(button&&reason)lv_obj_add_state(button,LV_STATE_DISABLED); }

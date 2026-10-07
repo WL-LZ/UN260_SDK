@@ -285,8 +285,51 @@ static void test_menu_recovery_after_restore_timeout(void)
     assert(state.failure == FAILURE_SAVE);
     assert(!work_mode_service_request(WORK_MODE_AUTO)); /* Cannot bypass failed save. */
 }
+static void test_user_confirmation_event(void)
+{
+    reset((work_mode_record_t){0}); sync_mode(WORK_MODE_AUTO); flush();
+    assert(!work_mode_service_take_user_confirmation());
+    assert(work_mode_service_request(WORK_MODE_MANUAL));
+    assert(!work_mode_service_take_user_confirmation());
+    assert(!ack(WORK_MODE_AUTO));
+    assert(!work_mode_service_take_user_confirmation());
+    assert(ack(WORK_MODE_MANUAL));
+    assert(work_mode_service_take_user_confirmation());
+    assert(!work_mode_service_take_user_confirmation());
+    assert(!ack(WORK_MODE_MANUAL));
+    assert(!work_mode_service_take_user_confirmation());
+    flush();
+    assert(work_mode_service_request(WORK_MODE_AUTO));
+    fake_now += REQUEST_TIMEOUT_MS; poll(false);
+    assert(!work_mode_service_take_user_confirmation());
+    assert(!ack(WORK_MODE_AUTO));
+    assert(!work_mode_service_take_user_confirmation());
+    begin_auto_diagnostic();
+    assert(!work_mode_service_take_user_confirmation());
+    work_mode_service_set_diagnostic(false); poll(false);
+    assert(ack(WORK_MODE_AUTO)); flush();
+    assert(!work_mode_service_take_user_confirmation());
+    puts("PASS user confirmation: matching ACK once; no sync, mismatch, duplicate, timeout, diagnostic or restore success");
+}
+static void test_reset_owns_mode_recovery(void)
+{
+    reset((work_mode_record_t){0});sync_mode(WORK_MODE_AUTO);flush();
+    work_mode_service_set_diagnostic(true);flush();assert(ack(WORK_MODE_MANUAL));flush();
+    assert(!work_mode_service_operation_active());
+    work_mode_service_hold_operation(WORK_MODE_OPERATION_MOTOR_MAIN,true);
+    assert(work_mode_service_operation_active());
+    work_mode_service_hold_operation(WORK_MODE_OPERATION_MOTOR_MAIN,false);
+    work_mode_service_set_diagnostic(false);
+    work_mode_service_set_reset_pending(true);
+    unsigned before=sent;flush();assert(sent==before);
+    assert(!work_mode_service_request(WORK_MODE_AUTO));
+    work_mode_service_set_reset_pending(false);flush();assert(sent==before+1);
+    assert(ack(WORK_MODE_AUTO));flush();
+}
 int main(void)
 {
+    test_reset_owns_mode_recovery();
+    test_user_confirmation_event();
     test_confirmation_and_restore();
     test_journal_precedes_command();
     test_ack_matching_timeout_retry();

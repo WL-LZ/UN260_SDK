@@ -11,6 +11,7 @@ extern "C" {
 
 void ui_state_apply_common_runtime(void);
 void ui_state_save_popup_auto_state(void);
+bool ui_state_popup_auto_set_enabled(bool enabled);
 bool ui_state_top_popup_set_enabled(bool enabled);
 void ui_state_quick_order_get(uint8_t order[UI_STATE_QUICK_CONTROL_COUNT]);
 bool ui_state_quick_order_save(const uint8_t order[UI_STATE_QUICK_CONTROL_COUNT]);

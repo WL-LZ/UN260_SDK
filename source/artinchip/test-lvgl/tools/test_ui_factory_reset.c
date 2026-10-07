@@ -83,7 +83,7 @@ static workspace_model_t *read_model(void)
     FILE *file = fopen(path, "rb"); assert(file);
     unsigned header[4]; assert(fread(header, sizeof(header), 1, file) == 1);
     workspace_model_t *model = malloc(sizeof(*model)); assert(model);
-    assert(header[0] == 0x31535755U && header[1] == 3 && header[2] == sizeof(*model));
+    assert(header[0] == 0x31535755U && header[1] == 4 && header[2] == sizeof(*model));
     assert(fread(model, sizeof(*model), 1, file) == 1 && fgetc(file) == EOF);
     assert(!fclose(file)); assert(workspace_model_valid(model)); return model;
 }
@@ -122,12 +122,13 @@ int main(void)
     workspace_store_init(); wait_workspace();
     workspace_model_t *model = malloc(sizeof(*model)); assert(model); workspace_defaults(model);
     unsigned id; assert(workspace_add_user(model, "Alice", &id)); model->active_id = id;
-    assert(workspace_delete_user(model, 1)); assert(model->users[0].id == 2 && model->next_id == 3);
-    strcpy(model->users[0].employee_id, "A-002"); strcpy(model->users[0].team, "Branch One");
-    model->users[0].avatar.present = 1; model->users[0].avatar.pixels[100] = 42;
-    model->users[0].quick_enabled = 0; model->users[0].qr_after_count = 1;
-    model->users[0].batches[1] = 13; strcpy(model->users[0].profiles[0].name, "Special count");
-    model->users[0].profiles[0].mode = 2;
+    assert(workspace_disable_user(model, 1)); assert(model->users[0].id == 1 && model->disabled[0] && model->users[1].id == 2 && model->next_id == 3);
+    model->operators_enabled = 1;
+    strcpy(model->users[1].employee_id, "A-002"); strcpy(model->users[1].team, "Branch One");
+    model->users[1].avatar.present = 1; model->users[1].avatar.pixels[100] = 42;
+    model->users[1].quick_enabled = 0; model->users[1].qr_after_count = 1;
+    model->users[1].batches[1] = 13; strcpy(model->users[1].profiles[0].name, "Special count");
+    model->users[1].profiles[0].mode = 2;
     assert(workspace_store_save(model)); wait_workspace();
     file_write("cashbook.v1", "business ledger\n"); file_write("standby_1.bin", "personal photograph\n");
     file_write("standby_1.bin.source", "photo source\n"); file_write("unrelated.cfg", "unowned file\n");
@@ -160,15 +161,16 @@ int main(void)
            exists("standby_1.bin.source") && exists("unrelated.cfg"));
     workspace_model_t *reset = read_model();
     workspace_model_t *defaults = malloc(sizeof(*defaults)); assert(defaults); workspace_defaults(defaults);
-    assert(reset->next_id == 3 && reset->active_id == 2 && reset->users[0].id == 2);
-    assert(!strcmp(reset->users[0].name, "Alice") && !strcmp(reset->users[0].employee_id, "A-002") &&
-           !strcmp(reset->users[0].team, "Branch One") && reset->users[0].avatar.pixels[100] == 42);
-    assert(reset->users[0].quick_enabled == defaults->users[0].quick_enabled &&
-           reset->users[0].qr_after_count == defaults->users[0].qr_after_count);
-    assert(!memcmp(reset->users[0].profiles, defaults->users[0].profiles, sizeof(reset->users[0].profiles)));
-    assert(!memcmp(reset->users[0].batches, defaults->users[0].batches, sizeof(reset->users[0].batches)));
+    assert(reset->next_id == 3 && reset->active_id == 2 && reset->users[1].id == 2);
+    assert(reset->user_count == 2 && reset->disabled[0] && reset->operators_enabled);
+    assert(!strcmp(reset->users[1].name, "Alice") && !strcmp(reset->users[1].employee_id, "A-002") &&
+           !strcmp(reset->users[1].team, "Branch One") && reset->users[1].avatar.pixels[100] == 42);
+    assert(reset->users[1].quick_enabled == defaults->users[0].quick_enabled &&
+           reset->users[1].qr_after_count == defaults->users[0].qr_after_count);
+    assert(!memcmp(reset->users[1].profiles, defaults->users[0].profiles, sizeof(reset->users[1].profiles)));
+    assert(!memcmp(reset->users[1].batches, defaults->users[0].batches, sizeof(reset->users[1].batches)));
     /* Runtime caches stay usable for Restart; startup journal defeats an old writer. */
-    assert(!workspace_store_get()->users[0].quick_enabled);
+    assert(!workspace_store_get()->users[1].quick_enabled);
     file_write("touch_calibration.cfg", "old cached calibration\n");
     /* Early boot-light runs before main journal replay and restores old PWM. */
     file_write("brightness.cfg", "80\n"); backlight_service_init();

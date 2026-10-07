@@ -35,13 +35,8 @@ bool page_01_main_quick_request_back(void){return false;}
 lv_nav_back_result_t lv_nav_button_request_back(void){esc_calls++;return nav_result;}
 static void (*queued)(void*);
 static void *queued_data;
-static lv_timer_t nav_timer;
-static bool nav_wait, hint_enabled, hint_returning;
+static bool hint_enabled, hint_returning;
 void uart_debug_printf(const char *fmt,...){LV_UNUSED(fmt);}
-lv_timer_t *lv_timer_create(void (*cb)(lv_timer_t *),uint32_t period,void *data){
-    assert(!nav_wait && period==16);nav_timer=(lv_timer_t){data,cb};nav_wait=true;return &nav_timer;
-}
-void lv_timer_del(lv_timer_t *timer){assert(timer==&nav_timer);nav_wait=false;}
 void lv_port_indev_set_pointer_observer(lv_port_pointer_observer_t cb,void *data) { LV_UNUSED(data); observer=cb; }
 uint8_t lv_port_indev_touch_points(lv_point_t *p,int32_t *id,uint8_t cap) {
     unsigned n=fingers<cap?fingers:cap;
@@ -80,7 +75,7 @@ void lv_port_indev_capture_pointer(lv_indev_t *indev){(void)indev;++captures;}
 int lv_async_call_cancel(void(*cb)(void*),void *data){
  if(queued==cb && queued_data==data){queued=NULL;return 0;}return 1;
 }
-static void drain(void){if(nav_wait)nav_timer.cb(&nav_timer);if(queued){void(*cb)(void*)=queued;queued=NULL;cb(queued_data);}}
+static void drain(void){if(queued){void(*cb)(void*)=queued;queued=NULL;cb(queued_data);}}
 static void release(void){sample(0,0,0,0);drain();page=UI_PAGE_MENU;}
 int main(void)
 {
@@ -136,13 +131,15 @@ int main(void)
     /* A lifted and re-added finger cancels, even after the threshold. */
     sample(2,100,300,0); sample(2,100,200,0); sample(1,100,200,0);
     sample(2,100,180,0); release(); assert(returned==2);
-    /* Navigation runs on the first async turn while the edge is still returning. */
+    /* Accepted release dispatches without advancing time or finishing feedback. */
     hint_enabled=true; page=UI_PAGE_INNOVATION_CENTER;
     unsigned previous_back=back;
     sample(1,5,200,0);sample(1,130,200,0);sample(0,0,0,0);
-    assert(!nav_wait && queued && hint_returning);
-    drain();assert(back==previous_back+1 && hint_returning && !nav_wait);
+    assert(queued && hint_returning);
+    uint32_t released_tick=tick;
+    drain();assert(back==previous_back+1 && hint_returning && tick==released_tick);
     drain();assert(back==previous_back+1);
+    hint_enabled=false;hint_returning=false;
     /* A page change or disabling gestures before the async turn cancels work. */
     ui_page_t maintenance[]={UI_PAGE_CIS_CALIB,UI_PAGE_MOTOR_TEST,UI_PAGE_AGING_SETTING,
         UI_PAGE_FACTORY_SETTING,UI_PAGE_UI_UPGRADE,UI_PAGE_MAIN_UPGRADE,UI_PAGE_IMAGE_UPGRADE};
@@ -165,10 +162,10 @@ int main(void)
     nav_result=LV_NAV_BACK_NONE;
     page=UI_PAGE_MENU;
     sample(1,5,200,0);sample(1,130,200,0);sample(0,0,0,0);
-    page=UI_PAGE_SETTING;drain();assert(back==previous_back+1 && !nav_wait);
+    page=UI_PAGE_SETTING;drain();assert(back==previous_back+1);
     page=UI_PAGE_MENU;
     sample(1,5,200,0);sample(1,130,200,0);sample(0,0,0,0);
-    gesture_service_set_enabled(false);drain();assert(back==previous_back+1 && !nav_wait);
+    gesture_service_set_enabled(false);drain();assert(back==previous_back+1);
     /* Every page can own a single drag without disabling global multi-touch. */
     gesture_service_set_enabled(true);
     for(int editor=0;editor<2;editor++) {
@@ -300,5 +297,5 @@ int main(void)
     sample(1,5,180,0);sample(1,130,180,0);sample(0,0,0,0);drain();assert(back==pure_back+1);
     puts("PASS independent theme navigation: edges/Home/Return blocked, raw panel/taps live, pending and held gestures cancelled");
     puts("PASS page touch gate: fault modal remains interactive; page, gestures and stale contacts remain blocked");
-    puts("gesture: PASS (navigation without waiting for hint, cancellation, multi-touch and safety)");
+    puts("gesture: PASS (immediate release navigation independent of feedback, cancellation, multi-touch and safety)");
 }

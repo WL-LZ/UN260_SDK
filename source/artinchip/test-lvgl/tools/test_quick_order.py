@@ -37,7 +37,7 @@ code = r'''
 static bool fail_sync,fail_rename;
 static bool popup_auto=true,top_popup=true,pure_count=true;
 #define QUICK_COUNT UI_STATE_QUICK_CONTROL_COUNT
-_Static_assert(QUICK_COUNT==9,"Top popup must participate in the saved order");
+_Static_assert(QUICK_COUNT==13,"All quick tools must participate in the saved order");
 int __real_fsync(int fd);
 int __wrap_fsync(int fd){if(fail_sync){errno=EIO;return -1;}return __real_fsync(fd);}
 int __real_rename(const char *old,const char *new);
@@ -67,8 +67,7 @@ static void unchanged(const uint8_t expected[QUICK_COUNT],const char *original,s
 }
 int main(int argc,char **argv){
  assert(argc==3);unsigned values[QUICK_COUNT];uint8_t expected[QUICK_COUNT];
- assert(sscanf(argv[2],"%u,%u,%u,%u,%u,%u,%u,%u,%u",&values[0],&values[1],&values[2],&values[3],
- &values[4],&values[5],&values[6],&values[7],&values[8])==QUICK_COUNT);
+ char input[128];snprintf(input,sizeof(input),"%s",argv[2]);char *part=strtok(input,",");unsigned count=0;while(part&&count<QUICK_COUNT){values[count++]=strtoul(part,NULL,10);part=strtok(NULL,",");}assert(count==QUICK_COUNT);
  for(unsigned i=0;i<QUICK_COUNT;i++)expected[i]=values[i];
  get_order(expected);ui_state_quick_order_get(NULL);
  if(!strncmp(argv[1],"top-",4)){
@@ -92,12 +91,12 @@ int main(int argc,char **argv){
   return 0;
  }
  if(!strcmp(argv[1],"get"))return 0;
- const uint8_t next[QUICK_COUNT]={8,7,6,5,4,3,2,1,0};
+ const uint8_t next[QUICK_COUNT]={8,7,6,5,4,3,2,1,0,9,10,11,12};
  char original[4096];size_t size=file_bytes(original);
  if(!strcmp(argv[1],"invalid")){
   uint8_t bad[QUICK_COUNT]={0,1,2,3,4,5,6,7,7};assert(!ui_state_quick_order_save(NULL));
   assert(!ui_state_quick_order_save(bad));bad[8]=9;assert(!ui_state_quick_order_save(bad));
-  assert(!ui_state_quick_order_swap(9,0));assert(!ui_state_quick_order_swap(0,255));
+  assert(!ui_state_quick_order_swap(13,0));assert(!ui_state_quick_order_swap(0,255));
   unchanged(expected,original,size);return 0;
  }
  if(!strcmp(argv[1],"open-failure")){
@@ -150,19 +149,23 @@ with tempfile.TemporaryDirectory(prefix='un260-quick-order-') as temporary:
                     '-DUI_STATE_STORE_PATH="' + str(state) + '"', str(work / 'test.c'),
                     *map(str, sources), '-Wl,--wrap=fsync', '-Wl,--wrap=rename', '-o', str(binary)], check=True)
     def run(mode, expected):
+        if len(expected.split(','))==9:expected+=',9,10,11,12'
         subprocess.run([str(binary), mode, expected], check=True)
 
     def check_written_order(expected):
         fields = dict(line.split('=', 1) for line in state.read_text().splitlines())
-        projection = ','.join(value for value in expected.split(',') if value != '8')
+        if len(expected.split(','))==9:expected+=',9,10,11,12'
+        projection = ','.join(value for value in expected.split(',') if int(value)<8)
+        v2 = ','.join(value for value in expected.split(',') if int(value)<9)
         assert fields['p01_quick_order'] == projection
-        assert fields['p01_quick_order_v2'] == expected
+        assert fields['p01_quick_order_v2'] == v2
+        assert fields['p01_quick_order_v3'] == expected
         run('get', expected)
         # A file retaining only the legacy projection still contains all eight
         # original controls in the same relative order. New UI appends Top.
         original = state.read_bytes()
         state.write_text('\n'.join(line for line in state.read_text().splitlines()
-                                   if not line.startswith('p01_quick_order_v2=')) + '\n')
+                                   if not line.startswith(('p01_quick_order_v2=','p01_quick_order_v3='))) + '\n')
         run('get', projection + ',8')
         state.write_bytes(original)
 

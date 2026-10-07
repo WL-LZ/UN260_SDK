@@ -27,11 +27,11 @@ static void refresh(void)
     if (maximum > 0) lv_label_set_text_fmt(preview.value, "%d%%", level * 100 / maximum);
     else lv_label_set_text(preview.value, "--");
     if (preview.pending) {
-        settings_detail_action_block(preview.keep, NULL);
-        settings_detail_action_block(preview.revert, NULL);
+        settings_detail_action_wait(preview.keep, NULL);
+        settings_detail_action_wait(preview.revert, NULL);
     } else {
-        settings_detail_action_block(preview.keep, UI_N_("Adjust the brightness first."));
-        settings_detail_action_block(preview.revert, UI_N_("Adjust the brightness first."));
+        settings_detail_action_wait(preview.keep, UI_N_("Adjust the brightness first."));
+        settings_detail_action_wait(preview.revert, UI_N_("Adjust the brightness first."));
     }
 }
 

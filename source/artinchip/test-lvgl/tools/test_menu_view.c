@@ -65,6 +65,8 @@ const standby_config_t *standby_config(void){return &standby_fixture;}
 bool standby_store_save(const standby_config_t *v){standby_fixture=*v;return true;}
 void machine_time_get(machine_time_value_t *v){*v=(machine_time_value_t){2026,9,23,10,42,0};}
 void ui_page_19_history_open_record(uint32_t n){assert(n);}
+void ui_page_19_history_open_all(void){}
+void ui_page_19_history_open_operator(uint32_t id){assert(id);}
 uint8_t machine_state_mode(void){return MODE_MDC;}
 uint8_t machine_state_reject_pocket_max(void){return 100;}
 static unsigned mode_requests;
@@ -75,10 +77,10 @@ static unsigned revision,nav_count,printed;
 static ui_page_t current=UI_PAGE_MENU;
 static bool busy,gestures=true,layout=true;
 static bool popup_auto=true,pure_count,touch_guide=true;
-static bool top_popup_save_fails;
+static bool top_popup_save_fails,local_save_fails;
 bool ui_state_top_popup_set_enabled(bool enabled)
-{if(top_popup_save_fails)return false;ui_notice_set_enabled(enabled);return true;}
-static uint8_t quick_order[QUICK_CONTROL_COUNT]={0,1,2,3,4,5,6,7,8};
+{if(top_popup_save_fails||local_save_fails)return false;ui_notice_set_enabled(enabled);return true;}
+static uint8_t quick_order[QUICK_CONTROL_COUNT]={0,1,2,3,4,5,6,7,8,9,10,11,12};
 static gesture_pointer_policy_t quick_pointer_policy;
 static bool quick_navigation_blocked;
 void gesture_service_set_pointer_policy(uint32_t owner,gesture_pointer_policy_t cb)
@@ -87,17 +89,22 @@ void gesture_service_clear_pointer_policy(uint32_t owner)
 {assert(owner==UI_PAGE_MENU);quick_pointer_policy=NULL;}
 void gesture_service_set_navigation_blocked(uint32_t owner,bool blocked)
 {assert(owner==UI_PAGE_MENU);quick_navigation_blocked=blocked;}
+#ifndef CASH_REAL_FONTS
+void ui_cash_journal_filter_operator(uint32_t id){(void)id;}
 const lv_font_t *ui_message_font(const lv_font_t *font){return font;}
+#endif
 void ui_state_quick_order_get(uint8_t order[QUICK_CONTROL_COUNT]){memcpy(order,quick_order,sizeof(quick_order));}
-bool ui_state_quick_order_swap(uint8_t a,uint8_t b){uint8_t value=quick_order[a];quick_order[a]=quick_order[b];quick_order[b]=value;return true;}
+bool ui_state_quick_order_swap(uint8_t a,uint8_t b){if(local_save_fails)return false;uint8_t value=quick_order[a];quick_order[a]=quick_order[b];quick_order[b]=value;return true;}
 bool fault_popup_get_auto_enabled(void){return popup_auto;}
 void fault_popup_set_auto_enabled(bool value){popup_auto=value;}
 void ui_state_save_popup_auto_state(void){}
+bool ui_state_popup_auto_set_enabled(bool enabled){if(local_save_fails)return false;popup_auto=enabled;return true;}
+bool app_setting_notice_page_allowed(void){return current==UI_PAGE_MENU;}
 bool smart_island_pure_count_is_enabled(void){return pure_count;}
 void smart_island_set_pure_count_enabled(bool value){pure_count=value;}
 void ui_state_save_pure_count_state(void){}
 bool touch_feedback_enabled(void){return touch_guide;}
-bool touch_feedback_set_enabled(bool value){touch_guide=value;return true;}
+bool touch_feedback_set_enabled(bool value){if(local_save_fails)return false;touch_guide=value;return true;}
 bool ui_export_data_request(void){return true;}
 void smart_island_show_qr_popup(void){}
 bool ui_page_18_pure_toggle_theme(void){pure_count=current!=UI_PAGE_PURE;ui_manager_switch(pure_count?UI_PAGE_PURE:UI_PAGE_MAIN);return true;}
@@ -113,6 +120,7 @@ bool smart_island_is_expanded(void){return false;}
 bool page_01_main_quick_is_open(void){return false;}
 static machine_state_snapshot_t actual_state={.batch_enabled=true,.batch_num=50,.speed=1,.buzzer_enabled=true};
 const workspace_model_t *workspace_store_get(void){return &model;}
+uint32_t workspace_store_revision(void){return revision;}
 bool workspace_store_ready(void){return true;}
 bool workspace_store_busy(void){return busy;}
 bool workspace_store_last_success(void){return true;}
@@ -155,7 +163,7 @@ bool setting_service_request_batch_switch(bool enabled,uint8_t n,bool e,uint8_t 
 bool app_command_runtime_count_start_busy(void){return busy;}
 bool standby_store_busy(void){return false;}
 bool gesture_service_enabled(void){return gestures;}
-bool gesture_service_set_enabled(bool e){gestures=e;return true;}
+bool gesture_service_set_enabled(bool e){if(local_save_fails)return false;gestures=e;return true;}
 bool page_01_main_layout_is_enabled(void){return layout;}
 void page_01_main_layout_set_enabled(bool e){layout=e;}
 bool ui_manager_pop_page(void){nav_count++;current=UI_PAGE_MAIN;return true;}
@@ -268,8 +276,7 @@ static void check_numeric_keypad(void)
     assert(lv_obj_get_x(two)-lv_obj_get_x(one)==115);
     assert(lv_obj_get_y(four)-lv_obj_get_y(one)==73);
     assert(lv_obj_get_style_bg_color(one,0).full==lv_color_hex(0xF0F3F5).full);
-    assert(lv_obj_get_style_border_width(one,0)==1&&lv_obj_get_style_radius(one,0)==12);
-    assert(lv_obj_get_style_border_opa(one,0)==LV_OPA_TRANSP);
+    assert(lv_obj_get_style_border_width(one,0)==0&&lv_obj_get_style_radius(one,0)==12);
     assert(lv_obj_get_style_text_font(lv_obj_get_child(one,0),0)==&lv_font_instrument_sans_medium_26);
     assert(lv_obj_get_style_bg_color(clear,0).full==lv_color_hex(0xFBFCFD).full);
     assert(lv_obj_get_style_border_width(clear,0)==0);
@@ -317,9 +324,37 @@ static void test_auto_qr(void)
     app_auto_qr_on_start();app_auto_qr_on_end(4000);app_auto_qr_poll(8001);assert(!lv_qr_popup_is_showing());
     app_auto_qr_cancel();puts("PASS auto QR: delay, pending result, fault, new count, manual ownership, page change and expiry");
 }
+static void test_local_feedback_contract(void)
+{
+    bool old_g=gestures,old_l=layout,old_p=popup_auto,old_t=touch_guide;
+    uint8_t old_order[QUICK_CONTROL_COUNT];memcpy(old_order,quick_order,sizeof(old_order));
+    for(unsigned id=0;id<APP_LOCAL_SETTING_COUNT;id++){
+        ui_notice_set_enabled(true);local_save_fails=false;
+        unsigned before=test_notice_count;
+        assert(app_local_setting_apply(id,1,0));
+        assert(test_notice_count==before+1 && test_notice_kind==UI_NOTICE_SUCCESS);
+        assert(*test_notice_key && *test_notice_title);
+        if(id==APP_LOCAL_LAYOUT)continue; /* Runtime-only, not a disk transaction. */
+        local_save_fails=true;before=test_notice_count;
+        assert(!app_local_setting_apply(id,0,1));
+        assert(test_notice_count==before+1 && test_notice_kind==UI_NOTICE_ERROR);
+        local_save_fails=false;
+    }
+    unsigned before=test_notice_count;
+    assert(!app_local_setting_apply(APP_LOCAL_SETTING_COUNT,0,0));assert(test_notice_count==before);
+    assert(app_local_setting_apply(APP_LOCAL_TOP_POPUP,0,0));assert(test_notice_count==before);
+    assert(app_local_setting_apply(APP_LOCAL_GESTURES,0,0));assert(test_notice_count==before);
+    assert(app_local_setting_apply(APP_LOCAL_TOP_POPUP,1,0));assert(test_notice_count==before+1);
+    before=test_notice_count;current=UI_PAGE_MAIN;
+    assert(app_local_setting_apply(APP_LOCAL_GESTURES,1,0));assert(test_notice_count==before);
+    current=UI_PAGE_MENU;gestures=old_g;layout=old_l;popup_auto=old_p;touch_guide=old_t;
+    memcpy(quick_order,old_order,sizeof(old_order));ui_notice_dismiss(NULL);
+    puts("PASS all registered local settings: one success/error; disabled popup, invalid ID and Main origin quiet; no replay");
+}
 int main(void)
 {
-    cashbook_defaults(&ledger);workspace_defaults(&model);strcpy(model.users[0].name,"Alex Morgan");
+    test_local_feedback_contract();
+    cashbook_defaults(&ledger);workspace_defaults(&model);model.operators_enabled=1;strcpy(model.users[0].name,"Alex Morgan");
     seed_ledger();char report[8192];assert(support_report_build(report,sizeof(report)));
     assert(strstr(report,"Confirmed settings")&&!strstr(report,"Alex Morgan")&&!strstr(report,"10000"));assert(!support_report_build(report,8));
     workspace_profile_t p=model.users[0].profiles[0];strcpy(p.name,"Bundle preparation");p.batch_enabled=1;p.batch=100;assert(workspace_add_profile(&model,1,&p));
@@ -372,16 +407,7 @@ int main(void)
     output_input("99",(void *)(uintptr_t)PRINT_CONFIG_BOTTOM);tick(120);assert(print_fixture.space_bottom==99);
     assert(output_action(807));tick(120);
     click("QR export");raster("menu-qr-export");
-    click("Preferences");assert(!find(menu.body,"Switch operator"));raster("menu-operators");click("New operator");assert(menu.user_edit);raster("menu-register");click("Enter a name");assert(settings_detail_overlay_is_open());raster("menu-name-keyboard");settings_detail_keyboard_hide();
-    name_submit("Jordan",NULL);tick(120);click("Import USB photo");ui_page_03_menu_refresh_data(0);tick(120);assert(menu.photo_sheet);raster("menu-usb-empty");
-    point=(lv_point_t){80,190};down=LV_INDEV_STATE_PRESSED;tick(40);down=LV_INDEV_STATE_RELEASED;tick(120);assert(!menu.photo_sheet);
-    click("Create operator");ui_page_03_menu_refresh_data(0);tick(100);assert(model.user_count==3&&!menu.user_edit);
-    assert(find(menu.body,"Delete")&&!lv_obj_has_state(find(menu.body,"Delete"),LV_STATE_DISABLED));
-    click("Delete");assert(settings_detail_overlay_is_open());click("Cancel");assert(model.user_count==3);
-    click("Delete");assert(settings_detail_overlay_is_open());click("Delete");
-    ui_page_03_menu_refresh_data(0);tick(100);
-    assert(model.user_count==2&&menu.selected_user==0);
-    assert(lv_obj_has_state(find(menu.body,"Delete"),LV_STATE_DISABLED));
+    click("Preferences");assert(find(menu.body,"Manage operators"));raster("menu-operators-entry");click("Manage operators");assert(current==UI_PAGE_OPERATORS);current=UI_PAGE_MENU;assert(model.user_count==2);
     click("Interaction");raster("menu-interaction");
     lv_obj_t *interaction_rows=find_setting_row(menu.body,"Top popup"),*top_toggle=NULL;assert(interaction_rows);
     for(unsigned i=0;i<lv_obj_get_child_cnt(interaction_rows);i++){
@@ -485,7 +511,7 @@ int main(void)
     lv_modal_dialog_destroy(&first);lv_modal_dialog_destroy(&second);
     puts("PASS Menu hierarchy: centered borderless ABC-color header, aligned utility buttons, fixed OFF, guarded drafts, empty records, current operator status, no persistent footer, scoped transient feedback, in-place Quick refresh");
     /* Full-page visual fixtures: not production sample data. */
-    ui_page_03_menu_destroy();workspace_defaults(&model);strcpy(model.users[0].name,"Local operator");assert(workspace_add_user(&model,"Alex",&uid));strcpy(model.users[1].employee_id,"A-002");
+    ui_page_03_menu_destroy();workspace_defaults(&model);model.operators_enabled=1;strcpy(model.users[0].name,"Local operator");assert(workspace_add_user(&model,"Alex",&uid));strcpy(model.users[1].employee_id,"A-002");
     p=model.users[0].profiles[0];p.add=1;model.users[0].profiles[0]=p;strcpy(p.name,"Bundle preparation");p.batch_enabled=1;p.batch=100;assert(workspace_add_profile(&model,1,&p));
     strcpy(p.name,"Careful verification");p.speed=0;p.work=1;p.batch_enabled=0;assert(workspace_add_profile(&model,1,&p));
     cashbook_defaults(&ledger);
@@ -516,9 +542,13 @@ int main(void)
         if(code==0x14||code==0x1e||code==0x2e){lv_obj_scroll_to_y(menu.task_scroll,(code-1)*58-90,LV_ANIM_OFF);char filename[64];snprintf(filename,sizeof(filename),"studio-reject-%02x",code);raster(filename);}
     }
     assert(strstr(counting_reject_guide_get(0x1e)->title,"denomination"));assert(strstr(counting_reject_guide_get(0x2e)->title,"Duplicate"));assert(strstr(counting_reject_guide_get(0xfe)->title,"Unknown"));
-    menu.tab=4;menu.sub=0;menu.selected_user=0;menu.dirty=true;tick(100);click("Edit details");name_submit("Local operator",NULL);name_submit("B-007",(void *)2);name_submit("Branch One",(void *)3);tick(100);click("Save details");ui_page_03_menu_refresh_data(0);tick(100);
-    assert(!strcmp(model.users[0].employee_id,"B-007")&&!strcmp(model.users[0].team,"Branch One"));raster("studio-operator-metadata");
-    puts("PASS Studio: all 17 pages, 50 protocol code entries, unknown fallback, 28px reserve, keyboard focus, operator metadata edit");
+    menu.tab=4;menu.sub=0;menu.dirty=true;tick(100);assert(find(menu.body,"Manage operators"));raster("studio-operators-entry");
+    for(unsigned i=model.user_count;i<8;++i){char n[25];snprintf(n,sizeof(n),"Operator %u",i+1);assert(workspace_add_user(&model,n,NULL));}
+    revision++;menu.dirty=true;tick(120);raster("operators-summary-eight");
+    lv_obj_t *person=find(menu.body,"Alex");assert(person);
+    lv_obj_t *list=lv_obj_get_parent(person); /* the last matching label is the card */
+    assert(lv_obj_get_height(person)==68&&lv_obj_get_width(person)==284);assert(lv_obj_get_x(person)+lv_obj_get_width(person)<=lv_obj_get_width(list)-UI_SCROLLBAR_GUTTER);lv_obj_scroll_to_y(list,152,LV_ANIM_OFF);tick(100);raster("operators-summary-scrolled");
+    puts("PASS Studio: shared settings and dedicated Operators navigation");
     settings_detail_keyboard_show("Lifecycle check","10",3,SETTINGS_DETAIL_KEYBOARD_UINT,batch_submit,NULL);
     assert(settings_detail_overlay_is_open());ui_page_03_menu_destroy();assert(!menu.root&&!settings_detail_overlay_is_open());
     tick(200);test_auto_qr();puts("PASS native Menu: six tabs, real ledger decisions/close/QR, batch drafts/keypad, minimum-one delete, registration, outside-close, resume/destroy; 1280x400");return 0;

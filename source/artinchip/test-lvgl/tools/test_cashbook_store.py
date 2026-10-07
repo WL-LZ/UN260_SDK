@@ -11,5 +11,6 @@ with tempfile.TemporaryDirectory(prefix='un260-cashbook-store-') as tmp:
     text=reports[0].read_text();assert '10000' in text and 'DAY_CLOSE' in text and 'Do not export names' not in text
     journal=data/'cashbook.v1';original=journal.read_bytes()
     journal.write_bytes(original+b'partial');run('reload');assert journal.read_bytes()==original
+    archive=next(data.glob('cashbook-archive-*.bin'));saved=archive.read_bytes();bad=bytearray(saved);bad[-1]^=1;archive.write_bytes(bad);run('archive-corrupt');assert archive.read_bytes()==bad;archive.write_bytes(saved)
     run('sync-failure')
     corrupted=bytearray(original);corrupted[-1]^=1;journal.write_bytes(corrupted);run('corrupt');assert journal.read_bytes()==corrupted

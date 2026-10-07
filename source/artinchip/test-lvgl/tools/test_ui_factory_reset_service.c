@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include "un260/app_service/ui_factory_reset_service.c"
+static bool operation_active, reset_pending;
 static bool running, result_pending, aging, diagnostic, settings_busy, touch_busy, touch_storage_busy;
 static bool workspace_busy, cashbook_busy, standby_busy, mode_store_busy, history_ready = true;
 static bool send_ok = true, submit_ok = true, store_ready, store_success;
@@ -13,6 +14,8 @@ bool setting_service_request_factory_reset(void) { ++sends; return send_ok; }
 bool app_command_runtime_count_start_busy(void) { return running; }
 bool app_command_runtime_result_pending(void) { return result_pending; }
 bool machine_state_aging_running(void) { return aging; }
+bool work_mode_service_operation_active(void) { return operation_active; }
+void work_mode_service_set_reset_pending(bool value) { reset_pending=value; }
 bool work_mode_service_diagnostic_active(void) { return diagnostic; }
 bool workspace_service_settings_busy(void) { return settings_busy; }
 bool workspace_store_busy(void) { return workspace_busy; }
@@ -35,7 +38,7 @@ int main(void)
     assert(ui_factory_reset_get_phase() == UI_FACTORY_RESET_IDLE && !ui_factory_reset_blocks_navigation());
     ui_factory_reset_on_controller_result(true); ui_factory_reset_poll();
     assert(local_begins == 0 && stops == 0); /* No unsolicited/duplicate ACK. */
-    bool *gates[] = {&running, &result_pending, &aging, &diagnostic, &settings_busy, &touch_busy,
+    bool *gates[] = {&running, &result_pending, &aging, &operation_active, &settings_busy, &touch_busy,
         &workspace_busy, &cashbook_busy, &standby_busy, &touch_storage_busy, &mode_store_busy};
     for (unsigned i = 0; i < sizeof(gates) / sizeof(gates[0]); ++i) {
         *gates[i] = true; assert(!ui_factory_reset_request() && ui_factory_reset_blocker()); *gates[i] = false;
@@ -45,17 +48,17 @@ int main(void)
     lane_status = STORAGE_JOB_SUCCEEDED;
     history_ready = false; assert(!ui_factory_reset_request()); history_ready = true;
     mode.pending = true; assert(!ui_factory_reset_request()); mode.pending = false;
-    mode.restore_pending = true; assert(!ui_factory_reset_request()); mode.restore_pending = false;
+    mode.restore_pending = true; diagnostic = true; assert(!ui_factory_reset_blocker()); mode.restore_pending = false; diagnostic = false;
     upgrade_owner = UPGRADE_SESSION_UI; assert(!ui_factory_reset_request());
     upgrade_owner = UPGRADE_SESSION_CONTROLLER; assert(!ui_factory_reset_request());
     upgrade_owner = UPGRADE_SESSION_NONE;
     assert(sends == 0 && local_begins == 0);
     send_ok = false; assert(!ui_factory_reset_request() && !ui_factory_reset_blocks_navigation()); send_ok = true;
-    assert(ui_factory_reset_request() && ui_factory_reset_blocks_navigation());
+    assert(ui_factory_reset_request() && ui_factory_reset_blocks_navigation() && reset_pending);
     assert(!ui_factory_reset_request()); ui_factory_reset_on_controller_result(false); ui_factory_reset_poll();
-    assert(!ui_factory_reset_blocks_navigation() && local_begins == 0 && stops == 0);
+    assert(!reset_pending && !ui_factory_reset_blocks_navigation() && local_begins == 0 && stops == 0);
     assert(ui_factory_reset_request()); ui_factory_reset_on_controller_timeout(); ui_factory_reset_poll();
-    assert(!ui_factory_reset_blocks_navigation() && local_begins == 0);
+    assert(!reset_pending && !ui_factory_reset_blocks_navigation() && local_begins == 0);
     ui_factory_reset_on_controller_result(true); assert(local_begins == 0); /* Late timeout ACK ignored. */
     assert(ui_factory_reset_request()); unsigned confirmed_sends = sends;
     ui_factory_reset_on_controller_result(true);

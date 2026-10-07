@@ -79,7 +79,7 @@ static lv_res_t image_open(lv_img_decoder_t*d,lv_img_decoder_dsc_t*s){if(info(d,
 static lv_obj_t *label_find(lv_obj_t *o,const char *text);
 static void click(const char *text);
 static void snapshot(const char*n){
- bool keep_run=!strncmp(n,"sensors-",8)||!strncmp(n,"image-",6)||!strncmp(n,"wave-",5)||!strncmp(n,"debug-",6);
+ bool keep_run=!strncmp(n,"image-",6)||!strncmp(n,"wave-",5)||!strncmp(n,"debug-",6);
  assert((label_find(lv_scr_act(),"RUN")!=NULL)==keep_run);
  if(keep_run){unsigned before=run_clicks;click("RUN");assert(run_clicks==before+1);}
  lv_obj_update_layout(lv_scr_act());assert_settings_toolbars(lv_scr_act());lv_obj_invalidate(lv_scr_act());lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/%s.bgra",getenv("OUT"),n);FILE*f=fopen(path,"wb");assert(f);assert(fwrite(pixels,4,1280*400,f)==1280*400);fclose(f);

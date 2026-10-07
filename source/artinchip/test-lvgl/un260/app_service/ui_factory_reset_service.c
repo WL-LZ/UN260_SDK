@@ -31,13 +31,17 @@ static bool independent_storage_busy(void)
 const char *ui_factory_reset_blocker(void)
 {
     if (phase != UI_FACTORY_RESET_IDLE) return UI_N_("Reset is in progress. Keep power connected.");
-    if (app_command_runtime_count_start_busy() || app_command_runtime_result_pending() ||
-        machine_state_aging_running() || work_mode_service_diagnostic_active() || touch_calibration_busy() ||
-        workspace_service_settings_busy()) return UI_N_("Wait for the current operation to finish.");
+    if (app_command_runtime_count_start_busy() || app_command_runtime_result_pending())
+        return UI_N_("Finish counting and receiving results before resetting.");
+    if (machine_state_aging_running() || work_mode_service_operation_active())
+        return UI_N_("Stop the running test before resetting.");
+    if (touch_calibration_busy()) return UI_N_("Finish or cancel touch calibration before resetting.");
+    if (workspace_service_settings_busy()) return UI_N_("Wait for the profile to finish applying.");
     if (upgrade_session_owner() != UPGRADE_SESSION_NONE) return UI_N_("Wait for the update to finish.");
     work_mode_snapshot_t mode;
     work_mode_service_get_snapshot(&mode);
-    if (mode.pending || mode.restore_pending) return UI_N_("Wait for the current operation to finish.");
+    if (mode.pending) return UI_N_("Waiting for controller mode");
+    /* A failed/deferred restore is not an active command. Reset supersedes it. */
     if (independent_storage_busy() || work_mode_store_busy() ||
         storage_worker_pending_status() != STORAGE_JOB_SUCCEEDED || !counting_history_can_start())
         return UI_N_("Wait for local settings and records to finish saving.");
@@ -47,6 +51,7 @@ const char *ui_factory_reset_blocker(void)
 bool ui_factory_reset_request(void)
 {
     if (ui_factory_reset_blocker() || !setting_service_request_factory_reset()) return false;
+    work_mode_service_set_reset_pending(true);
     phase = UI_FACTORY_RESET_WAIT_CONTROLLER;
     return true;
 }
@@ -54,7 +59,7 @@ bool ui_factory_reset_request(void)
 void ui_factory_reset_on_controller_result(bool success)
 {
     if (phase != UI_FACTORY_RESET_WAIT_CONTROLLER) return;
-    if (!success) { phase = UI_FACTORY_RESET_IDLE; return; }
+    if (!success) { work_mode_service_set_reset_pending(false); phase = UI_FACTORY_RESET_IDLE; return; }
     /* A saved pre-reset mode must never be published again after 0x44 ACK.
      * Already accepted saves drain before the reset in the shared FIFO. */
     work_mode_service_stop();
@@ -64,7 +69,10 @@ void ui_factory_reset_on_controller_result(bool success)
 
 void ui_factory_reset_on_controller_timeout(void)
 {
-    if (phase == UI_FACTORY_RESET_WAIT_CONTROLLER) phase = UI_FACTORY_RESET_IDLE;
+    if (phase == UI_FACTORY_RESET_WAIT_CONTROLLER) {
+        work_mode_service_set_reset_pending(false);
+        phase = UI_FACTORY_RESET_IDLE;
+    }
 }
 
 bool ui_factory_reset_retry_local(void)

@@ -42,7 +42,7 @@ static void ui_state_set_defaults(void)
     s_ui_state.version = UI_STATE_STORE_VERSION;
     s_ui_state.page01.detail_section = PAGE_01_DETAIL_SECTION_A;
     ui_main_layout_default(&s_ui_state.page01.layout);
-    static const uint8_t default_order[UI_STATE_QUICK_CONTROL_COUNT]={0,1,3,4,2,5,6,7,8};
+    static const uint8_t default_order[UI_STATE_QUICK_CONTROL_COUNT]={0,1,3,4,2,5,6,7,8,9,10,11,12};
     memcpy(s_ui_state.page01.quick_order,default_order,sizeof(default_order));
     s_ui_state.page07.view_mode = UI_STATE_CURR_VIEW_CARD;
     s_ui_state.page06.reserved06_enable = 1;
@@ -89,6 +89,17 @@ void ui_state_save_popup_auto_state(void)
 {
     ui_state_ensure_loaded();
     ui_state_save_all();
+}
+bool ui_state_popup_auto_set_enabled(bool enabled)
+{
+    ui_state_ensure_loaded();
+    ui_state_pull_common_runtime();
+    ui_persist_state_t next=s_ui_state;
+    next.page06.reserved06_enable=enabled?1:0;
+    if(!ui_state_store_save(&next))return false;
+    s_ui_state=next;
+    fault_popup_set_auto_enabled(enabled);
+    return true;
 }
 bool ui_state_top_popup_set_enabled(bool enabled)
 {

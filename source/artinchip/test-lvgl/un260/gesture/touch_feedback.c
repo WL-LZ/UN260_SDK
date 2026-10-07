@@ -141,7 +141,10 @@ void touch_feedback_edge_hint(int side, int distance, int y)
             g_edge_steps = g_edge_max_gap = g_edge_elapsed = 0;
             g_edge_draws = g_edge_draw_gap = 0;
             g_edge_last_draw_tick = lv_tick_get();
-            g_edge_frame_pending = false;
+            /* A fast press/move/release may be drained before any render.
+             * Present the captured extent before advancing the return. */
+            g_edge_frame_pending = true;
+            lv_obj_invalidate(g_edge_hint);
             if(g_edge_timer) {
                 lv_timer_reset(g_edge_timer);
                 lv_timer_resume(g_edge_timer);

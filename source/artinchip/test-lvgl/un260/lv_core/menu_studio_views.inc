@@ -106,12 +106,12 @@ static void overview(void)
     avatar_size(person,16,17,48,u?&u->avatar:NULL,u?u->name:NULL,&menu.avatar_desc);
     lv_obj_t *name=label(person,76,21,174,u?u->name:ui_tr("Local operator"),&lv_font_instrument_sans_semibold_18,INK);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
     label(person,76,46,174,ui_tr("Current operator"),&lv_font_instrument_sans_medium_13,MUTED);
-    const char *titles[]={ui_tr("Print & export"),ui_tr("Reject guide")},*icons[]={MICON("output",25),MICON("reject",25)};
+    const char *titles[]={ui_tr("Calculator"),ui_tr("Cash journal")},*icons[]={MICON("layers",19),MICON("history",19)};
     const counting_sim_t *result=counting_data_current();snprintf(line,sizeof(line),ui_trn("%u notes to check", (result?result->err_expected:0)),result?result->err_expected:0);
     for(unsigned i=0;i<2;i++){
-        lv_obj_t *v=button(b,966,94+i*107,266,95,"",i?308:307,false);palette(v,PANEL);lv_obj_set_style_radius(v,18,0);
+        lv_obj_t *v=button(b,966,94+i*107,266,95,"",i?1901:1900,false);palette(v,PANEL);lv_obj_set_style_radius(v,18,0);
         icon(v,icons[i],17,35,i?ORANGE:BLUE);label(v,55,26,179,titles[i],&lv_font_instrument_sans_semibold_18,INK);
-        if(i)label(v,55,53,184,line,&lv_font_instrument_sans_medium_13,MUTED);
+        label(v,55,53,184,ui_tr(i?UI_N_("Cash receipts and payments"):UI_N_("Ordinary and cash")),&lv_font_instrument_sans_medium_13,MUTED);
         icon(v,MICON("next",18),233,39,MUTED);
     }
 }
@@ -185,52 +185,7 @@ static void options_view(lv_obj_t *b)
     option_label(right,2,ui_tr("Current batch"));snprintf(value,sizeof(value),machine_state_batch_enabled()?ui_trn("%u notes", (machine_state_batch_num())):ui_tr("Off"),machine_state_batch_num());link_button(right,366,131,120,value,301);
     box(right,18,181,468,1,LINE,0);small(right,18,195,409,ui_tr("Mode changes clear the current result after confirmation. Saved records stay unchanged."));icon(right,MICON("shield",22),464,199,TEAL);
 }
-static void operator_view(lv_obj_t *b)
-{
-    heading(b,ui_tr("Operators"));const workspace_model_t *m=workspace_store_get();
-    lv_obj_t *add=button(b,854,0,174,36,ui_tr("New operator"),A_NEW_USER,false);button_icon(add,MICON("plus",22),INK);
-    lv_obj_t *list=scroll(b,0,48,340,248);menu.task_scroll=list;
-    for(unsigned i=0;i<m->user_count;i++){
-        const workspace_user_t *u=&m->users[i];bool selected=i==menu.selected_user,active=u->id==m->active_id;
-        lv_obj_t *v=lv_settings_button(list,3,2+i*80,334,72,"",false,pick_event,(void *)(uintptr_t)i);palette(v,selected?HEADER_SURFACE:PANEL);lv_obj_set_style_border_width(v,0,0);lv_obj_set_style_radius(v,14,0);if(selected)box(v,0,9,3,54,BLUE,2);
-        /* The list uses initials; selected USB photo is shown at full size in the detail. */
-        avatar_size(v,16,15,42,NULL,u->name,NULL);
-        lv_obj_t *name=label(v,72,13,220,u->name,&lv_font_instrument_sans_semibold_18,INK);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
-        small(v,72,41,220,active?ui_tr("Current operator"):u->employee_id);icon(v,active?MICON("check",22):MICON("next",22),296,25,BLUE);
-    }
-    if(menu.selected_user>=m->user_count)menu.selected_user=0;
-    const workspace_user_t *u=&m->users[menu.selected_user];
-    lv_obj_t *d=box(b,360,48,668,248,PANEL,18);avatar_size(d,20,20,72,&u->avatar,u->name,&menu.avatar_desc);
-    lv_obj_t *name=label(d,112,22,536,u->name,&lv_font_instrument_sans_semibold_25,INK);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
-    if(u->id==m->active_id){icon(d,MICON("check",16),112,64,TEAL);label(d,135,63,470,ui_tr("Active operator"),&lv_font_instrument_sans_menumedium_14,TEAL);}
-    small(d,112,94,260,ui_tr("Employee ID"));text(d,112,116,260,*u->employee_id?u->employee_id:ui_tr("Not added"));
-    small(d,389,94,259,ui_tr("Branch / team"));text(d,389,116,259,*u->team?u->team:ui_tr("Not added"));
-    lv_obj_t *edit=white_button(d,112,184,151,44,ui_tr("Edit details"),A_EDIT_USER);header_content(edit,ui_tr("Edit details"),MICON("edit",22),INK);
-    bool active=u->id==m->active_id;lv_obj_t *sw=button(d,275,184,190,44,active?ui_tr("In use"):ui_tr("Switch operator"),A_USER_SWITCH,true);if(active){button_icon(sw,MICON("check",22),0x64717C);lv_obj_add_state(sw,LV_STATE_DISABLED);}
-    lv_obj_t *del=white_button(d,477,184,171,44,ui_tr("Delete"),A_DELETE_USER);
-    button_icon(del,MICON("trash",22),0xB33535);
-    lv_obj_set_style_text_color(lv_obj_get_child(del,0),lv_color_hex(0xB33535),0);
-    if(active||m->user_count<=1)lv_obj_add_state(del,LV_STATE_DISABLED);
-    if(active&&m->user_count>1)
-        small(d,112,154,536,ui_tr("Switch to another operator before deleting this one."));
-    if(menu.user_edit){
-        menu.user_sheet=box(menu.root,0,0,1280,400,INK,0);lv_obj_set_style_bg_opa(menu.user_sheet,LV_OPA_30,0);lv_obj_add_flag(menu.user_sheet,LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_t *sheet=box(menu.user_sheet,180,28,920,344,0xFFFFFF,22);lv_obj_add_flag(sheet,LV_OBJ_FLAG_CLICKABLE);
-        label(sheet,22,22,812,menu.editing_user?ui_tr("Edit operator"):ui_tr("New operator"),&lv_font_instrument_sans_semibold_26,INK);
-        lv_obj_t *close=button(sheet,860,20,38,38,"",A_USER_CANCEL,false);icon(close,MICON("close",22),8,8,INK);lv_nav_button_mark_back(close);
-        lv_obj_t *photo=box(sheet,22,74,208,190,PANEL,16);avatar_size(photo,12,12,50,&menu.avatar,menu.user_name,&menu.form_avatar_desc);
-        label(photo,72,20,112,ui_tr("Photo"),&lv_font_instrument_sans_medium_15,INK);label(photo,72,43,112,menu.avatar.present?ui_tr("Imported"):ui_tr("Optional"),&lv_font_instrument_sans_medium_12,MUTED);
-        white_button(photo,12,74,184,38,ui_tr("Import USB photo"),A_USB_SCAN);
-        label(photo,12,124,184,ui_tr("avatar.png or\nun260_avatar_01-20.png\nPNG / up to 2 MB / 16-2048 px"),&lv_font_instrument_sans_medium_12,MUTED);
-        if(menu.avatar.present){lv_obj_t *remove=white_button(photo,168,8,28,28,"",A_REMOVE_PHOTO);icon(remove,MICON("close",18),5,5,MUTED);}
-        small(sheet,254,77,644,ui_tr("Operator name"));
-        white_button(sheet,254,100,644,44,*menu.user_name?menu.user_name:ui_tr("Enter a name"),A_EDIT_NAME);border(lv_obj_get_child(sheet,-1),LINE);
-        small(sheet,254,159,312,ui_tr("Employee ID / optional"));small(sheet,586,159,312,ui_tr("Branch / team / optional"));
-        lv_obj_t *id=white_button(sheet,254,182,312,44,*menu.employee_id?menu.employee_id:ui_tr("Add employee ID"),A_EMPLOYEE_ID);border(id,LINE);
-        lv_obj_t *team=white_button(sheet,586,182,312,44,*menu.team?menu.team:ui_tr("Add branch or team"),A_TEAM);border(team,LINE);
-        button(sheet,604,278,120,44,ui_tr("Cancel"),A_USER_CANCEL,false);button(sheet,738,278,160,44,menu.editing_user?ui_tr("Save details"):ui_tr("Create operator"),A_USER_SAVE,true);
-    }
-}
+
 static void interaction_view(lv_obj_t *b)
 {
     heading(b,ui_tr("Interaction"));
@@ -243,10 +198,12 @@ static void interaction_view(lv_obj_t *b)
     lv_obj_t *right=box(b,524,48,504,248,PANEL,20);
     label(right,16,9,290,ui_tr("Shortcut order"),&lv_font_instrument_sans_semibold_17,INK);
     small(right,16,32,468,ui_tr("Tap two shortcuts to swap positions."));
+    lv_obj_t *shortcuts=box(right,16,57,472,175,PANEL,0);
+    lv_obj_add_flag(shortcuts,LV_OBJ_FLAG_SCROLLABLE|LV_OBJ_FLAG_USER_4);lv_obj_set_scroll_dir(shortcuts,LV_DIR_VER);lv_port_indev_set_drag_obj(shortcuts,true);
     uint8_t order[QUICK_CONTROL_COUNT];ui_state_quick_order_get(order);
     for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
         bool selected=menu.quick_pick==i;
-        lv_obj_t *item=button(right,16+(i%2)*240,57+(i/2)*36,232,32,
+        lv_obj_t *item=button(shortcuts,(i%2)*240,(i/2)*36,232,32,
             lv_quick_controls_title(order[i]),A_QUICK_ORDER_BASE+i,false);
         lv_obj_set_style_radius(item,9,0);
         border(item,selected?BLUE:0xDFE5EB);
@@ -270,7 +227,7 @@ static void display_view(lv_obj_t *b)
     label(left,52,18,400,ui_tr("Sound"),&lv_font_instrument_sans_semibold_21,INK);
     box(left,20,64,464,1,LINE,0);
     lv_obj_t *sound=box(left,20,79,464,55,0xFFFFFF,12);
-    lv_obj_t *sound_row=box(sound,14,7,436,40,0xFFFFFF,0);
+    lv_obj_t *sound_row=box(sound,14,4,436,47,0xFFFFFF,0);
     toggle(sound_row,0,436,ui_tr("Machine sound"),NULL,machine_state_buzzer_enabled(),440+!machine_state_buzzer_enabled());
     box(left,20,151,464,1,LINE,0);
     text(left,20,177,265,ui_tr("Standby delay"));
@@ -289,4 +246,36 @@ static void display_view(lv_obj_t *b)
     box(right,20,144,464,1,LINE,0);
     icon(right,MICON("power",22),20,171,PURPLE);
     white_button(right,58,162,426,48,ui_tr("Enter standby"),A_STANDBY);
+}
+
+static void operators_summary_view(lv_obj_t *b)
+{
+    heading(b,ui_tr("Operators"));
+    const workspace_model_t *m=workspace_store_get();const workspace_user_t *active=workspace_active(m);
+    lv_obj_t *left=box(b,0,48,360,248,PANEL,20),*right=box(b,380,48,648,248,PANEL,20);
+    small(left,20,18,320,ui_tr("Quick view"));text(left,20,51,320,active&&active->id?active->name:ui_tr("Device workspace"));
+    small(left,20,93,320,ui_tr(m&&m->operators_enabled?UI_N_("Operators enabled"):UI_N_("Operators disabled")));
+    small(left,20,126,320,ui_tr("Names label records; balances are shared."));
+    small(left,20,151,320,ui_tr("Manage people and permissions in full view."));
+    button(left,20,192,320,40,ui_tr("Manage operators"),1902,true);
+    if(!m)return;
+    if(menu.selected_user>=m->user_count)menu.selected_user=0;
+    small(right,20,15,600,ui_tr("Select a person, then switch operator."));
+    lv_obj_t *people=box(right,20,43,608,150,PANEL,0);
+    lv_obj_add_flag(people,LV_OBJ_FLAG_SCROLLABLE|LV_OBJ_FLAG_USER_4);lv_obj_set_scroll_dir(people,LV_DIR_VER);lv_port_indev_set_drag_obj(people,true);
+    for(unsigned i=0;i<m->user_count;i++){
+        const workspace_user_t *u=&m->users[i];bool current=m->operators_enabled&&u->id==m->active_id;
+        lv_obj_t *item=lv_settings_button(people,(i%2)*296,(i/2)*76,284,68,"",false,pick_event,(void *)(uintptr_t)i);
+        lv_damped_button_set_exact_palette(item,lv_color_hex(menu.selected_user==i?0xE1EEFC:0xFFFFFF),lv_color_hex(0xDCE4E8));
+        lv_obj_set_style_border_width(item,0,0);lv_obj_set_style_radius(item,14,0);
+        lv_obj_t *avatar=box(item,12,14,40,40,0xEBE5F7,12);char initial[5];operator_initial(u->name,initial);
+        lv_obj_t *letter=text(avatar,0,0,40,initial);lv_obj_set_style_text_color(letter,lv_color_hex(PURPLE),0);lv_obj_set_style_text_align(letter,LV_TEXT_ALIGN_CENTER,0);lv_obj_center(letter);
+        lv_obj_t *name=text(item,64,12,208,u->name);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);small(item,64,39,208,ui_tr(m->disabled[i]?UI_N_("Disabled"):current?UI_N_("Current operator"):UI_N_("Available")));
+        if(m->disabled[i])lv_obj_add_state(item,LV_STATE_DISABLED);
+    }
+    if(m->operators_enabled&&menu.selected_user<m->user_count&&!m->disabled[menu.selected_user]){
+        small(right,20,213,374,m->users[menu.selected_user].name);
+        lv_obj_t *switch_button=button(right,408,202,220,32,ui_tr(m->users[menu.selected_user].id==m->active_id?UI_N_("Current operator"):UI_N_("Switch operator")),A_USER_SWITCH,false);
+        if(m->users[menu.selected_user].id==m->active_id)lv_obj_add_state(switch_button,LV_STATE_DISABLED);
+    }else small(right,20,210,608,ui_tr(m->operators_enabled?UI_N_("This operator is disabled. Restore them in Manage operators."):UI_N_("Enable operators in Manage operators.")));
 }

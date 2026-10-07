@@ -53,11 +53,11 @@ static bool ui_state_store_parse_quick_order(ui_persist_state_t *state,const cha
         if(*value)return false;
         break;
     }
-    if(count==8 && used==0xFFU)order[count++]=8;
+    if((count==8&&used==0xFFU)||(count==9&&used==0x1FFU))while(count<UI_STATE_QUICK_CONTROL_COUNT){order[count]=(uint8_t)count;++count;}
     if(count!=UI_STATE_QUICK_CONTROL_COUNT)return false;
     memcpy(state->page01.quick_order,order,sizeof(order));return true;
 }
-static void ui_state_store_parse_line(ui_persist_state_t* state, const char* line,bool *quick_order_v2)
+static void ui_state_store_parse_line(ui_persist_state_t* state, const char* line,unsigned *quick_order_v2)
 {
     if (strncmp(line, "magic=", 6) == 0) {
         state->magic = (unsigned int)strtoul(line + 6, NULL, 0);
@@ -81,7 +81,9 @@ static void ui_state_store_parse_line(ui_persist_state_t* state, const char* lin
     } else if (strncmp(line, "p01_quick_order=", 16) == 0) {
         if(!*quick_order_v2)(void)ui_state_store_parse_quick_order(state,line+16);
     } else if (strncmp(line,"p01_quick_order_v2=",19)==0) {
-        if(ui_state_store_parse_quick_order(state,line+19))*quick_order_v2=true;
+        if(*quick_order_v2<3&&ui_state_store_parse_quick_order(state,line+19))*quick_order_v2=2;
+    } else if (strncmp(line,"p01_quick_order_v3=",19)==0) {
+        if(ui_state_store_parse_quick_order(state,line+19))*quick_order_v2=3;
     } else if (strncmp(line, "p07_view_mode=", 14) == 0) {
         state->page07.view_mode = atoi(line + 14);
     } else if (strncmp(line, "p07_fav_only=", 13) == 0) {
@@ -120,7 +122,7 @@ bool ui_state_store_load(ui_persist_state_t* state)
     ui_persist_state_t loaded_state;
     FILE* fp;
     char line[128];
-    bool quick_order_v2=false;
+    unsigned quick_order_v2=0;
 
     if (!state) return false;
     loaded_state = *state;
@@ -240,6 +242,8 @@ bool ui_state_store_save(const ui_persist_state_t* state)
         fprintf(fp,"%s%u",written++?",":"",state->page01.quick_order[i]);
     }
     fputs("\np01_quick_order_v2=",fp);
+    written=0;for(unsigned i=0;i<UI_STATE_QUICK_CONTROL_COUNT;++i)if(state->page01.quick_order[i]<9)fprintf(fp,"%s%u",written++?",":"",state->page01.quick_order[i]);
+    fputs("\np01_quick_order_v3=",fp);
     for(unsigned i=0;i<UI_STATE_QUICK_CONTROL_COUNT;i++)
         fprintf(fp,"%s%u",i?",":"",state->page01.quick_order[i]);
     fputc('\n',fp);

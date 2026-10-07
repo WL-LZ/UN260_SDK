@@ -2,6 +2,7 @@
 #include "un260/lv_components/ui_notice.h"
 #include "un260/lv_resources/ui_page_background.h"
 #include "page_19_history.h"
+#include "un260/storage/workspace_store.h"
 #include "un260/lv_components/lv_popup_style.h"
 #include "page_19_history_search.h"
 #include "lv_page_manager.h"
@@ -44,6 +45,7 @@ typedef struct {
 typedef struct {
     lv_obj_t *root, *title, *subtitle, *summary, *lifetime, *lifetime_title;
     unsigned notice_state;
+    uint32_t operator_filter;
     lv_obj_t *reset_total, *actions[4], *list_panel, *empty, *range, *sort, *unknown;
     lv_obj_t *dialog, *metadata;
     lv_recycled_list_t *list;
@@ -72,7 +74,8 @@ typedef struct {
 } history_ctx_t;
 
 static history_ctx_t *history;
-static uint32_t requested_record;
+static uint32_t requested_record, requested_operator;
+static bool scope_requested;
 static bool external_record;
 static void refresh_records(bool reset);
 static void refresh_header(void);
@@ -628,7 +631,7 @@ static void refresh_header(void)
             text_set(history->summary,text);
         }
         if(rec&&rec->operator_id) {
-            snprintf(text,sizeof(text),ui_tr("%s  |  Operator: %s"),lv_label_get_text(history->subtitle),rec->operator_name);
+            snprintf(text,sizeof(text),ui_tr("%s  |  Operator: %s"),lv_label_get_text(history->subtitle),workspace_record_name(workspace_store_get(),rec->operator_id,rec->operator_name));
             text_set(history->subtitle,text);
         }
     } else {
@@ -640,7 +643,7 @@ static void refresh_header(void)
         lv_obj_set_pos(history->summary,16,9);
         lv_obj_set_width(history->summary,360);
         lv_obj_set_style_text_font(history->summary,&lv_font_instrument_sans_semibold_16,0);
-        text_set(history->title,tr(UI_TEXT_HISTORY_RECORDS));
+        if(history->operator_filter){snprintf(text,sizeof(text),"%s · #%u",ui_tr("Operator history"),history->operator_filter);text_set(history->title,text);}else text_set(history->title,tr(UI_TEXT_HISTORY_RECORDS));
         if (history->selecting) {
             snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_SELECTED_FMT),(unsigned)history->selected_count);
             text_set(history->subtitle,text);
@@ -695,7 +698,7 @@ static void refresh_records(bool reset)
         release_details();history->record_count=0;
         if (store && ui_history_data_is_available()) {
             for (unsigned i=0;i<store->record_count && i<UI_HISTORY_MAX_RECORDS;++i) {
-                const ui_history_record_t *r=&store->records[i];if (!r->valid) continue;
+                const ui_history_record_t *r=&store->records[i];if (!r->valid||(history->operator_filter&&r->operator_id!=history->operator_filter)) continue;
                 history_query_record_t *p=&history->records[history->record_count++];
                 memset(p,0,sizeof(*p));p->valid=true;p->record_no=r->record_no;
                 p->pcs=r->pcs;p->amount=r->amount;memcpy(p->currency,r->currency,sizeof(p->currency));
@@ -910,9 +913,12 @@ static void action_event(lv_event_t *event)
     } else if (history->selecting) show_confirmation(false);
     else {history->selecting=true;history->selected_count=0;refresh_records(false);}
 }
+void ui_page_19_history_open_all(void){requested_operator=0;scope_requested=true;requested_record=0;ui_manager_push_page(UI_PAGE_HISTORY);}
+void ui_page_19_history_open_operator(uint32_t id){requested_operator=id;scope_requested=true;requested_record=0;ui_manager_push_page(UI_PAGE_HISTORY);}
+static void apply_requested_scope(void){if(!history)return;history->operator_filter=scope_requested?requested_operator:0;requested_operator=0;scope_requested=false;history->model_dirty=true;history->selected_count=0;history->selecting=false;}
 void ui_page_19_history_open_record(uint32_t record_no)
 {
-    requested_record=record_no;
+    requested_operator=0;scope_requested=true;requested_record=record_no;
     ui_manager_push_page(UI_PAGE_HISTORY);
 }
 static void open_requested_record(void)
@@ -982,7 +988,7 @@ void ui_page_19_history_create(lv_obj_t *parent)
     if (!history->empty || !history->unknown) goto failed;
     lv_label_set_long_mode(history->empty,LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_font(lv_damped_button_get_label(history->unknown),&lv_font_instrument_sans_medium_12,0);
-    refresh_records(true);
+    apply_requested_scope();refresh_records(true);
     open_requested_record();
     return;
 failed:
@@ -996,6 +1002,7 @@ void ui_page_19_history_refresh(void)
 }
 bool ui_page_19_history_resume(void)
 {
+    if(history)apply_requested_scope();
     if (!history || !history->root) return false;
     if (history->language!=ui_lang_get()) {
         lv_obj_t *parent=lv_obj_get_parent(history->root);

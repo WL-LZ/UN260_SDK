@@ -19,6 +19,7 @@ with tempfile.TemporaryDirectory(prefix='un260-workspace-') as directory:
     reports=list(usb.glob('UN260_support_*.txt'));assert len(reports)==1
     assert reports[0].read_text()=='UN260 SUPPORT\nNo personal data\n'
     file=data/'workspace.v1';original=file.read_bytes()
+    subprocess.run([str(binary),'remove'],check=True);subprocess.run([str(binary),'reload-removed'],check=True);file.write_bytes(original)
     temporary=data/'workspace.v1.tmp';temporary.symlink_to(usb)
     subprocess.run([str(binary),'save-failure'],check=True);assert file.read_bytes()==original
     temporary.unlink()
@@ -46,4 +47,4 @@ with tempfile.TemporaryDirectory(prefix='un260-workspace-') as directory:
         old+=user[44+8*40:]
     file.write_bytes(struct.pack('<4I',0x31535755,1,len(old),zlib.crc32(old))+old)
     subprocess.run([str(binary),'legacy'],check=True)
-    assert struct.unpack('<4I',file.read_bytes()[:16])[1]==3
+    assert struct.unpack('<4I',file.read_bytes()[:16])[1]==4

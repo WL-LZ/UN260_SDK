@@ -104,15 +104,6 @@ static void support_export(void *unused)
     else app_ui_runtime_notice_started(APP_UI_NOTICE_WORKSPACE_STORE,UI_N_("Writing support report to USB. Keep the drive connected."));
 }
 
-static void sorter_badge(lv_obj_t *parent,int x,int y)
-{
-    lv_obj_t *body=box(parent,x,y,30,34,0x244B65,4);
-    box(body,4,3,22,4,0x89B1C7,1);
-    box(body,4,9,22,10,0xB9D7E4,2);
-    box(body,4,22,10,8,0xE9F0F1,1);
-    box(body,16,22,10,8,0xE9F0F1,1);
-    box(body,6,20,18,2,0x4E7E96,0);
-}
 static void help_view(lv_obj_t *b)
 {
     const char *titles[]={ui_tr("Reject guide"),ui_tr("Care"),ui_tr("Device & support")};heading(b,titles[menu.sub]);
@@ -157,8 +148,12 @@ static void help_view(lv_obj_t *b)
         step_card(b,349,82,330,186,"02",ui_tr("Clean gently"),ui_tr("Use the approved brush. Keep liquids away from the note path."),MICON("brush",22));
         step_card(b,691,82,337,186,"03",ui_tr("Check the path"),ui_tr("Remove loose dust, close covers, then perform a test count."),MICON("note",22));
     }else{
-        lv_obj_t *d=box(b,0,48,650,248,PANEL,20);sorter_badge(d,22,26);
-        label(d,62,20,380,"UN260",&lv_font_instrument_sans_semibold_37,INK);button(d,519,28,109,30,ui_tr("Versions"),812,false);
+        lv_obj_t *d=box(b,0,48,650,248,PANEL,20);
+        lv_obj_t *name=label(d,62,20,380,"UN260",&lv_font_instrument_sans_semibold_37,INK);
+        lv_obj_t *device_icon=icon(d,MICON("screen",25),22,0,INK);
+        lv_obj_update_layout(name);
+        lv_obj_align_to(device_icon,name,LV_ALIGN_OUT_LEFT_MID,-15,0);
+        button(d,519,28,109,30,ui_tr("Versions"),812,false);
         small(d,22,88,270,ui_tr("UI version"));text(d,22,111,270,device_info_display_app());
         small(d,336,88,292,ui_tr("Controller"));text(d,336,111,292,device_info_is_valid()?device_info_main_app():ui_tr("Not connected"));
         small(d,22,154,270,ui_tr("Display"));text(d,22,177,270,"1280 x 400");

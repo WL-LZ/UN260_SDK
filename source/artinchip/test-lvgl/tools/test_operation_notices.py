@@ -27,6 +27,8 @@ fixture = r'''
 #include "un260/app_service/workspace_service.h"
 #include "un260/lv_components/ui_notice.h"
 #include "un260/lv_system/ui_i18n.h"
+static workspace_model_t operator_model;
+const workspace_model_t *workspace_store_get(void){return &operator_model;}
 static bool notices_allowed=true;
 bool app_setting_notice_page_allowed(void){return notices_allowed;}
 static ui_message_t ws_message, records_message, profile_message, batch_message;
@@ -129,6 +131,12 @@ int main(void){
  home_posts=posts;notices_allowed=false;applying=false;
  app_ui_runtime_poll_operation_notices();assert(posts==home_posts&&!queue.has_active);
  notices_allowed=true;
+ workspace_defaults(&operator_model);operator_model.operators_enabled=1;strcpy(operator_model.users[0].name,"Alex");
+ ws_busy=true;ws_ok=true;app_ui_runtime_notice_started(APP_UI_NOTICE_OPERATOR_SWITCH,"Switching workspace...");
+ assert(last_kind==UI_NOTICE_PROGRESS&&!strcmp(last_key,"workspace.operator"));
+ ws_busy=false;app_ui_runtime_poll_operation_notices();assert(last_kind==UI_NOTICE_SUCCESS&&!strcmp(last_detail,"Switched to Alex"));
+ unsigned switched=posts;app_ui_runtime_poll_operation_notices();assert(posts==switched);
+ ws_busy=true;app_ui_runtime_notice_started(APP_UI_NOTICE_OPERATOR_SWITCH,"Switching workspace...");ws_ok=false;ws_busy=false;app_ui_runtime_poll_operation_notices();assert(last_kind==UI_NOTICE_ERROR&&!strstr(last_detail,"Switched"));
  /* A 6-byte frame contains only type then checksum, never a result byte. */
  uint8_t truncated[]={0xfd,0xdf,6,0x3a,1,1};route_fo(truncated,6);
  assert(fo_pending&&!fo_consumed&&!fo_confirmed&&!fo_notice);
@@ -141,7 +149,7 @@ int main(void){
 with tempfile.TemporaryDirectory(prefix='un260-operation-notice-') as tmp:
     code, exe = Path(tmp)/'owner.c', Path(tmp)/('owner.exe' if os.name=='nt' else 'owner')
     code.write_text(fixture + owner + fo + main)
-    sources=with_i18n([code,root/'un260/lv_components/ui_notice_state.c'],root)
+    sources=with_i18n([code,root/'un260/lv_components/ui_notice_state.c',root/'un260/workspace/workspace_model.c'],root)
     command=[os.environ.get('CC','cc'),'-std=c11','-Wall','-Wextra','-Werror',
              '-I'+str(root),*map(str,sources),'-o',str(exe)]
     if os.name!='nt':command+=['-fsanitize=address,undefined','-no-pie']

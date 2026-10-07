@@ -213,3 +213,5 @@ int main(int argc,char **argv)
     counting_report_shutdown();
     puts("PASS reports: 725/10000 rows, byte wrap incl 00/FF, original holes, duplicate frames/text, atomic publication, empty ADD reuse, interleaved runs, timeout/drain, overflow, failed send");
 }
+
+void counting_history_current_invalidate(void){}

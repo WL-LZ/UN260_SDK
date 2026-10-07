@@ -1,3 +1,4 @@
+#include "counting_history_service.h"
 #include "counting_data_store.h"
 
 #include <limits.h>
@@ -24,6 +25,7 @@ void counting_data_mark_multi_result(counting_sim_t *sim_data)
 
 void counting_data_reset_result_scope(counting_sim_t *sim_data)
 {
+    counting_history_current_invalidate();
     if (sim_data != NULL) sim_data->multi_currency_result = false;
 }
 

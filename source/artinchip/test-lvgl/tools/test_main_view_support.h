@@ -110,6 +110,8 @@ void ui_state_apply_common_runtime(void) {}
 int ui_state_page01_detail_section_get(void) { return saved_tab; }
 void ui_state_save_page01_detail_section(void) { saved_tab=page_01_detail_section_get();++persisted_tabs; }
 void ui_state_save_popup_auto_state(void) {}
+bool ui_state_popup_auto_set_enabled(bool enabled){fault_popup_set_auto_enabled(enabled);return true;}
+bool app_setting_notice_page_allowed(void){return host_current_page!=UI_PAGE_MAIN&&host_current_page!=UI_PAGE_PURE;}
 static uint8_t host_quick_order[UI_STATE_QUICK_CONTROL_COUNT]={0,1,3,4,2,5,6,7,8};
 static bool host_order_save_fails;
 void ui_state_quick_order_get(uint8_t order[UI_STATE_QUICK_CONTROL_COUNT])

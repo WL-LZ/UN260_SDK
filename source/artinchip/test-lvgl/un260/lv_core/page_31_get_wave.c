@@ -81,9 +81,9 @@ static void wave_refresh_request_button(uint32_t now_ms)
     if (!wave_request_button || !lv_obj_is_valid(wave_request_button)) return;
 
     if (wave_request_active || wave_guard_active(now_ms) || !work_mode_service_diagnostic_ready()) {
-        settings_detail_action_block(wave_request_button, !work_mode_service_diagnostic_ready() ? work_mode_service_status_msgid() : UI_N_("The previous capture is still being received. Please wait."));
+        settings_detail_action_wait(wave_request_button, !work_mode_service_diagnostic_ready() ? work_mode_service_status_msgid() : UI_N_("The previous capture is still being received. Please wait."));
     } else {
-        settings_detail_action_block(wave_request_button, NULL);
+        settings_detail_action_wait(wave_request_button, NULL);
     }
 }
 

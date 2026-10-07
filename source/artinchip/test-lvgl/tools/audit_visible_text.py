@@ -20,12 +20,12 @@ SINKS = {
     'lv_roller_set_options': {1}, 'lv_table_set_cell_value': {3},
     'lv_table_set_cell_value_fmt': {3}, 'lv_list_add_btn': {2},
     'lv_list_add_text': {1}, 'lv_settings_label': {1},
-    'lv_settings_button': {5}, 'ui_notice_post': {2, 3},
+    'lv_settings_button': {5}, 'cw_label': {4}, 'cw_button': {5}, 'ui_notice_post': {2, 3},
     'settings_detail_dialog_show': {0, 1, 2, 3},
-    'settings_detail_action_block': {1},
+    'settings_detail_action_wait': {1}, 'settings_detail_action_block': {1},
 }
 KEY_SINKS = {'ui_notice_post_text': {2, 3}, 'ui_notice_post_message': {2},
-             'settings_detail_action_block': {1}, 'app_ui_runtime_notice_started': {1}}
+             'settings_detail_action_wait': {1}, 'settings_detail_action_block': {1}, 'app_ui_runtime_notice_started': {1}}
 SINKS.update(KEY_SINKS)
 MARKERS = {'ui_tr', 'ui_trc', 'ui_trn', 'ui_tr_for', 'UI_N_', '_', '_p'}
 # Display values with stable external identity; never translate currency/protocol
@@ -87,12 +87,15 @@ def analyze(source, name):
                         source_keys.add(k)
                     localized.append({'file': name, 'line': source.count('\n', 0, tokens[k][1])+1,
                                       'marker': function, 'text': value})
+    sinks=dict(SINKS)
+    if name.endswith('page_cash_tools.c'):sinks.update({'button':{6},'hint':{4},'overlay':{1}})
+    if name.endswith('page_operators.c'):sinks.update({'button':{5},'hint':{4},'overlay':{0}})
     findings = []
     seen = set()
     for function, _, _, args in calls:
-        if function not in SINKS:
+        if function not in sinks:
             continue
-        for arg in SINKS[function]:
+        for arg in sinks[function]:
             if arg >= len(args):
                 continue
             start, end = args[arg]

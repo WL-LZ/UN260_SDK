@@ -234,8 +234,8 @@ void page_06_data_collection_refresh(void)
     for(unsigned i=0;i<4;i++){
         bool enabled=!request_pending&&!busy&&(i!=2||ready)&&
                      (i<2||mode!=DATA_COLLECT_MODE_NONE);
-        if(enabled)settings_detail_action_block(actions[i], NULL);
-        else settings_detail_action_block(actions[i], request_pending ? UI_N_("Wait for the current collection request to finish.") : busy ? UI_N_("Stop counting before changing collection.") : !ready ? work_mode_service_status_msgid() : UI_N_("Select All notes or Rejected notes first."));
+        if(enabled)settings_detail_action_wait(actions[i], NULL);
+        else settings_detail_action_wait(actions[i], request_pending ? UI_N_("Wait for the current collection request to finish.") : busy ? UI_N_("Stop counting before changing collection.") : !ready ? work_mode_service_status_msgid() : UI_N_("Select All notes or Rejected notes first."));
     }
     work_mode_snapshot_t gate;
     work_mode_service_get_snapshot(&gate);

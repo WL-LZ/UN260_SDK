@@ -12,6 +12,8 @@
 #include "un260/app_service/workspace_service.h"
 #include "un260/storage/workspace_store.h"
 #include "un260/storage/cashbook_store.h"
+#include "un260/storage/cash_journal_store.h"
+#include "un260/storage/cash_journal_export.h"
 #include "un260/diagnostic/diagnostic.h"
 #include "un260/lv_components/lv_components.h"
 #include "un260/lv_components/lv_debug_overlay.h"
@@ -51,6 +53,7 @@ static const char *operation_key(app_ui_notice_operation_t operation)
 {
     switch (operation) {
     case APP_UI_NOTICE_WORKSPACE_STORE: return "workspace.store";
+    case APP_UI_NOTICE_OPERATOR_SWITCH: return "workspace.operator";
     case APP_UI_NOTICE_BATCH_SAVE: return "workspace.batch";
     case APP_UI_NOTICE_RECORD_STORE: return "records.store";
     case APP_UI_NOTICE_PROFILE_APPLY: return "workspace.apply";
@@ -62,6 +65,7 @@ static const char *operation_title(app_ui_notice_operation_t operation)
 {
     switch (operation) {
     case APP_UI_NOTICE_BATCH_SAVE: return UI_N_("Batch cycle");
+    case APP_UI_NOTICE_OPERATOR_SWITCH: return UI_N_("Current operator");
     case APP_UI_NOTICE_RECORD_STORE: return UI_N_("Records");
     case APP_UI_NOTICE_PROFILE_APPLY: return UI_N_("Counting profile");
     default: return UI_N_("Workspace");
@@ -74,6 +78,7 @@ void app_ui_runtime_notice_started(app_ui_notice_operation_t operation, const ch
     if (!key || !app_setting_notice_page_allowed()) return;
     switch (operation) {
     case APP_UI_NOTICE_WORKSPACE_STORE:
+    case APP_UI_NOTICE_OPERATOR_SWITCH:
     case APP_UI_NOTICE_BATCH_SAVE:
         if (!workspace_store_busy()) return;
         g_operation_notice.workspace = true;
@@ -100,6 +105,11 @@ static void app_ui_runtime_poll_operation_notices(void)
         bool success = workspace_store_last_success();
         g_operation_notice.workspace = false;
         if (!app_setting_notice_page_allowed()) ui_notice_clear(operation_key(operation));
+        else if(success&&operation==APP_UI_NOTICE_OPERATOR_SWITCH){
+            const workspace_user_t *active=workspace_active(workspace_store_get());ui_message_t detail;
+            ui_message_string(&detail,UI_N_("Switched to %s"),active?active->name:"");
+            ui_notice_post_message(UI_NOTICE_SUCCESS,operation_key(operation),operation_title(operation),&detail);
+        }
         else ui_notice_post_message(success ? UI_NOTICE_SUCCESS : UI_NOTICE_ERROR,
             operation_key(operation), operation_title(operation),
             success && operation == APP_UI_NOTICE_BATCH_SAVE ?
@@ -133,6 +143,7 @@ void app_ui_runtime_init(void)
     work_mode_service_init();
     workspace_service_init();
     cashbook_store_init();
+    cash_journal_store_init();
     lv_debug_overlay_init();
     lv_debug_overlay_set_enabled(user_cfg_performance_monitor_enabled());
 }
@@ -174,6 +185,9 @@ void app_ui_runtime_poll(uint32_t now_ms)
         page == UI_PAGE_BOOT_ANIM || page == UI_PAGE_UI_UPGRADE || lv_upgrade_popup_is_showing());
 
     app_setting_runtime_poll(now_ms);
+    cash_store_status_t cash_before=cash_journal_store_status();
+    if(cash_journal_store_poll()&&cash_before!=CASH_STORE_LOADING){cash_store_status_t cash_after=cash_journal_store_status();if(cash_after==CASH_STORE_READY)ui_notice_post_text(UI_NOTICE_SUCCESS,"cash.save",UI_N_("Cash journal"),UI_N_("Cash entry saved."));else if(cash_after==CASH_STORE_FAILED||cash_after==CASH_STORE_CORRUPT)ui_notice_post_text(UI_NOTICE_ERROR,"cash.save",UI_N_("Cash journal"),UI_N_("Cash entry not confirmed. Retry the same save."));}
+    cash_journal_export_poll();
     if(cashbook_store_poll()) ui_manager_publish_data_changed(UI_DATA_TOPIC_MACHINE_SETTINGS);
     if (workspace_service_poll(now_ms))
         ui_manager_publish_data_changed(UI_DATA_TOPIC_MACHINE_SETTINGS);

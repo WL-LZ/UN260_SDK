@@ -51,7 +51,7 @@ static void time_refresh(void){
  snprintf(s,sizeof(s),"%02u:%02u:%02u",time_draft.hour,time_draft.minute,time_draft.second);lv_label_set_text(time_preview,s);
  snprintf(s,sizeof(s),"%04u / %02u / %02u",time_draft.year,time_draft.month,time_draft.day);lv_label_set_text(date_preview,s);
  lv_label_set_text(time_frame.message,time_dirty()?ui_tr("Unsaved changes"):ui_tr("No changes"));
- if(time_dirty())settings_detail_action_block(time_save, NULL);else settings_detail_action_block(time_save, UI_N_("No changes to save."));
+ settings_detail_action_wait(time_save, NULL);
 }
 static void time_wheel_changed(lv_event_t *e){
  unsigned field=(unsigned)(uintptr_t)lv_event_get_user_data(e);
@@ -79,7 +79,7 @@ static bool time_gesture(gesture_action_t action){
 static void time_cancel(lv_event_t *e){(void)e;time_home=false;time_leave(NULL);}
 static void time_apply(lv_event_t *e){
  (void)e;
- if(!time_dirty()||!machine_time_is_valid(&time_draft)||time_draft.year>2099)return;
+ if(!machine_time_is_valid(&time_draft)||time_draft.year>2099)return;
  /* Existing software clock service; do not invent an RTC write or controller ACK. */
  machine_time_confirm(&time_draft);time_home=false;time_leave(NULL);
  ui_notice_post_text(UI_NOTICE_SUCCESS,"settings.time",UI_N_("Date & time updated"),NULL);

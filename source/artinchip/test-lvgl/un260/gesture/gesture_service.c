@@ -137,6 +137,13 @@ static void gesture_navigate_async(void *user_data)
         (unsigned long)(started-g_pending_tick), (unsigned long)lv_tick_elaps(started));
 }
 
+static void gesture_pending_cancel(void)
+{
+    if (g_pending)
+        lv_async_call_cancel(gesture_navigate_async, (void *)(uintptr_t)g_pending_action);
+    g_pending = false;
+}
+
 static void gesture_queue(void)
 {
     if(g_pending || g_runtime.origin != ui_manager_get_current_page() ||
@@ -145,8 +152,8 @@ static void gesture_queue(void)
     g_pending_tick = lv_tick_get();
     g_pending_action = g_runtime.action;
     void *data = (void *)(uintptr_t)g_pending_action;
-    /* Leave the input callback safely, but never wait for the visual return.
-     * The system-layer hint lives independently of the outgoing page. */
+    /* Dispatch after the input callback unwinds; visual feedback never gates
+     * an accepted release. Keep page and maintenance guards at dispatch. */
     g_pending = lv_async_call(gesture_navigate_async, data) == LV_RES_OK;
     printf("GESTURE action=%s fingers=%u edge=%d queued=%d\n",
         g_runtime.action == GESTURE_ACTION_HOME ? "HOME" :
@@ -165,8 +172,7 @@ void gesture_service_set_navigation_blocked(uint32_t owner, bool blocked)
     if(!blocked) { g_navigation_blocked_pages &= ~bit; return; }
     g_navigation_blocked_pages |= bit;
     if(g_pending && (uint32_t)g_pending_origin == owner) {
-        lv_async_call_cancel(gesture_navigate_async, (void *)(uintptr_t)g_pending_action);
-        g_pending = false;
+        gesture_pending_cancel();
     }
     if(owner != (uint32_t)ui_manager_get_current_page()) return;
     /* Keep a captured contact consumed, so changing this policy cannot turn
@@ -187,8 +193,7 @@ void gesture_service_set_input_blocked(uint32_t owner, bool blocked)
     if (!blocked) { g_input_blocked_pages &= ~bit; return; }
     g_input_blocked_pages |= bit;
     if (g_pending && (uint32_t)g_pending_origin == owner) {
-        lv_async_call_cancel(gesture_navigate_async, (void *)(uintptr_t)g_pending_action);
-        g_pending = false;
+        gesture_pending_cancel();
     }
     if (owner != (uint32_t)ui_manager_get_current_page()) return;
     memset(&g_runtime, 0, sizeof(g_runtime));
@@ -220,6 +225,12 @@ static bool gesture_pointer_event(lv_indev_t *indev, lv_event_code_t event,
          * guide and the visible fault island remain operable for every fault. */
         return held_before_gate ||
             !(fault_popup_is_showing() || smart_island_fault_hit_test(point));
+    }
+    if (g_pending) {
+        /* Consume a second contact sequence while the accepted release owns
+         * navigation; it cannot restart the hint or click the incoming page. */
+        g_blocked_contact = count != 0 && event != LV_EVENT_RELEASED;
+        return true;
     }
     if(app_standby_runtime_touch(count > 0 && event != LV_EVENT_RELEASED)) {
         memset(&g_runtime, 0, sizeof(g_runtime));
@@ -357,6 +368,7 @@ bool gesture_service_set_enabled(bool enabled)
 {
     bool ok = user_cfg_gesture_save(enabled);
     if(ok) {
+        if (!enabled) gesture_pending_cancel();
         /* Keep a captured contact consumed until release; do not turn the
            rest of an in-flight gesture into an ordinary click. */
         if(g_runtime.captured) { g_runtime.cancelled = true; g_runtime.triggered = false; }

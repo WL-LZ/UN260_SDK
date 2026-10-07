@@ -16,7 +16,8 @@ typedef struct {
     uint8_t active;
     lv_coord_t page_width;
     bool circular, dragging, settling;
-    uint8_t neighbor, target;
+    uint8_t neighbor, target, requested;
+    bool has_requested;
     int direction;
     int32_t offset, drag_origin, sample_displacement, velocity;
     uint32_t sample_tick, motion_tick;
@@ -75,6 +76,7 @@ static void pager_place(content_pager_context_t *context, int32_t offset)
 static void pager_center(content_pager_context_t *context, uint8_t active)
 {
     pager_stop(context);
+    context->has_requested = false;
     context->active = context->target = active;
     context->direction = 1;
     context->neighbor = pager_neighbor(context, 1);
@@ -98,6 +100,11 @@ static void pager_offset_ready(lv_anim_t *animation)
     context->neighbor = pager_neighbor(context, 1);
     pager_place(context, 0);
     pager_update_dots(context);
+    if (context->has_requested) {
+        uint8_t requested = context->requested;
+        context->has_requested = false;
+        lv_content_pager_set_active(context->root, requested, true);
+    }
 }
 
 static void pager_settle(content_pager_context_t *context, int32_t destination, uint8_t target)
@@ -121,7 +128,7 @@ static void pager_settle(content_pager_context_t *context, int32_t destination, 
     lv_anim_set_time(&animation, duration);
     lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
     lv_anim_set_ready_cb(&animation, pager_offset_ready);
-    lv_anim_start(&animation);
+    if (!lv_anim_start(&animation)) pager_center(context, target);
 }
 
 /* Stay within one page width: with two real pages an overshoot would expose a
@@ -270,11 +277,27 @@ bool lv_content_pager_set_active(lv_obj_t *pager, uint8_t index, bool animated)
     content_pager_context_t *context = pager_find(pager);
     if (context == NULL || index >= context->count) return false;
     if (context->circular) {
-        if (!animated || index == context->active) {
+        if (!animated) {
             pager_center(context, index);
             return true;
         }
-        lv_content_pager_finish(pager);
+        if (context->dragging || context->settling || context->offset != 0) {
+            context->has_requested = false;
+            if (context->settling && index == context->target) return true;
+            if (index == context->active) {
+                pager_settle(context, 0, context->active);
+            } else if (index == context->neighbor) {
+                pager_settle(context, -context->direction * context->page_width, index);
+            } else {
+                /* Only two pages are visible. Defer a third destination until
+                 * the current handoff instead of snapping either page. */
+                context->requested = index;
+                context->has_requested = true;
+                if (!context->settling)
+                    pager_settle(context, -context->direction * context->page_width, context->neighbor);
+            }
+            return true;
+        }
         if (index == context->active) return true;
         unsigned forward = (index + context->count - context->active) % context->count;
         context->direction = forward <= context->count - forward ? 1 : -1;
@@ -333,6 +356,7 @@ bool lv_content_pager_drag_begin(lv_obj_t *pager)
     if (abs(context->offset) >= context->page_width)
         pager_center(context, context->neighbor);
     pager_stop(context);
+    context->has_requested = false;
     context->dragging = true;
     context->drag_origin = pager_unresisted_offset(context);
     context->sample_displacement = 0;

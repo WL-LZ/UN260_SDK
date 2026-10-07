@@ -15,6 +15,10 @@ typedef struct {
 
 void machine_time_confirm(const machine_time_value_t* value);
 void machine_time_get(machine_time_value_t* value);
+/* False for the placeholder clock until explicitly confirmed this boot. */
+bool machine_time_is_confirmed(void);
+/* Changes only when a date is explicitly applied, not on clock ticks. */
+uint32_t machine_time_confirmation_revision(void);
 bool machine_time_is_valid(const machine_time_value_t* value);
 void machine_time_normalize(machine_time_value_t* value);
 void machine_time_tick(void);

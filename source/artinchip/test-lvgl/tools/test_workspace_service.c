@@ -45,7 +45,7 @@ bool setting_service_request_add(bool n){return send(4,n);}
 bool setting_service_request_work_mode(uint8_t n){return send(5,n);}
 int main(void)
 {
-    workspace_defaults(&model);uint32_t id;assert(workspace_add_user(&model,"Taylor",&id));
+    workspace_defaults(&model);model.operators_enabled=1;uint32_t id;assert(workspace_add_user(&model,"Taylor",&id));
     assert(!workspace_service_switch_blocker());
     running=true;assert(!workspace_service_switch(id));running=false;
     pending=true;assert(!workspace_service_switch(id));pending=false;
@@ -82,7 +82,7 @@ int main(void)
     assert(workspace_service_apply(&p,6000));
     for(unsigned i=0;i<12&&workspace_service_applying();i++){workspace_service_poll(6100+i*20);actuals[last_step]=last_value;}
     assert(!workspace_service_applying());assert(strstr(workspace_service_apply_message(),"Profile applied"));
-    assert(!memcmp(actuals,(unsigned[]){2,1,0,100,1,1,1},sizeof(actuals)));
+    assert(!memcmp(actuals,(unsigned[]){2,1,1,100,1,1,1},sizeof(actuals)));
     /* Explicit profile mode is sent last and becomes applied only after ACK. */
     count.total_pcs=0;actuals[4]=0;p.add=0;p.mode=2;
     assert(workspace_service_apply(&p,8000));workspace_service_poll(8001);
@@ -90,7 +90,7 @@ int main(void)
     workspace_service_poll(8100);assert(workspace_service_applying());
     actuals[6]=2;workspace_service_poll(8200);assert(!workspace_service_applying());
     /* Editing an active preset must save first, then send once, never fake ACK. */
-    workspace_defaults(&model);actuals[3]=10;actuals[4]=1;count.total_pcs=50;
+    workspace_defaults(&model);model.operators_enabled=1;actuals[3]=10;actuals[4]=1;count.total_pcs=50;
     uint8_t slots[]={0,13,50,100,150};async_save=true;before=commands;
     assert(workspace_service_save_batches(1,slots,5,10,13));
     assert(busy&&commands==before&&actuals[3]==10);
@@ -111,17 +111,17 @@ int main(void)
     assert(workspace_service_save_batches(1,removed,4,0,0));save_done=true;workspace_service_poll(9050);assert(commands==before&&actuals[3]==14);
 
     /* Failed storage, changed controller state, running and failed send stay honest. */
-    workspace_defaults(&model);actuals[3]=10;slots[1]=13;slots[2]=50;
+    workspace_defaults(&model);model.operators_enabled=1;actuals[3]=10;slots[1]=13;slots[2]=50;
     assert(workspace_service_save_batches(1,slots,5,10,13));save_success=false;save_done=true;
     workspace_service_poll(9060);assert(commands==before&&actuals[3]==10&&model.users[0].batches[1]==10);save_success=true;
     assert(workspace_service_save_batches(1,slots,5,10,13));actuals[3]=50;save_done=true;
     workspace_service_poll(9070);assert(commands==before&&actuals[3]==50);
-    workspace_defaults(&model);actuals[3]=10;
+    workspace_defaults(&model);model.operators_enabled=1;actuals[3]=10;
     running=true;assert(!workspace_service_save_batches(1,slots,5,10,13));running=false;
     assert(workspace_service_save_batches(1,slots,5,10,13));running=true;save_done=true;
     workspace_service_poll(9080);assert(commands==before);running=false;
     workspace_service_poll(9090);assert(commands==before); /* No surprise delayed apply. */
-    workspace_defaults(&model);assert(workspace_service_save_batches(1,slots,5,10,13));
+    workspace_defaults(&model);model.operators_enabled=1;assert(workspace_service_save_batches(1,slots,5,10,13));
     fail_send=true;save_done=true;workspace_service_poll(9100);fail_send=false;
     assert(commands==before+1&&actuals[3]==10&&strstr(workspace_service_batch_save_message(),"not changed"));
     assert(!workspace_service_save_batches(999,slots,5,10,13));
@@ -129,3 +129,5 @@ int main(void)
     slots[1]=200;assert(!workspace_service_save_batches(1,slots,5,10,200));
     puts("PASS workspace service: profile apply + active Batch edit save/send/ACK boundaries, non-active/OFF/delete, ADD, storage/send failure, changed state, lifecycle and no delayed retry");
 }
+
+cash_store_status_t cash_journal_store_status(void){return CASH_STORE_READY;}

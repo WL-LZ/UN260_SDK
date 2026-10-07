@@ -32,7 +32,7 @@ static void language_refresh(void)
         if (selected) { lv_obj_clear_flag(row->check, LV_OBJ_FLAG_HIDDEN); name = row->locale->name; }
         else lv_obj_add_flag(row->check, LV_OBJ_FLAG_HIDDEN);
     }
-    settings_detail_action_block(language_save, language_dirty() ? NULL : UI_N_("No changes to save."));
+    settings_detail_action_wait(language_save, language_dirty() ? NULL : UI_N_("No changes to save."));
     lv_label_set_text(language_frame.message, language_dirty() ? ui_tr("Unsaved changes") : ui_tr("No changes"));
     lv_label_set_text(language_preview, name);
 }

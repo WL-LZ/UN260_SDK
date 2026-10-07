@@ -7,6 +7,9 @@ lv_obj_t *lv_nav_button_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
 /* Shared 27px raster home icon. Parent-owned, non-interactive; the caller
  * places it inside its navigation button and keeps the existing action. */
 lv_obj_t *lv_nav_home_icon_create(lv_obj_t *parent);
+/* Full-screen header: localized single-line text, no icon. */
+lv_obj_t *lv_nav_back_text_button_create(lv_obj_t *parent,lv_coord_t x,lv_coord_t y,
+    const lv_font_t *font,lv_event_cb_t cb,void *user_data);
 typedef enum {
     LV_NAV_BACK_NONE, LV_NAV_BACK_HANDLED, LV_NAV_BACK_BLOCKED
 } lv_nav_back_result_t;

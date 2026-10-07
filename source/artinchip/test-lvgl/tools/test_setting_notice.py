@@ -72,6 +72,26 @@ int main(void) {
     page=UI_PAGE_MAIN;apply.active=apply.waiting=true;apply.step=0;
     app_setting_notice_result("settings.speed","Speed",false);
     assert(notices==8&&!apply.active&&apply_result==WORKSPACE_APPLY_FAILED);
+    apply.active=apply.waiting=false;page=UI_PAGE_MENU;
+    const struct { const char *key; uint8_t command; } settings[]={
+        {"settings.mode",0x04},{"settings.speed",0x16},{"settings.work_mode",0x38},
+        {"settings.add",0x39},{"settings.sorting",0x3A},{"settings.sound",0x15},
+        {"settings.batch",0x06},{"settings.reject_pocket",0x08}};
+    for(unsigned i=0;i<sizeof(settings)/sizeof(settings[0]);++i){
+        unsigned before=notices;observer(settings[i].command);
+        app_setting_notice_result(settings[i].key,"Setting",true);
+        assert(notices==before+1&&last==UI_NOTICE_SUCCESS);
+    }
+    apply.active=apply.waiting=true;apply.step=5;
+    unsigned before=notices;
+    app_setting_notice_result("settings.work_mode","Start",true);
+    assert(notices==before); /* Profile owns this result. */
+    apply.active=apply.waiting=false;
+    page=UI_PAGE_MAIN;observer(0x38);page=UI_PAGE_MENU;
+    app_setting_notice_result("settings.work_mode","Start",true);
+    assert(notices==before); /* Main-origin confirmation stays quiet. */
+    observer(0x38);app_setting_notice_result("settings.work_mode","Start",true);
+    assert(notices==before+1);
     puts("PASS profile matched reject ends once without child notice; unrelated results visible; timeout remains unconfirmed");
 }
 '''

@@ -5,6 +5,7 @@
 #include "work_mode_service.h"
 #include "app_command_runtime.h"
 #include "un260/storage/workspace_store.h"
+#include "un260/storage/cash_journal_store.h"
 #include "un260/counting/counting_history_service.h"
 #include "un260/counting/counting_cashbook.h"
 #include "un260/counting/counting_data_store.h"
@@ -28,7 +29,7 @@ static struct {
 static const char *const steps[]={UI_N_("Speed"),UI_N_("Sorting"),UI_N_("Sound"),UI_N_("Batch"),UI_N_("ADD"),UI_N_("Start method"),UI_N_("Count mode")};
 static unsigned value(unsigned step,const workspace_profile_t *p)
 {
-    switch(step){case 0:return p->speed;case 1:return p->sort;case 2:return p->beep;
+    switch(step){case 0:return p->speed;case 1:return p->sort;case 2:return machine_state_buzzer_enabled();
         case 3:return p->batch_enabled?p->batch:0;case 4:return p->add;case 5:return p->work;default:return p->mode;}
 }
 static unsigned actual(unsigned step)
@@ -52,6 +53,7 @@ static const char *machine_blocker(void)
 }
 const char *workspace_service_switch_blocker(void)
 {
+    if(cash_journal_store_status()==CASH_STORE_SAVING||cash_journal_store_status()==CASH_STORE_FAILED)return UI_N_("Finish saving the cash entry before changing operator.");
     if(!workspace_store_ready())return UI_N_("The workspace is not available yet.");
     if(workspace_store_busy())return UI_N_("A workspace save or photo import is in progress.");
     if(apply.active||batch_save.pending)return UI_N_("Wait for the workspace change to finish.");
@@ -68,9 +70,10 @@ bool workspace_service_switch(uint32_t id)
     if(workspace_service_switch_blocker())return false;
     /* Heap snapshot, not a large per-callback stack allocation. */
     const workspace_model_t *saved=workspace_store_get();
+    if(!saved->operators_enabled)return false;
     if(id==saved->active_id)return true;
     workspace_model_t *next=malloc(sizeof(*next));if(!next)return false;
-    *next=*saved;bool ok=workspace_find(next,id)!=NULL;
+    *next=*saved;bool ok=false;for(unsigned i=0;i<next->user_count;++i)if(next->users[i].id==id&&!next->disabled[i])ok=true;
     next->active_id=id;if(ok)ok=workspace_store_save(next);free(next);return ok;
 }
 bool workspace_service_apply(const workspace_profile_t *p,uint32_t now)
@@ -144,7 +147,7 @@ bool workspace_service_set_quick_enabled(bool enabled)
 {
     if(!workspace_store_ready()||workspace_store_busy())return false;
     workspace_model_t *next=malloc(sizeof(*next));if(!next)return false;
-    *next=*workspace_store_get();workspace_user_t *u=workspace_find(next,next->active_id);
+    *next=*workspace_store_get();workspace_user_t *u=workspace_find(next,next->operators_enabled?next->active_id:0);
     bool ok=u!=NULL;if(ok){u->quick_enabled=enabled;ok=workspace_store_save(next);}free(next);return ok;
 }
 bool workspace_service_batch_next(void)

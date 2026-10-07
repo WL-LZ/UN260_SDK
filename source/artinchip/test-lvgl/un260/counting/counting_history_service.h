@@ -45,4 +45,6 @@ bool counting_history_prepare_reset(counting_session_state_t *session,
 bool counting_history_prepare_start(counting_session_state_t *session,
     const counting_sim_t *sim_data, uint32_t now_ms);
 
+uint32_t counting_history_current_record(void);
+void counting_history_current_invalidate(void);
 #endif

@@ -34,6 +34,8 @@ typedef struct {
 typedef struct {
     uint32_t version, next_id, active_id, user_count;
     workspace_user_t users[WORKSPACE_USERS];
+    uint8_t operators_enabled, management_protected, disabled[WORKSPACE_USERS];
+    workspace_user_t shared;
 } workspace_model_t;
 void workspace_defaults(workspace_model_t *model);
 /* Restore per-operator controls without reusing IDs or deleting identity data. */
@@ -41,9 +43,14 @@ bool workspace_restore_preferences(workspace_model_t *model);
 bool workspace_name_valid(const char *name);
 bool workspace_model_valid(const workspace_model_t *model);
 const workspace_user_t *workspace_active(const workspace_model_t *model);
+/* Resolve a stable record identity without modifying its historical snapshot. */
+const char *workspace_record_name(const workspace_model_t *model, uint32_t id, const char *snapshot);
 workspace_user_t *workspace_find(workspace_model_t *model, uint32_t id);
+bool workspace_set_operators_enabled(workspace_model_t *model, bool enabled);
 bool workspace_add_user(workspace_model_t *model, const char *name, uint32_t *id);
-bool workspace_delete_user(workspace_model_t *model, uint32_t id);
+/* Caller must first verify references in the application service. IDs are never reused. */
+bool workspace_remove_user(workspace_model_t *model, uint32_t id);
+bool workspace_disable_user(workspace_model_t *model, uint32_t id);
 bool workspace_add_profile(workspace_model_t *model, uint32_t user, const workspace_profile_t *profile);
 bool workspace_delete_profile(workspace_model_t *model, uint32_t user, uint32_t profile);
 /* Next saved slot; never mutate the actual machine state. */

@@ -43,6 +43,20 @@ static bool full_io(int fd,void *data,size_t bytes,bool writing)
     while(bytes) {ssize_t n=writing?write(fd,p,bytes):read(fd,p,bytes);if(n<0&&errno==EINTR)continue;if(n<=0)return false;p+=n;bytes-=(size_t)n;}
     return true;
 }
+typedef struct {uint32_t version,next_id,active_id,user_count;workspace_user_t users[WORKSPACE_USERS];} model_v3_t;
+static void upgrade_policy(void)
+{
+    transaction.version=4;transaction.operators_enabled=1;transaction.management_protected=0;memset(transaction.disabled,0,sizeof(transaction.disabled));
+    const workspace_user_t *u=NULL;for(unsigned i=0;i<transaction.user_count;++i)if(transaction.users[i].id==transaction.active_id)u=&transaction.users[i];
+    if(u)transaction.shared=*u;else memset(&transaction.shared,0,sizeof(transaction.shared));
+    transaction.shared.id=0;transaction.shared.employee_id[0]=0;transaction.shared.team[0]=0;memset(&transaction.shared.avatar,0,sizeof(transaction.shared.avatar));snprintf(transaction.shared.name,sizeof(transaction.shared.name),"Device workspace");
+}
+static bool load_v3(int fd,const uint32_t *header)
+{
+    model_v3_t *old=malloc(sizeof(*old));if(!old)return false;
+    bool ok=full_io(fd,old,sizeof(*old),false)&&header[3]==checksum(old,sizeof(*old))&&old->version==3&&old->user_count<=WORKSPACE_USERS;
+    if(ok){memset(&transaction,0,sizeof(transaction));memcpy(&transaction,old,sizeof(*old));upgrade_policy();ok=workspace_model_valid(&transaction);}free(old);return ok;
+}
 /* v1 is decoded explicitly; existing operator IDs, photos and rules are retained. */
 typedef struct {uint32_t id;char name[25];uint8_t speed,work,add,sort,beep,batch_enabled,batch;} profile_v1_t;
 typedef struct {uint32_t id;char name[25];uint8_t quick_enabled,profile_count,batch_count;uint8_t batches[10];profile_v1_t profiles[8];workspace_avatar_t avatar;} user_v1_t;
@@ -52,7 +66,7 @@ static bool load_v1(int fd,const uint32_t *header)
     model_v1_t *old=malloc(sizeof(*old));if(!old)return false;
     bool ok=full_io(fd,old,sizeof(*old),false)&&header[3]==checksum(old,sizeof(*old))&&old->version==1&&old->user_count<=WORKSPACE_USERS;
     if(ok){
-        memset(&transaction,0,sizeof(transaction));transaction.version=3;transaction.next_id=old->next_id;transaction.active_id=old->active_id;transaction.user_count=old->user_count;
+        memset(&transaction,0,sizeof(transaction));transaction.version=4;transaction.next_id=old->next_id;transaction.active_id=old->active_id;transaction.user_count=old->user_count;
         for(unsigned i=0;i<old->user_count;i++){
             const user_v1_t *v=&old->users[i];workspace_user_t *u=&transaction.users[i];
             u->id=v->id;memcpy(u->name,v->name,sizeof(u->name));u->quick_enabled=v->quick_enabled;u->profile_count=v->profile_count;u->batch_count=v->batch_count;
@@ -62,7 +76,7 @@ static bool load_v1(int fd,const uint32_t *header)
                 n->id=p->id;memcpy(n->name,p->name,sizeof(n->name));n->speed=p->speed;n->work=p->work;n->add=p->add;n->sort=p->sort;n->beep=p->beep;n->batch_enabled=p->batch_enabled;n->batch=p->batch;
             }
         }
-        ok=workspace_model_valid(&transaction);
+        upgrade_policy();ok=workspace_model_valid(&transaction);
     }
     free(old);return ok;
 }
@@ -75,9 +89,9 @@ static bool load_v2(int fd,const uint32_t *header)
     model_v2_t *old=malloc(sizeof(*old));if(!old)return false;
     bool valid=full_io(fd,old,sizeof(*old),false)&&header[3]==checksum(old,sizeof(*old))&&old->version==2&&old->user_count<=WORKSPACE_USERS;
     if(valid){
-        memset(&transaction,0,sizeof(transaction));transaction.version=3;transaction.next_id=old->next_id;transaction.active_id=old->active_id;transaction.user_count=old->user_count;
+        memset(&transaction,0,sizeof(transaction));transaction.version=4;transaction.next_id=old->next_id;transaction.active_id=old->active_id;transaction.user_count=old->user_count;
         for(unsigned i=0;i<old->user_count;i++)memcpy(&transaction.users[i],&old->users[i],sizeof(user_v2_t));
-        valid=workspace_model_valid(&transaction);
+        upgrade_policy();valid=workspace_model_valid(&transaction);
     }
     free(old);return valid;
 }
@@ -89,7 +103,8 @@ static bool load_model(void)
     bool valid=!fstat(fd,&st)&&S_ISREG(st.st_mode)&&full_io(fd,header,sizeof(header),false)&&header[0]==0x31535755U;
     if(valid&&header[1]==1&&header[2]==sizeof(model_v1_t)&&st.st_size==(off_t)(sizeof(header)+sizeof(model_v1_t)))valid=load_v1(fd,header);
     else if(valid&&header[1]==2&&header[2]==sizeof(model_v2_t)&&st.st_size==(off_t)(sizeof(header)+sizeof(model_v2_t)))valid=load_v2(fd,header);
-    else if(valid&&header[1]==3&&header[2]==sizeof(transaction)&&st.st_size==(off_t)(sizeof(header)+sizeof(transaction)))
+    else if(valid&&header[1]==3&&header[2]==sizeof(model_v3_t)&&st.st_size==(off_t)(sizeof(header)+sizeof(model_v3_t)))valid=load_v3(fd,header);
+    else if(valid&&header[1]==4&&header[2]==sizeof(transaction)&&st.st_size==(off_t)(sizeof(header)+sizeof(transaction)))
         valid=full_io(fd,&transaction,sizeof(transaction),false)&&header[3]==checksum(&transaction,sizeof(transaction))&&workspace_model_valid(&transaction);
     else valid=false;
     close(fd);return valid;
@@ -98,7 +113,7 @@ static bool save_model(void)
 {
     uncertain_save=false;
     if(mkdir(WORKSPACE_DIRECTORY,0755)&&errno!=EEXIST)return false;
-    uint32_t header[]={0x31535755U,3,sizeof(transaction),checksum(&transaction,sizeof(transaction))};
+    uint32_t header[]={0x31535755U,4,sizeof(transaction),checksum(&transaction,sizeof(transaction))};
     int dir=open(WORKSPACE_DIRECTORY,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);if(dir<0)return false;
     int fd=open(STORE ".tmp",O_WRONLY|O_CREAT|O_TRUNC|O_NOFOLLOW,0600);
     if(fd<0){close(dir);return false;}

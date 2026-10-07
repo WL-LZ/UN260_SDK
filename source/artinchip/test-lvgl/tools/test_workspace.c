@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include "un260/lv_core/operator_initial.h"
 static bool fail_directory_sync;
 int __real_fsync(int fd);
 int __wrap_fsync(int fd)
@@ -21,6 +22,7 @@ static void wait_job(void)
 {for(unsigned i=0;i<10000&&workspace_store_busy();i++){usleep(1000);workspace_store_poll();}assert(!workspace_store_busy());}
 int main(int argc,char **argv)
 {
+    char initial[5];operator_initial("alice",initial);assert(!strcmp(initial,"A"));operator_initial("张三",initial);assert(!strcmp(initial,"张"));operator_initial("8",initial);assert(!strcmp(initial,"8"));
     workspace_model_t *m=malloc(sizeof(*m));assert(m);workspace_defaults(m);assert(workspace_model_valid(m));
     assert(!workspace_delete_profile(m,1,1));uint32_t id;
     assert(workspace_add_user(m,"Alice",&id)&&id==2);assert(m->active_id==1);
@@ -30,13 +32,23 @@ int main(int argc,char **argv)
     assert(workspace_add_user(remove,"Second",&second));
     assert(workspace_add_user(remove,"Third",&third));
     remove->users[1].avatar.present=1;
-    assert(!workspace_delete_user(remove,remove->active_id));
-    assert(!workspace_delete_user(remove,99));
-    assert(workspace_delete_user(remove,second));
-    assert(remove->user_count==2&&remove->users[1].id==third&&workspace_model_valid(remove));
-    assert(workspace_delete_user(remove,third));
-    assert(remove->user_count==1&&!remove->users[1].id&&workspace_model_valid(remove));
-    assert(!workspace_delete_user(remove,1));free(remove);
+    assert(!workspace_disable_user(remove,remove->active_id));
+    assert(!workspace_disable_user(remove,99));
+    assert(workspace_disable_user(remove,second));
+    assert(remove->user_count==3&&remove->users[1].id==second&&remove->disabled[1]&&workspace_model_valid(remove));
+    assert(workspace_disable_user(remove,third));
+    assert(remove->user_count==3&&remove->users[2].id==third&&remove->disabled[2]&&workspace_model_valid(remove));
+    assert(!workspace_disable_user(remove,1));
+    remove->operators_enabled=1;assert(!workspace_remove_user(remove,1));
+    assert(workspace_remove_user(remove,second));assert(remove->user_count==2&&remove->users[1].id==third&&remove->disabled[1]);
+    remove->operators_enabled=0;assert(workspace_remove_user(remove,1));assert(remove->active_id==third&&remove->user_count==1&&workspace_model_valid(remove));
+    assert(!workspace_remove_user(remove,third));uint32_t newer;assert(workspace_add_user(remove,"New",&newer)&&newer==4);assert(!remove->disabled[1]);free(remove);
+    assert(workspace_set_operators_enabled(m,true)&&m->active_id==1);
+    assert(workspace_set_operators_enabled(m,false));m->disabled[0]=1;
+    assert(workspace_set_operators_enabled(m,true)&&m->active_id==2);
+    assert(workspace_set_operators_enabled(m,false));m->disabled[1]=1;
+    assert(!workspace_set_operators_enabled(m,true)&&!m->operators_enabled);
+    m->disabled[0]=m->disabled[1]=0;m->active_id=1;
     assert(!workspace_add_user(m,"alice",NULL));assert(!workspace_add_user(m," Bob",NULL));
     workspace_profile_t p=m->users[0].profiles[0];strcpy(p.name,"Bundle");p.batch_enabled=1;p.batch=100;
     assert(workspace_add_profile(m,1,&p));assert(workspace_delete_profile(m,1,1));assert(!workspace_delete_profile(m,1,2));
@@ -49,18 +61,24 @@ int main(int argc,char **argv)
     memset(m->users[1].team,'X',sizeof(m->users[1].team));assert(!workspace_model_valid(m));memset(m->users[1].team,0,sizeof(m->users[1].team));
     workspace_store_init();wait_job();
     if(argc>1&&!strcmp(argv[1],"v2")){
-        assert(workspace_store_ready());const workspace_model_t *old=workspace_store_get();assert(old->version==3&&old->user_count==2);
+        assert(workspace_store_ready());const workspace_model_t *old=workspace_store_get();assert(old->version==4&&old->user_count==2);
         assert(old->users[0].profiles[0].mode==1&&old->users[0].qr_after_count&&!strcmp(old->users[1].name,"Alice"));assert(!*old->users[0].employee_id&&!*old->users[0].team);
         assert(workspace_store_save(old));wait_job();assert(workspace_store_last_success());free(m);return 0;
     }
     if(argc>1&&!strcmp(argv[1],"legacy")){
         assert(workspace_store_ready());const workspace_model_t *old=workspace_store_get();
-        assert(old->version==3&&old->user_count==2&&old->users[1].id==2&&!strcmp(old->users[1].name,"Alice"));
+        assert(old->version==4&&old->user_count==2&&old->users[1].id==2&&!strcmp(old->users[1].name,"Alice"));
         assert(old->users[0].profiles[0].mode==0&&!old->users[0].qr_after_count);
         assert(workspace_store_save(old));wait_job();assert(workspace_store_last_success());
         free(m);puts("PASS v1 workspace migrated, IDs/preferences retained, old profiles keep current mode");return 0;
     }
     if(argc>1&&!strcmp(argv[1],"corrupt")){assert(!workspace_store_ready());assert(!workspace_store_save(m));puts("PASS corrupt file preserved; writes disabled");free(m);return 0;}
+    if(argc>1&&!strcmp(argv[1],"remove")){
+        *m=*workspace_store_get();assert(workspace_remove_user(m,2));assert(workspace_store_save(m));wait_job();assert(workspace_store_last_success());free(m);return 0;
+    }
+    if(argc>1&&!strcmp(argv[1],"reload-removed")){
+        const workspace_model_t *saved=workspace_store_get();assert(workspace_store_ready()&&saved->user_count==1&&saved->users[0].id==1&&saved->next_id==3&&!workspace_find((workspace_model_t *)saved,2));free(m);puts("PASS removed identity stays removed after restart; IDs are not reused");return 0;
+    }
     if(argc>1&&!strcmp(argv[1],"reload-uncertain")){
         assert(workspace_store_ready());assert(!strcmp(workspace_store_get()->users[1].name,"Replacement"));free(m);return 0;
     }

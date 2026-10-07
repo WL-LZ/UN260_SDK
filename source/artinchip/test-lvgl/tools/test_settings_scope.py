@@ -50,7 +50,7 @@ code += scope + '\nstatic void count_started(void){\n' + decision + '\n}\n'
 code += r'''
 int main(void){
  for(int theme=0;theme<2;theme++)for(int page=0;page<UI_PAGE_COUNT;page++){
-  bool expected=page==UI_PAGE_CIS_CALIB||page==UI_PAGE_DEBUG||page==UI_PAGE_SENSOR||
+  bool expected=page==UI_PAGE_CIS_CALIB||page==UI_PAGE_DEBUG||
    page==UI_PAGE_IMAGE_GET||page==UI_PAGE_WAVE_GET||page==UI_PAGE_MOTOR_TEST||page==UI_PAGE_AGING_SETTING;
   current=page;pure_theme=theme;collection_page=false;collection_mode=0;switches=0;
   ui_manager_update_diagnostic_scope(page);assert(scope_active==expected);

@@ -59,6 +59,8 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${UN260_I18N_INPU
 # Check source markers on incremental builds too, even when CMake inputs did
 # not change. This runs on the host only; firmware lookup has no file I/O.
 add_custom_target(un260_i18n_check
+    COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_notice_routes.py
+    COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_setting_feedback.py
     COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_update_messages.py --check
     COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_i18n.py --check
     COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_visible_text.py --check)
@@ -127,6 +129,16 @@ add_executable(${PROJECT_NAME} main.c
     un260/font/lv_font_standby_112.c
     un260/font/scaled_font.c
     un260/storage/standby_store.c
+    un260/workspace/cash_tools.c
+    un260/storage/cash_journal_store.c
+    un260/storage/cash_journal_export.c
+    un260/app_service/cash_tools_service.c
+    un260/lv_core/cash_workspace_style.c
+    un260/lv_core/page_cash_tools.c
+    un260/lv_core/page_operators.c
+    un260/app_service/cash_workspace_access.c
+    un260/lv_core/page_operators.c
+    un260/app_service/cash_workspace_access.c
     un260/storage/cashbook_store.c
     un260/workspace/cashbook.c
     un260/counting/counting_cashbook.c
@@ -280,6 +292,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/protocol/protocol_rx_service.c
     un260/protocol/protocol_request.c
     un260/app_service/app_setting_reply_basic.c
+    un260/app_service/app_local_setting.c
     un260/app_service/app_setting_notice.c
     un260/app_service/app_setting_reply_detail.c
     un260/protocol/startup_sync_reply.c
@@ -399,7 +412,6 @@ add_executable(${PROJECT_NAME} main.c
     un260/font/lv_font_montserrat_42.c
     un260/font/lv_font_montserrat_44.c
     un260/font/lv_font_montserrat_46.c
-    un260/font/lv_font_montserrat_48.c
     un260/font/MONTSERRAT_EXTRABOLD_35.c
     un260/font/MONTSERRAT_MEDIUM_15.c
     un260/font/lv_font_rajdhani_27.c

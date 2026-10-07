@@ -1,18 +1,23 @@
 #include "ui_notice.h"
 #include "lvgl/lvgl.h"
-#include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/font/ui_message_font.h"
 #include <stdio.h>
 #include <string.h>
 
-#define NOTICE_WIDTH 750
-#define NOTICE_HEIGHT 116
-#define NOTICE_Y 14
-#define NOTICE_OFFSCREEN_Y (-140)
-#define NOTICE_ENTER_MS 240
-#define NOTICE_EXIT_MS 240
+/* Apple 01 reference at native 1280x400: one screen-space owner. */
+#define NOTICE_WIDTH 360
+#define NOTICE_HEIGHT 72
+#define NOTICE_Y 12
+#define NOTICE_ENTRY_Y (NOTICE_Y - 24)
+#define NOTICE_EXIT_Y (NOTICE_Y - 8)
+#define NOTICE_ENTER_MS 380
+#define NOTICE_EXIT_MS 180
 #define NOTICE_SPINNER_MS 40
+#define NOTICE_TEXT_X 60
+#define NOTICE_TEXT_WIDTH 248
+#define NOTICE_ICON_X 32
+#define NOTICE_SHADOW_EXTENT 20
 
 static uint32_t dialog_hold_count;
 static bool enabled = true;
@@ -29,6 +34,8 @@ static struct {
     uint32_t last_tick;
     uint16_t angle;
     lv_coord_t animation_y;
+    lv_coord_t title_height, detail_height, copy_y, height;
+    lv_opa_t opacity, animation_opacity;
     bool initialized;
     bool visible;
     bool leaving;
@@ -40,47 +47,52 @@ static struct {
 static void present(bool animate);
 static void service_start(void);
 
+static lv_opa_t opacity(unsigned alpha)
+{
+    return (lv_opa_t)(alpha * notice.opacity / LV_OPA_COVER);
+}
+
 static void line(lv_draw_ctx_t *ctx, const lv_area_t *a,
-                 int x1, int y1, int x2, int y2, int width)
+                 int x1, int y1, int x2, int y2, int width, uint32_t color)
 {
     lv_draw_line_dsc_t d;
     lv_point_t p1 = { a->x1 + x1, a->y1 + y1 };
     lv_point_t p2 = { a->x1 + x2, a->y1 + y2 };
     lv_draw_line_dsc_init(&d);
-    d.color = lv_color_white();
-    d.opa = LV_OPA_COVER;
+    d.color = lv_color_hex(color);
+    d.opa = notice.opacity;
     d.width = width;
     d.round_start = d.round_end = 1;
     lv_draw_line(ctx, &d, &p1, &p2);
 }
 
-static void arc(lv_draw_ctx_t *ctx, const lv_area_t *a, unsigned start, unsigned end, unsigned opa)
+static void arc(lv_draw_ctx_t *ctx, const lv_area_t *a, unsigned start, unsigned end, unsigned alpha)
 {
     lv_draw_arc_dsc_t d;
-    lv_point_t center = { a->x1 + 58, a->y1 + 58 };
+    lv_point_t center = { a->x1 + NOTICE_ICON_X, a->y1 + notice.height / 2 };
     lv_draw_arc_dsc_init(&d);
     d.color = lv_color_white();
-    d.opa = opa;
-    d.width = 3;
+    d.opa = opacity(alpha);
+    d.width = 2;
     d.rounded = 1;
-    lv_draw_arc(ctx, &d, &center, 17, start, end);
+    lv_draw_arc(ctx, &d, &center, 9, start, end);
 }
 
-static void label(lv_draw_ctx_t *ctx, const lv_area_t *origin, int x, int y, int width,
-                  const char *text, const lv_font_t *font, uint32_t color, lv_text_align_t align)
+static void label(lv_draw_ctx_t *ctx, const lv_area_t *origin, int y, int height,
+                  const char *text, const lv_font_t *font, uint32_t color)
 {
     lv_draw_label_dsc_t d;
-    lv_area_t area = { origin->x1 + x, origin->y1 + y,
-                       origin->x1 + x + width - 1, origin->y1 + y + font->line_height - 1 };
+    lv_area_t area = { origin->x1 + NOTICE_TEXT_X, origin->y1 + y,
+                       origin->x1 + NOTICE_TEXT_X + NOTICE_TEXT_WIDTH - 1,
+                       origin->y1 + y + height - 1 };
     lv_area_t clip;
     const lv_area_t *saved_clip = ctx->clip_area;
     if (!_lv_area_intersect(&clip, saved_clip, &area)) return;
     lv_draw_label_dsc_init(&d);
     d.font = ui_message_font(font);
     d.color = lv_color_hex(color);
-    d.opa = LV_OPA_COVER;
-    d.align = align;
-    d.flag = LV_TEXT_FLAG_EXPAND;
+    d.opa = notice.opacity;
+    d.line_space = 2;
     ctx->clip_area = &clip;
     lv_draw_label(ctx, &d, &area, text, NULL);
     ctx->clip_area = saved_clip;
@@ -88,107 +100,117 @@ static void label(lv_draw_ctx_t *ctx, const lv_area_t *origin, int x, int y, int
 
 static void draw(lv_event_t *event)
 {
-    static const uint32_t colors[] = {0x20AC71,0xDF5754,0xDD982F,0x397FE1,0x74879D};
+    static const uint32_t colors[] = {0x34C759,0xFF453A,0xFF9F0A,0x007AFF,0x8E8E93};
     lv_draw_ctx_t *ctx = lv_event_get_draw_ctx(event);
     lv_area_t a, tile;
     lv_draw_rect_dsc_t d;
-    const char *meta = ui_text_get(notice.shown.kind == UI_NOTICE_PROGRESS ?
-                                  UI_TEXT_NOTICE_ONGOING : UI_TEXT_NOTICE_NOW);
-    char repeated[24];
+    int cy = notice.height / 2;
     lv_obj_get_coords(notice.object, &a);
     lv_draw_rect_dsc_init(&d);
-    d.radius = 29;
-    d.bg_color = lv_color_hex(0xECEFF1);
-    d.bg_opa = LV_OPA_COVER;
+    d.radius = 23;
+    /* An opaque frost tint avoids text bleeding through without framebuffer
+     * capture/blur or an offscreen opacity layer on the embedded renderer. */
+    d.bg_color = lv_color_hex(0xF5F7FA);
+    d.bg_opa = notice.opacity;
     d.border_width = 1;
     d.border_color = lv_color_white();
-    d.border_opa = LV_OPA_COVER;
+    d.border_opa = opacity(220);
+    d.shadow_color = lv_color_hex(0x20243A);
+    d.shadow_width = 16;
+    d.shadow_ofs_y = 4;
+    d.shadow_opa = opacity(22);
     lv_draw_rect(ctx, &d, &a);
 
-    tile = (lv_area_t){ a.x1 + 25, a.y1 + 25, a.x1 + 90, a.y1 + 90 };
+    tile = (lv_area_t){ a.x1 + 16, a.y1 + cy - 16, a.x1 + 47, a.y1 + cy + 15 };
     lv_draw_rect_dsc_init(&d);
-    d.radius = 18;
+    d.radius = LV_RADIUS_CIRCLE;
     d.bg_color = lv_color_hex(colors[notice.shown.kind]);
-    d.bg_opa = LV_OPA_COVER;
+    d.bg_opa = notice.opacity;
     lv_draw_rect(ctx, &d, &tile);
 
     switch (notice.shown.kind) {
     case UI_NOTICE_SUCCESS:
-        line(ctx, &a, 44, 58, 54, 68, 4);
-        line(ctx, &a, 54, 68, 74, 48, 4);
+        line(ctx, &a, 25, cy, 30, cy + 5, 2, 0xFFFFFF);
+        line(ctx, &a, 30, cy + 5, 39, cy - 5, 2, 0xFFFFFF);
         break;
     case UI_NOTICE_ERROR:
-        arc(ctx, &a, 0, 360, LV_OPA_COVER);
-        line(ctx, &a, 51, 51, 65, 65, 3);
-        line(ctx, &a, 65, 51, 51, 65, 3);
+        line(ctx, &a, 27, cy - 5, 37, cy + 5, 2, 0xFFFFFF);
+        line(ctx, &a, 37, cy - 5, 27, cy + 5, 2, 0xFFFFFF);
         break;
     case UI_NOTICE_WARNING:
-        line(ctx, &a, 58, 41, 77, 73, 3);
-        line(ctx, &a, 77, 73, 39, 73, 3);
-        line(ctx, &a, 39, 73, 58, 41, 3);
-        line(ctx, &a, 58, 53, 58, 61, 3);
-        line(ctx, &a, 58, 67, 58, 67, 3);
+        line(ctx, &a, 32, cy - 8, 32, cy + 2, 2, 0xFFFFFF);
+        line(ctx, &a, 32, cy + 7, 32, cy + 7, 2, 0xFFFFFF);
         break;
     case UI_NOTICE_PROGRESS:
         arc(ctx, &a, 0, 360, 70);
         arc(ctx, &a, notice.angle, (notice.angle + 95) % 360, LV_OPA_COVER);
         break;
     case UI_NOTICE_INFO:
-        arc(ctx, &a, 0, 360, LV_OPA_COVER);
-        line(ctx, &a, 58, 57, 58, 67, 3);
-        line(ctx, &a, 58, 49, 58, 49, 3);
+        line(ctx, &a, 32, cy - 2, 32, cy + 7, 2, 0xFFFFFF);
+        line(ctx, &a, 32, cy - 7, 32, cy - 7, 2, 0xFFFFFF);
         break;
     }
-    label(ctx, &a, 113, notice.detail[0] ? 29 : 43, 518, notice.title,
-          notice.title_font, 0x1F252C, LV_TEXT_ALIGN_LEFT);
+    label(ctx, &a, notice.copy_y, notice.title_height, notice.title,
+          notice.title_font, 0x1D1D1F);
     if (notice.detail[0])
-        label(ctx, &a, 113, 64, 610, notice.detail, &lv_font_instrument_sans_medium_18,
-              0x4B525B, LV_TEXT_ALIGN_LEFT);
-    label(ctx, &a, 637, 28, 88, meta, &lv_font_instrument_sans_medium_14,
-          0x737B84, LV_TEXT_ALIGN_RIGHT);
-    if (notice.shown.repeats > 1 && notice.shown.kind != UI_NOTICE_PROGRESS) {
-        snprintf(repeated, sizeof(repeated), "x%u", notice.shown.repeats);
-        label(ctx, &a, 651, 48, 74, repeated, &lv_font_instrument_sans_medium_14,
-              0x737B84, LV_TEXT_ALIGN_RIGHT);
-    }
+        label(ctx, &a, notice.copy_y + notice.title_height + 2, notice.detail_height,
+              notice.detail, &lv_font_instrument_sans_medium_12, 0x73737C);
+    line(ctx, &a, 327, cy - 3, 333, cy + 3, 1, 0x92929A);
+    line(ctx, &a, 333, cy - 3, 327, cy + 3, 1, 0x92929A);
 }
 
-static void fit_text(char *out, size_t size, const char *text, const lv_font_t *font, int width)
+/* Bound external/localized strings at UTF-8 boundaries. Keep detail intact
+ * within the existing message capacity; decorative titles get two lines. */
+static void copy_text(char *output, size_t capacity, const char *input)
 {
-    size_t count = strlen(text), i;
-    lv_point_t measured;
-    font = ui_message_font(font);
-    if (count >= size) count = size - 1;
-    while (count && ((unsigned char)text[count] & 0xc0) == 0x80) --count;
-    memcpy(out, text, count);
-    out[count] = '\0';
-    for (i = 0; i < count; ++i) if (out[i] == '\n' || out[i] == '\r') out[i] = ' ';
-    lv_txt_get_size(&measured, out, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_EXPAND);
-    if (measured.x <= width) return;
-    while (count) {
-        do { --count; } while (count && ((unsigned char)out[count] & 0xc0) == 0x80);
-        if (count + 3 >= size) continue;
-        memcpy(out + count, "...", 4);
-        lv_txt_get_size(&measured, out, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_EXPAND);
-        if (measured.x <= width) return;
+    size_t length = strlen(input);
+    if (length >= capacity) length = capacity - 1;
+    while (length && ((unsigned char)input[length] & 0xC0) == 0x80) --length;
+    memcpy(output, input, length);
+    output[length] = '\0';
+    for (size_t i = 0; i < length; ++i)
+        if (output[i] == '\n' || output[i] == '\r') output[i] = ' ';
+}
+
+static void measure_title(lv_point_t *size)
+{
+    size_t length = strlen(notice.title);
+    for (;;) {
+        lv_txt_get_size(size, notice.title, notice.title_font, 0, 2, NOTICE_TEXT_WIDTH, 0);
+        if (size->y <= 2 * notice.title_font->line_height + 2 || !length) return;
+        do { --length; } while (length && ((unsigned char)notice.title[length] & 0xC0) == 0x80);
+        if (length + 3 < sizeof(notice.title)) memcpy(notice.title + length, "...", 4);
+        else notice.title[length] = '\0';
     }
-    out[0] = '\0';
 }
 
 static void prepare_copy(void)
 {
     lv_point_t measured;
     char detail[UI_NOTICE_DETAIL_CAPACITY];
-    const char *title=notice.shown.localized?ui_tr(notice.shown.title):notice.shown.title;
-    const char *body=notice.shown.localized?ui_tr(notice.shown.detail):notice.shown.detail;
-    if(notice.shown.has_message){ui_message_render(&notice.shown.message,detail,sizeof(detail));body=detail;}
-    notice.title_font = ui_message_font(&lv_font_instrument_sans_semibold_22);
-    lv_txt_get_size(&measured, title, notice.title_font, 0, 0,
-                    LV_COORD_MAX, LV_TEXT_FLAG_EXPAND);
-    if (measured.x > 518) notice.title_font = ui_message_font(&lv_font_instrument_sans_semibold_20);
-    fit_text(notice.title, sizeof(notice.title), title, notice.title_font, 518);
-    fit_text(notice.detail, sizeof(notice.detail), body,
-             &lv_font_instrument_sans_medium_18, 610);
+    const char *title = notice.shown.localized ? ui_tr(notice.shown.title) : notice.shown.title;
+    const char *body = notice.shown.localized ? ui_tr(notice.shown.detail) : notice.shown.detail;
+    if (notice.shown.has_message) { ui_message_render(&notice.shown.message, detail, sizeof(detail)); body = detail; }
+    notice.title_font = ui_message_font(&lv_font_instrument_sans_semibold_16);
+    copy_text(notice.title, sizeof(notice.title), title);
+    copy_text(notice.detail, sizeof(notice.detail), body);
+    if (notice.shown.repeats > 1 && notice.shown.kind != UI_NOTICE_PROGRESS) {
+        size_t length = strlen(notice.title);
+        snprintf(notice.title + length, sizeof(notice.title) - length, " (x%u)", notice.shown.repeats);
+    }
+    measure_title(&measured);
+    notice.title_height = measured.y;
+    notice.detail_height = 0;
+    if (notice.detail[0]) {
+        lv_txt_get_size(&measured, notice.detail, ui_message_font(&lv_font_instrument_sans_medium_12),
+                        0, 2, NOTICE_TEXT_WIDTH, 0);
+        notice.detail_height = measured.y;
+    }
+    int copy_height = notice.title_height + (notice.detail_height ? notice.detail_height + 2 : 0);
+    notice.height = LV_MAX(NOTICE_HEIGHT, copy_height + 24);
+    notice.copy_y = (notice.height - copy_height) / 2;
+    lv_obj_set_size(notice.object, NOTICE_WIDTH, notice.height);
+    lv_obj_set_x(notice.object, (lv_disp_get_hor_res(NULL) - NOTICE_WIDTH) / 2);
 }
 
 static void service_stop(void)
@@ -199,8 +221,11 @@ static void service_stop(void)
 static void animation_exec(void *object, int32_t value)
 {
     int start = notice.animation_y;
-    int end = notice.leaving ? NOTICE_OFFSCREEN_Y : NOTICE_Y;
+    int end = notice.leaving ? NOTICE_EXIT_Y : NOTICE_Y;
+    int alpha = notice.leaving ? LV_OPA_TRANSP : LV_OPA_COVER;
+    notice.opacity = notice.animation_opacity + (alpha - notice.animation_opacity) * value / 1000;
     lv_obj_set_y(object, start + (end - start) * value / 1000);
+    lv_obj_invalidate(object);
 }
 
 static void animation_ready(lv_anim_t *animation)
@@ -212,7 +237,13 @@ static void animation_ready(lv_anim_t *animation)
         notice.leaving = false;
         lv_obj_add_flag(notice.object, LV_OBJ_FLAG_HIDDEN);
         present(true);
-    } else service_start();
+    } else {
+        /* Resolve the final layout before exposing the settled position. */
+        notice.opacity = LV_OPA_COVER;
+        lv_obj_set_y(notice.object, NOTICE_Y);
+        lv_obj_update_layout(notice.object);
+        service_start();
+    }
 }
 
 static void animate(bool leaving)
@@ -221,7 +252,9 @@ static void animate(bool leaving)
     service_stop();
     lv_anim_del(notice.object, animation_exec);
     notice.leaving = leaving;
-    notice.animation_y = leaving ? lv_obj_get_y(notice.object) : NOTICE_OFFSCREEN_Y;
+    lv_obj_update_layout(notice.object);
+    notice.animation_y = lv_obj_get_y(notice.object);
+    notice.animation_opacity = notice.opacity;
     notice.animating = true;
     lv_anim_init(&a);
     lv_anim_set_var(&a, notice.object);
@@ -230,7 +263,10 @@ static void animate(bool leaving)
     lv_anim_set_time(&a, leaving ? NOTICE_EXIT_MS : NOTICE_ENTER_MS);
     lv_anim_set_path_cb(&a, leaving ? lv_anim_path_ease_in : lv_anim_path_ease_out);
     lv_anim_set_ready_cb(&a, animation_ready);
-    lv_anim_start(&a);
+    if (!lv_anim_start(&a)) {
+        animation_exec(notice.object, 1000);
+        animation_ready(NULL);
+    }
 }
 
 static void timer_event(lv_timer_t *timer)
@@ -247,8 +283,8 @@ static void timer_event(lv_timer_t *timer)
         lv_area_t icon;
         notice.angle = (notice.angle + 13) % 360;
         lv_obj_get_coords(notice.object, &icon);
-        icon.x1 += 25; icon.y1 += 25;
-        icon.x2 = icon.x1 + 65; icon.y2 = icon.y1 + 65;
+        icon.x1 += 16; icon.y1 += notice.height / 2 - 16;
+        icon.x2 = icon.x1 + 31; icon.y2 = icon.y1 + 31;
         lv_obj_invalidate_area(notice.object, &icon);
     }
 }
@@ -288,6 +324,11 @@ static void event(lv_event_t *e)
 {
     switch (lv_event_get_code(e)) {
     case LV_EVENT_DRAW_MAIN: draw(e); break;
+    case LV_EVENT_REFR_EXT_DRAW_SIZE: {
+        lv_coord_t *size = lv_event_get_param(e);
+        *size = LV_MAX(*size, NOTICE_SHADOW_EXTENT);
+        break;
+    }
     case LV_EVENT_PRESSED:
         consume_visible_time(); notice.held = true; service_stop(); break;
     case LV_EVENT_RELEASED:
@@ -316,6 +357,7 @@ void ui_notice_init(void)
     lv_obj_clear_flag(notice.object, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(notice.object, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(notice.object, event, LV_EVENT_ALL, NULL);
+    lv_obj_refresh_ext_draw_size(notice.object);
     notice.timer = lv_timer_create(timer_event, NOTICE_SPINNER_MS, NULL);
     service_stop();
 }
@@ -330,12 +372,22 @@ static void present(bool with_animation)
         notice.visible = notice.animating = notice.leaving = false;
         return;
     }
+    bool continue_motion = notice.visible && notice.leaving;
     notice.shown = notice.state.active;
     prepare_copy();
+    /* A result may arrive before the first entry frame. Updating its content
+     * must not complete or restart the existing presentation timeline. */
+    if (!with_animation && notice.visible && notice.animating && !notice.leaving) {
+        lv_obj_invalidate(notice.object);
+        return;
+    }
     lv_anim_del(notice.object, animation_exec);
     notice.animating = notice.leaving = notice.held = false;
     notice.visible = true;
-    lv_obj_set_y(notice.object, with_animation ? NOTICE_OFFSCREEN_Y : NOTICE_Y);
+    if (!with_animation || !continue_motion) {
+        notice.opacity = with_animation ? LV_OPA_TRANSP : LV_OPA_COVER;
+        lv_obj_set_y(notice.object, with_animation ? NOTICE_ENTRY_Y : NOTICE_Y);
+    }
     lv_obj_clear_flag(notice.object, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(notice.object);
     if (with_animation) animate(false);
@@ -396,7 +448,11 @@ void ui_notice_dismiss(const char *key)
 void ui_notice_clear(const char *key)
 {
     if (!notice.initialized) return;
-    if (ui_notice_state_remove(&notice.state, key, false)) present(false);
+    uint32_t revision = notice.state.has_active ? notice.state.active.revision : 0;
+    bool was_visible = notice.visible && !notice.leaving;
+    if (ui_notice_state_remove(&notice.state, key, false) &&
+        (!notice.state.has_active || notice.state.active.revision != revision))
+        present(!was_visible);
 }
 
 void ui_notice_set_suspended(uint32_t reason, bool suspended)
@@ -414,7 +470,7 @@ void ui_notice_set_suspended(uint32_t reason, bool suspended)
             lv_obj_add_flag(notice.object, LV_OBJ_FLAG_HIDDEN);
         }
         notice.visible = notice.animating = notice.leaving = notice.held = false;
-    } else present(false);
+    } else present(true);
 }
 
 bool ui_notice_is_visible(void)

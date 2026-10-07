@@ -144,9 +144,10 @@ static void immediate_pages(void)
     click(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3));assert(lv_obj_get_style_bg_color(button(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_2)),0).full==checked.full);assert(last_command==0x31&&last_payload[0]==3);
     assert(find_label(lv_scr_act(),"Confirmed level: 2"));snapshot("double-pending");
     unsigned sent_before=sends,notice_before=action_notices;
+    assert(lv_obj_has_state(button(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3)),LV_STATE_DISABLED));
     assert(action_blocked(button(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3))));
     click(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3));
-    assert(sends==sent_before&&action_notices==notice_before+1&&strstr(action_notice,"confirm"));
+    assert(sends==sent_before&&action_notices==notice_before);
     ui_page_22_set_double_note_on_reply(&result);assert(find_label(lv_scr_act(),"Confirmed level: 2"));
     click(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3));double_level=3;result.success=true;
     ui_page_22_set_double_note_on_reply(&result);assert(find_label(lv_scr_act(),"Confirmed level: 3"));ui_page_22_set_double_note_destroy();
@@ -246,8 +247,8 @@ static void cfd_page_test(void)
     click("4");assert(lv_obj_has_state(button("4"),LV_STATE_CHECKED));assert(gesture_policy&&gesture_policy(GESTURE_ACTION_HOME)&&overlay);
     settings_detail_dialog_hide();click(ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE));assert(last_payload[0]==2);
     unsigned notices_before=action_notices,pops_before=pops;
-    assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);
-    assert(action_notices==notices_before+1&&pops==pops_before);assert(gesture_policy(GESTURE_ACTION_HOME));
+    assert(lv_nav_button_request_back()==LV_NAV_BACK_BLOCKED);
+    assert(action_notices==notices_before&&pops==pops_before);assert(gesture_policy(GESTURE_ACTION_HOME));
     advance(800);assert(cfd_service_take_update_timeout());ui_page_27_set_cfd_level_on_request_failed();
     assert(test_notice_kind==UI_NOTICE_WARNING&&!overlay);
     assert(find_label(lv_scr_act(),"4"));snapshot("cfd-save-failed");click(ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE));
