@@ -1,0 +1,32 @@
+UN260 Welcome 品牌移植与 USB 启动加速核验
+2026-10-07
+
+已实施的品牌范围
+以 welcome-v3.html 为视觉基准。红丝巾与 Instrument Sans SemiBold 20 型号组合，在同一离线背景生成器生成，供原生首屏与自检页复用。Welcome 新增独立compact字形，缩小18%，位置y=141；未改变其他主题原始字形。圆点5px、起点623、步长14、y=288，尺寸与位置由原生/LVGL共享定义。
+没有增加运行时缩放、解码循环、IO或帧定时器。保持原动画时序、自检回复和错误诊断入口。视觉协议版本递增，旧initramfs不得错误继承新画面时序。
+旧内核仍可能先显示旧品牌再进入新界面；应用包不能重写其编译内嵌资源。这不是可以靠替换PNG消除的差异。
+
+当前权威源码确认的启动边界
+1. tools/un260-startup/early_init.c 在挂载真实rootfs前启动原生显示；build_early_init.py 将其连同资源编入静态/init，设置内核INITRAMFS_SOURCE。
+2. ui_update.sh安装白名单没有内核或启动分区。普通UPK不包含内核更新过程。
+3. image_cfg.json含单个12MiB kernel、10MiB recovery、64MiB ubiroot与剩余un260_app卷；不能把已保存用户应用/数据的ubisystem当作空闲备用槽。
+4. 当前U-Boot配置 CONFIG_BOOTCOUNT_LIMIT 未启用；系统配置 BR2_PACKAGE_SWUPDATE 未启用。sw-description是SDK示例，其流程写logo/kernel/rootfs，不能直接应用到需保留现有用户数据的设备。
+5. recovery.itb存在不能证明旧设备上装有同版本、可启动、能接续USB升级的recovery；需板上读取版本和验证。
+
+决策
+尚未允许升级器写内核、修改bootcmd、分区或启动环境。不能把未经断电和回退验证的内核包作为普通USB升级交付，也不承诺已实现3秒亮屏。
+先用 tools/un260-startup/inspect_boot_readonly.sh 核验8秒设备。脚本仅输出内核、启动参数、MTD几何、挂载、容量、已安装组件哈希、状态标记与选定环境变量。不触发刷写、挂载、重启或清理。
+如只是S00启动路径缺失，走现有UPK修复；如缺失早期initramfs，评估厂商recovery接续路径。前提是保留当前可启动系统、校验写入目标与空间、读回核验、恢复状态可重入、失败仍可进入恢复环境。不能用U盘上的内核备份代替自动可启动回退。
+若现有启动器无法提供安全试启动/恢复，需一次维护升级建立该能力；纯UI包无法保证达到刷IMG后的时间。
+
+验证和边界
+原生D主题完整帧对照、前后时间跳变、帧缓存边界、lease/FD交接、旧视觉版本拒绝继承均通过。
+initramfs 12条控制流路径通过。没有对真实设备挂载或写入。
+最终交付记录另附完整make结果与包摘要；编译与主机测试不代表板上亮屏、触摸、自检、断电恢复已通过。
+需比较真实冷启动的上电至首帧、至可操作两个时间，不用动画总时长冒充亮屏时间。
+
+机制参考
+https://rauc.readthedocs.io/en/latest/basic.html
+https://docs.u-boot-project.org/en/latest/api/bootcount.html
+只借鉴非活动槽、健康确认、启动失败回退设计；当前设备并未因此具备这些能力。
+屏幕板验证补充（用户提供）：COM19为Linux调试口，Type-C只供电，未连接主控。握手4超时和自检停留是预期，不能作为Linux启动失败或升级回退触发条件。后续启动健康确认应依据Linux进入用户态、显示交接、UI进程存活与触摸设备可用；主控通信状态单独提示，不与系统升级成功判定混淆。当前COM19打开返回Access denied，尚未读取该板运行信息。
