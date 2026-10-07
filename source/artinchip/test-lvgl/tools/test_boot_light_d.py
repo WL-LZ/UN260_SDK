@@ -10,4 +10,8 @@ s=s.replace('const uint8_t color[4]={0x20,0x58,0xf8,255}', 'const uint8_t color[
 s=s.replace('un260-boot-light-20260914','un260-boot-light-d')
 s=s.replace('float alpha=ease(progress(elapsed,BOOT_DOT_START+i*120,450))', 'jump=boot_d_dot(elapsed,i);\n  float alpha=ease(progress(elapsed,2300U,800U))')
 s=s.replace('BOOT_WELCOME_MOTION_SCALE*6*jump','BOOT_WELCOME_MOTION_SCALE*5*jump')
+s=s.replace('unsigned x=619+i*17', 'unsigned x=623+i*14')
+s=s.replace('yy<7;yy++)for(unsigned xx=0;xx<7', 'yy<5;yy++)for(unsigned xx=0;xx<5')
+s=s.replace('(int)xx-3,dy=(int)yy-3', '(int)xx-2,dy=(int)yy-2')
+s=s.replace('dx*dx+dy*dy>12', 'dx*dx+dy*dy>5')
 exec(compile(s,str(Path(__file__)), 'exec'))

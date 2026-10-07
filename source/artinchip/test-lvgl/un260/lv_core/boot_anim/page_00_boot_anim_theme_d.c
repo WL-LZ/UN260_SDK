@@ -301,14 +301,14 @@ void ui_page_00_boot_anim_create(lv_obj_t *parent)
     g_intro.brand = label(g_intro.root, "UN260", &lv_font_open_runde_medium_48, 1);
     bool english = ui_lang_get() == LANGUAGE_EN;
     g_intro.welcome = label(g_intro.root, english ? BOOT_WELCOME_TEXT : ui_tr("Welcome"),
-                            english ? &lv_font_boot_welcome : &lv_font_open_runde_medium_40, 0);
+                            english ? &lv_font_boot_welcome_compact : &lv_font_open_runde_medium_40, 0);
     if (!g_intro.brand || !g_intro.welcome) { create_failed(); return; }
     for (unsigned i = 0; i < 3; ++i) {
         g_intro.dots[i] = lv_obj_create(g_intro.root);
         if (!g_intro.dots[i]) { create_failed(); return; }
         lv_obj_remove_style_all(g_intro.dots[i]);
-        lv_obj_set_size(g_intro.dots[i], 7, 7);
-        lv_obj_set_pos(g_intro.dots[i], 619 + (int)i * 17, BOOT_DOT_Y);
+        lv_obj_set_size(g_intro.dots[i], BOOT_DOT_SIZE, BOOT_DOT_SIZE);
+        lv_obj_set_pos(g_intro.dots[i], BOOT_DOT_X + (int)i * BOOT_DOT_STEP, BOOT_DOT_Y);
         lv_obj_set_style_radius(g_intro.dots[i], LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_bg_color(g_intro.dots[i], lv_color_hex(0x7C879E), 0);
         background_opacity(g_intro.dots[i], LV_OPA_TRANSP);

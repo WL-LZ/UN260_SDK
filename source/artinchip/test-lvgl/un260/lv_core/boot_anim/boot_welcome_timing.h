@@ -14,9 +14,13 @@
 #define BOOT_WELCOME_HOLD_END 7400U
 #define BOOT_DOT_START 2500U
 #define BOOT_DOT_PERIOD 1800U
-#define BOOT_TEXT_Y 126
+#define BOOT_TEXT_Y 141
 #define BOOT_TEXT_HEIGHT 128U
-#define BOOT_DOT_Y 303
+#define BOOT_DOT_Y 288
+#define BOOT_DOT_X 623U
+#define BOOT_DOT_STEP 14U
+#define BOOT_DOT_SIZE 5U
+#define BOOT_DOT_RADIUS_SQ 5
 #else
 #define BOOT_ENTRANCE_START 0U
 #define BOOT_ENTRANCE_DURATION 600U
@@ -31,6 +35,10 @@
 #define BOOT_TEXT_Y 196
 #define BOOT_TEXT_HEIGHT 128U
 #define BOOT_DOT_Y 330
+#define BOOT_DOT_X 619U
+#define BOOT_DOT_STEP 17U
+#define BOOT_DOT_SIZE 7U
+#define BOOT_DOT_RADIUS_SQ 12
 #endif
 /* Board fallback: set to 0 for opacity-only text and stationary breathing
  * dots. Rebuild BOTH native/initramfs and LVGL; never mix their timelines. */

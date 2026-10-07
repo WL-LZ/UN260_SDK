@@ -114,6 +114,9 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${MACHINE_GUIDE_I
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/icon_sources/fault_guide/manifest.json")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_boot_d_assets.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/icon_sources/brand/scarf-hd.png"
+    "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/lv_font_instrument_sans_semibold_20.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/lv_font_boot_welcome_compact.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/un260/lv_core/boot_anim/boot_theme_config.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/lv_font_roboto_12.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/lv_font_roboto_16.c"
@@ -152,6 +155,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/font/lv_font_open_runde_medium_24.c
     un260/font/lv_font_open_runde_medium_40.c
     un260/font/lv_font_open_runde_medium_48.c
+    un260/font/lv_font_boot_welcome_compact.c
     un260/font/lv_font_boot_welcome.c
     un260/font/lv_font_roboto_12.c
     un260/font/lv_font_roboto_16.c

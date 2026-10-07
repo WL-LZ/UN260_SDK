@@ -33,15 +33,17 @@ bg=Image.open(root/'aic_ui/lvgl_data/backgrounds/boot.png').convert('RGBA')
 # Both renderers consume these same baked pixels; no runtime scaling or drawing.
 resample=getattr(Image,'Resampling',Image).LANCZOS
 emblem=Image.open(root/'aic_ui/lvgl_data/boot_theme_c/emblem.png').convert('RGBA')
-brand_emblem=emblem.resize((24,24),resample)
-bg.alpha_composite(brand_emblem,(48,27))
-brand=glyphs('lv_font_roboto_16.c','UN260',(111,116,129),64,24);bg.alpha_composite(brand,(77,29))
+brand_emblem=Image.open(root/'tools/icon_sources/brand/scarf-hd.png').convert('RGBA').resize((54,36),resample)
+# Same image box and optical baseline as the approved 1280x400 HTML.
+bg.alpha_composite(brand_emblem,(39,22))
+brand=glyphs('lv_font_instrument_sans_semibold_20.c','UN260',(52,71,89),68,32)
+bg.alpha_composite(brand,(91,29))
 footer=glyphs('lv_font_instrument_sans_semibold_12.c','CURRENCY PROCESSING SYSTEM',(146,152,168),220,20);bg.alpha_composite(footer,(52,363))
 def save(im,path):
     data=io.BytesIO();im.save(data,format='PNG');data=data.getvalue()
     if not path.exists() or path.read_bytes()!=data:path.write_bytes(data)
 save(bg,out/'background.png');blank=Image.new('RGBA',(96,96));save(emblem,out/'emblem.png')
-welcome=glyphs('lv_font_boot_welcome.c','\ue000',(82,109,130),500,128)
+welcome=glyphs('lv_font_boot_welcome_compact.c','\ue000',(82,109,130),500,128)
 pixels=bg.tobytes('raw','BGRA')+blank.tobytes('raw','BGRA')+Image.new('RGBA',(500,128)).tobytes('raw','BGRA')+welcome.tobytes('raw','BGRA')
 value=2166136261
 for b in pixels:value=((value^b)*16777619)&0xffffffff

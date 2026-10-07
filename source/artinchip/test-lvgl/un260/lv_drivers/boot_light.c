@@ -53,9 +53,9 @@
 #define ACTIVE_W 500U
 #define ACTIVE_STRIDE (ACTIVE_W*4U)
 #define ACTIVE_BYTES (ACTIVE_STRIDE*ACTIVE_H)
-#define DOTS_X 619U
+#define DOTS_X BOOT_DOT_X
 #define DOTS_Y (BOOT_DOT_Y-6U)
-#define DOTS_W 41U
+#define DOTS_W (2U*BOOT_DOT_STEP+BOOT_DOT_SIZE)
 #define DOTS_H 13U
 typedef struct {
     bool initialized;
@@ -138,10 +138,10 @@ static void render(uint8_t *frame,unsigned stride,const uint8_t *assets,
 #if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D
         alpha=ease(progress(elapsed,2300U,800U))*(.4f+.6f*jump);lift=5;
 #endif
-        unsigned x=619+i*17,y=BOOT_DOT_Y-(unsigned)(BOOT_WELCOME_MOTION_SCALE*lift*jump+.5f);
-        for(unsigned yy=0;yy<7;yy++)for(unsigned xx=0;xx<7;xx++) {
-            int dx=(int)xx-3,dy=(int)yy-3;
-            if(dx*dx+dy*dy>12)continue;
+        unsigned x=BOOT_DOT_X+i*BOOT_DOT_STEP,y=BOOT_DOT_Y-(unsigned)(BOOT_WELCOME_MOTION_SCALE*lift*jump+.5f);
+        for(unsigned yy=0;yy<BOOT_DOT_SIZE;yy++)for(unsigned xx=0;xx<BOOT_DOT_SIZE;xx++) {
+            int dx=(int)xx-(int)(BOOT_DOT_SIZE/2),dy=(int)yy-(int)(BOOT_DOT_SIZE/2);
+            if(dx*dx+dy*dy>BOOT_DOT_RADIUS_SQ)continue;
 #if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D
             const uint8_t color[4]={0x9e,0x87,0x7c,255};
 #else

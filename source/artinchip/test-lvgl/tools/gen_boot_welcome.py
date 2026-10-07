@@ -7,6 +7,10 @@ The native renderer reads this same committed bitmap, so handoff is exact.
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument("--compact", action="store_true")
+args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 font = ImageFont.truetype(str(root / 'aic_ui/font/OoohBaby-Regular.ttf'), 560)
 if not hasattr(font, 'getbbox') or not hasattr(Image, 'Resampling'):
@@ -16,6 +20,8 @@ mask = Image.new('L', (box[2]-box[0]+16, box[3]-box[1]+16))
 ImageDraw.Draw(mask).text((8-box[0], 8-box[1]), 'Welcome', font=font,
                           fill=255, stroke_width=4)
 mask.thumbnail((480, 112), Image.Resampling.LANCZOS)
+if args.compact:
+    mask = mask.resize((round(mask.width * .82), round(mask.height * .82)), Image.Resampling.LANCZOS)
 w, h = mask.size
 alpha = [(v+8)//17 for v in mask.tobytes()]
 if len(alpha) % 2:
@@ -50,5 +56,9 @@ const lv_font_t lv_font_boot_welcome = {
     .line_height = %d, .base_line = 0, .dsc = &font_dsc
 };
 ''' % (bitmap, w*16, w, h, h)
-(root / 'un260/font/lv_font_boot_welcome.c').write_text(text)
+name = 'lv_font_boot_welcome_compact' if args.compact else 'lv_font_boot_welcome'
+text = text.replace('const lv_font_t lv_font_boot_welcome =', 'const lv_font_t ' + name + ' =')
+condition = "==" if args.compact else "!="
+text = ('#include "un260/lv_core/boot_anim/boot_theme_config.h"\n#if UI_BOOT_ANIM_THEME ' + condition + ' UI_BOOT_ANIM_THEME_D\n' + text + '\n#endif\n')
+(root / ('un260/font/' + name + '.c')).write_text(text)
 print(f'Welcome: {w}x{h}, {len(data)} bytes; one pre-shaped glyph')
