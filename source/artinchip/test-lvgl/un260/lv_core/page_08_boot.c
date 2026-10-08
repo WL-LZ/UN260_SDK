@@ -8,6 +8,7 @@
 #include "un260/boot/boot_service.h"
 #include "../aic_ui/aic_ui.h"
 #include "un260/font/boot_fonts.h"
+#include "un260/font/ui_message_font.h"
 
 #include <string.h>
 
@@ -179,7 +180,7 @@ static void boot_progress_create(lv_obj_t* parent)
     lv_obj_set_style_text_color(g_boot_page.progress_loading_label,
                                 lv_color_hex(0x6D92AA), 0);
     lv_obj_set_style_text_font(g_boot_page.progress_loading_label,
-                               &lv_font_open_runde_medium_24, 0);
+                               ui_message_font_sized(&lv_font_open_runde_medium_24, 24), 0);
 
     g_boot_page.progress_percent_label = lv_label_create(parent);
     lv_label_set_text(g_boot_page.progress_percent_label, "0%");
@@ -203,7 +204,7 @@ static void boot_selftest_list_create(lv_obj_t* parent) // 创建自检卡片列
     lv_selftest_list_config_t cfg;
 
     lv_selftest_list_config_init(&cfg);
-    cfg.text_font = &lv_font_open_runde_medium_24;
+    cfg.text_font = ui_message_font_sized(&lv_font_open_runde_medium_24, 24);
     cfg.item_w = 682;
     cfg.item_h = 36;
     cfg.item_gap = 10;

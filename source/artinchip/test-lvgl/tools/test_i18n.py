@@ -3,6 +3,7 @@
 from pathlib import Path
 import argparse
 import importlib.util
+import json
 import os
 import subprocess
 import tempfile
@@ -26,6 +27,18 @@ def main():
                  'un260/lv_system/ui_text_widget.c', 'i18n/generated/lv_i18n.c']
         subprocess.run([args.cc, *flags, *(str(ROOT / file) for file in files), '-o', str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
+        # An enabled fixture exercises production resource gates without
+        # marking the actual unfinished rendering rollout as released.
+        (folder / 'i18n/generated').mkdir(parents=True)
+        registry = (ROOT / 'i18n/generated/ui_locale_registry.inc').read_text()
+        (folder / 'i18n/generated/ui_locale_registry.inc').write_text(registry.replace('false', 'true'))
+        guarded = folder / 'ui_lang.c'
+        guarded.write_text((ROOT / 'un260/lv_system/ui_lang.c').read_text())
+        guard_exe = folder / 'resource_guard'
+        subprocess.run([args.cc, *flags, '-I'+str(ROOT / 'un260/lv_system'), str(ROOT / 'tools/test_locale_resource_guard.c'),
+                        str(guarded), str(ROOT / 'i18n/generated/lv_i18n.c'),
+                        '-o', str(guard_exe)], check=True)
+        subprocess.run([str(guard_exe)], check=True)
         if os.name != 'nt':
             exe = folder / 'store'
             path = folder / 'state'
@@ -69,6 +82,37 @@ def main():
         finally:
             generator.ROOT = original_root
     print('I18n format validator and production extraction PASS')
+    original_i18n = generator.I18N
+    with tempfile.TemporaryDirectory(prefix='un260-plural-gate-') as directory:
+        fixture = Path(directory)
+        (fixture / 'i18n/locales').mkdir(parents=True)
+        (fixture / 'i18n/fragments').mkdir()
+        (fixture / 'main.c').write_text('')
+        def save(name, data):
+            (fixture / 'i18n' / name).write_text(json.dumps(data), encoding='utf-8')
+        en = dict(id=0, tag='en', code='EN', name='English', direction='ltr',
+                  enabled=True, translations_ready=True, font_ready=True,
+                  shaping_ready=True, font_profile='test')
+        save('locales/en.json', {'en': {'%u notes': {'one': '%u note', 'other': '%u notes'}}})
+        generator.ROOT, generator.I18N = fixture, fixture / 'i18n'
+        try:
+            for tag in ('zh-Hans', 'ko', 'ja', 'ar'):
+                locale = dict(en, id=1, tag=tag, direction='rtl' if tag == 'ar' else 'ltr')
+                save('locales.json', [en, locale])
+                save('locales/' + tag + '.json', {tag: {'%u notes': {'other': 'N: %u'}}})
+                if tag == 'ar':
+                    try:
+                        generator.catalogues()
+                    except ValueError as error:
+                        assert 'incomplete plural forms' in str(error)
+                    else:
+                        raise AssertionError('Arabic release accepted without six plural categories')
+                    save('locales/ar.json', {'ar': {'%u notes': {form: 'N: %u' for form in
+                         ('zero', 'one', 'two', 'few', 'many', 'other')}}})
+                generator.catalogues()
+        finally:
+            generator.ROOT, generator.I18N = original_root, original_i18n
+    print('Four-language plural release gates PASS')
 
 
 if __name__ == '__main__':

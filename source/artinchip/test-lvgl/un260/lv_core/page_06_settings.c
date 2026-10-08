@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_i18n.h"
 /* Settings navigation owns layout; device actions remain in their existing services. */
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
@@ -54,7 +55,7 @@ static lv_color_t color_primary(void){return lv_color_hex(0x1462CC);}
 static lv_color_t color_line(void){return lv_color_hex(0xE3E9ED);}
 static lv_color_t color_text(void){return lv_color_hex(0x1D2B34);}
 static lv_obj_t *create_label(lv_obj_t *p,const char *t,const lv_font_t *f,lv_color_t c){
- lv_obj_t *l=lv_label_create(p);lv_label_set_text(l,t);lv_obj_set_style_text_font(l,f,0);lv_obj_set_style_text_color(l,c,0);
+ lv_obj_t *l=lv_label_create(p);lv_label_set_text(l,t);lv_obj_set_style_text_font(l,ui_message_font(f),0);lv_obj_set_style_text_color(l,c,0);
  lv_obj_clear_flag(l,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);return l;
 }
 static void capture_scroll(void){if(grid&&scope)scroll_positions[scope-catalog]=lv_obj_get_scroll_y(grid);}

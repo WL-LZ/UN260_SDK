@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "page_07_curr_overview.h"
 #include "page_07_curr_layout.h"
@@ -32,7 +33,7 @@ static lv_obj_t *text(lv_obj_t *parent, const char *value, int x, int y,
     lv_obj_t *label = lv_label_create(parent);
     lv_label_set_text(label, value);
     lv_obj_set_pos(label, x, y);
-    lv_obj_set_style_text_font(label, font, 0);
+    lv_obj_set_style_text_font(label,ui_message_font(font), 0);
     lv_obj_set_style_text_color(label, lv_color_hex(color), 0);
     lv_obj_clear_flag(label, LV_OBJ_FLAG_CLICKABLE);
     return label;

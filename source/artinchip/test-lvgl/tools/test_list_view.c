@@ -12,6 +12,17 @@
 #include "un260/lv_core/page_02_list.c"
 #include "test_recycled_list_cases.h"
 #include "test_alnum_keyboard_cases.h"
+/* Peripheral workflow edges; the multi-detail page and projection stay real. */
+static bool (*list_gesture_policy)(gesture_action_t);
+static unsigned host_history_invalidations, host_protocol_sends;
+void gesture_service_set_page_policy(uint32_t owner,bool (*drag)(void),bool (*action)(gesture_action_t))
+{(void)owner;(void)drag;list_gesture_policy=action;}
+void gesture_service_clear_page_policy(uint32_t owner){(void)owner;list_gesture_policy=NULL;}
+void counting_history_current_invalidate(void){++host_history_invalidations;}
+bool app_command_runtime_count_start_busy(void){return false;}
+bool protocol_send_is_ready(void){return true;}
+int protocol_send(uint8_t cmd,const uint8_t *data,uint16_t count)
+{(void)cmd;(void)data;(void)count;++host_protocol_sends;return 0;}
 
 /* Host-only bridge: the production decoder uploads these exact BGRA arrays
  * into DMA frames. The software renderer reads them directly, without PNG I/O
@@ -801,8 +812,8 @@ int main(void)
         assert(lv_obj_get_y(row)>=0 && lv_obj_get_y(row)<252);
         label_fits(lv_obj_get_child(row,0));label_fits(lv_obj_get_child(row,2));
     }
-    /* MULTI has no per-note currency from the current controller. The current
-     * selector and a retained mixed result both prevent fabricated amounts. */
+    /* MULTI owns a separate per-currency detail view. Ordinary projection
+     * panels must be hidden rather than presenting their previous totals. */
     assert(currency_state_confirm_auto_selection());
     data->total_pcs=0;
     page_02_list_report_reset();tick(40);
@@ -816,18 +827,17 @@ int main(void)
     data->total_pcs=10000;
     assert(currency_state_confirm_multi_selection());
     page_02_list_report_reset();tick(40);
-    assert(view->data.denom_count==0 && !strcmp(lv_label_get_text(view->amount),"--"));
-    assert(!strcmp(lv_label_get_text(view->pcs),"10000"));
-    for(unsigned i=0;i<lv_obj_get_child_cnt(vp);++i) {
-        lv_obj_t *row=lv_obj_get_child(vp,i);
-        if(lv_obj_has_flag(row,LV_OBJ_FLAG_HIDDEN)||lv_obj_get_child_cnt(row)!=3)continue;
-        assert(!strcmp(lv_label_get_text(lv_obj_get_child(row,2)),"--"));
-        assert(strlen(lv_label_get_text(lv_obj_get_child(row,1)))>0);
-    }
+    assert(view->multi && view->multi_visible && list_gesture_policy);
+    assert(data->total_pcs==10000);
+    for(unsigned i=0;i<PAGE_02_SECTION_COUNT;++i)
+        assert(lv_obj_has_flag(view->section[i].panel,LV_OBJ_FLAG_HIDDEN));
     write_bmp("list-multi-safe");
     counting_data_mark_multi_result(data);
     assert(currency_state_leave_special_selection());
     page_02_list_report_reset();tick(40);
+    assert(!view->multi_visible && !list_gesture_policy);
+    for(unsigned i=0;i<PAGE_02_SECTION_COUNT;++i)
+        assert(!lv_obj_has_flag(view->section[i].panel,LV_OBJ_FLAG_HIDDEN));
     assert(!strcmp(lv_label_get_text(view->amount),"--"));
     counting_data_reset_result_scope(data);
     page_02_list_report_reset();tick(40);

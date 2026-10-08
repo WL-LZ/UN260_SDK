@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "ui_multi_detail.h"
 #include "lv_recycled_list.h"
 #include "lv_alnum_keyboard.h"
@@ -51,7 +52,7 @@ static lv_obj_t *label(lv_obj_t *p,int x,int y,int w,const char *s,const lv_font
 {
     if(!p)return NULL;
     lv_obj_t *o=lv_label_create(p);if(!o)return NULL;lv_obj_set_pos(o,x,y);lv_obj_set_width(o,w);
-    lv_obj_set_style_text_font(o,font,0);lv_obj_set_style_text_color(o,lv_color_hex(color),0);
+    lv_obj_set_style_text_font(o,ui_message_font(font),0);lv_obj_set_style_text_color(o,lv_color_hex(color),0);
     lv_label_set_long_mode(o,LV_LABEL_LONG_CLIP);lv_label_set_text(o,s);return o;
 }
 static void hide(lv_obj_t *o,bool yes){if(!o)return;if(yes)lv_obj_add_flag(o,LV_OBJ_FLAG_HIDDEN);else lv_obj_clear_flag(o,LV_OBJ_FLAG_HIDDEN);}
@@ -173,7 +174,7 @@ void ui_multi_detail_search(ui_multi_detail_t *v)
         lv_alnum_keyboard_config_t cfg={0};cfg.title=ui_text_get(UI_TEXT_QUERY_SERIAL);cfg.placeholder=ui_text_get(UI_TEXT_MULTI_SEARCH_HINT);
         cfg.choice_title=ui_text_get(UI_TEXT_QUERY_DENOMINATION);cfg.choice_hint=ui_text_get(UI_TEXT_QUERY_DENOM_HINT);
         cfg.choice_empty=ui_text_get(UI_TEXT_MULTI_NO_RECORDS);
-        cfg.apply_text=ui_text_get(UI_TEXT_MULTI_SEARCH_APPLY);cfg.clear_text=ui_text_get(UI_TEXT_MULTI_SEARCH_CLEAR);cfg.cancel_text=ui_text_get(UI_TEXT_MULTI_BACK);
+        cfg.apply_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_MULTI_SEARCH_APPLY));cfg.clear_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_MULTI_SEARCH_CLEAR));cfg.cancel_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_MULTI_BACK));
         cfg.max_length=32;cfg.submit=search_submit;cfg.context=v;cfg.modern=true;
         v->keyboard=lv_alnum_keyboard_create(lv_obj_get_parent(v->root),&cfg);
     }
@@ -239,7 +240,7 @@ static void bind_row(lv_obj_t *row,uint32_t index,void *ctx)
         if(overview)x3+=size.x+10;else x1+=size.x+10;
     }
     lv_obj_set_x(a,x1);lv_obj_set_width(a,x2-x1-16);lv_obj_set_x(b,x2);lv_obj_set_width(b,x3-x2-20);lv_obj_set_x(c,x3);lv_obj_set_width(c,overview?140:v->width-68-x3);
-    lv_obj_set_style_text_font(a,v->tab&&!overview&&!rejects_view?&lv_font_instrument_sans_medium_14:&lv_font_instrument_sans_semibold_20,0);
+    lv_obj_set_style_text_font(a,ui_message_font(v->tab&&!overview&&!rejects_view?&lv_font_instrument_sans_medium_14:&lv_font_instrument_sans_semibold_20),0);
     hide(f,!overview);
     if(overview&&index<m->count){const multi_currency_t *cur=&m->currencies[index];flag(f,cur->code);text(a,cur->code);number(b,cur->pcs);number(c,cur->amount);}
     else if(rejects_view){const multi_reject_cache_t *r=counting_multi_rejects();if(index>=r->count)return;char code[16];snprintf(code,sizeof(code),"0x%02X",r->rows[index].code);text(a,code);text(b,ui_text_counting_reject_reason(r->rows[index].code));number(c,r->rows[index].pcs);}
@@ -288,7 +289,7 @@ ui_multi_detail_t *ui_multi_detail_create(lv_obj_t *parent,bool expanded,ui_mult
         lv_obj_set_parent(v->tabs[i],v->segments);lv_obj_set_pos(v->tabs[i],3+i*138,3);
         lv_obj_t *l=lv_obj_get_child(v->tabs[i],0);lv_obj_set_align(l,LV_ALIGN_TOP_LEFT);
         lv_obj_set_pos(l,31,9);lv_obj_set_width(l,103);lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_LEFT,0);
-        lv_obj_set_style_text_font(l,&lv_font_instrument_sans_semibold_12,0);
+        lv_obj_set_style_text_font(l,ui_message_font(&lv_font_instrument_sans_semibold_12),0);
         lv_obj_t *tab_icon=icon(v->tabs[i],8,8,i?LVGL_DIR"list_icons/barcode_24.png":LVGL_DIR"list_icons/receipt_24.png");
         if(!tab_icon)goto failed;
         lv_img_set_pivot(tab_icon,0,0);lv_img_set_zoom(tab_icon,192);
@@ -308,7 +309,7 @@ ui_multi_detail_t *ui_multi_detail_create(lv_obj_t *parent,bool expanded,ui_mult
     lv_obj_t *reject_text=lv_obj_get_child(v->reject,0);lv_obj_set_align(reject_text,LV_ALIGN_TOP_LEFT);
     lv_obj_set_pos(reject_text,0,14);lv_obj_set_width(reject_text,64);
     text(reject_text,ui_text_get(UI_TEXT_PAGE01_DETAIL_COL_REJECT));
-    lv_obj_set_style_text_font(reject_text,&lv_font_instrument_sans_medium_10,0);
+    lv_obj_set_style_text_font(reject_text,ui_message_font(&lv_font_instrument_sans_medium_10),0);
     v->reject_value=label(v->reject,70,8,52,"0",&lv_font_instrument_sans_semibold_28,0xA67834);
     v->currency_line=box(v->root,expanded?194:180,head_y+10,1,42,0xEFF3F5,0);
     v->head_line=box(v->root,22,expanded?60:80,v->width-44,1,0xEFF3F5,0);
@@ -405,7 +406,7 @@ void ui_multi_detail_refresh(ui_multi_detail_t *v)
     lv_obj_set_x(v->subtitle,title_x);
     lv_obj_set_width(v->title,c?168:v->width-560);
     lv_obj_set_width(v->subtitle,c?168:v->width-560);
-    lv_obj_set_style_text_font(v->title,c?&lv_font_instrument_sans_semibold_18:&lv_font_instrument_sans_semibold_22,0);
+    lv_obj_set_style_text_font(v->title,ui_message_font(c?&lv_font_instrument_sans_semibold_18:&lv_font_instrument_sans_semibold_22),0);
     hide(v->flag,rejects_view);hide(v->currency,rejects_view);hide(v->currency_name,rejects_view);hide(v->currency_line,rejects_view);
     number(v->pcs,c?c->pcs:m->total_pcs);number(v->amount,c?c->amount:m->reject);number(v->reject_value,m->reject);
     hide(v->pcs,rejects_view);hide(v->pcs_title,rejects_view);
@@ -415,7 +416,7 @@ void ui_multi_detail_refresh(ui_multi_detail_t *v)
         lv_point_t size;const lv_font_t *font=&lv_font_instrument_sans_semibold_28;
         lv_txt_get_size(&size,lv_label_get_text(v->amount),font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
         if(size.x>104){font=&lv_font_instrument_sans_semibold_20;lv_txt_get_size(&size,lv_label_get_text(v->amount),font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);}
-        lv_obj_set_style_text_font(v->amount,font,0);
+        lv_obj_set_style_text_font(v->amount,ui_message_font(font),0);
         lv_obj_set_x(v->amount_symbol,lv_obj_get_x(v->amount)+size.x+8);
     }
     char unit[64];snprintf(unit,sizeof(unit),"%s - %s",ui_text_get(UI_TEXT_PAGE01_DETAIL_COL_AMOUNT),c?c->code:"");text(v->unit,c?unit:ui_text_get(UI_TEXT_PAGE01_DETAIL_COL_REJECT));

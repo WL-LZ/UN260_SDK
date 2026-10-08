@@ -6,6 +6,8 @@
 #include "un260/lv_components/lv_settings.h"
 #include "un260/lv_system/ui_lang.h"
 #include "un260/lv_system/ui_i18n.h"
+#include "un260/font/ui_message_font.h"
+#include "un260/font/ui_locale_font_bank.h"
 #include "un260/gesture/gesture_service.h"
 #include <stdint.h>
 #include <string.h>
@@ -17,24 +19,69 @@ typedef struct {
 static lv_settings_frame_t language_frame;
 static language_t language_original, language_draft;
 static lv_obj_t *language_save, *language_preview;
+static lv_obj_t *language_sample_device, *language_sample_label;
+static lv_obj_t *language_sample_date, *language_sample_format, *language_sample_icon;
 static language_row_t *language_rows;
 static size_t language_row_count;
 static bool language_home;
 static bool language_dirty(void) { return language_original != language_draft; }
+static bool language_prepare(language_t id)
+{
+    if(ui_lang_prepare_resources(id)) return true;
+    if(language_frame.message) lv_label_set_text(language_frame.message,ui_tr("Language settings unavailable"));
+    ui_notice_post_text(UI_NOTICE_ERROR,"settings.language",
+        UI_N_("Language settings unavailable"),UI_N_("Check storage and retry."));
+    return false;
+}
+static void language_preview_style(void)
+{
+    bool rtl=false;
+    for(size_t i=0;i<ui_lang_count();++i) {
+        const ui_locale_t *locale=ui_lang_at(i);
+        if(locale->id==language_draft) { rtl=locale->direction==UI_LANG_RTL; break; }
+    }
+    lv_obj_t *labels[]={language_sample_label,language_sample_date};
+    lv_obj_t *values[]={language_preview,language_sample_format};
+    for(size_t i=0;i<2;++i) {
+        lv_obj_set_style_text_font(labels[i],ui_message_font_for(&lv_font_instrument_sans_medium_16,language_draft),0);
+        lv_obj_set_style_text_font(values[i],ui_message_font_for(&lv_font_instrument_sans_medium_16,language_draft),0);
+        lv_obj_set_style_base_dir(labels[i],rtl?LV_BASE_DIR_RTL:LV_BASE_DIR_LTR,0);
+        lv_obj_set_style_base_dir(values[i],rtl?LV_BASE_DIR_RTL:LV_BASE_DIR_LTR,0);
+        lv_obj_set_width(labels[i],244);lv_obj_set_x(labels[i],rtl?282:18);
+        lv_obj_set_style_text_align(labels[i],rtl?LV_TEXT_ALIGN_RIGHT:LV_TEXT_ALIGN_LEFT,0);
+        lv_obj_set_x(values[i],rtl?18:310);
+        lv_obj_set_style_text_align(values[i],rtl?LV_TEXT_ALIGN_LEFT:LV_TEXT_ALIGN_RIGHT,0);
+    }
+    lv_obj_set_style_text_font(language_sample_device,ui_message_font_for(&lv_font_instrument_sans_semibold_20,language_draft),0);
+    lv_obj_set_style_base_dir(language_sample_device,rtl?LV_BASE_DIR_RTL:LV_BASE_DIR_LTR,0);
+    lv_obj_set_width(language_sample_device,456);lv_obj_set_x(language_sample_device,rtl?18:52);
+    lv_obj_set_style_text_align(language_sample_device,rtl?LV_TEXT_ALIGN_RIGHT:LV_TEXT_ALIGN_LEFT,0);
+    lv_obj_set_x(language_sample_icon,rtl?494:18);
+}
 static void language_refresh(void)
 {
     const char *name = ui_tr("Unavailable");
+    for(size_t i=0;i<ui_lang_count();++i)
+        if(ui_lang_at(i)->id==language_draft) name=ui_lang_at(i)->name;
+    lv_obj_t *selected_row=NULL;
     for (size_t i = 0; i < language_row_count; ++i) {
         language_row_t *row = &language_rows[i];
         bool selected = language_draft == row->locale->id;
         lv_obj_set_style_bg_color(row->row, lv_color_hex(selected ? 0xEDF4FF : 0xF3F6F8), 0);
         lv_obj_set_style_border_color(row->row, lv_color_hex(selected ? 0x8CACDA : 0xE3E9ED), 0);
-        if (selected) { lv_obj_clear_flag(row->check, LV_OBJ_FLAG_HIDDEN); name = row->locale->name; }
+        if (selected) { lv_obj_clear_flag(row->check, LV_OBJ_FLAG_HIDDEN); name = row->locale->name; selected_row=row->row; }
         else lv_obj_add_flag(row->check, LV_OBJ_FLAG_HIDDEN);
     }
+    if(selected_row) lv_obj_scroll_to_view(selected_row,LV_ANIM_OFF);
     settings_detail_action_wait(language_save, language_dirty() ? NULL : UI_N_("No changes to save."));
     lv_label_set_text(language_frame.message, language_dirty() ? ui_tr("Unsaved changes") : ui_tr("No changes"));
+    language_preview_style();
     lv_label_set_text(language_preview, name);
+    /* Preview never changes the active locale or persists the draft. */
+    lv_label_set_text(language_sample_device, ui_tr_for(language_draft, "Device"));
+    lv_label_set_text(language_sample_label, ui_tr_for(language_draft, "Language"));
+    lv_label_set_text(language_sample_date, ui_tr_for(language_draft, "Date & time"));
+    lv_label_set_text(language_sample_format, ui_tr_for(language_draft, "24-hour"));
 }
 static void language_leave(void *data)
 {
@@ -64,6 +111,7 @@ static void language_apply(lv_event_t *event)
     (void)event;
     if (!language_dirty()) return;
     if (!ui_lang_save(language_draft)) {
+        lv_label_set_text(language_frame.message,ui_tr("Language change not confirmed"));
         ui_notice_post_text(UI_NOTICE_ERROR, "settings.language", UI_N_("Language change not confirmed"), UI_N_("Check storage and retry."));
         return;
     }
@@ -76,7 +124,10 @@ static void language_choice(lv_event_t *event)
 {
     language_t id = (language_t)(uintptr_t)lv_event_get_user_data(event);
     for (size_t i = 0; i < language_row_count; ++i)
-        if (language_rows[i].locale->id == id) { language_draft = id; language_refresh(); return; }
+        if (language_rows[i].locale->id == id) {
+            if(!language_prepare(id)) return;
+            language_draft = id; language_refresh(); return;
+        }
 }
 void ui_page_21_set_language_create(lv_obj_t *parent)
 {
@@ -98,7 +149,7 @@ void ui_page_21_set_language_create(lv_obj_t *parent)
     }
     memset(language_rows, 0, language_row_count * sizeof(*language_rows));
     lv_settings_label(body, ui_tr("Interface language"), 20, 12, &lv_font_instrument_sans_semibold_14, 0x536B79);
-    lv_obj_t *list = lv_settings_grid(body, 17, 40, 610, 184); lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+    lv_obj_t *list = lv_settings_grid(body, 17, 40, 610, 244); lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
     size_t row_index = 0;
     for (size_t i = 0; i < ui_lang_count(); ++i) {
         const ui_locale_t *locale = ui_lang_at(i);
@@ -110,20 +161,33 @@ void ui_page_21_set_language_create(lv_obj_t *parent)
         lv_obj_set_style_border_color(button, lv_color_hex(0x8CACDA), 0); lv_obj_set_style_radius(button, 13, 0);
         lv_obj_t *code = lv_settings_box(button, 18, 16, 44, 44, 0xFFFFFF); lv_obj_set_style_radius(code, 10, 0);
         lv_obj_t *label = lv_settings_label(code, locale->code, 0, 0, &lv_font_instrument_sans_semibold_18, 0x155CBA); lv_obj_center(label);
-        lv_settings_label(button, locale->name, 78, 25, &lv_font_instrument_sans_semibold_22, 0x174F9D);
+        bool prepared=ui_locale_font_prepare_size(locale->id,22);
+        lv_obj_t *native=lv_settings_label(button, prepared?locale->name:locale->code, 78, 25,
+            ui_message_font_for(&lv_font_instrument_sans_semibold_22,locale->id),0x174F9D);
+        lv_obj_set_width(native,450);lv_label_set_long_mode(native,LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_base_dir(native,locale->direction==UI_LANG_RTL?LV_BASE_DIR_RTL:LV_BASE_DIR_LTR,0);
+        /* Keep every autonym beside its code; RTL controls letter order, not
+         * which end of this wide list row contains the name. */
+        lv_obj_set_style_text_align(native,LV_TEXT_ALIGN_LEFT,0);
         row->check = lv_settings_icon(button, "Check-active", 548, 26);
     }
     lv_settings_box(body, 644, 12, 1, 212, 0xE3E9ED);
     lv_settings_label(body, ui_tr("Preview"), 666, 12, &lv_font_instrument_sans_semibold_14, 0x536B79);
     lv_obj_t *sample = lv_settings_box(body, 666, 42, 544, 151, 0xF5F7F9); lv_obj_set_style_radius(sample, 13, 0);
-    lv_settings_icon(sample, "Settings", 18, 14);
-    lv_settings_label(sample, ui_tr("Device"), 52, 14, &lv_font_instrument_sans_semibold_20, 0x1D2B34);
+    language_sample_icon=lv_settings_icon(sample, "Settings", 18, 14);
+    language_sample_device = lv_settings_label(sample, ui_tr("Device"), 52, 14, &lv_font_instrument_sans_semibold_20, 0x1D2B34);
     lv_settings_box(sample, 18, 52, 508, 1, 0xE3E9ED);
-    lv_settings_label(sample, ui_tr("Language"), 18, 66, &lv_font_instrument_sans_medium_16, 0x1D2B34);
-    language_preview = lv_settings_label(sample, ui_lang_current()->name, 390, 66, &lv_font_instrument_sans_medium_16, 0x536B79);
+    language_sample_label = lv_settings_label(sample, ui_tr("Language"), 18, 66, &lv_font_instrument_sans_medium_16, 0x1D2B34);
+    language_preview = lv_settings_label(sample, ui_lang_current()->name, 310, 66, &lv_font_instrument_sans_medium_16, 0x536B79);
+    lv_obj_set_width(language_preview, 216);
+    lv_obj_set_style_text_align(language_preview, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_label_set_long_mode(language_preview, LV_LABEL_LONG_CLIP);
     lv_settings_box(sample, 18, 101, 508, 1, 0xE3E9ED);
-    lv_settings_label(sample, ui_tr("Date & time"), 18, 115, &lv_font_instrument_sans_medium_16, 0x1D2B34);
-    lv_settings_label(sample, ui_tr("24-hour"), 390, 115, &lv_font_instrument_sans_medium_16, 0x536B79);
+    language_sample_date = lv_settings_label(sample, ui_tr("Date & time"), 18, 115, &lv_font_instrument_sans_medium_16, 0x1D2B34);
+    language_sample_format = lv_settings_label(sample, ui_tr("24-hour"), 310, 115, &lv_font_instrument_sans_medium_16, 0x536B79);
+    lv_obj_set_width(language_sample_format, 216);
+    lv_obj_set_style_text_align(language_sample_format, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_label_set_long_mode(language_sample_format, LV_LABEL_LONG_CLIP);
     lv_settings_label(body, ui_tr("The interface changes after Save."), 666, 207, &lv_font_instrument_sans_medium_12, 0x536B79);
     lv_settings_button(language_frame.footer, 976, 0, 116, 44, ui_tr("Cancel"), false, language_cancel, NULL);
     language_save = lv_settings_button(language_frame.footer, 1102, 0, 130, 44, ui_tr("Save"), true, language_apply, NULL);
@@ -135,6 +199,8 @@ void ui_page_21_set_language_destroy(void)
     gesture_service_clear_page_policy(UI_PAGE_LANGUAGE_SETTING); settings_detail_dialog_hide();
     if (language_frame.root) lv_obj_del(language_frame.root);
     memset(&language_frame, 0, sizeof(language_frame)); language_save = language_preview = NULL;
+    language_sample_device = language_sample_label = NULL;
+    language_sample_date = language_sample_format = language_sample_icon = NULL;
     if (language_rows) lv_mem_free(language_rows);
     language_rows = NULL; language_row_count = 0;
 }

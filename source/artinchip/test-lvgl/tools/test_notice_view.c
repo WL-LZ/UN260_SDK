@@ -5,6 +5,7 @@
 #include "lvgl/lvgl.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_components/ui_notice.c"
+#include "un260/font/ui_locale_font_bank.h"
 #include "message_codepoints.h"
 
 static lv_color_t pixels[1280 * 400], buffer[1280 * 40];
@@ -342,6 +343,21 @@ int main(void)
     language = 2;
     ui_notice_post(UI_NOTICE_SUCCESS, "receipt", "인쇄 설정", "설정이 저장되었습니다.");
     advance(420); capture("success-kr"); ui_notice_deinit();
+    ui_lang_set_resource_preparer(ui_locale_font_prepare);ui_message_font_set_provider(ui_locale_font_compose);
+    for(size_t i=1;i<ui_lang_count();++i){
+        const ui_locale_t *locale=ui_lang_at(i);assert(ui_lang_prepare_resources(locale->id));ui_lang_set(locale->id);
+        ui_notice_post_text(UI_NOTICE_SUCCESS,"locale-shape","Language changed","Settings saved");advance(420);
+        lv_obj_t *probe=lv_label_create(lv_scr_act());lv_label_set_text(probe,ui_tr("Language changed"));
+        assert(!strcmp(notice.title,lv_label_get_text(probe)));lv_obj_del(probe);
+        const char *texts[]={notice.title,notice.detail};
+        const lv_font_t *faces[]={notice.title_font,ui_message_font(&lv_font_instrument_sans_medium_12)};
+        for(unsigned j=0;j<2;++j){uint32_t offset=0;while(texts[j][offset]){
+            uint32_t cp=_lv_txt_encoded_next(texts[j],&offset);lv_font_glyph_dsc_t glyph;
+            if(cp>32)assert(lv_font_get_glyph_dsc(faces[j],&glyph,cp,0)&&!glyph.is_placeholder);
+        }}
+        char file[64];snprintf(file,sizeof(file),"notice-locale-%s",locale->tag);capture(file);ui_notice_deinit();
+    }
+    ui_lang_set(LANGUAGE_EN);
     for (unsigned i = 0; i < 40; ++i) {
         ui_notice_post(UI_NOTICE_PROGRESS, "cycle", "Working", NULL);
         advance(40);

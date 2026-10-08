@@ -1,4 +1,11 @@
+#include "un260/font/ui_locale_font_bank.h"
 #include "un260/lv_components/lv_alnum_keyboard.h"
+#include "un260/lv_components/lv_pin_keypad.h"
+#include "un260/lv_core/page_08_boot.h"
+#include "un260/lv_core/page_00_boot_anim.h"
+#include "un260/lv_components/lv_qr_popup.h"
+#include "un260/boot/boot_service.h"
+void boot_service_snapshot(boot_snapshot_t *s){memset(s,0,sizeof(*s));}
 #define CASH_REAL_FONTS
 #define main menu_suite_main
 #include "test_menu_view.c"
@@ -15,10 +22,12 @@ bool machine_time_is_confirmed(void){return date_confirmed;}
 bool machine_time_is_valid(const machine_time_value_t *t){return t&&t->year>=2020;}
 void machine_time_confirm(const machine_time_value_t *t){date_confirmed=machine_time_is_valid(t);++date_revision;}
 static unsigned char background[1280*400*4];
+static unsigned char boot_background[1280*400*4],ready_background[1280*400*4];
+static unsigned char boot_emblem[96*96*4];
 static char space_result[33];static void space_submit(const char *text,void *context){(void)context;snprintf(space_result,sizeof(space_result),"%s",text);}
-static bool is_background(const void *src){return lv_img_src_get_type(src)==LV_IMG_SRC_FILE&&strstr(src,"backgrounds/user.png");}
-static lv_res_t cash_asset_info(lv_img_decoder_t *d,const void *src,lv_img_header_t *h){if(!is_background(src))return asset_info(d,src,h);memset(h,0,sizeof(*h));h->w=1280;h->h=400;h->cf=LV_IMG_CF_TRUE_COLOR_ALPHA;return LV_RES_OK;}
-static lv_res_t cash_asset_open(lv_img_decoder_t *d,lv_img_decoder_dsc_t *s){if(!is_background(s->src))return asset_open(d,s);cash_asset_info(d,s->src,&s->header);s->img_data=background;return LV_RES_OK;}
+static bool is_background(const void *src){return lv_img_src_get_type(src)==LV_IMG_SRC_FILE&&(strstr(src,"backgrounds/user.png")||strstr(src,"boot_theme_d/")||strstr(src,"backgrounds/boot.png"));}
+static lv_res_t cash_asset_info(lv_img_decoder_t *d,const void *src,lv_img_header_t *h){if(!is_background(src))return asset_info(d,src,h);bool emblem=strstr(src,"emblem.png")!=NULL;memset(h,0,sizeof(*h));h->w=emblem?96:1280;h->h=emblem?96:400;h->cf=LV_IMG_CF_TRUE_COLOR_ALPHA;return LV_RES_OK;}
+static lv_res_t cash_asset_open(lv_img_decoder_t *d,lv_img_decoder_dsc_t *s){if(!is_background(s->src))return asset_open(d,s);cash_asset_info(d,s->src,&s->header);s->img_data=strstr(s->src,"emblem.png")?boot_emblem:strstr(s->src,"boot_theme_d/")?boot_background:strstr(s->src,"backgrounds/boot.png")?ready_background:background;return LV_RES_OK;}
 cash_store_status_t cash_journal_store_status(void){return pending_save?CASH_STORE_SAVING:CASH_STORE_READY;}
 const cash_journal_t *cash_journal_store_get(void){return &journal_fixture;}
 unsigned cash_journal_store_revision(void){return journal_fixture.count;}
@@ -52,22 +61,82 @@ static lv_obj_t *cash_button(lv_obj_t *p,const char *text){
  if(lv_obj_check_type(p,&lv_label_class)&&!strcmp(lv_label_get_text(p),text)&&lv_obj_get_child_cnt(lv_obj_get_parent(p))==1)return lv_obj_get_parent(p);
  for(unsigned i=0;i<lv_obj_get_child_cnt(p);++i){lv_obj_t *o=cash_button(lv_obj_get_child(p,i),text);if(o)return o;}return NULL;
 }
-static void cash_click(const char *text){lv_obj_t *o=cash_button(lv_scr_act(),text);if(!o)fprintf(stderr,"Missing cash button: %s\n",text);assert(o);if(lv_obj_check_type(o,&lv_label_class))o=lv_obj_get_parent(o);lv_event_send(o,LV_EVENT_CLICKED,NULL);tick(100);}
-static void check_single_line(lv_obj_t *o){
- if(!lv_obj_is_visible(o))return;
- if(lv_obj_check_type(o,&lv_label_class)&&lv_obj_get_child_cnt(lv_obj_get_parent(o))==1&&lv_obj_has_flag(lv_obj_get_parent(o),LV_OBJ_FLAG_CLICKABLE)){
-  const lv_font_t *font=lv_obj_get_style_text_font(o,0);lv_point_t size;lv_txt_get_size(&size,lv_label_get_text(o),font,lv_obj_get_style_text_letter_space(o,0),0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
-  if(size.x>lv_obj_get_width(o))fprintf(stderr,"Button text too wide: %s (%d > %d)\n",lv_label_get_text(o),size.x,lv_obj_get_width(o));
-  assert(size.x<=lv_obj_get_width(o));assert(lv_obj_get_height(o)<=font->line_height);
+static void cash_click(const char *text){
+ lv_obj_t *o=cash_button(lv_scr_act(),text);
+ if(!o){
+  /* Match the text LVGL actually stores after Arabic shaping. */
+  lv_obj_t *probe=lv_label_create(lv_scr_act());lv_label_set_text(probe,text);
+  char *shaped=strdup(lv_label_get_text(probe));assert(shaped);lv_obj_del(probe);
+  o=cash_button(lv_scr_act(),shaped);free(shaped);
  }
- for(unsigned i=0;i<lv_obj_get_child_cnt(o);++i)check_single_line(lv_obj_get_child(o,i));
+ if(!o)fprintf(stderr,"Missing cash button: %s\n",text);assert(o);
+ if(lv_obj_check_type(o,&lv_label_class))o=lv_obj_get_parent(o);
+ lv_event_send(o,LV_EVENT_CLICKED,NULL);tick(100);
 }
+#include "test_locale_view_checks.h"
+
+static void cached_pin_locales(void){
+ lv_pin_keypad_t pin={0};assert(lv_pin_keypad_create(&pin,lv_scr_act(),215,18));
+ const language_t sequence[]={LANGUAGE_CN,LANGUAGE_KR,LANGUAGE_JA,LANGUAGE_AR,LANGUAGE_EN};
+ for(unsigned i=0;i<sizeof(sequence)/sizeof(sequence[0]);++i){
+  assert(ui_lang_prepare_resources(sequence[i]));ui_lang_set(sequence[i]);
+  lv_pin_keypad_config_t cfg={.title=ui_tr("Settings access"),.prompt=ui_tr("Enter your 4-digit password."),
+   .footnote=ui_tr("For authorized configuration and service."),.idle_status=ui_tr("Opens automatically when the code is correct."),.compact=true,.auto_confirm=true};
+  assert(lv_pin_keypad_show(&pin,&cfg,""));tick(100);check_single_line(pin.root);
+  bool rtl=sequence[i]==LANGUAGE_AR;
+  assert(lv_obj_get_x(pin.dots[0])==(rtl?289:34));
+  assert(lv_obj_get_x(pin.digits[0])<lv_obj_get_x(pin.digits[3]));
+  assert(lv_obj_get_x(pin.footnote_icon)==(rtl?398:34));
+  assert(lv_obj_get_width(pin.status)==(rtl?376:340));
+  lv_obj_t *labels[]={pin.title,pin.prompt,pin.status,pin.footnote};
+  for(unsigned j=0;j<4;++j){
+   lv_obj_t *o=labels[j];lv_point_t size;
+   lv_txt_get_size(&size,lv_label_get_text(o),lv_obj_get_style_text_font(o,0),lv_obj_get_style_text_letter_space(o,0),lv_obj_get_style_text_line_space(o,0),lv_obj_get_width(o),LV_TEXT_FLAG_NONE);
+   assert(lv_obj_get_y(o)+size.y<=lv_obj_get_height(pin.root)-12);
+   if(j==0)assert(size.y<=lv_obj_get_style_text_font(o,0)->line_height);
+  }
+  char file[64];snprintf(file,sizeof(file),"cached-settings-pin-%u",sequence[i]);raster(file);
+  lv_pin_keypad_hide(&pin);
+  assert(lv_qr_popup_show("UN260 locale test"));tick(100);check_single_line(lv_layer_top());
+  snprintf(file,sizeof(file),"cached-qr-%u",sequence[i]);raster(file);lv_qr_popup_hide();
+ }
+ lv_pin_keypad_destroy(&pin);
+}
+
+static void early_boot_locales(void){
+ ui_page_t previous=current;current=UI_PAGE_BOOT;
+ for(size_t i=0;i<ui_lang_count();++i){
+  const ui_locale_t *locale=ui_lang_at(i);ui_lang_set(LANGUAGE_EN);
+  ui_page_08_curr_create(lv_scr_act());ui_page_00_boot_anim_create(lv_layer_top());
+  assert(ui_lang_prepare_resources(locale->id));ui_lang_set(locale->id);
+  ui_page_00_boot_anim_set_startup_ready(true);ui_page_00_boot_anim_adopt_elapsed(4300);tick(40);
+  check_single_line(lv_layer_top());
+  ui_page_00_boot_anim_set_startup_error(true);tick(100);check_single_line(lv_layer_top());
+  char file[64];snprintf(file,sizeof(file),"startup-diagnostic-%s",locale->tag);raster(file);
+  ui_page_00_boot_anim_destroy();ui_page_08_curr_destroy();
+ }
+ ui_lang_set(LANGUAGE_EN);ui_page_08_curr_create(lv_scr_act());ui_page_08_curr_set_covered(true);
+ for(size_t i=1;i<ui_lang_count();++i){
+  const ui_locale_t *locale=ui_lang_at(i);assert(ui_lang_prepare_resources(locale->id));ui_lang_set(locale->id);
+  ui_page_08_curr_set_covered(false);tick(1500);check_single_line(lv_scr_act());
+  char file[64];snprintf(file,sizeof(file),"early-selfcheck-%s",locale->tag);raster(file);
+  ui_page_08_curr_set_covered(true);
+ }
+ ui_page_08_curr_destroy();ui_lang_set(LANGUAGE_EN);current=previous;
+}
+
 int main(void){
- FILE *f=fopen("/tmp/un260-cash-background.bgra","rb");assert(f);assert(fread(background,1,sizeof(background),f)==sizeof(background));fclose(f);
+ const char *bg_path=getenv("UN260_CASH_BACKGROUND");assert(bg_path);
+ FILE *f=fopen(bg_path,"rb");assert(f);assert(fread(background,1,sizeof(background),f)==sizeof(background));fclose(f);
+ f=fopen(getenv("UN260_BOOT_BACKGROUND"),"rb");assert(f);assert(fread(boot_background,1,sizeof(boot_background),f)==sizeof(boot_background));fclose(f);
+ f=fopen(getenv("UN260_READY_BACKGROUND"),"rb");assert(f);assert(fread(ready_background,1,sizeof(ready_background),f)==sizeof(ready_background));fclose(f);
+ f=fopen(getenv("UN260_BOOT_EMBLEM"),"rb");assert(f);assert(fread(boot_emblem,1,sizeof(boot_emblem),f)==sizeof(boot_emblem));fclose(f);
  workspace_defaults(&model);cashbook_defaults(&ledger);
- lv_init();lv_disp_draw_buf_t buf;lv_disp_draw_buf_init(&buf,draw_buffer,NULL,1280*64);lv_disp_drv_t d;lv_disp_drv_init(&d);d.hor_res=1280;d.ver_res=400;d.flush_cb=flush;d.draw_buf=&buf;lv_disp_t *display=lv_disp_drv_register(&d);assert(display);ui_scrollbar_init(display);
+ lv_init();ui_lang_set_resource_preparer(ui_locale_font_prepare);ui_message_font_set_provider(ui_locale_font_compose);lv_disp_draw_buf_t buf;lv_disp_draw_buf_init(&buf,draw_buffer,NULL,1280*64);lv_disp_drv_t d;lv_disp_drv_init(&d);d.hor_res=1280;d.ver_res=400;d.flush_cb=flush;d.draw_buf=&buf;lv_disp_t *display=lv_disp_drv_register(&d);assert(display);ui_scrollbar_init(display);
  lv_indev_drv_t in;lv_indev_drv_init(&in);in.type=LV_INDEV_TYPE_POINTER;in.read_cb=read_pointer;assert(lv_indev_drv_register(&in));
  lv_img_decoder_t *decoder=lv_img_decoder_create();lv_img_decoder_set_info_cb(decoder,cash_asset_info);lv_img_decoder_set_open_cb(decoder,cash_asset_open);lv_img_decoder_set_close_cb(decoder,asset_close);
+ cached_pin_locales();
+ early_boot_locales();
  current=UI_PAGE_CALCULATOR;ui_calculator_create(lv_scr_act());tick(250);cash_click("1");cash_click("2");cash_click("+");cash_click("3");cash_click("=");assert(find(lv_scr_act(),"15"));check_single_line(lv_scr_act());raster("cash-calculator");
  cash_click("Exchange rate");cash_click("Import count");assert(find(lv_scr_act(),"1680.00"));check_single_line(lv_scr_act());raster("cash-fx");ui_calculator_destroy();tick(300);
  cash_entry_t e={.kind=CASH_OPENING,.time=1791244800,.cash={.code="USD",.amount=2000*CASH_SCALE}};assert(cash_journal_append(&journal_fixture,&e)==CASH_OK);
@@ -125,6 +194,36 @@ int main(void){
  cash_click("Scroll view");cash_click(">");tick(100);raster("operators-eight-paged");
  ui_operators_destroy();workspace_defaults(&model);revision++;
  lv_alnum_keyboard_config_t space_config={.title="Text search",.placeholder="",.apply_text="Apply",.clear_text="Clear",.cancel_text="Cancel",.max_length=32,.submit=space_submit,.symbols=true};lv_alnum_keyboard_t *space_keyboard=lv_alnum_keyboard_create(lv_scr_act(),&space_config);assert(space_keyboard);lv_alnum_keyboard_show(space_keyboard);tick(80);cash_click("A");cash_click("Space");cash_click("B");raster("cash-text-space-keyboard");cash_click("Apply");assert(!strcmp(space_result,"A B"));lv_alnum_keyboard_destroy(space_keyboard);
- ui_lang_set(LANGUAGE_CN);ui_calculator_create(lv_scr_act());tick(250);assert(!cash_button(lv_scr_act(),ui_tr("Quick")));check_single_line(lv_scr_act());raster("cash-calculator-cn");ui_calculator_destroy();ui_cash_journal_create(lv_scr_act());tick(250);assert(!cash_button(lv_scr_act(),ui_tr("Quick")));check_single_line(lv_scr_act());raster("cash-journal-cn");cash_click(ui_tr("Receipt"));cash_click(ui_tr("Note (optional)"));lv_obj_t *space_cn=cash_button(lv_scr_act(),ui_tr("Space"));assert(space_cn);lv_font_glyph_dsc_t space_glyph;assert(lv_font_get_glyph_dsc(lv_obj_get_style_text_font(lv_obj_get_child(space_cn,0),0),&space_glyph,0x7A7A,0));raster("cash-note-keyboard-cn");settings_detail_keyboard_hide();cash_click(ui_tr("Cancel"));ui_cash_journal_destroy();ui_operators_create(lv_scr_act());tick(250);check_single_line(lv_scr_act());assert(find(lv_scr_act(),ui_tr("Device workspace")));raster("cash-operators-cn");unsigned ink=0;for(unsigned y=27;y<46;++y)for(unsigned x=1080;x<1250;++x)if(framebuffer[y*1280+x].full==lv_color_hex(0x7358AD).full)++ink;assert(ink>20);ui_operators_destroy();
+ assert(ui_lang_prepare_resources(LANGUAGE_CN));ui_lang_set(LANGUAGE_CN);ui_calculator_create(lv_scr_act());tick(250);assert(!cash_button(lv_scr_act(),ui_tr("Quick")));check_single_line(lv_scr_act());raster("cash-calculator-cn");ui_calculator_destroy();ui_cash_journal_create(lv_scr_act());tick(250);assert(!cash_button(lv_scr_act(),ui_tr("Quick")));check_single_line(lv_scr_act());raster("cash-journal-cn");cash_click(ui_tr("Receipt"));cash_click(ui_tr("Note (optional)"));lv_obj_t *space_cn=cash_button(lv_scr_act(),"Space");assert(space_cn);assert(cash_button(lv_scr_act(),"Clear"));assert(cash_button(lv_scr_act(),"Apply"));assert(cash_button(lv_scr_act(),"Cancel"));assert(!cash_button(lv_scr_act(),ui_tr("Space")));raster("cash-note-keyboard-cn");settings_detail_keyboard_hide();cash_click(ui_tr("Cancel"));ui_cash_journal_destroy();ui_operators_create(lv_scr_act());tick(250);check_single_line(lv_scr_act());assert(find(lv_scr_act(),ui_tr("Device workspace")));raster("cash-operators-cn");unsigned ink=0;for(unsigned y=27;y<46;++y)for(unsigned x=1080;x<1250;++x)if(framebuffer[y*1280+x].full==lv_color_hex(0x7358AD).full)++ink;assert(ink>20);ui_operators_destroy();
+ for(size_t language=1;language<ui_lang_count();++language){
+  const ui_locale_t *locale=ui_lang_at(language);assert(ui_lang_prepare_resources(locale->id));ui_lang_set(locale->id);
+  char file[80];
+  ui_calculator_create(lv_scr_act());tick(250);check_single_line(lv_scr_act());
+  snprintf(file,sizeof(file),"calculator-%s",locale->tag);raster(file);ui_calculator_destroy();
+  ui_cash_journal_create(lv_scr_act());tick(250);check_single_line(lv_scr_act());
+  snprintf(file,sizeof(file),"journal-%s",locale->tag);raster(file);
+  cash_click(ui_tr("Receipt"));check_single_line(lv_scr_act());
+  snprintf(file,sizeof(file),"receipt-%s",locale->tag);raster(file);
+  cash_click(ui_tr("Note (optional)"));
+  assert(cash_button(lv_scr_act(),"Space")&&cash_button(lv_scr_act(),"Clear")&&cash_button(lv_scr_act(),"Apply"));
+  snprintf(file,sizeof(file),"keyboard-%s",locale->tag);raster(file);
+  settings_detail_keyboard_hide();cash_click(ui_tr("Cancel"));ui_cash_journal_destroy();
+  ui_operators_create(lv_scr_act());tick(250);check_single_line(lv_scr_act());
+  snprintf(file,sizeof(file),"operators-%s",locale->tag);raster(file);ui_operators_destroy();
+  current=UI_PAGE_MENU;ui_page_03_menu_create(lv_scr_act());tick(150);
+  for(unsigned tab=0;tab<6;++tab)for(unsigned sub=0;sub<(tab?subcounts[tab]:1);++sub){
+   menu.tab=tab;menu.sub=sub;menu.selected_group=menu.selected_close=0;
+   menu.record_pending=menu.verify_pick=false;menu.dirty=true;tick(120);
+   check_single_line(lv_scr_act());
+   snprintf(file,sizeof(file),"menu-%s-%u-%u",locale->tag,tab,sub);raster(file);
+  }
+  ui_page_03_menu_destroy();
+ }
+ ui_lang_set(LANGUAGE_EN);
+ current=UI_PAGE_MENU;ui_page_03_menu_create(lv_scr_act());tick(150);
+ const int baseline_widths[]={126,103,121,109,147,82};
+ for(unsigned i=0;i<6;++i)assert(lv_obj_get_width(menu.nav[i])==baseline_widths[i]);
+ assert(lv_obj_get_width(lv_obj_get_parent(menu.nav[0]))==706);
+ ui_page_03_menu_destroy();
  puts("PASS native cash tools: arithmetic/formula, payment balance, date confirmation, MULTI cancellation/direction, visible press and drag cancellation, scroll versus tap, void balance, manual reconciliation, numeric PIN geometry, CJK pixels and repeated lifecycle");return 0;
 }

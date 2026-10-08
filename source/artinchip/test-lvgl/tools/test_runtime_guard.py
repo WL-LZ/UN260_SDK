@@ -14,6 +14,12 @@ harness=r'''
 #include <string.h>
 #include <unistd.h>
 static const char *mode;
+static unsigned fail_sync, sync_calls;
+int __real_fsync(int);
+int __wrap_fsync(int fd) {
+ if(fail_sync && ++sync_calls==fail_sync){errno=EIO;return -1;}
+ return __real_fsync(fd);
+}
 static int app(void) {
  FILE *pid=fopen(PID_PATH,"w");fprintf(pid,"%ld",(long)getpid());fclose(pid);
  runtime_guard_count(123,456.5f,1,true,true,false);
@@ -22,20 +28,21 @@ static int app(void) {
  runtime_guard_tx(frame,sizeof(frame),0);
  runtime_guard_heartbeat();
  if(!strcmp(mode,"normal"))return 0;
+ if(!strcmp(mode,"restarted"))return runtime_guard_previous_fault()?0:8;
  if(!strcmp(mode,"corrupt")){shared->count_slot=UINT32_MAX;raise(SIGSEGV);}
  if(!strcmp(mode,"segv"))raise(SIGSEGV);
  if(!strcmp(mode,"abort")){LV_ASSERT_HANDLER}
  if(!strcmp(mode,"tx"))runtime_guard_fault(RUNTIME_FAULT_UART_TX);
  for(;;){if(!strcmp(mode,"alive")||!strcmp(mode,"tx"))runtime_guard_heartbeat();usleep(10000);}
 }
-int main(int argc,char **argv){if(argc!=2)return 1;mode=argv[1];if(!strcmp(mode,"ack"))return runtime_guard_reconcile();return runtime_guard_run(app);}
+int main(int argc,char **argv){if(argc!=2)return 1;mode=argv[1];if(!strncmp(mode,"fail-",5)){fail_sync=atoi(mode+5);return runtime_guard_reconcile();}if(!strcmp(mode,"ack"))return runtime_guard_reconcile();return runtime_guard_run(app);}
 '''
 with tempfile.TemporaryDirectory(prefix='un260-guard-') as temporary:
     t=Path(temporary);d=t/'fault';pid=t/'child';exe=t/'guard';src=t/'main.c';src.write_text(harness)
     subprocess.run(['cc','-std=gnu11','-O2','-Wall','-Wextra','-Werror','-DUN260_RUNTIME_GUARD_ENABLED=1',
         '-DRUNTIME_GUARD_TEST=1','-DRUNTIME_GUARD_STALL_MS=250','-DRUNTIME_GUARD_START_MS=500',
         f'-DRUNTIME_GUARD_DIR="{d}"',f'-DRUNTIME_GUARD_LOCK="{t / "lock"}"',f'-DPID_PATH="{pid}"',
-        '-I'+str(root),str(src),'-o',str(exe)],check=True)
+        '-I'+str(root),str(src),'-Wl,--wrap=fsync','-o',str(exe)],check=True)
     def run(mode,expected):
         result=subprocess.run([str(exe),mode],timeout=4)
         assert result.returncode==expected,(mode,result.returncode)
@@ -45,9 +52,25 @@ with tempfile.TemporaryDirectory(prefix='un260-guard-') as temporary:
         evidence=(d/'evidence.txt').read_text();assert needle in evidence
         if mode!='corrupt':assert 'pcs=123 amount=456.5' in evidence and 'busy=1 pending=1' in evidence
         assert 'overwritten=52' in evidence and 'completed=0' in evidence
-        pid.unlink();run('normal',2);assert not pid.exists(),'protected start ran app'
-        run('ack',0);assert not (d/'pending').exists()
-        assert list(d.glob('reconciled-*/evidence.txt'))
+        pid.unlink();run('restarted',0);assert pid.exists(),'restart did not run normal app'
+        assert not (d/'pending').exists()
+        assert any(x.read_text()==evidence for x in d.glob('restart-*/evidence.txt'))
+        run('normal',0)
+    run('segv',2);run('ack',0)
+    assert list(d.glob('reconciled-*/evidence.txt'))
+    (d/'pending').write_text('interrupted fault write')
+    (d/'evidence.tmp').write_text('partial journal')
+    run('restarted',0)
+    assert any(x.read_text()=='partial journal' for x in d.glob('restart-*/evidence.partial'))
+    assert not (d/'evidence.tmp').exists()
+    for failure in range(1,5):
+        run('segv',2)
+        original=(d/'evidence.txt').read_bytes()
+        run('fail-'+str(failure),1)
+        assert (d/'pending').exists(),'failed archive lost fault marker'
+        assert any(p.read_bytes()==original for p in d.rglob('evidence.txt')),'failed archive lost evidence'
+        run('restarted',0)
+    pid.unlink(missing_ok=True)
     proc=subprocess.Popen([str(exe),'alive'])
     for _ in range(100):
         if pid.exists():break
@@ -57,4 +80,4 @@ with tempfile.TemporaryDirectory(prefix='un260-guard-') as temporary:
     assert not (d/'pending').exists(),'service stop mistaken for crash'
     # A crafted symlink must be treated as a hold, never followed or removed.
     (d/'pending').symlink_to(t/'missing');run('normal',2)
-    print('PASS guard: SIGSEGV, abort, heartbeat stall, uncertain TX, count/ring evidence, protected reboot, manual archived reconciliation, service stop, live lock, symlink hold')
+    print('PASS guard: SIGSEGV, abort, heartbeat stall, uncertain TX, count/ring evidence, normal reboot with archived evidence, partial-write and four fsync failure recovery, manual archived reconciliation, service stop, live lock, symlink hold')

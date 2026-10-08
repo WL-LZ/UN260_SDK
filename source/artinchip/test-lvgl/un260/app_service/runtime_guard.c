@@ -43,6 +43,8 @@ typedef struct {
     record_t rx[RX_SLOTS], tx[TX_SLOTS];
 } shared_t;
 static shared_t *shared;
+static bool previous_fault;
+bool runtime_guard_previous_fault(void) { return previous_fault; }
 static volatile sig_atomic_t stopping;
 static unsigned char signal_stack[65536];
 static uint64_t now_ms(void)
@@ -224,40 +226,54 @@ static void wait_protected_display(pid_t display)
     (void)display;
 #endif
 }
+/* Archiving records a restart, not a physical reconciliation. Keep original
+ * evidence until the archive and its directory entry are durable. */
+static bool archive_pending(int dir, const char *prefix, bool require_evidence)
+{
+    struct stat st;
+    if(fstatat(dir,"pending",&st,AT_SYMLINK_NOFOLLOW) || !S_ISREG(st.st_mode)) return false;
+    bool evidence=fstatat(dir,"evidence.txt",&st,AT_SYMLINK_NOFOLLOW)==0;
+    if((evidence && (!S_ISREG(st.st_mode)||st.st_size<=0)) ||
+       (!evidence && (errno!=ENOENT || require_evidence))) return false;
+    char archive[96]; int saved=-1;
+    for(unsigned attempt=0;attempt<32;attempt++) {
+        snprintf(archive,sizeof(archive),"%s-%lld-%ld-%u",prefix,(long long)time(NULL),(long)getpid(),attempt);
+        if(!mkdirat(dir,archive,0700)) {
+            saved=openat(dir,archive,O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);break;
+        }
+        if(errno!=EEXIST)return false;
+    }
+    if(saved<0)return false;
+    bool ok=!evidence || linkat(dir,"evidence.txt",saved,"evidence.txt",0)==0;
+    if(ok && linkat(dir,"pending",saved,"pending",0))ok=false;
+    /* A failed evidence write may have left a partial file. Preserve it too. */
+    bool partial=fstatat(dir,"evidence.tmp",&st,AT_SYMLINK_NOFOLLOW)==0;
+    if(partial && (!S_ISREG(st.st_mode) || linkat(dir,"evidence.tmp",saved,"evidence.partial",0)))ok=false;
+    if(ok && fsync(saved))ok=false;
+    if(ok && fsync(dir))ok=false;
+    if(ok && unlinkat(dir,"pending",0))ok=false;
+    if(ok && fsync(dir))ok=false;
+    if(ok && evidence && unlinkat(dir,"evidence.txt",0))ok=false;
+    if(ok && partial && unlinkat(dir,"evidence.tmp",0))ok=false;
+    if(ok && fsync(dir))ok=false;
+    if(!ok)(void)marker(dir);
+    close(saved);
+    return ok;
+}
 int runtime_guard_reconcile(void)
 {
     int lock=lock_guard();
     if(lock<0){fprintf(stderr,"Stop the UI service before reconciliation.\n");return 1;}
     int dir=directory();
     if(dir<0){close(lock);return 1;}
-    struct stat st;
-    if(fstatat(dir,"pending",&st,AT_SYMLINK_NOFOLLOW)){close(dir);close(lock);return 1;}
-    if(!S_ISREG(st.st_mode) || fstatat(dir,"evidence.txt",&st,AT_SYMLINK_NOFOLLOW) ||
-       !S_ISREG(st.st_mode) || st.st_size<=0) {
-        fprintf(stderr,"Complete fault evidence is unavailable; keep protection and recover the RAM evidence first.\n");
-        close(dir);close(lock);return 1;
-    }
-    /* Keep all fault evidence. The operator acknowledges physical recount and
-     * controller reconciliation; this command sends no controller commands. */
-    char archive[80];
-    snprintf(archive,sizeof(archive),"reconciled-%lld-%ld",(long long)time(NULL),(long)getpid());
-    bool ok=mkdirat(dir,archive,0700)==0;
-    int saved=ok?openat(dir,archive,O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC):-1;
-    if(saved<0)ok=false;
-    if(ok && renameat(dir,"evidence.txt",saved,"evidence.txt") && errno!=ENOENT)ok=false;
-    if(ok && fsync(saved))ok=false;
-    if(ok && renameat(dir,"pending",saved,"pending"))ok=false;
-    if(ok && fsync(saved))ok=false;
-    if(fsync(dir))ok=false;
-    if(!ok)(void)marker(dir);
-    if(saved>=0)close(saved);
+    bool ok=archive_pending(dir,"reconciled",true);
     close(dir);close(lock);
     if(ok)puts("Reconciliation recorded. Evidence retained. Start the UI service manually.");
     return ok?0:1;
 }
 int runtime_guard_run(int (*application)(void))
 {
-    stopping=0;
+    stopping=0;previous_fault=false;
     signal(SIGTERM,stop_handler);signal(SIGINT,stop_handler);signal(SIGPIPE,SIG_IGN);
     int lock=lock_guard(),dir=directory();
     if(lock<0||dir<0){fprintf(stderr,"Runtime protection unavailable; counting not started.\n");
@@ -266,8 +282,12 @@ int runtime_guard_run(int (*application)(void))
         return 1;}
     struct stat st;
     if(!fstatat(dir,"pending",&st,AT_SYMLINK_NOFOLLOW)||errno!=ENOENT){
-        fprintf(stderr,"Unreconciled runtime fault; counting start inhibited.\n");
-        wait_protected_display(start_protected_display());close(dir);close(lock);return 2;
+        if(!archive_pending(dir,"restart",false)) {
+            fprintf(stderr,"Fault log cannot be preserved; startup requires storage repair.\n");
+            wait_protected_display(start_protected_display());close(dir);close(lock);return 2;
+        }
+        previous_fault=true;
+        fprintf(stderr,"Previous runtime fault archived, not reconciled; starting normal self-check.\n");
     }
     shared=mmap(NULL,sizeof(*shared),PROT_READ|PROT_WRITE,MAP_SHARED|MAP_ANONYMOUS,-1,0);
     if(shared==MAP_FAILED){shared=NULL;close(dir);close(lock);return 1;}
@@ -313,7 +333,7 @@ int runtime_guard_run(int (*application)(void))
          * stalled evidence write must not leave the dead UI on screen. */
         pid_t display=start_protected_display();
         bool held=marker(dir),saved=save_evidence(dir,status,maps);
-        fprintf(stderr,"Runtime fault: persistent_hold=%d evidence=%d; manual reconciliation required.\n",held,saved);
+        fprintf(stderr,"Runtime fault: fault_record=%d evidence=%d; restart runs normal self-check; verify unfinished counts.\n",held,saved);
         if(!saved){
             int ram=open("/tmp",O_RDONLY|O_DIRECTORY|O_CLOEXEC);
             if(ram>=0){(void)save_evidence(ram,status,maps);close(ram);}

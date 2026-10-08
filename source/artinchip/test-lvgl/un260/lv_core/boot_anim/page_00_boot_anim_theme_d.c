@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_system/ui_lang.h"
 #include "un260/lv_core/page_00_boot_anim.h"
@@ -162,6 +163,12 @@ void ui_page_00_boot_anim_set_startup_ready(bool ready)
     if (!g_intro.root || g_intro.failed) return;
     g_intro.managed = true;
     g_intro.startup_ready = ready;
+    if(ready && g_intro.welcome) {
+        bool english=ui_lang_get()==LANGUAGE_EN;
+        lv_obj_set_style_text_font(g_intro.welcome,english?&lv_font_boot_welcome_compact:
+            ui_message_font_sized(&lv_font_open_runde_medium_40,36),0);
+        lv_label_set_text(g_intro.welcome,english?BOOT_WELCOME_TEXT:ui_tr("Welcome"));
+    }
 }
 
 static void startup_diagnostics(lv_event_t *event)
@@ -178,10 +185,10 @@ void ui_page_00_boot_anim_set_startup_error(bool diagnostics_available)
         g_intro.managed = true;
         g_intro.revealing = false;
         apply_elapsed(INTRO_MIN_REVEAL_MS);
-        lv_obj_set_style_text_font(g_intro.welcome, &lv_font_open_runde_medium_40, 0);
-        lv_label_set_text_static(g_intro.welcome, ui_tr("STARTUP ERROR"));
-        lv_label_set_text_static(g_intro.brand, ui_tr("RESTART DEVICE"));
-        lv_obj_set_style_text_font(g_intro.brand, &lv_font_open_runde_medium_24, 0);
+        lv_obj_set_style_text_font(g_intro.welcome, ui_message_font_sized(&lv_font_open_runde_medium_40,36), 0);
+        lv_label_set_text(g_intro.welcome, ui_tr("STARTUP ERROR"));
+        lv_label_set_text(g_intro.brand, ui_tr("RESTART DEVICE"));
+        lv_obj_set_style_text_font(g_intro.brand, ui_message_font_sized(&lv_font_open_runde_medium_24,24), 0);
         lv_obj_set_y(g_intro.brand, 305);
         text_opacity(g_intro.brand, LV_OPA_COVER);
         for (unsigned i = 0; i < 3; ++i)
@@ -204,8 +211,8 @@ void ui_page_00_boot_anim_set_startup_error(bool diagnostics_available)
     lv_obj_add_event_cb(g_intro.diagnostics, startup_diagnostics, LV_EVENT_CLICKED, NULL);
     lv_obj_t *text = lv_label_create(g_intro.diagnostics);
     if (text) {
-        lv_label_set_text_static(text, ui_tr("DIAGNOSTICS"));
-        lv_obj_set_style_text_font(text, &lv_font_open_runde_medium_40, 0);
+        lv_label_set_text(text, ui_tr("DIAGNOSTICS"));
+        lv_obj_set_style_text_font(text, ui_message_font_sized(&lv_font_open_runde_medium_24,24), 0);
         lv_obj_set_style_text_color(text, lv_color_hex(0x74818A), 0);
         lv_obj_center(text);
     }
@@ -251,12 +258,12 @@ static lv_obj_t *label(lv_obj_t *parent, const char *text,
     lv_obj_remove_style_all(obj);
     lv_obj_set_pos(obj, 390, BOOT_TEXT_Y);
     lv_obj_set_width(obj, 500);
-    lv_obj_set_style_text_font(obj, font, 0);
+    lv_obj_set_style_text_font(obj,font==&lv_font_open_runde_medium_40?ui_message_font_sized(font,36):ui_message_font(font), 0);
     lv_obj_set_style_text_color(obj, lv_color_hex(0x526D82), 0);
     lv_obj_set_style_text_align(obj, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_letter_space(obj, spacing, 0);
     lv_obj_set_style_text_opa(obj, LV_OPA_TRANSP, 0);
-    lv_label_set_text_static(obj, text);
+    lv_label_set_text(obj, text);
     return obj;
 }
 

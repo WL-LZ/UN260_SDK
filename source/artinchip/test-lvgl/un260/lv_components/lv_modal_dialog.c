@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "lv_modal_dialog.h"
 #include "lv_popup_style.h"
 #include "ui_notice.h"
@@ -172,8 +173,10 @@ bool lv_modal_dialog_show(lv_modal_dialog_t *dialog,
                             config->primary_color);
     modal_set_button_colors(dialog->secondary_button,
                             0xF1F4F5, 0xD9E0E3);
-    lv_obj_set_style_text_font(dialog->title, config->title_font, 0);
-    lv_obj_set_style_text_font(dialog->body, config->body_font, 0);
+    lv_obj_set_style_text_font(dialog->title,ui_message_font(config->title_font), 0);
+    lv_obj_set_style_text_font(dialog->body,ui_message_font(config->body_font), 0);
+    lv_obj_set_style_base_dir(dialog->title, LV_BASE_DIR_AUTO, 0);
+    lv_obj_set_style_base_dir(dialog->body, LV_BASE_DIR_AUTO, 0);
     lv_obj_set_width(dialog->title, panel_width - 124);
     lv_obj_set_size(dialog->body, panel_width - 64, panel_height - 174);
     modal_set_text(dialog->title, config->title);

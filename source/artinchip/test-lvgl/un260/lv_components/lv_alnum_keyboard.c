@@ -73,6 +73,7 @@ static lv_obj_t *label_create(lv_obj_t *parent, const char *text,
     lv_obj_set_pos(label, x, y);
     lv_obj_set_size(label, width, height);
     lv_obj_set_style_text_font(label, ui_message_font(font), 0);
+    lv_obj_set_style_base_dir(label, LV_BASE_DIR_AUTO, 0);
     lv_obj_set_style_text_color(label, lv_color_hex(color), 0);
     lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
     lv_label_set_text(label, text ? text : "");
@@ -97,7 +98,8 @@ static void refresh_text(lv_alnum_keyboard_t *keyboard)
     set_visible(keyboard->cursor,true);
     lv_label_set_text(keyboard->value_label, keyboard->text);
     set_visible(keyboard->placeholder, keyboard->text[0] == '\0');
-    lv_txt_get_size(&size, keyboard->text, &lv_font_instrument_sans_medium_22,
+    lv_txt_get_size(&size, lv_label_get_text(keyboard->value_label),
+                    lv_obj_get_style_text_font(keyboard->value_label, LV_PART_MAIN),
                     0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
     lv_obj_set_x(keyboard->cursor, 14 + size.x + 2);
 }
@@ -255,7 +257,7 @@ void lv_alnum_keyboard_set_choice_mode(lv_alnum_keyboard_t *keyboard, bool choic
         lv_obj_set_style_shadow_width(key,choices?0:2,0);
         lv_obj_set_parent(key,choices?keyboard->choice_grid:keyboard->panel);
         set_visible(key, !choices || i < keyboard->choice_count);
-        lv_obj_set_style_text_font(lv_damped_button_get_label(key),choices?&lv_font_instrument_sans_medium_22:&lv_font_instrument_sans_medium_20,0);
+        lv_obj_set_style_text_font(lv_damped_button_get_label(key),ui_message_font(choices?&lv_font_instrument_sans_medium_22:&lv_font_instrument_sans_medium_20),0);
         uint32_t color=choices && i<keyboard->choice_count && (keyboard->choice_mask&(1U<<i))?0xDCE6EC:KEY_COLOR;
         keyboard->button_colors[i]=color;
         lv_damped_button_set_palette(key,lv_color_hex(color),lv_color_hex(0xD9E5ED));
@@ -412,6 +414,8 @@ lv_alnum_keyboard_t *lv_alnum_keyboard_create(lv_obj_t *parent,
         TEXT_COLOR, 14, 7, 618, 30);
     keyboard->cursor = plain(input, 16, 10, 1, 24, MUTED_COLOR, 0);
     if (!keyboard->placeholder || !keyboard->value_label || !keyboard->cursor) goto failed;
+    /* The fixed English keyboard appends at the right-hand caret. */
+    lv_obj_set_style_base_dir(keyboard->value_label, LV_BASE_DIR_LTR, 0);
 
     static const char *const rows[] = { "1234567890", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM" };
     for (unsigned row = 0; row < sizeof(rows) / sizeof(rows[0]); ++row) {
@@ -434,7 +438,7 @@ lv_alnum_keyboard_t *lv_alnum_keyboard_create(lv_obj_t *parent,
         !button_create(keyboard, panel, config->apply_text, &lv_font_instrument_sans_semibold_20,
                        824, 36, 186, 44, ACTION_COLOR, apply_event)) goto failed;
     if (config->symbols) {
-        if(!button_create(keyboard,panel,ui_tr("Space"),&lv_font_instrument_sans_medium_18,267,296,480,44,KEY_COLOR,space_event))goto failed;
+        if(!button_create(keyboard,panel,ui_tr_for(LANGUAGE_EN, "Space"),&lv_font_instrument_sans_medium_18,267,296,480,44,KEY_COLOR,space_event))goto failed;
         keyboard->symbols = button_create(keyboard, panel, "#+=",
             &lv_font_instrument_sans_medium_18, 20, 245, 74, 44,
             KEY_COLOR, symbols_event);

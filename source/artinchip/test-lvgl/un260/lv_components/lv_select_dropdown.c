@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "lv_select_dropdown.h"
 #include "lv_port_indev.h"
 #include "ui_scrollbar.h"
@@ -91,11 +92,13 @@ lv_obj_t *lv_select_dropdown_create(lv_obj_t *parent,lv_coord_t x,lv_coord_t y,
     lv_obj_set_style_border_color(o,lv_color_hex(0xD4DBE1),0);
     lv_obj_set_style_border_color(o,lv_color_hex(LV_SETTINGS_CHOICE_BORDER),LV_STATE_CHECKED);
     lv_obj_set_style_radius(o,12,0);
-    lv_obj_set_style_text_font(o,&lv_font_instrument_sans_medium_18,0);
+    lv_obj_set_style_text_font(o,ui_message_font(&lv_font_instrument_sans_medium_18),0);
     lv_obj_set_style_text_color(o,lv_color_hex(LV_SETTINGS_ACTION_TEXT),0);
     lv_obj_set_style_text_color(o,lv_color_hex(LV_SETTINGS_PRIMARY),LV_STATE_CHECKED);
     lv_obj_set_style_pad_left(o,16,0);lv_obj_set_style_pad_right(o,40,0);
-    lv_obj_set_style_pad_top(o,(height-lv_font_instrument_sans_medium_18.line_height)/2-1,0);
+    const lv_font_t *resolved_font=ui_message_font(&lv_font_instrument_sans_medium_18);
+    lv_obj_set_style_pad_top(o,(height-resolved_font->line_height)/2-1,0);
+    lv_obj_set_style_base_dir(o,LV_BASE_DIR_AUTO,0);
     /* Native selection and list remain intact; render the field's single-line
      * value/chevron ourselves to reserve their separate, non-scrollable areas. */
     lv_dropdown_set_symbol(o,NULL);
@@ -103,14 +106,15 @@ lv_obj_t *lv_select_dropdown_create(lv_obj_t *parent,lv_coord_t x,lv_coord_t y,
     lv_obj_t *list=lv_dropdown_get_list(o);
     if(!list)goto failed;
     lv_obj_remove_style_all(list);
-    const int space=SELECT_ROW_HEIGHT-lv_font_instrument_sans_medium_18.line_height;
-    lv_obj_set_style_text_font(list,&lv_font_instrument_sans_medium_18,0);
-    lv_obj_set_style_text_font(list,&lv_font_instrument_sans_medium_18,LV_PART_SELECTED);
+    const int space=SELECT_ROW_HEIGHT-resolved_font->line_height;
+    lv_obj_set_style_text_font(list,ui_message_font(&lv_font_instrument_sans_medium_18),0);
+    lv_obj_set_style_text_font(list,ui_message_font(&lv_font_instrument_sans_medium_18),LV_PART_SELECTED);
     lv_obj_set_style_text_line_space(list,space,0);
     lv_obj_set_style_text_line_space(list,space,LV_PART_SELECTED);
     lv_obj_set_style_text_color(list,lv_color_hex(0x20303A),0);
     lv_obj_set_style_text_color(list,lv_color_hex(LV_SETTINGS_PRIMARY),LV_PART_SELECTED);
-    lv_obj_set_style_text_align(list,LV_TEXT_ALIGN_LEFT,0);
+    lv_obj_set_style_base_dir(list,LV_BASE_DIR_AUTO,0);
+    lv_obj_set_style_text_align(list,LV_TEXT_ALIGN_AUTO,0);
     lv_obj_set_style_bg_color(list,lv_color_hex(0xFFFFFF),0);
     lv_obj_set_style_bg_opa(list,LV_OPA_COVER,0);
     lv_obj_set_style_bg_color(list,lv_color_hex(UI_SELECTION_SURFACE),LV_PART_SELECTED);

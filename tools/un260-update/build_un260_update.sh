@@ -15,6 +15,7 @@ STARTUP_PATH="$SDK_ROOT/package/artinchip/test-lvgl/S20test_lvgl"
 VERSION=""
 OUTPUT_PATH=""
 EXTRA_ROOT=""
+STORAGE_ROUTE=legacy-root
 
 usage()
 {
@@ -31,6 +32,7 @@ Optional:
   --app FILE              Override built test_lvgl path
   --lvgl-lib FILE         Override built liblvgl.so path
   --lvgl-data DIR         Override built lvgl_data directory
+  --unified-route        Qualify the internal application for the verified unified migration route
   --help                  Show this help
 
 The fixed core payload is always included. Extra files are restricted to the
@@ -132,6 +134,10 @@ while [[ $# -gt 0 ]]; do
         --help|-h)
             usage
             exit 0
+            ;;
+        --unified-route)
+            STORAGE_ROUTE=unified-app-volume
+            shift
             ;;
         *)
             die "Unknown option: $1"
@@ -258,7 +264,7 @@ fi
 for reference in "$BASELINE" "$OUTPUT_PATH"; do
     if [[ -f "$reference" ]]; then
         python3 "$SCRIPT_DIR/check_storage_budget.py" --base "$reference" \
-            --payload "$PKG_ROOT/payload"
+            --payload "$PKG_ROOT/payload" --route "$STORAGE_ROUTE"
     fi
 done
 CREATED_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -269,6 +275,7 @@ product=UN260
 package_type=ui
 storage_layout=app-volume-v1
 storage_guard=syncfs-v1
+qualification_route=$STORAGE_ROUTE
 version=$VERSION
 package_id=$PACKAGE_ID
 requires_reboot=1

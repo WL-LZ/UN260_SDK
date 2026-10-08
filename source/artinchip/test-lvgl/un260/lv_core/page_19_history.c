@@ -1,4 +1,5 @@
 #include "un260/lv_system/ui_i18n.h"
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_components/ui_notice.h"
 #include "un260/lv_resources/ui_page_background.h"
 #include "page_19_history.h"
@@ -118,7 +119,8 @@ static lv_obj_t *label(lv_obj_t *parent,int x,int y,int w,int h,
     lv_obj_t *obj=lv_label_create(parent);
     if (!obj) return NULL;
     lv_obj_remove_style_all(obj);lv_obj_set_pos(obj,x,y);lv_obj_set_size(obj,w,h);
-    lv_obj_set_style_text_font(obj,font,0);
+    lv_obj_set_style_text_font(obj,ui_message_font(font),0);
+    lv_obj_set_style_base_dir(obj,LV_BASE_DIR_AUTO,0);
     lv_obj_set_style_text_color(obj,lv_color_hex(color),0);
     lv_obj_set_style_text_align(obj,align,0);
     lv_label_set_long_mode(obj,LV_LABEL_LONG_CLIP);lv_label_set_text(obj,"");
@@ -598,7 +600,7 @@ static void refresh_header(void)
         lv_obj_set_style_bg_opa(history->metadata,LV_OPA_TRANSP,0);
         lv_obj_set_pos(history->summary,6,0);
         lv_obj_set_width(history->summary,1220);
-        lv_obj_set_style_text_font(history->summary,&lv_font_instrument_sans_medium_12,0);
+        lv_obj_set_style_text_font(history->summary,ui_message_font(&lv_font_instrument_sans_medium_12),0);
         const ui_history_record_t *rec=record_find(history->current_id);
         char date[64];date_text(rec,date,sizeof(date));
         if (rec) {
@@ -642,7 +644,7 @@ static void refresh_header(void)
         lv_obj_set_style_bg_opa(history->metadata,LV_OPA_COVER,0);
         lv_obj_set_pos(history->summary,16,9);
         lv_obj_set_width(history->summary,360);
-        lv_obj_set_style_text_font(history->summary,&lv_font_instrument_sans_semibold_16,0);
+        lv_obj_set_style_text_font(history->summary,ui_message_font(&lv_font_instrument_sans_semibold_16),0);
         if(history->operator_filter){snprintf(text,sizeof(text),"%s · #%u",ui_tr("Operator history"),history->operator_filter);text_set(history->title,text);}else text_set(history->title,tr(UI_TEXT_HISTORY_RECORDS));
         if (history->selecting) {
             snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_SELECTED_FMT),(unsigned)history->selected_count);
@@ -949,7 +951,7 @@ void ui_page_19_history_create(lv_obj_t *parent)
     history->reset_total=button(history->metadata,1130,3,108,32,tr(UI_TEXT_HISTORY_CLEAR_TOTAL),reset_event,NULL);
     if (!history->title || !history->subtitle || !history->summary ||
         !history->lifetime_title || !history->lifetime || !history->reset_total) goto failed;
-    lv_obj_set_style_text_font(lv_damped_button_get_label(history->reset_total),&lv_font_instrument_sans_semibold_12,0);
+    lv_obj_set_style_text_font(lv_damped_button_get_label(history->reset_total),ui_message_font(&lv_font_instrument_sans_semibold_12),0);
     for (unsigned i=0;i<4;++i) {
         const int x[]={736,868,992,1152},w[]={120,112,128,108};
         history->actions[i]= i==3 ? lv_nav_button_create(history->root,x[i],16,w[i],42,action_event,(void *)(uintptr_t)i) :
@@ -957,7 +959,7 @@ void ui_page_19_history_create(lv_obj_t *parent)
         if (!history->actions[i]) goto failed;
         lv_settings_damped_action_style(history->actions[i],LV_SETTINGS_ACTION_SECONDARY);
         lv_obj_set_style_radius(history->actions[i],12,0);
-        lv_obj_set_style_text_font(lv_damped_button_get_label(history->actions[i]),&lv_font_instrument_sans_medium_16,0);
+        lv_obj_set_style_text_font(lv_damped_button_get_label(history->actions[i]),ui_message_font(&lv_font_instrument_sans_medium_16),0);
     }
     if(!surface(history->root,1136,24,1,26,0,LV_SETTINGS_ACTION_DIVIDER))goto failed;
     history->list_panel=surface(history->root,16,118,1248,270,16,0xFFFFFF);
@@ -987,7 +989,7 @@ void ui_page_19_history_create(lv_obj_t *parent)
     history->unknown=button(history->metadata,854,3,380,32,tr(UI_TEXT_HISTORY_PARTIAL),unknown_event,NULL);
     if (!history->empty || !history->unknown) goto failed;
     lv_label_set_long_mode(history->empty,LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_font(lv_damped_button_get_label(history->unknown),&lv_font_instrument_sans_medium_12,0);
+    lv_obj_set_style_text_font(lv_damped_button_get_label(history->unknown),ui_message_font(&lv_font_instrument_sans_medium_12),0);
     apply_requested_scope();refresh_records(true);
     open_requested_record();
     return;

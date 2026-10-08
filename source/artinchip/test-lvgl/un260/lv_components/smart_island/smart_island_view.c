@@ -602,7 +602,7 @@ static void smart_island_multi_live_apply(void)
     for(unsigned i=0;i<4;i++){
         lv_obj_t *label=g_si_ctx.objects.counting_multi[i];
         if(strcmp(lv_label_get_text(label),values[i]))lv_label_set_text(label,values[i]);
-        lv_obj_set_style_text_font(label,i==3?&multi_symbol_font.font:fonts[fit],0);
+        lv_obj_set_style_text_font(label,ui_message_font(i==3?&multi_symbol_font.font:fonts[fit]),0);
         lv_obj_set_size(label,sizes[i].x,sizes[i].y);
         lv_obj_set_pos(label,x,(SMART_ISLAND_COUNT_H-sizes[i].y)/2);
         lv_obj_clear_flag(label,LV_OBJ_FLAG_HIDDEN);
@@ -660,7 +660,7 @@ static void smart_island_counting_apply_visibility(void)
     lv_obj_set_pos(g_si_ctx.objects.counting_serial,142,12);
     lv_obj_set_width(g_si_ctx.objects.counting_serial,154);
     lv_obj_set_style_text_align(g_si_ctx.objects.counting_serial,LV_TEXT_ALIGN_CENTER,0);
-    lv_obj_set_style_text_font(g_si_ctx.objects.counting_serial,&lv_font_instrument_sans_medium_16,0);
+    lv_obj_set_style_text_font(g_si_ctx.objects.counting_serial,ui_message_font(&lv_font_instrument_sans_medium_16),0);
     lv_obj_set_pos(g_si_ctx.objects.counting_value_track,83,21);
     lv_obj_set_width(g_si_ctx.objects.counting_value_track,34);
 
@@ -1642,7 +1642,7 @@ void smart_island_create(lv_obj_t *parent)
 
     g_si_ctx.objects.time = lv_label_create(g_si_ctx.objects.root);
     lv_label_set_text(g_si_ctx.objects.time, "00:00:00");
-    lv_obj_set_style_text_font(g_si_ctx.objects.time, &lv_font_instrument_sans_medium_18, 0);
+    lv_obj_set_style_text_font(g_si_ctx.objects.time,ui_message_font(&lv_font_instrument_sans_medium_18), 0);
     lv_obj_set_style_text_color(g_si_ctx.objects.time, lv_color_hex(SMART_ISLAND_TEXT_LIGHT), 0);
     lv_obj_align(g_si_ctx.objects.time, LV_ALIGN_RIGHT_MID, -14, 0);
     lv_obj_clear_flag(g_si_ctx.objects.time, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_CLICK_FOCUSABLE);
@@ -1728,8 +1728,7 @@ void smart_island_create(lv_obj_t *parent)
     lv_obj_set_pos(g_si_ctx.objects.counting_value, 69, 10);
     lv_obj_set_width(g_si_ctx.objects.counting_value, 58);
     lv_label_set_long_mode(g_si_ctx.objects.counting_value, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_font(g_si_ctx.objects.counting_value,
-                               &lv_font_instrument_sans_semibold_20, 0);
+    lv_obj_set_style_text_font(g_si_ctx.objects.counting_value,ui_message_font(&lv_font_instrument_sans_semibold_20), 0);
     lv_obj_set_style_text_color(g_si_ctx.objects.counting_value,
                                 lv_color_white(), 0);
 
@@ -1738,8 +1737,7 @@ void smart_island_create(lv_obj_t *parent)
     lv_obj_set_pos(g_si_ctx.objects.counting_value_next, 69, SMART_ISLAND_COUNT_H);
     lv_obj_set_width(g_si_ctx.objects.counting_value_next, 58);
     lv_label_set_long_mode(g_si_ctx.objects.counting_value_next, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_font(g_si_ctx.objects.counting_value_next,
-                               &lv_font_instrument_sans_semibold_20, 0);
+    lv_obj_set_style_text_font(g_si_ctx.objects.counting_value_next,ui_message_font(&lv_font_instrument_sans_semibold_20), 0);
     lv_obj_set_style_text_color(g_si_ctx.objects.counting_value_next,
                                 lv_color_white(), 0);
     lv_obj_add_flag(g_si_ctx.objects.counting_value_next, LV_OBJ_FLAG_HIDDEN);
@@ -1768,8 +1766,7 @@ void smart_island_create(lv_obj_t *parent)
     g_si_ctx.objects.counting_unit = lv_label_create(g_si_ctx.objects.counting_root);
     lv_label_set_text(g_si_ctx.objects.counting_unit, ui_tr("PCS"));
     lv_obj_set_pos(g_si_ctx.objects.counting_unit, 192, 16);
-    lv_obj_set_style_text_font(g_si_ctx.objects.counting_unit,
-                               &lv_font_instrument_sans_medium_14, 0);
+    lv_obj_set_style_text_font(g_si_ctx.objects.counting_unit,ui_message_font(&lv_font_instrument_sans_medium_14), 0);
     lv_obj_set_style_text_color(g_si_ctx.objects.counting_unit,
                                 lv_color_hex(0xA3A3A3), 0);
 
@@ -1786,8 +1783,7 @@ void smart_island_create(lv_obj_t *parent)
     lv_obj_set_width(g_si_ctx.objects.counting_serial, 154);
     lv_label_set_long_mode(g_si_ctx.objects.counting_serial, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_align(g_si_ctx.objects.counting_serial, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(g_si_ctx.objects.counting_serial,
-                               &lv_font_instrument_sans_medium_16, 0);
+    lv_obj_set_style_text_font(g_si_ctx.objects.counting_serial,ui_message_font(&lv_font_instrument_sans_medium_16), 0);
     lv_obj_set_style_text_color(g_si_ctx.objects.counting_serial,
                                 lv_color_white(), 0);
 
@@ -1838,7 +1834,7 @@ void smart_island_create(lv_obj_t *parent)
     lv_label_set_long_mode(g_si_ctx.objects.expand_subtitle, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(g_si_ctx.objects.expand_subtitle, 173);
     lv_obj_set_pos(g_si_ctx.objects.expand_subtitle, 68, 36);
-    lv_obj_set_style_text_font(g_si_ctx.objects.expand_subtitle, &lv_font_instrument_sans_semibold_12, 0);
+    lv_obj_set_style_text_font(g_si_ctx.objects.expand_subtitle,ui_message_font(&lv_font_instrument_sans_semibold_12), 0);
     lv_obj_set_style_text_color(g_si_ctx.objects.expand_subtitle, lv_color_hex(SMART_ISLAND_TEXT_LIGHT), 0);
     lv_obj_set_style_text_align(g_si_ctx.objects.expand_subtitle, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_recolor(g_si_ctx.objects.expand_subtitle, true);
@@ -1849,7 +1845,7 @@ void smart_island_create(lv_obj_t *parent)
     lv_obj_set_width(g_si_ctx.objects.expand_last, 40);
     lv_obj_set_pos(g_si_ctx.objects.expand_last, 20, 36);
     lv_obj_set_style_text_align(g_si_ctx.objects.expand_last, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_set_style_text_font(g_si_ctx.objects.expand_last, &lv_font_instrument_sans_medium_12, 0);
+    lv_obj_set_style_text_font(g_si_ctx.objects.expand_last,ui_message_font(&lv_font_instrument_sans_medium_12), 0);
     lv_obj_set_style_text_color(g_si_ctx.objects.expand_last, lv_color_hex(SMART_ISLAND_LAST_TEXT_GRAY), 0);
 
     g_si_ctx.objects.expand_divider = lv_obj_create(g_si_ctx.objects.page_info);
@@ -1864,7 +1860,7 @@ void smart_island_create(lv_obj_t *parent)
     lv_label_set_long_mode(g_si_ctx.objects.expand_footer, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(g_si_ctx.objects.expand_footer, 150);
     lv_obj_set_pos(g_si_ctx.objects.expand_footer, 20, 62);
-    lv_obj_set_style_text_font(g_si_ctx.objects.expand_footer, &lv_font_instrument_sans_medium_12, 0);
+    lv_obj_set_style_text_font(g_si_ctx.objects.expand_footer,ui_message_font(&lv_font_instrument_sans_medium_12), 0);
     lv_obj_set_style_text_color(g_si_ctx.objects.expand_footer, lv_color_hex(SMART_ISLAND_TEXT_SUB), 0);
     lv_obj_add_flag(g_si_ctx.objects.expand_footer, LV_OBJ_FLAG_HIDDEN);
 
@@ -1873,7 +1869,7 @@ void smart_island_create(lv_obj_t *parent)
     lv_label_set_long_mode(g_si_ctx.objects.expand_extra, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(g_si_ctx.objects.expand_extra, 150);
     lv_obj_set_pos(g_si_ctx.objects.expand_extra, 20, 80);
-    lv_obj_set_style_text_font(g_si_ctx.objects.expand_extra, &lv_font_instrument_sans_medium_12, 0);
+    lv_obj_set_style_text_font(g_si_ctx.objects.expand_extra,ui_message_font(&lv_font_instrument_sans_medium_12), 0);
     lv_obj_set_style_text_color(g_si_ctx.objects.expand_extra, lv_color_hex(SMART_ISLAND_TEXT_SUB), 0);
     lv_obj_add_flag(g_si_ctx.objects.expand_extra, LV_OBJ_FLAG_HIDDEN);
 
@@ -1897,7 +1893,7 @@ void smart_island_create(lv_obj_t *parent)
     g_si_ctx.objects.quality_percent = lv_label_create(g_si_ctx.objects.page_info);
     lv_label_set_text(g_si_ctx.objects.quality_percent, "100%");
     lv_obj_set_pos(g_si_ctx.objects.quality_percent, 228, 62);
-    lv_obj_set_style_text_font(g_si_ctx.objects.quality_percent, &lv_font_instrument_sans_medium_12, 0);
+    lv_obj_set_style_text_font(g_si_ctx.objects.quality_percent,ui_message_font(&lv_font_instrument_sans_medium_12), 0);
     lv_obj_set_style_text_color(g_si_ctx.objects.quality_percent, lv_color_hex(SMART_ISLAND_RESULT_OK_COLOR), 0);
     lv_obj_add_flag(g_si_ctx.objects.quality_percent, LV_OBJ_FLAG_HIDDEN);
 

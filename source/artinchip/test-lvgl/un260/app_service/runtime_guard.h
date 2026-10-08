@@ -8,6 +8,7 @@ enum { RUNTIME_FAULT_UART_TX = 1, RUNTIME_FAULT_UART_RX = 2, RUNTIME_FAULT_STALL
 #ifdef UN260_RUNTIME_GUARD_ENABLED
 int runtime_guard_run(int (*application)(void));
 int runtime_guard_reconcile(void);
+bool runtime_guard_previous_fault(void);
 void runtime_guard_heartbeat(void);
 void runtime_guard_fault(unsigned reason);
 bool runtime_guard_has_fault(void);
@@ -17,6 +18,7 @@ void runtime_guard_count(int pcs, float amount, unsigned phase, bool busy, bool 
 #else
 /* Component-only builds have no process supervisor. Production enables the
  * hooks explicitly on its executable; no LVGL library ABI dependency. */
+static inline bool runtime_guard_previous_fault(void) { return false; }
 static inline void runtime_guard_heartbeat(void) {}
 static inline void runtime_guard_fault(unsigned r) { (void)r; }
 static inline bool runtime_guard_has_fault(void) { return false; }

@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_resources/ui_page_background.h"
 #include "page_19_history_search.h"
 #include "un260/lv_components/lv_popup_style.h"
@@ -71,7 +72,7 @@ static lv_obj_t *label(lv_obj_t *parent, int x, int y, int width, int height,
     if (!o) return NULL;
     lv_obj_remove_style_all(o);
     lv_obj_set_pos(o, x, y); lv_obj_set_size(o, width, height);
-    lv_obj_set_style_text_font(o, font, 0);
+    lv_obj_set_style_text_font(o,ui_message_font(font), 0);
     lv_obj_set_style_text_color(o, lv_color_hex(color), 0);
     lv_label_set_long_mode(o, LV_LABEL_LONG_WRAP);
     lv_label_set_text(o, text ? text : "");
@@ -280,9 +281,9 @@ static void input_event(lv_event_t *event)
     const lv_alnum_keyboard_config_t config = {
         .title = ui_text_get(field_title(field)),
         .placeholder = "",
-        .apply_text = ui_text_get(UI_TEXT_HISTORY_APPLY),
-        .clear_text = ui_text_get(UI_TEXT_SERIAL_CLEAR),
-        .cancel_text = ui_text_get(UI_TEXT_SERIAL_ESC),
+        .apply_text = ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_HISTORY_APPLY)),
+        .clear_text = ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_SERIAL_CLEAR)),
+        .cancel_text = ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_SERIAL_ESC)),
         .max_length = (uint8_t)LV_MIN(size - 1, LV_ALNUM_KEYBOARD_MAX_TEXT),
         .submit = input_submit, .context = s, .symbols = true
     };
@@ -454,8 +455,8 @@ static void editor_numeric_open(lv_event_t *e)
     if(s->keyboard) {lv_alnum_keyboard_destroy(s->keyboard);s->keyboard=NULL;}
     const lv_alnum_keyboard_config_t config={
         .title=ui_text_get(s->editing_field<=FIELD_TO ? UI_TEXT_HISTORY_YEAR : field_title(s->editing_field)),
-        .placeholder="",.apply_text=ui_text_get(UI_TEXT_HISTORY_APPLY),
-        .clear_text=ui_text_get(UI_TEXT_SERIAL_CLEAR),.cancel_text=ui_text_get(UI_TEXT_SERIAL_ESC),
+        .placeholder="",.apply_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_HISTORY_APPLY)),
+        .clear_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_SERIAL_CLEAR)),.cancel_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_SERIAL_ESC)),
         .max_length=s->editing_field<=FIELD_TO ? 4 : 20,.submit=editor_numeric_submit,.context=s
     };
     s->keyboard=lv_alnum_keyboard_create(s->editor,&config);
@@ -554,10 +555,10 @@ static void open_editor(page_19_history_search_t *s, unsigned field)
             s->wheel_titles[i]=label(card,100+i*260,76,220,26,&lv_font_instrument_sans_medium_18,SEARCH_BODY,ui_text_get(title));
             if(!s->wheel_titles[i]) goto failed;
             s->wheels[i]=lv_roller_create(card);if(!s->wheels[i]) goto failed;
-            lv_obj_set_style_text_font(s->wheels[i],&lv_font_instrument_sans_medium_22,0);
+            lv_obj_set_style_text_font(s->wheels[i],ui_message_font(&lv_font_instrument_sans_medium_22),0);
             /* Match both text layers: different metrics can shift the selected
              * overlay away from the actual option on long year wheels. */
-            lv_obj_set_style_text_font(s->wheels[i],&lv_font_instrument_sans_medium_22,LV_PART_SELECTED);
+            lv_obj_set_style_text_font(s->wheels[i],ui_message_font(&lv_font_instrument_sans_medium_22),LV_PART_SELECTED);
             lv_obj_set_style_bg_color(s->wheels[i],lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),0);
             lv_obj_set_style_bg_opa(s->wheels[i],LV_OPA_COVER,0);
             lv_obj_set_style_text_color(s->wheels[i],lv_color_hex(SEARCH_MUTED),0);
@@ -592,7 +593,7 @@ static void open_editor(page_19_history_search_t *s, unsigned field)
                 SEARCH_BODY,ui_text_get(i ? UI_TEXT_HISTORY_MAXIMUM : UI_TEXT_HISTORY_MINIMUM));
             s->number[i]=button(card,100+i*400,140,360,68,s->number_text[i],editor_numeric_open,s);
             if(!s->number[i] || !s->number_title[i]) goto failed;
-            lv_obj_set_style_text_font(lv_damped_button_get_label(s->number[i]),&lv_font_instrument_sans_semibold_22,0);
+            lv_obj_set_style_text_font(lv_damped_button_get_label(s->number[i]),ui_message_font(&lv_font_instrument_sans_semibold_22),0);
         }
     }
     lv_dropdown_set_selected(s->precision,(uint16_t)precision);
@@ -788,7 +789,7 @@ page_19_history_search_t *page_19_history_search_create(lv_obj_t *parent,
                SEARCH_INK, ui_text_get(UI_TEXT_HISTORY_SEARCH_TITLE))) goto failed;
     lv_obj_t *esc = lv_nav_button_create(s->root, 1152, 16, 108, 42, cancel_event, s);
     if (!esc) goto failed;
-    lv_obj_set_style_text_font(lv_damped_button_get_label(esc),&lv_font_instrument_sans_medium_16,0);
+    lv_obj_set_style_text_font(lv_damped_button_get_label(esc),ui_message_font(&lv_font_instrument_sans_medium_16),0);
     lv_damped_button_set_text(esc, ui_text_get(UI_TEXT_HISTORY_BACK));
     s->mode=dropdown(s->root,520,16,300,s);
     if(!s->mode)goto failed;
@@ -803,7 +804,7 @@ page_19_history_search_t *page_19_history_search_create(lv_obj_t *parent,
         s->panels[i] = surface(s->root, 252, 74, 1012, 310, 0xFFFFFF, 16);
         if (!s->tabs[i] || !s->panels[i]) goto failed;
         lv_obj_t *caption=lv_damped_button_get_label(s->tabs[i]);
-        lv_obj_set_style_text_font(caption,&lv_font_instrument_sans_medium_16,0);
+        lv_obj_set_style_text_font(caption,ui_message_font(&lv_font_instrument_sans_medium_16),0);
         lv_obj_set_style_text_align(caption,LV_TEXT_ALIGN_LEFT,0);
         lv_obj_set_width(caption,148);lv_obj_align(caption,LV_ALIGN_LEFT_MID,14,0);
         s->tab_counts[i]=label(s->tabs[i],168,23,20,20,&lv_font_instrument_sans_medium_12,0xFFFFFF,"");

@@ -34,6 +34,10 @@ The C guard retains directory descriptors opened before writes, checks path iden
 
 Preflight separately measures root staged bytes + 2048 KiB, app staged bytes + 2048 KiB, and USB originals + 4096 KiB. Initial enrollment requires enough empty app-volume capacity for two copies of the current executable plus 4096 KiB. No UBIFS compression discounts are assumed. Reboot releases old executable mappings; no unlimited free-space promise is made.
 
+Build qualification has two explicit routes. Standalone `build_un260_update.sh` defaults to `legacy-root` and charges every changed file to root as before. The post-image hook uses `--unified-route` only for the internal application that is subsequently enclosed in, and verified against, the public unified package. `unified-app-volume` charges exactly `usr/local/bin/test_lvgl` to the application volume; libraries and resources remain charged to root. Each volume has an independent 16 MiB free-space qualification and its own 2048 KiB reserve. USB backup requirements and on-device `df`/syncfs checks are unchanged. The route is recorded in the inner manifest and does not itself request or perform migration.
+
+This is not permission to distribute the inner application as a legacy-device upgrade. Public output remains the verified unified package; its existing route performs approved, backed-up enrollment first or reuses the already-owned volume. Unknown layouts and insufficient actual free space still fail on the device. Candidate language/font assets are not included merely because their host-generation tests passed.
+
 Managed devices reject pre-v1 full packages and loose legacy updates. Full packages must contain storage-aware startup/updater/helper; deltas cannot remove those core components or replace them with pre-v1 implementations. Manually overwriting the launcher outside the supported updater is detected at boot.
 
 ## Validation

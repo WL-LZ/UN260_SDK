@@ -48,6 +48,7 @@ def main():
                *[source.resolve() for source in args.extra_source], *compiled_asset_sources()]
     actual = [
         "un260/font/scaled_font.c", "un260/font/ui_message_font.c",
+        "un260/font/ui_locale_font_bank.c",
         "un260/device_info/device_info.c",
         "un260/gesture/gesture_guide.c", "un260/lv_components/lv_content_pager.c",
         "un260/lv_system/ui_main_layout.c",
@@ -87,6 +88,12 @@ def main():
                 for size in (12, 14, 16, 18, 20, 22, 24, 28)]
     with tempfile.TemporaryDirectory(prefix="un260-main-view-") as tmp:
         work = Path(tmp)
+        metadata = (ROOT / "un260/currency/currency_metadata.c").read_text(encoding="utf-8")
+        codes = re.findall(r'\{"([A-Z]{3})",\s*"', metadata)
+        assert len(codes) == len(set(codes)) and codes
+        (work / "currency_codes_under_test.h").write_text(
+            'static const char *const all_currency_codes[]={' +
+            ','.join(json.dumps(code) for code in codes) + '};\n', encoding="utf-8")
         (work/'lv_drv_conf.h').write_text('/* Host rendering: no physical driver. */\n')
         # Firmware keeps large PNGs outside the binary and decodes into the DMA
         # pool, not LVGL's 4 MiB object heap. Decode those same pixels on the host
@@ -148,7 +155,12 @@ void host_external_assets_release(void) {
         conf.write_text("""#ifndef LV_CONF_H
 #define LV_CONF_H
 #define LV_COLOR_DEPTH 32
-#define LV_MEM_SIZE (4U * 1024U * 1024U)
+#define LV_MEM_SIZE (24U * 1024U * 1024U)
+#define LV_USE_BIDI 1
+#define LV_USE_ARABIC_PERSIAN_CHARS 1
+#define LV_USE_FS_STDIO 1
+#define LV_FS_STDIO_LETTER 83
+#define LV_FS_STDIO_PATH ""
 #define LV_USE_LOG 0
 #define LV_USE_SNAPSHOT 1
 #define LV_USE_GPU_AIC 0
@@ -201,7 +213,8 @@ const gesture_definition_t *gesture_service_definition(size_t index) {
         sources += [skin_presenter, ROOT / "tools/test_main_skin_backend.c"]
         sources += sorted((lvgl / "src").rglob("*.c"))
         executable = work / "test-main-view"
-        command = [compiler, "-std=c11", "-O1", "-g", "-Wall", "-Wextra", "-DLV_DRV_CONF_H", "-D_POSIX_C_SOURCE=200809L",
+        command = [compiler, "-std=c11", "-O1", "-g", "-Wall", "-Wextra", "-DLV_DRV_CONF_H", "-D_POSIX_C_SOURCE=200809L", "-D_DEFAULT_SOURCE",
+                   '-DUN260_LOCALE_FONT_DIR="S:'+str(ROOT/'aic_ui/lvgl_data/locale_fonts')+'/"',
                    '-DLVGL_DIR="L:/usr/local/share/lvgl_data/"', f"-I{work}", f"-I{ROOT}",
                    f"-I{ROOT / 'aic_ui'}", f"-I{lvgl}", f"-DLV_CONF_PATH={conf}"]
         if args.sanitize != "none": command += [f"-fsanitize={args.sanitize}", "-fno-sanitize-recover=all"]
@@ -216,7 +229,7 @@ const gesture_definition_t *gesture_service_definition(size_t index) {
             list(pool.map(compile_source, zip(sources, objects)))
         subprocess.run([*command, *map(str, objects),
                         *[f"-Wl,--wrap={symbol}" for symbol in args.wrap],
-                        "-lm", "-pthread", "-o", str(executable)], check=True)
+                        "-lm", "-lz", "-pthread", "-o", str(executable)], check=True)
         environment = os.environ.copy()
         if args.output_dir:
             args.output_dir.mkdir(parents=True, exist_ok=True)

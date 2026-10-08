@@ -1,5 +1,8 @@
 #include "ui_notice.h"
 #include "lvgl/lvgl.h"
+#if LV_USE_ARABIC_PERSIAN_CHARS
+#include "lvgl/src/misc/lv_txt_ap.h"
+#endif
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/font/ui_message_font.h"
 #include <stdio.h>
@@ -28,8 +31,8 @@ static struct {
     lv_obj_t *object;
     lv_timer_t *timer;
     const lv_font_t *title_font;
-    char title[UI_NOTICE_TITLE_CAPACITY];
-    char detail[UI_NOTICE_DETAIL_CAPACITY];
+    char title[UI_NOTICE_TITLE_CAPACITY * 2];
+    char detail[UI_NOTICE_DETAIL_CAPACITY * 2];
     uint32_t suspended;
     uint32_t last_tick;
     uint16_t angle;
@@ -93,6 +96,8 @@ static void label(lv_draw_ctx_t *ctx, const lv_area_t *origin, int y, int height
     d.color = lv_color_hex(color);
     d.opa = notice.opacity;
     d.line_space = 2;
+    d.bidi_dir = LV_BASE_DIR_AUTO;
+    d.align = ui_lang_current()->direction==UI_LANG_RTL ? LV_TEXT_ALIGN_RIGHT : LV_TEXT_ALIGN_LEFT;
     ctx->clip_area = &clip;
     lv_draw_label(ctx, &d, &area, text, NULL);
     ctx->clip_area = saved_clip;
@@ -192,12 +197,19 @@ static void prepare_copy(void)
     const char *body = notice.shown.localized ? ui_tr(notice.shown.detail) : notice.shown.detail;
     if (notice.shown.has_message) { ui_message_render(&notice.shown.message, detail, sizeof(detail)); body = detail; }
     notice.title_font = ui_message_font(&lv_font_instrument_sans_semibold_16);
-    copy_text(notice.title, sizeof(notice.title), title);
-    copy_text(notice.detail, sizeof(notice.detail), body);
+    copy_text(notice.title, UI_NOTICE_TITLE_CAPACITY, title);
+    copy_text(notice.detail, UI_NOTICE_DETAIL_CAPACITY, body);
     if (notice.shown.repeats > 1 && notice.shown.kind != UI_NOTICE_PROGRESS) {
         size_t length = strlen(notice.title);
-        snprintf(notice.title + length, sizeof(notice.title) - length, " (x%u)", notice.shown.repeats);
+        snprintf(notice.title + length, UI_NOTICE_TITLE_CAPACITY - length, " (x%u)", notice.shown.repeats);
     }
+#if LV_USE_ARABIC_PERSIAN_CHARS
+    /* Direct draw bypasses lv_label_set_text's shaping. Prepare once per notice,
+     * with room for UTF-8 presentation forms; never allocate in the draw path. */
+    char shaped[LV_MAX(UI_NOTICE_TITLE_CAPACITY,UI_NOTICE_DETAIL_CAPACITY) * 2];
+    _lv_txt_ap_proc(notice.title,shaped);strcpy(notice.title,shaped);
+    _lv_txt_ap_proc(notice.detail,shaped);strcpy(notice.detail,shaped);
+#endif
     measure_title(&measured);
     notice.title_height = measured.y;
     notice.detail_height = 0;

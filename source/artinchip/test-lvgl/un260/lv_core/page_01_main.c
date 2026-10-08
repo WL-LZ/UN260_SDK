@@ -1,4 +1,5 @@
 #include "un260/lv_system/ui_i18n.h"
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_resources/ui_page_background.h"
 #include "un260/lv_core/page_01_main.h"
 #include "page_01_multi.h"
@@ -548,7 +549,7 @@ static lv_obj_t* page_01_bottom_btn_label_create(lv_obj_t* parent) //创建主�
     lv_obj_set_size(label, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_center(label);
     lv_obj_set_style_text_color(label, lv_color_hex(0x4C606E), 0);
-    lv_obj_set_style_text_font(label, &lv_font_instrument_sans_medium_18, 0);
+    lv_obj_set_style_text_font(label,ui_message_font(&lv_font_instrument_sans_medium_18), 0);
     lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
 
@@ -730,12 +731,12 @@ static lv_obj_t *page_01_detail_section_btn_create(lv_coord_t x, lv_coord_t y,
     lv_obj_clear_flag(badge, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t *letter = lv_label_create(badge);
     lv_label_set_text(letter, letters[section]);
-    lv_obj_set_style_text_font(letter, &lv_font_instrument_sans_bold_14, 0);
+    lv_obj_set_style_text_font(letter,ui_message_font(&lv_font_instrument_sans_bold_14), 0);
     lv_obj_set_style_text_color(letter, lv_color_white(), 0);
     lv_obj_center(letter);
     lv_obj_t *label = lv_label_create(btn);
     lv_label_set_text(label, text);
-    lv_obj_set_style_text_font(label, &lv_font_instrument_sans_medium_16, 0);
+    lv_obj_set_style_text_font(label,ui_message_font(&lv_font_instrument_sans_medium_16), 0);
     lv_obj_align(label, LV_ALIGN_LEFT_MID, 58, 0);
     return btn;
 }
@@ -948,7 +949,8 @@ static lv_obj_t *main_label(lv_obj_t *parent, const char *name, const char *text
     lv_obj_set_pos(label, x, y);
     lv_obj_set_size(label, w, LV_SIZE_CONTENT);
     lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_font(label, font, 0);
+    lv_obj_set_style_text_font(label, ui_message_font(font), 0);
+    lv_obj_set_style_base_dir(label, LV_BASE_DIR_AUTO, 0);
     lv_obj_set_style_text_color(label, lv_color_hex(color), 0);
     if (name) main_register(name, label);
     return label;
@@ -988,8 +990,8 @@ static void main_currency_target(lv_obj_t *parent)
     lv_obj_add_event_cb(target, page_01_curr_btn_event_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *icon = main_icon(target, "curr_USD_img",
         LVGL_DIR"main_icons/currencies_32.png", 4, 15);
-    main_label(target, NULL, ui_tr("Currency"), 80, 3, 120, &lv_font_instrument_sans_medium_12, 0x7A8D9B);
-    lv_obj_t *code = main_label(target, NULL, ui_tr("AUTO"), 80, 24, 112,
+    main_label(target, NULL, ui_tr("Currency"), 80, 0, 120, &lv_font_instrument_sans_semibold_16, 0x526E80);
+    lv_obj_t *code = main_label(target, NULL, ui_tr("AUTO"), 80, 27, 112,
         &lv_font_instrument_sans_semibold_24, 0x17212A);
     main_icon(target, NULL, LVGL_DIR"main_icons/caret_down_16.png", 206, 33);
     s_curr_img = icon; s_currency_code = code;
@@ -1017,9 +1019,9 @@ static void page_01_main_build_content(void)
     lv_obj_set_style_border_color(s_summary_card, lv_color_hex(0xECF0F3), 0);
     lv_obj_set_style_border_opa(s_summary_card, LV_OPA_COVER, 0);
     main_currency_target(s_summary_card);
-    lv_obj_t *reject = main_box(s_summary_card, 346, 25, 114, 38, 0xF4F7F8, 8);
-    main_label(reject, NULL, ui_tr("REJECT"), 10, 13, 56, &lv_font_instrument_sans_medium_10, 0x657F90);
-    lv_obj_t *reject_num = main_label(reject, "reject_num_label", "0", 66, 8, 39,
+    lv_obj_t *reject = main_box(s_summary_card, 314, 25, 146, 38, 0xF4F7F8, 8);
+    main_label(reject, NULL, ui_tr("REJECT"), 8, 8, 88, &lv_font_instrument_sans_semibold_16, 0x526E80);
+    lv_obj_t *reject_num = main_label(reject, "reject_num_label", "0", 104, 8, 34,
         &lv_font_instrument_sans_semibold_20, 0x4C606E);
     lv_obj_set_style_text_align(reject_num, LV_TEXT_ALIGN_RIGHT, 0);
     main_box(s_summary_card, 22, 90, 438, 1, 0xEFF3F5, 0);
@@ -1028,7 +1030,7 @@ static void page_01_main_build_content(void)
     s_total_pcs_label = main_label(s_summary_card, "01_pcs_label", "0", 120, 108, 340,
         &lv_font_manrope_bold_48, 0x17212A);
     main_box(s_summary_card, 22, 190, 438, 1, 0xEFF3F5, 0);
-    main_label(s_summary_card, NULL, ui_tr("AMOUNT"), 22, 230, 100, &lv_font_instrument_sans_medium_12, 0x7A8D9B);
+    main_label(s_summary_card, NULL, ui_tr("AMOUNT"), 22, 218, 100, &lv_font_instrument_sans_semibold_16, 0x526E80);
     s_curr_label = main_label(s_summary_card, "curr_icon_label", "", 22, 244, 92,
         &lv_font_main_currency_56, 0x0074F8);
     s_amount_unit_icon = main_icon(s_summary_card, NULL, LVGL_DIR"main_icons/currencies_56.png", 22, 248);
@@ -1291,7 +1293,7 @@ static void page_01_main_summary_label_set(lv_obj_t **cached_label,
     if (strcmp(lv_label_get_text(label), text) == 0 && *geometry_compact) return;
     lv_label_set_text(label, text);
     const lv_font_t *large = &lv_font_main_numeric_64;
-    lv_obj_set_style_text_font(label, large, 0);
+    lv_obj_set_style_text_font(label,large, 0);
     lv_obj_set_width(label, LV_SIZE_CONTENT);
     lv_obj_update_layout(label);
     if (lv_obj_get_width(label) > SUMMARY_MAX_WIDTH) {

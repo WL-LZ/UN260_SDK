@@ -17,7 +17,8 @@ static const uint8_t *glyph_bitmap(const lv_font_t *font,uint32_t letter){
     if(!lv_font_get_glyph_dsc(s->base,&d,letter,0))return NULL;
     unsigned w=scaled(d.box_w,s->percent),h=scaled(d.box_h,s->percent);
     if(!w||!h||w*h>s->capacity||!(d.bpp==1||d.bpp==2||d.bpp==4||d.bpp==8))return NULL;
-    const uint8_t *src=lv_font_get_glyph_bitmap(s->base,letter);if(!src)return NULL;
+    const lv_font_t *resolved=d.resolved_font?d.resolved_font:s->base;
+    const uint8_t *src=lv_font_get_glyph_bitmap(resolved,letter);if(!src)return NULL;
     /* Pixel-centred bilinear alpha preserves thin stems better than nearest-neighbour. */
     for(unsigned y=0;y<h;y++){
         int fy=((2*y+1)*d.box_h*128/h)-128;fy=LV_CLAMP(0,fy,((int)d.box_h-1)*256);

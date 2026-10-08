@@ -6,6 +6,16 @@
 static const ui_locale_t *current = &ui_locales[0];
 static uint32_t generation;
 static bool initialized;
+static ui_lang_prepare_cb_t resource_prepare;
+void ui_lang_set_resource_preparer(ui_lang_prepare_cb_t prepare)
+{ resource_prepare = prepare; }
+bool ui_lang_prepare_resources(language_t lang)
+{
+    if(lang==LANGUAGE_EN) return true;
+    for(size_t i=0;i<ui_lang_count();++i)
+        if(ui_lang_at(i)->id==lang) return resource_prepare&&resource_prepare(lang);
+    return false;
+}
 
 void ui_lang_init(void)
 {
@@ -47,13 +57,14 @@ void ui_lang_set(language_t lang)
 void ui_lang_restore(const char *tag)
 {
     const ui_locale_t *locale = ui_lang_find(tag);
-    select_locale(ui_lang_is_available(locale) ? locale : &ui_locales[0]);
+    select_locale(ui_lang_is_available(locale) && ui_lang_prepare_resources(locale->id) ? locale : &ui_locales[0]);
 }
 bool ui_lang_save(language_t lang)
 {
     for (size_t i = 0; i < ui_lang_count(); ++i) {
         if (ui_locales[i].id != lang) continue;
         if (!ui_lang_is_available(&ui_locales[i]) ||
+            !ui_lang_prepare_resources(lang) ||
             !ui_locale_store_write(ui_locales[i].tag)) return false;
         select_locale(&ui_locales[i]);
         return true;

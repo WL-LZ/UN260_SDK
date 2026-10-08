@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "page_18_pure.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/lv_page_event.h"
@@ -246,19 +247,19 @@ void ui_page_18_pure_create(lv_obj_t* parent)
     g_pure_page.amount_label = lv_label_create(g_pure_page.page);
     lv_label_set_text(g_pure_page.amount_label, ui_text_get(UI_TEXT_WIDGET_PURE_AMOUNT));
     lv_obj_set_pos(g_pure_page.amount_label, 68, 75);
-    lv_obj_set_style_text_font(g_pure_page.amount_label, &MONTSERRAT_EXTRABOLD_35, 0);
+    lv_obj_set_style_text_font(g_pure_page.amount_label,ui_message_font_sized(&MONTSERRAT_EXTRABOLD_35,36), 0);
     lv_obj_set_style_text_color(g_pure_page.amount_label, lv_color_hex(0x636363), 0);
 
     g_pure_page.total_top_label = lv_label_create(g_pure_page.page);
     lv_label_set_text(g_pure_page.total_top_label, ui_text_get(UI_TEXT_WIDGET_PURE_TOTAL));
     lv_obj_set_pos(g_pure_page.total_top_label, 70, 114);
-    lv_obj_set_style_text_font(g_pure_page.total_top_label, &MONTSERRAT_Medium_15, 0);
+    lv_obj_set_style_text_font(g_pure_page.total_top_label,ui_message_font_sized(&MONTSERRAT_Medium_15,16), 0);
     lv_obj_set_style_text_color(g_pure_page.total_top_label, lv_color_hex(0x505050), 0);
 
     g_pure_page.value_label = lv_label_create(g_pure_page.page);
     lv_label_set_text(g_pure_page.value_label, ui_text_get(UI_TEXT_WIDGET_PURE_VALUE));
     lv_obj_set_pos(g_pure_page.value_label, 141, 114);
-    lv_obj_set_style_text_font(g_pure_page.value_label, &MONTSERRAT_Medium_15, 0);
+    lv_obj_set_style_text_font(g_pure_page.value_label,ui_message_font_sized(&MONTSERRAT_Medium_15,16), 0);
     lv_obj_set_style_text_color(g_pure_page.value_label, lv_color_hex(0x505050), 0);
 
     g_pure_page.amount_value = lv_label_create(g_pure_page.page);
@@ -272,19 +273,19 @@ void ui_page_18_pure_create(lv_obj_t* parent)
     g_pure_page.pcs_label = lv_label_create(g_pure_page.page);
     lv_label_set_text(g_pure_page.pcs_label, ui_text_get(UI_TEXT_WIDGET_PURE_PCS));
     lv_obj_set_pos(g_pure_page.pcs_label, 68, 248);
-    lv_obj_set_style_text_font(g_pure_page.pcs_label, &MONTSERRAT_EXTRABOLD_35, 0);
+    lv_obj_set_style_text_font(g_pure_page.pcs_label,ui_message_font_sized(&MONTSERRAT_EXTRABOLD_35,36), 0);
     lv_obj_set_style_text_color(g_pure_page.pcs_label, lv_color_hex(0x636363), 0);
 
     g_pure_page.total_bottom_label = lv_label_create(g_pure_page.page);
     lv_label_set_text(g_pure_page.total_bottom_label, ui_text_get(UI_TEXT_WIDGET_PURE_TOTAL));
     lv_obj_set_pos(g_pure_page.total_bottom_label, 70, 287);
-    lv_obj_set_style_text_font(g_pure_page.total_bottom_label, &MONTSERRAT_Medium_15, 0);
+    lv_obj_set_style_text_font(g_pure_page.total_bottom_label,ui_message_font_sized(&MONTSERRAT_Medium_15,16), 0);
     lv_obj_set_style_text_color(g_pure_page.total_bottom_label, lv_color_hex(0x505050), 0);
 
     g_pure_page.pieces_label = lv_label_create(g_pure_page.page);
     lv_label_set_text(g_pure_page.pieces_label, ui_text_get(UI_TEXT_WIDGET_PURE_PIECES));
     lv_obj_set_pos(g_pure_page.pieces_label, 141, 287);
-    lv_obj_set_style_text_font(g_pure_page.pieces_label, &MONTSERRAT_Medium_15, 0);
+    lv_obj_set_style_text_font(g_pure_page.pieces_label,ui_message_font_sized(&MONTSERRAT_Medium_15,16), 0);
     lv_obj_set_style_text_color(g_pure_page.pieces_label, lv_color_hex(0x505050), 0);
 
     g_pure_page.pcs_value = lv_label_create(g_pure_page.page);
@@ -298,7 +299,7 @@ void ui_page_18_pure_create(lv_obj_t* parent)
     g_pure_page.reject_label = lv_label_create(g_pure_page.page);
     lv_label_set_text(g_pure_page.reject_label, ui_text_get(UI_TEXT_WIDGET_PURE_REJECT));
     lv_obj_set_pos(g_pure_page.reject_label, 70, 361);
-    lv_obj_set_style_text_font(g_pure_page.reject_label, &lv_font_montserrat_18, 0);
+    lv_obj_set_style_text_font(g_pure_page.reject_label, ui_message_font_sized(&lv_font_montserrat_18,18), 0);
     lv_obj_set_style_text_color(g_pure_page.reject_label, lv_color_hex(0xFF7171), 0);
 
     g_pure_page.reject_value = lv_label_create(g_pure_page.page);
@@ -326,7 +327,7 @@ void ui_page_18_pure_create(lv_obj_t* parent)
 
     g_pure_page.start_btn_label = lv_label_create(btn_start);
     lv_label_set_text(g_pure_page.start_btn_label, ui_text_get(UI_TEXT_WIDGET_PURE_START));
-    lv_obj_set_style_text_font(g_pure_page.start_btn_label, &lv_font_rajdhani_27, 0);
+    lv_obj_set_style_text_font(g_pure_page.start_btn_label, ui_message_font_sized(&lv_font_rajdhani_27,28), 0);
     lv_obj_set_style_text_color(g_pure_page.start_btn_label, lv_color_hex(0x818181), 0);
     lv_obj_center(g_pure_page.start_btn_label);
 
@@ -345,7 +346,7 @@ void ui_page_18_pure_create(lv_obj_t* parent)
 
     g_pure_page.clear_btn_label = lv_label_create(btn_clear);
     lv_label_set_text(g_pure_page.clear_btn_label, ui_text_get(UI_TEXT_WIDGET_PURE_CLEAR));
-    lv_obj_set_style_text_font(g_pure_page.clear_btn_label, &lv_font_rajdhani_27, 0);
+    lv_obj_set_style_text_font(g_pure_page.clear_btn_label, ui_message_font_sized(&lv_font_rajdhani_27,28), 0);
     lv_obj_set_style_text_color(g_pure_page.clear_btn_label, lv_color_hex(0x818181), 0);
     lv_obj_center(g_pure_page.clear_btn_label);
 

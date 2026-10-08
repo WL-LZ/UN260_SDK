@@ -27,6 +27,8 @@ typedef uint8_t lv_opa_t;
 #define LV_SYMBOL_BACKSPACE "BACKSPACE"
 #define LV_SYMBOL_EYE_OPEN "EYE_OPEN"
 #define LV_SYMBOL_EYE_CLOSE "EYE_CLOSE"
+#define LV_BASE_DIR_AUTO 2
+#define LV_BASE_DIR_LTR 0
 #define LV_TEXT_ALIGN_CENTER 1
 #define USER_PASSWORD_MAX_LEN 4
 #define lv_snprintf snprintf
@@ -128,6 +130,7 @@ PIN_STYLE_STUB(lv_obj_set_style_text_font, const lv_font_t *)
 PIN_STYLE_STUB(lv_obj_set_style_text_color, uint32_t)
 PIN_STYLE_STUB(lv_obj_set_style_text_letter_space, int)
 PIN_STYLE_STUB(lv_obj_set_style_text_align, int)
+PIN_STYLE_STUB(lv_obj_set_style_base_dir, int)
 PIN_STYLE_STUB(lv_obj_set_style_shadow_width, int)
 PIN_STYLE_STUB(lv_obj_set_style_shadow_opa, int)
 PIN_STYLE_STUB(lv_obj_set_style_shadow_color, uint32_t)

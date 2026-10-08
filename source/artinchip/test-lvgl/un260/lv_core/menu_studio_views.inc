@@ -1,13 +1,23 @@
 /* Menu-private geometry, matching Studio revision 04; all values come from services. */
 static void context(lv_obj_t *p,const char *s,int x)
-{small(p,x,14,420,s);}
+{
+    /* Each content header starts with heading(). Reserve its actual translated
+       width instead of overlapping two broad, independently RTL-aligned boxes. */
+    lv_obj_t *title=lv_obj_get_child(p,0);
+    lv_obj_update_layout(p);
+    if(title&&lv_obj_check_type(title,&lv_label_class))x=LV_MAX(x,lv_obj_get_x(title)+lv_obj_get_width(title)+20);
+    lv_obj_t *caption=small(p,x,14,LV_MAX(1,LV_MIN(420,850-x)),s);
+    lv_label_set_long_mode(caption,LV_LABEL_LONG_DOT);
+    lv_obj_set_width(caption,LV_SIZE_CONTENT);
+    lv_obj_set_style_max_width(caption,LV_MAX(1,LV_MIN(420,850-x)),0);
+}
 static void palette(lv_obj_t *b,uint32_t color)
 {focus_style(b);lv_damped_button_set_exact_palette(b,lv_color_hex(color),lv_damped_button_pressed_color(lv_color_hex(color)));}
 static lv_obj_t *link_button(lv_obj_t *p,int x,int y,int w,const char *s,int id)
 {
     lv_obj_t *v=button(p,x,y,w,40,s,id,false);palette(v,lv_obj_get_style_bg_color(p,0).full&0xFFFFFF);
     lv_obj_set_style_bg_opa(v,LV_OPA_TRANSP,0);
-    lv_obj_t *l=lv_obj_get_child(v,0);lv_obj_set_style_text_font(l,&lv_font_instrument_sans_medium_16,0);
+    lv_obj_t *l=lv_obj_get_child(v,0);lv_obj_set_style_text_font(l,ui_message_font(&lv_font_instrument_sans_medium_16),0);
     lv_obj_set_style_text_color(l,lv_color_hex(BLUE),0);lv_obj_align(l,LV_ALIGN_LEFT_MID,3,0);
     icon(v,MICON("next",18),w-21,11,BLUE);return v;
 }
@@ -120,7 +130,8 @@ static void batch_view(lv_obj_t *b)
     if(!menu.batch_dirty&&menu.owner!=(user()?user()->id:0))reset_batch();
     heading(b,ui_tr("Batch presets"));char line[64];snprintf(line,sizeof(line),ui_tr("%u / 10 slots"),menu.batch_count);context(b,line,181);
     if(menu.batch_dirty){button(b,689,0,92,36,ui_tr("Cancel"),500,false);button(b,789,0,92,36,ui_tr("Save"),A_SAVE_BATCH,true);}
-    lv_obj_t *add=button(b,916,0,112,36,ui_tr("Add slot"),A_ADD_BATCH,false);button_icon(add,MICON("plus",22),INK);if(menu.batch_count>=WORKSPACE_BATCHES)lv_obj_add_state(add,LV_STATE_DISABLED);
+    int add_width=LV_MAX(112,menu_text_width(ui_tr("Add slot"))+46);
+    lv_obj_t *add=button(b,1028-add_width,0,add_width,36,ui_tr("Add slot"),A_ADD_BATCH,false);button_icon(add,MICON("plus",22),INK);if(menu.batch_count>=WORKSPACE_BATCHES)lv_obj_add_state(add,LV_STATE_DISABLED);
     for(unsigned j=0;j<5;j++){
         unsigned i=menu.batch_page*5+j;if(i>=menu.batch_count)break;
         lv_obj_t *v=lv_settings_button(b,j*145,77,j==4?134:135,128,"",false,pick_event,(void *)(uintptr_t)i);
@@ -140,7 +151,7 @@ static void batch_view(lv_obj_t *b)
     snprintf(line,sizeof(line),menu.selected_batch?"%u":ui_tr("OFF"),menu.batches[menu.selected_batch]);lv_obj_t *value=label(d,20,58,254,line,&lv_font_instrument_sans_semibold_50,INK);lv_obj_set_style_text_letter_space(value,-1,0);lv_obj_set_width(value,LV_SIZE_CONTENT);lv_obj_update_layout(value);
     if(menu.selected_batch)label(d,26+lv_obj_get_width(value),58+lv_font_instrument_sans_semibold_50.line_height-lv_font_instrument_sans_semibold_50.base_line-lv_font_instrument_sans_medium_16.line_height+lv_font_instrument_sans_medium_16.base_line,90,ui_tr("notes"),&lv_font_instrument_sans_medium_16,MUTED);
     small(d,20,122,254,menu.selected_batch?ui_tr("Stops when the batch is complete."):ui_tr("Count continuously without a preset."));
-    if(menu.selected_batch){lv_obj_t *edit=white_button(d,20,146,83,36,ui_tr("Edit"),A_EDIT_BATCH);button_icon(edit,MICON("edit",22),INK);lv_obj_t *remove=button(d,111,146,137,36,ui_tr("Remove"),A_DELETE_BATCH,false);lv_obj_set_style_bg_opa(remove,LV_OPA_TRANSP,0);lv_obj_set_style_text_color(remove,lv_color_hex(0xB33535),0);icon(remove,MICON("trash",22),9,7,0xB33535);lv_obj_align(lv_obj_get_child(remove,0),LV_ALIGN_LEFT_MID,40,0);if(menu.batch_count<=2)lv_obj_add_state(remove,LV_STATE_DISABLED);}
+    if(menu.selected_batch){int edit_width=LV_MAX(83,menu_text_width(ui_tr("Edit"))+46);lv_obj_t *edit=white_button(d,20,146,edit_width,36,ui_tr("Edit"),A_EDIT_BATCH);button_icon(edit,MICON("edit",22),INK);lv_obj_t *remove=button(d,28+edit_width,146,137,36,ui_tr("Remove"),A_DELETE_BATCH,false);lv_obj_set_style_bg_opa(remove,LV_OPA_TRANSP,0);lv_obj_set_style_text_color(remove,lv_color_hex(0xB33535),0);icon(remove,MICON("trash",22),9,7,0xB33535);lv_obj_align(lv_obj_get_child(remove,0),LV_ALIGN_LEFT_MID,40,0);if(menu.batch_count<=2)lv_obj_add_state(remove,LV_STATE_DISABLED);}
     bool active=!menu.batch_dirty&&(machine_state_batch_enabled()?menu.selected_batch&&menu.batches[menu.selected_batch]==machine_state_batch_num():!menu.selected_batch);
     lv_obj_t *apply=button(d,20,186,254,44,active?ui_tr("In use"):ui_tr("Use this preset"),A_APPLY_BATCH,true);if(active)button_icon(apply,MICON("check",22),0x64717C);if(active)lv_obj_add_state(apply,LV_STATE_DISABLED);
 }
@@ -151,7 +162,7 @@ static bool profile_matches(const workspace_profile_t *p)
 }
 static void profiles_view(lv_obj_t *b)
 {
-    heading(b,ui_tr("Counting profiles"));lv_obj_t *add=button(b,887,0,141,36,ui_tr("Save current"),A_NEW_PROFILE,false);button_icon(add,MICON("plus",22),INK);
+    heading(b,ui_tr("Counting profiles"));int add_width=LV_MAX(141,menu_text_width(ui_tr("Save current"))+46);lv_obj_t *add=button(b,1028-add_width,0,add_width,36,ui_tr("Save current"),A_NEW_PROFILE,false);button_icon(add,MICON("plus",22),INK);
     const workspace_user_t *u=user();if(!u)return;if(menu.selected_profile>=u->profile_count)menu.selected_profile=u->profile_count-1;
     lv_obj_t *list=scroll(b,0,48,586,248);menu.task_scroll=list;
     int item_width=ui_scrollbar_content_width(list)-3;
@@ -167,7 +178,8 @@ static void profiles_view(lv_obj_t *b)
     const workspace_profile_t *p=&u->profiles[menu.selected_profile];lv_obj_t *d=box(b,606,48,422,248,PANEL,20);
     lv_obj_t *name=label(d,20,18,382,p->name,&lv_font_instrument_sans_semibold_21,INK);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
     profile_summary(d,p,61);
-    lv_obj_t *del=button(d,20,194,100,36,ui_tr("Delete"),A_DELETE_PROFILE,false);lv_obj_set_style_bg_opa(del,LV_OPA_TRANSP,0);lv_obj_set_style_text_color(del,lv_color_hex(0xB33535),0);icon(del,MICON("trash",22),8,7,0xB33535);lv_obj_align(lv_obj_get_child(del,0),LV_ALIGN_LEFT_MID,37,0);if(u->profile_count<=1)lv_obj_add_state(del,LV_STATE_DISABLED);
+    int delete_width=LV_MAX(100,menu_text_width(ui_tr("Delete"))+53);
+    lv_obj_t *del=button(d,20,194,delete_width,36,ui_tr("Delete"),A_DELETE_PROFILE,false);lv_obj_set_style_bg_opa(del,LV_OPA_TRANSP,0);lv_obj_set_style_text_color(del,lv_color_hex(0xB33535),0);icon(del,MICON("trash",22),8,7,0xB33535);lv_obj_set_width(lv_obj_get_child(del,0),delete_width-45);lv_obj_align(lv_obj_get_child(del,0),LV_ALIGN_LEFT_MID,37,0);if(u->profile_count<=1)lv_obj_add_state(del,LV_STATE_DISABLED);
     bool active=profile_matches(p);lv_obj_t *apply=button(d,258,186,144,44,active?ui_tr("In use"):ui_tr("Apply profile"),A_APPLY_PROFILE,true);if(active)lv_obj_add_state(apply,LV_STATE_DISABLED);
 }
 static void option_label(lv_obj_t *p,unsigned row,const char *s)

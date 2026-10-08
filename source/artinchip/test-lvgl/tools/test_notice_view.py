@@ -25,11 +25,18 @@ def write_changed(path, text):
         path.write_text(text)
 
 write_changed(cache / 'lvgl/lvgl.h', '#include "' + str(lvgl / 'lvgl.h') + '"\n')
+(cache/'lvgl/src/misc').mkdir(parents=True,exist_ok=True)
+write_changed(cache/'lvgl/src/misc/lv_txt_ap.h','#include "'+str(lvgl/'src/misc/lv_txt_ap.h')+'"\n')
 conf = cache / 'lv_conf.h'
 write_changed(conf, '''#ifndef LV_CONF_H
 #define LV_CONF_H
 #define LV_COLOR_DEPTH 32
-#define LV_MEM_SIZE (4U*1024U*1024U)
+#define LV_MEM_SIZE (24U*1024U*1024U)
+#define LV_USE_BIDI 1
+#define LV_USE_ARABIC_PERSIAN_CHARS 1
+#define LV_USE_FS_STDIO 1
+#define LV_FS_STDIO_LETTER 83
+#define LV_FS_STDIO_PATH ""
 #define LV_USE_GPU_AIC 0
 #define LV_USE_GPU_AIC_GE 0
 #define LV_USE_THEME_DEFAULT 0
@@ -52,6 +59,7 @@ coverage.append('};')
 write_changed(cache / 'message_codepoints.h', '\n'.join(coverage)+'\n')
 sources = [root / 'tools/test_notice_view.c', root / 'un260/lv_components/ui_notice_state.c']
 sources += [root / 'un260/font/ui_message_font.c']
+sources += [root / 'un260/font/ui_locale_font_bank.c']
 sources += [root / f'un260/font/lv_font_message_cjk_{size}.c' for size in (12, 14, 16, 18, 20, 22, 24, 28)]
 sources += [root / ('un260/font/lv_font_' + font + '.c') for font in fonts]
 sources += sorted(p for p in (lvgl / 'src').rglob('*.c') if p.name != 'qrcodegen.c')
@@ -59,6 +67,7 @@ sources = with_i18n(sources, root)
 flags = ['cc', '-std=gnu11', '-g', '-O1', '-Wall', '-Wextra', '-fsanitize=address,undefined',
          '-fno-sanitize-recover=all', '-no-pie', f'-I{cache}', f'-I{root}', f'-I{lvgl}',
          f'-DLV_CONF_PATH={conf}']
+flags+=['-DUN260_LOCALE_FONT_DIR="S:'+str(root/'aic_ui/lvgl_data/locale_fonts')+'/"']
 
 def compile_one(source):
     key = hashlib.sha256((str(source) + repr(flags)).encode()).hexdigest()
@@ -73,7 +82,7 @@ def compile_one(source):
 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
     objects = list(pool.map(compile_one, sources))
 exe = cache / 'test_notice'
-subprocess.run(['cc', '-fsanitize=address,undefined', '-no-pie', *map(str, objects), '-lm', '-o', str(exe)], check=True)
+subprocess.run(['cc', '-fsanitize=address,undefined', '-no-pie', *map(str, objects), '-lm', '-lz', '-o', str(exe)], check=True)
 subprocess.run([str(exe)], check=True, env=dict(os.environ, NOTICE_OUTPUT=str(out)))
 from PIL import Image
 for path in out.glob('*.bgra'):

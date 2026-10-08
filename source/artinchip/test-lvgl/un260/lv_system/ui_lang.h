@@ -10,6 +10,8 @@ typedef uint16_t language_t;
 #define LANGUAGE_EN ((language_t)0)
 #define LANGUAGE_CN ((language_t)1)
 #define LANGUAGE_KR ((language_t)2)
+#define LANGUAGE_JA ((language_t)3)
+#define LANGUAGE_AR ((language_t)4)
 #define UI_LANGUAGE_INVALID ((language_t)UINT16_MAX)
 
 typedef enum { UI_LANG_LTR, UI_LANG_RTL } ui_lang_direction_t;
@@ -33,6 +35,13 @@ bool ui_lang_is_available(const ui_locale_t *locale);
 /* Low-level non-persistent draft/test selection. Production settings use save;
  * background workers must only read a persisted tag, then apply on the UI thread. */
 void ui_lang_set(language_t lang);
+/* The UI runtime registers its resource preflight once, after LVGL init.
+ * No callback is needed for English. A missing/failed preflight forbids a
+ * non-English production restore/save, without changing persistent state. */
+typedef bool (*ui_lang_prepare_cb_t)(language_t lang);
+void ui_lang_set_resource_preparer(ui_lang_prepare_cb_t prepare);
+/* Prepare a preview without changing the active language or persisted tag. */
+bool ui_lang_prepare_resources(language_t lang);
 /* Restore only a released, resource-ready locale; unknown/removed tags use English. */
 void ui_lang_restore(const char *tag);
 /* Store the stable tag atomically, then select. Failure leaves language unchanged. */

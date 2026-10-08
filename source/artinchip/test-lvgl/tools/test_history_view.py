@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render and exercise the real History page/search with LVGL 8 and a 4 MiB pool.
+"""Render and exercise the real History page/search with LVGL 8, real locale fonts and a 24 MiB pool.
 
 The store and external actions are in-memory stubs. No device, real history,
 USB mount or firmware write is used. This is not a board touch/GE validation.
@@ -17,6 +17,8 @@ from test_list_view import compiled_asset_sources
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPONENTS = [
+    "un260/font/ui_message_font.c", "un260/font/ui_locale_font_bank.c",
+    *["un260/font/lv_font_message_cjk_%d.c" % n for n in (12,14,16,18,20,22,24,28)],
     "un260/workspace/workspace_model.c",
     "tools/test_search_modes.c",
     "un260/lv_components/ui_multi_detail.c",
@@ -81,7 +83,12 @@ def main():
         conf.write_text("""#ifndef LV_CONF_H
 #define LV_CONF_H
 #define LV_COLOR_DEPTH 32
-#define LV_MEM_SIZE (4U * 1024U * 1024U)
+#define LV_MEM_SIZE (24U * 1024U * 1024U)
+#define LV_USE_BIDI 1
+#define LV_USE_ARABIC_PERSIAN_CHARS 1
+#define LV_USE_FS_STDIO 1
+#define LV_FS_STDIO_LETTER 83
+#define LV_FS_STDIO_PATH ""
 #define LV_USE_LOG 1
 #define LV_LOG_LEVEL LV_LOG_LEVEL_WARN
 #define LV_LOG_PRINTF 1
@@ -111,11 +118,11 @@ def main():
                    *sorted(p for p in (lvgl / "src").rglob("*.c") if p.name != "qrcodegen.c")]
         executable = work / "test-history-view"
         sources = with_i18n(sources, ROOT)
-        command = [compiler, "-D_GNU_SOURCE", '-DUI_STATE_DIR="/tmp/un260-i18n-tests"', "-std=c11", "-O1", "-g", "-Wall", "-Wextra",
+        command = [compiler, '-DUN260_LOCALE_FONT_DIR="S:'+str(ROOT/'aic_ui/lvgl_data/locale_fonts')+'/"', "-D_GNU_SOURCE", '-DUI_STATE_DIR="/tmp/un260-i18n-tests"', "-std=c11", "-O1", "-g", "-Wall", "-Wextra",
                    "-DLV_DRV_CONF_H", '-DLVGL_DIR="L:/usr/local/share/lvgl_data/"',
                    "-fsanitize=address,undefined" if args.asan else "-fsanitize=undefined", "-fno-sanitize-recover=all",
                    f"-I{work}", f"-I{ROOT}", f"-I{lvgl}", f"-DLV_CONF_PATH={conf}",
-                   *map(str, sources), "-lm", "-o", str(executable)]
+                   *map(str, sources), "-lm", "-lz", "-o", str(executable)]
         subprocess.run(command, check=True)
         from PIL import Image
         for name in ('user', 'settings'):

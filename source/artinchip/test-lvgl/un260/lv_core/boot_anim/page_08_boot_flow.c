@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "boot_theme_config.h"
 #if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D
@@ -27,6 +28,8 @@ static struct {
     ready_visual_t ready;
     lv_timer_t *timer;
     uint32_t shown_at,active_at[5],done_at;
+    uint32_t language_generation;
+    const char *caption_text;
     uint8_t phase[5],step,completed;
     bool covered,visible,done,failed;
 } view;
@@ -36,7 +39,7 @@ static bool defer_create;
 #define UI_BOOT_HANDOFF_FADE_ENABLE 1
 #endif
 static struct {lv_obj_t *root,*image;ready_visual_t ready;lv_timer_t *timer;uint32_t tick;uint8_t phase;} bridge;
-static void set_text(lv_obj_t *o,const char *s){if(o&&strcmp(lv_label_get_text(o),s))lv_label_set_text_static(o,s);}
+static void set_text(lv_obj_t *o,const char *s){if(o&&strcmp(lv_label_get_text(o),s))lv_label_set_text(o,s);}
 
 static float smooth(float p){if(p<=0)return 0;if(p>=1)return 1;return p*p*(3-2*p);}
 static float settle(float p){if(p<=0)return 0;if(p>=1)return 1;float q=1-p;return 1-q*q*q*q;}
@@ -46,8 +49,8 @@ static void bg_alpha(lv_obj_t *o,lv_opa_t a){if(o&&lv_obj_get_style_bg_opa(o,0)!
 static lv_obj_t *label(lv_obj_t *parent,int x,int y,int w,const char *text,const lv_font_t *font,uint32_t color){
     lv_obj_t *o=lv_label_create(parent);if(!o)return NULL;
     lv_obj_remove_style_all(o);lv_obj_set_pos(o,x,y);lv_obj_set_width(o,w);
-    lv_obj_set_style_text_font(o,font,0);lv_obj_set_style_text_color(o,lv_color_hex(color),0);
-    lv_label_set_long_mode(o,LV_LABEL_LONG_CLIP);lv_label_set_text_static(o,text);return o;
+    lv_obj_set_style_text_font(o,ui_message_font(font),0);lv_obj_set_style_text_color(o,lv_color_hex(color),0);
+    lv_label_set_long_mode(o,LV_LABEL_LONG_CLIP);lv_label_set_text(o,text);return o;
 }
 static void ready_create(lv_obj_t *parent, ready_visual_t *v)
 {
@@ -82,8 +85,32 @@ static void ready_render(ready_visual_t *v,uint32_t age,float exit)
 }
 static void stop(void){if(view.waiting){lv_obj_del(view.waiting);view.waiting=NULL;}lv_timer_t *t=view.timer;view.timer=NULL;if(t)lv_timer_del(t);}
 static void deleted(lv_event_t *e){if(lv_event_get_target(e)!=view.root)return;stop();if(!bridge.root)lv_img_cache_invalidate_src(background);memset(&view,0,sizeof(view));}
+static void refresh_language(void){
+    /* Early boot builds this view before persisted locale resources are ready. */
+    uint32_t generation=ui_lang_generation();
+    if(view.language_generation==generation)return;
+    view.language_generation=generation;
+    lv_obj_t *labels[]={view.title,view.caption,view.section,view.count,
+        view.ready.title,view.ready.sub,view.ready.signature};
+    const lv_font_t *fonts[]={&lv_font_instrument_sans_medium_36,&lv_font_instrument_sans_medium_16,
+        &lv_font_instrument_sans_semibold_14,&lv_font_instrument_sans_semibold_14,
+        &lv_font_instrument_sans_medium_36,&lv_font_instrument_sans_medium_16,&lv_font_instrument_sans_medium_12};
+    for(unsigned i=0;i<7;++i)if(labels[i])lv_obj_set_style_text_font(labels[i],ui_message_font(fonts[i]),0);
+    if(view.title)lv_label_set_text(view.title,view.failed?ui_tr("Needs attention."):ui_tr("Getting ready."));
+    set_text(view.section,ui_tr("SELF-CHECK"));
+    set_text(view.ready.title,ui_tr("Ready to count."));
+    set_text(view.ready.sub,ui_tr("Precision starts here."));
+    set_text(view.ready.signature,ui_tr("UN260  /  PRECISION IN EVERY NOTE"));
+    for(unsigned i=0;i<5;++i){
+        if(view.labels[i]){lv_obj_set_style_text_font(view.labels[i],ui_message_font(&lv_font_instrument_sans_medium_16),0);lv_label_set_text(view.labels[i],ui_tr(names[i]));}
+        if(view.states[i]){lv_obj_set_style_text_font(view.states[i],ui_message_font(&lv_font_instrument_sans_medium_12),0);
+            lv_label_set_text(view.states[i],view.phase[i]==FAIL?ui_tr("Not passed"):view.phase[i]==PASS?ui_tr("Ready"):view.phase[i]==CHECK?ui_tr("Checking"):ui_tr("Waiting"));}
+    }
+    view.completed=255; /* Refresh the translated progress sentence, not animations. */
+}
 static void apply(uint32_t now){
     if(!view.root||view.covered||view.step)return;
+    refresh_language();
     boot_snapshot_t s;boot_service_snapshot(&s);
     uint32_t age=now-view.shown_at;
     bool failed=s.stage==BOOT_STAGE_FAIL;unsigned passed=0;
@@ -100,7 +127,7 @@ static void apply(uint32_t now){
             view.phase[i]=state;view.active_at[i]=now;
             if(i==0&&state==CHECK&&age<970)view.active_at[i]=view.shown_at+970;
             uint32_t color=state==FAIL?0xB53622:state==PASS?0x209A78:state==CHECK?0x0074F8:0xA1B0BC;
-            if(view.states[i]){lv_label_set_text_static(view.states[i],state==FAIL?ui_tr("Not passed"):state==PASS?ui_tr("Ready"):state==CHECK?ui_tr("Checking"):ui_tr("Waiting"));lv_obj_set_style_text_color(view.states[i],lv_color_hex(color),0);}
+            if(view.states[i]){lv_label_set_text(view.states[i],state==FAIL?ui_tr("Not passed"):state==PASS?ui_tr("Ready"):state==CHECK?ui_tr("Checking"):ui_tr("Waiting"));lv_obj_set_style_text_color(view.states[i],lv_color_hex(color),0);}
             if(view.icons[i]){lv_obj_set_style_border_color(view.icons[i],lv_color_hex(color),0);lv_obj_set_style_bg_color(view.icons[i],lv_color_hex(color),0);}
             if(view.marks[i]){
                 if(state==PASS||state==FAIL){lv_img_set_src(view.marks[i],state==PASS?&selfcheck_pass:&selfcheck_fail);lv_obj_clear_flag(view.marks[i],LV_OBJ_FLAG_HIDDEN);}
@@ -118,8 +145,9 @@ static void apply(uint32_t now){
     bool ready=s.stage==BOOT_STAGE_DONE&&passed==5&&!failed;
     if(ready&&!view.done){view.done=true;view.done_at=now;}
     if(!ready)view.done=false;
-    if(failed!=view.failed){view.failed=failed;if(view.title)lv_label_set_text_static(view.title,failed?ui_tr("Needs attention."):ui_tr("Getting ready."));}
-    set_text(view.caption,failed?ui_tr("Check the reported fault before continuing."):ui_tr("Checking your system."));
+    if(failed!=view.failed){view.failed=failed;if(view.title)lv_label_set_text(view.title,failed?ui_tr("Needs attention."):ui_tr("Getting ready."));}
+    const char *caption=failed?ui_tr("Check the reported fault before continuing."):ui_tr("Checking your system.");
+    if(view.caption_text!=caption){view.caption_text=caption;if(view.caption)lv_label_set_text(view.caption,caption);}
     if(view.caption){lv_color_t c=lv_color_hex(failed?0xB53622:0x68818F);if(lv_obj_get_style_text_color(view.caption,0).full!=c.full)lv_obj_set_style_text_color(view.caption,c,0);}
     if(!ready&&!failed&&!view.waiting){
         view.waiting=lv_spinner_create(view.root,900,72);

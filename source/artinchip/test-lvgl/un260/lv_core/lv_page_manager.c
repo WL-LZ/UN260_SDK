@@ -24,6 +24,7 @@
 #include "page_cash_tools.h"
 #include "un260/app_service/ui_factory_reset_service.h"
 #include "un260/lv_drivers/uart_io.h"
+#include "un260/lv_system/ui_lang.h"
 
 #define UI_PAGE_STACK_CAPACITY 10
 #define UI_PAGE_INVALID ((ui_page_t)-1)
@@ -43,6 +44,7 @@ static ui_page_manager_context_t g_home_bookmark;
 static bool g_home_bookmark_valid,g_temporary_home,g_restoring_home;
 
 static bool g_page_cache_ready[UI_PAGE_COUNT];
+static uint32_t g_page_cache_language[UI_PAGE_COUNT];
 static ui_data_topic_t g_page_data_dirty[UI_PAGE_COUNT];
 static ui_page_t g_page_prewarming = UI_PAGE_INVALID;
 static bool g_page_switch_committing;
@@ -381,6 +383,16 @@ static const char *create_new_page(ui_page_t page)
      * current values, not a projection waiting behind the next LVGL tick. */
     ui_frame_commit_begin_sync();
 
+    /* Cached objects own translated text, fonts and direction. A restore can
+     * change locale without visiting Language settings; never resume that tree. */
+    if (registration->cache_policy == UI_PAGE_RETAINED &&
+        g_page_cache_ready[page] &&
+        g_page_cache_language[page] != ui_lang_generation()) {
+        if (registration->destroy != NULL) registration->destroy();
+        g_page_cache_ready[page] = false;
+        g_page_data_dirty[page] = UI_DATA_TOPIC_NONE;
+    }
+
     if (registration->cache_policy == UI_PAGE_RETAINED &&
         g_page_cache_ready[page]) {
         if (g_page_data_dirty[page] != UI_DATA_TOPIC_NONE &&
@@ -400,6 +412,8 @@ static const char *create_new_page(ui_page_t page)
             g_page_data_dirty[page] = UI_DATA_TOPIC_NONE;
         }
     }
+    if (registration->cache_policy == UI_PAGE_RETAINED)
+        g_page_cache_language[page] = ui_lang_generation();
     ui_frame_commit_end_sync();
     return action;
 }
@@ -720,6 +734,7 @@ bool ui_manager_adopt_precreated_page(ui_page_t page)
     ui_manager_schedule_first_frame();
     if (g_page_registry[page].cache_policy == UI_PAGE_RETAINED) {
         g_page_cache_ready[page] = true;
+        g_page_cache_language[page] = ui_lang_generation();
     }
     if (profile_enabled) {
         sample.commit_us = ui_manager_profile_elapsed_us(phase_started_us);
@@ -1024,6 +1039,7 @@ bool ui_manager_prewarm_page(ui_page_t page)
     }
     registration->suspend();
     g_page_cache_ready[page] = true;
+    g_page_cache_language[page] = ui_lang_generation();
     g_page_data_dirty[page] = UI_DATA_TOPIC_NONE;
 
     if (profile_enabled) {

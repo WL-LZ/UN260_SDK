@@ -134,7 +134,7 @@ static lv_obj_t *button(lv_obj_t *p,int x,int y,int w,int h,const char *s,int id
     uint32_t surface=lv_obj_get_style_bg_opa(p,0)==LV_OPA_COVER&&lv_obj_get_style_bg_color(p,0).full==lv_color_hex(PANEL).full?0xFFFFFF:HEADER_SURFACE;
     lv_damped_button_set_exact_palette(v,lv_color_hex(primary?BLUE:surface),lv_color_hex(primary?LV_SETTINGS_PRIMARY_PRESSED:LV_SETTINGS_CONTROL_PRESSED));
     lv_obj_set_style_border_width(v,0,0);
-    lv_obj_set_style_text_font(lv_obj_get_child(v,0),h<=36?&lv_font_instrument_sans_medium_15:&lv_font_instrument_sans_medium_17,0);
+    lv_obj_set_style_text_font(lv_obj_get_child(v,0),ui_message_font(h<=36?&lv_font_instrument_sans_medium_15:&lv_font_instrument_sans_medium_17),0);
     lv_obj_set_style_radius(v,h<=36?9:12,0);
     lv_obj_set_style_border_width(v,0,LV_STATE_DISABLED);
     lv_obj_set_style_bg_color(v,lv_color_hex(0xE8EBEE),LV_STATE_DISABLED);
@@ -151,20 +151,32 @@ static void choose(lv_obj_t *b,bool selected)
     lv_obj_set_style_shadow_opa(b,LV_OPA_10,0);
 }
 /* Match Main's ABC tray; centre the icon and natural-width label as one unit. */
-static void header_content(lv_obj_t *button,const char *title,const char *src,uint32_t color)
+static int menu_text_width(const char *text)
 {
-    lv_obj_t *l=lv_obj_get_child(button,0);
-    lv_label_set_text(l,title);lv_obj_set_width(l,LV_SIZE_CONTENT);
-    lv_obj_set_style_text_font(l,&lv_font_instrument_sans_medium_16,0);
-    lv_obj_t *im=ui_icon_create(button,src);
-    lv_obj_set_style_img_recolor(im,lv_color_hex(color),0);
-    lv_obj_set_style_img_recolor_opa(im,LV_OPA_COVER,0);
+    lv_point_t normal,bold;
+    lv_txt_get_size(&normal,text,ui_message_font(&lv_font_instrument_sans_medium_16),0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+    lv_txt_get_size(&bold,text,ui_message_font(&lv_font_instrument_sans_semibold_16),0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+    return LV_MAX(normal.x,bold.x);
+}
+static void header_align_content(lv_obj_t *button)
+{
+    lv_obj_t *l=lv_obj_get_child(button,0),*im=lv_obj_get_child(button,1);
     lv_obj_update_layout(button);
-    if(!*title){lv_obj_center(im);return;}
+    if(!*lv_label_get_text(l)){lv_obj_center(im);return;}
     int iw=lv_obj_get_width(im),tw=lv_obj_get_width(l);
     int start=(lv_obj_get_content_width(button)-iw-8-tw)/2;
     lv_obj_align(im,LV_ALIGN_LEFT_MID,start,0);
     lv_obj_align(l,LV_ALIGN_LEFT_MID,start+iw+8,0);
+}
+static void header_content(lv_obj_t *button,const char *title,const char *src,uint32_t color)
+{
+    lv_obj_t *l=lv_obj_get_child(button,0);
+    lv_label_set_text(l,title);lv_obj_set_width(l,LV_SIZE_CONTENT);
+    lv_obj_set_style_text_font(l,ui_message_font(&lv_font_instrument_sans_medium_16),0);
+    lv_obj_t *im=ui_icon_create(button,src);
+    lv_obj_set_style_img_recolor(im,lv_color_hex(color),0);
+    lv_obj_set_style_img_recolor_opa(im,LV_OPA_COVER,0);
+    header_align_content(button);
 }
 static void header_surface(lv_obj_t *o)
 {
@@ -298,7 +310,7 @@ static void render(void)
         if(menu.tab==4){if(!menu.sub){operators_summary_view(content);}else if(menu.sub==1)interaction_view(content);else display_view(content);}
         if(menu.tab==5)help_view(content);
     }
-    for(unsigned i=0;i<6;i++){choose(menu.nav[i],i==menu.tab);lv_obj_t *l=lv_obj_get_child(menu.nav[i],0);lv_obj_set_style_text_color(l,lv_color_hex(i==menu.tab?BLUE:0x455D6B),0);lv_obj_set_style_text_font(l,i==menu.tab?&lv_font_instrument_sans_semibold_16:&lv_font_instrument_sans_medium_16,0);}
+    for(unsigned i=0;i<6;i++){choose(menu.nav[i],i==menu.tab);lv_obj_t *l=lv_obj_get_child(menu.nav[i],0);lv_obj_set_style_text_color(l,lv_color_hex(i==menu.tab?BLUE:0x455D6B),0);lv_obj_set_style_text_font(l,ui_message_font(i==menu.tab?&lv_font_instrument_sans_semibold_16:&lv_font_instrument_sans_medium_16),0);header_align_content(menu.nav[i]);}
     if(menu.task_scroll){lv_obj_update_layout(menu.task_scroll);lv_obj_scroll_to_y(menu.task_scroll,menu.scroll_y[menu.tab][menu.sub],LV_ANIM_OFF);}
     menu.rendered_tab=menu.tab;menu.rendered_sub=menu.sub;menu.dirty=false;
 }
@@ -603,14 +615,27 @@ void ui_page_03_menu_create(lv_obj_t *parent)
     header_surface(back);lv_damped_button_set_exact_palette(back,lv_color_hex(PANEL),lv_color_hex(LINE));header_content(back,"",MICON("back",22),INK);
     lv_obj_t *title=label(menu.root,80,14,142,ui_tr("Menu"),&lv_font_instrument_sans_semibold_25,INK);
     lv_obj_update_layout(title);lv_obj_set_y(title,14+(44-lv_obj_get_height(title))/2);
-    lv_obj_t *nav=box(menu.root,287,12,706,48,HEADER_SURFACE,14);
-    const int widths[]={126,103,121,109,147,82};int nav_x=4;
+    int quick_width=LV_MAX(102,menu_text_width(ui_tr("Quick"))+46);
+    int quick_x=1204-quick_width;
+    int widths[]={126,103,121,109,147,82},minimum[6],nav_width=18;
+    for(unsigned i=0;i<6;i++){
+        minimum[i]=menu_text_width(ui_tr(tabs[i]))+46;
+        widths[i]=LV_MAX(widths[i],minimum[i]);nav_width+=widths[i];
+    }
+    int available=quick_x-16-222;
+    for(unsigned i=0;i<6&&nav_width>available;i++){
+        int reduction=LV_MIN(widths[i]-minimum[i],nav_width-available);
+        widths[i]-=reduction;nav_width-=reduction;
+    }
+    int nav_left=LV_MIN(287,quick_x-16-nav_width);
+    lv_obj_t *nav=box(menu.root,nav_left,12,nav_width,48,HEADER_SURFACE,14);
+    int nav_x=4;
     for(unsigned i=0;i<6;i++){
         menu.nav[i]=lv_settings_button(nav,nav_x,4,widths[i],40,ui_tr(tabs[i]),false,tab_event,(void *)(uintptr_t)i);nav_x+=widths[i]+2;
         header_surface(menu.nav[i]);
         header_content(menu.nav[i],ui_tr(tabs[i]),tab_icons[i],accents[i]);
     }
-    lv_obj_t *quick=button(menu.root,1102,14,102,44,ui_tr("Quick"),A_QUICK,false);
+    lv_obj_t *quick=button(menu.root,quick_x,14,quick_width,44,ui_tr("Quick"),A_QUICK,false);
     header_surface(quick);lv_damped_button_set_exact_palette(quick,lv_color_hex(PANEL),lv_color_hex(LINE));header_content(quick,ui_tr("Quick"),MICON("quick",22),PURPLE);
     lv_obj_t *lock=button(menu.root,1212,14,44,44,"",A_SETTINGS,false);
     header_surface(lock);lv_damped_button_set_exact_palette(lock,lv_color_hex(PANEL),lv_color_hex(LINE));header_content(lock,"",MICON("lock",22),INK);

@@ -256,6 +256,8 @@ static void test_main_quick(void)
     assert(lv_obj_get_child_cnt(page_indicator)==2&&lv_obj_is_visible(page_indicator));
     for(unsigned i=0;i<8;i++){
         unsigned id=quick.controls.state.order[i];lv_area_t a;lv_obj_get_coords(quick.controls.tiles[id],&a);
+        if(a.x1!=25+(int)(i%4)*1242/4 || a.y1!=65+(int)(i/4)*106)
+            fprintf(stderr,"Quick tile %u (id %u): actual %d,%d expected %d,%d\n",i,id,a.x1,a.y1,25+(int)(i%4)*1242/4,65+(int)(i/4)*106);
         assert(a.x1==25+(int)(i%4)*1242/4 && a.y1==65+(int)(i/4)*106);
         assert(lv_area_get_width(&a)==299 && lv_area_get_height(&a)==96);
         assert(a.x2<1280 && a.y2<328);

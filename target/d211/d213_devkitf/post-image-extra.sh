@@ -29,6 +29,7 @@ echo "Generate UN260 U-disk package: version=$PACKAGE_VERSION"
 BUILD_ARGS=(
 	--version "$PACKAGE_VERSION"
 	--output "$OUTPUT_PACKAGE"
+	--unified-route
 )
 if [ -d "$EXTRA_ROOT" ]; then
 	echo "Include UN260 incremental root: $EXTRA_ROOT"

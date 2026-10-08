@@ -1,0 +1,19 @@
+{
+  "cjk-draft": {
+    "source": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "face_indices": {"zh-Hans": 2, "ko": 1}
+  },
+  "japanese-draft": {
+    "source": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "face_index": 0
+  },
+  "arabic-draft": {
+    "source": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "face_index": 0,
+    "presentation_forms": true
+  },
+  "latin": {
+    "source": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "face_index": 0
+  }
+}

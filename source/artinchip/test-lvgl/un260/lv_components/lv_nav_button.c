@@ -78,7 +78,11 @@ lv_obj_t *lv_nav_back_text_button_create(lv_obj_t *parent,lv_coord_t x,lv_coord_
     if(!button)return NULL;
     lv_obj_set_pos(button,x,y);lv_obj_set_size(button,76,42);
     lv_obj_set_style_border_width(button,0,0);lv_obj_set_style_shadow_width(button,0,0);
-    lv_obj_t *label=lv_damped_button_get_label(button);lv_obj_set_size(label,60,font->line_height);lv_label_set_long_mode(label,LV_LABEL_LONG_DOT);lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_CENTER,0);lv_obj_center(label);
+    lv_obj_t *label=lv_damped_button_get_label(button);
+    const lv_font_t *resolved=lv_obj_get_style_text_font(label,LV_PART_MAIN);
+    lv_obj_set_size(label,60,resolved->line_height);
+    lv_label_set_long_mode(label,LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_CENTER,0);lv_obj_center(label);
     if(cb){lv_obj_add_event_cb(button,cb,LV_EVENT_CLICKED,user_data);lv_nav_button_mark_back(button);}
     return button;
 }

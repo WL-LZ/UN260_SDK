@@ -68,6 +68,15 @@ static lv_obj_t *alnum_test_find_key(lv_obj_t *root, const char *text)
     if (lv_obj_check_type(root, &lv_btn_class)) {
         lv_obj_t *label = lv_damped_button_get_label(root);
         if (label && !strcmp(lv_label_get_text(label), text)) return root;
+        if(!strcmp(text,LV_SYMBOL_BACKSPACE)) {
+            for(uint32_t i=0;i<lv_obj_get_child_cnt(root);++i){
+                lv_obj_t *child=lv_obj_get_child(root,(int32_t)i);
+                if(!lv_obj_check_type(child,&lv_img_class))continue;
+                const void *src=lv_img_get_src(child);
+                if(lv_img_src_get_type(src)==LV_IMG_SRC_FILE &&
+                   !strcmp((const char *)src,LVGL_DIR "popup_icons/backspace.png"))return root;
+            }
+        }
     }
     for (uint32_t i = 0; i < lv_obj_get_child_cnt(root); ++i) {
         lv_obj_t *found = alnum_test_find_key(lv_obj_get_child(root, (int32_t)i), text);
@@ -79,6 +88,7 @@ static lv_obj_t *alnum_test_find_key(lv_obj_t *root, const char *text)
 static void alnum_test_click(lv_obj_t *root, const char *text)
 {
     lv_obj_t *button = alnum_test_find_key(root, text);
+    if(!button)fprintf(stderr,"Missing keyboard action: %s\n",text);
     assert(button);
     lv_event_send(button, LV_EVENT_CLICKED, NULL);
 }

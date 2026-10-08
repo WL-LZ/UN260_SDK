@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/smart_island/smart_island_internal.h"
 #include "un260/gesture/touch_feedback.h"
@@ -627,7 +628,7 @@ static void smart_island_action_btn_style_apply(uint8_t index)
         if (arrow && lv_obj_is_valid(arrow)) {
             lv_label_set_text(arrow, ">");
             lv_obj_set_style_text_color(arrow, lv_color_hex(SMART_ISLAND_BTN_ARROW), 0);
-            lv_obj_set_style_text_font(arrow, &lv_font_instrument_sans_medium_18, 0);
+            lv_obj_set_style_text_font(arrow,ui_message_font(&lv_font_instrument_sans_medium_18), 0);
             lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, -16, 0);
         }
         return;
@@ -648,7 +649,7 @@ static void smart_island_action_btn_style_apply(uint8_t index)
         lv_label_set_text(arrow, enabled ? ui_tr("ON") : ui_tr("OFF"));
         lv_obj_set_style_text_color(arrow,
             lv_color_hex(enabled ? SMART_ISLAND_BTN_SWITCH_ON_TEXT : SMART_ISLAND_BTN_SWITCH_OFF_TEXT), 0);
-        lv_obj_set_style_text_font(arrow, &lv_font_instrument_sans_medium_12, 0);
+        lv_obj_set_style_text_font(arrow,ui_message_font(&lv_font_instrument_sans_medium_12), 0);
         lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, -12, 0);
     }
 }
@@ -844,13 +845,13 @@ void smart_island_action_btn_create(void)
 
         label = lv_label_create(btn);
         lv_obj_set_style_text_color(label, lv_color_hex(SMART_ISLAND_BTN_TEXT), 0);
-        lv_obj_set_style_text_font(label, &lv_font_instrument_sans_medium_14, 0);
+        lv_obj_set_style_text_font(label,ui_message_font(&lv_font_instrument_sans_medium_14), 0);
         lv_obj_align(label, LV_ALIGN_LEFT_MID, 16, 0);
 
         arrow = lv_label_create(btn);
         lv_label_set_text(arrow, ">");
         lv_obj_set_style_text_color(arrow, lv_color_hex(0x666666), 0);
-        lv_obj_set_style_text_font(arrow, &lv_font_instrument_sans_medium_18, 0);
+        lv_obj_set_style_text_font(arrow,ui_message_font(&lv_font_instrument_sans_medium_18), 0);
         lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, -16, 0);
 
         g_si_ctx.objects.action_buttons[i] = btn;

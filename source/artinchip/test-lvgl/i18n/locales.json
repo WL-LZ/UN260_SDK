@@ -17,9 +17,9 @@
     "code": "ZH",
     "name": "简体中文",
     "direction": "ltr",
-    "enabled": false,
-    "translations_ready": false,
-    "font_ready": false,
+    "enabled": true,
+    "translations_ready": true,
+    "font_ready": true,
     "shaping_ready": true,
     "font_profile": "cjk-draft"
   },
@@ -29,10 +29,118 @@
     "code": "KO",
     "name": "한국어",
     "direction": "ltr",
-    "enabled": false,
-    "translations_ready": false,
-    "font_ready": false,
+    "enabled": true,
+    "translations_ready": true,
+    "font_ready": true,
     "shaping_ready": true,
     "font_profile": "cjk-draft"
+  },
+  {
+    "id": 3,
+    "tag": "ja",
+    "code": "JA",
+    "name": "日本語",
+    "direction": "ltr",
+    "enabled": true,
+    "translations_ready": true,
+    "font_ready": true,
+    "shaping_ready": true,
+    "font_profile": "japanese-draft"
+  },
+  {
+    "id": 4,
+    "tag": "ar",
+    "code": "AR",
+    "name": "العربية",
+    "direction": "rtl",
+    "enabled": true,
+    "translations_ready": true,
+    "font_ready": true,
+    "shaping_ready": true,
+    "font_profile": "arabic-draft"
+  },
+  {
+    "id": 5,
+    "tag": "tr",
+    "code": "TR",
+    "name": "Türkçe",
+    "direction": "ltr",
+    "enabled": true,
+    "translations_ready": true,
+    "font_ready": true,
+    "shaping_ready": true,
+    "font_profile": "latin",
+    "plural_forms": [
+      "one",
+      "other"
+    ]
+  },
+  {
+    "id": 6,
+    "tag": "fr",
+    "code": "FR",
+    "name": "Français",
+    "direction": "ltr",
+    "enabled": true,
+    "translations_ready": true,
+    "font_ready": true,
+    "shaping_ready": true,
+    "font_profile": "latin",
+    "plural_forms": [
+      "one",
+      "other"
+    ]
+  },
+  {
+    "id": 7,
+    "tag": "pl",
+    "code": "PL",
+    "name": "Polski",
+    "direction": "ltr",
+    "enabled": true,
+    "translations_ready": true,
+    "font_ready": true,
+    "shaping_ready": true,
+    "font_profile": "latin",
+    "plural_forms": [
+      "one",
+      "few",
+      "many",
+      "other"
+    ]
+  },
+  {
+    "id": 8,
+    "tag": "ru",
+    "code": "RU",
+    "name": "Русский",
+    "direction": "ltr",
+    "enabled": true,
+    "translations_ready": true,
+    "font_ready": true,
+    "shaping_ready": true,
+    "font_profile": "latin",
+    "plural_forms": [
+      "one",
+      "few",
+      "many",
+      "other"
+    ]
+  },
+  {
+    "id": 9,
+    "tag": "de",
+    "code": "DE",
+    "name": "Deutsch",
+    "direction": "ltr",
+    "enabled": true,
+    "translations_ready": true,
+    "font_ready": true,
+    "shaping_ready": true,
+    "font_profile": "latin",
+    "plural_forms": [
+      "one",
+      "other"
+    ]
   }
 ]

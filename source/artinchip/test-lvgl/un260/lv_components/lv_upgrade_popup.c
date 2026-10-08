@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "lv_upgrade_popup.h"
 #include "un260/lv_core/settings_detail_ui.h"
@@ -445,7 +446,7 @@ static lv_obj_t* upgrade_popup_create_btn(lv_obj_t* parent,
 
     lv_obj_t* label = lv_label_create(btn);
     lv_label_set_text(label, text);
-    lv_obj_set_style_text_font(label, &lv_font_instrument_sans_medium_16, 0);
+    lv_obj_set_style_text_font(label,ui_message_font(&lv_font_instrument_sans_medium_16), 0);
     lv_obj_center(label);
 
     return btn;
@@ -482,7 +483,7 @@ static void upgrade_popup_apply_text_style(lv_obj_t* label,
     if (label == NULL) return;
     lv_obj_set_style_text_color(label, color, 0);
     if (font) {
-        lv_obj_set_style_text_font(label, font, 0);
+        lv_obj_set_style_text_font(label,ui_message_font(font), 0);
     }
 }
 

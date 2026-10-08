@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import unittest
-from check_storage_budget import budget, ROOT_FREE_FLOOR_KB
+from check_storage_budget import budget, ROOT_FREE_FLOOR_KB, APP_FREE_FLOOR_KB, APP_PATH
 
 class StorageBudget(unittest.TestCase):
     def test_noop(self):
@@ -28,5 +28,28 @@ class StorageBudget(unittest.TestCase):
         del new['1']  # Offline raw oracle, not a runtime asset.
         self.assertEqual(budget({},new)['root_required_kb'],14030)
         self.assertLess(budget({},new)['root_required_kb'],16516)
+    def test_unified_accounts_exact_application_path_separately(self):
+        new={APP_PATH:(bytes(12*1024*1024),0o755),
+             'usr/local/bin/test_lvgl.extra':(bytes(2*1024*1024),0o644),
+             'usr/local/share/lvgl_data/fonts.bin':(bytes(1024*1024),0o644)}
+        legacy=budget({},new)
+        managed=budget({},new,'unified-app-volume')
+        self.assertGreater(legacy['root_required_kb'],ROOT_FREE_FLOOR_KB)
+        self.assertEqual(managed['app_staged_kb'],12*1024+4)
+        self.assertEqual(managed['root_staged_kb'],3*1024+8)
+        self.assertEqual(managed['root_required_kb'],managed['root_staged_kb']+2048)
+        self.assertEqual(managed['app_required_kb'],managed['app_staged_kb']+2048)
+        self.assertLess(managed['app_required_kb'],APP_FREE_FLOOR_KB)
+        self.assertEqual(legacy['usb_backup_required_kb'],managed['usb_backup_required_kb'])
+    def test_app_boundary_and_unchanged_app_reserve(self):
+        size=(APP_FREE_FLOOR_KB-2048-4)*1024
+        self.assertEqual(budget({}, {APP_PATH:(bytes(size),0o755)},'unified-app-volume')['app_required_kb'],APP_FREE_FLOOR_KB)
+        self.assertGreater(budget({}, {APP_PATH:(bytes(size+1),0o755)},'unified-app-volume')['app_required_kb'],APP_FREE_FLOOR_KB)
+        old={APP_PATH:(b'app',0o755)}
+        new={**old,'resource':(b'new',0o644)}
+        self.assertEqual(budget(old,new,'unified-app-volume')['app_required_kb'],2048)
+        self.assertEqual(budget(old,old,'unified-app-volume')['app_required_kb'],0)
+    def test_unknown_route_rejected(self):
+        with self.assertRaises(ValueError):budget({}, {}, 'ignore-capacity')
 
 if __name__=='__main__': unittest.main()

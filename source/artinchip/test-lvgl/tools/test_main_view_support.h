@@ -13,6 +13,11 @@ bool setting_service_request_beep(bool enabled){machine_state_confirm_buzzer(ena
 /* Surrounding workflows are captured, never sent to hardware/storage. Main,
  * detail projection, styling, hit tests, fonts and Smart Island remain real. */
 static unsigned callbacks[16], pushes, protocol_calls, persisted_tabs;
+static uint32_t host_cash_operator_filter;
+static unsigned host_history_open_all, host_history_invalidations;
+void ui_cash_journal_filter_operator(uint32_t id){host_cash_operator_filter=id;}
+void ui_page_19_history_open_all(void){++host_history_open_all;}
+void counting_history_current_invalidate(void){++host_history_invalidations;}
 static unsigned host_notice_posts;
 static ui_notice_kind_t host_notice_kind;
 static char host_notice_detail[UI_NOTICE_DETAIL_CAPACITY];
@@ -112,7 +117,7 @@ void ui_state_save_page01_detail_section(void) { saved_tab=page_01_detail_sectio
 void ui_state_save_popup_auto_state(void) {}
 bool ui_state_popup_auto_set_enabled(bool enabled){fault_popup_set_auto_enabled(enabled);return true;}
 bool app_setting_notice_page_allowed(void){return host_current_page!=UI_PAGE_MAIN&&host_current_page!=UI_PAGE_PURE;}
-static uint8_t host_quick_order[UI_STATE_QUICK_CONTROL_COUNT]={0,1,3,4,2,5,6,7,8};
+static uint8_t host_quick_order[UI_STATE_QUICK_CONTROL_COUNT]={0,1,3,4,2,5,6,7,8,9,10,11,12};
 static bool host_order_save_fails;
 void ui_state_quick_order_get(uint8_t order[UI_STATE_QUICK_CONTROL_COUNT])
 {memcpy(order,host_quick_order,sizeof(host_quick_order));}

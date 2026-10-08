@@ -141,6 +141,11 @@ def catalogues(extract=False):
         ids.add(item['id']); tags.add(tag)
         if item['direction'] not in ('ltr', 'rtl'):
             raise ValueError(f'{tag}: invalid direction')
+        forms=item.get('plural_forms')
+        if forms is not None and (not isinstance(forms,list) or not forms or
+                not set(forms)<={'zero','one','two','few','many','other'} or
+                'other' not in forms or len(set(forms))!=len(forms)):
+            raise ValueError(f'{tag}: invalid plural form declaration')
         if item['enabled'] and not all(item[k] for k in ('translations_ready', 'font_ready', 'shaping_ready')):
             raise ValueError(f'{tag}: cannot enable an unverified language')
         path = I18N / 'locales' / f'{tag}.json'
@@ -203,6 +208,17 @@ def catalogues(extract=False):
             missing = [key for key in catalog['en'] if not entries.get(key)]
             if missing:
                 raise ValueError(f"{item['tag']}: enabled locale has {len(missing)} untranslated keys")
+            required_forms = item.get('plural_forms') or {'ar': {'zero', 'one', 'two', 'few', 'many', 'other'},
+                              'zh-Hans': {'other'}, 'ko': {'other'}, 'ja': {'other'}}.get(item['tag'])
+            if required_forms and (not set(required_forms)<= {'zero','one','two','few','many','other'} or 'other' not in required_forms):
+                raise ValueError(f"{item['tag']}: invalid plural form declaration")
+            if required_forms:
+                for key, base in catalog['en'].items():
+                    if not isinstance(base, dict):
+                        continue
+                    value = entries[key]
+                    if not isinstance(value, dict) or any(not value.get(form) for form in required_forms):
+                        raise ValueError(f"{item['tag']}: incomplete plural forms: {key!r}")
     return registry, {tag: dict(sorted(entries.items())) for tag, entries in catalog.items()}
 
 
@@ -220,6 +236,8 @@ def patch_runtime(folder):
     source = (folder / 'lv_i18n.c').read_text(encoding='utf-8')
     source = source.replace('static lv_i18n_phrase_t ', 'static const lv_i18n_phrase_t ')
     source = source.replace('(uint32_t)(val < 0 ? -val : val)', '(val < 0 ? 0U - (uint32_t)val : (uint32_t)val)')
+    # CLDR's Polish rule includes a redundant lower bound on unsigned i10.
+    source = source.replace('(0 <= i10 && i10 <= 1)', '(i10 <= 1)')
     source = re.sub(r'(static uint8_t \w+_plural_fn\(int32_t num\)\n\{)', r'\1\n    UNUSED(num);', source)
     source = re.sub(r'(    \.singulars = (\w+),)', r'\1\n    .singular_count = sizeof(\2) / sizeof(\2[0]) - 1,', source)
     source = re.sub(r'(    \.plurals\[([^]]+)\] = (\w+),)', r'\1\n    .plural_count[\2] = sizeof(\3) / sizeof(\3[0]) - 1,', source)

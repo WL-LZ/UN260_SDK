@@ -1,0 +1,1012 @@
+{
+  "languages": [
+    "tr",
+    "fr",
+    "pl",
+    "ru",
+    "de"
+  ],
+  "terms": {
+    "Face": [
+      "Yüz",
+      "Face",
+      "Strona",
+      "Сторона",
+      "Seite"
+    ],
+    "Orientation": [
+      "Yön",
+      "Orientation",
+      "Kierunek",
+      "Ориентация",
+      "Ausrichtung"
+    ],
+    "Face / Orientation": [
+      "Yüz / Yön",
+      "Face / Orientation",
+      "Strona / Kierunek",
+      "Сторона / Ориентация",
+      "Seite / Ausrichtung"
+    ],
+    "Serial": [
+      "Seri no.",
+      "N° de série",
+      "Nr seryjny",
+      "Серийный №",
+      "Seriennr."
+    ],
+    "Serials": [
+      "Seri numaraları",
+      "Numéros de série",
+      "Numery seryjne",
+      "Серийные номера",
+      "Seriennummern"
+    ],
+    "Serial & rejects": [
+      "Seri numaraları ve iadeler",
+      "N° de série et rejets",
+      "Numery seryjne i odrzuty",
+      "Серийные номера и отбраковка",
+      "Seriennummern und Rückweisungen"
+    ],
+    "Reject Exit Jam": [
+      "İade çıkışında sıkışma",
+      "Bourrage à la sortie de rejet",
+      "Zacięcie na wyjściu odrzutów",
+      "Замятие на выходе отбраковки",
+      "Stau am Rückweisungsausgang"
+    ],
+    "Reject exit blocked": [
+      "İade çıkışı tıkalı",
+      "Sortie de rejet bloquée",
+      "Zablokowane wyjście odrzutów",
+      "Выход отбраковки заблокирован",
+      "Rückweisungsausgang blockiert"
+    ],
+    "Reject Pocket Error": [
+      "İade cebi hatası",
+      "Erreur du bac de rejet",
+      "Błąd kieszeni odrzutów",
+      "Ошибка кармана отбраковки",
+      "Fehler am Rückweisungsfach"
+    ],
+    "Reject Pocket Full Only": [
+      "Yalnız iade cebi dolu",
+      "Seul le bac de rejet est plein",
+      "Pełna tylko kieszeń odrzutów",
+      "Полон только карман отбраковки",
+      "Nur Rückweisungsfach voll"
+    ],
+    "Stacker and Reject Pockets Full": [
+      "Çıkış ve iade cepleri dolu",
+      "Bacs de réception et de rejet pleins",
+      "Pełny odbiornik i kieszeń odrzutów",
+      "Приёмный карман и карман отбраковки полны",
+      "Ausgabe- und Rückweisungsfach voll"
+    ],
+    "Check for remaining scraps": [
+      "Kalan kâğıt parçalarını kontrol edin",
+      "Vérifier l’absence de fragments de papier",
+      "Sprawdź, czy nie pozostały skrawki papieru",
+      "Проверьте, не остались ли обрывки бумаги",
+      "Auf verbliebene Papierreste prüfen"
+    ],
+    "Equals\nAt least\nAt most\nRange": [
+      "Eşittir\nEn az\nEn çok\nAralık",
+      "Égal à\nAu moins\nAu plus\nIntervalle",
+      "Równe\nCo najmniej\nCo najwyżej\nZakres",
+      "Равно\nНе менее\nНе более\nДиапазон",
+      "Gleich\nMindestens\nHöchstens\nBereich"
+    ],
+    "Denom": [
+      "Küpür",
+      "Coupure",
+      "Nominał",
+      "Номинал",
+      "Nennwert"
+    ],
+    "Correct": [
+      "Düzelt",
+      "Corriger",
+      "Skoryguj",
+      "Исправить",
+      "Korrigieren"
+    ],
+    "Current records": [
+      "Mevcut kayıtlar",
+      "Enregistrements actuels",
+      "Bieżące zapisy",
+      "Текущие записи",
+      "Aktuelle Datensätze"
+    ],
+    "Counting history is not a cash receipt.": [
+      "Sayım geçmişi bir tahsilat kaydı değildir.",
+      "L’historique de comptage n’est pas une écriture d’encaissement.",
+      "Historia liczenia nie jest zapisem wpłaty.",
+      "История пересчётов не является записью о приходе денег.",
+      "Die Zählhistorie ist keine Buchung eines Geldeingangs."
+    ],
+    "Confirm actual cash movement. Recounting is not a new receipt.": [
+      "Gerçek nakit girişini veya çıkışını onaylayın. Yeniden sayım yeni bir tahsilat değildir.",
+      "Confirmez le mouvement réel d’espèces. Un recomptage n’est pas une nouvelle entrée.",
+      "Potwierdź rzeczywisty przepływ gotówki. Ponowne liczenie nie jest nową wpłatą.",
+      "Подтвердите фактическое движение наличных. Повторный пересчёт не является новым приходом.",
+      "Bestätigen Sie den tatsächlichen Bargeldfluss. Erneutes Zählen ist kein neuer Eingang."
+    ],
+    "Insufficient book balance. Check the opening balance and receipts.": [
+      "Kayıtlı bakiye yetersiz. Açılış bakiyesini ve tahsilatları kontrol edin.",
+      "Solde comptable insuffisant. Vérifiez le solde initial et les entrées.",
+      "Niewystarczające saldo księgowe. Sprawdź saldo początkowe i wpłaty.",
+      "Недостаточный учётный остаток. Проверьте начальный остаток и приходы.",
+      "Buchbestand nicht ausreichend. Prüfen Sie Anfangsbestand und Eingänge."
+    ],
+    "Adjust the opening balance with Correct.": [
+      "Açılış bakiyesini Düzelt düğmesiyle değiştirin.",
+      "Modifiez le solde initial avec Corriger.",
+      "Zmień saldo początkowe przyciskiem Skoryguj.",
+      "Измените начальный остаток кнопкой «Исправить».",
+      "Ändern Sie den Anfangsbestand mit Korrigieren."
+    ],
+    "Book balance is not denomination inventory.": [
+      "Kayıtlı bakiye, küpür stokunu göstermez.",
+      "Le solde est distinct du stock par coupure.",
+      "Saldo nie określa stanu poszczególnych nominałów.",
+      "Учётный остаток не отражает запас по номиналам.",
+      "Der Buchbestand ist kein Bestand nach Nennwert."
+    ],
+    "Add a denomination or import a saved count.": [
+      "Bir küpür ekleyin veya kayıtlı sayım sonucunu aktarın.",
+      "Ajoutez une coupure ou importez un comptage enregistré.",
+      "Dodaj nominał lub zaimportuj zapisany wynik liczenia.",
+      "Добавьте номинал или загрузите сохранённый результат пересчёта.",
+      "Fügen Sie einen Nennwert hinzu oder laden Sie ein gespeichertes Zählergebnis."
+    ],
+    "All denominations": [
+      "Tüm küpürler",
+      "Toutes les coupures",
+      "Wszystkie nominały",
+      "Все номиналы",
+      "Alle Nennwerte"
+    ],
+    "Single denomination": [
+      "Tek küpür",
+      "Coupure unique",
+      "Jeden nominał",
+      "Один номинал",
+      "Ein Nennwert"
+    ],
+    "Mixed denominations": [
+      "Karışık küpürler",
+      "Coupures mixtes",
+      "Różne nominały",
+      "Разные номиналы",
+      "Gemischte Nennwerte"
+    ],
+    "Different denomination": [
+      "Farklı küpür",
+      "Coupure différente",
+      "Inny nominał",
+      "Другой номинал",
+      "Anderer Nennwert"
+    ],
+    "Denomination summary": [
+      "Küpür özeti",
+      "Résumé par coupure",
+      "Podsumowanie nominałów",
+      "Итоги по номиналам",
+      "Nennwertübersicht"
+    ],
+    "By denomination": [
+      "Küpüre göre",
+      "Par coupure",
+      "Według nominału",
+      "По номиналу",
+      "Nach Nennwert"
+    ],
+    "Add denomination": [
+      "Küpür ekle",
+      "Ajouter une coupure",
+      "Dodaj nominał",
+      "Добавить номинал",
+      "Nennwert hinzufügen"
+    ],
+    "Cash by denomination": [
+      "Küpür hesabı",
+      "Espèces par coupure",
+      "Gotówka wg nominału",
+      "Деньги по номиналам",
+      "Bargeld nach Nennwert"
+    ],
+    "Denomination x quantity": [
+      "Küpür × adet",
+      "Coupure × quantité",
+      "Nominał × liczba",
+      "Номинал × количество",
+      "Nennwert × Anzahl"
+    ],
+    "Saved denominations": [
+      "Kayıtlı küpürler",
+      "Coupures enregistrées",
+      "Zapisane nominały",
+      "Сохранённые номиналы",
+      "Gespeicherte Nennwerte"
+    ],
+    "Notes": [
+      "Banknotlar",
+      "Billets",
+      "Banknoty",
+      "Банкноты",
+      "Banknoten"
+    ],
+    "Notes Counted": [
+      "Sayılan banknotlar",
+      "Billets comptés",
+      "Przeliczone banknoty",
+      "Пересчитано банкнот",
+      "Gezählte Banknoten"
+    ],
+    "notes": [
+      "banknot",
+      "billets",
+      "banknotów",
+      "банкнот",
+      "Banknoten"
+    ],
+    "notes per batch": [
+      "deste başına banknot",
+      "billets par lot",
+      "banknotów w partii",
+      "банкнот в пачке",
+      "Banknoten je Bündel"
+    ],
+    "Notes per batch (1-199)": [
+      "Deste başına banknot (1–199)",
+      "Billets par lot (1–199)",
+      "Banknoty w partii (1–199)",
+      "Банкнот в пачке (1–199)",
+      "Banknoten je Bündel (1–199)"
+    ],
+    "All notes": [
+      "Tüm banknotlar",
+      "Tous les billets",
+      "Wszystkie banknoty",
+      "Все банкноты",
+      "Alle Banknoten"
+    ],
+    "Rejected notes": [
+      "İade banknotları",
+      "Billets rejetés",
+      "Odrzucone banknoty",
+      "Отбракованные банкноты",
+      "Zurückgewiesene Banknoten"
+    ],
+    "Suspect Notes": [
+      "Şüpheli banknotlar",
+      "Billets suspects",
+      "Podejrzane banknoty",
+      "Подозрительные банкноты",
+      "Verdächtige Banknoten"
+    ],
+    "Damaged Notes": [
+      "Hasarlı banknotlar",
+      "Billets endommagés",
+      "Uszkodzone banknoty",
+      "Повреждённые банкноты",
+      "Beschädigte Banknoten"
+    ],
+    "Reject pocket full": [
+      "İade cebi dolu",
+      "Bac de rejet plein",
+      "Pełna kieszeń odrzutów",
+      "Карман отбраковки полон",
+      "Rückweisungsfach voll"
+    ],
+    "Reject pocket empty": [
+      "İade cebi boş",
+      "Bac de rejet vide",
+      "Pusta kieszeń odrzutów",
+      "Карман отбраковки пуст",
+      "Rückweisungsfach leer"
+    ],
+    "Empty the reject pocket": [
+      "İade cebini boşaltın",
+      "Vider le bac de rejet",
+      "Opróżnij kieszeń odrzutów",
+      "Опорожните карман отбраковки",
+      "Rückweisungsfach leeren"
+    ],
+    "Reject pocket capacity": [
+      "İade cebi kapasitesi",
+      "Capacité du bac de rejet",
+      "Pojemność kieszeni odrzutów",
+      "Ёмкость кармана отбраковки",
+      "Kapazität Rückweisungsfach"
+    ],
+    "Back to receipt": [
+      "Tahsilata dön",
+      "Retour à l’entrée",
+      "Powrót do wpłaty",
+      "Вернуться к приходу",
+      "Zurück zum Eingang"
+    ],
+    "Void entry": [
+      "Kaydı iptal et",
+      "Annuler l’écriture",
+      "Anuluj zapis",
+      "Аннулировать запись",
+      "Buchung stornieren"
+    ],
+    "Void keeps a record and reverses its balance effect.": [
+      "İptal işlemi kaydı korur ve bakiyeye etkisini geri alır.",
+      "L’annulation conserve la trace de l’écriture et inverse son effet sur le solde.",
+      "Anulowanie zachowuje zapis i odwraca jego wpływ na saldo.",
+      "Аннулирование сохраняет запись и отменяет её влияние на остаток.",
+      "Die Stornierung erhält den Nachweis und hebt die Bestandsänderung auf."
+    ],
+    "Back": [
+      "Geri",
+      "Retour",
+      "Wstecz",
+      "Назад",
+      "Zurück"
+    ],
+    "Cancel": [
+      "İptal",
+      "Annuler",
+      "Anuluj",
+      "Отмена",
+      "Abbruch"
+    ],
+    "Save": [
+      "Kaydet",
+      "Enregistrer",
+      "Zapisz",
+      "Сохранить",
+      "Speichern"
+    ],
+    "Confirm": [
+      "Onayla",
+      "Confirmer",
+      "Potwierdź",
+      "Подтвердить",
+      "Bestätigen"
+    ],
+    "Clear": [
+      "Temizle",
+      "Effacer",
+      "Wyczyść",
+      "Очистить",
+      "Leeren"
+    ],
+    "Delete": [
+      "Sil",
+      "Supprimer",
+      "Usuń",
+      "Удалить",
+      "Löschen"
+    ],
+    "Start": [
+      "Başlat",
+      "Démarrer",
+      "Start",
+      "Старт",
+      "Start"
+    ],
+    "Stop": [
+      "Durdur",
+      "Arrêter",
+      "Stop",
+      "Стоп",
+      "Stopp"
+    ],
+    "Retry": [
+      "Tekrar dene",
+      "Réessayer",
+      "Ponów",
+      "Повторить",
+      "Erneut"
+    ],
+    "Close": [
+      "Kapat",
+      "Fermer",
+      "Zamknij",
+      "Закрыть",
+      "Schließen"
+    ],
+    "Settings": [
+      "Ayarlar",
+      "Réglages",
+      "Ustawienia",
+      "Настройки",
+      "Einstellungen"
+    ],
+    "Language": [
+      "Dil",
+      "Langue",
+      "Język",
+      "Язык",
+      "Sprache"
+    ],
+    "Currency": [
+      "Para birimi",
+      "Devise",
+      "Waluta",
+      "Валюта",
+      "Währung"
+    ],
+    "Amount": [
+      "Tutar",
+      "Montant",
+      "Kwota",
+      "Сумма",
+      "Betrag"
+    ],
+    "Quantity": [
+      "Adet",
+      "Quantité",
+      "Liczba",
+      "Количество",
+      "Anzahl"
+    ],
+    "Denomination": [
+      "Küpür",
+      "Coupure",
+      "Nominał",
+      "Номинал",
+      "Nennwert"
+    ],
+    "Denominations": [
+      "Küpürler",
+      "Coupures",
+      "Nominały",
+      "Номиналы",
+      "Nennwerte"
+    ],
+    "Serial number": [
+      "Seri numarası",
+      "Numéro de série",
+      "Numer seryjny",
+      "Серийный номер",
+      "Seriennummer"
+    ],
+    "Serial numbers": [
+      "Seri numaraları",
+      "Numéros de série",
+      "Numery seryjne",
+      "Серийные номера",
+      "Seriennummern"
+    ],
+    "Reject pocket": [
+      "İade cebi",
+      "Bac de rejet",
+      "Kieszeń odrzutów",
+      "Карман отбраковки",
+      "Rückweisungsfach"
+    ],
+    "Stacker": [
+      "Çıkış cebi",
+      "Bac de réception",
+      "Odbiornik",
+      "Приёмный карман",
+      "Ausgabefach"
+    ],
+    "Hopper": [
+      "Besleme haznesi",
+      "Trémie",
+      "Podajnik",
+      "Загрузочный карман",
+      "Einlegefach"
+    ],
+    "Suspect": [
+      "Şüpheli",
+      "Suspect",
+      "Podejrzane",
+      "Подозрительные",
+      "Verdächtig"
+    ],
+    "Damaged": [
+      "Hasarlı",
+      "Endommagé",
+      "Uszkodzone",
+      "Повреждённые",
+      "Beschädigt"
+    ],
+    "Reject": [
+      "İade",
+      "Rejet",
+      "Odrzut",
+      "Отбраковка",
+      "Rückweisung"
+    ],
+    "Rejected": [
+      "İade edilen",
+      "Rejetés",
+      "Odrzucone",
+      "Отбраковано",
+      "Zurückgewiesen"
+    ],
+    "Batch": [
+      "Deste",
+      "Lot",
+      "Odliczanie",
+      "Фасовка",
+      "Bündel"
+    ],
+    "Batch count": [
+      "Deste sayımı",
+      "Comptage par lots",
+      "Odliczanie",
+      "Фасовка",
+      "Bündelzählung"
+    ],
+    "Count mode": [
+      "Sayım modu",
+      "Mode de comptage",
+      "Tryb liczenia",
+      "Режим счёта",
+      "Zählmodus"
+    ],
+    "Counting history": [
+      "Sayım geçmişi",
+      "Historique des comptages",
+      "Historia liczenia",
+      "История пересчётов",
+      "Zählhistorie"
+    ],
+    "Report": [
+      "Rapor",
+      "Rapport",
+      "Raport",
+      "Отчёт",
+      "Bericht"
+    ],
+    "Print": [
+      "Yazdır",
+      "Imprimer",
+      "Drukuj",
+      "Печать",
+      "Drucken"
+    ],
+    "Speed": [
+      "Hız",
+      "Vitesse",
+      "Prędkość",
+      "Скорость",
+      "Geschwindigkeit"
+    ],
+    "Automatic": [
+      "Otomatik",
+      "Automatique",
+      "Automatycznie",
+      "Автоматически",
+      "Automatisch"
+    ],
+    "Manual": [
+      "Manuel",
+      "Manuel",
+      "Ręcznie",
+      "Вручную",
+      "Manuell"
+    ],
+    "Low": [
+      "Düşük",
+      "Faible",
+      "Niska",
+      "Низкая",
+      "Niedrig"
+    ],
+    "Medium": [
+      "Orta",
+      "Moyenne",
+      "Średnia",
+      "Средняя",
+      "Mittel"
+    ],
+    "High": [
+      "Yüksek",
+      "Élevée",
+      "Wysoka",
+      "Высокая",
+      "Hoch"
+    ],
+    "On": [
+      "Açık",
+      "Activé",
+      "Wł.",
+      "Вкл.",
+      "Ein"
+    ],
+    "Off": [
+      "Kapalı",
+      "Désactivé",
+      "Wył.",
+      "Выкл.",
+      "Aus"
+    ],
+    "Calculator": [
+      "Hesap makinesi",
+      "Calculatrice",
+      "Kalkulator",
+      "Калькулятор",
+      "Rechner"
+    ],
+    "Cash journal": [
+      "Kasa defteri",
+      "Journal de caisse",
+      "Dziennik kasowy",
+      "Кассовый журнал",
+      "Kassenbuch"
+    ],
+    "Cash entries": [
+      "Nakit kayıtları",
+      "Écritures",
+      "Wpisy kasowe",
+      "Операции",
+      "Buchungen"
+    ],
+    "Receipt": [
+      "Tahsilat",
+      "Entrée",
+      "Wpłata",
+      "Приход",
+      "Eingang"
+    ],
+    "Payment": [
+      "Ödeme",
+      "Sortie",
+      "Wypłata",
+      "Расход",
+      "Ausgang"
+    ],
+    "Book balance": [
+      "Kayıtlı bakiye",
+      "Solde comptable",
+      "Saldo księgowe",
+      "Учётный остаток",
+      "Buchbestand"
+    ],
+    "Opening balance": [
+      "Açılış bakiyesi",
+      "Solde initial",
+      "Saldo początkowe",
+      "Начальный остаток",
+      "Anfangsbestand"
+    ],
+    "Balance after confirmation": [
+      "Onay sonrası bakiye",
+      "Solde après confirmation",
+      "Saldo po zatwierdzeniu",
+      "Остаток после записи",
+      "Bestand nach Bestätigung"
+    ],
+    "Exchange rate": [
+      "Döviz kuru",
+      "Taux de change",
+      "Kurs wymiany",
+      "Курс обмена",
+      "Wechselkurs"
+    ],
+    "Original amount": [
+      "Kaynak tutar",
+      "Montant initial",
+      "Kwota źródłowa",
+      "Исходная сумма",
+      "Ausgangsbetrag"
+    ],
+    "Converted amount": [
+      "Çevrilen tutar",
+      "Montant converti",
+      "Kwota po przeliczeniu",
+      "Сумма после обмена",
+      "Umgerechneter Betrag"
+    ],
+    "Enter rate": [
+      "Kur gir",
+      "Saisir le taux",
+      "Podaj kurs",
+      "Введите курс",
+      "Kurs eingeben"
+    ],
+    "Import count": [
+      "Sayımı aktar",
+      "Importer",
+      "Importuj wynik",
+      "Взять итог",
+      "Zählung laden"
+    ],
+    "Record cash": [
+      "Kasaya kaydet",
+      "Enregistrer",
+      "Zaksięguj",
+      "Записать",
+      "Buchen"
+    ],
+    "Record original cash": [
+      "Kaynak tutarı kaydet",
+      "Enregistrer l’original",
+      "Zapisz kwotę źródłową",
+      "Записать исходную",
+      "Quellbetrag buchen"
+    ],
+    "Actual exchange": [
+      "Gerçek döviz işlemi",
+      "Change réel",
+      "Rzeczywista wymiana",
+      "Фактический обмен",
+      "Tatsächlicher Wechsel"
+    ],
+    "Operators": [
+      "Operatörler",
+      "Opérateurs",
+      "Operatorzy",
+      "Операторы",
+      "Bediener"
+    ],
+    "Operator": [
+      "Operatör",
+      "Opérateur",
+      "Operator",
+      "Оператор",
+      "Bediener"
+    ],
+    "Add operator": [
+      "Operatör ekle",
+      "Ajouter un opérateur",
+      "Dodaj operatora",
+      "Добавить оператора",
+      "Bediener hinzufügen"
+    ],
+    "Switch operator": [
+      "Operatör değiştir",
+      "Changer d’opérateur",
+      "Zmień operatora",
+      "Сменить оператора",
+      "Bediener wechseln"
+    ],
+    "Device workspace": [
+      "Cihaz alanı",
+      "Espace appareil",
+      "Obszar urządzenia",
+      "Общий профиль",
+      "Gerätebereich"
+    ],
+    "Search": [
+      "Ara",
+      "Rechercher",
+      "Szukaj",
+      "Поиск",
+      "Suchen"
+    ],
+    "Date & time": [
+      "Tarih ve saat",
+      "Date et heure",
+      "Data i czas",
+      "Дата и время",
+      "Datum und Uhrzeit"
+    ],
+    "Note (optional)": [
+      "Not (isteğe bağlı)",
+      "Note (facultative)",
+      "Notatka (opcjonalnie)",
+      "Примечание (необязательно)",
+      "Notiz (optional)"
+    ],
+    "Recounting the same cash is not a new receipt.": [
+      "Aynı parayı yeniden saymak yeni bir tahsilat değildir.",
+      "Recompter les mêmes espèces ne constitue pas une nouvelle entrée.",
+      "Ponowne przeliczenie tej samej gotówki nie jest nową wpłatą.",
+      "Повторный пересчёт тех же денег не является новым приходом.",
+      "Erneutes Zählen desselben Bargelds ist kein neuer Eingang."
+    ],
+    "Operator filters do not change this balance.": [
+      "Operatör filtresi bu bakiyeyi değiştirmez.",
+      "Le filtre par opérateur ne modifie pas ce solde.",
+      "Filtr operatora nie zmienia tego salda.",
+      "Фильтр по оператору не меняет этот остаток.",
+      "Der Bedienerfilter ändert diesen Bestand nicht."
+    ],
+    "Manual rate · not a live market quote": [
+      "Manuel kur · güncel piyasa kuru değildir",
+      "Taux manuel · pas de cours en direct",
+      "Kurs ręczny · nie jest kursem na żywo",
+      "Курс задан вручную · не текущая котировка",
+      "Manueller Kurs · kein Live-Marktkurs"
+    ],
+    "Face + orientation": [
+      "Yüz / Yön",
+      "Face / Orientation",
+      "Strona / Kierunek",
+      "Сторона / Ориентация",
+      "Seite / Ausrichtung"
+    ],
+    "Face and orientation": [
+      "Yüz / Yön",
+      "Face / Orientation",
+      "Strona / Kierunek",
+      "Сторона / Ориентация",
+      "Seite / Ausrichtung"
+    ],
+    "Requesting rejected-note collection": [
+      "İade edilen banknotların veri toplaması isteniyor",
+      "Demande de collecte des données des billets rejetés",
+      "Żądanie zbierania danych odrzuconych banknotów",
+      "Запрос сбора данных отбракованных банкнот",
+      "Datenerfassung zurückgewiesener Banknoten wird angefordert"
+    ],
+    "Requesting all-note collection": [
+      "Tüm banknotların veri toplaması isteniyor",
+      "Demande de collecte des données de tous les billets",
+      "Żądanie zbierania danych wszystkich banknotów",
+      "Запрос сбора данных всех банкнот",
+      "Datenerfassung aller Banknoten wird angefordert"
+    ],
+    "Page view": [
+      "Sayfalar",
+      "Par pages",
+      "Strony",
+      "Страницы",
+      "Seiten"
+    ],
+    "Scroll view": [
+      "Kaydırma",
+      "Défilement",
+      "Przewijanie",
+      "Прокрутка",
+      "Scrollen"
+    ],
+    "All operators": [
+      "Tümü",
+      "Tous",
+      "Wszyscy",
+      "Все",
+      "Alle"
+    ],
+    "Operators off": [
+      "Kullanıcılar kapalı",
+      "Opérateurs : non",
+      "Obsługa wył.",
+      "Без оператора",
+      "Bediener aus"
+    ],
+    "OFF": [
+      "Kap.",
+      "Non",
+      "Wył.",
+      "Выкл",
+      "Aus"
+    ],
+    "Reconcile": [
+      "Mutabakat",
+      "Rapprocher",
+      "Uzgodnij",
+      "Сверка",
+      "Abgleichen"
+    ],
+    "Reconciliation": [
+      "Mutabakat",
+      "Rapprochement",
+      "Uzgodnienie",
+      "Сверка",
+      "Abgleich"
+    ],
+    "Reversal": [
+      "Ters kayıt",
+      "Contrepassation",
+      "Storno",
+      "Сторно",
+      "Storno"
+    ],
+    "Swap": [
+      "Değiştir",
+      "Inverser",
+      "Zamień",
+      "Поменять",
+      "Tauschen"
+    ],
+    "Ordinary": [
+      "Standart",
+      "Standard",
+      "Zwykły",
+      "Обычный",
+      "Standard"
+    ],
+    "Entry cancelled": [
+      "Kayıt iptal edildi",
+      "Écriture annulée",
+      "Wpis anulowany",
+      "Запись отменена",
+      "Buchung storniert"
+    ],
+    "Export this view": [
+      "Listeyi dışa aktar",
+      "Exporter la vue",
+      "Eksportuj listę",
+      "Экспорт списка",
+      "Ansicht exportieren"
+    ],
+    "Batch presets": [
+      "Deste ayarları",
+      "Lots prédéfinis",
+      "Presety paczek",
+      "Пачки",
+      "Bündelvorlagen"
+    ],
+    "Selected preset": [
+      "Seçili ayar",
+      "Lot choisi",
+      "Wybrany preset",
+      "Выбранная пачка",
+      "Gewählte Vorlage"
+    ],
+    "No batch limit": [
+      "Limit yok",
+      "Sans limite",
+      "Bez limitu",
+      "Без ограничения",
+      "Ohne Limit"
+    ],
+    "Add slot": [
+      "Ekle",
+      "Ajouter",
+      "Dodaj",
+      "Добавить",
+      "Hinzufügen"
+    ],
+    "Fixed slot": [
+      "Sabit",
+      "Fixe",
+      "Stały",
+      "Фиксир.",
+      "Fest"
+    ],
+    "Edit": [
+      "Düzenle",
+      "Éditer",
+      "Edytuj",
+      "Правка",
+      "Ändern"
+    ],
+    "Options": [
+      "Seçenekler",
+      "Options",
+      "Opcje",
+      "Опции",
+      "Optionen"
+    ],
+    "Output": [
+      "Çıktı",
+      "Sortie",
+      "Wyjście",
+      "Вывод",
+      "Ausgabe"
+    ],
+    "Records": [
+      "Kayıtlar",
+      "Historique",
+      "Rejestry",
+      "Записи",
+      "Protokolle"
+    ],
+    "In use": [
+      "Kullanımda",
+      "Utilisé",
+      "Aktywny",
+      "Активно",
+      "Verwendet"
+    ],
+    "Stops when the batch is complete.": [
+      "Deste tamamlanınca durur.",
+      "Arrêt à la fin du lot.",
+      "Stop po odliczeniu paczki.",
+      "Стоп при заполнении пачки.",
+      "Stopp bei voller Stückzahl."
+    ],
+    "1–199 notes · OFF is fixed": [
+      "1–199 banknot · kapalı yuva sabit",
+      "1–199 billets · case Non fixe",
+      "1–199 banknotów · Wył. jest stałe",
+      "1–199 банкнот · Выкл неизменно",
+      "1–199 Banknoten · Aus ist fest"
+    ]
+  }
+}

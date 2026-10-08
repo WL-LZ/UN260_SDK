@@ -1,4 +1,5 @@
 #include "test_notice_sink.h"
+#include "un260/font/ui_locale_font_bank.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,7 +9,35 @@
 #include "un260/lv_core/page_21_set_language.c"
 #include "test_settings_actions.h"
 #include "un260/lv_components/lv_damped_button.h"
+#include "un260/lv_components/lv_nav_button.h"
 #include "tools/test_page_background_asset.h"
+static bool deny_language_resources(language_t id){(void)id;return false;}
+static void language_buttons_test(void)
+{
+ language_t original=ui_lang_get();
+ for(size_t i=0;i<ui_lang_count();++i){
+  const ui_locale_t *locale=ui_lang_at(i);assert(ui_lang_prepare_resources(locale->id));
+  ui_lang_set(locale->id);
+  lv_obj_t *button=lv_nav_back_text_button_create(lv_scr_act(),20,20,
+      &lv_font_instrument_sans_medium_16,NULL,NULL);
+  lv_obj_t *label=lv_damped_button_get_label(button);lv_obj_update_layout(button);
+  const lv_font_t *font=lv_obj_get_style_text_font(label,LV_PART_MAIN);
+  if(locale->id!=LANGUAGE_EN)assert(font->fallback==ui_locale_font_get(locale->id,16));
+  assert(lv_obj_get_width(button)==76&&lv_obj_get_height(button)==42);
+  assert(lv_obj_get_height(label)==font->line_height);
+  lv_point_t size;lv_txt_get_size(&size,lv_label_get_text(label),font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+  assert(size.x<=60&&size.y<=34);
+  const char *text=lv_label_get_text(label);uint32_t offset=0;
+  while(text[offset]){uint32_t cp=_lv_txt_encoded_next(text,&offset);lv_font_glyph_dsc_t glyph;
+   if(cp>32){assert(lv_font_get_glyph_dsc(font,&glyph,cp,0));assert(!glyph.is_placeholder);}}
+  assert(lv_obj_get_style_base_dir(label,LV_PART_MAIN)==LV_BASE_DIR_AUTO);
+  lv_event_send(button,LV_EVENT_PRESSED,NULL);
+  lv_event_send(button,LV_EVENT_PRESS_LOST,NULL);
+  lv_obj_del(button); /* pending feedback must not retain deleted objects */
+ }
+ ui_lang_set(original);
+ puts("PASS localized Back buttons: glyphs, width, composed height, direction and feedback lifetime");
+}
 static unsigned sends,pops;static uint8_t last_command,last_sub;static ui_page_t requested;
 static bool white_selected,overlay;static settings_detail_dialog_cb_t discard;
 static bool diagnostic_scope,diagnostic_ready=true,machine_running;
@@ -207,7 +236,65 @@ static void details_test(void){
  machine_time_tick();machine_time_get(&now);assert(now.second==59);lv_roller_set_selected(time_wheels[1],1,LV_ANIM_OFF);lv_event_send(time_wheels[1],LV_EVENT_VALUE_CHANGED,NULL);assert(time_draft.month==2&&time_draft.day==29);machine_time_get(&now);assert(now.month==1);snapshot("date-time-draft");
  assert(policy(GESTURE_ACTION_HOME)&&discard);settings_detail_dialog_hide();unsigned old=pops;time_back(NULL);assert(discard&&pops==old);settings_detail_dialog_hide();time_cancel(NULL);assert(pops==old+1);ui_page_11_timeset_destroy();machine_time_get(&now);assert(now.month==1&&!policy);
  ui_page_11_timeset_create(lv_scr_act());lv_roller_set_selected(time_wheels[1],1,LV_ANIM_OFF);lv_event_send(time_wheels[1],LV_EVENT_VALUE_CHANGED,NULL);lv_roller_set_selected(time_wheels[0],25,LV_ANIM_OFF);lv_event_send(time_wheels[0],LV_EVENT_VALUE_CHANGED,NULL);assert(time_draft.year==2025&&time_draft.day==28);time_apply(NULL);machine_time_get(&now);assert(now.year==2025&&now.month==2&&now.day==28);ui_page_11_timeset_destroy();
- ui_page_21_set_language_create(lv_scr_act());snapshot("language");assert(action_blocked(language_save));assert(!language_dirty());language_cancel(NULL);ui_page_21_set_language_destroy();
+ ui_page_21_set_language_create(lv_scr_act());snapshot("language");assert(action_blocked(language_save));assert(!language_dirty());
+ /* Autonyms must render on a cold bank, before full-locale preview preparation. */
+ for(size_t i=0;i<language_row_count;++i){
+  lv_obj_t *row=language_rows[i].row;
+  lv_obj_scroll_to_view(row,LV_ANIM_OFF);lv_obj_update_layout(language_frame.root);
+  lv_obj_t *native=lv_obj_get_child(row,2);assert(lv_obj_check_type(native,&lv_label_class));
+  lv_obj_t *probe=lv_label_create(lv_scr_act());lv_label_set_text(probe,language_rows[i].locale->name);
+  assert(!strcmp(lv_label_get_text(native),lv_label_get_text(probe)));lv_obj_del(probe);
+  const lv_font_t *font=lv_obj_get_style_text_font(native,0);lv_point_t extent;
+  lv_txt_get_size(&extent,lv_label_get_text(native),font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+  assert(extent.x>0&&extent.x<=lv_obj_get_width(native));
+  assert(lv_obj_get_x(native)>=70&&lv_obj_get_x(native)+lv_obj_get_width(native)<=548);
+  assert(lv_obj_get_y(native)>=8&&lv_obj_get_y(native)+extent.y<=68);
+  const char *text=lv_label_get_text(native);uint32_t offset=0;
+  while(text[offset]){uint32_t cp=_lv_txt_encoded_next(text,&offset);lv_font_glyph_dsc_t glyph;
+   assert(lv_font_get_glyph_dsc(font,&glyph,cp,0)&&!glyph.is_placeholder);}
+  char file[64];snprintf(file,sizeof(file),"language-native-%s",language_rows[i].locale->tag);snapshot(file);
+ }
+ language_buttons_test();
+ language_t active_language=ui_lang_get();uint32_t language_revision=ui_lang_generation();
+ /* Exercise preview independently of release availability. It must not switch
+  * the active locale, even when previewing an unreleased translation draft. */
+ assert(ui_lang_prepare_resources(LANGUAGE_CN));language_draft=LANGUAGE_CN;language_refresh();
+ assert(!strcmp(lv_label_get_text(language_sample_device),ui_tr_for(LANGUAGE_CN,"Device")));
+ assert(!strcmp(lv_label_get_text(language_sample_label),ui_tr_for(LANGUAGE_CN,"Language")));
+ assert(!strcmp(lv_label_get_text(language_sample_date),ui_tr_for(LANGUAGE_CN,"Date & time")));
+ assert(ui_lang_get()==active_language&&ui_lang_generation()==language_revision);
+ language_draft=language_original;language_refresh();
+ ui_lang_set_resource_preparer(deny_language_resources);
+ lv_event_send(language_rows[4].row,LV_EVENT_CLICKED,NULL);
+ assert(language_draft==language_original&&ui_lang_get()==active_language&&ui_lang_generation()==language_revision);
+ assert(!strcmp(lv_label_get_text(language_frame.message),ui_tr("Language settings unavailable")));
+ ui_lang_set_resource_preparer(ui_locale_font_prepare);
+ lv_event_send(language_rows[4].row,LV_EVENT_CLICKED,NULL);
+ assert(language_draft==LANGUAGE_AR&&ui_lang_get()==active_language);
+ size_t available_count=0;
+ for(size_t i=0;i<ui_lang_count();++i)if(ui_lang_is_available(ui_lang_at(i)))++available_count;
+ assert(language_row_count==available_count);
+ for(size_t i=1;i<ui_lang_count();++i){
+  const ui_locale_t *locale=ui_lang_at(i);assert(ui_lang_prepare_resources(locale->id));
+  language_draft=locale->id;language_refresh();lv_obj_update_layout(language_frame.root);
+  assert(ui_lang_get()==active_language&&ui_lang_generation()==language_revision);
+  lv_obj_t *labels[]={language_sample_label,language_sample_date,language_preview,language_sample_format,language_sample_device};
+  for(unsigned n=0;n<5;++n){
+   lv_obj_t *label=labels[n];const lv_font_t *font=lv_obj_get_style_text_font(label,0);
+   assert(font->fallback==ui_locale_font_get(locale->id,n==4?20:16));
+   lv_point_t size;lv_txt_get_size(&size,lv_label_get_text(label),font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+   if(size.x>lv_obj_get_width(label))fprintf(stderr,"Preview too wide: %s %s %d/%d\n",locale->tag,lv_label_get_text(label),size.x,lv_obj_get_width(label));
+   assert(size.x<=lv_obj_get_width(label));
+   const char *text=lv_label_get_text(label);uint32_t offset=0;
+   while(text[offset]){uint32_t cp=_lv_txt_encoded_next(text,&offset);lv_font_glyph_dsc_t glyph;if(cp>32)assert(lv_font_get_glyph_dsc(font,&glyph,cp,0));}
+  }
+  assert(lv_obj_get_style_base_dir(language_sample_device,0)==(locale->direction==UI_LANG_RTL?LV_BASE_DIR_RTL:LV_BASE_DIR_LTR));
+  assert(lv_obj_get_x(language_sample_label)==(locale->direction==UI_LANG_RTL?282:18));
+  char file[64];snprintf(file,sizeof(file),"language-preview-%s",locale->tag);snapshot(file);
+ }
+ language_draft=language_original;language_refresh();assert(!language_dirty());
+ language_cancel(NULL);ui_page_21_set_language_destroy();
+ assert(!language_sample_device&&!language_sample_label&&!language_sample_date&&!language_sample_format);
  for(unsigned i=0;i<8;i++){ui_page_11_timeset_create(lv_scr_act());ui_page_11_timeset_destroy();ui_page_21_set_language_create(lv_scr_act());ui_page_21_set_language_destroy();}
  puts("PASS full-screen details, right Back, live clock while editing, draft/cancel/Save, leap clamp, dirty Home and lifecycle");}
 static void third_level_test(void){
@@ -233,7 +320,26 @@ static void third_level_test(void){
  ui_page_06_settings_destroy();catalog=saved_catalog;catalog_count=saved_count;scope=NULL;
  memset(scroll_positions,0,sizeof(scroll_positions));
  puts("PASS actual third-level navigation, exact parent return, seven categories overflow, optional category icons");
+ }
+#include "test_locale_view_checks.h"
+static void directory_locales_test(void){
+ for(size_t lang=0;lang<ui_lang_count();++lang){
+  const ui_locale_t *locale=ui_lang_at(lang);assert(ui_lang_prepare_resources(locale->id));ui_lang_set(locale->id);
+  ui_page_06_settings_create(lv_scr_act());
+  for(size_t i=0;i<catalog_count;++i){
+   if(catalog[i].kind==SETTINGS_DETAIL&&strcmp(catalog[i].id,"versions")&&strcmp(catalog[i].id,"collection"))continue;
+   scope=&catalog[i];render();lv_obj_update_layout(settings_page);check_single_line(settings_page);
+   char file[96];snprintf(file,sizeof(file),"settings-%s-%s",locale->tag,scope->id);snapshot(file);
+   if(grid){lv_obj_scroll_to_y(grid,9999,LV_ANIM_OFF);lv_obj_update_layout(grid);check_single_line(settings_page);}
+  }
+  ui_page_06_settings_destroy();scope=NULL;
+  ui_page_11_timeset_create(lv_scr_act());lv_obj_update_layout(time_frame.root);check_single_line(time_frame.root);
+  char file[80];snprintf(file,sizeof(file),"date-%s",locale->tag);snapshot(file);ui_page_11_timeset_destroy();
+  ui_page_21_set_language_create(lv_scr_act());lv_obj_update_layout(language_frame.root);check_single_line(language_frame.root);
+  snprintf(file,sizeof(file),"language-active-%s",locale->tag);snapshot(file);ui_page_21_set_language_destroy();
+ }
+ ui_lang_set(LANGUAGE_EN);
 }
-int main(void){lv_init();lv_disp_draw_buf_t db;lv_disp_draw_buf_init(&db,buffer,NULL,1280*40);lv_disp_drv_t dd;lv_disp_drv_init(&dd);dd.hor_res=1280;dd.ver_res=400;dd.draw_buf=&db;dd.flush_cb=flush;lv_disp_drv_register(&dd);lv_img_decoder_t*dec=lv_img_decoder_create();lv_img_decoder_set_info_cb(dec,info);lv_img_decoder_set_open_cb(dec,image_open);lv_indev_drv_t input;lv_indev_drv_init(&input);input.type=LV_INDEV_TYPE_POINTER;input.read_cb=pointer_read;input.feedback_cb=evdev_feedback;lv_indev_drv_register(&input);device_info_init("V1.0.0");catalog_test();grid_test();directory_test();third_level_test();details_test();puts("PASS actual LVGL settings suite");return 0;}
+int main(void){lv_init();ui_lang_set_resource_preparer(ui_locale_font_prepare);ui_message_font_set_provider(ui_locale_font_compose);lv_disp_draw_buf_t db;lv_disp_draw_buf_init(&db,buffer,NULL,1280*40);lv_disp_drv_t dd;lv_disp_drv_init(&dd);dd.hor_res=1280;dd.ver_res=400;dd.draw_buf=&db;dd.flush_cb=flush;lv_disp_drv_register(&dd);lv_img_decoder_t*dec=lv_img_decoder_create();lv_img_decoder_set_info_cb(dec,info);lv_img_decoder_set_open_cb(dec,image_open);lv_indev_drv_t input;lv_indev_drv_init(&input);input.type=LV_INDEV_TYPE_POINTER;input.read_cb=pointer_read;input.feedback_cb=evdev_feedback;lv_indev_drv_register(&input);device_info_init("V1.0.0");catalog_test();grid_test();directory_test();third_level_test();details_test();directory_locales_test();puts("PASS actual LVGL settings suite");return 0;}
 
 const char *work_mode_service_status_msgid(void){return work_mode_service_status_text();}

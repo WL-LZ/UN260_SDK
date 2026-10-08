@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "page_cash_tools.h"
 #include "lv_page_manager.h"
 #include "page_19_history.h"
@@ -49,9 +50,12 @@ static void amount(lv_obj_t *p,int x,int y,int w,int64_t n,const char *code,cons
     lv_point_t extent;lv_txt_get_size(&extent,s,font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
     const lv_font_t *number_font=font;
     if(extent.x>w-48){number_font=&lv_font_instrument_sans_medium_24;lv_txt_get_size(&extent,s,number_font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);}
-    cw_label(p,x,y,w-48,s,number_font,CW_INK);
+    lv_obj_t *value=cw_label(p,x,y,w-48,s,number_font,CW_INK);
+    lv_obj_set_style_base_dir(value,LV_BASE_DIR_LTR,0);
+    lv_obj_set_style_text_align(value,LV_TEXT_ALIGN_LEFT,0);
     int unit_x=extent.x+8;if(unit_x>w-40)unit_x=w-40;
-    cw_label(p,x+unit_x,y+number_font->line_height-18,40,code,&lv_font_instrument_sans_medium_15,CW_MUTED);
+    lv_obj_t *unit=cw_label(p,x+unit_x,y+number_font->line_height-18,40,code,&lv_font_instrument_sans_medium_15,CW_MUTED);
+    lv_obj_set_style_base_dir(unit,LV_BASE_DIR_LTR,0);
 }
 static void trim(char *s){if(strchr(s,'.')){char *p=s+strlen(s)-1;while(p>s&&*p=='0')*p--=0;if(*p=='.')*p=0;}}
 static void default_code(char code[4]){if(!code[0]){char list[64][4];if(cash_tools_currencies(list,64))memcpy(code,list[0],4);}}
@@ -194,7 +198,7 @@ static void draw_calculator(cash_view_t *v)
         if(calc.source.record){snprintf(s,sizeof(s),"#%u · %s",calc.source.record,calc.source.code);hint(left,20,190,452,s);}
         button(v,left,20,242,144,42,ui_tr("Import count"),A_IMPORT,2);button(v,left,174,242,144,42,ui_tr("Exchange rate"),A_FX,2);button(v,left,328,242,144,42,ui_tr("Record cash"),A_RECORD,1);
         const char *keys[]={UI_N_("Clear"),"+/-","<","/","1","2","3","*","4","5","6","-","7","8","9","+","0",".","="};const unsigned ids[]={'C','S','B','/','1','2','3','*','4','5','6','-','7','8','9','+','0','.','='};
-        for(unsigned i=0;i<19;++i){int x=510+(i%4)*182,y=(i/4)*62;lv_obj_t *key=button(v,b,x,y,i==18?358:174,54,ui_tr(keys[i]),ids[i],i==18?1:(i%4==3?2:0));if(i!=18&&i%4!=3)lv_obj_set_style_bg_color(key,lv_color_hex(0xF0F3F5),0);lv_obj_t *label=lv_obj_get_child(key,0);const lv_font_t *font=ui_message_font(i<3?&lv_font_instrument_sans_medium_17:&lv_font_instrument_sans_medium_26);lv_obj_set_style_text_font(label,font,0);lv_obj_set_height(label,font->line_height);lv_obj_center(label);}
+        for(unsigned i=0;i<19;++i){int x=510+(i%4)*182,y=(i/4)*62;lv_obj_t *key=button(v,b,x,y,i==18?358:174,54,ui_tr(keys[i]),ids[i],i==18?1:(i%4==3?2:0));if(i!=18&&i%4!=3)lv_obj_set_style_bg_color(key,lv_color_hex(0xF0F3F5),0);lv_obj_t *label=lv_obj_get_child(key,0);const lv_font_t *font=ui_message_font(i<3?&lv_font_instrument_sans_medium_17:&lv_font_instrument_sans_medium_26);lv_obj_set_style_text_font(label,ui_message_font(font),0);lv_obj_set_height(label,font->line_height);lv_obj_center(label);}
     }else if(calc.mode==MODE_FX){lv_obj_t *left=cw_box(b,0,0,584,304,0xFFFFFF,17),*right=cw_box(b,602,0,630,304,CW_PANEL,17);cw_label(left,20,28,300,ui_tr("Original amount"),&lv_font_instrument_sans_semibold_18,CW_INK);button(v,left,424,20,140,42,ui_tr("Import count"),A_IMPORT,2);lv_obj_t *input=button(v,left,20,82,466,65,calc.fx_amount[0]?calc.fx_amount:"0.00",A_AMOUNT,0);lv_obj_set_style_text_font(lv_obj_get_child(input,0),&lv_font_instrument_sans_semibold_37,0);lv_obj_set_height(lv_obj_get_child(input,0),lv_font_instrument_sans_semibold_37.line_height);lv_obj_center(lv_obj_get_child(input,0));lv_obj_set_style_text_align(lv_obj_get_child(input,0),LV_TEXT_ALIGN_LEFT,0);button(v,left,498,82,66,65,calc.code,A_CURRENCY,0);
         if(calc.source.record)snprintf(s,sizeof(s),"#%u · %s",calc.source.record,operator_text(calc.source.operator_id,calc.source.operator_name));else snprintf(s,sizeof(s),"%s",ui_tr("Manual input. Machine currency stays unchanged."));hint(left,20,158,544,s);snprintf(s,sizeof(s),"1 %s = ? %s",calc.code,calc.to);hint(left,20,185,544,s);button(v,left,20,205,420,44,calc.rate[0]?calc.rate:ui_tr("Enter rate"),A_RATE,0);button(v,left,450,205,114,44,ui_tr("Swap"),A_SWAP,2);hint(left,20,263,544,ui_tr("Manual rate · not a live market quote"));
         cw_label(right,20,28,360,ui_tr("Converted amount"),&lv_font_instrument_sans_semibold_18,CW_INK);button(v,right,510,20,100,42,calc.to[0]?calc.to:ui_tr("Currency"),A_TO_CURRENCY,0);int64_t a,r,n;if(cash_parse(calc.fx_amount,&a)&&cash_parse(calc.rate,&r)&&strcmp(calc.code,calc.to)&&cash_convert(a,r,calc.to,&n)==CASH_OK)amount(right,20,99,590,n,calc.to,&lv_font_instrument_sans_semibold_48);else cw_label(right,20,111,590,ui_tr("Enter rate"),&lv_font_instrument_sans_medium_24,CW_MUTED);hint(right,20,174,590,ui_tr("Reference only. Confirm the actual cash exchanged."));hint(right,20,197,590,ui_tr("Rounded to the target currency precision."));button(v,right,20,242,200,42,ui_tr("Record original cash"),A_RECORD,2);button(v,right,400,242,210,42,ui_tr("Actual exchange"),A_EXCHANGE,1);
@@ -286,7 +290,7 @@ static void draw_book(cash_view_t *v)
     lv_obj_t *left=cw_box(v->body,0,0,300,304,CW_PANEL,17),*list=cw_box(v->body,318,0,914,304,0xFFFFFF,17);cw_label(left,20,29,180,ui_tr("Book balance"),&lv_font_instrument_sans_semibold_18,CW_INK);button(v,left,210,20,70,42,book.code,A_CURRENCY,0);
     bool opened=cash_journal_opened(j,book.code);if(opened)amount(left,20,91,260,cash_journal_balance(j,book.code),book.code,&lv_font_instrument_sans_semibold_37);else cw_label(left,20,104,260,ui_tr("Not set"),&lv_font_instrument_sans_medium_24,CW_MUTED);
     hint(left,20,159,260,ui_tr("Shared cashbox · all operators"));button(v,left,20,193,260,38,ui_tr("Import count"),A_IMPORT,2);if(opened){button(v,left,20,242,124,42,ui_tr("Receipt"),A_RECEIPT,1);button(v,left,156,242,124,42,ui_tr("Payment"),A_PAYMENT,2);}else button(v,left,20,242,260,42,ui_tr("Set opening balance"),A_OPENING,1);
-    cw_label(list,20,29,255,ui_tr(book.audit_history?UI_N_("Reconciliation records"):UI_N_("Cash entries")),&lv_font_instrument_sans_semibold_18,CW_INK);button(v,list,484,20,138,34,ui_tr(book.filter?UI_N_("Filtered operator"):UI_N_("All operators")),A_PEOPLE,0);button(v,list,634,20,124,34,book.query[0]?book.query:ui_tr("Search"),A_QUERY,0);button(v,list,770,20,124,34,ui_tr("Import count"),A_IMPORT,2);
+    cw_label(list,20,29,255,ui_tr(book.audit_history?UI_N_("Reconciliation records"):UI_N_("Cash entries")),&lv_font_instrument_sans_semibold_18,CW_INK);button(v,list,464,20,138,34,ui_tr(book.filter?UI_N_("Filtered operator"):UI_N_("All operators")),A_PEOPLE,0);button(v,list,614,20,124,34,book.query[0]?book.query:ui_tr("Search"),A_QUERY,0);button(v,list,750,20,144,34,ui_tr("Import count"),A_IMPORT,2);
     entry_count=0;for(unsigned i=j->count;i>0;--i)if(match(&j->entries[i-1]))entry_indices[entry_count++]=i-1;
     entry_range=cw_label(list,20,265,190,"",&lv_font_instrument_sans_medium_12,CW_MUTED);
     button(v,list,250,254,150,34,ui_tr(book.paged?UI_N_("Page view"):UI_N_("Scroll view")),A_LIST_MODE,0);

@@ -4,7 +4,7 @@ import os
 
 def with_i18n(sources, root):
     names={Path(p).name for p in sources}
-    if names.intersection({'settings_detail_ui.c','lv_alnum_keyboard.c'}) and not names.intersection({'ui_message_font.c','test_menu_view.c'}):
+    if names.intersection({'settings_detail_ui.c','lv_alnum_keyboard.c','lv_settings.c','lv_damped_button.c'}) and not names.intersection({'ui_message_font.c','test_menu_view.c'}):
         sources=[*sources,Path(root)/'tools/tests/ui_message_font_stub.c']
     relative = [
         "un260/lv_system/ui_i18n.c",

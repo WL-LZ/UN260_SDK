@@ -1,4 +1,5 @@
 #include "lv_settings.h"
+#include "un260/font/ui_message_font.h"
 #include "lv_nav_button.h"
 #include "lv_damped_button.h"
 #include "lv_port_indev.h"
@@ -57,7 +58,8 @@ lv_obj_t *lv_settings_box(lv_obj_t *p,int x,int y,int w,int h,uint32_t color)
 lv_obj_t *lv_settings_label(lv_obj_t *p,const char *s,int x,int y,const lv_font_t *font,uint32_t color)
 {
     lv_obj_t *o=lv_label_create(p); lv_label_set_text(o,s?s:"");
-    lv_obj_set_pos(o,x,y); lv_obj_set_style_text_font(o,font,0);
+    lv_obj_set_pos(o,x,y); lv_obj_set_style_text_font(o,ui_message_font(font),0);
+    lv_obj_set_style_base_dir(o,LV_BASE_DIR_AUTO,0);
     lv_obj_set_style_text_color(o,lv_color_hex(color),0);
     lv_obj_clear_flag(o,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
     return o;
@@ -131,7 +133,8 @@ lv_obj_t *lv_settings_button(lv_obj_t *p,int x,int y,int w,int h,const char *s,
     lv_obj_set_style_border_color(o,lv_color_hex(0x8CACDA),LV_STATE_CHECKED);
     lv_obj_set_style_bg_color(o,lv_color_hex(0xE2E9EE),LV_STATE_CHECKED|LV_STATE_PRESSED);
     lv_obj_t *l=lv_label_create(o);lv_label_set_text(l,s);
-    lv_obj_set_style_text_font(l,&lv_font_instrument_sans_medium_16,0);lv_obj_center(l);
+    lv_obj_set_style_text_font(l,ui_message_font(&lv_font_instrument_sans_medium_16),0);
+    lv_obj_set_style_base_dir(l,LV_BASE_DIR_AUTO,0);lv_obj_center(l);
     lv_settings_action_guard_init(o);
     if(cb)lv_obj_add_event_cb(o,cb,LV_EVENT_CLICKED,data);
     /* Buttons inside a scroll region keep the initiating finger. Standalone

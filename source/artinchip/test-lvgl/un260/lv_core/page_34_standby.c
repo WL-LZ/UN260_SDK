@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
@@ -36,7 +37,7 @@ static void scene_layout(scene_t*s,const standby_layout_t*p);
 static void editor_apply(void);
 static standby_layout_t* layout(void){return &draft.layout[draft.mode][draft.active[draft.mode]];}
 static lv_obj_t* box(lv_obj_t*p,int x,int y,int w,int h,uint32_t c){lv_obj_t*o=lv_obj_create(p);lv_obj_remove_style_all(o);lv_obj_clear_flag(o,LV_OBJ_FLAG_SCROLLABLE);lv_obj_set_pos(o,x,y);lv_obj_set_size(o,w,h);lv_obj_set_style_bg_color(o,lv_color_hex(c),0);lv_obj_set_style_bg_opa(o,LV_OPA_COVER,0);return o;}
-static lv_obj_t* label(lv_obj_t*p,const char*t,int x,int y,const lv_font_t*f,uint32_t c){lv_obj_t*o=lv_label_create(p);lv_label_set_text(o,t);lv_obj_set_pos(o,x,y);lv_obj_set_style_text_font(o,f,0);lv_obj_set_style_text_color(o,lv_color_hex(c),0);lv_obj_clear_flag(o,LV_OBJ_FLAG_CLICKABLE);return o;}
+static lv_obj_t* label(lv_obj_t*p,const char*t,int x,int y,const lv_font_t*f,uint32_t c){lv_obj_t*o=lv_label_create(p);lv_label_set_text(o,t);lv_obj_set_pos(o,x,y);lv_obj_set_style_text_font(o,ui_message_font(f),0);lv_obj_set_style_text_color(o,lv_color_hex(c),0);lv_obj_clear_flag(o,LV_OBJ_FLAG_CLICKABLE);return o;}
 static uint32_t ink(uint32_t c){return (((c>>16)&255)*299+((c>>8)&255)*587+(c&255)*114)>145000?0x304957:0xFFFFFF;}
 static lv_point_t dial_point(int cx,int cy,float radius,float degrees){float a=degrees*0.01745329252f;return (lv_point_t){cx+(int)roundf(sinf(a)*radius),cy-(int)roundf(cosf(a)*radius)};}
 static void dial_draw(lv_event_t*e){
@@ -105,7 +106,7 @@ static void scene_update(scene_t*s,const standby_config_t*c,bool force){
 static void scene_layout(scene_t*s,const standby_layout_t*p){
  unsigned z=standby_layout_scale(p)*(s->small?4:10)/10;int k=s->small?4:10,pad=20*k/10;
  const lv_font_t*clock=&lv_font_standby_112;
- const lv_font_t*detail=&lv_font_instrument_sans_medium_18;
+ const lv_font_t*detail=ui_message_font(&lv_font_instrument_sans_medium_18);
  scaled_font_init(&s->clock_font,clock,z,s->clock_pixels,sizeof(s->clock_pixels));scaled_font_init(&s->detail_font,detail,z,s->detail_pixels,sizeof(s->detail_pixels));
  lv_obj_set_style_text_font(s->time,z==100?clock:&s->clock_font.font,0);lv_obj_set_style_text_font(s->greeting,z==100?detail:&s->detail_font.font,0);lv_obj_set_style_text_font(s->date,z==100?detail:&s->detail_font.font,0);
  lv_obj_refresh_self_size(s->time);lv_obj_refresh_self_size(s->date);lv_obj_refresh_self_size(s->greeting);lv_obj_update_layout(s->root);
@@ -183,7 +184,7 @@ static lv_obj_t*button(lv_obj_t*p,int x,int y,int w,const char*t,int id,bool act
  }
  return b;
 }
-static void link_button(lv_obj_t*p,int x,int y,int w,const char*t,int id){lv_obj_t*b=button(p,x,y,w,t,id,false);lv_obj_set_style_bg_opa(b,0,0);lv_obj_set_style_bg_opa(b,255,LV_STATE_PRESSED);lv_obj_set_style_text_font(lv_obj_get_child(b,0),&lv_font_instrument_sans_medium_12,0);}
+static void link_button(lv_obj_t*p,int x,int y,int w,const char*t,int id){lv_obj_t*b=button(p,x,y,w,t,id,false);lv_obj_set_style_bg_opa(b,0,0);lv_obj_set_style_bg_opa(b,255,LV_STATE_PRESSED);lv_obj_set_style_text_font(lv_obj_get_child(b,0),ui_message_font(&lv_font_instrument_sans_medium_12),0);}
 static lv_obj_t* choice(lv_obj_t*p,int x,int y,int w,int h,const char*t,int id,bool selected,uint32_t bg){lv_obj_t*b=control(p,x,y,w,h,id,bg,selected?0x3B87E7:0xDCE4E9);lv_obj_t*l=label(b,t,0,0,&lv_font_instrument_sans_medium_14,0x293B44);lv_obj_center(l);return b;}
 static void toggle(lv_obj_t*p,int x,int y,int w,const char*t,int id,bool on){lv_obj_t*b=control(p,x,y,w,48,id,0xFFFFFF,0xE4EBEF);label(b,t,15,15,&lv_font_instrument_sans_medium_14,0x293B44);lv_obj_t*s=box(b,w-59,11,43,25,on?0x287CE5:0xDCE4E9);lv_obj_clear_flag(s,LV_OBJ_FLAG_CLICKABLE);lv_obj_set_style_radius(s,13,0);lv_obj_t*k=box(s,on?20:2,2,21,21,0xFFFFFF);lv_obj_clear_flag(k,LV_OBJ_FLAG_CLICKABLE);lv_obj_set_style_radius(k,11,0);}
 static void queue_save(void){if(standby_store_save(&draft)){saving=true;redraw=true;ui_notice_post_text(UI_NOTICE_PROGRESS,"settings.standby",UI_N_("Standby settings"),UI_N_("Saving..."));}else ui_notice_post_text(UI_NOTICE_ERROR,"settings.standby",UI_N_("Standby settings not saved"),UI_N_("Try again."));}

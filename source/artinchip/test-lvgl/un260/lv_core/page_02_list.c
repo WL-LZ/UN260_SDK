@@ -1,5 +1,6 @@
 #include "un260/lv_resources/ui_page_background.h"
 #include "page_02_list.h"
+#include "un260/font/ui_message_font.h"
 #include "page_02_list_data.h"
 #include "page_02_list_search.h"
 #include "un260/lv_components/ui_multi_detail.h"
@@ -140,7 +141,8 @@ static lv_obj_t *label_create(lv_obj_t *parent, int x, int y, int w, int h,
     if (!o) return NULL;
     lv_obj_remove_style_all(o);
     lv_obj_set_pos(o, x, y); lv_obj_set_size(o, w, h);
-    lv_obj_set_style_text_font(o, font, 0);
+    lv_obj_set_style_text_font(o, ui_message_font(font), 0);
+    lv_obj_set_style_base_dir(o, LV_BASE_DIR_AUTO, 0);
     lv_obj_set_style_text_color(o, lv_color_hex(color), 0);
     lv_obj_set_style_text_align(o, align, 0);
     lv_label_set_long_mode(o, LV_LABEL_LONG_CLIP);

@@ -15,7 +15,7 @@ static void segments(lv_obj_t *p,int x,int y,int w,int h,const char *const *name
         lv_damped_button_set_exact_palette(v,lv_color_hex(value==i?0xFFFFFF:HEADER_SURFACE),lv_color_hex(0xDCE4E8));
         lv_obj_set_style_radius(v,10,0);
         lv_obj_t *l=lv_obj_get_child(v,0);lv_obj_set_style_text_color(l,lv_color_hex(value==i?BLUE:MUTED),0);
-        lv_obj_set_style_text_font(l,value==i?&lv_font_instrument_sans_semibold_16:&lv_font_instrument_sans_medium_16,0);
+        lv_obj_set_style_text_font(l,ui_message_font(value==i?&lv_font_instrument_sans_semibold_16:&lv_font_instrument_sans_medium_16),0);
     }
 }
 static uint32_t business_day(void)

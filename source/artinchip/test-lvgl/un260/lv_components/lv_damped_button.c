@@ -1,4 +1,5 @@
 #include "lv_damped_button.h"
+#include "un260/font/ui_message_font.h"
 
 #include <string.h>
 
@@ -283,7 +284,8 @@ lv_obj_t *lv_damped_button_create(lv_obj_t *parent,
     lv_obj_set_style_border_opa(button, LV_OPA_30, LV_STATE_PRESSED);
     label = lv_label_create(button);
     lv_label_set_text(label, text != NULL ? text : "");
-    lv_obj_set_style_text_font(label, font, 0);
+    lv_obj_set_style_text_font(label, ui_message_font(font), 0);
+    lv_obj_set_style_base_dir(label, LV_BASE_DIR_AUTO, 0);
     lv_obj_set_style_text_color(label, lv_color_hex(style->text_color), 0);
     lv_obj_set_style_text_color(label, lv_color_hex(style->disabled_text_color), LV_STATE_DISABLED);
     lv_obj_center(label);

@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #include "un260/lv_core/page_07_curr.h"
@@ -156,6 +157,8 @@ static void curr_style_view_button(void)
     lv_obj_set_style_shadow_width(g_page07_curr.objects.btn_view, 12, 0);
     lv_obj_set_style_shadow_opa(g_page07_curr.objects.btn_view, LV_OPA_10, 0);
     lv_obj_set_style_text_color(g_page07_curr.objects.btn_view_label, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_font(g_page07_curr.objects.btn_view_label,
+                              ui_message_font(&lv_font_instrument_sans_medium_16), 0);
     lv_label_set_text(g_page07_curr.objects.btn_view_label,
                       (g_page07_curr.model.view_mode == PAGE07_CURR_VIEW_CARD) ? ui_tr("CARD") : ui_tr("VIEW"));
     lv_obj_center(g_page07_curr.objects.btn_view_label);
@@ -177,6 +180,8 @@ static void curr_style_fav_button(void)
     lv_obj_set_style_shadow_opa(g_page07_curr.objects.btn_favorite, LV_OPA_0, 0);
     lv_obj_set_style_text_color(g_page07_curr.objects.btn_favorite_label,
                                 g_page07_curr.model.favorite_only ? lv_color_hex(0x377DAE) : lv_color_hex(0x5F5F5F), 0);
+    lv_obj_set_style_text_font(g_page07_curr.objects.btn_favorite_label,
+                              ui_message_font(&lv_font_instrument_sans_medium_16), 0);
     lv_label_set_text(g_page07_curr.objects.btn_favorite_label, ui_tr("FAV"));
     lv_obj_center(g_page07_curr.objects.btn_favorite_label);
 }
@@ -193,6 +198,8 @@ static void curr_style_back_button(void)
     lv_obj_set_style_shadow_width(g_page07_curr.objects.btn_back, 0, 0);
     lv_obj_set_style_shadow_opa(g_page07_curr.objects.btn_back, LV_OPA_0, 0);
     lv_obj_set_style_text_color(g_page07_curr.objects.btn_back_label, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_text_font(g_page07_curr.objects.btn_back_label,
+                              ui_message_font(&lv_font_instrument_sans_medium_16), 0);
     lv_label_set_text(g_page07_curr.objects.btn_back_label, ui_tr("Back"));
     lv_obj_center(g_page07_curr.objects.btn_back_label);
 }
@@ -515,7 +522,7 @@ static void curr_build_card_layer(void)
     lv_label_set_text(heading, g_page07_curr.model.favorite_only ?
                       ui_tr("Favorite currencies") : ui_tr("All currencies"));
     lv_obj_set_pos(heading, 24, 25);
-    lv_obj_set_style_text_font(heading, &lv_font_instrument_sans_medium_14, 0);
+    lv_obj_set_style_text_font(heading,ui_message_font(&lv_font_instrument_sans_medium_14), 0);
     lv_obj_set_style_text_color(heading, lv_color_hex(0x60798D), 0);
     lv_obj_t *available = lv_label_create(g_page07_curr.objects.card_layer);
     /* currency_state owns AUT/MUL insertion; do not add them twice. */
@@ -523,7 +530,7 @@ static void curr_build_card_layer(void)
     lv_obj_set_size(available, 180, LV_SIZE_CONTENT);
     lv_obj_set_pos(available, CURR_VIEW_W - 204, 25);
     lv_obj_set_style_text_align(available, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_set_style_text_font(available, &lv_font_instrument_sans_medium_14, 0);
+    lv_obj_set_style_text_font(available,ui_message_font(&lv_font_instrument_sans_medium_14), 0);
     lv_obj_set_style_text_color(available, lv_color_hex(0x7E91A1), 0);
     page07_curr_carousel_init(&g_page07_curr.carousel,
         g_page07_curr.objects.card_layer,
@@ -568,13 +575,13 @@ static void curr_build_card_layer(void)
         lv_label_set_text(g_page07_curr.cards[i].name,
                           currency_state_display_code(curr_code));
         lv_obj_set_pos(g_page07_curr.cards[i].name, 22, 158);
-        lv_obj_set_style_text_font(g_page07_curr.cards[i].name, &lv_font_instrument_sans_semibold_32, 0);
+        lv_obj_set_style_text_font(g_page07_curr.cards[i].name,ui_message_font(&lv_font_instrument_sans_semibold_32), 0);
 
         g_page07_curr.cards[i].no =
             lv_label_create(g_page07_curr.cards[i].render_root);
         lv_label_set_text_fmt(g_page07_curr.cards[i].no, ui_tr("NO. %02d"), abs_idx + 1);
         lv_obj_set_pos(g_page07_curr.cards[i].no, 22, 230);
-        lv_obj_set_style_text_font(g_page07_curr.cards[i].no, &lv_font_instrument_sans_medium_12, 0);
+        lv_obj_set_style_text_font(g_page07_curr.cards[i].no,ui_message_font(&lv_font_instrument_sans_medium_12), 0);
 
         /* Static footer divider stays inside the original card footprint. */
         g_page07_curr.cards[i].focus_mark =
@@ -641,7 +648,7 @@ static void curr_build_card_layer(void)
         lv_obj_t *selected_text = lv_label_create(selected);
         lv_label_set_text(selected_text, ui_tr("Selected"));
         lv_obj_set_pos(selected_text, 17, 0);
-        lv_obj_set_style_text_font(selected_text, &lv_font_instrument_sans_medium_12, 0);
+        lv_obj_set_style_text_font(selected_text,ui_message_font(&lv_font_instrument_sans_medium_12), 0);
         lv_obj_set_style_text_color(selected_text, lv_color_hex(0x377DAE), 0);
         g_page07_curr.cards[i].selected_label = selected;
         lv_obj_add_flag(selected, LV_OBJ_FLAG_HIDDEN);
@@ -673,7 +680,7 @@ static void curr_build_card_layer(void)
     lv_obj_t *hint = lv_label_create(g_page07_curr.objects.card_layer);
     lv_label_set_text(hint, ui_tr("Select a currency to continue"));
     lv_obj_set_pos(hint, 24, 358);
-    lv_obj_set_style_text_font(hint, &lv_font_instrument_sans_medium_12, 0);
+    lv_obj_set_style_text_font(hint,ui_message_font(&lv_font_instrument_sans_medium_12), 0);
     lv_obj_set_style_text_color(hint, lv_color_hex(0x7E91A1), 0);
     /* Transparent arrow buttons retain a 36px touch target. */
     static const lv_point_t chevron_left[] = {{18,12},{12,18},{18,24}};
@@ -850,7 +857,7 @@ static void curr_refresh_right_views(void)
         g_page07_curr.objects.empty_label = lv_label_create(g_page07_curr.objects.right_area);
         lv_label_set_text(g_page07_curr.objects.empty_label, g_page07_curr.model.favorite_only ? ui_tr("NO FAVORITE CURRENCY") : ui_tr("NO CURRENCY"));
         lv_obj_set_style_text_color(g_page07_curr.objects.empty_label, lv_color_hex(0xB3B3B3), 0);
-        lv_obj_set_style_text_font(g_page07_curr.objects.empty_label, &lv_font_instrument_sans_medium_20, 0);
+        lv_obj_set_style_text_font(g_page07_curr.objects.empty_label,ui_message_font(&lv_font_instrument_sans_medium_20), 0);
         lv_obj_center(g_page07_curr.objects.empty_label);
         curr_set_mode_visible();
         return;
@@ -974,7 +981,7 @@ void page_07_curr_img_refre(void)
     lv_obj_t* left_title = lv_label_create(g_page07_curr.objects.left_panel);
     lv_label_set_text(left_title, ui_tr("CURRENCY"));
     lv_obj_set_pos(left_title, 105, 14);
-    lv_obj_set_style_text_font(left_title, &lv_font_instrument_sans_semibold_24, 0);
+    lv_obj_set_style_text_font(left_title,ui_message_font(&lv_font_instrument_sans_semibold_24), 0);
     lv_obj_set_style_text_color(left_title, lv_color_hex(0x707070), 0);
 
     g_page07_curr.objects.left_img = lv_img_create(g_page07_curr.objects.left_panel);
@@ -984,7 +991,7 @@ void page_07_curr_img_refre(void)
     lv_obj_t *current_caption = lv_label_create(g_page07_curr.objects.left_panel);
     lv_label_set_text(current_caption, ui_tr("CURRENT CURRENCY"));
     lv_obj_set_pos(current_caption, 51, 82);
-    lv_obj_set_style_text_font(current_caption, &lv_font_instrument_sans_medium_12, 0);
+    lv_obj_set_style_text_font(current_caption,ui_message_font(&lv_font_instrument_sans_medium_12), 0);
     lv_obj_set_style_text_color(current_caption, lv_color_hex(0x7E91A1), 0);
     lv_obj_t *current_dot = lv_obj_create(g_page07_curr.objects.left_panel);
     lv_obj_remove_style_all(current_dot);
@@ -1009,7 +1016,7 @@ void page_07_curr_img_refre(void)
 
     g_page07_curr.objects.left_no = lv_label_create(g_page07_curr.objects.left_panel);
     lv_obj_set_pos(g_page07_curr.objects.left_no, CURR_LEFT_NO_X, CURR_LEFT_NO_Y);
-    lv_obj_set_style_text_font(g_page07_curr.objects.left_no, &lv_font_instrument_sans_medium_14, 0);
+    lv_obj_set_style_text_font(g_page07_curr.objects.left_no,ui_message_font(&lv_font_instrument_sans_medium_14), 0);
     lv_obj_set_style_text_color(g_page07_curr.objects.left_no, lv_color_hex(0x7E91A1), 0);
 
     g_page07_curr.objects.btn_view = lv_btn_create(g_page07_curr.objects.left_panel);

@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
@@ -148,7 +149,7 @@ static void append_log(const char* prefix, const char* data, const char* color_h
 
     lv_obj_set_width(lbl, lv_pct(100));
     lv_label_set_long_mode(lbl, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_font(lbl, &lv_font_instrument_sans_medium_14, 0);
+    lv_obj_set_style_text_font(lbl,ui_message_font(&lv_font_instrument_sans_medium_14), 0);
     /* Native flex compacts after oldest-row deletion; no animated log scroll. */
     lv_obj_update_layout(g_debug_page.log_area);
     if (follow_tail) lv_obj_scroll_to_view(lbl, LV_ANIM_OFF);
@@ -447,7 +448,7 @@ void ui_page_10_debug_create(void)
     lv_textarea_set_max_length(g_debug_page.input,191);
     lv_textarea_set_accepted_chars(g_debug_page.input,"0123456789ABCDEF ");
     lv_textarea_set_text(g_debug_page.input,"FD DF ");
-    lv_obj_set_style_text_font(g_debug_page.input,&lv_font_instrument_sans_medium_18,0);
+    lv_obj_set_style_text_font(g_debug_page.input,ui_message_font(&lv_font_instrument_sans_medium_18),0);
     lv_obj_set_style_text_color(g_debug_page.input,lv_color_hex(0x1D2B34),0);
     lv_obj_set_style_bg_color(g_debug_page.input,lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),0);
     lv_obj_set_style_border_width(g_debug_page.input,1,0);
@@ -471,7 +472,7 @@ void ui_page_10_debug_create(void)
     lv_obj_set_style_bg_opa(g_debug_page.keyboard,255,LV_PART_ITEMS);
     lv_obj_set_style_bg_color(g_debug_page.keyboard,lv_color_hex(0xE2E9EE),LV_PART_ITEMS|LV_STATE_PRESSED);
     lv_obj_set_style_text_color(g_debug_page.keyboard,lv_color_hex(0x1D2B34),LV_PART_ITEMS);
-    lv_obj_set_style_text_font(g_debug_page.keyboard,&lv_font_instrument_sans_medium_18,LV_PART_ITEMS);
+    lv_obj_set_style_text_font(g_debug_page.keyboard,ui_message_font(&lv_font_instrument_sans_medium_18),LV_PART_ITEMS);
     lv_obj_add_event_cb(g_debug_page.keyboard,kb_hex_event_cb,LV_EVENT_VALUE_CHANGED,NULL);
 
     lv_obj_t *log=lv_settings_box(communication_view,646,0,586,242,0xFFFFFF);

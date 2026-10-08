@@ -1,3 +1,5 @@
+#include "un260/font/ui_locale_font_bank.h"
+#include "un260/font/ui_message_font.h"
 #include "test_notice_sink.h"
 #include <assert.h>
 #include <stdio.h>
@@ -763,10 +765,14 @@ static void history_test_multi(unsigned baseline)
     puts("PASS: MULTI unchanged main list, nested currency/detail Back, incomplete state, USD search and lifecycle");
 }
 
+
+#include "test_locale_view_checks.h"
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
     lv_init();
+    ui_lang_set_resource_preparer(ui_locale_font_prepare);ui_message_font_set_provider(ui_locale_font_compose);
+    for(size_t i=1;i<ui_lang_count();++i)assert(ui_lang_prepare_resources(ui_lang_at(i)->id));
     lv_img_decoder_t *decoder = lv_img_decoder_create(); assert(decoder);
     lv_img_decoder_set_info_cb(decoder, test_asset_info);
     lv_img_decoder_set_open_cb(decoder, test_asset_open);
@@ -792,7 +798,7 @@ int main(void)
     assert(history && !history->record_count && !history->result.matched_count);
     for(unsigned i=0;i<4;i++) {
         lv_obj_t *label=lv_damped_button_get_label(history->actions[i]);
-        assert(lv_obj_get_style_text_font(label,0)==&lv_font_instrument_sans_medium_16);
+        assert(lv_obj_get_style_text_font(label,0)==ui_message_font(&lv_font_instrument_sans_medium_16));
         assert(lv_obj_get_y(history->actions[i])==16);
         assert(lv_obj_get_height(history->actions[i])==42);
         if(!lv_obj_has_state(history->actions[i],LV_STATE_DISABLED))
@@ -832,7 +838,17 @@ int main(void)
     workspace_defaults(&operator_model);strcpy(operator_model.users[0].name,"Renamed Operator");strcpy(test_store.records[0].operator_name,"Original Operator");
     ui_page_19_history_open_record(test_store.records[0].record_no);ui_page_19_history_create(lv_scr_act());history_test_tick(100);assert(strstr(lv_label_get_text(history->subtitle),"Renamed Operator"));assert(!strcmp(test_store.records[0].operator_name,"Original Operator")&&test_store.records[0].operator_id==1);ui_page_19_history_destroy();
     puts("PASS operator scope and rename: stable ID, current display name, immutable original snapshot, global counts unchanged");
-    puts("PASS: actual History LVGL empty/full smoke and timer ownership");
+    for(size_t i=1;i<ui_lang_count();++i){
+        const ui_locale_t *locale=ui_lang_at(i);ui_lang_set(locale->id);history_test_fixtures(3);
+        ui_page_19_history_open_all();ui_page_19_history_create(lv_scr_act());history_test_tick(150);
+        check_single_line(lv_scr_act());char name[80];snprintf(name,sizeof(name),"history-%s",locale->tag);history_test_bmp(name);
+        ui_page_19_history_destroy();
+        ui_page_19_history_open_record(test_store.records[0].record_no);ui_page_19_history_create(lv_scr_act());history_test_tick(150);
+        check_single_line(lv_scr_act());snprintf(name,sizeof(name),"history-detail-%s",locale->tag);history_test_bmp(name);
+        ui_page_19_history_destroy();
+    }
+    ui_lang_set(LANGUAGE_EN);
+    puts("PASS: actual History LVGL empty/full smoke, locale glyphs/buttons and timer ownership");
     return 0;
 }
 

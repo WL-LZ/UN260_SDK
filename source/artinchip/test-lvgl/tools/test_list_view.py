@@ -13,6 +13,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from test_i18n_support import with_i18n
 
 ROOT = Path(__file__).resolve().parents[1]
 FONTS = ["instrument_sans_medium_10", "instrument_sans_medium_12",
@@ -21,7 +22,8 @@ FONTS = ["instrument_sans_medium_10", "instrument_sans_medium_12",
          "instrument_sans_medium_22",
          "instrument_sans_medium_32", "instrument_sans_semibold_12",
          "instrument_sans_semibold_14", "instrument_sans_semibold_20",
-         "instrument_sans_semibold_22", "instrument_sans_bold_14"]
+         "instrument_sans_semibold_22", "instrument_sans_semibold_24", "instrument_sans_bold_14",
+         "instrument_sans_semibold_18", "instrument_sans_semibold_28", "main_currency_32"]
 
 LIST_IMAGES = {
     "list_icons/receipt_24.png": 24,
@@ -90,6 +92,8 @@ def main():
         conf.write_text("""#ifndef LV_CONF_H
 #define LV_CONF_H
 #define LV_COLOR_DEPTH 32
+#define LV_USE_BIDI 1
+#define LV_USE_ARABIC_PERSIAN_CHARS 1
 #define LV_MEM_SIZE (4U * 1024U * 1024U)
 #define LV_USE_LOG 0
 #define LV_USE_SNAPSHOT 1
@@ -107,7 +111,11 @@ def main():
         if not match:
             raise AssertionError("Production drag-ownership registration missing")
         port_helper = work / "port_drag.c"
-        port_helper.write_text('#include "lvgl/lvgl.h"\n' + match.group() + '\n')
+        images = (ROOT / "un260/lv_resources/lv_img_init.c").read_text(encoding="utf-8")
+        currency_image = re.search(r"const char\s*\*\s*get_currency_img\(.*?\n\}", images, re.S)
+        assert currency_image, "Production currency image mapping missing"
+        port_helper.write_text('#include <string.h>\n#include "lvgl/lvgl.h"\n'
+            '#include "un260/lv_resources/lv_img_init.h"\n' + match.group() + '\n' + currency_image.group() + '\n')
         sources = [ROOT / "tools/test_list_view.c", port_helper, *asset_sources]
         for path in ["un260/lv_components/lv_recycled_list.c", "un260/lv_components/ui_scrollbar.c",
                      "un260/lv_components/ui_list_window.c",
@@ -128,16 +136,24 @@ def main():
                      "un260/counting/counting_serial_text.c"]:
             sources.append(ROOT / path)
         sources += [ROOT / f"un260/font/lv_font_{f}.c" for f in FONTS]
+        sources += [ROOT / path for path in (
+            "un260/lv_components/lv_settings.c", "un260/lv_components/ui_multi_detail.c",
+            "un260/lv_components/ui_detail_reveal.c", "un260/font/scaled_font.c",
+            "un260/lv_components/lv_loading_orbit.c",
+            "un260/counting/counting_multi_extra.c", "un260/counting/counting_multi.c",
+            "un260/currency/currency_metadata.c", "un260/lv_system/app_clock.c")]
+        sources = with_i18n(sources, ROOT)
         sources += sorted((lvgl / "src").rglob("*.c"))
         executable = work / "test-list"
         command = [compiler, "-std=c11", "-O1", "-g", "-Wall", "-Wextra",
+                   "-D_POSIX_C_SOURCE=200809L",
                    "-DLV_DRV_CONF_H",  # Hardware driver config is not a host raster configuration.
                    '-DLVGL_DIR="L:/usr/local/share/lvgl_data/"',
                    "-fsanitize=undefined", "-fno-sanitize-recover=all",
                    "-Wl,--wrap=lv_timer_create",  # Test-only one-shot motion timer allocation failure.
                    "-Wl,--wrap=lv_mem_alloc",  # Test-only one-shot search owner allocation failure.
                    f"-I{work}", f"-I{ROOT}", f"-I{lvgl}", f"-DLV_CONF_PATH={conf}",
-                   *map(str, sources), "-lm", "-o", str(executable)]
+                   *map(str, sources), "-lm", "-pthread", "-o", str(executable)]
         subprocess.run(command, check=True)
         from PIL import Image
         for name in ('user', 'settings'):

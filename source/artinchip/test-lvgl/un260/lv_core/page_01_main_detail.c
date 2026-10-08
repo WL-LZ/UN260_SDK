@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "page_01_main_detail.h"
 #include "lv_page_manager.h"
 #include "lv_port_indev.h"
@@ -74,7 +75,7 @@ static lv_obj_t *label_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t width,
     if (!label) return NULL;
     lv_obj_remove_style_all(label);
     lv_obj_set_size(label, width, LV_SIZE_CONTENT);
-    lv_obj_set_style_text_font(label, font, 0);
+    lv_obj_set_style_text_font(label,ui_message_font(font), 0);
     lv_obj_set_style_text_color(label, lv_color_hex(color), 0);
     lv_obj_set_style_text_align(label, align, 0);
     lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
@@ -100,7 +101,7 @@ static void number_text(lv_obj_t *label, const char *text)
         if (size.x <= lv_obj_get_style_width(label, 0)) { font = fonts[i]; break; }
     }
     if (lv_obj_get_style_text_font(label, 0) != font)
-        lv_obj_set_style_text_font(label, font, 0);
+        lv_obj_set_style_text_font(label,ui_message_font(font), 0);
     label_text(label, text);
 }
 

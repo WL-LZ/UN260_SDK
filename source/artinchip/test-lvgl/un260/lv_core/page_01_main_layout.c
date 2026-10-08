@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "page_01_main_layout.h"
 #include <stdlib.h>
@@ -248,7 +249,7 @@ static lv_obj_t *box(lv_obj_t *parent,int x,int y,int w,int h,uint32_t color)
 static lv_obj_t *label(lv_obj_t *parent,const char *text,uint32_t color)
 {
     lv_obj_t *obj=lv_label_create(parent);lv_label_set_text(obj,text);
-    lv_obj_set_style_text_font(obj,&lv_font_instrument_sans_medium_16,0);
+    lv_obj_set_style_text_font(obj,ui_message_font(&lv_font_instrument_sans_medium_16),0);
     lv_obj_set_style_text_color(obj,lv_color_hex(color),0);
     return obj;
 }

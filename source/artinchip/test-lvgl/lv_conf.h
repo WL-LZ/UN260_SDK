@@ -3,6 +3,10 @@
 
 #define LV_USE_PERF_MONITOR         0
 #define LV_COLOR_DEPTH              32
+/* Shared with lv_conf_library.h: shape Arabic text and resolve mixed-direction
+ * labels. Page geometry and numeric/keyboard direction remain explicit. */
+#define LV_USE_BIDI 1
+#define LV_USE_ARABIC_PERSIAN_CHARS 1
 #define LV_IMG_CACHE_DEF_SIZE 16
 #define LV_USE_MEM_MONITOR 0
 #define LV_INDEV_DEF_READ_PERIOD 10

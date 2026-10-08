@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_resources/ui_page_background.h"
 #include "un260/lv_components/ui_scrollbar.h"
 #include "un260/lv_components/lv_settings.h"
@@ -65,7 +66,7 @@ static lv_obj_t *search_label(lv_obj_t *parent,int x,int y,int w,int h,
     lv_obj_t *o=lv_label_create(parent);
     if (!o) return NULL;
     lv_obj_remove_style_all(o);lv_obj_set_pos(o,x,y);lv_obj_set_size(o,w,h);
-    lv_obj_set_style_text_font(o,font,0);
+    lv_obj_set_style_text_font(o,ui_message_font(font),0);
     lv_obj_set_style_text_color(o,lv_color_hex(color),0);
     lv_label_set_long_mode(o,LV_LABEL_LONG_CLIP);lv_label_set_text(o,text ? text : "");
     lv_obj_clear_flag(o,LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
@@ -222,9 +223,9 @@ static void search_input_event(lv_event_t *e)
         const lv_alnum_keyboard_config_t config={
             .title=ui_text_get(UI_TEXT_QUERY_SERIAL),
             .placeholder=ui_text_get(UI_TEXT_SERIAL_INPUT_HINT),
-            .apply_text=ui_text_get(UI_TEXT_SERIAL_SEARCH),
-            .clear_text=ui_text_get(UI_TEXT_SERIAL_CLEAR),
-            .cancel_text=ui_text_get(UI_TEXT_SERIAL_ESC),
+            .apply_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_SERIAL_SEARCH)),
+            .clear_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_SERIAL_CLEAR)),
+            .cancel_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_SERIAL_ESC)),
             .max_length=sizeof(s->query.text)-1,
             .submit=search_input_submit,.cancel=search_input_cancel,.context=s};
         s->keyboard=lv_alnum_keyboard_create(s->root,&config);

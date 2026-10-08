@@ -44,4 +44,31 @@ with tempfile.TemporaryDirectory(prefix='un260-update-i18n-') as temp:
     if os.name != 'nt': flags += ['-fsanitize=address,undefined','-no-pie']
     subprocess.run([os.environ.get('CC','cc'),*flags,'-I'+str(ROOT),str(code),str(ROOT/'un260/lv_system/ui_update_message.c'),'-o',str(exe)],check=True)
     subprocess.run([str(exe)],check=True)
+    code.write_text(r'''
+#include <assert.h>
+#include <string.h>
+#include "un260/lv_system/ui_i18n.h"
+#include "un260/lv_system/ui_update_message.h"
+static const struct {const char *key,*text;} expected[]={
+#include "un260/lv_system/ui_update_catalog.inc"
+};
+int main(void){
+    for(unsigned i=0;i<sizeof(expected)/sizeof(expected[0]);++i){
+        if(i)assert(strcmp(expected[i-1].key,expected[i].key)<0);
+        assert(!strcmp(ui_tr_for(LANGUAGE_EN,expected[i].key),expected[i].text));
+    }
+    assert(!strcmp(ui_tr_for(LANGUAGE_EN,NULL),""));
+    assert(!strcmp(ui_tr_for(LANGUAGE_EN,"External %n"),"External %n"));
+    char out[320];
+    ui_update_message_render(LANGUAGE_EN,"Unsafe install destination: customer-%n-name",out,sizeof(out));
+    assert(!strcmp(out,"Unsafe install destination: customer-%n-name"));
+    ui_update_message_render(LANGUAGE_EN,"Upgrade interrupted",out,sizeof(out));
+    assert(!strcmp(out,"Upgrade interrupted"));
+    return 0;
+}
+''',encoding='utf-8')
+    subprocess.run([os.environ.get('CC','cc'),*flags,'-I'+str(ROOT),str(code),
+                    str(ROOT/'un260/lv_system/ui_update_message.c'),
+                    str(ROOT/'un260/lv_system/ui_update_catalog.c'),'-o',str(exe)],check=True)
+    subprocess.run([str(exe)],check=True)
 print('Updater i18n PASS: known templates, literal parameters, unknown diagnostics, UTF-8, extraction')

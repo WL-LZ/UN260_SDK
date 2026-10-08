@@ -1,4 +1,6 @@
 #include "un260/lv_components/ui_notice.h"
+#include "un260/font/ui_locale_font_bank.h"
+#include "un260/font/ui_message_font.h"
 #include "un260/app_service/runtime_guard.h"
 #include <unistd.h>
 #include <stdio.h>
@@ -46,6 +48,8 @@ static int application_main(void) {
     if (!startup_devices_prepare()) return 1;
 #endif
     lv_init();
+    ui_lang_set_resource_preparer(ui_locale_font_prepare);
+    ui_message_font_set_provider(ui_locale_font_compose);
     lv_img_cache_set_size(IMG_CACHE_NUM);
     aic_dec_create();
 
@@ -126,6 +130,7 @@ static int application_main(void) {
         app_startup_trace_mark("early_visual_adopted");
     }
     bool history_load_reported = false;
+    bool previous_fault_notified = false;
     uint32_t visual_commit_tick = app_clock_uptime_ms() - LV_DISP_DEF_REFR_PERIOD;
     while (1) {
         runtime_guard_heartbeat();
@@ -235,6 +240,13 @@ static int application_main(void) {
         render_scratch_poll(app_clock_uptime_ms());
 
         current_page = ui_manager_get_current_page();
+        if (!previous_fault_notified && runtime_guard_previous_fault() &&
+            current_page != UI_PAGE_BOOT && !ui_page_00_boot_anim_is_active()) {
+            previous_fault_notified = true;
+            ui_notice_post_text(UI_NOTICE_WARNING, "runtime.restart",
+                UI_N_("Previous fault recorded"),
+                UI_N_("Check any unfinished count before continuing."));
+        }
         perf_profile_set_page_context(
             (uint32_t)current_page, ui_manager_page_name(current_page));
 

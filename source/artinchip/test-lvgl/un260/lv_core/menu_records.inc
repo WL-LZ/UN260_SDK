@@ -140,7 +140,7 @@ static void records_view(lv_obj_t *b)
     if(menu.sub==4&&cashbook_day_valid(day)){size_t used=strlen(date);snprintf(date+used,sizeof(date)-used," %u",day/10000);}
     lv_point_t title_size;lv_txt_get_size(&title_size,title,&lv_font_instrument_sans_semibold_26,0,0,650,LV_TEXT_FLAG_NONE);
     lv_obj_t *date_button=button(b,title_size.x+12,3,132,34,date,A_BUSINESS_DAY,false);lv_obj_set_style_bg_opa(date_button,LV_OPA_TRANSP,0);lv_obj_set_style_text_color(date_button,lv_color_hex(MUTED),0);
-    lv_obj_t *date_label=lv_obj_get_child(date_button,0);lv_obj_set_style_text_font(date_label,&lv_font_instrument_sans_menumedium_14,0);lv_obj_align(date_label,LV_ALIGN_LEFT_MID,0,0);
+    lv_obj_t *date_label=lv_obj_get_child(date_button,0);lv_obj_set_style_text_font(date_label,ui_message_font(&lv_font_instrument_sans_menumedium_14),0);lv_obj_align(date_label,LV_ALIGN_LEFT_MID,0,0);
     if(menu.sub==4){
         unsigned total=book->close_count;if(record_page*3>=total)record_page=0;
         button(b,882,0,146,36,ui_tr("Archives"),A_ARCHIVES,false);

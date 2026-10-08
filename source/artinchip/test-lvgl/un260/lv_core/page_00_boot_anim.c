@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_core/page_00_boot_anim.h"
 
@@ -208,7 +209,7 @@ static lv_obj_t *boot_intro_create_label(lv_obj_t *parent, const char *text,
     lv_label_set_text(label, text);
     lv_obj_set_width(label, width);
     lv_obj_set_pos(label, x, y);
-    lv_obj_set_style_text_font(label, font, 0);
+    lv_obj_set_style_text_font(label,ui_message_font(font), 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_opa(label, LV_OPA_TRANSP, 0);
     return label;

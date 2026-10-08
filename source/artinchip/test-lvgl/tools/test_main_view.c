@@ -4,9 +4,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include "lvgl/lvgl.h"
+static void check_single_line(lv_obj_t *o);
 #include "aic_ui/compiled_asset.h"
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/lv_system/ui_lang.h"
+#include "un260/font/ui_locale_font_bank.h"
 #include "un260/lv_components/smart_island/smart_island_internal.h"
 #include "un260/lv_core/page_01_main_detail.c"
 #include "un260/lv_core/page_01_main.c"
@@ -300,7 +302,9 @@ static void test_main(void)
     const char *currencies[]={"CNY","EUR","KRW","TRY","INR","PHP","GBP","PKR","ISK","SOS","MAD","DZD","AED","SAR","OMR","QAR","IQD"};
     for(unsigned i=0;i<sizeof(currencies)/sizeof(currencies[0]);++i) {
         assert(currency_state_confirm_active_code(currencies[i]));ui_refresh_main_page();render();
-        assert(!strcmp(lv_label_get_text(s_curr_label),currency_metadata_symbol(currencies[i])));
+        lv_obj_t *symbol_probe=lv_label_create(lv_scr_act());lv_label_set_text(symbol_probe,currency_metadata_symbol(currencies[i]));
+        assert(!strcmp(lv_label_get_text(s_curr_label),lv_label_get_text(symbol_probe)));lv_obj_del(symbol_probe);
+        check_single_line(s_curr_label);
         assert(lv_obj_is_visible(s_curr_label) && !lv_obj_is_visible(s_amount_unit_icon));
         lv_point_t size;
         lv_txt_get_size(&size,lv_label_get_text(s_curr_label),lv_obj_get_style_text_font(s_curr_label,0),
@@ -600,6 +604,47 @@ static void test_list_initial_font(void)
 #include "test_main_layout_cases.h"
 #include "test_main_footer_layout_cases.h"
 #include "test_main_quick_cases.h"
+#include "test_locale_view_checks.h"
+#include "currency_codes_under_test.h"
+#include "un260/font/scaled_font.h"
+static void test_main_locales(void){
+ ui_lang_set_resource_preparer(ui_locale_font_prepare);ui_message_font_set_provider(ui_locale_font_compose);
+ for(size_t i=0;i<ui_lang_count();++i){
+  const ui_locale_t *locale=ui_lang_at(i);
+  assert(ui_lang_prepare_resources(locale->id));ui_lang_set(locale->id);
+  /* Scaled text must fetch its bitmap from the font that owns the glyph. */
+  lv_obj_t *sample=lv_label_create(lv_scr_act());lv_label_set_text(sample,ui_tr("Amount"));
+  const char *shaped=lv_label_get_text(sample);
+  const unsigned scales[]={40,80,100,140};
+  for(unsigned scale=0;scale<sizeof(scales)/sizeof(scales[0]);++scale){
+   scaled_font_t scaled;uint8_t pixels[4096];
+   assert(scaled_font_init(&scaled,ui_message_font(&lv_font_instrument_sans_medium_18),scales[scale],pixels,sizeof(pixels)));
+   uint32_t offset=0;
+   while(shaped[offset]){uint32_t cp=_lv_txt_encoded_next(shaped,&offset);lv_font_glyph_dsc_t glyph;
+    if(cp<=32)continue;
+    assert(lv_font_get_glyph_dsc(&scaled.font,&glyph,cp,0)&&!glyph.is_placeholder);
+    if(glyph.box_w&&glyph.box_h)assert(lv_font_get_glyph_bitmap(&scaled.font,cp)!=NULL);
+   }
+  }
+  lv_obj_del(sample);
+  fixture(true);assert(currency_state_confirm_active_code("USD"));ui_main_create(lv_scr_act());page_01_main_resume();tick(300);
+  for(size_t c=0;c<sizeof(all_currency_codes)/sizeof(all_currency_codes[0]);++c){
+   assert(currency_state_confirm_active_code(all_currency_codes[c]));ui_refresh_main_page();render();
+   printf("GLYPH_MATRIX locale=%s currency=%s\n",locale->tag,all_currency_codes[c]);
+   check_single_line(s_curr_label);
+   assert(lv_obj_get_style_text_font(s_curr_label,0)==&lv_font_main_currency_32 ||
+          lv_obj_get_style_text_font(s_curr_label,0)==&lv_font_main_currency_56);
+  }
+  assert(currency_state_confirm_active_code("USD"));ui_refresh_main_page();render();
+  for(unsigned section=0;section<3;++section){
+   page_01_detail_section_set(section,true);tick(300);check_single_line(lv_scr_act());
+   char file[80];snprintf(file,sizeof(file),"main-locale-%s-%u",locale->tag,section);write_bmp(file);
+  }
+  smart_island_open_action_page();tick(500);check_single_line(lv_scr_act());smart_island_close();tick(300);
+  ui_main_destroy();
+ }
+ ui_lang_set(LANGUAGE_EN);
+}
 int main(void)
 {
     setvbuf(stdout,NULL,_IONBF,0);
@@ -646,6 +691,7 @@ int main(void)
         assert(frame.root == NULL && timers() == test_timer_count);
     }
 #endif
+    test_main_locales();
     counting_data_clear_serials(counting_data_mutable());counting_data_clear_errors(counting_data_mutable());
     lv_indev_delete(indev);lv_img_decoder_delete(decoder);lv_deinit();host_external_assets_release();
     puts("PASS actual Main/detail/Smart Island raster and pointer dispatch, all modes, pending START, retained lifecycle; DMA/controller/Innovation navigation remain board tests");

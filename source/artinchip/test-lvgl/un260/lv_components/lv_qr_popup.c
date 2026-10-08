@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "lv_qr_popup.h"
 #include "lv_popup_style.h"
 #include "un260/lv_system/ui_text.h"
@@ -83,12 +84,12 @@ static void qr_popup_create(void) //创建二维码弹窗对象
     g_qr_popup_title = lv_label_create(g_qr_popup_card);
     lv_obj_set_width(g_qr_popup_title, 510);
     lv_obj_set_pos(g_qr_popup_title, 32, 38);
-    lv_obj_set_style_text_font(g_qr_popup_title, &lv_font_instrument_sans_semibold_28, 0);
+    lv_obj_set_style_text_font(g_qr_popup_title,ui_message_font(&lv_font_instrument_sans_semibold_28), 0);
     lv_obj_set_style_text_color(g_qr_popup_title, lv_color_hex(0x1D2B34), 0);
 
     g_qr_popup_desc = lv_label_create(g_qr_popup_card);
     lv_obj_set_width(g_qr_popup_desc, 490);
-    lv_obj_set_style_text_font(g_qr_popup_desc, &lv_font_instrument_sans_medium_16, 0);
+    lv_obj_set_style_text_font(g_qr_popup_desc,ui_message_font(&lv_font_instrument_sans_medium_16), 0);
     lv_obj_set_style_text_color(g_qr_popup_desc, lv_color_hex(0x586B77), 0);
 
     g_qr_popup_canvas = lv_canvas_create(g_qr_popup_card);
@@ -181,14 +182,17 @@ static bool qr_popup_draw_code(const char* qr_text) //生成并绘制二维码�
 static void qr_popup_refresh_text(void) //刷新二维码弹窗文本
 {
     if (g_qr_popup_title != NULL) {
+        lv_obj_set_style_text_font(g_qr_popup_title,ui_message_font(&lv_font_instrument_sans_semibold_28),0);
         lv_label_set_text(g_qr_popup_title, ui_text_get(UI_TEXT_WIDGET_QR_POPUP_TITLE));
     }
 
     if (g_qr_popup_desc != NULL) {
+        lv_obj_set_style_text_font(g_qr_popup_desc,ui_message_font(&lv_font_instrument_sans_medium_16),0);
         lv_label_set_text(g_qr_popup_desc, ui_text_get(UI_TEXT_WIDGET_QR_POPUP_DESC));
     }
 
     if (g_qr_popup_close_label != NULL) {
+        lv_obj_set_style_text_font(g_qr_popup_close_label,ui_message_font(&lv_font_instrument_sans_bold_16),0);
         lv_damped_button_set_text(g_qr_popup_close_btn,
                                   ui_text_get(UI_TEXT_WIDGET_QR_POPUP_BTN_CLOSE));
     }

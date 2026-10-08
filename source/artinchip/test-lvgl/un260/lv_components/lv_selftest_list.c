@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "lv_selftest_list.h"
 
@@ -242,7 +243,7 @@ static void selftest_list_apply_item_style(lv_selftest_list_ctx_t *ctx, lv_selft
     lv_obj_set_style_pad_top(item->card, 0, 0);
     lv_obj_set_style_pad_bottom(item->card, 0, 0);
     lv_obj_set_style_pad_row(item->card, 0, 0);
-    lv_obj_set_style_text_font(item->card, ctx->cfg.text_font, 0);
+    lv_obj_set_style_text_font(item->card,ui_message_font(ctx->cfg.text_font), 0);
 
     lv_obj_set_size(item->icon_box, ctx->cfg.icon_size, ctx->cfg.icon_size);
     lv_obj_set_size(item->spinner_arc, ctx->cfg.spinner_size, ctx->cfg.spinner_size);
@@ -392,7 +393,7 @@ static lv_obj_t *selftest_list_create_item_card(lv_selftest_list_ctx_t *ctx, lv_
     lv_obj_set_style_pad_right(card, ctx->cfg.item_pad_x, 0);
     lv_obj_set_style_pad_top(card, 0, 0);
     lv_obj_set_style_pad_bottom(card, 0, 0);
-    lv_obj_set_style_text_font(card, ctx->cfg.text_font, 0);
+    lv_obj_set_style_text_font(card,ui_message_font(ctx->cfg.text_font), 0);
 
     item->left_box = lv_obj_create(card);
     lv_obj_remove_style_all(item->left_box);
@@ -439,13 +440,13 @@ static lv_obj_t *selftest_list_create_item_card(lv_selftest_list_ctx_t *ctx, lv_
 
     item->name_label = lv_label_create(card);
     lv_label_set_long_mode(item->name_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_font(item->name_label, ctx->cfg.text_font, 0);
+    lv_obj_set_style_text_font(item->name_label,ui_message_font(ctx->cfg.text_font), 0);
     lv_obj_set_style_text_color(item->name_label, ctx->cfg.pending_text_color, 0);
 
     item->state_label = lv_label_create(card);
     lv_label_set_long_mode(item->state_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(item->state_label, ctx->cfg.state_w);
-    lv_obj_set_style_text_font(item->state_label, ctx->cfg.text_font, 0);
+    lv_obj_set_style_text_font(item->state_label,ui_message_font(ctx->cfg.text_font), 0);
     lv_obj_set_style_text_align(item->state_label, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_set_style_text_color(item->state_label, ctx->cfg.pending_state_color, 0);
 

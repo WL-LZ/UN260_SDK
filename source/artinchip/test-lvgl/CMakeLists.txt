@@ -12,7 +12,7 @@ install(TARGETS un260_unpack RUNTIME DESTINATION bin)
 add_executable(un260_storage_sync tools/un260_storage_sync.c)
 install(TARGETS un260_storage_sync RUNTIME DESTINATION bin)
 add_executable(un260_upgrade_display un260/lv_drivers/boot_light.c un260/lv_system/backlight_service.c
-    un260/lv_system/ui_update_message.c ${UN260_I18N_SOURCES})
+    un260/lv_system/ui_update_message.c un260/lv_system/ui_update_catalog.c)
 target_compile_definitions(un260_upgrade_display PRIVATE UN260_UPDATE_DISPLAY=1)
 target_link_libraries(un260_upgrade_display z)
 install(TARGETS un260_upgrade_display RUNTIME DESTINATION bin)
@@ -193,6 +193,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/protocol/machine_fault_reply.c
     un260/lv_components/lv_loading_orbit.c
     un260/font/ui_message_font.c
+    un260/font/ui_locale_font_bank.c
     un260/font/lv_font_message_cjk_12.c
     un260/font/lv_font_message_cjk_14.c
     un260/font/lv_font_message_cjk_16.c
@@ -416,6 +417,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/font/lv_font_montserrat_42.c
     un260/font/lv_font_montserrat_44.c
     un260/font/lv_font_montserrat_46.c
+    un260/font/lv_font_montserrat_48.c
     un260/font/MONTSERRAT_EXTRABOLD_35.c
     un260/font/MONTSERRAT_MEDIUM_15.c
     un260/font/lv_font_rajdhani_27.c

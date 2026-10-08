@@ -1,3 +1,4 @@
+#include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
@@ -101,7 +102,7 @@ void ui_page_11_timeset_create(lv_obj_t *parent){
   lv_obj_remove_style_all(wheel);lv_obj_set_pos(wheel,x,64);lv_obj_set_width(wheel,w);
   lv_obj_set_style_bg_color(wheel,lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),0);
   lv_obj_set_style_bg_opa(wheel,LV_OPA_COVER,0);lv_obj_set_style_radius(wheel,12,0);
-  lv_obj_set_style_text_font(wheel,&lv_font_instrument_sans_medium_22,0);
+  lv_obj_set_style_text_font(wheel,ui_message_font(&lv_font_instrument_sans_medium_22),0);
   lv_obj_set_style_text_color(wheel,lv_color_hex(0x82939F),0);
   lv_obj_set_style_text_line_space(wheel,22,0);
   lv_obj_set_style_text_align(wheel,LV_TEXT_ALIGN_CENTER,0);
@@ -109,7 +110,7 @@ void ui_page_11_timeset_create(lv_obj_t *parent){
   lv_obj_set_style_bg_color(wheel,lv_color_hex(0xFFFFFF),LV_PART_SELECTED);
   lv_obj_set_style_bg_opa(wheel,LV_OPA_COVER,LV_PART_SELECTED);
   lv_obj_set_style_text_color(wheel,lv_color_hex(0x1D2B34),LV_PART_SELECTED);
-  lv_obj_set_style_text_font(wheel,&lv_font_instrument_sans_semibold_22,LV_PART_SELECTED);
+  lv_obj_set_style_text_font(wheel,ui_message_font(&lv_font_instrument_sans_semibold_22),LV_PART_SELECTED);
   lv_obj_set_style_anim_time(wheel,120,0);
   time_options(i);lv_roller_set_visible_row_count(wheel,3);
   lv_port_indev_set_drag_obj(wheel,true);

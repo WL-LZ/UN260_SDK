@@ -39,7 +39,12 @@ def translated_points(keys):
     """
     chars = {ord(c) for key in keys for c in key if ord(c) >= 0x80}
     for path in sorted((ROOT / 'i18n/locales').glob('*.json')) + sorted((ROOT / 'i18n/fragments').glob('*.json')):
-        for entries in json.loads(path.read_text(encoding='utf-8')).values():
+        for tag, entries in json.loads(path.read_text(encoding='utf-8')).items():
+            # This legacy SC message face serves only existing EN/CN/KR roles.
+            # Regional Japanese and Arabic candidates are built separately by
+            # gen_locale_fonts; they must not be mislabeled as SC coverage.
+            if tag not in ('en', 'zh-Hans', 'ko'):
+                continue
             for key in keys:
                 value = entries.get(key)
                 values = value.values() if isinstance(value, dict) else (value,)

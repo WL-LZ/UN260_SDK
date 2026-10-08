@@ -32,6 +32,10 @@ void lv_nav_button_mark_back(lv_obj_t *button){assert(lv_obj_is_valid(button));}
 #include "../un260/lv_core/page_29_set_password.c"
 
 const char *ui_tr(const char *text){return text;}
+const lv_font_t *ui_message_font(const lv_font_t *font){return font;}
+const ui_locale_t *ui_lang_current(void){static const ui_locale_t locale={.id=LANGUAGE_EN,.direction=UI_LANG_LTR};return &locale;}
+const char *ui_tr_for(language_t language, const char *text)
+{assert(language == LANGUAGE_EN); return text;}
 void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title,const char *detail)
 {(void)kind;(void)key;snprintf(toast_text,sizeof(toast_text),"%s",detail&&*detail?detail:title);}
 

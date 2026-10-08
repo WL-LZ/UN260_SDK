@@ -1,0 +1,51 @@
+UN260 新增语言操作流程
+权威源码：/home/pc/d213-100ask/d211/source/artinchip/test-lvgl
+以下命令均在该目录执行。不要只改生成后的 C 文件，重新生成会覆盖它们。
+
+一、注册语言与字体
+先在 i18n/font_profiles.json 配置可用字体文件、字体集合中的正确 face，以及是否需要 Arabic presentation forms。
+注册示例（仅示例，不重复注册已有语种）：
+python3 tools/language_workflow.py add xx --name "本语言名称" --code XX --direction ltr --font-profile latin --plural-forms one,other
+稳定 ID 不能因改名或排序而改变，不能复用已删除语种的 ID。
+RTL 语言不能只设置 direction，必须另验文字整形、混合数字和页面布局。
+
+二、导出模板
+python3 tools/language_workflow.py export xx /tmp/xx-template.json
+保留 key、source、source_sha256，只填写 translation。
+不同语境的 receipt（收款/打印凭条）、collection（数据采集）、serial（冠字号/串口）、
+face（票面朝向）需依据实际调用判断，不能全局机械替换。
+printf 参数、颜色标记、换行不能丢失、改类型或乱序。
+只发送固定 UI 文案用于机器翻译；不发送代码、记录、人员信息和密钥。
+机器翻译仅作草稿。关键故障、删除/撤销、金额及余额相关提示优先人工审校。
+
+三、导入并保持入口关闭
+python3 tools/language_workflow.py import xx /tmp/xx-template.json
+导入器会校验源版本、全部 key、占位符和复数，并关闭该语种的就绪开关。
+不要绕过检查直接复制其他语种、用英语填满或手改生成文件来通过验收。
+
+四、字体与实际页面检查
+python3 tools/language_workflow.py check --converter /实际路径/lv_font_conv.js --output /tmp/un260-language-qa
+该流程生成字库、检查字形/文件哈希/控件文字宽度，并执行语言、设置、现金、菜单、主页面和提示测试。
+字库须包含大字号契约使用的全部字符，包括普通英文字母；只查非 ASCII 会漏掉缺字。
+检查普通状态和选中状态字体、原生语言名称、货币符号、数字/币种方向及往返切换。
+通过短而准确的翻译解决宽度问题；不能为了通过测试随意缩小字体或删除必要文字。
+自动检查通过后仍要查看生成截图，尤其是说明文字、金额和按钮之间的留白。
+
+五、开放测试入口并完整构建
+只有翻译、字体、方向和主机页面验收完成，才设置对应 locale 的 enabled、translations_ready、font_ready、shaping_ready。
+开放后再次验证语言列表，检查原生名称、滚动和选择反馈：
+python3 tools/language_workflow.py build --output /tmp/un260-language-build
+该命令执行检查及 lvgl-rebuild、test-lvgl-rebuild、完整 make。
+核对应用、动态库、字库、嵌套 application.upk 和 IMG 来自同一构建；核对实际分区容量，不能仅看压缩包大小。
+
+六、板上验收与回退
+正式升级前保存现有应用、设置和升级回退备份；沿用实际 U 盘升级流程。
+逐语种测试语言列表、密码页、Main、Set/Menu、计算器、账本、错误提示和触摸。
+反复切换后不应遗留上一语种；退出/重进与断电重启应恢复已保存语种。
+金额、币种代码、冠字号及英语键盘维持正确方向。
+无主控的独立屏幕板可以验显示/触摸，不能证明点钞协议和实际机械运行正常。
+板上失败时保留日志和可回退版本，不通过取消保护或伪造主控确认掩盖问题。
+
+当前版本说明
+新增 tr/fr/pl/ru/de 已完成主机页面检查和英语尺寸恢复检查，测试包开放十种语言；板上验收尚未完成。
+乌尔都语未在此测试包中新增，需在后续复杂文字阶段单独完成。

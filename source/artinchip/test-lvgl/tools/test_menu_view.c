@@ -246,6 +246,10 @@ static void check_header(void)
 {
     lv_obj_t *tray=lv_obj_get_parent(menu.nav[0]);lv_area_t t;
     lv_obj_get_coords(tray,&t);
+    /* Arabic labels are shaped; identify the adjacent header control by tree. */
+    lv_obj_t *quick=lv_obj_get_child(menu.root,lv_obj_get_index(tray)+1);assert(quick);
+    lv_area_t q;lv_obj_get_coords(quick,&q);
+    assert(t.x1>=222&&t.x2+16<=q.x1);
     assert(lv_obj_get_style_border_width(tray,0)==0);
     assert(lv_obj_get_style_bg_color(tray,0).full==lv_color_hex(0xE7EDF0).full);
     for(unsigned i=0;i<6;i++){

@@ -1,0 +1,22 @@
+{
+  "en": {
+    "Previous fault recorded": "Previous fault recorded",
+    "Check any unfinished count before continuing.": "Check any unfinished count before continuing."
+  },
+  "zh-Hans": {
+    "Previous fault recorded": "上次异常已记录",
+    "Check any unfinished count before continuing.": "如有未完成点钞，请先核对。"
+  },
+  "ko": {
+    "Previous fault recorded": "이전 오류 기록됨",
+    "Check any unfinished count before continuing.": "계속하기 전에 미완료 계수를 확인하세요."
+  },
+  "ja": {
+    "Previous fault recorded": "前回の異常を記録しました",
+    "Check any unfinished count before continuing.": "未完了の計数があれば、続行前に確認してください。"
+  },
+  "ar": {
+    "Previous fault recorded": "تم تسجيل العطل السابق",
+    "Check any unfinished count before continuing.": "تحقق من أي عملية عد غير مكتملة قبل المتابعة."
+  }
+}
