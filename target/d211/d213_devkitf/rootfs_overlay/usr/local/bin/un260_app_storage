@@ -1,6 +1,7 @@
 #!/bin/sh
 # Versioned, opt-in application volume. Boot/ordinary updates NEVER format NAND.
 # UN260_STORAGE_SYNC_1: verify durable USB backup before initializing NAND.
+# UN260_APP_PREPARE_STORAGE_1: recovery mounts owned storage before app validation.
 # UN260_MTD_STREAM_1: MTD read errors are not fingerprint mismatches.
 # UN260_STORAGE_POLICY_V2: reviewed legacy data or a completely erased partition.
 # UN260_STORAGE_POLICY_V3: explicit migration of a durably backed-up legacy partition.
@@ -73,6 +74,26 @@ safe_path()
         sp=$(dirname "$sp")
     done
 }
+
+select_sync_tool()
+{
+    [ "${UN260_ENGINE_SYNC+x}" = x ] || return 0
+    case "$UN260_ENGINE_SYNC" in /tmp/un260-update-engine.[A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9]/sync) ;; *) return 1 ;; esac
+    engine_context=${UN260_ENGINE_SYNC%/sync}
+    engine_uid=$(id -u) || return 1
+    safe_path "$engine_context" && [ -d "$engine_context" ] &&
+        [ "$(LC_ALL=C ls -ld "$engine_context" | awk '{print $1}')" = drwx------ ] &&
+        [ "$(LC_ALL=C ls -nd "$engine_context" | awk '{print $3}')" = "$engine_uid" ] &&
+        regular "$UN260_ENGINE_SYNC" && [ -x "$UN260_ENGINE_SYNC" ] &&
+        [ "$(LC_ALL=C ls -ld "$UN260_ENGINE_SYNC" | awk '{print $1}')" = -rwxr-xr-x ] &&
+        [ "$(LC_ALL=C ls -nd "$UN260_ENGINE_SYNC" | awk '{print $3}')" = "$engine_uid" ] || return 1
+    engine_parent=$(awk '$1=="PPid:" {print $2}' /proc/$$/status) || return 1
+    case "$engine_parent" in ''|*[!0-9]*|0|1) return 1 ;; esac
+    safe_path "$LOCK" && [ -d "$LOCK" ] && regular "$LOCK/pid" &&
+        [ "$(cat "$LOCK/pid")" = "$engine_parent" ] || return 1
+    SYNC_TOOL=$UN260_ENGINE_SYNC
+}
+
 known_source()
 {
     [ "$1" = "$APPROVED" ] || [ "$1" = "$ERASED_HASH" ]
@@ -352,6 +373,33 @@ activate()
     sync
     echo 'APP_STORAGE: migration committed; reboot releases the running old root inode'
 }
+
+prepare_active_storage()
+{
+    if [ -e "$STATE/active" ]; then
+        regular "$STATE/active" && [ "$(cat "$STATE/active")" = "$OWNER" ] || die 'Invalid activation marker'
+        mount_volume
+        owner_check
+    fi
+}
+prepare_storage()
+{
+    safe_path "$STATE" && safe_path "$(dirname "$APP")" && safe_path "$VOLUME" || die 'Unsafe storage paths'
+    [ ! -e "$STATE" ] || [ -d "$STATE" ] || die 'Invalid storage state directory'
+    for sf in pending pending.tmp active active.tmp; do
+        safe_path "$STATE/$sf" || die 'Unsafe storage metadata path'
+    done
+    # This repair route never advances or initializes a migration.
+    for sf in pending pending.tmp active.tmp; do
+        [ ! -e "$STATE/$sf" ] && [ ! -L "$STATE/$sf" ] || die 'Storage migration recovery required'
+    done
+    prepare_active_storage
+    if [ -e "$STATE/active" ]; then
+        [ ! -e "$VOLUME/test_lvgl" ] && [ ! -L "$VOLUME/test_lvgl" ] ||
+            regular "$VOLUME/test_lvgl" || die 'Unsafe installed app shape'
+    fi
+}
+
 prepare()
 {
     safe_path "$STATE" && safe_path "$APP" || die 'Unsafe storage paths'
@@ -379,11 +427,9 @@ prepare()
         # Early phases leave the original UI available. Only an explicit
         # migration UPK with its verified USB backup may resume initialization.
     fi
+    prepare_active_storage
     if [ -e "$STATE/active" ]; then
-        regular "$STATE/active" && [ "$(cat "$STATE/active")" = "$OWNER" ] || die 'Invalid activation marker'
         regular "$APP" && [ "$(digest "$APP")" = "$(launcher | sha256sum | awk '{print $1}')" ] || die 'Managed launcher was overwritten; use storage-aware recovery'
-        mount_volume
-        owner_check
         regular "$VOLUME/test_lvgl" && [ -x "$VOLUME/test_lvgl" ] || die 'Installed app missing'
     fi
 }
@@ -612,10 +658,12 @@ if [ "${UN260_STORAGE_LIBRARY_ONLY:-0}" = 1 ]; then return 0; fi
 if [ "${1:-}" = --can-launch-legacy ]; then [ "$#" = 1 ] && can_launch_legacy; exit $?; fi
 if [ "${1:-}" = --can-launch-current ]; then [ "$#" = 1 ] && can_launch_current; exit $?; fi
 if [ "${1:-}" = --verify-layout ]; then [ "$#" = 1 ] && verify_layout; exit $?; fi
+select_sync_tool || die 'Unsafe matching engine sync tool'
 [ -x "$SYNC_TOOL" ] && [ "$("$SYNC_TOOL" --probe)" = UN260_STORAGE_SYNC_1 ] || die 'Storage writeback guard missing'
 exec 7< / || die 'Cannot track root writes'
 GUARDED=1
 case "${1:-}" in
+    --prepare-storage) [ "$#" = 1 ] || die 'Unexpected storage preparation arguments'; prepare_storage ;;
     --prepare) prepare ;;
     --migrate) [ "$#" = 2 ] || die 'Missing reviewed fingerprint'; migrate "$2" ;;
     --launch)
@@ -625,5 +673,5 @@ case "${1:-}" in
         exec 7<&- 8<&- 9<&-
         exec "$VOLUME/test_lvgl" "$@"
         ;;
-    *) die 'Usage: un260_app_storage --prepare | --verify-layout | --can-launch-current | --can-launch-legacy | --launch | --migrate POLICY' ;;
+    *) die 'Usage: un260_app_storage --prepare-storage | --prepare | --verify-layout | --can-launch-current | --can-launch-legacy | --launch | --migrate POLICY' ;;
 esac

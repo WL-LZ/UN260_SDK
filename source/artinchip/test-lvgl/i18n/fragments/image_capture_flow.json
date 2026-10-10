@@ -1,0 +1,62 @@
+{
+  "en": {
+    "Place one note in the hopper.": "Place one note in the hopper.",
+    "Select an image source": "Select an image source",
+    "Receiving image": "Receiving image",
+    "Image data incomplete. Tap the source to retry.": "Image data incomplete. Tap the source to retry."
+  },
+  "zh-Hans": {
+    "Place one note in the hopper.": "请在进钞口放入一张钞票",
+    "Select an image source": "选择图像来源",
+    "Receiving image": "正在接收图像",
+    "Image data incomplete. Tap the source to retry.": "图像数据不完整，请点击该来源重试。"
+  },
+  "ko": {
+    "Place one note in the hopper.": "투입구에 지폐 한 장을 넣으세요.",
+    "Select an image source": "이미지 소스 선택",
+    "Receiving image": "이미지 수신 중",
+    "Image data incomplete. Tap the source to retry.": "이미지 데이터가 불완전합니다. 해당 소스를 눌러 다시 시도하세요."
+  },
+  "ja": {
+    "Place one note in the hopper.": "給紙口に紙幣を1枚入れてください。",
+    "Select an image source": "画像ソースを選択",
+    "Receiving image": "画像を受信中",
+    "Image data incomplete. Tap the source to retry.": "画像データが不完全です。ソースをタップして再試行してください。"
+  },
+  "ar": {
+    "Place one note in the hopper.": "ضع ورقة نقدية واحدة في مدخل الأوراق.",
+    "Select an image source": "اختر مصدر الصورة",
+    "Receiving image": "جارٍ استقبال الصورة",
+    "Image data incomplete. Tap the source to retry.": "بيانات الصورة غير مكتملة. اضغط على المصدر لإعادة المحاولة."
+  },
+  "tr": {
+    "Place one note in the hopper.": "Besleme haznesine bir banknot yerleştirin.",
+    "Select an image source": "Görüntü kaynağını seçin",
+    "Receiving image": "Görüntü alınıyor",
+    "Image data incomplete. Tap the source to retry.": "Görüntü verileri eksik. Yeniden denemek için kaynağa dokunun."
+  },
+  "fr": {
+    "Place one note in the hopper.": "Placez un billet dans la trémie.",
+    "Select an image source": "Sélectionnez une source d’image",
+    "Receiving image": "Réception de l’image",
+    "Image data incomplete. Tap the source to retry.": "Données d’image incomplètes. Touchez la source pour réessayer."
+  },
+  "pl": {
+    "Place one note in the hopper.": "Włóż jeden banknot do podajnika.",
+    "Select an image source": "Wybierz źródło obrazu",
+    "Receiving image": "Odbieranie obrazu",
+    "Image data incomplete. Tap the source to retry.": "Dane obrazu są niekompletne. Dotknij źródła, aby spróbować ponownie."
+  },
+  "ru": {
+    "Place one note in the hopper.": "Поместите одну банкноту в подающий карман.",
+    "Select an image source": "Выберите источник изображения",
+    "Receiving image": "Приём изображения",
+    "Image data incomplete. Tap the source to retry.": "Данные изображения неполные. Нажмите на источник, чтобы повторить."
+  },
+  "de": {
+    "Place one note in the hopper.": "Legen Sie eine Banknote in den Einzug.",
+    "Select an image source": "Bildquelle auswählen",
+    "Receiving image": "Bild wird empfangen",
+    "Image data incomplete. Tap the source to retry.": "Bilddaten unvollständig. Tippen Sie auf die Quelle, um es erneut zu versuchen."
+  }
+}

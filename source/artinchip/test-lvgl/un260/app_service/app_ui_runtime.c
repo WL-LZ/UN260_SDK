@@ -37,8 +37,10 @@
 #include <stdbool.h>
 
 #define APP_UI_UPGRADE_DETECT_INTERVAL_MS 500U
+#define APP_UI_UPGRADE_POLL_INTERVAL_MS 100U
 
 static uint32_t g_upgrade_detect_tick;
+static uint32_t g_upgrade_poll_tick;
 static uint32_t g_language_generation;
 
 /* User-requested work only: startup loads and background maintenance are not
@@ -172,6 +174,11 @@ static void app_ui_runtime_poll_upgrade(uint32_t now_ms)
 
 void app_ui_runtime_poll(uint32_t now_ms)
 {
+    /* The service owns its writer even if an upgrade view is destroyed. */
+    if ((uint32_t)(now_ms - g_upgrade_poll_tick) >= APP_UI_UPGRADE_POLL_INTERVAL_MS) {
+        g_upgrade_poll_tick = now_ms;
+        ui_upgrade_service_poll(NULL);
+    }
     uint32_t language_generation = ui_lang_generation();
     if (language_generation != g_language_generation) {
         g_language_generation = language_generation;

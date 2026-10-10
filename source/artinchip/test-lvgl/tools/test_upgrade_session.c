@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -26,14 +27,15 @@ static struct {
     bool running, finished, success, preparing_data;
     uint32_t data_prepare_started_ms;
     pid_t child_pid;
+    uint64_t selected_hash;
+    char child_log_path[96];
     char status_content[512];
     size_t status_content_len;
     ui_upgrade_service_status_t status;
 } g_ui_upgrade_service;
 static hash_cache_t g_ui_upgrade_pkg_hash_cache;
-static bool g_ui_upgrade_bundle_selected;
 static bool g_ui_upgrade_full_bundle_selected;
-static bool script_exists, media_ready, cleanup_ok;
+static bool script_exists, media_ready;
 static pid_t fork_result, wait_result;
 static int wait_status;
 static unsigned forks, waits;
@@ -43,12 +45,14 @@ uint32_t app_clock_uptime_ms(void) { return now_ms; }
 app_ui_upgrade_readiness_t app_command_runtime_prepare_ui_upgrade(void) { return readiness; }
 static bool ui_upgrade_service_file_exists(const char *p) { (void)p; return script_exists; }
 void ui_upgrade_service_detect(ui_upgrade_detect_info_t *info) {
+    g_ui_upgrade_pkg_hash_cache.valid=media_ready;
+    g_ui_upgrade_pkg_hash_cache.hash=0x0123456789abcdefULL;
     *info=(ui_upgrade_detect_info_t){media_ready,media_ready,media_ready,
         media_ready?UI_UPGRADE_PACKAGE_HASH_DIFFERENT:UI_UPGRADE_PACKAGE_HASH_NOT_CHECKED};
 }
 static void ui_upgrade_service_load_status_file(void) {}
 static void ui_upgrade_service_hash_cache_clear(hash_cache_t *cache) { memset(cache,0,sizeof(*cache)); }
-static int mock_unlink(const char *p) { (void)p; errno=cleanup_ok?ENOENT:EACCES; return -1; }
+static int mock_unlink(const char *p) { assert(strcmp(p,UI_UPGRADE_STATUS_FILE_PATH));errno=ENOENT;return -1; }
 static pid_t mock_fork(void) { forks++; errno=EAGAIN; return fork_result; }
 static pid_t mock_waitpid(pid_t p,int *status,int flags) { (void)p;(void)flags;waits++;*status=wait_status;errno=ECHILD;return wait_result; }
 #define unlink mock_unlink
@@ -63,7 +67,7 @@ static void reset_fixture(void) {
     upgrade_session_end(upgrade_session_owner());
     memset(&g_ui_upgrade_service,0,sizeof(g_ui_upgrade_service));
     g_ui_upgrade_service.child_pid=-1;
-    script_exists=media_ready=cleanup_ok=true;fork_result=123;wait_result=0;wait_status=0;
+    script_exists=media_ready=true;fork_result=123;wait_result=0;wait_status=0;
     readiness=APP_UI_UPGRADE_READY;
     now_ms=0;
 }
@@ -171,8 +175,6 @@ int main(void) {
     assert(upgrade_session_owner()==UPGRADE_SESSION_NONE);script_exists=true;
     media_ready=false;assert(ui_upgrade_service_start()==UI_UPGRADE_START_PACKAGE_NOT_READY);
     assert(upgrade_session_owner()==UPGRADE_SESSION_NONE);media_ready=true;
-    cleanup_ok=false;assert(ui_upgrade_service_start()==UI_UPGRADE_START_STATUS_CLEANUP_FAILED);
-    assert(upgrade_session_owner()==UPGRADE_SESSION_NONE);cleanup_ok=true;
     fork_result=-1;assert(ui_upgrade_service_start()==UI_UPGRADE_START_FORK_FAILED);
     assert(upgrade_session_owner()==UPGRADE_SESSION_NONE);fork_result=123;
 
@@ -214,6 +216,9 @@ int main(void) {
     test_terminal_file_exit_matrix();
     test_restart_exit_matrix();
     test_data_gate();
+    reset_fixture();assert(ui_upgrade_service_start()==UI_UPGRADE_START_OK);
+    wait_result=123;ui_upgrade_service_poll(NULL);
+    assert(upgrade_session_owner()==UPGRADE_SESSION_NONE&&g_ui_upgrade_service.child_pid<0);
     puts("PASS shared upgrade owner, durable-data launch gate, terminal/restart-file exit matrix, no child-exit-only success, real reap, retry and unknown-monitor hold");
     return 0;
 }

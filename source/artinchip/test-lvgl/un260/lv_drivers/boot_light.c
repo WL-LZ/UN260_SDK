@@ -1,6 +1,12 @@
 #define _GNU_SOURCE
 #include "boot_light_protocol.h"
 #include "boot_frame_stats.h"
+#include "un260/lv_core/boot_anim/boot_welcome_locale.h"
+#ifdef UN260_BOOT_BUNDLE
+#include "boot_theme_pack.h"
+#else
+#include "un260/font/boot_welcome_native.h"
+#endif
 #include "un260/lv_core/boot_anim/boot_welcome_timing.h"
 #include "un260/lv_system/backlight_service.h"
 #include <errno.h>
@@ -16,10 +22,12 @@
 #include <sys/file.h>
 #include <sys/prctl.h>
 #include <zlib.h>
+#ifndef UN260_BOOT_BUNDLE
 #if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D
 #include "aic_ui/generated_assets/boot_light_d_packed.h"
 #else
 #include "aic_ui/generated_assets/boot_light_packed.h"
+#endif
 #endif
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -74,6 +82,7 @@ static void trace(const char *stage)
     if(enabled&&!strcmp(enabled,"1"))fprintf(stderr,"BOOT_LIGHT uptime_ms=%llu stage=%s\n",(unsigned long long)now_ms(),stage);
 }
 #include "un260/lv_core/boot_anim/boot_d_motion.h"
+#ifndef UN260_BOOT_BUNDLE
 static float ease(float p) {
 #if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D
 return boot_d_smooth(p);
@@ -83,6 +92,7 @@ return boot_d_smooth(p);
     if(p<.5f)return 4*p*p*p;
     float q=2-2*p;return 1-q*q*q/2;
 }
+#endif
 static float progress(uint32_t t,uint32_t start,uint32_t duration) {return t<=start?0:t-start>=duration?1:(float)(t-start)/duration;}
 static void blend(uint8_t *dst,const uint8_t *src,unsigned count,unsigned opacity)
 {
@@ -100,6 +110,7 @@ static void sprite(uint8_t *frame,unsigned stride,const uint8_t *src,unsigned w,
     if(!a)return;
     for(unsigned row=0;row<h;row++)blend(frame+(y+row)*stride+x*4,src+row*w*4,w,a);
 }
+#ifndef UN260_BOOT_BUNDLE
 static void render(uint8_t *frame,unsigned stride,const uint8_t *assets,
                    uint8_t *canvas,uint32_t elapsed,frame_state_t *state)
 {
@@ -156,6 +167,88 @@ static void render(uint8_t *frame,unsigned stride,const uint8_t *assets,
     state->initialized=true;
     state->settled=elapsed>=BOOT_WELCOME_SETTLED;
 }
+#else
+static float scene_ease(const boot_theme_pack_t *pack,float p)
+{
+    if(pack->theme==4U)return boot_d_smooth(p);
+    if(p<=0)return 0;
+    if(p>=1)return 1;
+    if(p<.5f)return 4*p*p*p;
+    float q=2-2*p;return 1-q*q*q/2;
+}
+static void render_bundle(uint8_t *frame,unsigned stride,boot_theme_pack_t *pack,
+                          uint8_t *canvas,uint32_t elapsed,frame_state_t *state)
+{
+    const boot_theme_scene_t *s=&pack->scene;
+    const uint8_t *assets=pack->data;
+    if(pack->mode==BOOT_THEME_MODE_LOGO) {
+        if(!state->initialized)for(unsigned row=0;row<H;row++)
+            memcpy(frame+row*stride,assets+pack->logo_offset+row*W*4U,W*4U);
+        state->initialized=true;state->settled=true;return;
+    }
+    if(!state->initialized)for(unsigned row=0;row<H;row++)
+        memcpy(frame+row*stride,assets+row*W*4U,W*4U);
+    bool dots_only=state->settled && elapsed>=s->welcome_settled;
+    unsigned x=dots_only?s->dot_x:ACTIVE_X,y=dots_only?s->dot_y-6U:s->active_y;
+    unsigned width=dots_only?2U*s->dot_step+s->dot_size:ACTIVE_W;
+    unsigned height=dots_only?s->dot_size+6U:s->active_h;
+    for(unsigned row=0;row<height;row++)
+        memcpy(canvas+(y+row-s->active_y)*ACTIVE_STRIDE+(x-ACTIVE_X)*4U,
+               assets+((y+row)*W+x)*4U,width*4U);
+    if(!dots_only) {
+        if(pack->theme==3U) {
+            float p=progress(elapsed,s->entrance_start,s->entrance_duration),q=1-p;
+            sprite(canvas,ACTIVE_STRIDE,assets+BG_BYTES,96,96,592-ACTIVE_X,
+                   82U-s->active_y+(unsigned)(s->motion_scale*6U*q*q*q+.5f),scene_ease(pack,p));
+            sprite(canvas,ACTIVE_STRIDE,assets+BG_BYTES+ICON_BYTES,500,128,0,
+                   s->text_y-s->active_y+(unsigned)(s->motion_scale*4U*q*q*q+.5f),
+                   scene_ease(pack,p)*(1-scene_ease(pack,progress(elapsed,s->brand_exit_start,s->brand_exit_duration))));
+        }
+        float p=progress(elapsed,s->welcome_start,s->welcome_duration),q=pack->theme==4U?0:1-p;
+        sprite(canvas,ACTIVE_STRIDE,assets+BG_BYTES+ICON_BYTES+TEXT_BYTES,500,128,0,
+               s->text_y-s->active_y+(unsigned)(s->motion_scale*4U*q*q*q+.5f),scene_ease(pack,p));
+    }
+    for(unsigned i=0;i<3;i++) {
+        unsigned phase=elapsed<s->dot_start?0:(elapsed-s->dot_start+s->dot_period-i*160U)%s->dot_period;
+        float jump=phase>=660U?0:phase<240U?scene_ease(pack,(float)phase/240):1-scene_ease(pack,(float)(phase-240U)/420);
+        unsigned lift=6U;
+        float alpha=scene_ease(pack,progress(elapsed,s->dot_start+i*120U,450U))*(.4f+.6f*jump);
+        if(pack->theme==4U) {
+            /* Native waiting repeats; the shared legacy intro remains bounded. */
+            uint32_t dot_phase=elapsed<s->dot_start?0:(elapsed-s->dot_start)%s->dot_period;
+            jump=elapsed<s->dot_start?0:boot_d_dot(2500U+dot_phase*1800U/s->dot_period,i);
+            alpha=scene_ease(pack,progress(elapsed,s->welcome_settled,800U))*(.4f+.6f*jump);lift=5U;
+        }
+        unsigned dx=s->dot_x+i*s->dot_step;
+        unsigned dy=s->dot_y-(unsigned)(s->motion_scale*lift*jump+.5f);
+        for(unsigned yy=0;yy<s->dot_size;yy++)for(unsigned xx=0;xx<s->dot_size;xx++) {
+            int a=(int)xx-(int)(s->dot_size/2U),b=(int)yy-(int)(s->dot_size/2U);
+            if((unsigned)(a*a+b*b)>s->dot_radius)continue;
+            const uint8_t color[4]={pack->theme==4U?0x9e:0x20,pack->theme==4U?0x87:0x58,pack->theme==4U?0x7c:0xf8,255};
+            blend(canvas+(dy+yy-s->active_y)*ACTIVE_STRIDE+(dx+xx-ACTIVE_X)*4U,color,1,(unsigned)(alpha*255+.5f));
+        }
+    }
+    for(unsigned row=0;row<height;row++)
+        memcpy(frame+(y+row)*stride+x*4U,
+               canvas+(y+row-s->active_y)*ACTIVE_STRIDE+(x-ACTIVE_X)*4U,width*4U);
+    state->initialized=true;state->settled=elapsed>=s->welcome_settled;
+}
+static bool decode_bundle_id(const char *text,uint8_t identity[32])
+{
+    if(!text || strlen(text)!=64U)return false;
+    for(unsigned i=0;i<32;i++) {
+        unsigned v=0;
+        for(unsigned j=0;j<2;j++) {
+            unsigned char c=(unsigned char)text[i*2U+j];
+            if(c>='0'&&c<='9')v=v*16U+c-'0';
+            else if(c>='a'&&c<='f')v=v*16U+c-'a'+10U;
+            else return false;
+        }
+        identity[i]=(uint8_t)v;
+    }
+    return true;
+}
+#endif
 static int display_ioctl(int fd,unsigned long request,void *arg)
 {
     int result;
@@ -173,11 +266,13 @@ static void quiet_pause(void)
 
 #ifdef UN260_EARLY_INIT
 int boot_light_run(void)
+#elif defined(UN260_BOOT_BUNDLE)
+int main(int argc,char **argv)
 #else
 int main(void)
 #endif
 {
-#if !UI_BOOT_EARLY_ENABLED
+#if !UI_BOOT_EARLY_ENABLED && !defined(UN260_BOOT_BUNDLE)
     return 1;
 #endif
     trace("main_enter");
@@ -185,12 +280,60 @@ int main(void)
     (void)render;(void)quiet_pause;
 #endif
     int status=1,lease=-1,fb=-1,server=-1,ipc_dir=-1;
-    uint8_t *mapped=MAP_FAILED,*assets=NULL,*canvas=NULL;
+    uint8_t *mapped=MAP_FAILED,*canvas=NULL;
+#ifndef UN260_BOOT_BUNDLE
+    uint8_t *assets=NULL;
+#endif
     struct fb_fix_screeninfo fix={0};struct fb_var_screeninfo var={0};
     bool bound=false,ready=false;
     const char *frame_trace_env=getenv("UN260_BOOT_FRAME_TRACE");
     bool frame_trace=frame_trace_env&&!strcmp(frame_trace_env,"1");
     boot_frame_stats_t frame_stats={0};
+#ifdef UN260_BOOT_BUNDLE
+    boot_theme_pack_t bundle={0};bool check_only=false,unified_ready=false;
+    const char *theme_path=NULL,*id_text=NULL;int theme_fd=-1;uint32_t mode_override=0;
+    for(int i=1;i<argc;i++) {
+        if(!strcmp(argv[i],"--check")){check_only=true;continue;}
+        if(i+1>=argc)goto done;
+        if(!strcmp(argv[i],"--theme"))theme_path=argv[++i];
+        else if(!strcmp(argv[i],"--theme-fd")) {
+            char *end=NULL;long n=strtol(argv[++i],&end,10);
+            if(!end || end==argv[i] || *end || argv[i][0]<'0' || argv[i][0]>'9' || n<0 || n>65535)goto done;
+            theme_fd=(int)n;
+        }
+        else if(!strcmp(argv[i],"--bundle-id"))id_text=argv[++i];
+        else if(!strcmp(argv[i],"--mode")) {
+            const char *value=argv[++i];
+            if(!strcmp(value,"animation"))mode_override=BOOT_THEME_MODE_ANIMATION;
+            else if(!strcmp(value,"logo"))mode_override=BOOT_THEME_MODE_LOGO;
+            else goto done;
+        }
+        else goto done;
+    }
+    if(theme_fd>=0 ? !boot_theme_pack_load_fd(theme_fd,&bundle) :
+       !theme_path || !boot_theme_pack_load_path(theme_path,&bundle))goto done;
+    if(theme_fd>=0){close(theme_fd);theme_fd=-1;}
+    if(id_text && !decode_bundle_id(id_text,bundle.identity))goto done;
+    if(mode_override && mode_override!=bundle.mode)goto done;
+    char language_tag[UI_LOCALE_TAG_CAPACITY]={0};
+    (void)ui_locale_read_file(BOOT_WELCOME_LOCALE_PATH,language_tag);
+    if(!boot_theme_pack_select_language(&bundle,language_tag))goto done;
+    if(check_only) {
+        printf("BOOT_THEME_CHECK theme=%u mode=%s languages=%u raw_bytes=%zu\n",bundle.theme,
+               bundle.mode==BOOT_THEME_MODE_LOGO?"logo":"animation",bundle.language_count,bundle.data_bytes);
+        status=0;goto done;
+    }
+    if(!boot_theme_pack_freeze(&bundle))goto done;
+#endif
+    bool locale_ready=true;
+#ifndef UN260_BOOT_BUNDLE
+    int locale_fd=-1;
+    unsigned welcome_index=boot_welcome_read_index(BOOT_WELCOME_LOCALE_PATH);
+#ifdef UN260_EARLY_INIT
+    const char *locale_env=getenv("UN260_BOOT_LOCALE_FD");
+    if(locale_env){locale_fd=atoi(locale_env);locale_ready=false;}
+#endif
+#endif
     prctl(PR_SET_NAME,"un260-boot",0,0,0);
     umask(077);signal(SIGTERM,stop_signal);signal(SIGINT,stop_signal);signal(SIGPIPE,SIG_IGN);
     lease=open(BOOT_LIGHT_LOCK,O_CREAT|O_RDWR|O_CLOEXEC,0600);
@@ -204,13 +347,26 @@ int main(void)
     if(flock(lease,LOCK_EX|LOCK_NB))goto done;
 #endif
     unlink(BOOT_LIGHT_READY);
+#ifdef UN260_BOOT_BUNDLE
+    unlink(BOOT_LIGHT_UNIFIED_READY);
+#endif
 #ifndef UN260_UPDATE_DISPLAY
+#ifdef UN260_BOOT_BUNDLE
+    if(bundle.mode==BOOT_THEME_MODE_ANIMATION) {
+        canvas=malloc(ACTIVE_STRIDE*bundle.scene.active_h);
+        if(!canvas)goto done;
+    }
+#else
     assets=malloc(ASSET_BYTES);
     if(!assets)goto done;
     uLongf length=ASSET_BYTES;
     if(uncompress(assets,&length,boot_light_packed,sizeof(boot_light_packed))!=Z_OK||length!=ASSET_BYTES)goto done;
+    boot_welcome_native_apply(assets+BG_BYTES+ICON_BYTES+TEXT_BYTES,welcome_index);
     canvas=malloc(ACTIVE_BYTES);
+#endif
+#ifndef UN260_BOOT_BUNDLE
     if(!canvas)goto done;
+#endif
 #endif
     trace("assets_ready");
     fb=open("/dev/fb0",O_RDWR|O_CLOEXEC);
@@ -234,19 +390,59 @@ int main(void)
     trace("display_ready");
     /* First scanout already contains a soft, visible brand mark; do not spend
        the first half second displaying only an empty background. */
-    uint64_t start=now_ms()-450U;frame_state_t pages[2]={{0},{0}};unsigned visible=var.yoffset>=H?1:0;
+    uint64_t lifetime_start=now_ms(),start=lifetime_start-450U;frame_state_t pages[2]={{0},{0}};unsigned visible=var.yoffset>=H?1:0;
     while(!stopped
-#ifndef UN260_UPDATE_DISPLAY
-          &&now_ms()-start<20000U
+#if !defined(UN260_UPDATE_DISPLAY) && !defined(UN260_BOOT_BUNDLE)
+          &&now_ms()-lifetime_start<20000U
 #endif
     ) {
+#ifndef UN260_BOOT_BUNDLE
+        if(!locale_ready) {
+            uint32_t index=0; ssize_t n=read(locale_fd,&index,sizeof(index));
+            if(n>=0 || (errno!=EAGAIN && errno!=EINTR)) {
+                welcome_index=n==sizeof(index)&&index<BOOT_WELCOME_COUNT?index:0;
+                close(locale_fd);locale_fd=-1;locale_ready=true;
+#if !defined(UN260_UPDATE_DISPLAY) && !defined(UN260_BOOT_BUNDLE)
+                boot_welcome_native_apply(assets+BG_BYTES+ICON_BYTES+TEXT_BYTES,welcome_index);
+#endif
+                start=now_ms()-450U;
+            }
+        }
+#endif
         int client=accept4(server,NULL,NULL,SOCK_CLOEXEC|SOCK_NONBLOCK);
         if(client>=0) {
             struct pollfd p={client,POLLIN,0};char request;
-            if(poll(&p,1,100)>0&&recv(client,&request,1,0)==1&&request=='T') {
-                boot_light_reply_t reply={BOOT_LIGHT_MAGIC,(uint32_t)(now_ms()-start)};
+            if(poll(&p,1,100)>0&&recv(client,&request,1,0)==1) {
+#ifdef UN260_BOOT_BUNDLE
+                if(request==BOOT_LIGHT_PROBE || request==BOOT_LIGHT_UI_READY || request==BOOT_LIGHT_UI_ERROR) {
+                    uint32_t elapsed_ms=(uint32_t)(now_ms()-start);
+                    bool handoff=ready && (request==BOOT_LIGHT_UI_ERROR ||
+                        (request==BOOT_LIGHT_UI_READY && (bundle.mode==BOOT_THEME_MODE_LOGO || elapsed_ms>=bundle.min_show_ms)));
+                    boot_light_status_t reply={.magic=BOOT_LIGHT_UNIFIED_MAGIC,.abi=BOOT_LIGHT_UNIFIED_ABI,
+                        .flags=(ready?BOOT_LIGHT_FIRST_FRAME:0U)|(handoff?BOOT_LIGHT_HANDOFF:0U)|
+                               (request==BOOT_LIGHT_UI_ERROR?BOOT_LIGHT_ERROR:0U),
+                        .mode=bundle.mode,.language=bundle.language,.elapsed_ms=elapsed_ms,.origin_ms=start};
+                    memcpy(reply.theme_id,bundle.identity,sizeof(reply.theme_id));
+                    union {struct cmsghdr alignment;char bytes[CMSG_SPACE(sizeof(int))];} control={0};
+                    struct iovec iov={&reply,sizeof(reply)};
+                    struct msghdr msg={.msg_iov=&iov,.msg_iovlen=1};
+                    if(handoff) {
+                        msg.msg_control=control.bytes;msg.msg_controllen=sizeof(control.bytes);
+                        struct cmsghdr *c=CMSG_FIRSTHDR(&msg);c->cmsg_level=SOL_SOCKET;c->cmsg_type=SCM_RIGHTS;c->cmsg_len=CMSG_LEN(sizeof(int));
+                        memcpy(CMSG_DATA(c),&fb,sizeof(fb));
+                    }
+                    bool sent=sendmsg(client,&msg,MSG_NOSIGNAL)==sizeof(reply);
+                    close(client);client=-1;
+                    if(handoff && sent){status=0;trace("handoff");break;}
+                }
+#endif
+                if(request=='T') {
+                boot_light_reply_t reply={locale_ready?BOOT_LIGHT_MAGIC:0,(uint32_t)(now_ms()-start)};
 #ifdef UN260_UPDATE_DISPLAY
                 reply.magic=0; /* Transfer the fd, but never adopt upgrade art as boot animation. */
+#endif
+#ifdef UN260_BOOT_BUNDLE
+                reply.magic=0; /* A legacy client gets safe FD transfer, no duplicated animation. */
 #endif
                 union {struct cmsghdr alignment;char bytes[CMSG_SPACE(sizeof(int))];} control={0};
                 struct iovec iov={&reply,sizeof(reply)};
@@ -257,15 +453,25 @@ int main(void)
                  * fb reference prevents the vendor release hook firing early. */
                 if(sendmsg(client,&msg,MSG_NOSIGNAL)==sizeof(reply)) {status=0;trace("handoff");}
                 close(client);break;
+                }
             }
-            close(client);
+            if(client>=0)close(client);
         }
-        uint32_t elapsed=(uint32_t)(now_ms()-start);
+        uint32_t elapsed=locale_ready?(uint32_t)(now_ms()-start):450U;
 #ifndef UN260_UPDATE_DISPLAY
+#ifdef UN260_BOOT_BUNDLE
+        if(pages[0].initialized && pages[1].initialized && bundle.mode==BOOT_THEME_MODE_LOGO) {
+            quiet_pause();continue;
+        }
+        if(pages[0].settled && pages[1].settled && elapsed>=bundle.scene.welcome_settled && elapsed<bundle.scene.dot_start) {
+            quiet_pause();continue;
+        }
+#else
         if(pages[0].settled&&pages[1].settled&&
            elapsed>=BOOT_WELCOME_SETTLED&&elapsed<BOOT_DOT_START) {
             quiet_pause();continue;
         }
+#endif
 #endif
         unsigned target=visible^1U;
         uint64_t work_started_us=0,work_us=0;
@@ -274,7 +480,11 @@ int main(void)
         upgrade_render(mapped+target*H*fix.line_length,fix.line_length);
         (void)elapsed;(void)pages;
 #else
+#ifdef UN260_BOOT_BUNDLE
+        render_bundle(mapped+target*H*fix.line_length,fix.line_length,&bundle,canvas,elapsed,&pages[target]);
+#else
         render(mapped+target*H*fix.line_length,fix.line_length,assets,canvas,elapsed,&pages[target]);
+#endif
 #endif
         if(frame_trace)work_us=now_us()-work_started_us;
         var.yoffset=target*H;int zero=0;
@@ -282,9 +492,16 @@ int main(void)
         if(frame_trace)boot_frame_stats_record(&frame_stats,now_us(),work_us);
         visible=target;
         if(!ready) {
+            char pid[32];int n=snprintf(pid,sizeof(pid),"%ld\n",(long)getpid());
+#ifdef UN260_BOOT_BUNDLE
+            int modern=open(BOOT_LIGHT_UNIFIED_READY,O_CREAT|O_WRONLY|O_TRUNC|O_CLOEXEC,0600);
+            if(modern<0)goto done;
+            bool modern_ok=write(modern,pid,n)==n;close(modern);
+            unified_ready=true;
+            if(!modern_ok)goto done;
+#endif
             int fd=open(BOOT_LIGHT_READY,O_CREAT|O_WRONLY|O_TRUNC|O_CLOEXEC,0600);
             if(fd<0)goto done;
-            char pid[32];int n=snprintf(pid,sizeof(pid),"%ld\n",(long)getpid());
             bool ok=write(fd,pid,n)==n;close(fd);if(!ok)goto done;
             ready=true;
             trace("first_frame");
@@ -294,6 +511,15 @@ int main(void)
 #endif
     }
 done:
+#ifdef UN260_BOOT_BUNDLE
+    if(theme_fd>=0)close(theme_fd);
+    if(unified_ready) {
+        if(ipc_dir>=0)unlinkat(ipc_dir,strrchr(BOOT_LIGHT_UNIFIED_READY,'/')+1,0);
+        else unlink(BOOT_LIGHT_UNIFIED_READY);
+    }
+#else
+    if(locale_fd>=0)close(locale_fd);
+#endif
     if(bound) {
         if(ipc_dir>=0)unlinkat(ipc_dir,strrchr(BOOT_LIGHT_SOCKET,'/')+1,0);
         else unlink(BOOT_LIGHT_SOCKET);
@@ -306,7 +532,11 @@ done:
     if(server>=0)close(server);
     if(mapped!=MAP_FAILED)munmap(mapped,fix.smem_len);
     if(fb>=0)close(fb);
+#ifdef UN260_BOOT_BUNDLE
+    boot_theme_pack_free(&bundle);
+#else
     free(assets);
+#endif
     free(canvas);
     if(lease>=0)close(lease);
     if(frame_trace)boot_frame_stats_print(stderr,&frame_stats,"native",status?"stopped_or_failed":"handoff");

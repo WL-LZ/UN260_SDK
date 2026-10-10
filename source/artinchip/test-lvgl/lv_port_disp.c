@@ -26,6 +26,7 @@
 #include "aic_ui/perf_stats.h"
 #include "aic_ui/present_damage.h"
 #include "un260/lv_system/app_clock.h"
+#include "un260/lv_drivers/startup_visual.h"
 
 static int draw_fps = 0;
 static struct mpp_ge *g_ge = NULL;

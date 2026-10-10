@@ -6,6 +6,7 @@ functions and the ordinary 0x04 mode reply branch are compiled unchanged with th
 and request services. No device, existing config or history files are touched.
 """
 from pathlib import Path
+from test_i18n_support import with_i18n
 import os
 import re
 import subprocess
@@ -78,7 +79,7 @@ def main():
                        "-Wall", "-Wextra", "-Werror", f"-I{work}", f"-I{ROOT}"]
             if os.name != "nt":
                 command += ["-fsanitize=undefined", "-fno-sanitize-recover=all"]
-            subprocess.run(command + [str(ROOT / path) for path in sources] +
+            subprocess.run(command + list(map(str, with_i18n([ROOT / path for path in sources], ROOT))) +
                            ["-o", str(binary)], check=True)
             subprocess.run([str(binary)], check=True, timeout=30)
 

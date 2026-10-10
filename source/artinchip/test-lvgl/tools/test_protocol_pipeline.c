@@ -10,6 +10,7 @@
 #include "un260/protocol/protocol_frame.h"
 #include "un260/protocol/protocol_frame_queue.h"
 #include "un260/protocol/protocol_rx_service.h"
+#include "un260/protocol/protocol_request.h"
 
 #define TEST_FRAMES 600U
 static uint8_t g_input[TEST_FRAMES * 7U];
@@ -55,7 +56,7 @@ void uart_log_hex(int fd, const char *prefix, const uint8_t *data,
                   size_t len, size_t preview_limit)
 {
     (void)fd;
-    assert(prefix != NULL && data != NULL && len == 7U && preview_limit == 32U);
+    assert(prefix != NULL && data != NULL && (len == 6U || len == 7U) && preview_limit == 32U);
     pthread_mutex_lock(&g_test_mutex);
     g_logged_frames++;
     pthread_mutex_unlock(&g_test_mutex);
@@ -143,6 +144,11 @@ static void test_rx_order_and_backpressure(void)
     /* Allow a real full queue, then release the consumer. The pending parser
      * frame must survive this interval without overwrite, duplication or loss. */
     sleep_ms(35);
+    uint64_t pending_observed_ms = app_clock_monotonic_ms();
+    assert(protocol_rx_service_has_command_between(0x49, 0, pending_observed_ms + 1));
+    assert(!protocol_rx_service_has_command_between(0x38, 0, pending_observed_ms + 1));
+    assert(!protocol_rx_service_has_command_between(0x49, pending_observed_ms + 1, pending_observed_ms + 100));
+    bool overflow_frame_seen = false;
     for (unsigned i = 0; i < TEST_FRAMES;) {
         protocol_frame_t frame;
         uint64_t token = app_runtime_wakeup_snapshot();
@@ -155,12 +161,17 @@ static void test_rx_order_and_backpressure(void)
         assert(frame.len == 7U && frame.data[3] == 0x49);
         assert(frame.data[4] == (uint8_t)i);
         assert(frame.data[5] == (uint8_t)(i >> 8));
+        if (i == PROTOCOL_FRAME_QUEUE_CAPACITY) {
+            overflow_frame_seen = true;
+            assert(frame.received_ms <= pending_observed_ms);
+        }
         i++;
     }
     protocol_rx_service_stop();
     assert(!protocol_frame_queue_has_pending());
-    assert(g_logged_frames == TEST_FRAMES);
+    assert(g_logged_frames == TEST_FRAMES && overflow_frame_seen);
     assert(g_read_calls < g_input_len / 2U);
+    assert(!protocol_rx_service_has_command_between(0x49, 0, UINT64_MAX));
 }
 
 static void test_stop_when_full(void)
@@ -170,10 +181,72 @@ static void test_stop_when_full(void)
     reset_input(TEST_FRAMES);
     assert(protocol_rx_service_start(1, 2));
     sleep_ms(35);
+    assert(protocol_rx_service_has_command_between(0x49, 0, UINT64_MAX));
     started = app_clock_monotonic_us();
     protocol_rx_service_stop();
     assert(app_clock_monotonic_us() - started < 200000U);
+    assert(!protocol_rx_service_has_command_between(0x49, 0, UINT64_MAX));
     protocol_frame_queue_clear();
+    /* An empty restarted service must not expose its predecessor's metadata. */
+    reset_input(0);
+    assert(protocol_rx_service_start(1, 2));
+    assert(!protocol_rx_service_has_command_between(0x49, 0, UINT64_MAX));
+    protocol_rx_service_stop();
+}
+
+static bool pending_reply(uint8_t command, uint64_t started_ms, uint64_t deadline_ms)
+{
+    /* Probe the producer before the queue to preserve its handoff observation. */
+    return protocol_rx_service_has_command_between(command, started_ms, deadline_ms) ||
+           protocol_frame_queue_has_command_between(command, started_ms, deadline_ms);
+}
+
+static void test_waiting_rx_ack_deadline(void)
+{
+    const uint8_t captured[] = {0xFD,0xDF,6,0x38,0,0x83};
+    protocol_request_t request = PROTOCOL_REQUEST_INITIALIZER(5000);
+    reset_input(PROTOCOL_FRAME_QUEUE_CAPACITY);
+    memcpy(g_input + g_input_len, captured, sizeof(captured));
+    g_input_len += sizeof(captured);
+    protocol_request_set_pending_reply_probe(pending_reply);
+    assert(protocol_request_begin_for_command(&request, 0x38));
+    assert(protocol_rx_service_start(1, 2));
+    uint64_t observed_ms;
+    for (;;) {
+        observed_ms = app_clock_monotonic_ms();
+        if (protocol_rx_service_has_command_between(0x38, request.started_ms, observed_ms + 1)) break;
+        assert(observed_ms - request.started_ms < 1000);
+        sleep_ms(1);
+    }
+    /* Use the observed complete-frame bound to avoid scheduler timing assumptions. */
+    request.timeout_ms = (uint32_t)(observed_ms - request.started_ms + 1);
+    sleep_ms(5);
+    assert(protocol_request_is_expired(&request));
+    assert(!protocol_frame_queue_has_command_between(0x38, request.started_ms,
+                                                     request.started_ms + request.timeout_ms));
+    assert(!protocol_request_take_timeout(&request)); /* only waiting RX can defer */
+    for (unsigned i = 0; i < PROTOCOL_FRAME_QUEUE_CAPACITY; i++) {
+        protocol_frame_t frame;
+        assert(protocol_frame_queue_pop(&frame));
+        assert(frame.data[3] == 0x49 && frame.data[4] == (uint8_t)i);
+    }
+    protocol_frame_t ack;
+    for (;;) {
+        if (protocol_frame_queue_pop(&ack)) break;
+        assert(app_clock_monotonic_ms() - observed_ms < 1000);
+        assert(!protocol_request_take_timeout(&request));
+        sleep_ms(1);
+    }
+    assert(ack.len == sizeof(captured) && !memcmp(ack.data, captured, sizeof(captured)));
+    assert(ack.received_ms <= observed_ms);
+    protocol_request_result_context_begin(ack.received_ms);
+    assert(protocol_request_take_result(&request));
+    protocol_request_result_context_end();
+    protocol_rx_service_stop();
+    protocol_request_set_pending_reply_probe(NULL);
+    assert(!protocol_frame_queue_has_pending());
+    assert(!protocol_rx_service_has_command_between(0x38, 0, UINT64_MAX));
+    puts("PASS full queue: timely CRC83 ACK waits in RX, defers timeout, retains FIFO and original arrival time");
 }
 
 int main(void)
@@ -182,6 +255,7 @@ int main(void)
     test_queue_capacity();
     test_rx_order_and_backpressure();
     test_stop_when_full();
+    test_waiting_rx_ack_deadline();
     puts("protocol pipeline tests passed");
     return 0;
 }

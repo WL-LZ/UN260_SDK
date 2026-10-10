@@ -13,6 +13,8 @@ import shlex
 
 ROOT = Path(__file__).resolve().parents[1]
 RELATIVE = 'target/d211/d213_devkitf/rootfs_overlay/usr/bin/ui_update.sh'
+ADDITIONAL = ('tools/un260-update/un260_update_dispatch.sh',
+              'package/artinchip/test-lvgl/S20test_lvgl')
 RECORD = ROOT / 'i18n/external/updater.json'
 FRAGMENT = ROOT / 'i18n/fragments/updater.en.json'
 TABLE = ROOT / 'un260/lv_system/ui_update_templates.inc'
@@ -26,7 +28,7 @@ def extract(source):
     for line in source.splitlines():
         if line.lstrip().startswith('#'):
             continue
-        for match in re.finditer(r'\b(?:fail_update|finish_success)\s+(' + QUOTED + ')', line):
+        for match in re.finditer(r'\b(?:fail_update|finish_success|fatal)\s+(' + QUOTED + ')', line):
             messages.add(shlex.split(match[1])[0])
         match = re.search(r'\bcompletion_message=(' + QUOTED + ')', line)
         if match:
@@ -36,6 +38,15 @@ def extract(source):
             if len(args) >= 5 and args[4] and not args[4].startswith('$'):
                 messages.add(args[4])
     return sorted(text for text in messages if not text.startswith('$'))
+
+
+def current_messages(script):
+    messages = set(extract(script.read_text(encoding='utf-8')))
+    for relative in ADDITIONAL:
+        path = ROOT.parents[2] / relative
+        if path.exists():
+            messages.update(extract(path.read_text(encoding='utf-8')))
+    return sorted(messages)
 
 
 def outputs(messages):
@@ -75,14 +86,15 @@ def main():
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
     if args.script and not args.check:
-        messages = extract(args.script.read_text(encoding='utf-8'))
+        messages = current_messages(args.script)
         RECORD.parent.mkdir(parents=True, exist_ok=True)
-        RECORD.write_bytes((json.dumps({'source': RELATIVE, 'messages': messages}, indent=2)+'\n').encode())
+        RECORD.write_bytes((json.dumps({'source': RELATIVE, 'sources': [RELATIVE, *ADDITIONAL],
+                                      'messages': messages}, indent=2)+'\n').encode())
     else:
         messages = json.loads(RECORD.read_text(encoding='utf-8'))['messages']
     if args.check:
         source = args.script or ROOT.parents[2] / RELATIVE
-        if source.exists() and extract(source.read_text(encoding='utf-8')) != messages:
+        if source.exists() and current_messages(source) != messages:
             raise SystemExit('Updater display messages changed; reimport with --script, then regenerate i18n')
     for path, text in outputs(messages).items():
         if args.check:

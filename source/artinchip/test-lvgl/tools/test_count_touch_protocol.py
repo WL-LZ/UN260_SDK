@@ -15,6 +15,9 @@ info = function(source, 'app_counting_runtime_handle_info')
 command = (root/'un260/app_service/app_command_runtime.c').read_text()
 preflight = command[command.index('    if (cmd == 0x0A && len >= 7'):command.index('    if (cmd == 0x03 && len >= 6')]
 preflight = 'static bool delayed_start(uint8_t cmd,uint8_t *buf,uint8_t len) {\n'+preflight+'\nreturn true;\n}\n'
+end_generation = function(command, 'app_command_runtime_count_end_generation')
+end_case = command[command.index('    case 0x0E: {'):command.index('    case 0x0F:',command.index('    case 0x0E: {'))]
+end_dispatch = 'static void runtime_info(counting_session_state_t *session,counting_sim_t *sim_data,const uint8_t *buf,uint8_t len) {\nassert(session==&g_counting_session&&sim_data==&data);switch(0x0E) {\n'+end_case+'default:assert(false);}}\n'
 assert source.count('page_01_main_set_counting_locked(false)') == 1
 assert source.count('page_01_main_set_counting_locked(true)') == 1
 head = r'''
@@ -26,8 +29,13 @@ head = r'''
 #include "un260/counting/counting_multi.h"
 #include "un260/innovation/multi_pass_verification.h"
 static counting_sim_t data;
+static counting_session_state_t g_counting_session;
+static uint32_t g_count_end_generation;
 static bool locked, multi;
 static unsigned locks,unlocks;
+/* Observe the UI publication without simulating protocol or lock events. */
+static unsigned reject_notifications;
+static void app_counting_runtime_on_reject_report_changed(void *context){(void)context;++reject_notifications;}
 static void page_01_main_set_counting_locked(bool value){locked=value;if(value)++locks;else ++unlocks;}
 bool counting_history_discard_pending(counting_session_state_t *s){(void)s;return false;}
 void uart_debug_printf(const char *s,...){(void)s;}
@@ -60,11 +68,16 @@ smart_island_update_counting smart_island_notify_count_end app_counting_runtime_
 ui_refresh_main_page app_counting_runtime_schedule_auto_wave app_auto_qr_on_end'''.split()
 head += '\n'.join(f'#define {name}(...) ((void)0)' for name in noops)+'\n'
 test = r'''
+#define session g_counting_session
 int main(void){
- counting_session_state_t session={0};
+ memset(&session,0,sizeof(session));
  counting_control_reply_hooks_t hooks={.on_start_success=app_counting_runtime_on_start_success};
  uint8_t reply[]={0xFD,0xDF,7,0x0A,1,1,0};
  uint8_t report[16]={0xFD,0xDF,13,0x0E,0,0,0,100,0,10,0,1,0};
+ /* Boot and unarmed end reports never represent a completed run. */
+ report[11]=2;runtime_info(&session,&data,report,13);assert(app_command_runtime_count_end_generation()==0);
+ report[11]=6;runtime_info(&session,&data,report,13);assert(app_command_runtime_count_end_generation()==0);
+ report[11]=1;
  /* A buffered start must lock before history finishes, without requiring
     model publication or a pending on-screen Start request. */
  assert(!delayed_start(0x0A,reply,7)&&locked);locked=false;
@@ -74,27 +87,38 @@ int main(void){
  reply[5]=1;counting_control_reply_dispatch(0x0A,&session,reply,6,&hooks);assert(!locked);
  for(int mode=0;mode<2;++mode)for(int end=2;end<=5;++end){
   multi=mode;memset(&data,0,sizeof(data));memset(&session,0,sizeof(session));
-  unsigned old_locks=locks,old_unlocks=unlocks;
+  unsigned old_locks=locks,old_unlocks=unlocks;uint32_t old_end=app_command_runtime_count_end_generation();
+  unsigned old_reject_notifications=reject_notifications;
   counting_control_reply_dispatch(0x0A,&session,reply,7,&hooks);
   assert(locked&&session.start_confirmed&&locks==old_locks+1);
-  report[11]=1;app_counting_runtime_handle_info(&session,&data,report,13);assert(locked);
-  report[11]=6;app_counting_runtime_handle_info(&session,&data,report,13);assert(locked);
-  report[11]=end;app_counting_runtime_handle_info(&session,&data,report,12);assert(locked);
+  assert(reject_notifications==old_reject_notifications+1);
+  report[11]=1;runtime_info(&session,&data,report,13);assert(locked);
+  report[11]=6;runtime_info(&session,&data,report,13);assert(locked);
+  report[11]=end;runtime_info(&session,&data,report,12);assert(locked);
   reply[4]=2;reply[5]=7;counting_control_reply_dispatch(0x0A,&session,reply,7,&hooks);assert(locked);
   uint8_t fault[]={0xFD,0xDF,6,0x0F,1,0};
   counting_control_reply_dispatch(0x0F,&session,fault,6,&hooks);assert(locked);
   fault[4]=0;counting_control_reply_dispatch(0x0F,&session,fault,6,&hooks);assert(locked);
-  assert(unlocks==old_unlocks);
-  app_counting_runtime_handle_info(&session,&data,report,13);
-  assert(!locked&&!session.start_confirmed&&unlocks==old_unlocks+1);
-  app_counting_runtime_handle_info(&session,&data,report,13);assert(unlocks==old_unlocks+1);
+  assert(unlocks==old_unlocks&&app_command_runtime_count_end_generation()==old_end);
+  runtime_info(&session,&data,report,13);
+  assert(!locked&&!session.start_confirmed&&unlocks==old_unlocks+1&&app_command_runtime_count_end_generation()==old_end+1);
+  runtime_info(&session,&data,report,13);assert(unlocks==old_unlocks+1&&app_command_runtime_count_end_generation()==old_end+1);
   reply[4]=reply[5]=1;
  }
+ uint32_t entry=app_command_runtime_count_end_generation();
+ memset(&session,0,sizeof(session));memset(&data,0,sizeof(data));multi=false;report[11]=2;
+ runtime_info(&session,&data,report,13);assert(app_command_runtime_count_end_generation()==entry);
+ /* An unsolicited AUTO start/end in one consumer tick is visible via epoch. */
+ counting_control_reply_dispatch(0x0A,&session,reply,7,&hooks);
+ runtime_info(&session,&data,report,13);assert(app_command_runtime_count_end_generation()==entry+1);
+ runtime_info(&session,&data,report,13);assert(app_command_runtime_count_end_generation()==entry+1);
+ memset(&session,0,sizeof(session));assert(app_command_runtime_count_end_generation()==entry+1);
+ puts("PASS accepted count-end generation: boot/duplicate/unknown ignored, AUTO start/end in one tick and reset retain epoch");
  puts("PASS exact app start/end + control/info/MUL: unsolicited start, failures, invalid/truncated/live reports, fault/reset reports, all four terminal statuses, duplicate end");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='un260-count-touch-protocol-') as temp:
-    w=Path(temp);(w/'test.c').write_text(head+preflight+start+'\n'+info+'\n'+test)
+    w=Path(temp);(w/'test.c').write_text(head+preflight+start+'\n'+info+'\n'+end_generation+'\n'+end_dispatch+'\n'+test)
     sources=['un260/counting/counting_control_reply.c','un260/counting/counting_info_reply.c','un260/counting/counting_multi.c']
     subprocess.run(['cc','-std=c11','-g','-fsanitize=address,undefined','-fno-sanitize-recover=all',
                     '-ffunction-sections','-fdata-sections','-no-pie','-I'+str(root),str(w/'test.c'),

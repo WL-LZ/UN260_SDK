@@ -13,7 +13,9 @@ import struct
 import tempfile
 import zlib
 from build_delta import load
+from boot_bundle import verify_metadata, active as boot_active, TREE as BOOT_TREE, MAGIC as BOOT_MAGIC
 from factory_layout import APP, APP_IMAGE, LAUNCHER, OWNER, STATE
+from release_manifest import factory_contract
 
 def text_field(data): return data.split(b'\0', 1)[0].decode('ascii')
 
@@ -75,6 +77,8 @@ def verify(image, application, target, deep=False):
     image, application, target = Path(image), Path(application), Path(target)
     report = json.loads((image.parent / 'un260-factory-layout.json').read_text())
     metadata, files = load(application)
+    verify_metadata(metadata, files, target)
+    contract = factory_contract(target)
     assert report['release'] == metadata['version'], 'Factory and UPK versions differ'
     assert report['requires_usb'] is False and report['first_boot_formats'] is False
     assert hashlib.sha256(files[APP][0]).hexdigest() == report['app_sha256']
@@ -98,6 +102,23 @@ def verify(image, application, target, deep=False):
             app = read_ubifs(Path(directory) / 'app')
         assert root[APP] == (LAUNCHER, 0o755, 0, 0), 'Root launcher or ownership differs'
         assert root[STATE + '/active'] == (OWNER, 0o644, 0, 0)
+        for name, (data, mode) in contract.items():
+            assert root[name] == (data, mode, 0, 0), 'Factory updater/startup contract differs: ' + name
+        if metadata.get('boot_bundle_id'):
+            assert root['etc/un260/boot-active'] == ((target / 'etc/un260/boot-active').read_bytes(), 0o644, 0, 0), 'Factory boot descriptor differs'
+            descriptor = boot_active(target)
+            identities = [descriptor[0]]
+            if descriptor[2] != 'none':
+                identities.append(descriptor[2])
+                fallback = ('\n'.join((BOOT_MAGIC, *descriptor[2:], 'none', 'none')) + '\n').encode()
+                assert root['etc/un260/boot-active.previous'] == (fallback, 0o644, 0, 0), 'Factory fallback descriptor differs'
+            else:
+                assert 'etc/un260/boot-active.previous' not in root, 'Unexpected factory fallback'
+            for identity in identities:
+                for filename, mode in (('player', 0o755), ('theme.pack', 0o644), ('manifest', 0o644)):
+                    name = BOOT_TREE + '/' + identity + '/' + filename
+                    assert root[name] == ((target / name).read_bytes(), mode, 0, 0), 'Factory complete boot bundle differs: ' + name
+
         assert app['.un260-owner'] == (OWNER, 0o644, 0, 0)
         for forbidden in ['etc/un260/unified-request', 'etc/ui_state', 'var/lib/un260-updater', STATE + '/pending']:
             assert not any(path == forbidden or path.startswith(forbidden + '/') for path in root), forbidden

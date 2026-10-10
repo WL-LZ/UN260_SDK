@@ -5,19 +5,22 @@
 #include "un260/lv_system/app_clock.h"
 #include "un260/machine_state/machine_state.h"
 #include "un260/protocol/protocol_send.h"
+#include "un260/protocol/protocol_request.h"
 #include "un260/storage/work_mode_store.h"
 
 #define REQUEST_TIMEOUT_MS 5000U
 #define LATE_REPLY_GUARD_MS 800U
 
-typedef enum { REQUEST_NONE, REQUEST_USER, REQUEST_MANUAL, REQUEST_RESTORE } request_kind_t;
+typedef enum { REQUEST_NONE, REQUEST_USER, REQUEST_TEMPORARY, REQUEST_RESTORE } request_kind_t;
 typedef enum { FAILURE_NONE, FAILURE_LOAD, FAILURE_SAVE, FAILURE_SEND, FAILURE_REPLY, FAILURE_TIMEOUT } failure_t;
 static struct {
     bool initialized, stopped, loaded, diagnostic, actual_valid, busy;
-    bool deferred_sync, failure_event, controller_seen, retry_manual;
+    bool deferred_sync, failure_event, controller_seen, retry_temporary;
     bool session_restore, user_confirmation, reset_pending;
-    uint8_t actual, sync_mode, target;
-    uint32_t operations, request_tick, guard_tick;
+    uint8_t actual, sync_mode, target, diagnostic_mode;
+    uint32_t operations, guard_tick;
+    protocol_request_t lifecycle;
+    uint64_t late_started_ms;
     bool guard_active, late_request;
     request_kind_t request;
     failure_t failure;
@@ -37,7 +40,7 @@ static void fail(failure_t reason)
     state.failure = reason;
     state.failure_event = true;
     state.phase = WORK_MODE_FAILED;
-    state.retry_manual = false;
+    state.retry_temporary = false;
 }
 
 static bool guard_active(uint32_t now)
@@ -51,15 +54,16 @@ static bool send_mode(uint8_t target, request_kind_t kind, uint32_t now)
 {
     if (state.request != REQUEST_NONE || guard_active(now)) return false;
     const uint8_t wire = target == WORK_MODE_MANUAL ? 0x00 : 0x01;
+    if (!protocol_request_begin_for_command(&state.lifecycle, 0x38)) return false;
     if (protocol_send(0x38, &wire, 1) < 0) {
+        protocol_request_finish(&state.lifecycle);
         fail(FAILURE_SEND);
         return false;
     }
     state.target = target;
     state.late_request = false;
     state.request = kind;
-    state.retry_manual = false;
-    state.request_tick = now;
+    state.retry_temporary = false;
     state.phase = kind == REQUEST_RESTORE ? WORK_MODE_RESTORING : WORK_MODE_SWITCHING;
     return true;
 }
@@ -78,6 +82,7 @@ static void synchronize(uint8_t mode)
      * acknowledgement of an in-flight UI command. Never consume it as one. */
     if (state.request != REQUEST_NONE) {
         state.request = REQUEST_NONE;
+        protocol_request_finish(&state.lifecycle);
         state.guard_active = true;
         state.guard_tick = app_clock_uptime_ms();
     }
@@ -103,22 +108,31 @@ void work_mode_service_init(void)
 {
     if (state.initialized) return;
     state.initialized = true;
+    state.lifecycle.timeout_ms = REQUEST_TIMEOUT_MS;
+    state.diagnostic_mode = WORK_MODE_MANUAL;
     state.phase = WORK_MODE_WAITING_SYNC;
     if (!work_mode_store_begin_load()) fail(FAILURE_LOAD);
 }
 
 void work_mode_service_set_diagnostic(bool active)
 {
+    work_mode_service_set_diagnostic_mode(active, WORK_MODE_MANUAL);
+}
+
+void work_mode_service_set_diagnostic_mode(bool active, uint8_t mode)
+{
     work_mode_service_init();
-    if (state.diagnostic == active) return;
+    if (mode > WORK_MODE_MANUAL ||
+        (state.diagnostic == active && (!active || state.diagnostic_mode == mode))) return;
     state.diagnostic = active;
-    /* Recover a temporary manual request on a fresh entry, rather than
+    if (active) state.diagnostic_mode = mode;
+    /* Recover a temporary mode request on a fresh entry, rather than
      * inheriting an old page's transport failure as a permanent UI lock. */
     if (active && (state.failure == FAILURE_TIMEOUT || state.failure == FAILURE_SEND))
         work_mode_service_retry();
     if (active && state.loaded && state.controller_seen && state.record.preferred_valid &&
         !state.actual_valid && state.request == REQUEST_NONE && state.failure == FAILURE_NONE)
-        state.retry_manual = true;
+        state.retry_temporary = true;
     /* Leaving is an explicit request to recover the saved preference. An
      * earlier temporary request may still complete, so never cancel it here. */
     if (!active && state.record.restore_pending &&
@@ -141,10 +155,10 @@ bool work_mode_service_diagnostic_active(void) { return state.diagnostic; }
 bool work_mode_service_diagnostic_ready(void)
 {
     return state.diagnostic && state.loaded && state.actual_valid &&
-           state.actual == WORK_MODE_MANUAL && state.record.preferred_valid &&
+           state.actual == state.diagnostic_mode && state.record.preferred_valid &&
            state.request == REQUEST_NONE && state.failure == FAILURE_NONE &&
            state.phase == WORK_MODE_READY &&
-           (state.record.preferred == WORK_MODE_MANUAL ||
+           (state.record.preferred == state.diagnostic_mode ||
             (state.durable.restore_pending &&
              state.durable.preferred == state.record.preferred));
 }
@@ -197,7 +211,8 @@ bool work_mode_service_handle_reply(const uint8_t *frame, uint8_t length)
          * request is inferred and the saved user preference is retained. */
         uint8_t actual = frame[4] == 0 ? WORK_MODE_MANUAL : WORK_MODE_AUTO;
         if (!state.late_request || state.failure != FAILURE_TIMEOUT ||
-            frame[4] > 1 || actual != state.target) return false;
+            frame[4] > 1 || actual != state.target ||
+            protocol_request_result_time_ms() < state.late_started_ms) return false;
         confirm_actual(actual);
         state.failure = FAILURE_NONE;
         state.failure_event = false;
@@ -205,9 +220,13 @@ bool work_mode_service_handle_reply(const uint8_t *frame, uint8_t length)
         return true;
     }
     uint32_t now = app_clock_uptime_ms();
-    if ((uint32_t)(now - state.request_tick) >= REQUEST_TIMEOUT_MS &&
-        state.request != REQUEST_MANUAL) return false;
+    /* UART arrival owns the acknowledgement deadline. A queued echo may be
+     * dispatched after unrelated UI or history work has consumed that time. */
+    if (protocol_request_result_time_ms() < state.lifecycle.started_ms ||
+        (!protocol_request_can_take_result(&state.lifecycle) &&
+         state.request != REQUEST_TEMPORARY)) return false;
     if (frame[4] > 1) {
+        protocol_request_finish(&state.lifecycle);
         state.request = REQUEST_NONE;
         state.actual_valid = false;
         state.guard_active = true;
@@ -222,6 +241,7 @@ bool work_mode_service_handle_reply(const uint8_t *frame, uint8_t length)
      * protocol support; no stronger delivery guarantee is claimed here. */
     if (actual != state.target) return false;
     request_kind_t completed = state.request;
+    protocol_request_finish(&state.lifecycle);
     state.request = REQUEST_NONE;
     confirm_actual(actual);
     if (completed == REQUEST_USER) {
@@ -256,26 +276,37 @@ void work_mode_service_poll(uint32_t now, bool machine_busy)
     state.busy = machine_busy;
     poll_store();
     if (state.reset_pending) return;
+    uint64_t started_ms = state.lifecycle.started_ms;
     if (state.request != REQUEST_NONE &&
-        (int32_t)(now - state.request_tick) >= (int32_t)REQUEST_TIMEOUT_MS) {
-        state.late_request = state.request == REQUEST_MANUAL;
+        protocol_request_take_timeout(&state.lifecycle)) {
+        const uint8_t latest_mode = state.diagnostic ? state.diagnostic_mode : state.record.preferred;
+        const bool converge_changed_requirement = state.request == REQUEST_TEMPORARY &&
+            state.record.preferred_valid && state.target != latest_mode;
+        state.late_request = state.request == REQUEST_TEMPORARY;
+        state.late_started_ms = started_ms;
         state.request = REQUEST_NONE;
         state.actual_valid = false;
         state.guard_active = true;
         state.guard_tick = now;
         fail(FAILURE_TIMEOUT);
+        /* An abandoned temporary target must not block the latest requirement.
+         * Retain the failure event and quarantine, without retrying that target. */
+        if (converge_changed_requirement) {
+            state.failure = FAILURE_NONE;
+            state.retry_temporary = state.diagnostic;
+        }
     }
     if (state.failure != FAILURE_NONE) { state.phase = WORK_MODE_FAILED; return; }
     if (!state.loaded) { state.phase = WORK_MODE_SAVING; return; }
 
     if (state.diagnostic && state.record.preferred_valid &&
-        state.record.preferred == WORK_MODE_AUTO) {
+        state.record.preferred != state.diagnostic_mode) {
         state.record.restore_pending = true;
         state.session_restore = true;
     }
 
     /* Completion, not a page close, clears the recovery journal. On re-entry
-     * before a restore ACK, the lease still wins and requests MANUAL again. */
+     * before a restore ACK, the current lease still wins and requests its required mode again. */
     if (!state.diagnostic && state.record.restore_pending && state.actual_valid &&
         state.request == REQUEST_NONE && !machine_busy && !state.operations &&
         state.actual == state.record.preferred) {
@@ -292,22 +323,22 @@ void work_mode_service_poll(uint32_t now, bool machine_busy)
     }
     if (!state.record.preferred_valid) { state.phase = WORK_MODE_WAITING_SYNC; return; }
     if (state.diagnostic) {
-        if (state.record.preferred == WORK_MODE_AUTO &&
+        if (state.record.preferred != state.diagnostic_mode &&
             (!state.durable.restore_pending || state.durable.preferred != state.record.preferred)) {
             state.phase = WORK_MODE_SAVING;
             return;
         }
-        if (!state.actual_valid && !state.retry_manual) {
+        if (!state.actual_valid && !state.retry_temporary) {
             state.phase = WORK_MODE_WAITING_SYNC;
             return;
         }
-        if (state.actual_valid && state.actual == WORK_MODE_MANUAL) {
+        if (state.actual_valid && state.actual == state.diagnostic_mode) {
             state.phase = WORK_MODE_READY;
             return;
         }
         if (machine_busy || state.operations) { state.phase = WORK_MODE_WAITING_IDLE; return; }
         state.phase = WORK_MODE_SWITCHING;
-        (void)send_mode(WORK_MODE_MANUAL, REQUEST_MANUAL, now);
+        (void)send_mode(state.diagnostic_mode, REQUEST_TEMPORARY, now);
     } else if (state.record.restore_pending) {
         if (!state.controller_seen) { state.phase = WORK_MODE_WAITING_SYNC; return; }
         if (machine_busy || state.operations) { state.phase = WORK_MODE_WAITING_IDLE; return; }
@@ -326,10 +357,10 @@ void work_mode_service_retry(void)
     if (!state.loaded) {
         if (!work_mode_store_begin_load()) fail(FAILURE_LOAD);
     } else if (previous == FAILURE_SEND || previous == FAILURE_TIMEOUT || previous == FAILURE_REPLY) {
-        /* MANUAL is safe to request again under the existing recovery journal;
+        /* Retry only the currently owned temporary mode under its recovery journal;
          * an unknown original preference still requires a controller sync. */
         if (state.diagnostic && state.record.preferred_valid)
-            state.retry_manual = true;
+            state.retry_temporary = true;
     }
 }
 
@@ -337,6 +368,7 @@ void work_mode_service_stop(void)
 {
     state.user_confirmation = false;
     state.stopped = true;
+    protocol_request_finish(&state.lifecycle);
     state.request = REQUEST_NONE;
     state.actual_valid = false;
     /* Do not erase the persisted recovery journal on application shutdown. */
@@ -376,10 +408,11 @@ const char *work_mode_service_status_msgid(void)
             UI_N_("Manual mode retained until the operation finishes") :
             UI_N_("Waiting for the operation to finish");
     case WORK_MODE_SWITCHING:
-        return state.request == REQUEST_USER && state.target == WORK_MODE_AUTO ?
+        return state.target == WORK_MODE_AUTO ?
             UI_N_("Confirming automatic mode") : UI_N_("Confirming manual mode");
     case WORK_MODE_RESTORING: return UI_N_("Restoring start mode");
-    case WORK_MODE_READY: return state.diagnostic ? UI_N_("Manual mode confirmed") : UI_N_("Start mode confirmed");
+    case WORK_MODE_READY: return state.diagnostic && state.diagnostic_mode == WORK_MODE_MANUAL ?
+        UI_N_("Manual mode confirmed") : UI_N_("Start mode confirmed");
     default: return UI_N_("Start mode unavailable");
     }
 }

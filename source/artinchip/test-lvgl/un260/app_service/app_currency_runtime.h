@@ -2,6 +2,7 @@
 #define UN260_APP_SERVICE_APP_CURRENCY_RUNTIME_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "un260/counting/counting_detail_state.h"
 #include "un260/counting/counting_session_state.h"

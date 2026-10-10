@@ -256,7 +256,9 @@ void page_07_curr_apply_switch_result(const currency_switch_result_t* result)
     ui_message_t info;
     if(result->success)ui_message_literal(&info,result->target_code);
     else ui_message_key(&info,result->timeout?UI_N_("No reply. Showing the last confirmed currency."):UI_N_("Previous currency retained."));
-    ui_notice_post_message(result->success?UI_NOTICE_SUCCESS:result->timeout?UI_NOTICE_WARNING:UI_NOTICE_ERROR,
+    if (result->controller_rejected) ui_notice_clear("settings.currency");
+    else
+        ui_notice_post_message(result->success?UI_NOTICE_SUCCESS:result->timeout?UI_NOTICE_WARNING:UI_NOTICE_ERROR,
         "settings.currency",result->success?UI_N_("Currency changed"):result->timeout?UI_N_("Currency unconfirmed"):UI_N_("Currency rejected"),&info);
     if (result->success) {
         g_page07_curr.model.selected_abs_idx = result->target_index;
@@ -273,6 +275,10 @@ void page_07_curr_apply_switch_result(const currency_switch_result_t* result)
     g_page07_curr.model.selected_abs_idx = page07_curr_model_find_abs_idx(curr_code);
     g_page07_curr.model.selected_visible_idx = page07_curr_model_find_visible_pos(g_page07_curr.model.selected_abs_idx);
     if (curr_page == NULL) return;
+    if (result->controller_rejected) {
+        ui_manager_switch(UI_PAGE_MAIN);
+        return;
+    }
     curr_set_left_info_by_abs(g_page07_curr.model.selected_abs_idx);
     if (g_page07_curr.model.view_mode == PAGE07_CURR_VIEW_CARD) {
         curr_apply_selected_style();

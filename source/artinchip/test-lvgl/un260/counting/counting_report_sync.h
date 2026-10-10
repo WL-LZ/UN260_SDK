@@ -28,6 +28,11 @@ void counting_report_schedule(const counting_session_state_t *session,
 void counting_report_poll(const counting_session_state_t *session,
                           uint32_t now);
 bool counting_report_discard_stale(uint8_t cmd, const uint8_t *buf, uint8_t len);
+uint32_t counting_report_live_owner(const counting_session_state_t *session);
+bool counting_report_live_reject_start(const counting_session_state_t *session,
+                                       uint32_t now);
+void counting_report_live_reject_end(const counting_session_state_t *session,
+                                     uint32_t now);
 bool counting_report_accept_reject(const counting_session_state_t *session);
 bool counting_report_reject_start(void);
 bool counting_report_reject_started(void);

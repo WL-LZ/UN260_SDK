@@ -42,6 +42,7 @@ typedef struct { ui_page_t current,stack[10];int stack_top; } ui_page_manager_co
 static ui_page_manager_context_t g_page_manager={.current=UI_PAGE_MAIN,.stack_top=-1},g_home_bookmark;
 static bool g_home_bookmark_valid,g_temporary_home,g_restoring_home;
 static bool g_page_switch_committing;
+static uint64_t g_navigation_owners;
 static unsigned session_resets;
 static void ui_manager_reset_navigation_sessions(void){session_resets++;}
 #define uart_debug_printf(...) ((void)0)
@@ -57,17 +58,38 @@ code+='static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT]={'+','
 # Keep diagnostic arguments evaluated in the stub build for -Werror.
 code=code.replace('#define uart_debug_printf(...) ((void)0)',
                   'static void uart_debug_printf(const char *fmt,...){(void)fmt;}')
+code+=function('ui_manager_navigation_is_blocked')
+code+=function('ui_manager_hold_navigation')
 code+=function('ui_manager_is_navigation_root')
 code+=function('ui_manager_history_on_commit')
 code+=function('ui_manager_navigation_on_leave')
 code+=r'''
-void ui_manager_switch(ui_page_t p){if(ui_factory_reset_blocks_navigation() || g_page_switch_committing || !ui_manager_page_is_registered(p))return;
+void ui_manager_switch(ui_page_t p){if(ui_factory_reset_blocks_navigation() || ui_manager_navigation_is_blocked() || g_page_switch_committing || !ui_manager_page_is_registered(p))return;
 ui_manager_navigation_on_leave(g_page_manager.current,p);ui_manager_history_on_commit(p);g_page_manager.current=p;}
 '''
 for name in ('ui_manager_push_page','ui_manager_pop_page','ui_manager_clear_stack','ui_manager_suspend_to_home','ui_manager_restore_from_home'):
     code+=function(name)
 code+=r'''
 int main(void){
+    for(unsigned owner=UI_PAGE_IMAGE_GET;owner<=UI_PAGE_WAVE_GET;owner+=UI_PAGE_WAVE_GET-UI_PAGE_IMAGE_GET){
+        ui_manager_switch(UI_PAGE_SETTING);ui_manager_push_page((ui_page_t)owner);
+        g_home_bookmark=g_page_manager;g_home_bookmark_valid=true;
+        ui_page_manager_context_t frozen_capture=g_page_manager, frozen_bookmark=g_home_bookmark;
+        ui_manager_hold_navigation((ui_page_t)owner,true);ui_manager_hold_navigation((ui_page_t)owner,true);
+        ui_manager_hold_navigation(UI_PAGE_MENU,true);ui_manager_hold_navigation(UI_PAGE_MENU,false);
+        for(unsigned target=0;target<UI_PAGE_COUNT;target++){
+            ui_manager_push_page((ui_page_t)target);ui_manager_switch((ui_page_t)target);
+            assert(!memcmp(&g_page_manager,&frozen_capture,sizeof(frozen_capture)));
+        }
+        assert(!ui_manager_pop_page()&&!ui_manager_suspend_to_home()&&!ui_manager_restore_from_home());
+        ui_manager_clear_stack();assert(!memcmp(&g_page_manager,&frozen_capture,sizeof(frozen_capture)));
+        assert(!memcmp(&g_home_bookmark,&frozen_bookmark,sizeof(frozen_bookmark))&&g_home_bookmark_valid);
+        ui_manager_hold_navigation((ui_page_t)owner,false);assert(!ui_manager_navigation_is_blocked());
+        assert(ui_manager_pop_page());ui_manager_switch(UI_PAGE_MAIN);
+    }
+    ui_manager_hold_navigation((ui_page_t)-1,true);ui_manager_hold_navigation(UI_PAGE_COUNT,true);
+    assert(!ui_manager_navigation_is_blocked());
+    puts("PASS capture owner navigation: all direct/push targets, Back, Home, Return and stack clear preserve state; owner-specific idempotent unlock resumes routes");
     /* While reset is pending, successful, or failed, its owner exposes the
      * same navigation lock. All real history helpers leave both chains intact. */
     ui_manager_push_page(UI_PAGE_SETTING);ui_manager_push_page(UI_PAGE_FACTORY_SETTING);
@@ -163,6 +185,10 @@ int main(void){
     puts("PASS independent Pure root: old history/bookmark discarded, no Back/Home exit, repeated Standby/Start wake bounded");
 }
 '''
+for name in ('ui_manager_switch','ui_manager_adopt_precreated_page'):
+    body=function(name)
+    assert body.index('ui_manager_navigation_is_blocked()') < body.index('ui_manager_notify_page_switch'), name
+
 work=Path(tempfile.mkdtemp(prefix='un260-navigation-test-'))
 (work/'test.c').write_text(code)
 subprocess.run(['cc','-std=c11','-O2','-Wall','-Wextra','-Werror','-fsanitize=undefined',

@@ -11,9 +11,12 @@ import re
 import shutil
 import subprocess
 import tempfile
+from test_i18n_support import with_i18n
 
 ROOT = Path(__file__).resolve().parents[1]
-FONTS = [f"instrument_sans_medium_{size}" for size in (12, 14, 16, 18, 20)]
+FONTS = sorted(set([f"instrument_sans_medium_{size}" for size in (12, 14, 16, 18, 20)] +
+    re.findall(r"\blv_font_((?:instrument_sans|message_cjk)_[A-Za-z0-9_]+)",
+               (ROOT / "un260/font/ui_message_font.c").read_text())))
 
 
 def main():
@@ -59,12 +62,16 @@ def main():
             "un260/lv_system/ui_text_page.c",
             "un260/lv_system/ui_text_widget.c",
             "un260/lv_system/ui_lang.c",
-            "un260/counting/counting_data_store.c")]
+            "un260/counting/counting_data_store.c",
+            "un260/font/ui_message_font.c")]
         sources += [ROOT / f"un260/font/lv_font_{font}.c" for font in FONTS]
+        sources = with_i18n(sources, ROOT)
         sources += sorted((lvgl / "src").rglob("*.c"))
         executable = work / ("test-main-detail.exe" if os.name == "nt" else "test-main-detail")
         command = [compiler, "-std=c11", "-O1", "-g", "-Wall", "-Wextra",
-                   "-DLV_DRV_CONF_H", "-Wl,--wrap=lv_mem_alloc", "-Wl,--wrap=lv_timer_create",
+                   "-DLV_DRV_CONF_H", "-D_POSIX_C_SOURCE=200809L", "-D_DEFAULT_SOURCE",
+                   f'-DUI_STATE_DIR="{work}/state"',
+                   "-Wl,--wrap=lv_mem_alloc", "-Wl,--wrap=lv_timer_create",
                    f"-I{work}", f"-I{ROOT}", f"-I{lvgl}", f"-DLV_CONF_PATH={conf}"]
         if args.sanitize != "none":
             command += [f"-fsanitize={args.sanitize}", "-fno-sanitize-recover=all"]

@@ -2,9 +2,11 @@
 #include "app_setting_notice.h"
 #include "workspace_service.h"
 #include "setting_service.h"
+#include "app_fault_recovery.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include <string.h>
 #include "un260/lv_components/ui_notice.h"
+#include "un260/lv_components/lv_fault_popup.h"
 /* This is application presentation policy. Protocol state is always consumed,
  * including rejected profile steps, whether or not a banner is permitted. */
 static uint8_t request_origin[256];
@@ -46,11 +48,16 @@ static uint8_t profile_command(const char *key)
 }
 void app_setting_notice_result(const char *key, const char *title, bool success)
 {
+    if (success) app_fault_recovery_resolve_setting_rejection(notice_command(key));
     uint8_t command = profile_command(key);
     if (command) {
         /* Capture ownership before rejection ends the profile. Its global
          * owner publishes the aggregate result once, without a child notice. */
         if (!success) workspace_service_reject_command(command);
+        return;
+    }
+    if (!success && app_fault_recovery_report_setting_rejection(notice_command(key))) {
+        ui_notice_clear(key);
         return;
     }
     if (!app_setting_notice_allowed(key)) return;

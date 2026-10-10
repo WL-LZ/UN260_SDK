@@ -67,6 +67,40 @@ static mf_step_t close_passage(bool lower)
 void fault_guide_lookup(machine_fault_key_t key, mf_guide_t *g)
 {
     if (!g) return;
+    if (key.source == MACHINE_FAULT_SETTING) {
+        bool notes = key.type == MACHINE_FAULT_SETTING_NOTES || key.type == 7 || (key.code == 0x03 && key.type == 2);
+        mf_text_t title, body;
+        switch (key.code) {
+        case 0x03:
+            title = T("Currency change blocked");
+            body = notes ? T("Notes remain in the stacker pocket. Cannot change the currency.") :
+                T("Currency change rejected. Previous currency retained.");
+            break;
+        case 0x04:
+            title = T("Count mode change blocked");
+            body = notes ? T("Notes remain in the stacker pocket. Cannot change the count mode.") :
+                T("Count mode change rejected. Previous mode retained.");
+            break;
+        case 0x3A:
+            title = T("Sorting change blocked");
+            body = notes ? T("Notes remain in the stacker pocket. Cannot change sorting (SOT).") :
+                T("Sorting change rejected. Previous setting retained.");
+            break;
+        default:
+            title = T("Batch change blocked");
+            body = notes ? T("Notes remain in the stacker pocket. Cannot change the batch setting.") :
+                T("Batch change rejected. Previous setting retained.");
+            break;
+        }
+        memset(g, 0, sizeof(*g));
+        g->title = title;
+        g->location = notes ? T("Lower front · Stacker pocket ST") : T("Exact location not reported");
+        g->step_count = 1;
+        g->steps[0] = step(notes ? T("Remove notes") : T("Check machine"),
+            notes ? T("Empty the stacker pocket") : T("Check the machine before retrying"),
+            body, MF_FRONT, notes ? MF_STACKER : MF_MACHINE, notes ? MF_REMOVE : MF_FOCUS);
+        return;
+    }
     entry_t e = runtime[0];
     if (key.source == MACHINE_FAULT_PRESET) {
         e = (entry_t)E("Preset count reached","Feeder · Preset count full",MF_FRONT,MF_PRESET,GUIDE_FOCUS);
@@ -158,6 +192,10 @@ void fault_guide_format_code(machine_fault_key_t key, char *buffer, size_t size)
     case MACHINE_FAULT_START: snprintf(buffer,size,"0x0A/0x%02X/0x%02X",key.type,key.code); break;
     case MACHINE_FAULT_SENSOR: snprintf(buffer,size,"0x02/bit%u",key.code); break;
     case MACHINE_FAULT_PRESET: snprintf(buffer,size,"0x06/0x04"); break;
+    case MACHINE_FAULT_SETTING:
+        if (key.code == 0x3A) snprintf(buffer,size,"0x3A/0x00..03/0x02");
+        else snprintf(buffer,size,"0x%02X/0x02",key.code);
+        break;
     default: snprintf(buffer,size,"0x0F/0x%02X",key.code); break;
     }
 }

@@ -39,6 +39,69 @@ static void counting_detail_notify_summary(
     }
 }
 
+static counting_detail_reply_result_t counting_reject_live_handle(
+    counting_detail_state_t *detail, counting_session_state_t *session,
+    counting_sim_t *sim_data, const uint8_t *buf,
+    const counting_reject_sn_reply_hooks_t *hooks)
+{
+    const uint8_t code = buf[4], pcs = buf[5];
+    const uint32_t now = app_clock_uptime_ms();
+    const uint32_t owner = counting_report_live_owner(session);
+    if (code == 0 && pcs == 0) {
+        /* Repeated empty rows are not new progress or a user CLEAR. */
+        if (detail->live_reject_started && detail->live_reject_owner == owner &&
+            !detail->live_reject_number)
+            return COUNTING_DETAIL_REPLY_IGNORED;
+        if (!counting_report_live_reject_start(session, now))
+            return COUNTING_DETAIL_REPLY_IGNORED;
+        detail->live_reject_started = true;
+        detail->live_reject_owner = owner;
+        detail->live_reject_number = 0;
+        return COUNTING_DETAIL_REPLY_START;
+    }
+    if (!detail->live_reject_started || detail->live_reject_owner != owner)
+        return COUNTING_DETAIL_REPLY_IGNORED;
+    if (code == 0xFF && pcs == 0xFF) {
+        detail->live_reject_started = false;
+        const unsigned count = detail->live_reject_number;
+        const unsigned previous = counting_data_error_detail_count(sim_data);
+        /* An empty push while the live count still reports rejects cannot
+         * erase their last complete detail. The final query will reconcile it. */
+        const bool usable = count != 0 || sim_data->err_expected == 0;
+        const bool changed = usable && (previous != count ||
+            (count && (memcmp(sim_data->err_code, detail->live_reject_codes, count) ||
+                       memcmp(sim_data->err_pcs, detail->live_reject_pcs, count))));
+        if (changed && count && !counting_data_ensure_error_capacity(sim_data, count)) {
+            counting_report_live_reject_end(session, now);
+            return COUNTING_DETAIL_REPLY_MEMORY_ERROR;
+        }
+        if (changed) {
+            if (count) {
+                memcpy(sim_data->err_code, detail->live_reject_codes, count);
+                memcpy(sim_data->err_pcs, detail->live_reject_pcs, count);
+            }
+            sim_data->err_num = (uint16_t)count;
+            counting_detail_notify(hooks, hooks ? hooks->on_reject_report_changed : NULL);
+        }
+        /* Live pushes do not complete history or start the 0C -> 0D chain.
+         * Release the wire owner only after its END, including a real STOP. */
+        counting_report_live_reject_end(session, now);
+        return COUNTING_DETAIL_REPLY_END;
+    }
+    unsigned index = 0;
+    while (index < detail->live_reject_number && detail->live_reject_codes[index] != code)
+        ++index;
+    const bool appended = index == detail->live_reject_number;
+    if (appended) {
+        detail->live_reject_codes[index] = code;
+        ++detail->live_reject_number;
+    }
+    if (appended || detail->live_reject_pcs[index] != pcs)
+        counting_report_touch(now);
+    detail->live_reject_pcs[index] = pcs;
+    return COUNTING_DETAIL_REPLY_DATA;
+}
+
 static counting_detail_reply_result_t counting_reject_reply_handle(
     counting_detail_state_t *detail,
     counting_session_state_t *session,
@@ -53,6 +116,8 @@ static counting_detail_reply_result_t counting_reject_reply_handle(
     if (detail == NULL || sim_data == NULL || buf == NULL || len != 7) {
         return COUNTING_DETAIL_REPLY_INVALID;
     }
+    if (counting_report_live_owner(session))
+        return counting_reject_live_handle(detail, session, sim_data, buf, hooks);
     if (!counting_report_accept_reject(session)) return COUNTING_DETAIL_REPLY_IGNORED;
 
     err_code = buf[4];
@@ -73,6 +138,9 @@ static counting_detail_reply_result_t counting_reject_reply_handle(
     }
 
     if (err_code == 0xFF && pcs == 0xFF) {
+        /* A repeated live END may arrive after the final query was sent.
+         * Only its own BEGIN can arm the queried report. */
+        if (!counting_report_reject_started()) return COUNTING_DETAIL_REPLY_IGNORED;
         counting_detail_record_history(hooks, "0x0C", buf, len);
         counting_detail_notify(hooks, hooks != NULL
             ? hooks->on_reject_report_changed : NULL);
@@ -238,8 +306,10 @@ counting_detail_reply_result_t counting_reject_sn_reply_dispatch(
     uint8_t len,
     const counting_reject_sn_reply_hooks_t *hooks)
 {
-    if (buf && counting_report_discard_stale(cmd, buf, len))
+    if (buf && counting_report_discard_stale(cmd, buf, len)) {
+        if (detail && cmd == 0x0C) detail->live_reject_started = false;
         return COUNTING_DETAIL_REPLY_IGNORED;
+    }
     switch (cmd) {
     case 0x0C:
         return counting_reject_reply_handle(detail, session, sim_data, buf, len, hooks);

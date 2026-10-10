@@ -1,0 +1,10 @@
+UN260 新启动基座验收记录（2026-10-09）
+
+问题包：1.0.0-d440266ca872-dirty-2f189f330f77；IMG SHA256 fb59d056a4599867d6497b6208331c88d4ebf6b4e9d288b66860273a05e50a74。
+真实板显示 Welcome，正常启动脚本、备用监控和 APP 未运行，APP 卷未挂载。fixed S00 hash-direct 对 UBIFS 返回 EINVAL；相同文件 hash-stream 成功。新交叉编译 hash-file 在同板通过，direct 仍拒绝 UBIFS，USB 严格语义保留。
+
+根因修复范围：普通内部文件与 USB 严格读回使用各自 API；fixed entry 保留 prepare-devices 同步接口；监督父进程与真实 UI 子进程身份绑定；严格检查使用 canonical /run，保留 /var/run 兼容别名；初始化成功之后的实际新上屏才发布健康；暂停进程不通过健康；没有有效 runtime 明确报错。
+
+板上验收必须包括：新 IMG 首次启动与连续重启、Welcome 到自检到主界面、新 UI PID/父 PID/启动时间和健康 marker、退出/故障恢复、匹配 UPK 的升级与跨重启 trial 确认。构建与 host PASS 不能替代上述板测。物理断电、各语种/Logo/动画和全部外设状态需要分别记录实际覆盖，不承诺不存在任何未知缺陷。
+
+本轮证据：Windows work/boot_handoff_freeze_20261009，Linux work/20261009_boot_handoff_freeze 及相关 agent 私有报告。未授权 Git 提交、未变更容量或历史记录政策。

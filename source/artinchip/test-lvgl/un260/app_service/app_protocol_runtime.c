@@ -16,6 +16,7 @@
 #include "un260/lv_core/page_31_get_wave.h"
 #include "un260/lv_drivers/lv_drivers.h"
 #include "un260/protocol/auxiliary_reply.h"
+#include "un260/protocol/protocol_frame.h"
 #include "un260/protocol/startup_sync_reply.h"
 #include "un260/protocol/stream_data_reply.h"
 #include "un260/protocol/machine_fault_reply.h"
@@ -95,7 +96,7 @@ static void handle_auxiliary_reply(uint8_t cmd, const uint8_t *buf, uint8_t len)
 
 static void handle_stream_data_reply(uint8_t cmd,
                                      const uint8_t *buf,
-                                     uint8_t len)
+                                     uint16_t len)
 {
     stream_data_reply_view_t reply = stream_data_reply_parse(buf, len);
 
@@ -120,8 +121,14 @@ static void handle_machine_state_reply(uint8_t cmd, const uint8_t *buf, uint8_t 
 
 bool app_protocol_runtime_handle_reply(uint8_t cmd,
                                        const uint8_t *buf,
-                                       uint8_t len)
+                                       uint16_t frame_len)
 {
+    if (cmd == 0x47 || cmd == 0x48) {
+        handle_stream_data_reply(cmd, buf, frame_len);
+        return true;
+    }
+    if (frame_len > PROTOCOL_FRAME_MAX_SIZE) return false;
+    uint8_t len = (uint8_t)frame_len;
     switch (cmd) {
     case 0x02:
     case 0x14:
@@ -147,11 +154,6 @@ bool app_protocol_runtime_handle_reply(uint8_t cmd,
     case 0x53:
     case 0x54:
         handle_auxiliary_reply(cmd, buf, len);
-        return true;
-
-    case 0x47:
-    case 0x48:
-        handle_stream_data_reply(cmd, buf, len);
         return true;
 
     case 0xC0:

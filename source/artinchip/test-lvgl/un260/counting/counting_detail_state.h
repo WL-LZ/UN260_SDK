@@ -7,6 +7,12 @@
 #include "counting_data_types.h"
 
 typedef struct {
+    /* One complete controller snapshot; quantities are replacements. */
+    bool live_reject_started;
+    uint32_t live_reject_owner;
+    uint16_t live_reject_number;
+    uint8_t live_reject_codes[256];
+    uint8_t live_reject_pcs[256];
     /* Live 0B snapshots are published only at their end marker. */
     bool live_denom_started;
     bool live_denom_invalid;

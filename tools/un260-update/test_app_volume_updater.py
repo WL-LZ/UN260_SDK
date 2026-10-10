@@ -59,6 +59,7 @@ class VolumeUpdaterTests(unittest.TestCase):
 UN260_UPDATER_LIBRARY_ONLY=1
 . '%s'
 ROOT_PREFIX='%s'
+SYNC_TOOL=$ROOT_PREFIX/usr/local/bin/un260_storage_sync
 APP_VOLUME=%s
 APP_VOLUME_DIR='%s'
 USB_MNT='%s'
@@ -94,7 +95,7 @@ df() {
 %s
 %s
 ''' % (source or SDK / UPDATER_REL, self.root, managed, self.vol, self.usb, package or self.full, extra, action))
-        r = subprocess.run(SHELL + [str(runner)], capture_output=True, text=True)
+        r = subprocess.run(SHELL + [str(runner)], capture_output=True, text=True, timeout=30)
         log = (self.root / 'log').read_text() if (self.root / 'log').exists() else ''
         if ok is not None:
             self.assertEqual(r.returncode == 0, ok, r.stdout + r.stderr + log)

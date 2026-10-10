@@ -54,7 +54,7 @@ bool cfd_service_request_query(const char currency[4])
 
     if (!currency || currency[0] == '\0') return false;
     if (protocol_request_is_pending(&g_cfd_update_request)) return false;
-    if (!protocol_request_begin(&g_cfd_query_request)) return false;
+    if (!protocol_request_begin_for_command(&g_cfd_query_request, 0x45)) return false;
     cfd_copy_currency(g_cfd_query_currency, currency);
     payload[1] = (uint8_t)g_cfd_query_currency[0];
     payload[2] = (uint8_t)g_cfd_query_currency[1];
@@ -96,7 +96,7 @@ bool cfd_service_request_update(const cfd_state_value_t *target,
     if (target == NULL || target->currency[0] == '\0' ||
         selected_scene >= CFD_SCENE_COUNT ||
         protocol_request_is_pending(&g_cfd_query_request) ||
-        !protocol_request_begin(&g_cfd_update_request)) {
+        !protocol_request_begin_for_command(&g_cfd_update_request, 0x45)) {
         return false;
     }
 

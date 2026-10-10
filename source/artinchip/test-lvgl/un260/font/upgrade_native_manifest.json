@@ -1,0 +1,1722 @@
+{
+  "inputs": {
+    "keys": [
+      "BACKUP   STORAGE   APPLICATION   VERIFY",
+      "CHECKING THE SAME USB PACKAGE",
+      "CONTACT SERVICE  DO NOT RESUME COUNTING",
+      "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
+      "Insert USB drive with update/UN260_UPDATE.upk",
+      "KEEP BACKUPS AND CHECK THE ERROR",
+      "KEEP NOTES SEPARATE AND RECOUNT",
+      "KEEP USB AND POWER CONNECTED",
+      "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE",
+      "STOP FEEDING BANKNOTES",
+      "UN260 PROTECTION MODE",
+      "UN260 SYSTEM UPDATE",
+      "UPDATE COMPLETE",
+      "UPDATE PAUSED",
+      "UPDATING YOUR DEVICE"
+    ],
+    "locales": [
+      {
+        "id": 0,
+        "tag": "en",
+        "code": "EN",
+        "name": "English",
+        "direction": "ltr",
+        "enabled": true,
+        "translations_ready": true,
+        "font_ready": true,
+        "shaping_ready": true,
+        "font_profile": "latin"
+      },
+      {
+        "id": 1,
+        "tag": "zh-Hans",
+        "code": "ZH",
+        "name": "简体中文",
+        "direction": "ltr",
+        "enabled": true,
+        "translations_ready": true,
+        "font_ready": true,
+        "shaping_ready": true,
+        "font_profile": "cjk-draft"
+      },
+      {
+        "id": 2,
+        "tag": "ko",
+        "code": "KO",
+        "name": "한국어",
+        "direction": "ltr",
+        "enabled": true,
+        "translations_ready": true,
+        "font_ready": true,
+        "shaping_ready": true,
+        "font_profile": "cjk-draft"
+      },
+      {
+        "id": 3,
+        "tag": "ja",
+        "code": "JA",
+        "name": "日本語",
+        "direction": "ltr",
+        "enabled": true,
+        "translations_ready": true,
+        "font_ready": true,
+        "shaping_ready": true,
+        "font_profile": "japanese-draft"
+      },
+      {
+        "id": 4,
+        "tag": "ar",
+        "code": "AR",
+        "name": "العربية",
+        "direction": "rtl",
+        "enabled": true,
+        "translations_ready": true,
+        "font_ready": true,
+        "shaping_ready": true,
+        "font_profile": "arabic-draft"
+      },
+      {
+        "id": 5,
+        "tag": "tr",
+        "code": "TR",
+        "name": "Türkçe",
+        "direction": "ltr",
+        "enabled": true,
+        "translations_ready": true,
+        "font_ready": true,
+        "shaping_ready": true,
+        "font_profile": "latin",
+        "plural_forms": [
+          "one",
+          "other"
+        ]
+      },
+      {
+        "id": 6,
+        "tag": "fr",
+        "code": "FR",
+        "name": "Français",
+        "direction": "ltr",
+        "enabled": true,
+        "translations_ready": true,
+        "font_ready": true,
+        "shaping_ready": true,
+        "font_profile": "latin",
+        "plural_forms": [
+          "one",
+          "other"
+        ]
+      },
+      {
+        "id": 7,
+        "tag": "pl",
+        "code": "PL",
+        "name": "Polski",
+        "direction": "ltr",
+        "enabled": true,
+        "translations_ready": true,
+        "font_ready": true,
+        "shaping_ready": true,
+        "font_profile": "latin",
+        "plural_forms": [
+          "one",
+          "few",
+          "many",
+          "other"
+        ]
+      },
+      {
+        "id": 8,
+        "tag": "ru",
+        "code": "RU",
+        "name": "Русский",
+        "direction": "ltr",
+        "enabled": true,
+        "translations_ready": true,
+        "font_ready": true,
+        "shaping_ready": true,
+        "font_profile": "latin",
+        "plural_forms": [
+          "one",
+          "few",
+          "many",
+          "other"
+        ]
+      },
+      {
+        "id": 9,
+        "tag": "de",
+        "code": "DE",
+        "name": "Deutsch",
+        "direction": "ltr",
+        "enabled": true,
+        "translations_ready": true,
+        "font_ready": true,
+        "shaping_ready": true,
+        "font_profile": "latin",
+        "plural_forms": [
+          "one",
+          "other"
+        ]
+      }
+    ],
+    "profiles": {
+      "cjk-draft": {
+        "source": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "face_indices": {
+          "zh-Hans": 2,
+          "ko": 1
+        }
+      },
+      "japanese-draft": {
+        "source": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "face_index": 0
+      },
+      "arabic-draft": {
+        "source": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "face_index": 0,
+        "presentation_forms": true
+      },
+      "latin": {
+        "source": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "face_index": 0
+      }
+    },
+    "texts": {
+      "en": {
+        "BACKUP   STORAGE   APPLICATION   VERIFY": "BACKUP   STORAGE   APPLICATION   VERIFY",
+        "CHECKING THE SAME USB PACKAGE": "CHECKING THE SAME USB PACKAGE",
+        "CONTACT SERVICE  DO NOT RESUME COUNTING": "CONTACT SERVICE  DO NOT RESUME COUNTING",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
+        "Insert USB drive with update/UN260_UPDATE.upk": "Insert USB drive with update/UN260_UPDATE.upk",
+        "KEEP BACKUPS AND CHECK THE ERROR": "KEEP BACKUPS AND CHECK THE ERROR",
+        "KEEP NOTES SEPARATE AND RECOUNT": "KEEP NOTES SEPARATE AND RECOUNT",
+        "KEEP USB AND POWER CONNECTED": "KEEP USB AND POWER CONNECTED",
+        "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE": "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE",
+        "STOP FEEDING BANKNOTES": "STOP FEEDING BANKNOTES",
+        "UN260 PROTECTION MODE": "UN260 PROTECTION MODE",
+        "UN260 SYSTEM UPDATE": "UN260 SYSTEM UPDATE",
+        "UPDATE COMPLETE": "UPDATE COMPLETE",
+        "UPDATE PAUSED": "UPDATE PAUSED",
+        "UPDATING YOUR DEVICE": "UPDATING YOUR DEVICE"
+      },
+      "zh-Hans": {
+        "BACKUP   STORAGE   APPLICATION   VERIFY": "备份   存储   应用   校验",
+        "CHECKING THE SAME USB PACKAGE": "正在核对原U盘升级包",
+        "CONTACT SERVICE  DO NOT RESUME COUNTING": "请联系售后，勿继续点钞",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "请检查点钞结果和控制器状态",
+        "Insert USB drive with update/UN260_UPDATE.upk": "请插入含 update/UN260_UPDATE.upk 的U盘",
+        "KEEP BACKUPS AND CHECK THE ERROR": "保留备份并检查错误",
+        "KEEP NOTES SEPARATE AND RECOUNT": "请将钞票单独存放并重新清点",
+        "KEEP USB AND POWER CONNECTED": "保持 U 盘连接及供电",
+        "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE": "内存日志 / 界面升级日志，U 盘副本可能不可用",
+        "STOP FEEDING BANKNOTES": "请停止放入钞票",
+        "UN260 PROTECTION MODE": "UN260 保护模式",
+        "UN260 SYSTEM UPDATE": "UN260 系统升级",
+        "UPDATE COMPLETE": "升级完成",
+        "UPDATE PAUSED": "升级已暂停",
+        "UPDATING YOUR DEVICE": "正在升级设备"
+      },
+      "ko": {
+        "BACKUP   STORAGE   APPLICATION   VERIFY": "백업   저장소   앱   검증",
+        "CHECKING THE SAME USB PACKAGE": "동일한 USB 패키지 확인 중",
+        "CONTACT SERVICE  DO NOT RESUME COUNTING": "서비스에 문의하세요. 계수를 재개하지 마세요",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "계수 결과와 제어기 상태를 확인해야 합니다",
+        "Insert USB drive with update/UN260_UPDATE.upk": "update/UN260_UPDATE.upk가 있는 USB를 삽입하세요",
+        "KEEP BACKUPS AND CHECK THE ERROR": "백업을 보관하고 오류를 확인하세요",
+        "KEEP NOTES SEPARATE AND RECOUNT": "지폐를 따로 보관하고 다시 계수하세요",
+        "KEEP USB AND POWER CONNECTED": "USB 연결과 전원을 유지하세요",
+        "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE": "RAM 로그 / UI 업데이트 로그. USB 복사본이 없을 수 있습니다",
+        "STOP FEEDING BANKNOTES": "지폐 투입을 중지하세요",
+        "UN260 PROTECTION MODE": "UN260 보호 모드",
+        "UN260 SYSTEM UPDATE": "UN260 시스템 업데이트",
+        "UPDATE COMPLETE": "업데이트 완료",
+        "UPDATE PAUSED": "업데이트 일시 중지",
+        "UPDATING YOUR DEVICE": "장치 업데이트 중"
+      },
+      "ja": {
+        "BACKUP   STORAGE   APPLICATION   VERIFY": "バックアップ   ストレージ   アプリ   検証",
+        "CHECKING THE SAME USB PACKAGE": "同じUSBパッケージを確認中",
+        "CONTACT SERVICE  DO NOT RESUME COUNTING": "サービス窓口へ連絡し、計数を再開しないでください",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "計数結果とコントローラーの状態を確認してください",
+        "Insert USB drive with update/UN260_UPDATE.upk": "update/UN260_UPDATE.upkを保存したUSBを挿入してください",
+        "KEEP BACKUPS AND CHECK THE ERROR": "バックアップを保管し、エラーを確認",
+        "KEEP NOTES SEPARATE AND RECOUNT": "紙幣を分けて保管し、再計数してください",
+        "KEEP USB AND POWER CONNECTED": "USBと電源を接続したままにしてください",
+        "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE": "RAMログ / 画面更新ログ。USBへのコピーがない場合があります",
+        "STOP FEEDING BANKNOTES": "紙幣の投入を停止してください",
+        "UN260 PROTECTION MODE": "UN260 保護モード",
+        "UN260 SYSTEM UPDATE": "UN260システム更新",
+        "UPDATE COMPLETE": "更新完了",
+        "UPDATE PAUSED": "更新一時停止",
+        "UPDATING YOUR DEVICE": "機器を更新中"
+      },
+      "ar": {
+        "BACKUP   STORAGE   APPLICATION   VERIFY": "نسخ احتياطي   تخزين   تطبيق   تحقق",
+        "CHECKING THE SAME USB PACKAGE": "جارٍ التحقق من حزمة USB نفسها",
+        "CONTACT SERVICE  DO NOT RESUME COUNTING": "اتصل بخدمة الصيانة ولا تستأنف العد",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "يجب فحص نتيجة العد وحالة وحدة التحكم",
+        "Insert USB drive with update/UN260_UPDATE.upk": "أدخل وحدة USB تحتوي على update/UN260_UPDATE.upk",
+        "KEEP BACKUPS AND CHECK THE ERROR": "احتفظ بالنسخ الاحتياطية وتحقق من الخطأ",
+        "KEEP NOTES SEPARATE AND RECOUNT": "احتفظ بالأوراق منفصلة وأعد عدها",
+        "KEEP USB AND POWER CONNECTED": "أبقِ USB والطاقة متصلين",
+        "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE": "سجل RAM / تحديث الواجهة؛ قد لا تتوفر نسخة USB",
+        "STOP FEEDING BANKNOTES": "توقف عن إدخال الأوراق النقدية",
+        "UN260 PROTECTION MODE": "وضع حماية UN260",
+        "UN260 SYSTEM UPDATE": "تحديث نظام UN260",
+        "UPDATE COMPLETE": "اكتمل التحديث",
+        "UPDATE PAUSED": "التحديث متوقف مؤقتا",
+        "UPDATING YOUR DEVICE": "جارٍ تحديث جهازك"
+      },
+      "tr": {
+        "BACKUP   STORAGE   APPLICATION   VERIFY": "YEDEK DEPOLAMA UYGULAMASINI DOĞRULA",
+        "CHECKING THE SAME USB PACKAGE": "AYNI USB PAKETİNİ KONTROL ETMEK",
+        "CONTACT SERVICE  DO NOT RESUME COUNTING": "SERVİSE BAŞVURUN. SAYIMI SÜRDÜRMEYİN",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "SAYIM SONUCU VE DENETLEYİCİ DURUMU KONTROL EDİLMELİ",
+        "Insert USB drive with update/UN260_UPDATE.upk": "update/UN260_UPDATE.upk içeren USB sürücüsünü takın",
+        "KEEP BACKUPS AND CHECK THE ERROR": "YEDEKLEMELERİ TUTUN VE HATALARI KONTROL EDİN",
+        "KEEP NOTES SEPARATE AND RECOUNT": "BANKNOTLARI AYRI TUTUN VE YENİDEN SAYIN",
+        "KEEP USB AND POWER CONNECTED": "USB'Yİ VE GÜCÜ BAĞLI TUTUN",
+        "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE": "RAM GÜNLÜĞÜ UI GÜNCELLEME GÜNLÜĞÜ USB KOPYALANMAYAN OLABİLİR",
+        "STOP FEEDING BANKNOTES": "BANKNOT BESLEMEYİ DURDURUN",
+        "UN260 PROTECTION MODE": "UN260 KORUMA MODU",
+        "UN260 SYSTEM UPDATE": "UN260 SİSTEM GÜNCELLEMESİ",
+        "UPDATE COMPLETE": "GÜNCELLEME TAMAMLANDI",
+        "UPDATE PAUSED": "GÜNCELLEME DURAKLATILDI",
+        "UPDATING YOUR DEVICE": "CİHAZINIZI GÜNCELLEME"
+      },
+      "fr": {
+        "BACKUP   STORAGE   APPLICATION   VERIFY": "VÉRIFIER L'APPLICATION DE STOCKAGE DE SAUVEGARDE",
+        "CHECKING THE SAME USB PACKAGE": "VÉRIFICATION DU MÊME FORFAIT USB",
+        "CONTACT SERVICE  DO NOT RESUME COUNTING": "CONTACTEZ LE SERVICE. NE REPRENEZ PAS LE COMPTAGE",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "LE RÉSULTAT DU COMPTAGE ET L’ÉTAT DU CONTRÔLEUR DOIVENT ÊTRE VÉRIFIÉS",
+        "Insert USB drive with update/UN260_UPDATE.upk": "Insérez une clé USB contenant update/UN260_UPDATE.upk",
+        "KEEP BACKUPS AND CHECK THE ERROR": "CONSERVER DES SAUVEGARDES ET VÉRIFIER L'ERREUR",
+        "KEEP NOTES SEPARATE AND RECOUNT": "GARDEZ LES BILLETS SÉPARÉS ET RECOMPTEZ",
+        "KEEP USB AND POWER CONNECTED": "GARDER L'USB ET L'ALIMENTATION CONNECTÉS",
+        "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE": "RAM LOG UI UPDATE LOG COPIE USB PEUT ÊTRE INDISPONIBLE",
+        "STOP FEEDING BANKNOTES": "ARRÊTEZ L’ALIMENTATION EN BILLETS",
+        "UN260 PROTECTION MODE": "MODE DE PROTECTION UN260",
+        "UN260 SYSTEM UPDATE": "MISE À JOUR DU SYSTÈME UN260",
+        "UPDATE COMPLETE": "MISE À JOUR TERMINÉE",
+        "UPDATE PAUSED": "MISE À JOUR EN PAUSE",
+        "UPDATING YOUR DEVICE": "MISE À JOUR DE VOTRE APPAREIL"
+      },
+      "pl": {
+        "BACKUP   STORAGE   APPLICATION   VERIFY": "WERYFIKUJ APLIKACJĘ PRZECHOWYWANIA KOPII ZAPASOWYCH",
+        "CHECKING THE SAME USB PACKAGE": "SPRAWDZANIE TEGO SAMEGO PAKIETU USB",
+        "CONTACT SERVICE  DO NOT RESUME COUNTING": "SKONTAKTUJ SIĘ Z SERWISEM. NIE WZNAWIAJ LICZENIA",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "WYMAGANE SPRAWDZENIE WYNIKU LICZENIA I STANU KONTROLERA",
+        "Insert USB drive with update/UN260_UPDATE.upk": "Włóż nośnik USB z plikiem update/UN260_UPDATE.upk",
+        "KEEP BACKUPS AND CHECK THE ERROR": "ZACHOWAJ KOPIE ZAPASOWE I SPRAWDŹ BŁĄD",
+        "KEEP NOTES SEPARATE AND RECOUNT": "ODŁÓŻ BANKNOTY OSOBNO I PRZELICZ PONOWNIE",
+        "KEEP USB AND POWER CONNECTED": "UTRZYMAJ PODŁĄCZONE USB I ZASILANIE",
+        "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE": "DZIENNIK RAM UI AKTUALIZACJA DZIENNIKA USB KOPIA MOŻE BYĆ NIEDOSTĘPNA",
+        "STOP FEEDING BANKNOTES": "PRZERWIJ PODAWANIE BANKNOTÓW",
+        "UN260 PROTECTION MODE": "TRYB OCHRONY UN260",
+        "UN260 SYSTEM UPDATE": "AKTUALIZACJA SYSTEMU UN260",
+        "UPDATE COMPLETE": "AKTUALIZACJA ZAKOŃCZONA",
+        "UPDATE PAUSED": "AKTUALIZACJA WSTRZYMANA",
+        "UPDATING YOUR DEVICE": "AKTUALIZACJA URZĄDZENIA"
+      },
+      "ru": {
+        "BACKUP   STORAGE   APPLICATION   VERIFY": "ПРОВЕРКА ПРИЛОЖЕНИЯ РЕЗЕРВНОГО ХРАНЕНИЯ",
+        "CHECKING THE SAME USB PACKAGE": "ПРОВЕРКА ТО ЖЕ USB-ПАКЕТА",
+        "CONTACT SERVICE  DO NOT RESUME COUNTING": "ОБРАТИТЕСЬ В СЕРВИС. НЕ ВОЗОБНОВЛЯЙТЕ СЧЁТ",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "ТРЕБУЕТСЯ ПРОВЕРКА РЕЗУЛЬТАТА СЧЁТА И СОСТОЯНИЯ КОНТРОЛЛЕРА",
+        "Insert USB drive with update/UN260_UPDATE.upk": "Подключите USB-накопитель с файлом update/UN260_UPDATE.upk",
+        "KEEP BACKUPS AND CHECK THE ERROR": "СОХРАНИТЕ РЕЗЕРВНЫЕ КОПИИ И ПРОВЕРЬТЕ ОШИБКУ",
+        "KEEP NOTES SEPARATE AND RECOUNT": "ХРАНИТЕ БАНКНОТЫ ОТДЕЛЬНО И ПЕРЕСЧИТАЙТЕ",
+        "KEEP USB AND POWER CONNECTED": "ОСТАВАЙТЕ USB И ПИТАНИЕ ПОДКЛЮЧЕННЫМ",
+        "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE": "ЖУРНАЛ ОЗУ UI ЖУРНАЛ ОБНОВЛЕНИЙ USB-КОПИЯ МОЖЕТ БЫТЬ НЕДОСТУПНА",
+        "STOP FEEDING BANKNOTES": "ПРЕКРАТИТЕ ПОДАЧУ БАНКНОТ",
+        "UN260 PROTECTION MODE": "РЕЖИМ ЗАЩИТЫ UN260",
+        "UN260 SYSTEM UPDATE": "ОБНОВЛЕНИЕ СИСТЕМЫ UN260",
+        "UPDATE COMPLETE": "ОБНОВЛЕНИЕ ЗАВЕРШЕНО",
+        "UPDATE PAUSED": "ОБНОВЛЕНИЕ ПРИОСТАНОВЛЕНО",
+        "UPDATING YOUR DEVICE": "ОБНОВЛЕНИЕ ВАШЕГО УСТРОЙСТВА"
+      },
+      "de": {
+        "BACKUP   STORAGE   APPLICATION   VERIFY": "BACKUP-SPEICHER-ANWENDUNG ÜBERPRÜFEN",
+        "CHECKING THE SAME USB PACKAGE": "ÜBERPRÜFEN DESSELBEN USB-PAKETS",
+        "CONTACT SERVICE  DO NOT RESUME COUNTING": "SERVICE KONTAKTIEREN. ZÄHLEN NICHT FORTSETZEN",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "ZÄHLERGEBNIS UND CONTROLLER-ZUSTAND MÜSSEN GEPRÜFT WERDEN",
+        "Insert USB drive with update/UN260_UPDATE.upk": "USB-Laufwerk mit update/UN260_UPDATE.upk einstecken",
+        "KEEP BACKUPS AND CHECK THE ERROR": "Bewahren Sie Backups auf und überprüfen Sie den Fehler",
+        "KEEP NOTES SEPARATE AND RECOUNT": "BANKNOTEN GETRENNT HALTEN UND ERNEUT ZÄHLEN",
+        "KEEP USB AND POWER CONNECTED": "HALTEN SIE USB UND STROMVERBINDUNG",
+        "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE": "RAM-LOG UI-UPDATE-LOG USB-KOPIE IST MÖGLICHERWEISE NICHT VERFÜGBAR",
+        "STOP FEEDING BANKNOTES": "KEINE WEITEREN BANKNOTEN ZUFÜHREN",
+        "UN260 PROTECTION MODE": "UN260 SCHUTZMODUS",
+        "UN260 SYSTEM UPDATE": "UN260-SYSTEM-UPDATE",
+        "UPDATE COMPLETE": "UPDATE ABGESCHLOSSEN",
+        "UPDATE PAUSED": "UPDATE ANHALTEN",
+        "UPDATING YOUR DEVICE": "AKTUALISIEREN IHRES GERÄTS"
+      }
+    },
+    "fonts": {
+      "cjk-draft": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "japanese-draft": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "arabic-draft": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "latin": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db"
+    }
+  },
+  "generator_sha256": "b8c78e0034d061a39c968a461f28b296caf4a5d0ffcfa7170600a987b3f86d92",
+  "output_sha256": "e18b275e265c2bd550fddbbd38e2f562965877ac97d023901fcb0ef5a1bdfdc7",
+  "compressed_bytes": 205368,
+  "labels": [
+    {
+      "tag": "en",
+      "key": "BACKUP   STORAGE   APPLICATION   VERIFY",
+      "text": "BACKUP   STORAGE   APPLICATION   VERIFY",
+      "width": 370,
+      "height": 14,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "1bd2a5579373d56740cbd16015a851c87e976ddda5cbd4ddf08602d6b2ebc28c"
+    },
+    {
+      "tag": "en",
+      "key": "CHECKING THE SAME USB PACKAGE",
+      "text": "CHECKING THE SAME USB PACKAGE",
+      "width": 363,
+      "height": 17,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "22610d05401645918cae6368d01b8440c6d130faecd8629c65cf9074547b60e7"
+    },
+    {
+      "tag": "en",
+      "key": "CONTACT SERVICE  DO NOT RESUME COUNTING",
+      "text": "CONTACT SERVICE  DO NOT RESUME COUNTING",
+      "width": 413,
+      "height": 14,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "83a708bc43014f0af54a467f68b5018ee847d37fc96e9de99970ff93bb1afa1d"
+    },
+    {
+      "tag": "en",
+      "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
+      "text": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
+      "width": 620,
+      "height": 22,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "12855f12b66666aa619c51e8c5e1bf5b7a1fce8f50ba324e1a77636d3233dbb1"
+    },
+    {
+      "tag": "en",
+      "key": "Insert USB drive with update/UN260_UPDATE.upk",
+      "text": "Insert USB drive with update/UN260_UPDATE.upk",
+      "width": 496,
+      "height": 22,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "826be533ee24aad67f811065120057d3cf402f23198b343c4f7b22cda9de5d02"
+    },
+    {
+      "tag": "en",
+      "key": "KEEP BACKUPS AND CHECK THE ERROR",
+      "text": "KEEP BACKUPS AND CHECK THE ERROR",
+      "width": 400,
+      "height": 17,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "c765975c796a721a0dc394a59a8065166ea43f737c34617e93b5a9ed5f0e2969"
+    },
+    {
+      "tag": "en",
+      "key": "KEEP NOTES SEPARATE AND RECOUNT",
+      "text": "KEEP NOTES SEPARATE AND RECOUNT",
+      "width": 447,
+      "height": 19,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "6d96bd4795f1227587a4c96422d7facf0d501d53c7f37c640d3de9c3641a4866"
+    },
+    {
+      "tag": "en",
+      "key": "KEEP USB AND POWER CONNECTED",
+      "text": "KEEP USB AND POWER CONNECTED",
+      "width": 364,
+      "height": 17,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "71e15c8dbbb1be7b3e4c0f9d69da55326eeaf7aca1b12743a0e4a62324a8e91d"
+    },
+    {
+      "tag": "en",
+      "key": "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE",
+      "text": "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE",
+      "width": 503,
+      "height": 14,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "1e6f4ed3bebb3aa0993dc061a2ea5ce7ec0cd53a4943598123ebb617eabd814d"
+    },
+    {
+      "tag": "en",
+      "key": "STOP FEEDING BANKNOTES",
+      "text": "STOP FEEDING BANKNOTES",
+      "width": 391,
+      "height": 22,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "ea524f6b3da69021afca63c71bbde909ceb566bedc688ad536e83126bea92b8f"
+    },
+    {
+      "tag": "en",
+      "key": "UN260 PROTECTION MODE",
+      "text": "UN260 PROTECTION MODE",
+      "width": 381,
+      "height": 22,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "59e234cadf30a084b1a5d6640ea632462ce9cb1287bf54bde32fdf425e83bb7f"
+    },
+    {
+      "tag": "en",
+      "key": "UN260 SYSTEM UPDATE",
+      "text": "UN260 SYSTEM UPDATE",
+      "width": 241,
+      "height": 17,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "bb565a3560f13f1eb9cc9859db8e199e7f76a00f23f2585d518ce1b629f732eb"
+    },
+    {
+      "tag": "en",
+      "key": "UPDATE COMPLETE",
+      "text": "UPDATE COMPLETE",
+      "width": 339,
+      "height": 28,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "d6b01e009f22e3bea35f355bdd52059ff2c58e132d073c3cb396801d5584df93"
+    },
+    {
+      "tag": "en",
+      "key": "UPDATE PAUSED",
+      "text": "UPDATE PAUSED",
+      "width": 291,
+      "height": 28,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "53f7d21ca02a6d8e118e3ab5388ae6144266301e78fc9a779f5d4001160e0c2b"
+    },
+    {
+      "tag": "en",
+      "key": "UPDATING YOUR DEVICE",
+      "text": "UPDATING YOUR DEVICE",
+      "width": 430,
+      "height": 28,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "11b499a1c6596985f93193930ceeb987c310c66736e118fcef20f463cae2fc7a"
+    },
+    {
+      "tag": "zh-Hans",
+      "key": "BACKUP   STORAGE   APPLICATION   VERIFY",
+      "text": "备份   存储   应用   校验",
+      "width": 172,
+      "height": 19,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "9f20fdf88efc344e750ea4334479cab1cd1074551e43dd313343de1e8d3f0d84"
+    },
+    {
+      "tag": "zh-Hans",
+      "key": "CHECKING THE SAME USB PACKAGE",
+      "text": "正在核对原U盘升级包",
+      "width": 196,
+      "height": 22,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "36668cbea8839da9e02335ba04865dff77795fd90436d0e3ad08fad7fd3eafc4"
+    },
+    {
+      "tag": "zh-Hans",
+      "key": "CONTACT SERVICE  DO NOT RESUME COUNTING",
+      "text": "请联系售后，勿继续点钞",
+      "width": 189,
+      "height": 20,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "f5d1b24032b856060aaa064246da6bcb914ba823d6f1252b54086b80173c334c"
+    },
+    {
+      "tag": "zh-Hans",
+      "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
+      "text": "请检查点钞结果和控制器状态",
+      "width": 301,
+      "height": 25,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "a0a5b8ecddbbefc84232f4fe9483f9024167a7cdfd3912af93855ecd45cfa596"
+    },
+    {
+      "tag": "zh-Hans",
+      "key": "Insert USB drive with update/UN260_UPDATE.upk",
+      "text": "请插入含 update/UN260_UPDATE.upk 的U盘",
+      "width": 409,
+      "height": 25,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "19b055f9cfe3ac97462e6ad142343cc589a6e438e86a49b6d3cefac0b7981d15"
+    },
+    {
+      "tag": "zh-Hans",
+      "key": "KEEP BACKUPS AND CHECK THE ERROR",
+      "text": "保留备份并检查错误",
+      "width": 182,
+      "height": 22,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "54633a0896bc45b12de51c7b07f1d8d2e56ffeab61fdff5b5f716437187f9d98"
+    },
+    {
+      "tag": "zh-Hans",
+      "key": "KEEP NOTES SEPARATE AND RECOUNT",
+      "text": "请将钞票单独存放并重新清点",
+      "width": 301,
+      "height": 25,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "c21b99351a76fca10d41a97521cd5aa3f4739d23056958479d79f0e621adf7ac"
+    },
+    {
+      "tag": "zh-Hans",
+      "key": "KEEP USB AND POWER CONNECTED",
+      "text": "保持 U 盘连接及供电",
+      "width": 185,
+      "height": 22,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "5626a957285c93264cfdd25c22ea7bf6f289073e4429bb1a9f22b6375577630d"
+    },
+    {
+      "tag": "zh-Hans",
+      "key": "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE",
+      "text": "内存日志 / 界面升级日志，U 盘副本可能不可用",
+      "width": 355,
+      "height": 20,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "9408ff0680111889520133cba7626e51263c65312d753b56790d77def6c76bbf"
+    },
+    {
+      "tag": "zh-Hans",
+      "key": "STOP FEEDING BANKNOTES",
+      "text": "请停止放入钞票",
+      "width": 198,
+      "height": 30,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "34a05b19a3fd9cd93b7813fd7991d3f0b28b4139f3676c09afc367c19975e1fd"
+    },
+    {
+      "tag": "zh-Hans",
+      "key": "UN260 PROTECTION MODE",
+      "text": "UN260 保护模式",
+      "width": 207,
+      "height": 30,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "096bbec8857ba1bf0b76a86e2c5fb73afa34f213a0d4c457a7c4cbda73adf68b"
+    },
+    {
+      "tag": "zh-Hans",
+      "key": "UN260 SYSTEM UPDATE",
+      "text": "UN260 系统升级",
+      "width": 149,
+      "height": 22,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "486d4fc872f38d816a846713da1ff1a075c461e366123b7711c7e506081c6b99"
+    },
+    {
+      "tag": "zh-Hans",
+      "key": "UPDATE COMPLETE",
+      "text": "升级完成",
+      "width": 142,
+      "height": 37,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "d7e891e746f63ddad9b3c78bbfc2a95cc1879714420862e3a25f01716db9eb80"
+    },
+    {
+      "tag": "zh-Hans",
+      "key": "UPDATE PAUSED",
+      "text": "升级已暂停",
+      "width": 177,
+      "height": 37,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "547fd9778f093f23d29e59de36372a67605eaa24841e02ec527be7cbac8b7796"
+    },
+    {
+      "tag": "zh-Hans",
+      "key": "UPDATING YOUR DEVICE",
+      "text": "正在升级设备",
+      "width": 212,
+      "height": 37,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "ada676675fa7834175b683e0a01a8fb0190b3fdb26c31ec7d51bf28e03db8570"
+    },
+    {
+      "tag": "ko",
+      "key": "BACKUP   STORAGE   APPLICATION   VERIFY",
+      "text": "백업   저장소   앱   검증",
+      "width": 170,
+      "height": 19,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "6bc9f39348b94e9ff9b7284a4114c12629650af7a044e02405c36947f554f67c"
+    },
+    {
+      "tag": "ko",
+      "key": "CHECKING THE SAME USB PACKAGE",
+      "text": "동일한 USB 패키지 확인 중",
+      "width": 229,
+      "height": 22,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "23c1b51e7f26336ce844bc79f52018bd96afa8463c0d16c68a78dab572ca6ed7"
+    },
+    {
+      "tag": "ko",
+      "key": "CONTACT SERVICE  DO NOT RESUME COUNTING",
+      "text": "서비스에 문의하세요. 계수를 재개하지 마세요",
+      "width": 323,
+      "height": 19,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "4b61b6faafcaf1b3265957f530aefe05e83edb4c613e4446c58803970a5b7a40"
+    },
+    {
+      "tag": "ko",
+      "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
+      "text": "계수 결과와 제어기 상태를 확인해야 합니다",
+      "width": 415,
+      "height": 25,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "25ee16bf90a7acd31389d7ffe7174fa755279dd22ce00a46faa690128cbc03f7"
+    },
+    {
+      "tag": "ko",
+      "key": "Insert USB drive with update/UN260_UPDATE.upk",
+      "text": "update/UN260_UPDATE.upk가 있는 USB를 삽입하세요",
+      "width": 488,
+      "height": 25,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "e614c247de7b7a3e9814c7c0e94b26ac8edcf7114ef00c4ba0420cdeaae6d7f5"
+    },
+    {
+      "tag": "ko",
+      "key": "KEEP BACKUPS AND CHECK THE ERROR",
+      "text": "백업을 보관하고 오류를 확인하세요",
+      "width": 295,
+      "height": 22,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "af483622db8b3908947a10463a07ec221da53208fb1292f84623ede97d43d91b"
+    },
+    {
+      "tag": "ko",
+      "key": "KEEP NOTES SEPARATE AND RECOUNT",
+      "text": "지폐를 따로 보관하고 다시 계수하세요",
+      "width": 366,
+      "height": 25,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "6f5d389418881f62d75eb50533fe64a7598e341f6d71537d273a53f88396bee3"
+    },
+    {
+      "tag": "ko",
+      "key": "KEEP USB AND POWER CONNECTED",
+      "text": "USB 연결과 전원을 유지하세요",
+      "width": 261,
+      "height": 22,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "1416eedc6bda0ef9b1cfab3c38118e7096d073359463066ddd201b1a23c976d0"
+    },
+    {
+      "tag": "ko",
+      "key": "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE",
+      "text": "RAM 로그 / UI 업데이트 로그. USB 복사본이 없을 수 있습니다",
+      "width": 444,
+      "height": 19,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "4e2765cdadd38ae25e84b0e52bc6f84882a64a2c345554480fd4985abbce8d5e"
+    },
+    {
+      "tag": "ko",
+      "key": "STOP FEEDING BANKNOTES",
+      "text": "지폐 투입을 중지하세요",
+      "width": 275,
+      "height": 29,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "3180bb2b65334286d5d29d33c6d41f200c9c73fac6ca44a9da4fb5a4ed49e92e"
+    },
+    {
+      "tag": "ko",
+      "key": "UN260 PROTECTION MODE",
+      "text": "UN260 보호 모드",
+      "width": 208,
+      "height": 26,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "9b90f50a94b4e774e742299cc6696b81c2b34de2dbadd9fd86bac0e03034a0dd"
+    },
+    {
+      "tag": "ko",
+      "key": "UN260 SYSTEM UPDATE",
+      "text": "UN260 시스템 업데이트",
+      "width": 204,
+      "height": 22,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "62f640db9658cf21f03a56494fd235248cfe239e29adacb3c82c2fb40741dbfc"
+    },
+    {
+      "tag": "ko",
+      "key": "UPDATE COMPLETE",
+      "text": "업데이트 완료",
+      "width": 205,
+      "height": 35,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "124ea9e66aea32a93f4caa1e6e5f48fe217e35d82e8918747f40c52ec0b2d011"
+    },
+    {
+      "tag": "ko",
+      "key": "UPDATE PAUSED",
+      "text": "업데이트 일시 중지",
+      "width": 279,
+      "height": 35,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "d9be7b38f69452db91b5f4b0c57846b95b145be2ca298810bcd093055c2caf6b"
+    },
+    {
+      "tag": "ko",
+      "key": "UPDATING YOUR DEVICE",
+      "text": "장치 업데이트 중",
+      "width": 247,
+      "height": 35,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "b83b224200a66c102ae73c4136540499e8e5698203278bdc93fe60f872fd60b4"
+    },
+    {
+      "tag": "ja",
+      "key": "BACKUP   STORAGE   APPLICATION   VERIFY",
+      "text": "バックアップ   ストレージ   アプリ   検証",
+      "width": 308,
+      "height": 19,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "f8e066f5bd8f74228c81ead5dc73ed2f6b0df323917031c430510bfaa38ee50f"
+    },
+    {
+      "tag": "ja",
+      "key": "CHECKING THE SAME USB PACKAGE",
+      "text": "同じUSBパッケージを確認中",
+      "width": 261,
+      "height": 22,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "eb01db4512ba0fd8c45386a3ba810cd2d31ea23eb6d68fb529981c8e793676f5"
+    },
+    {
+      "tag": "ja",
+      "key": "CONTACT SERVICE  DO NOT RESUME COUNTING",
+      "text": "サービス窓口へ連絡し、計数を再開しないでください",
+      "width": 409,
+      "height": 20,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "643f048b5ebc3b9009192dc6386581a88a2ddfc6a349794955361ebb2975ec1e"
+    },
+    {
+      "tag": "ja",
+      "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
+      "text": "計数結果とコントローラーの状態を確認してください",
+      "width": 553,
+      "height": 25,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "b3c88e14d4f67b5f27ead5df524dd46bc5479562d183f04b52ff7f14c2beafdf"
+    },
+    {
+      "tag": "ja",
+      "key": "Insert USB drive with update/UN260_UPDATE.upk",
+      "text": "update/UN260_UPDATE.upkを保存したUSBを挿入してください",
+      "width": 584,
+      "height": 25,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "820861365066431db3085504f098ea6b843ebdd0af957cb2dc4d08c424a03443"
+    },
+    {
+      "tag": "ja",
+      "key": "KEEP BACKUPS AND CHECK THE ERROR",
+      "text": "バックアップを保管し、エラーを確認",
+      "width": 342,
+      "height": 22,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "d07040a5729e1982c7aa1304cfe25069f24fed7127126434896b89958ec20bdf"
+    },
+    {
+      "tag": "ja",
+      "key": "KEEP NOTES SEPARATE AND RECOUNT",
+      "text": "紙幣を分けて保管し、再計数してください",
+      "width": 438,
+      "height": 25,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "36700c2f6361b2b1baefc08c4dbce872b74fb00bc122ec955fca8660fdb3e787"
+    },
+    {
+      "tag": "ja",
+      "key": "KEEP USB AND POWER CONNECTED",
+      "text": "USBと電源を接続したままにしてください",
+      "width": 380,
+      "height": 22,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "8941305c4415439944c92e0d218987634e357c689e0e6f677d45d905a7ff3cd3"
+    },
+    {
+      "tag": "ja",
+      "key": "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE",
+      "text": "RAMログ / 画面更新ログ。USBへのコピーがない場合があります",
+      "width": 491,
+      "height": 20,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "5659ee281626d0f5393b4071317e44d2689bb0d3093dfe372f334a869ae8f528"
+    },
+    {
+      "tag": "ja",
+      "key": "STOP FEEDING BANKNOTES",
+      "text": "紙幣の投入を停止してください",
+      "width": 392,
+      "height": 30,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "51fadbecb8088f10458be6d1ad86f1c954ae8ac51cdc3d8d8aa7e9cf7898b070"
+    },
+    {
+      "tag": "ja",
+      "key": "UN260 PROTECTION MODE",
+      "text": "UN260 保護モード",
+      "width": 235,
+      "height": 30,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "cb2586bff96fcc13bc05d690e512d45c24f5bc0bab8dbe2d2a6194542f8b8c1e"
+    },
+    {
+      "tag": "ja",
+      "key": "UN260 SYSTEM UPDATE",
+      "text": "UN260システム更新",
+      "width": 184,
+      "height": 22,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "0250552eaf39afda078c2010f57e425b571018dc38028cde30e22dbb898df008"
+    },
+    {
+      "tag": "ja",
+      "key": "UPDATE COMPLETE",
+      "text": "更新完了",
+      "width": 142,
+      "height": 36,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "556e8195b5bc3bbee51383d3bb36d301c7b15eefb6ab160e87aa275adad0e30f"
+    },
+    {
+      "tag": "ja",
+      "key": "UPDATE PAUSED",
+      "text": "更新一時停止",
+      "width": 212,
+      "height": 36,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "95375a7beb4506d806da18e052de27257a663e96f3fe859198433fbfa968d1b3"
+    },
+    {
+      "tag": "ja",
+      "key": "UPDATING YOUR DEVICE",
+      "text": "機器を更新中",
+      "width": 212,
+      "height": 36,
+      "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "pixels_sha256": "452e6bed7ca2f48d2485ef6db0c22e53df9624f6e8c929c113d465ac8778c158"
+    },
+    {
+      "tag": "ar",
+      "key": "BACKUP   STORAGE   APPLICATION   VERIFY",
+      "text": "نسخ احتياطي   تخزين   تطبيق   تحقق",
+      "width": 270,
+      "height": 20,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "47fd646599379642c20eb8deb9f28c2f12ee3e04dfa3a574e7c34ad58c7eb666"
+    },
+    {
+      "tag": "ar",
+      "key": "CHECKING THE SAME USB PACKAGE",
+      "text": "جارٍ التحقق من حزمة USB نفسها",
+      "width": 280,
+      "height": 28,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "fde6f0333ce1de3954b7743352a443d5325426df618bd823c967f45b418c6b24"
+    },
+    {
+      "tag": "ar",
+      "key": "CONTACT SERVICE  DO NOT RESUME COUNTING",
+      "text": "اتصل بخدمة الصيانة ولا تستأنف العد",
+      "width": 255,
+      "height": 25,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "0cf86cbf76621e741169c26ed1f5e01462563972a7038ce42ae5c3900e625cef"
+    },
+    {
+      "tag": "ar",
+      "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
+      "text": "يجب فحص نتيجة العد وحالة وحدة التحكم",
+      "width": 392,
+      "height": 26,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "a0dec91a4b4a1d4a17a173c98207cb59146c9ef0eb1472a9eed6c0307521dd1a"
+    },
+    {
+      "tag": "ar",
+      "key": "Insert USB drive with update/UN260_UPDATE.upk",
+      "text": "أدخل وحدة USB تحتوي على update/UN260_UPDATE.upk",
+      "width": 523,
+      "height": 28,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "e2f30fc506ec16a56514d42523c8d7cb090fd9998c07dda5498f3babc8307cfc"
+    },
+    {
+      "tag": "ar",
+      "key": "KEEP BACKUPS AND CHECK THE ERROR",
+      "text": "احتفظ بالنسخ الاحتياطية وتحقق من الخطأ",
+      "width": 349,
+      "height": 28,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "44b9f4e361466e9e791d4337304d1025b38e022e95c03d953259f866490c8d93"
+    },
+    {
+      "tag": "ar",
+      "key": "KEEP NOTES SEPARATE AND RECOUNT",
+      "text": "احتفظ بالأوراق منفصلة وأعد عدها",
+      "width": 324,
+      "height": 31,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "6700f991777d4402e4c449edf94532f5f75fa2a66c590fc0275e215dcba9f564"
+    },
+    {
+      "tag": "ar",
+      "key": "KEEP USB AND POWER CONNECTED",
+      "text": "أبقِ USB والطاقة متصلين",
+      "width": 216,
+      "height": 32,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "f1460699eaa6badf2fd52e944360c12042c18b125847c527e8dca4055f96be87"
+    },
+    {
+      "tag": "ar",
+      "key": "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE",
+      "text": "سجل RAM / تحديث الواجهة؛ قد لا تتوفر نسخة USB",
+      "width": 372,
+      "height": 20,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "30426628b6b4a2496fa355161656e0e200711236c333d78438666f4e38d5d814"
+    },
+    {
+      "tag": "ar",
+      "key": "STOP FEEDING BANKNOTES",
+      "text": "توقف عن إدخال الأوراق النقدية",
+      "width": 363,
+      "height": 36,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "933565ad0a616bea039e9255df0673de0dafbf57e8cdca72b13740c9e1ecb6d2"
+    },
+    {
+      "tag": "ar",
+      "key": "UN260 PROTECTION MODE",
+      "text": "وضع حماية UN260",
+      "width": 232,
+      "height": 31,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "ea71ff973f74bd1ac424590e64b1ef95b8596ab7c9f9b049960e63f5d209b8a2"
+    },
+    {
+      "tag": "ar",
+      "key": "UN260 SYSTEM UPDATE",
+      "text": "تحديث نظام UN260",
+      "width": 177,
+      "height": 23,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "ee7e2d40fa25c75e140ff85f6daf9a6c3ca4b7686dcdf6deda52bbd6a9707aa5"
+    },
+    {
+      "tag": "ar",
+      "key": "UPDATE COMPLETE",
+      "text": "اكتمل التحديث",
+      "width": 213,
+      "height": 35,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "c35e7a6b1b7e4f4873ec48e0641587b3dca2fde58b14adc6efe017d7ad716e60"
+    },
+    {
+      "tag": "ar",
+      "key": "UPDATE PAUSED",
+      "text": "التحديث متوقف مؤقتا",
+      "width": 315,
+      "height": 38,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "68a4981b284a17c118ef52944da9424d43e7348e2e9e7eb811cc47b314b05760"
+    },
+    {
+      "tag": "ar",
+      "key": "UPDATING YOUR DEVICE",
+      "text": "جارٍ تحديث جهازك",
+      "width": 262,
+      "height": 47,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "0b94789d6446535af055a6acdf0b6fafdb1b08c9437818e5b75a0c486127d949"
+    },
+    {
+      "tag": "tr",
+      "key": "BACKUP   STORAGE   APPLICATION   VERIFY",
+      "text": "YEDEK DEPOLAMA UYGULAMASINI DOĞRULA",
+      "width": 386,
+      "height": 17,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "4875c6b170a95cc52a61d6464934e123a9a83c43e4f6334a15332ab270a0ef77"
+    },
+    {
+      "tag": "tr",
+      "key": "CHECKING THE SAME USB PACKAGE",
+      "text": "AYNI USB PAKETİNİ KONTROL ETMEK",
+      "width": 367,
+      "height": 21,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "13c22d12e20524f1f445ad56a007ee80b2a3a16d6be6e936e9838cd9147293f4"
+    },
+    {
+      "tag": "tr",
+      "key": "CONTACT SERVICE  DO NOT RESUME COUNTING",
+      "text": "SERVİSE BAŞVURUN. SAYIMI SÜRDÜRMEYİN",
+      "width": 372,
+      "height": 21,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "8187e90a1e9a7208eff02b6edab559701c04dfbaf07768d10833bb884736a157"
+    },
+    {
+      "tag": "tr",
+      "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
+      "text": "SAYIM SONUCU VE DENETLEYİCİ DURUMU KONTROL EDİLMELİ",
+      "width": 714,
+      "height": 23,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "6c4ddab3fc0ebec81e6fd1a252fe769d49b1a6d651850ffd4f83bd442b67e652"
+    },
+    {
+      "tag": "tr",
+      "key": "Insert USB drive with update/UN260_UPDATE.upk",
+      "text": "update/UN260_UPDATE.upk içeren USB sürücüsünü takın",
+      "width": 573,
+      "height": 22,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "8087a7420d4c2e9b3a622a13b1afab75d3fd53d4a02706261e5da9ea3e6bc606"
+    },
+    {
+      "tag": "tr",
+      "key": "KEEP BACKUPS AND CHECK THE ERROR",
+      "text": "YEDEKLEMELERİ TUTUN VE HATALARI KONTROL EDİN",
+      "width": 534,
+      "height": 21,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "f588f150666f0a791fc308ce2d0373ad547f757c98b71fbf7e34abbafd33d128"
+    },
+    {
+      "tag": "tr",
+      "key": "KEEP NOTES SEPARATE AND RECOUNT",
+      "text": "BANKNOTLARI AYRI TUTUN VE YENİDEN SAYIN",
+      "width": 533,
+      "height": 23,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "e079743940f5824d49af250b8f3b38a668c0a7405499ec2f634b42b4756f3f17"
+    },
+    {
+      "tag": "tr",
+      "key": "KEEP USB AND POWER CONNECTED",
+      "text": "USB'Yİ VE GÜCÜ BAĞLI TUTUN",
+      "width": 306,
+      "height": 21,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "7b5a3d6bdbf72ea60894ad52dcf02243eb7b23ea616b85b936758b78caaca24d"
+    },
+    {
+      "tag": "tr",
+      "key": "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE",
+      "text": "RAM GÜNLÜĞÜ UI GÜNCELLEME GÜNLÜĞÜ USB KOPYALANMAYAN OLABİLİR",
+      "width": 640,
+      "height": 18,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "5f19f92f756fdfbd8fc519a8f1c1c75f8755208a9409db9bfde6713ce64f0ccd"
+    },
+    {
+      "tag": "tr",
+      "key": "STOP FEEDING BANKNOTES",
+      "text": "BANKNOT BESLEMEYİ DURDURUN",
+      "width": 477,
+      "height": 28,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "736eb9f5dfb6fcb4e3b7604c2e439d9891041892c547eced6d7f631030d00e91"
+    },
+    {
+      "tag": "tr",
+      "key": "UN260 PROTECTION MODE",
+      "text": "UN260 KORUMA MODU",
+      "width": 325,
+      "height": 22,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "f6873692f53677c9435d569bb7e8bec92c9f583556da3594e9e33f0d981b4a68"
+    },
+    {
+      "tag": "tr",
+      "key": "UN260 SYSTEM UPDATE",
+      "text": "UN260 SİSTEM GÜNCELLEMESİ",
+      "width": 311,
+      "height": 21,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "40633525d7868b5b157cfea11444753e7ab0af7e9c6f23714843d8907da8a43d"
+    },
+    {
+      "tag": "tr",
+      "key": "UPDATE COMPLETE",
+      "text": "GÜNCELLEME TAMAMLANDI",
+      "width": 487,
+      "height": 34,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "adc8c632229468b818c8783b1ef13ad54ab9646bf80e856592457492e18f6757"
+    },
+    {
+      "tag": "tr",
+      "key": "UPDATE PAUSED",
+      "text": "GÜNCELLEME DURAKLATILDI",
+      "width": 504,
+      "height": 34,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "34eca3505c937097b8561b1c27399ec77f0b9dcb2798eae80e98fe6b817b9dd3"
+    },
+    {
+      "tag": "tr",
+      "key": "UPDATING YOUR DEVICE",
+      "text": "CİHAZINIZI GÜNCELLEME",
+      "width": 442,
+      "height": 34,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "7d85a54c567a468aa91465a8405a6d3f30798969c21ea05e867659c1a642d00f"
+    },
+    {
+      "tag": "fr",
+      "key": "BACKUP   STORAGE   APPLICATION   VERIFY",
+      "text": "VÉRIFIER L'APPLICATION DE STOCKAGE DE SAUVEGARDE",
+      "width": 488,
+      "height": 17,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "57c8e638dafa8ab1683ecec05171d58926a94f285cd50138e9ea7962bf60cbf7"
+    },
+    {
+      "tag": "fr",
+      "key": "CHECKING THE SAME USB PACKAGE",
+      "text": "VÉRIFICATION DU MÊME FORFAIT USB",
+      "width": 379,
+      "height": 21,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "f44ff971e0663022b83c8537c0f90fb4f2390f995a90606799a944bbad57782f"
+    },
+    {
+      "tag": "fr",
+      "key": "CONTACT SERVICE  DO NOT RESUME COUNTING",
+      "text": "CONTACTEZ LE SERVICE. NE REPRENEZ PAS LE COMPTAGE",
+      "width": 500,
+      "height": 14,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "c78b8b128e7a8218efd4ebeb78588a77d444fb18e6d24a6ae4f3200af71c1710"
+    },
+    {
+      "tag": "fr",
+      "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
+      "text": "LE RÉSULTAT DU COMPTAGE ET L’ÉTAT DU CONTRÔLEUR DOIVENT ÊTRE VÉRIFIÉS",
+      "width": 940,
+      "height": 23,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "d83376a9fa0da50cfe0951a83c3cafacf3697dbd9d93f76ea1443796ea4acc7a"
+    },
+    {
+      "tag": "fr",
+      "key": "Insert USB drive with update/UN260_UPDATE.upk",
+      "text": "Insérez une clé USB contenant update/UN260_UPDATE.upk",
+      "width": 592,
+      "height": 23,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "8d1fac9553cfffee009f10990b1aa5c9717da88a4fcf231719ecdf3b90cebbef"
+    },
+    {
+      "tag": "fr",
+      "key": "KEEP BACKUPS AND CHECK THE ERROR",
+      "text": "CONSERVER DES SAUVEGARDES ET VÉRIFIER L'ERREUR",
+      "width": 562,
+      "height": 21,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "85b83a7bf88f2b2cc51aff2441ae578cc85497531a8aa0d565c8de3b89b3083e"
+    },
+    {
+      "tag": "fr",
+      "key": "KEEP NOTES SEPARATE AND RECOUNT",
+      "text": "GARDEZ LES BILLETS SÉPARÉS ET RECOMPTEZ",
+      "width": 543,
+      "height": 23,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "63a843eb88bc40350a0ee232dfa9de02a9f48d917bc9cb004ebeeb2f66c27a9e"
+    },
+    {
+      "tag": "fr",
+      "key": "KEEP USB AND POWER CONNECTED",
+      "text": "GARDER L'USB ET L'ALIMENTATION CONNECTÉS",
+      "width": 483,
+      "height": 21,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "77cbaa5afbf8ea0672134b2d859e3eb1bdca99ba36ffa572748aec32b9ae5838"
+    },
+    {
+      "tag": "fr",
+      "key": "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE",
+      "text": "RAM LOG UI UPDATE LOG COPIE USB PEUT ÊTRE INDISPONIBLE",
+      "width": 537,
+      "height": 17,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "fc367594a47fcd53073b10e691d54cfcebd97f475cb040308e72cae961b5c5d9"
+    },
+    {
+      "tag": "fr",
+      "key": "STOP FEEDING BANKNOTES",
+      "text": "ARRÊTEZ L’ALIMENTATION EN BILLETS",
+      "width": 539,
+      "height": 28,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "e51d48c08f66a1f1d137d74b192835f3f2f47245edf58763fa28aa569734f41b"
+    },
+    {
+      "tag": "fr",
+      "key": "UN260 PROTECTION MODE",
+      "text": "MODE DE PROTECTION UN260",
+      "width": 429,
+      "height": 22,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "0372c7f3cf688e19edc3cc8a12441f3f91a3be66d6a29dc9f7f48b3ddf418491"
+    },
+    {
+      "tag": "fr",
+      "key": "UN260 SYSTEM UPDATE",
+      "text": "MISE À JOUR DU SYSTÈME UN260",
+      "width": 336,
+      "height": 25,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "920f22f0335b796d18ef62e4469adae4791976e757814c12440b27329fa9c15a"
+    },
+    {
+      "tag": "fr",
+      "key": "UPDATE COMPLETE",
+      "text": "MISE À JOUR TERMINÉE",
+      "width": 411,
+      "height": 42,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "3ed0d692883977e6ea7341f1dda8fa6581979fa42e241e5917040d2c8b7b5e9e"
+    },
+    {
+      "tag": "fr",
+      "key": "UPDATE PAUSED",
+      "text": "MISE À JOUR EN PAUSE",
+      "width": 404,
+      "height": 42,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "f2944f7010fe458b02057eb9cf94c1c213f79024fd535f870f2c4d8f3625e6e6"
+    },
+    {
+      "tag": "fr",
+      "key": "UPDATING YOUR DEVICE",
+      "text": "MISE À JOUR DE VOTRE APPAREIL",
+      "width": 587,
+      "height": 42,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "f6fde4f37f0c2300e490f25cc4819cdb078af0f130e5dc920758e6f7ec03ef89"
+    },
+    {
+      "tag": "pl",
+      "key": "BACKUP   STORAGE   APPLICATION   VERIFY",
+      "text": "WERYFIKUJ APLIKACJĘ PRZECHOWYWANIA KOPII ZAPASOWYCH",
+      "width": 531,
+      "height": 17,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "70e15f2635a884d1fe89890c1b832537e19f3ffd4798380744dc242f362ae555"
+    },
+    {
+      "tag": "pl",
+      "key": "CHECKING THE SAME USB PACKAGE",
+      "text": "SPRAWDZANIE TEGO SAMEGO PAKIETU USB",
+      "width": 442,
+      "height": 17,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "53622f464d6df5befd44aea2796fb65aacea961a70cf008e923299c03f285b0e"
+    },
+    {
+      "tag": "pl",
+      "key": "CONTACT SERVICE  DO NOT RESUME COUNTING",
+      "text": "SKONTAKTUJ SIĘ Z SERWISEM. NIE WZNAWIAJ LICZENIA",
+      "width": 471,
+      "height": 17,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "4cb1aa3dca990698a77382d358bb993c72f3ff0dfbcd1b74be0ff13ddeb22dbf"
+    },
+    {
+      "tag": "pl",
+      "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
+      "text": "WYMAGANE SPRAWDZENIE WYNIKU LICZENIA I STANU KONTROLERA",
+      "width": 787,
+      "height": 19,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "ec30136d27631b8f33395bce5fa5cd430dcbcead8ac80fcfb306bff05dff528c"
+    },
+    {
+      "tag": "pl",
+      "key": "Insert USB drive with update/UN260_UPDATE.upk",
+      "text": "Włóż nośnik USB z plikiem update/UN260_UPDATE.upk",
+      "width": 549,
+      "height": 23,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "97bcde769dbf747e40b25e0ad063f5403ca2629b4b74ceeb2c8e14efee52d1b3"
+    },
+    {
+      "tag": "pl",
+      "key": "KEEP BACKUPS AND CHECK THE ERROR",
+      "text": "ZACHOWAJ KOPIE ZAPASOWE I SPRAWDŹ BŁĄD",
+      "width": 474,
+      "height": 25,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "52527dd9e525274e4d09f5663e6565aafea84d967d2aa52b7d7f00854502908c"
+    },
+    {
+      "tag": "pl",
+      "key": "KEEP NOTES SEPARATE AND RECOUNT",
+      "text": "ODŁÓŻ BANKNOTY OSOBNO I PRZELICZ PONOWNIE",
+      "width": 597,
+      "height": 23,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "2291c39121be3c47b7c9929f6d495d2d812e20e9dccfb38f7f1fa65df3ab9b1b"
+    },
+    {
+      "tag": "pl",
+      "key": "KEEP USB AND POWER CONNECTED",
+      "text": "UTRZYMAJ PODŁĄCZONE USB I ZASILANIE",
+      "width": 422,
+      "height": 21,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "16c86ede978a34086e0ca5c37a75ac6041b7840c81b64ddab03119abacd73b40"
+    },
+    {
+      "tag": "pl",
+      "key": "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE",
+      "text": "DZIENNIK RAM UI AKTUALIZACJA DZIENNIKA USB KOPIA MOŻE BYĆ NIEDOSTĘPNA",
+      "width": 692,
+      "height": 21,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "be0b23015d44fcf901c9140520848638a36a3f6e1b5e096f08a0c59029e90a24"
+    },
+    {
+      "tag": "pl",
+      "key": "STOP FEEDING BANKNOTES",
+      "text": "PRZERWIJ PODAWANIE BANKNOTÓW",
+      "width": 513,
+      "height": 34,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "2431c4fa90e3bd94f0a81d44db230c21f6cf214ccd8ff0b79e56c516fc2b6370"
+    },
+    {
+      "tag": "pl",
+      "key": "UN260 PROTECTION MODE",
+      "text": "TRYB OCHRONY UN260",
+      "width": 329,
+      "height": 22,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "db59c19e7df9f158102c7113cad782007edaf4f923f596b53cbb7580c17ded83"
+    },
+    {
+      "tag": "pl",
+      "key": "UN260 SYSTEM UPDATE",
+      "text": "AKTUALIZACJA SYSTEMU UN260",
+      "width": 320,
+      "height": 21,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "462c06be3cd09b3946214aa92d8c845b29cd5bf6e6ea25e289c66db06a1473a4"
+    },
+    {
+      "tag": "pl",
+      "key": "UPDATE COMPLETE",
+      "text": "AKTUALIZACJA ZAKOŃCZONA",
+      "width": 512,
+      "height": 42,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "24d83211be21353c9750217d40d4fdcfdefee173d1cb4359eb7c770a8745b15e"
+    },
+    {
+      "tag": "pl",
+      "key": "UPDATE PAUSED",
+      "text": "AKTUALIZACJA WSTRZYMANA",
+      "width": 516,
+      "height": 35,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "51573317a308703997e2b9ce99683ff08d6a2c600203cc82779744282d256688"
+    },
+    {
+      "tag": "pl",
+      "key": "UPDATING YOUR DEVICE",
+      "text": "AKTUALIZACJA URZĄDZENIA",
+      "width": 495,
+      "height": 35,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "25861444b6e00d5c90e53cfce855bc41bc77a0d8895950f8e8e12d942719a282"
+    },
+    {
+      "tag": "ru",
+      "key": "BACKUP   STORAGE   APPLICATION   VERIFY",
+      "text": "ПРОВЕРКА ПРИЛОЖЕНИЯ РЕЗЕРВНОГО ХРАНЕНИЯ",
+      "width": 448,
+      "height": 14,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "8445d6269f674d79ed9323cbbb3482d061bf139bf9cee0bbd4650ad697253a66"
+    },
+    {
+      "tag": "ru",
+      "key": "CHECKING THE SAME USB PACKAGE",
+      "text": "ПРОВЕРКА ТО ЖЕ USB-ПАКЕТА",
+      "width": 322,
+      "height": 17,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "7c264ff1b6bbb016e43010c36c7eb70ac1b1cb462d700456e3ec9dd4dacff77e"
+    },
+    {
+      "tag": "ru",
+      "key": "CONTACT SERVICE  DO NOT RESUME COUNTING",
+      "text": "ОБРАТИТЕСЬ В СЕРВИС. НЕ ВОЗОБНОВЛЯЙТЕ СЧЁТ",
+      "width": 456,
+      "height": 18,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "9661e138b73552cecf55b8996ad66f9646a01c463dd9451b3f94e20eef5c8781"
+    },
+    {
+      "tag": "ru",
+      "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
+      "text": "ТРЕБУЕТСЯ ПРОВЕРКА РЕЗУЛЬТАТА СЧЁТА И СОСТОЯНИЯ КОНТРОЛЛЕРА",
+      "width": 874,
+      "height": 23,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "9f3e59d57b1a31c6f435460579a95733cd5d675e2e629faf341402f36dd8732b"
+    },
+    {
+      "tag": "ru",
+      "key": "Insert USB drive with update/UN260_UPDATE.upk",
+      "text": "Подключите USB-накопитель с файлом update/UN260_UPDATE.upk",
+      "width": 703,
+      "height": 22,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "93ea7b8d0185999293782c6c273dedc2fe864bad28eb0a132d74e528a7d6ec8b"
+    },
+    {
+      "tag": "ru",
+      "key": "KEEP BACKUPS AND CHECK THE ERROR",
+      "text": "СОХРАНИТЕ РЕЗЕРВНЫЕ КОПИИ И ПРОВЕРЬТЕ ОШИБКУ",
+      "width": 581,
+      "height": 17,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "7fb86c53001d1a80ceacebf98059c5669d1ef94f878bbf3290a5717ae019db49"
+    },
+    {
+      "tag": "ru",
+      "key": "KEEP NOTES SEPARATE AND RECOUNT",
+      "text": "ХРАНИТЕ БАНКНОТЫ ОТДЕЛЬНО И ПЕРЕСЧИТАЙТЕ",
+      "width": 610,
+      "height": 26,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "fb007489a7cfa9ffdeb79cc894f210328351a39673543a7c59879a9369030f82"
+    },
+    {
+      "tag": "ru",
+      "key": "KEEP USB AND POWER CONNECTED",
+      "text": "ОСТАВАЙТЕ USB И ПИТАНИЕ ПОДКЛЮЧЕННЫМ",
+      "width": 494,
+      "height": 23,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "ad363a468a60a01b44ee292ec866fc91f95c815baa6344df11f25c8b14c4d0fd"
+    },
+    {
+      "tag": "ru",
+      "key": "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE",
+      "text": "ЖУРНАЛ ОЗУ UI ЖУРНАЛ ОБНОВЛЕНИЙ USB-КОПИЯ МОЖЕТ БЫТЬ НЕДОСТУПНА",
+      "width": 714,
+      "height": 20,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "991d9d3142235dac7954e5f15b8fda41fae3660723e0fd5ad3c2365407f2bfcf"
+    },
+    {
+      "tag": "ru",
+      "key": "STOP FEEDING BANKNOTES",
+      "text": "ПРЕКРАТИТЕ ПОДАЧУ БАНКНОТ",
+      "width": 465,
+      "height": 26,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "3cae3a890e161b7c35875232f2011427bd40637d567570c38918d3999d0f4fc9"
+    },
+    {
+      "tag": "ru",
+      "key": "UN260 PROTECTION MODE",
+      "text": "РЕЖИМ ЗАЩИТЫ UN260",
+      "width": 355,
+      "height": 26,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "0a1053944f1804109e953ea13df0b92d425a13bb0d81c9b837d926af84241e4b"
+    },
+    {
+      "tag": "ru",
+      "key": "UN260 SYSTEM UPDATE",
+      "text": "ОБНОВЛЕНИЕ СИСТЕМЫ UN260",
+      "width": 329,
+      "height": 17,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "06076a03186a489136a61f273c3549ef20ae00861a39266e5d015bda2fb39611"
+    },
+    {
+      "tag": "ru",
+      "key": "UPDATE COMPLETE",
+      "text": "ОБНОВЛЕНИЕ ЗАВЕРШЕНО",
+      "width": 493,
+      "height": 28,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "ee83ba5c3c22d7d0fd75c8d9fea1678d072463eb37269173f88f8b9f7e9fcccb"
+    },
+    {
+      "tag": "ru",
+      "key": "UPDATE PAUSED",
+      "text": "ОБНОВЛЕНИЕ ПРИОСТАНОВЛЕНО",
+      "width": 617,
+      "height": 28,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "c0e2b541cdd92aec9ec787875ef977af691845abab832fd6614c3c21557c60bd"
+    },
+    {
+      "tag": "ru",
+      "key": "UPDATING YOUR DEVICE",
+      "text": "ОБНОВЛЕНИЕ ВАШЕГО УСТРОЙСТВА",
+      "width": 669,
+      "height": 34,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "18445af5c57c920ba81d94187ca8d3bc9557a57d03b70399258e3b017a05213f"
+    },
+    {
+      "tag": "de",
+      "key": "BACKUP   STORAGE   APPLICATION   VERIFY",
+      "text": "BACKUP-SPEICHER-ANWENDUNG ÜBERPRÜFEN",
+      "width": 401,
+      "height": 18,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "538d0c4a01453a9025a168a505ef13c0b36b3bb080b01bbaff9a95c278488032"
+    },
+    {
+      "tag": "de",
+      "key": "CHECKING THE SAME USB PACKAGE",
+      "text": "ÜBERPRÜFEN DESSELBEN USB-PAKETS",
+      "width": 391,
+      "height": 21,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "b3f8def3a2fecce1ec8926eef08cbcb07a8153adacb19a2eba5f766a9d8f2406"
+    },
+    {
+      "tag": "de",
+      "key": "CONTACT SERVICE  DO NOT RESUME COUNTING",
+      "text": "SERVICE KONTAKTIEREN. ZÄHLEN NICHT FORTSETZEN",
+      "width": 462,
+      "height": 18,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "5598c3cebb8618d2079d36f8f7077d8170a3bc5b291a37dff671118d5e376396"
+    },
+    {
+      "tag": "de",
+      "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
+      "text": "ZÄHLERGEBNIS UND CONTROLLER-ZUSTAND MÜSSEN GEPRÜFT WERDEN",
+      "width": 848,
+      "height": 23,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "48d170f815f5f8249a1b45ad8771214e1c135a3f144853acc64a6b80b6086c5d"
+    },
+    {
+      "tag": "de",
+      "key": "Insert USB drive with update/UN260_UPDATE.upk",
+      "text": "USB-Laufwerk mit update/UN260_UPDATE.upk einstecken",
+      "width": 579,
+      "height": 22,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "014126a75c602aaca3067ea52e28f2015fb6cf7680c8747944321fd5f4456f81"
+    },
+    {
+      "tag": "de",
+      "key": "KEEP BACKUPS AND CHECK THE ERROR",
+      "text": "Bewahren Sie Backups auf und überprüfen Sie den Fehler",
+      "width": 579,
+      "height": 21,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "60b54a7515fad4f367c92ab5618eaac6374b894c21a0dbb2845354920d18c5b1"
+    },
+    {
+      "tag": "de",
+      "key": "KEEP NOTES SEPARATE AND RECOUNT",
+      "text": "BANKNOTEN GETRENNT HALTEN UND ERNEUT ZÄHLEN",
+      "width": 635,
+      "height": 23,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "af9cde2efbbd5c177a410bb20c18b669b3a202ecdc2b0c2ce1d166eb3c65cdb8"
+    },
+    {
+      "tag": "de",
+      "key": "KEEP USB AND POWER CONNECTED",
+      "text": "HALTEN SIE USB UND STROMVERBINDUNG",
+      "width": 429,
+      "height": 17,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "406f29ca0cdd4f7398ed7175ecfd95704dcc522c00c29fd6d14b88b5a5b7c194"
+    },
+    {
+      "tag": "de",
+      "key": "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE",
+      "text": "RAM-LOG UI-UPDATE-LOG USB-KOPIE IST MÖGLICHERWEISE NICHT VERFÜGBAR",
+      "width": 676,
+      "height": 18,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "c9c173558967ab32923273242d78721b10ff14070cff52f06c0d94eacd83fa7b"
+    },
+    {
+      "tag": "de",
+      "key": "STOP FEEDING BANKNOTES",
+      "text": "KEINE WEITEREN BANKNOTEN ZUFÜHREN",
+      "width": 590,
+      "height": 28,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "41115a0ac21cbc4a1dc7b28d3d7e606f4c9a54e18a8e4909a91e02b293aa4073"
+    },
+    {
+      "tag": "de",
+      "key": "UN260 PROTECTION MODE",
+      "text": "UN260 SCHUTZMODUS",
+      "width": 327,
+      "height": 22,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "87da4cea898509e993e60e4a4f831adcbe77b48043f4a07d92a9e9b63fee7661"
+    },
+    {
+      "tag": "de",
+      "key": "UN260 SYSTEM UPDATE",
+      "text": "UN260-SYSTEM-UPDATE",
+      "width": 243,
+      "height": 17,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "4f80d186ce4ff2fbb785756a197a3e8ed3ea805b8f75809e206ae6db5dada750"
+    },
+    {
+      "tag": "de",
+      "key": "UPDATE COMPLETE",
+      "text": "UPDATE ABGESCHLOSSEN",
+      "width": 459,
+      "height": 28,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "7dc3b636953e9eb67115c29085c0738230a4cb1de970213ab300126150007b37"
+    },
+    {
+      "tag": "de",
+      "key": "UPDATE PAUSED",
+      "text": "UPDATE ANHALTEN",
+      "width": 336,
+      "height": 28,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "ae608c7f0bad9ec0b1e60d168ce885f12e1808f12c59fa1c7e06f614c70d633d"
+    },
+    {
+      "tag": "de",
+      "key": "UPDATING YOUR DEVICE",
+      "text": "AKTUALISIEREN IHRES GERÄTS",
+      "width": 539,
+      "height": 34,
+      "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "pixels_sha256": "15192fb2176779536288ba57d8cf986c2bf73c84a0314a5964c6023766bb2ce5"
+    }
+  ]
+}

@@ -8,8 +8,9 @@
 void app_startup_trace_mark(const char *stage);
 
 /* Separate, default-off frame tracing; the caller attaches the observer only
- * during the intro and detaches before finishing or entering normal UI. */
+ * during the intro or a bounded self-check window, then detaches before finishing. */
 bool app_startup_frames_begin(void);
+bool app_startup_frames_begin_selfcheck(void);
 void app_startup_frames_present(uint64_t present_us);
 void app_startup_frames_finish(void);
 

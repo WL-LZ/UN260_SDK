@@ -18,6 +18,7 @@ static bool reset_allowed=true;
 static const counting_sim_t *counting_data_current(void){return &sim;}
 static uint32_t lv_tick_get(void){return now;}
 static bool counting_history_prepare_reset(counting_session_state_t *session,const counting_sim_t *data,uint32_t tick){(void)session;(void)data;(void)tick;return reset_allowed;}
+static void app_auto_qr_cancel(void){}
 static void ui_count_end_anim_cancel(void){}
 static void smart_island_notify_count_reset(void){}
 static void counting_report_reset(void){}

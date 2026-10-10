@@ -346,6 +346,8 @@ typedef enum {
     UI_TEXT_GESTURE_EXIT_TITLE,
     UI_TEXT_GESTURE_EXIT_BODY,
     UI_TEXT_GESTURE_GOT_IT,
+    UI_TEXT_GESTURE_RETURN_TITLE,
+    UI_TEXT_GESTURE_RETURN_BODY,
     /* List presentation strings; existing column IDs remain shared. */
     UI_TEXT_LIST_DENOMINATIONS,
     UI_TEXT_LIST_SERIAL_NUMBERS,

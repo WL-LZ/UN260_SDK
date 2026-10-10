@@ -9,8 +9,13 @@ typedef enum {
     MACHINE_FAULT_START,
     MACHINE_FAULT_RUNTIME,
     MACHINE_FAULT_SENSOR,
-    MACHINE_FAULT_PRESET
+    MACHINE_FAULT_PRESET,
+    MACHINE_FAULT_SETTING /* Transient guide identity; never a physical record. */
 } machine_fault_source_t;
+
+/* Matched setting refusal contract on this controller, distinct from any
+ * raw 0x0F runtime code. */
+#define MACHINE_FAULT_SETTING_NOTES UINT8_C(0x80)
 
 typedef struct {
     machine_fault_source_t source;

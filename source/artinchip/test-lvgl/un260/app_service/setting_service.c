@@ -48,7 +48,7 @@ static bool setting_basic_request_begin(setting_basic_request_slot_t *slot,
                                         uint16_t payload_len,
                                         uint8_t target)
 {
-    if (slot == NULL || !protocol_request_begin(&slot->request)) return false;
+    if (slot == NULL || !protocol_request_begin_for_command(&slot->request, cmd_g)) return false;
 
     slot->target = target;
     if (protocol_send(cmd_g, payload, payload_len) < 0) {
@@ -138,7 +138,7 @@ static bool setting_action_request_begin(setting_action_request_slot_t *slot,
 {
     const uint8_t payload = 0x01;
 
-    if (slot == NULL || !protocol_request_begin(&slot->request)) return false;
+    if (slot == NULL || !protocol_request_begin_for_command(&slot->request, cmd_g)) return false;
     if (protocol_send(cmd_g, &payload, 1) < 0) {
         protocol_request_finish(&slot->request);
         return false;
@@ -184,7 +184,7 @@ static bool setting_value_request_begin(setting_value_request_slot_t *slot,
                                         uint8_t target,
                                         uint8_t previous)
 {
-    if (slot == NULL || !protocol_request_begin(&slot->request)) return false;
+    if (slot == NULL || !protocol_request_begin_for_command(&slot->request, cmd_g)) return false;
 
     slot->target = target;
     slot->previous = previous;
@@ -312,7 +312,7 @@ static bool setting_batch_request_begin(setting_batch_request_type_t type,
     g_batch_request.target.num = sent_num;
     g_batch_request.previous.enable = previous_enable;
     g_batch_request.previous.num = previous_num;
-    if (!protocol_request_begin(&g_batch_request.request)) return false;
+    if (!protocol_request_begin_for_command(&g_batch_request.request, 0x06)) return false;
 
 #if SETTING_BATCH_TRACE_ENABLE
     setting_batch_trace_tx();
@@ -375,6 +375,7 @@ bool setting_service_take_add_result(bool *target)
 
 bool setting_service_request_fo_mode(uint8_t target)
 {
+    if (target > 3) return false;
     uint8_t fo_cmd;
 
     fo_cmd = target;

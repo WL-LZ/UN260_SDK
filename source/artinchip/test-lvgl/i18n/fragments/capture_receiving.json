@@ -1,0 +1,42 @@
+{
+  "en": {
+    "Received %u / %u channels": "Received %u / %u channels",
+    "Missing channels: %s": "Missing channels: %s"
+  },
+  "zh-Hans": {
+    "Received %u / %u channels": "已接收 %u / %u 个通道",
+    "Missing channels: %s": "未收到的通道：%s"
+  },
+  "ko": {
+    "Received %u / %u channels": "%u / %u 채널 수신",
+    "Missing channels: %s": "미수신 채널: %s"
+  },
+  "ja": {
+    "Received %u / %u channels": "%u / %u チャンネル受信",
+    "Missing channels: %s": "未受信チャンネル: %s"
+  },
+  "ar": {
+    "Received %u / %u channels": "تم استقبال %u / %u قنوات",
+    "Missing channels: %s": "القنوات التي لم تصل: %s"
+  },
+  "tr": {
+    "Received %u / %u channels": "%u / %u kanal alındı",
+    "Missing channels: %s": "Alınmayan kanallar: %s"
+  },
+  "fr": {
+    "Received %u / %u channels": "%u / %u canaux reçus",
+    "Missing channels: %s": "Canaux non reçus : %s"
+  },
+  "pl": {
+    "Received %u / %u channels": "Odebrano %u / %u kanałów",
+    "Missing channels: %s": "Nieodebrane kanały: %s"
+  },
+  "ru": {
+    "Received %u / %u channels": "Получено каналов: %u / %u",
+    "Missing channels: %s": "Не получены каналы: %s"
+  },
+  "de": {
+    "Received %u / %u channels": "%u / %u Kanäle empfangen",
+    "Missing channels: %s": "Nicht empfangene Kanäle: %s"
+  }
+}

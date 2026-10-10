@@ -42,7 +42,7 @@ uint8_t serial_number_state_level(void)
 
 bool serial_number_service_request(bool target_enabled, uint8_t target_level)
 {
-    if (!protocol_request_begin(&g_serial_number_request)) return false;
+    if (!protocol_request_begin_for_command(&g_serial_number_request, 0x32)) return false;
 
     g_serial_number_request_state.target_enabled = target_enabled;
     g_serial_number_request_state.target_level = target_level;

@@ -56,3 +56,6 @@ __pycache__/
 *.key
 *.pfx
 *priv*.pem
+
+# Local firmware build coordination lock.
+/.un260-firmware-build.lock

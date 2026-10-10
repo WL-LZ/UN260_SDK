@@ -4,11 +4,14 @@
 #
 # UN260_STORAGE_POLICY_V2: failed migration may return to a verified legacy app.
 # UN260_STORAGE_POLICY_V3: backup-bound enrollment and older journal recovery.
+# UN260_BOOT_BUNDLE_1: verified root player and single-owner UI handoff.
+# UN260_STARTUP_RECOVERY_V1: first-paint trial health and independent USB rescue.
 
 
 DAEMON="/usr/local/bin/test_lvgl"
 DAEMONOPTS="-qws"
-PIDFILE=/var/run/test_lvgl.pid
+PIDFILE=/run/test_lvgl.pid
+APP_TOKENFILE=/run/test_lvgl.token
 DEFER_PIDFILE=/var/run/test_lvgl.defer.pid
 MDEV_PIDFILE=/var/run/mdev.pid
 STARTUP_LOG=/tmp/test_lvgl.startup.log
@@ -22,6 +25,19 @@ TOUCH_MODULE_FILE="/lib/modules/$(uname -r)/kernel/drivers/input/touchscreen/gt9
 TOUCH_DEVICE=""
 POLL_METHOD=""
 POLL_LIMIT=100
+UPDATE_DISPATCH=/usr/local/bin/un260_update_dispatch
+UPDATER_PLATFORM=/etc/un260/updater-platform
+RECOVERY_PIDFILE=/run/test_lvgl.recovery.pid
+RECOVERY_TOKENFILE=/run/test_lvgl.recovery.token
+RESCUE_DISPLAY_PIDFILE=/run/test_lvgl.rescue-display.pid
+RESCUE_DISPLAY=/usr/local/lib/un260-updater/rescue/display
+UI_HEALTH=/tmp/un260-ui.health
+RECOVERY_HEARTBEAT=/tmp/un260-recovery.heartbeat
+RECOVERY_STATUS=/tmp/ui_update.status
+UPDATE_LOCK=/tmp/un260-updater.lock
+USB_PACKAGE=/mnt/usb/update/UN260_UPDATE.upk
+HEALTH_LIMIT=30
+HEALTH_STABLE=3
 if [ "${UN260_BOOT_TRACE+x}" != x ]; then
       UN260_BOOT_TRACE=0
       [ ! -f /etc/un260/boot-trace.enabled ] || UN260_BOOT_TRACE=1
@@ -72,6 +88,28 @@ poll_pause() {
           fractional) sleep 0.1 ;;
           *) sleep 1 ;;
       esac
+}
+
+stop_upgrade_visual() {
+      # Only this invocation's child is ours; a changed ready marker may
+      # already name another renderer and is never used as the kill target.
+      [ -n "${upgrade_visual:-}" ] || return 0
+      select_poll_method
+      kill -TERM "$upgrade_visual" 2>/dev/null || true
+      visual_wait=0
+      while kill -0 "$upgrade_visual" 2>/dev/null; do
+          if [ "$visual_wait" -ge "$POLL_LIMIT" ]; then
+              echo 'Upgrade display did not stop; UI startup deferred'
+              return 1
+          fi
+          poll_pause
+          visual_wait=$((visual_wait + 1))
+      done
+      wait "$upgrade_visual" 2>/dev/null || true
+      upgrade_visual=""
+      light_pid=""
+      unset UN260_BOOT_LIGHT_ACTIVE
+      boot_trace upgrade_visual_released
 }
 
 live_pidfile() {
@@ -196,9 +234,489 @@ prepare_devices() {
       boot_trace devices_ready
 }
 
+modern_platform() {
+      [ -e "$UPDATER_PLATFORM" ] || [ -L "$UPDATER_PLATFORM" ]
+}
+
+safe_runtime_file() {
+      runtime_path=$1
+      [ -f "$runtime_path" ] && [ ! -L "$runtime_path" ] || return 1
+      while [ "$runtime_path" != / ]; do
+          [ ! -L "$runtime_path" ] || return 1
+          runtime_path=${runtime_path%/*}
+          [ -n "$runtime_path" ] || runtime_path=/
+      done
+      [ "$(LC_ALL=C ls -nd "$1" | awk '{print $3}')" = "$(id -u)" ]
+}
+
+health_marker_matches() {
+      safe_runtime_file "$UI_HEALTH" || return 1
+      [ "$(LC_ALL=C ls -ld "$UI_HEALTH" | awk '{print $1}')" = -rw------- ] || return 1
+      case "$1" in ''|0*|1|*[!0-9]*) return 1 ;; esac
+      [ "${#1}" -le 9 ] && [ "$(wc -c < "$UI_HEALTH")" = "$((${#1} + 1))" ] &&
+          [ "$(cat "$UI_HEALTH")" = "$1" ]
+}
+
+clear_owned_health() {
+      [ -n "${1:-}" ] || return 0
+      if health_marker_matches "$1"; then rm -f "$UI_HEALTH"; fi
+}
+
+# The guard owns the launch PID; its UI child owns the first-paint marker.
+process_identity() {
+      case "$1" in ''|0*|1|*[!0-9]*) return 1 ;; esac
+      [ "${#1}" -le 9 ] && kill -0 "$1" 2>/dev/null || return 1
+      process_fields=$(awk '{s=$0; sub(/^[0-9]+ \(.*\) /,"",s); n=split(s,f," ");
+          if(n<20)exit 1; print f[2],f[20],f[1]}' "/proc/$1/stat" 2>/dev/null) || return 1
+      read -r process_parent process_start process_state <<EOF
+$process_fields
+EOF
+      case "$process_parent:$process_start" in *[!0-9:]*|:*|*:) return 1 ;; esac
+      case "$process_state" in R|S|D|I|T|t) ;; *) return 1 ;; esac
+      [ "$(awk '/^Uid:/{if($2==$3 && $3==$4 && $4==$5)print $2; exit}' "/proc/$1/status" 2>/dev/null)" = "$(id -u)" ]
+}
+
+managed_process() {
+      process_identity "$1" || return 1
+      process_exe=$(readlink "/proc/$1/exe") || return 1
+      [ "$process_exe" = /mnt/un260-app/test_lvgl ] || [ "$process_exe" = '/mnt/un260-app/test_lvgl (deleted)' ]
+}
+
+healthy_process() {
+      managed_process "$1" || return 1
+      case "$process_state" in T|t) return 1 ;; esac
+}
+
+app_token_read() {
+      safe_runtime_file "$APP_TOKENFILE" &&
+          [ "$(LC_ALL=C ls -ld "$APP_TOKENFILE" | awk '{print $1}')" = -rw------- ] &&
+          [ "$(wc -c < "$APP_TOKENFILE")" -le 32 ] || return 1
+      read -r app_token_pid app_token_start app_token_extra < "$APP_TOKENFILE" || return 1
+      case "$app_token_pid" in ''|0*|1|*[!0-9]*) return 1 ;; esac
+      case "$app_token_start" in ''|*[!0-9]*) return 1 ;; esac
+      [ "$app_token_start" = 0 ] || case "$app_token_start" in 0*) return 1 ;; esac
+      [ -z "$app_token_extra" ] && [ "${#app_token_pid}" -le 9 ] && [ "${#app_token_start}" -le 20 ] &&
+          [ "$(wc -c < "$APP_TOKENFILE")" = "$((${#app_token_pid} + ${#app_token_start} + 2))" ] &&
+          [ "$(cat "$APP_TOKENFILE")" = "$app_token_pid $app_token_start" ]
+}
+
+app_monitor_matches() {
+      app_token_read && [ "$app_token_pid" = "$1" ] && managed_process "$1" &&
+          [ "$process_start" = "$app_token_start" ] || return 1
+}
+
+resolve_ui_identity() {
+      UI_PID=""
+      UI_START=""
+      app_monitor_matches "$1" || return 1
+      safe_runtime_file "$UI_HEALTH" && [ "$(wc -c < "$UI_HEALTH")" -le 10 ] || return 1
+      read -r health_candidate < "$UI_HEALTH" || return 1
+      health_marker_matches "$health_candidate" && managed_process "$health_candidate" || return 1
+      [ "$health_candidate" = "$1" ] || [ "$process_parent" = "$1" ] || return 1
+      health_candidate_start=$process_start
+      app_monitor_matches "$1" && health_marker_matches "$health_candidate" &&
+          managed_process "$health_candidate" && [ "$process_start" = "$health_candidate_start" ] &&
+          { [ "$health_candidate" = "$1" ] || [ "$process_parent" = "$1" ]; } || return 1
+      UI_PID=$health_candidate
+      UI_START=$health_candidate_start
+}
+
+resolve_ui_health() {
+      resolve_ui_identity "$1" && healthy_process "$1" && healthy_process "$UI_PID" &&
+          [ "$process_start" = "$UI_START" ] && health_marker_matches "$UI_PID"
+}
+
+publish_app_identity() {
+      process_identity "$1" || return 1
+      launch_start=$process_start
+      [ ! -e "$APP_TOKENFILE" ] && [ ! -L "$APP_TOKENFILE" ] &&
+          [ ! -e "$PIDFILE" ] && [ ! -L "$PIDFILE" ] || return 1
+      app_token_tmp=$(mktemp "$APP_TOKENFILE.XXXXXX") || return 1
+      app_pid_tmp=$(mktemp "$PIDFILE.XXXXXX") || { rm -f "$app_token_tmp"; return 1; }
+      if chmod 0600 "$app_token_tmp" "$app_pid_tmp" &&
+          printf '%s %s\n' "$1" "$launch_start" > "$app_token_tmp" &&
+          printf '%s\n' "$1" > "$app_pid_tmp" &&
+          mv "$app_token_tmp" "$APP_TOKENFILE" && mv "$app_pid_tmp" "$PIDFILE"; then return 0; fi
+      rm -f "$app_token_tmp" "$app_pid_tmp"
+      return 1
+}
+
+prepare_app_launch() {
+      if [ -e "$APP_TOKENFILE" ] || [ -L "$APP_TOKENFILE" ]; then
+          app_token_read && stop_owned_app "$app_token_pid" || return 1
+      elif [ -e "$PIDFILE" ] || [ -L "$PIDFILE" ]; then
+          safe_runtime_file "$PIDFILE" && [ "$(wc -c < "$PIDFILE")" -le 10 ] || return 1
+          read -r prior_pid < "$PIDFILE" || return 1
+          case "$prior_pid" in ''|0*|1|*[!0-9]*) return 1 ;; esac
+          [ "$(wc -c < "$PIDFILE")" = "$((${#prior_pid}+1))" ] &&
+              [ "$(cat "$PIDFILE")" = "$prior_pid" ] && [ ! -e "/proc/$prior_pid" ] || return 1
+          rm -f "$PIDFILE" || return 1
+      fi
+}
+
+stop_owned_app() {
+      stop_app_pid=$1
+      app_token_read && [ "$app_token_pid" = "$stop_app_pid" ] || return 1
+      stop_app_start=$app_token_start
+      stop_ui_pid=""
+      stop_ui_start=""
+      if process_identity "$stop_app_pid"; then
+          [ "$process_start" = "$stop_app_start" ] && managed_process "$stop_app_pid" || return 1
+          if resolve_ui_identity "$stop_app_pid"; then stop_ui_pid=$UI_PID; stop_ui_start=$UI_START; fi
+          kill -TERM "$stop_app_pid" 2>/dev/null || true
+          stop_app_wait=0
+          while process_identity "$stop_app_pid" && [ "$process_start" = "$stop_app_start" ] && [ "$stop_app_wait" -lt 5 ]; do
+              sleep 1
+              stop_app_wait=$((stop_app_wait + 1))
+          done
+          if process_identity "$stop_app_pid" && [ "$process_start" = "$stop_app_start" ]; then
+              kill -KILL "$stop_app_pid" 2>/dev/null || true
+          fi
+      elif [ -e "/proc/$stop_app_pid" ]; then
+          # A zombie cannot own a new UI. A different live/reused PID is never ours.
+          [ "$(awk '{s=$0; sub(/^[0-9]+ \(.*\) /,"",s); split(s,f," "); print f[20],f[1]}' "/proc/$stop_app_pid/stat")" = "$stop_app_start Z" ] || return 1
+      fi
+      wait "$stop_app_pid" 2>/dev/null || true
+      if [ -n "$stop_ui_pid" ]; then
+          if managed_process "$stop_ui_pid" && [ "$process_start" = "$stop_ui_start" ]; then
+              kill -KILL "$stop_ui_pid" 2>/dev/null || true
+          fi
+          clear_owned_health "$stop_ui_pid"
+      elif safe_runtime_file "$UI_HEALTH" && read -r stale_health_pid < "$UI_HEALTH" && health_marker_matches "$stale_health_pid"; then
+          if [ ! -e "/proc/$stale_health_pid" ] ||
+             [ "$(awk '{s=$0; sub(/^[0-9]+ \(.*\) /,"",s); split(s,f," "); print f[1]}' "/proc/$stale_health_pid/stat" 2>/dev/null)" = Z ]; then
+              clear_owned_health "$stale_health_pid"
+          fi
+      fi
+      clear_owned_health "$stop_app_pid"
+      if safe_runtime_file "$PIDFILE" && [ "$(cat "$PIDFILE")" = "$stop_app_pid" ]; then rm -f "$PIDFILE"; fi
+      if app_token_read && [ "$app_token_pid $app_token_start" = "$stop_app_pid $stop_app_start" ]; then rm -f "$APP_TOKENFILE"; fi
+      PID=""
+      UI_PID=""
+      UI_START=""
+}
+
+wait_ui_health() {
+      health_monitor=$1
+      health_count=0
+      health_stable=0
+      health_identity=""
+      while [ "$health_count" -lt "$HEALTH_LIMIT" ]; do
+          app_monitor_matches "$health_monitor" || return 1
+          if resolve_ui_health "$health_monitor"; then
+              if [ "$health_identity" = "$UI_PID $UI_START" ]; then health_stable=$((health_stable + 1))
+              else health_identity="$UI_PID $UI_START"; health_stable=1; fi
+              [ "$health_stable" -le "$HEALTH_STABLE" ] || return 0
+          else health_identity=""; health_stable=0; fi
+          sleep 1
+          health_count=$((health_count + 1))
+      done
+      return 1
+}
+
+heartbeat() {
+      read -r recovery_uptime recovery_idle < /proc/uptime || return 1
+      recovery_seconds=${recovery_uptime%%.*}
+      case "$recovery_seconds" in ''|*[!0-9]*) return 1 ;; esac
+      heartbeat_tmp=$(mktemp "$RECOVERY_HEARTBEAT.XXXXXX") || return 1
+      if printf '%s\n' "$recovery_seconds" > "$heartbeat_tmp" &&
+          mv -f "$heartbeat_tmp" "$RECOVERY_HEARTBEAT"; then return 0; fi
+      rm -f "$heartbeat_tmp"
+      return 1
+}
+
+stop_rescue_display() {
+      [ -n "${rescue_display_pid:-}" ] || return 0
+      kill -TERM "$rescue_display_pid" 2>/dev/null || true
+      select_poll_method
+      display_stop_count=0
+      while kill -0 "$rescue_display_pid" 2>/dev/null && [ "$display_stop_count" -lt "$POLL_LIMIT" ]; do
+          poll_pause
+          display_stop_count=$((display_stop_count + 1))
+      done
+      if kill -0 "$rescue_display_pid" 2>/dev/null; then kill -KILL "$rescue_display_pid" 2>/dev/null || true; fi
+      wait "$rescue_display_pid" 2>/dev/null || true
+      if [ -r "$RESCUE_DISPLAY_PIDFILE" ] &&
+         [ "$(cat "$RESCUE_DISPLAY_PIDFILE")" = "$rescue_display_pid" ]; then rm -f "$RESCUE_DISPLAY_PIDFILE"; fi
+      rescue_display_pid=""
+}
+
+start_rescue_display() {
+      [ -z "${rescue_display_pid:-}" ] || {
+          kill -0 "$rescue_display_pid" 2>/dev/null && return 0
+          wait "$rescue_display_pid" 2>/dev/null || true
+          rescue_display_pid=""
+      }
+      safe_runtime_file "$RESCUE_DISPLAY" && [ -x "$RESCUE_DISPLAY" ] &&
+          [ "$(LC_ALL=C ls -ld "$RESCUE_DISPLAY" | awk '{print $1}')" = -rwxr-xr-x ] &&
+          safe_runtime_file "$RESCUE_DISPLAY.sha256" &&
+          [ "$(wc -c < "$RESCUE_DISPLAY.sha256")" = 65 ] || return 1
+      display_hash=$(cat "$RESCUE_DISPLAY.sha256") || return 1
+      case "$display_hash" in *[!0-9a-f]*|'') return 1 ;; esac
+      [ "${#display_hash}" = 64 ] || return 1
+      display_sum=$(sha256sum "$RESCUE_DISPLAY") || return 1
+      [ "${display_sum%% *}" = "$display_hash" ] || return 1
+      if boot_light_owner; then kill -TERM "$light_pid" 2>/dev/null || true; fi
+      "$RESCUE_DISPLAY" >> "$STARTUP_LOG" 2>&1 &
+      rescue_display_pid=$!
+      printf '%s\n' "$rescue_display_pid" > "$RESCUE_DISPLAY_PIDFILE"
+}
+
+owned_runtime_worker() {
+      safe_runtime_file "$RECOVERY_PIDFILE" && safe_runtime_file "$RECOVERY_TOKENFILE" || return 1
+      live_pidfile "$RECOVERY_PIDFILE" || return 1
+      case "$found_pid" in ''|0*|1|*[!0-9]*) return 1 ;; esac
+      [ "$(wc -c < "$RECOVERY_PIDFILE")" = "$((${#found_pid} + 1))" ] || return 1
+      worker_start=$(awk '{print $22}' "/proc/$found_pid/stat") || return 1
+      case "$worker_start" in ''|*[!0-9]*) return 1 ;; esac
+      [ "$(cat "$RECOVERY_TOKENFILE")" = "$found_pid $worker_start" ]
+}
+
+runtime_cleanup() {
+      release_recovery_status_lock
+      stop_rescue_display
+      if [ -z "${PID:-}" ] || ! app_monitor_matches "$PID"; then cpu_performance_leave; fi
+      if [ -r "$RECOVERY_PIDFILE" ] && [ "$(cat "$RECOVERY_PIDFILE")" = "$runtime_worker_pid" ]; then
+          rm -f "$RECOVERY_PIDFILE" "$RECOVERY_TOKENFILE" "$RECOVERY_HEARTBEAT"
+      fi
+}
+
+runtime_cancel() {
+      trap - HUP INT TERM
+      [ -z "${PID:-}" ] || stop_owned_app "$PID"
+      cpu_performance_leave
+      exit 1
+}
+
+trial_pending() {
+      "$UPDATE_DISPATCH" --trial-pending >> "$STARTUP_LOG" 2>&1
+      trial_pending_status=$?
+      [ "$trial_pending_status" -eq 0 ] && return 0
+      [ "$trial_pending_status" -eq 1 ] && return 1
+      return 2
+}
+
+try_trial_rollback() {
+      trial_pending || return $?
+      [ -z "${PID:-}" ] || stop_owned_app "$PID" || return 2
+      "$UPDATE_DISPATCH" --rollback-trial >> "$STARTUP_LOG" 2>&1 || return 2
+      boot_trace trial_rolled_back
+      start_ready || return 2
+      wait_ui_health "$PID" || { stop_owned_app "$PID"; return 2; }
+      boot_trace restored_ui_healthy
+}
+
+same_boot_trial_reboot() {
+      "$UPDATE_DISPATCH" --trial-installed >> "$STARTUP_LOG" 2>&1
+      installed_status=$?
+      [ "$installed_status" -eq 1 ] && return 1
+      [ "$installed_status" -eq 0 ] || return 2
+      trial_pending
+      pending_status=$?
+      [ "$pending_status" -eq 1 ] || return 2
+      /sbin/reboot >> "$STARTUP_LOG" 2>&1
+      return 0
+}
+
+updater_blocks_recovery() {
+      [ -e "$UPDATE_LOCK" ] || [ -L "$UPDATE_LOCK" ] || return 1
+      # Unknown shape stays closed. A known dead RAM owner can only be
+      # reclaimed by the fixed dispatcher under its native filesystem lock.
+      [ -d "$UPDATE_LOCK" ] && [ ! -L "$UPDATE_LOCK" ] &&
+          [ "$(LC_ALL=C ls -ld "$UPDATE_LOCK" | awk '{print $1}')" = drwx------ ] &&
+          [ "$(LC_ALL=C ls -nd "$UPDATE_LOCK" | awk '{print $3}')" = "$(id -u)" ] &&
+          safe_runtime_file "$UPDATE_LOCK/pid" &&
+          [ "$(LC_ALL=C ls -ld "$UPDATE_LOCK/pid" | awk '{print $1}')" = -rw------- ] || return 0
+      read -r update_owner < "$UPDATE_LOCK/pid" || return 0
+      case "$update_owner" in ''|0*|1|*[!0-9]*) return 0 ;; esac
+      [ "${#update_owner}" -le 9 ] &&
+          [ "$(wc -c < "$UPDATE_LOCK/pid")" = "$((${#update_owner} + 1))" ] || return 0
+      kill -0 "$update_owner" 2>/dev/null
+}
+
+release_recovery_status_lock() {
+      [ "${recovery_status_lock:-0}" = 1 ] || return 0
+      if { [ ! -e "$UPDATE_LOCK/pid" ] && [ ! -L "$UPDATE_LOCK/pid" ]; } ||
+         { safe_runtime_file "$UPDATE_LOCK/pid" &&
+           { [ "$(cat "$UPDATE_LOCK/pid")" = "$runtime_worker_pid" ] ||
+             [ "$(wc -c < "$UPDATE_LOCK/pid")" = 0 ]; }; }; then
+          rm -f "$UPDATE_LOCK/pid"
+          rmdir "$UPDATE_LOCK" 2>/dev/null || true
+      fi
+      recovery_status_lock=0
+}
+
+publish_recovery_wait() {
+      owned_runtime_worker && [ "$found_pid" = "$runtime_worker_pid" ] || return 1
+      # Share the RAM publisher lock only for this tiny atomic status write.
+      # The updater's journal and every persistent file remain untouched.
+      (umask 077; mkdir "$UPDATE_LOCK") 2>/dev/null || return 1
+      recovery_status_lock=1
+      if ! (umask 077; printf '%s\n' "$runtime_worker_pid" > "$UPDATE_LOCK/pid"); then
+          release_recovery_status_lock
+          return 1
+      fi
+      recovery_status_tmp=$(mktemp "$RECOVERY_STATUS.recovery.XXXXXX") || {
+          release_recovery_status_lock
+          return 1
+      }
+      # Existing catalogue key; a frozen emergency renderer may use Latin.
+      printf 'progress=0\nstage=prepare\nstep=prepare\nsuccess=\nmessage=Insert USB drive with update/UN260_UPDATE.upk\nwriter_pid=%s\nbundle_fnv64=\n' \
+          "$runtime_worker_pid" > "$recovery_status_tmp" &&
+          mv -f "$recovery_status_tmp" "$RECOVERY_STATUS"
+      recovery_status_result=$?
+      rm -f "$recovery_status_tmp"
+      release_recovery_status_lock
+      return "$recovery_status_result"
+}
+
+usb_recovery_wait() {
+      recovery_seen=""
+      recovery_status_published=0
+      while :; do
+          heartbeat || true
+          if [ "$recovery_status_published" = 0 ] && publish_recovery_wait; then recovery_status_published=1; fi
+          start_rescue_display || true
+          if [ ! -e "$USB_PACKAGE" ] && [ ! -L "$USB_PACKAGE" ]; then recovery_seen=""
+          elif [ -f "$USB_PACKAGE" ] && [ ! -L "$USB_PACKAGE" ]; then
+              recovery_key=$(ls -nli "$USB_PACKAGE") || recovery_key=""
+              if ! updater_blocks_recovery &&
+                 [ -n "$recovery_key" ] && [ "$recovery_key" != "$recovery_seen" ]; then
+                  recovery_seen=$recovery_key
+                  if "$UPDATE_DISPATCH" >> "$STARTUP_LOG" 2>&1; then
+                      boot_trace rescue_update_complete
+                      stop_rescue_display
+                      /sbin/reboot >> "$STARTUP_LOG" 2>&1
+                      return 1
+                  fi
+                  if [ -e "$UPDATE_LOCK" ] || [ -L "$UPDATE_LOCK" ]; then recovery_seen=""; fi
+              fi
+          fi
+          sleep 2
+      done
+}
+
+runtime_supervise() {
+      runtime_start_status=$1
+      if [ "$runtime_start_status" = 0 ] && wait_ui_health "$PID"; then
+          if trial_pending; then
+              if ! "$UPDATE_DISPATCH" --confirm-trial "$UI_PID" >> "$STARTUP_LOG" 2>&1; then
+                  echo 'UI health is present; trial confirmation remains pending' >> "$STARTUP_LOG"
+              fi
+          fi
+          boot_trace ui_first_paint_healthy
+          return 0
+      fi
+      [ -z "${PID:-}" ] || stop_owned_app "$PID" || return 1
+      cpu_performance_leave
+      if try_trial_rollback; then return 0; fi
+      if same_boot_trial_reboot; then return 1; fi
+      usb_recovery_wait
+}
+
+runtime_worker() {
+      read -r runtime_worker_pid runtime_proc_rest < /proc/self/stat || return 1
+      rescue_display_pid=""
+      recovery_status_lock=0
+      PID=""
+      trap runtime_cleanup 0
+      trap runtime_cancel HUP INT TERM
+      runtime_publish=0
+      while [ ! -r "$RECOVERY_PIDFILE" ] ||
+            [ "$(cat "$RECOVERY_PIDFILE")" != "$runtime_worker_pid" ]; do
+          [ "$runtime_publish" -lt "$POLL_LIMIT" ] || return 1
+          poll_pause
+          runtime_publish=$((runtime_publish + 1))
+      done
+      if [ "$1" = rescue ]; then
+          if live_pidfile "$PIDFILE"; then
+              PID=$found_pid
+              resolve_ui_health "$PID" && return 0
+              stop_owned_app "$PID" || return 1
+          fi
+          if try_trial_rollback; then return 0; fi
+          if same_boot_trial_reboot; then return 1; fi
+          usb_recovery_wait
+          return $?
+      fi
+      if [ "${UN260_MDEV_READY:-0}" != 1 ]; then
+          boot_trace mdev_wait_begin
+          runtime_mdev_count=0
+          while ! live_pidfile "$MDEV_PIDFILE"; do
+              early_display_ready && break
+              [ "$runtime_mdev_count" -lt "$POLL_LIMIT" ] || { runtime_supervise 1; return $?; }
+              poll_pause
+              runtime_mdev_count=$((runtime_mdev_count + 1))
+          done
+          if live_pidfile "$MDEV_PIDFILE"; then boot_trace mdev_ready;
+          else boot_trace mdev_deferred; fi
+      fi
+      start_ready
+      runtime_supervise "$?"
+}
+
+start_runtime_worker() {
+      owned_runtime_worker && return 0
+      rm -f "$RECOVERY_PIDFILE" "$RECOVERY_TOKENFILE"
+      (runtime_worker "$1") >> "$STARTUP_LOG" 2>&1 &
+      recovery_pid=$!
+      worker_start=$(awk '{print $22}' "/proc/$recovery_pid/stat") || {
+          kill -TERM "$recovery_pid" 2>/dev/null || true
+          wait "$recovery_pid" 2>/dev/null || true
+          return 1
+      }
+      case "$worker_start" in ''|*[!0-9]*) return 1 ;; esac
+      (umask 077
+       printf '%s %s\n' "$recovery_pid" "$worker_start" > "$RECOVERY_TOKENFILE" &&
+       printf '%s\n' "$recovery_pid" > "$RECOVERY_PIDFILE") || return 1
+      printf 'Starting test_lvgl: first-paint supervision (pid %s)\n' "$recovery_pid"
+}
+
+stop_runtime_worker() {
+      if owned_runtime_worker; then
+          recovery_stop_pid=$found_pid
+          kill -TERM "$recovery_stop_pid" 2>/dev/null || true
+          select_poll_method
+          recovery_stop_wait=0
+          while kill -0 "$recovery_stop_pid" 2>/dev/null && [ "$recovery_stop_wait" -lt "$POLL_LIMIT" ]; do
+              poll_pause
+              recovery_stop_wait=$((recovery_stop_wait + 1))
+          done
+          if kill -0 "$recovery_stop_pid" 2>/dev/null; then kill -KILL "$recovery_stop_pid" 2>/dev/null || true; fi
+          wait "$recovery_stop_pid" 2>/dev/null || true
+      fi
+      rm -f "$RECOVERY_PIDFILE" "$RECOVERY_TOKENFILE" "$RECOVERY_HEARTBEAT"
+      if live_pidfile "$RESCUE_DISPLAY_PIDFILE"; then
+          rescue_display_pid=$found_pid
+          if [ "$(cat /proc/$rescue_display_pid/comm 2>/dev/null)" = un260-boot ]; then stop_rescue_display; fi
+      fi
+}
+
 start_ready() {
+      start_ready_impl
+      start_ready_status=$?
+      if [ "$start_ready_status" != 0 ]; then cpu_performance_leave; fi
+      return "$start_ready_status"
+}
+
+start_ready_impl() {
       PID=""
       light_pid=""
+      if modern_platform; then
+          prepare_app_launch || return 1
+          cpu_performance_enter
+          boot_trace app_launch_check_begin
+          # app-check prepares storage and completes journal recovery under
+          # its lock before checking the candidate; no second recovery run.
+          runtime_app=$("$UPDATE_DISPATCH" --can-launch 2>> "$STARTUP_LOG") || {
+              boot_trace app_launch_check_failed
+              echo 'Starting test_lvgl: Fail (application requires USB recovery)'
+              return 1
+          }
+          [ "$runtime_app" = /mnt/un260-app/test_lvgl ] || return 1
+          boot_trace app_launch_check_complete
+          DAEMON=$runtime_app
+      else
       # UN260_APP_VOLUME_V1: mount before recovering cross-volume transactions.
       # --prepare never formats or creates NAND volumes at boot.
       if [ -f /usr/local/bin/un260_app_storage ]; then
@@ -251,6 +769,11 @@ start_ready() {
               echo 'Unified upgrade incomplete; returning to installed UI for maintenance; USB retry remains pending'
               boot_trace unified_current_fallback
           fi
+          # Recovery is complete, or the installed app has been verified.
+          # Release maintenance before selecting the current brand bundle.
+          stop_upgrade_visual || return 1
+      fi
+
       fi
 
       if [ "$UN260_EARLY_DISPLAY" = 1 ] && [ -f "$TSCALIB" ]; then
@@ -293,33 +816,24 @@ start_ready() {
           sync
           boot_trace calibration_complete
       fi
-      cpu_performance_enter
-      # Optional native first screen. It owns a display lease until LVGL
-      # explicitly takes over; no file-only readiness flag grants ownership.
-        unset UN260_BOOT_LIGHT_ACTIVE
-        if boot_light_owner; then
-            export UN260_BOOT_LIGHT_ACTIVE=1
-            boot_trace initramfs_visual_found
-        elif [ "$UN260_STARTUP_PREPARE" = 1 ] &&
-         [ ! -f /etc/un260/boot-light.disabled ] &&
-         [ -x /usr/local/bin/un260_boot_light ] &&
-         grep -q '/dev/.un260-boot-light.sock' /usr/local/bin/un260_boot_light; then
-          /usr/local/bin/un260_boot_light >> "$STARTUP_LOG" 2>&1 &
-          light_pid=$!
+      if ! modern_platform; then cpu_performance_enter; fi
+      # The root launcher verifies a complete immutable version and returns
+      # only after its first frame. An initramfs owner is reused through the
+      # same PID/lease protocol; branding is never compiled into this service.
+      unset UN260_BOOT_LIGHT_ACTIVE
+      light_pid=""
+      if boot_light_owner; then
           export UN260_BOOT_LIGHT_ACTIVE=1
-          light_wait=0
-          light_ok=0
-          case "$POLL_METHOD" in usleep) light_limit=100 ;; fractional) light_limit=10 ;; *) light_limit=1 ;; esac
-          while kill -0 "$light_pid" 2>/dev/null && [ "$light_wait" -lt "$light_limit" ]; do
-                if [ -r /dev/.un260-boot-light.ready ]; then
-                    read -r light_ready_pid < /dev/.un260-boot-light.ready
-                  if [ "$light_ready_pid" = "$light_pid" ]; then light_ok=1; break; fi
-              fi
-              if [ "$POLL_METHOD" = usleep ]; then usleep 10000; else poll_pause; fi
-              light_wait=$((light_wait + 1))
-          done
-          if [ "$light_ok" = 0 ] && [ "$(readlink /proc/$light_pid/exe 2>/dev/null)" = /usr/local/bin/un260_boot_light ]; then
-              kill -TERM "$light_pid" 2>/dev/null || true
+          boot_trace initramfs_visual_found
+      elif [ "$UN260_STARTUP_PREPARE" = 1 ] &&
+           [ ! -f /etc/un260/boot-light.disabled ] &&
+           [ ! -f /etc/un260/early-display.disabled ] &&
+           [ -x /usr/local/bin/un260_boot_launch ]; then
+          if /usr/local/bin/un260_boot_launch >> "$STARTUP_LOG" 2>&1 && boot_light_owner; then
+              export UN260_BOOT_LIGHT_ACTIVE=1
+              boot_trace root_visual_found
+          else
+              boot_trace root_visual_fallback
           fi
       fi
       # Upgrade recovery owns its durability barriers; a normal start has
@@ -333,12 +847,28 @@ start_ready() {
           return 1
       fi
 
-      echo "$PID" > "$PIDFILE"
+      if modern_platform; then
+          if ! publish_app_identity "$PID"; then
+              # This invocation just forked the PID: use its captured start time
+              # even if a partial RAM record could not be published.
+              if process_identity "$PID" && [ "$process_start" = "${launch_start:-}" ]; then
+                  kill -TERM "$PID" 2>/dev/null || true
+                  sleep 1
+                  if process_identity "$PID" && [ "$process_start" = "$launch_start" ]; then kill -KILL "$PID" 2>/dev/null || true; fi
+              fi
+              if ! process_identity "$PID"; then wait "$PID" 2>/dev/null || true; fi
+              if app_token_read && [ "$app_token_pid $app_token_start" = "$PID ${launch_start:-}" ]; then rm -f "$APP_TOKENFILE"; fi
+              if [ ! -e "/proc/$PID" ] && [ ! -e "$PIDFILE" ] && [ ! -L "$PIDFILE" ]; then PID=""; fi
+              cpu_performance_leave
+              printf 'Fail (launch identity unavailable)\n'
+              return 1
+          fi
+      else echo "$PID" > "$PIDFILE"; fi
       sleep 1
       if ! kill -0 "$PID" 2>/dev/null; then
           wait "$PID" 2>/dev/null
           status=$?
-          rm -f "$PIDFILE"
+          if modern_platform; then stop_owned_app "$PID" || return 1; else rm -f "$PIDFILE"; fi
           cpu_performance_leave
           printf "Fail (exit=%s, log=%s)\n" "$status" "$STARTUP_LOG"
           return 1
@@ -350,9 +880,16 @@ start_ready() {
 }
 
 cancel_deferred_start() {
+      if modern_platform && owned_runtime_worker; then
+          printf "test_lvgl recovery already running (pid %s)\\n" "$found_pid"
+          return 0
+      fi
       trap - HUP INT TERM
       if [ -n "${light_pid:-}" ]; then
-          kill -TERM "$light_pid" 2>/dev/null || true
+          light_cancel_pid=$light_pid
+          if boot_light_owner && [ "$light_pid" = "$light_cancel_pid" ]; then
+              kill -TERM "$light_pid" 2>/dev/null || true
+          fi
       fi
       if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
           kill -TERM "$PID" 2>/dev/null || true
@@ -364,12 +901,19 @@ cancel_deferred_start() {
 
 start() {
       if live_pidfile "$PIDFILE"; then
+          if modern_platform && ! app_monitor_matches "$found_pid"; then
+              echo "test_lvgl PID has no trusted launch identity" >&2
+              return 1
+          fi
           printf "test_lvgl already running (pid %s)\n" "$found_pid"
           return 0
       fi
       if live_pidfile "$DEFER_PIDFILE"; then
           printf "test_lvgl start already pending (pid %s)\n" "$found_pid"
           return 0
+      fi
+      if modern_platform; then
+          prepare_app_launch || return 1
       fi
       rm -f "$PIDFILE" "$DEFER_PIDFILE"
       : > "$STARTUP_LOG"
@@ -378,6 +922,10 @@ start() {
       fi
       boot_trace start_requested
       select_poll_method
+      if modern_platform; then
+          start_runtime_worker normal
+          return $?
+      fi
       if [ "${UN260_MDEV_READY:-0}" = "1" ]; then
           start_ready
           return $?
@@ -419,6 +967,7 @@ start() {
 }
 
 stop() {
+        stop_runtime_worker
 	printf "Stopping test_lvgl: "
         if [ -r /dev/.un260-boot-light.ready ]; then
             read -r light_stop_pid < /dev/.un260-boot-light.ready
@@ -448,12 +997,21 @@ stop() {
             rm -f "$DEFER_PIDFILE"
         fi
         if [ ! -f "$PIDFILE" ]; then
+            if modern_platform && { [ -e "$APP_TOKENFILE" ] || [ -L "$APP_TOKENFILE" ]; }; then
+                app_token_read && stop_owned_app "$app_token_pid" || return 1
+            fi
             cpu_performance_leave
             printf "pidfile not found \n"
             return 0
         fi
 
         PID=$(cat "$PIDFILE" 2>/dev/null)
+        if modern_platform; then
+            stop_owned_app "$PID" || return 1
+            cpu_performance_leave
+            printf "OK \n"
+            return 0
+        fi
         if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
             kill -TERM "$PID" 2>/dev/null || true
             wait_count=0
@@ -465,12 +1023,19 @@ stop() {
                 kill -KILL "$PID" 2>/dev/null || true
             fi
         fi
+        clear_owned_health "$PID"
         rm -f "$PIDFILE"
         cpu_performance_leave
         printf "OK \n"
 }
 
 case "$1" in
+    --rescue-only)
+        modern_platform || exit 1
+        stop_runtime_worker
+        select_poll_method
+        start_runtime_worker rescue
+        ;;
     prepare-devices)
         prepare_devices
         ;;

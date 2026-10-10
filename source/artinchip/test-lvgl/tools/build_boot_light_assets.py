@@ -4,6 +4,8 @@ from pathlib import Path
 import re,struct,zlib
 from PIL import Image
 root=Path(__file__).resolve().parents[1]
+import runpy
+runpy.run_path(str(root/'tools/check_boot_handwriting.py'))
 def label(filename,text,spacing):
     source=(root/'un260/font'/filename).read_text()
     assert '.kern_dsc = NULL' in source and '.bpp = 4' in source and '.bitmap_format = 0' in source

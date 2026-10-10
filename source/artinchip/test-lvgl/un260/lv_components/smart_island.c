@@ -20,8 +20,14 @@ smart_island_context_t g_si_ctx = {
 
 void smart_island_destroy(void)
 {
+    bool transient = g_si_ctx.warning.fault.valid &&
+        g_si_ctx.warning.fault.source == MACHINE_FAULT_SETTING;
     smart_island_result_stop_timer();
     smart_island_warning_stop();
+    if (transient) {
+        g_si_ctx.warning.text[0] = '\0';
+        g_si_ctx.view.scene = SMART_ISLAND_SCENE_IDLE;
+    }
     smart_island_view_destroy_objects();
     g_si_ctx.view.page_slide_dir = 0;
     g_si_ctx.view.anim_running = false;
@@ -114,12 +120,14 @@ void smart_island_set_suspended(bool suspended)
          * every cached main-page resume.
          */
         if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_WARNING) {
-            bool keep_fault = g_si_ctx.warning.fault.valid;
+            bool keep_fault = g_si_ctx.warning.fault.valid &&
+                g_si_ctx.warning.fault.source != MACHINE_FAULT_SETTING;
 
             smart_island_warning_stop();
             if (keep_fault) {
                 g_si_ctx.warning.resume_animation_pending = true;
             } else {
+                smart_island_warning_fault_clear();
                 g_si_ctx.warning.text[0] = '\0';
                 g_si_ctx.view.scene = SMART_ISLAND_SCENE_IDLE;
                 g_si_ctx.view.visual = SMART_ISLAND_VISUAL_COMPACT;

@@ -2,18 +2,134 @@
 """Host-only cleanup safety tests. Production script has no root override."""
 import hashlib
 import importlib.util
+import json
 import os
 from pathlib import Path
 import signal
+import shutil
+import shlex
+import uuid
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 from test_storage_sync import native_tool
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('release_resources', HERE / 'release_resources.py')
 release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
+
+
+class MetadataCompactionTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix='un260-font-metadata-')
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name)
+        self.target = self.base / 'target'
+        self.source = self.base / 'source'
+        self.path = self.target / 'usr/local/share/lvgl_data/locale_fonts/manifest.json'
+        self.original = self.source / 'aic_ui/lvgl_data/locale_fonts/manifest.json'
+        self.path.parent.mkdir(parents=True)
+        self.original.parent.mkdir(parents=True)
+        self.files = {}
+        records = []
+        for size in (16, 32):
+            name = 'font-%d.bin' % size
+            data = ('font fixture %d' % size).encode()
+            font = self.path.parent / 'zh-Hans' / name
+            font.parent.mkdir(exist_ok=True)
+            font.write_bytes(data); font.chmod(0o644)
+            self.files[font] = data
+            records.append(dict(size=size, file=name, bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), codepoints=[65, 20013], text_keys=None))
+        self.metadata = dict(status='candidate-not-released', sizes=[16, 32], locales={'zh-Hans':
+            dict(family='Fixture', source_sha256='0'*64, face_index=0, candidate_entries=1, missing_translation_count=0,
+                 codepoints=[65, 20013], shaped_codepoints=[], files=records, license_metadata={'license':'retain all metadata'}, bytes=sum(len(d) for d in self.files.values()))})
+        self.write_both()
+        binding = patch.object(release, 'APP', self.source)
+        binding.start(); self.addCleanup(binding.stop)
+        self.user = self.target / 'etc/ui_state/touch_calibration.cfg'
+        self.user.parent.mkdir(parents=True)
+        self.user.write_bytes(b'USER-CALIBRATION')
+        self.addCleanup(lambda: self.assertEqual(self.user.read_bytes(), b'USER-CALIBRATION'))
+
+    def write_both(self):
+        data = (json.dumps(self.metadata, ensure_ascii=False, indent=2) + '\n').encode()
+        self.path.write_bytes(data); self.path.chmod(0o644)
+        self.original.write_bytes(data)
+        return data
+
+    def test_exact_json_meaning_and_all_font_bytes_preserved(self):
+        source = self.original.read_bytes()
+        before = self.path.read_bytes()
+        report = release.compact_locale_manifest(self.target)
+        self.assertEqual(json.loads(self.path.read_bytes()), json.loads(before))
+        self.assertEqual(self.original.read_bytes(), source)
+        self.assertGreater(report['saved'], 0)
+        self.assertEqual(report['fonts'], 2)
+        self.assertEqual(self.path.stat().st_mode & 0o777, 0o644)
+        for path, data in self.files.items(): self.assertEqual(path.read_bytes(), data)
+        self.assertEqual(release.compact_locale_manifest(self.target)['saved'], 0)
+
+    def test_unknown_target_metadata_retained(self):
+        obj = json.loads(self.path.read_text()); obj['status'] = 'unknown'
+        self.path.write_text(json.dumps(obj)); before = self.path.read_bytes()
+        with self.assertRaises(RuntimeError): release.compact_locale_manifest(self.target)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_unknown_schema_or_entry_even_in_source_retained(self):
+        for alter in (lambda: self.metadata.update(foreign=1),
+                      lambda: self.metadata['locales']['zh-Hans']['files'][0].update(file='../foreign'),
+                      lambda: self.metadata.update(sizes=[16,16])):
+            alter(); before = self.write_both()
+            with self.assertRaises(RuntimeError): release.compact_locale_manifest(self.target)
+            self.assertEqual(self.path.read_bytes(), before)
+            self.metadata.pop('foreign', None)
+            self.metadata['sizes'] = [16,32]
+            self.metadata['locales']['zh-Hans']['files'][0]['file'] = 'font-16.bin'
+
+    def test_duplicate_json_key_is_rejected_without_rewriting(self):
+        before = self.path.read_text().replace('{', '{"status":"duplicate",', 1).encode()
+        self.path.write_bytes(before)
+        with self.assertRaises(RuntimeError): release.compact_locale_manifest(self.target)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_modified_font_or_wrong_permissions_retained(self):
+        before = self.path.read_bytes()
+        font = next(iter(self.files))
+        font.write_bytes(b'foreign-font')
+        with self.assertRaises(RuntimeError): release.compact_locale_manifest(self.target)
+        self.assertEqual(self.path.read_bytes(), before)
+        font.write_bytes(self.files[font]); font.chmod(0o755)
+        with self.assertRaises(RuntimeError): release.compact_locale_manifest(self.target)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_manifest_symlink_and_font_ancestor_symlink_retained(self):
+        before = self.path.read_bytes()
+        victim = self.base / 'manifest-victim'; victim.write_bytes(before)
+        self.path.unlink(); self.path.symlink_to(victim)
+        with self.assertRaises(RuntimeError): release.compact_locale_manifest(self.target)
+        self.assertEqual(victim.read_bytes(), before)
+        self.path.unlink(); self.path.write_bytes(before); self.path.chmod(0o644)
+        directory = self.path.parent/'zh-Hans'; directory.rename(self.base/'fonts-victim')
+        directory.symlink_to(self.base/'fonts-victim', target_is_directory=True)
+        with self.assertRaises(RuntimeError): release.compact_locale_manifest(self.target)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_unknown_temporary_retained(self):
+        before = self.path.read_bytes()
+        temporary = self.path.with_name(self.path.name+'.un260-build-new')
+        temporary.write_text('foreign')
+        with self.assertRaises(RuntimeError): release.compact_locale_manifest(self.target)
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(temporary.read_text(), 'foreign')
+
+    def test_failed_atomic_replace_preserves_original(self):
+        before = self.path.read_bytes()
+        with patch.object(Path, 'replace', side_effect=OSError('injected rename failure')):
+            with self.assertRaises(OSError): release.compact_locale_manifest(self.target)
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertFalse(self.path.with_name(self.path.name+'.un260-build-new').exists())
 
 
 class CleanupTests(unittest.TestCase):
@@ -143,6 +259,33 @@ class CleanupTests(unittest.TestCase):
 
     def saved(self, i=0):
         return self.usb / 'UN260_RESOURCE_BACKUP_20260924/files' / self.entries[i]['path']
+
+    def test_private_engine_sync_is_only_used_by_lock_owning_parent(self):
+        context = Path('/tmp/un260-update-engine.' + uuid.uuid4().hex[:6])
+        context.mkdir(mode=0o700)
+        self.addCleanup(lambda: shutil.rmtree(context))
+        guard = context / 'sync'
+        guard.write_bytes(native_tool().read_bytes()); guard.chmod(0o755)
+        # The installed helper is deliberately unusable; the engine snapshot
+        # must carry this entire operation, including direct USB backup reads.
+        (self.app.parent / 'un260_storage_sync').write_text('#!/bin/sh\nexit 1\n')
+        lock = self.dir / 'updater-lock'
+        q = shlex.quote
+        script = ('mkdir -m 0700 ' + q(str(lock)) + '; printf "%s\\n" "$$" > ' + q(str(lock / 'pid')) + '; '
+                  'UN260_ENGINE_SYNC=' + q(str(guard)) + ' sh ' + q(str(self.script)) + ' --apply --updater "$$"; '
+                  'rc=$?; rm -f ' + q(str(lock / 'pid')) + '; rmdir ' + q(str(lock)) + '; exit "$rc"')
+        shell = ['busybox', 'sh'] if os.environ.get('TEST_BUSYBOX') == '1' else ['sh']
+        result = subprocess.run(shell + ['-c', script], capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(self.file().exists())
+        self.assertTrue(self.saved().exists())
+
+    def test_untrusted_sync_override_is_refused_without_writes(self):
+        environment = dict(os.environ, UN260_ENGINE_SYNC=str(self.app.parent / 'un260_storage_sync'))
+        self.run_script('--check', False, env=environment)
+        self.run_script('--apply', False, env=environment)
+        self.assertTrue(self.file().exists())
+        self.assertFalse(self.saved().exists())
 
     def test_check_no_writes(self):
         self.run_script('--check')

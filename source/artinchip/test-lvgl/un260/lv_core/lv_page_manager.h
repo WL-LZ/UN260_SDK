@@ -100,6 +100,10 @@ bool ui_manager_is_transitioning(void); // 页面正在同步提交或等待首�
 /* Idempotent per-page ownership for an asynchronous transition. Releasing
  * one owner never removes the manager's first-frame input guard. */
 void ui_manager_hold_transition_input(ui_page_t owner, bool hold);
+/* A page operation holds navigation until an explicit completion or failure.
+ * Guards every route before modifying history; rendering and local controls stay active. */
+void ui_manager_hold_navigation(ui_page_t owner, bool hold);
+bool ui_manager_navigation_is_blocked(void);
 void ui_manager_publish_data_changed(ui_data_topic_t topics); // 发布异步数据更新
 
 #ifdef __cplusplus

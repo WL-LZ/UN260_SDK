@@ -1,3 +1,7 @@
+#include "../lv_core/boot_anim/boot_theme_config.h"
+
+/* Legacy embedded background; Theme D uses the file-backed page assets. */
+#if UI_BOOT_ANIM_THEME != UI_BOOT_ANIM_THEME_D
 #ifdef __has_include
     #if __has_include("lvgl.h")
         #ifndef LV_LVGL_H_INCLUDE_SIMPLE
@@ -432,3 +436,4 @@ const lv_img_dsc_t page_07_currency_bg_img = {
     .header.cf = LV_IMG_CF_TRUE_COLOR_ALPHA,
     .data = page_07_currency_bg_img_map,
 };
+#endif

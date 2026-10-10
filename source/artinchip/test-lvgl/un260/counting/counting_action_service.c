@@ -21,7 +21,7 @@ static bool counting_action_send(protocol_request_t *request, uint8_t cmd)
 {
     const uint8_t payload = COUNTING_ACTION_REQUEST;
 
-    if (!protocol_request_begin(request)) {
+    if (!protocol_request_begin_for_command(request, cmd)) {
         return false;
     }
     if (protocol_send(cmd, &payload, 1) < 0) {

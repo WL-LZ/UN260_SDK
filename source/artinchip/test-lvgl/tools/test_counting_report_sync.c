@@ -11,6 +11,7 @@ static counting_sim_t data;
 static counting_session_state_t session;
 static counting_detail_state_t detail;
 static unsigned requests[256], publications, completions;
+static unsigned reject_publications, reject_analyses;
 static uint32_t now;
 static bool send_failed;
 uint32_t app_clock_uptime_ms(void) { return now; }
@@ -19,10 +20,13 @@ int protocol_send(uint8_t cmd, const uint8_t *p, uint16_t n)
 { assert(p && n); ++requests[cmd]; return send_failed ? -1 : 0; }
 static void ready(void *p) { (void)p; ++publications; }
 static void complete(void *p) { (void)p; ++completions; }
+static void reject_ready(void *p) { (void)p; ++reject_publications; }
+static void reject_analysis(void *p) { (void)p; ++reject_analyses; }
 static counting_detail_reply_result_t frame(uint8_t *b, unsigned n)
 {
     now += 1;
-    counting_reject_sn_reply_hooks_t h = {.on_serial_report_ready=ready,.on_detail_complete=complete};
+    counting_reject_sn_reply_hooks_t h = {.on_serial_report_ready=ready,.on_detail_complete=complete,
+        .on_reject_report_changed=reject_ready,.on_reject_analysis_ready=reject_analysis};
     return counting_reject_sn_reply_dispatch(b[3], &detail, &session, &data, b, n, &h);
 }
 static void mark(unsigned cmd, unsigned fill)
@@ -59,7 +63,8 @@ static void reset(void)
 {
     counting_report_shutdown();counting_data_clear_serials(&data);counting_data_clear_errors(&data);
     memset(&data,0,sizeof(data));memset(&session,0,sizeof(session));memset(&detail,0,sizeof(detail));
-    memset(requests,0,sizeof(requests));publications=completions=0;now=100;send_failed=false;
+    memset(requests,0,sizeof(requests));publications=completions=0;
+    reject_publications=reject_analyses=0;now=100;send_failed=false;
     data.total_pcs=725;data.total_amount=14500;data.denom_number=1;data.denom[0]=(denom_t){20,725,14500};
 }
 static void test_wrap_atomic(void)
@@ -180,6 +185,202 @@ static void test_empty_reject_compatibility(void)
     assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_SERIAL);
     puts("PASS issue 001: captured zero/zero/end, single serial request, real completion, bounded duplicate timeout, drain/recovery, missing and restarted reject list, phase-specific failures");
 }
+
+static counting_detail_reply_result_t reject_row(unsigned code, unsigned pcs)
+{
+    uint8_t b[7]={0xFD,0xDF,7,0x0C,(uint8_t)code,(uint8_t)pcs,0};
+    return frame(b,sizeof(b));
+}
+static unsigned reject_pcs(unsigned code)
+{
+    for (unsigned i=0;i<data.err_num;++i)
+        if(data.err_code[i]==code)return data.err_pcs[i];
+    return 0;
+}
+static void live_reject_snapshot(unsigned code,unsigned pcs)
+{
+    mark(0x0C,0);reject_row(code,pcs);mark(0x0C,255);
+}
+static void test_live_reject_atomic(void)
+{
+    reset();start(false);data.err_expected=1;
+    /* No START marker or confirmed count: no model, notifications or query. */
+    reject_row(0x1C,1);mark(0x0C,255);
+    assert(!data.err_num&&!reject_publications&&!requests[0x0D]);
+    mark(0x0C,0);reject_row(0x1C,1);
+    assert(!data.err_num&&!reject_publications);
+    mark(0x0C,255);
+    assert(data.err_num==1&&reject_pcs(0x1C)==1&&reject_publications==1);
+    assert(!requests[0x0C]&&!requests[0x0D]&&!publications&&!completions&&!reject_analyses);
+    /* Exact user capture: complete snapshots are 1 -> 2 -> 3, never 1+2+3. */
+    data.err_expected=2;mark(0x0C,0);reject_row(0x1C,2);
+    assert(data.err_num==1&&reject_pcs(0x1C)==1&&reject_publications==1);
+    mark(0x0C,255);assert(data.err_num==1&&reject_pcs(0x1C)==2&&reject_publications==2);
+    data.err_expected=3;live_reject_snapshot(0x1C,3);
+    assert(data.err_num==1&&reject_pcs(0x1C)==3&&reject_publications==3);
+    unsigned sent=reject_publications;mark(0x0C,255);mark(0x0C,255);
+    assert(reject_publications==sent&&!requests[0x0D]);
+    /* A complete update may contain multiple reasons and repeated code rows.
+     * The last count for a reason replaces it; publication is still atomic. */
+    data.err_expected=4;mark(0x0C,0);reject_row(0x1C,2);reject_row(0x15,1);reject_row(0x1C,3);
+    assert(data.err_num==1&&reject_pcs(0x1C)==3&&!reject_pcs(0x15));
+    mark(0x0C,255);
+    assert(data.err_num==2&&reject_pcs(0x1C)==3&&reject_pcs(0x15)==1);
+    assert(counting_data_reject_pcs_count(&data)==4);
+    data.err_expected=0;mark(0x0C,0);
+    assert(data.err_num==2);mark(0x0C,255);assert(!data.err_num);
+    assert(!requests[0x0C]&&!requests[0x0D]&&!publications&&!completions&&!reject_analyses);
+    puts("PASS live reject: captured 1C 1/2/3, atomic multi-reason snapshots, duplicate code/end, empty snapshot, no final query or analysis side effects");
+}
+static void test_live_reject_add_and_owner(void)
+{
+    reset();
+    mark(0x0C,0);reject_row(0x1C,7);mark(0x0C,255);
+    assert(!data.err_num&&!reject_publications);
+    start(false);data.err_expected=2;live_reject_snapshot(0x1C,2);
+    unsigned before=reject_publications;
+    start(true);
+    assert(data.err_num==1&&reject_pcs(0x1C)==2&&data.err_expected==2);
+    /* ADD preserves the last complete result while awaiting a cumulative
+     * controller snapshot. New snapshots replace totals, never add them. */
+    data.err_expected=3;mark(0x0C,0);reject_row(0x1C,3);
+    assert(reject_pcs(0x1C)==2);mark(0x0C,255);
+    assert(data.err_num==1&&reject_pcs(0x1C)==3&&reject_publications==before+1);
+    start(false);
+    assert(!data.err_num&&!data.err_expected);
+    data.err_expected=1;live_reject_snapshot(0x15,1);
+    assert(data.err_num==1&&reject_pcs(0x15)==1&&!reject_pcs(0x1C));
+    /* Old partial snapshot must not attach to a new START generation. */
+    mark(0x0C,0);reject_row(0x1C,9);before=reject_publications;
+    start(false);data.err_expected=1;reject_row(0x15,8);mark(0x0C,255);
+    assert(!data.err_num&&reject_publications==before);
+    live_reject_snapshot(0x1C,1);assert(data.err_num==1&&reject_pcs(0x1C)==1);
+    /* A failed/unconfirmed start cannot supply live detail ownership. */
+    session.start_confirmed=false;session.phase=COUNTING_SESSION_IDLE;
+    before=reject_publications;live_reject_snapshot(0x1C,9);
+    assert(reject_pcs(0x1C)==1&&reject_publications==before&&!requests[0x0D]);
+    counting_report_reset();session.start_confirmed=true;session.phase=COUNTING_SESSION_ACTIVE;
+    live_reject_snapshot(0x1C,9);assert(reject_publications==before);
+    puts("PASS live reject ADD/owner: ADD retains and replaces cumulative totals, non-ADD resets, unconfirmed/reset/orphan/previous-generation traffic ignored");
+}
+static void test_live_reject_final_and_drain(void)
+{
+    reset();start(false);data.err_expected=2;live_reject_snapshot(0x1C,2);
+    stop();assert(requests[0x0C]==1&&!requests[0x0D]);
+    mark(0x0C,0);reject_row(0x1C,2);mark(0x0C,255);
+    assert(requests[0x0D]==1&&!session.history_record.end_seen);
+    mark(0x0C,255);assert(requests[0x0D]==1);
+    mark(0x0D,0);row(1,false);mark(0x0D,255);
+    assert(publications==1&&completions==1&&session.history_record.end_seen);
+    unsigned before=reject_publications;live_reject_snapshot(0x1C,9);
+    assert(reject_pcs(0x1C)==2&&reject_publications==before&&requests[0x0D]==1);
+    /* Untagged old query replies remain drain-owned through their END.
+     * They must not update the current live model or schedule its serials. */
+    reset();start(false);stop();mark(0x0C,0);
+    start(true);data.err_expected=1;before=reject_publications;
+    reject_row(0x1C,9);mark(0x0C,255);
+    assert(!data.err_num&&reject_publications==before&&!requests[0x0D]);
+    live_reject_snapshot(0x1C,1);
+    assert(data.err_num==1&&reject_pcs(0x1C)==1&&!requests[0x0D]);
+    stop();assert(requests[0x0C]==2);mark(0x0C,0);reject_row(0x1C,1);mark(0x0C,255);
+    assert(requests[0x0D]==1);mark(0x0D,0);mark(0x0D,255);
+    assert(completions==1&&session.history_record.end_seen);
+    /* A serial query from the previous pass has a different command and
+     * must drain without overwriting freshly accepted current rejects. */
+    reset();start(false);request_serial();mark(0x0D,0);row(1,false);
+    start(true);data.err_expected=2;live_reject_snapshot(0x1C,2);
+    assert(!data.err_num); /* One untagged transaction is still drain-owned. */
+    row(2,false);mark(0x0D,255);
+    assert(!data.err_num&&!publications&&!completions);
+    live_reject_snapshot(0x1C,2);assert(reject_pcs(0x1C)==2);
+    puts("PASS live/final ownership: one final 0C->0D query, only final serial completes history, completed/orphan and stale reject/serial query tails cannot mutate current result");
+}
+
+
+static void test_live_reject_stop_timeout(void)
+{
+    reset();start(false);data.err_expected=1;live_reject_snapshot(0x1C,1);
+    mark(0x0C,0);reject_row(0x1C,2);data.err_expected=2;
+    unsigned before=reject_publications;
+    stop();assert(!requests[0x0C]&&!requests[0x0D]);
+    /* STOP preserves the in-flight live snapshot's owner and queues final
+     * reconciliation. Its END publishes once, then enables the final query. */
+    mark(0x0C,255);
+    assert(reject_pcs(0x1C)==2&&reject_publications==before+1);
+    assert(requests[0x0C]==1&&!requests[0x0D]&&!reject_analyses);
+    before=reject_publications;mark(0x0C,255);mark(0x0C,255);
+    assert(requests[0x0C]==1&&!requests[0x0D]&&!reject_analyses&&reject_publications==before);
+    mark(0x0C,0);reject_row(0x1C,2);mark(0x0C,255);
+    assert(requests[0x0D]==1&&reject_analyses==1);
+    mark(0x0D,0);row(1,false);mark(0x0D,255);
+    assert(completions==1&&session.history_record.end_seen);
+
+    reset();start(false);data.err_expected=1;live_reject_snapshot(0x1C,1);
+    mark(0x0C,0);reject_row(0x1C,9);before=reject_publications;
+    now+=3001;counting_report_poll(&session,now);
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_REJECT);
+    assert(reject_pcs(0x1C)==1&&reject_publications==before);
+    reject_row(0x15,8);mark(0x0C,255);
+    assert(reject_pcs(0x1C)==1&&!reject_pcs(0x15)&&reject_publications==before);
+    assert(!requests[0x0C]&&!requests[0x0D]);
+    live_reject_snapshot(0x1C,2);assert(reject_pcs(0x1C)==2);
+
+    reset();start(false);data.err_expected=1;live_reject_snapshot(0x1C,1);
+    mark(0x0C,0);reject_row(0x1C,9);stop();
+    now+=3001;counting_report_poll(&session,now);
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_REJECT&&!requests[0x0C]);
+    mark(0x0C,255);counting_report_poll(&session,++now);
+    assert(reject_pcs(0x1C)==1&&requests[0x0C]==1&&!requests[0x0D]);
+    mark(0x0C,0);reject_row(0x1C,1);mark(0x0C,255);
+    assert(requests[0x0D]==1);mark(0x0D,0);mark(0x0D,255);
+    assert(completions==1&&!counting_report_take_failure());
+    puts("PASS live STOP/timeout: partial snapshot finishes under its owner before final query; timeout preserves previous result, stale END drains, then final reconciliation resumes");
+}
+
+
+static void test_live_reject_duplicate_deadline(void)
+{
+    reset();start(false);
+    /* Detail can precede the first 0E totals in the same count. */
+    live_reject_snapshot(0x1C,1);
+    assert(data.err_num==1&&reject_pcs(0x1C)==1&&counting_data_reject_pcs_count(&data)==1);
+    mark(0x0C,0);reject_row(0x1C,2);
+    unsigned before=reject_publications;
+    now+=2000;reject_row(0x1C,2);now+=1100;counting_report_poll(&session,now);
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_REJECT);
+    mark(0x0C,255);
+    assert(reject_pcs(0x1C)==1&&reject_publications==before);
+    /* A new complete frame restores freshness after the timed-out tail drains. */
+    live_reject_snapshot(0x1C,3);assert(reject_pcs(0x1C)==3);
+    mark(0x0C,0);now+=2000;mark(0x0C,0);now+=1100;
+    counting_report_poll(&session,now);
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_REJECT);
+    mark(0x0C,255);assert(reject_pcs(0x1C)==3);
+    puts("PASS live progress freshness: early detail before 0E, identical data and repeated empty START do not extend a dead snapshot deadline");
+}
+
+
+static void test_live_reject_serial_capacity(void)
+{
+    reset();assert(counting_data_ensure_serial_capacity(&data,COUNTING_DATA_MAX_ITEMS));
+    data.sn_str[COUNTING_DATA_MAX_ITEMS-1]=malloc(5);assert(data.sn_str[COUNTING_DATA_MAX_ITEMS-1]);
+    strcpy(data.sn_str[COUNTING_DATA_MAX_ITEMS-1],"LAST");
+    data.denom_mix[COUNTING_DATA_MAX_ITEMS-1]=20;
+    start(true);data.err_expected=1;live_reject_snapshot(0x1C,1);
+    live();assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_CAPACITY);
+    live_reject_snapshot(0x1C,2);
+    assert(reject_pcs(0x1C)==2&&!counting_report_take_failure());
+    /* A capacity failure while collecting C invalidates only that incomplete
+     * snapshot. Drain its END, retain prior C and recover next full snapshot. */
+    start(true);mark(0x0C,0);reject_row(0x1C,3);
+    unsigned before=reject_publications;live();
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_CAPACITY);
+    mark(0x0C,255);assert(reject_pcs(0x1C)==2&&reject_publications==before);
+    live_reject_snapshot(0x1C,3);
+    assert(reject_pcs(0x1C)==3&&!counting_report_take_failure()&&!requests[0x0D]);
+    puts("PASS live C recovery around B capacity: capacity notice stays one-shot, partial C fails safely, next full C snapshot recovers after END drain");
+}
+
 static void captured_reports(const char *path)
 {
     FILE *input=fopen(path,"rb");assert(input);
@@ -208,7 +409,8 @@ static void captured_reports(const char *path)
 }
 int main(int argc,char **argv)
 {
-    test_wrap_atomic();test_empty_add();test_interleave();test_failure();test_capacity();test_empty_reject_compatibility();reset();
+    test_wrap_atomic();test_empty_add();test_interleave();test_failure();test_capacity();test_empty_reject_compatibility();
+    test_live_reject_atomic();test_live_reject_add_and_owner();test_live_reject_final_and_drain();test_live_reject_stop_timeout();test_live_reject_duplicate_deadline();test_live_reject_serial_capacity();reset();
     if(argc==2)captured_reports(argv[1]);
     counting_report_shutdown();
     puts("PASS reports: 725/10000 rows, byte wrap incl 00/FF, original holes, duplicate frames/text, atomic publication, empty ADD reuse, interleaved runs, timeout/drain, overflow, failed send");

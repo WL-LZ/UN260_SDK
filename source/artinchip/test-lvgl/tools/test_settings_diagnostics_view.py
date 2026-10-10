@@ -18,6 +18,8 @@ def function(source,name):
             if not depth:return source[match.start():source.index('{',match.start())+token.end()]
 lvgl = lvgl_source(root)
 out=Path(sys.argv[1]).resolve();out.mkdir(parents=True,exist_ok=True)
+color_depth=int(os.environ.get('UN260_TEST_COLOR_DEPTH','32'))
+assert color_depth in (16,32),color_depth
 for name in ['user','settings']:
     im=Image.open(root/'aic_ui/lvgl_data/backgrounds'/f'{name}.png').convert('RGBA')
     (out/f'{name}.bgra').write_bytes(im.tobytes('raw','BGRA'))
@@ -29,12 +31,15 @@ with tempfile.TemporaryDirectory(prefix='un260-settings-view-') as temp:
     work=Path(temp);(work/'lvgl').mkdir();(work/'lvgl/lvgl.h').write_text(f'#include "{lvgl}/lvgl.h"\n')
     (work/'lv_drv_conf.h').write_text('/* Driver configuration is not used by this renderer. */\n')
     (work/'actual_diagnostic_pointer.h').write_text(function((root/'lv_port_indev.c').read_text(),'lv_port_indev_set_drag_obj')+'\n'+function((root/'un260/lv_core/settings_detail_ui.c').read_text(),'settings_detail_add_run'))
-    conf=work/'lv_conf.h';conf.write_text('#ifndef LV_CONF_H\n#define LV_CONF_H\n#define LV_COLOR_DEPTH 32\n#define LV_MEM_SIZE (16U*1024U*1024U)\n#define LV_USE_THEME_DEFAULT 0\n#define LV_USE_LOG 0\n#define LV_FONT_MONTSERRAT_18 1\n#define LV_FONT_CUSTOM_DECLARE '+' '.join(f'LV_FONT_DECLARE({f});' for f in fonts)+'\n#endif\n')
-    # Optional old Debug translation unit for deterministic before/after crash reproduction.
-    page_sources=[Path(os.environ['UN260_TEST_DEBUG_SOURCE']) if p.endswith('/page_10_debug.c') and os.environ.get('UN260_TEST_DEBUG_SOURCE') else root/p for p in pages]
+    conf=work/'lv_conf.h';conf.write_text(f'#ifndef LV_CONF_H\n#define LV_CONF_H\n#define LV_COLOR_DEPTH {color_depth}\n#define LV_MEM_SIZE (16U*1024U*1024U)\n#define LV_USE_THEME_DEFAULT 0\n#define LV_USE_LOG 0\n#define LV_FONT_MONTSERRAT_18 1\n#define LV_FONT_CUSTOM_DECLARE '+' '.join(f'LV_FONT_DECLARE({f});' for f in fonts)+'\n#endif\n')
+    # Optional old translation units for deterministic before/after reproduction.
+    page_overrides={'page_10_debug.c':os.environ.get('UN260_TEST_DEBUG_SOURCE'),
+                    'page_31_get_wave.c':os.environ.get('UN260_TEST_WAVE_SOURCE'),
+                    'page_28_get_image.c':os.environ.get('UN260_TEST_IMAGE_SOURCE')}
+    page_sources=[Path(override) if (override:=page_overrides.get(Path(p).name)) else root/p for p in pages]
     sources=[*compiled_asset_sources(),root/'tools/test_settings_diagnostics_view.c',*page_sources,root/'un260/lv_components/lv_settings.c',
       root/'un260/lv_components/lv_nav_button.c',root/'un260/lv_components/lv_damped_button.c',
-      root/'un260/diagnostic/diagnostic.c',root/'un260/app_service/motor_test_service.c',root/'un260/protocol/protocol_frame.c',
+      root/'un260/diagnostic/diagnostic.c',root/'un260/app_service/motor_test_service.c',root/'un260/protocol/protocol_request.c',root/'un260/protocol/protocol_frame.c',root/'un260/protocol/protocol_frame_parser.c',root/'un260/protocol/stream_data_reply.c',
       *[root/'un260/font'/f'{f}.c' for f in fonts],*lvgl.joinpath('src').rglob('*.c')]
     sources = with_i18n(sources, root)
     common=['gcc','-DLVGL_DIR="L:/usr/local/share/lvgl_data/"','-DLV_DRV_CONF_H','-DUI_STATE_DIR="/tmp/un260-i18n-tests"','-std=gnu11','-O1','-g','-Wall','-Wextra',

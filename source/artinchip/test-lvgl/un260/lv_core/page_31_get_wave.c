@@ -8,6 +8,9 @@
 #include "un260/lv_core/settings_detail_ui.h"
 #include "un260/lv_system/app_clock.h"
 #include "un260/lv_system/ui_text.h"
+#include "un260/protocol/stream_data_reply.h"
+#include "un260/protocol/protocol_request.h"
+#include "un260/gesture/gesture_service.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -15,11 +18,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define WAVE_SOURCE_COUNT 7
+#define WAVE_SOURCE_COUNT WAVE_DATA_REPLY_CHANNEL_COUNT
 #define WAVE_POINT_MAX 256
 #define WAVE_PREVIEW_W 774
 #define WAVE_PREVIEW_H 170
 #define WAVE_REQUEST_TIMEOUT_MS 5000U
+#define WAVE_CAPTURE_LIMIT_MS 120000U
 #define WAVE_LATE_FRAME_GUARD_MS 3000U
 
 typedef struct {
@@ -30,7 +34,7 @@ typedef struct {
 static lv_obj_t *mode_retry_button;
 static void mode_retry_clicked(lv_event_t *e)
 {
-    if (lv_event_get_code(e) == LV_EVENT_CLICKED) work_mode_service_retry();
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED && !ui_page_31_get_wave_is_capturing()) work_mode_service_retry();
 }
 static void mode_retry_refresh(void)
 {
@@ -47,6 +51,7 @@ static lv_settings_frame_t wave_frame;
 static lv_obj_t* wave_page = NULL;
 static const char *wave_names[]={"MT","MG 1 / 2","MG 3","MG 4","MG 5 / 6",UI_N_("Upper UV"),UI_N_("Lower UV")};
 static uint8_t wave_received_mask;
+static bool wave_capture_attempted;
 static lv_obj_t* wave_chart_host = NULL;
 static lv_obj_t* wave_line = NULL;
 static lv_obj_t* wave_placeholder = NULL;
@@ -59,8 +64,8 @@ static uint8_t wave_values[WAVE_SOURCE_COUNT][WAVE_POINT_MAX];
 static uint16_t wave_value_counts[WAVE_SOURCE_COUNT] = { 0 };
 static uint16_t wave_current_count = 0;
 static uint8_t selected_wave_id = 1;
-static bool wave_request_active = false;
-static uint32_t wave_request_deadline = 0;
+static protocol_request_t wave_request = PROTOCOL_REQUEST_INITIALIZER(WAVE_REQUEST_TIMEOUT_MS);
+static uint64_t wave_capture_started_ms;
 static uint32_t wave_late_guard_deadline = 0;
 
 static bool wave_time_reached(uint32_t now_ms, uint32_t deadline_ms)
@@ -80,25 +85,29 @@ static void wave_refresh_request_button(uint32_t now_ms)
 {
     if (!wave_request_button || !lv_obj_is_valid(wave_request_button)) return;
 
-    if (wave_request_active || wave_guard_active(now_ms) || !work_mode_service_diagnostic_ready()) {
+    if (protocol_request_is_pending(&wave_request) || wave_guard_active(now_ms) || !work_mode_service_diagnostic_ready()) {
         settings_detail_action_wait(wave_request_button, !work_mode_service_diagnostic_ready() ? work_mode_service_status_msgid() : UI_N_("The previous capture is still being received. Please wait."));
     } else {
         settings_detail_action_wait(wave_request_button, NULL);
     }
 }
 
-static void wave_request_touch(uint32_t now_ms)
+static void wave_capture_lock(bool locked)
 {
-    wave_request_deadline = now_ms + WAVE_REQUEST_TIMEOUT_MS;
+    ui_manager_hold_navigation(UI_PAGE_WAVE_GET, locked);
+    gesture_service_set_navigation_blocked(UI_PAGE_WAVE_GET, locked);
+    if (wave_frame.back) {
+        if (locked) lv_obj_add_state(wave_frame.back, LV_STATE_DISABLED);
+        else lv_obj_clear_state(wave_frame.back, LV_STATE_DISABLED);
+    }
 }
 
 static void wave_request_finish(uint32_t now_ms, bool guard_late_frames)
 {
-    wave_request_active = false;
-    wave_request_deadline = 0;
-    if (guard_late_frames) {
-        wave_late_guard_deadline = now_ms + WAVE_LATE_FRAME_GUARD_MS;
-    }
+    protocol_request_finish(&wave_request);
+    wave_capture_started_ms = 0;
+    wave_capture_lock(false);
+    if (guard_late_frames) wave_late_guard_deadline = now_ms + WAVE_LATE_FRAME_GUARD_MS;
     wave_refresh_request_button(now_ms);
 }
 
@@ -134,6 +143,24 @@ static void wave_notice(ui_notice_kind_t kind,const char *text)
 {
     wave_set_status("",lv_color_hex(0x586B78));
     ui_notice_post_text(kind,"capture.wave",UI_N_("Signal capture"),text);
+}
+
+static void wave_update_capture_status(bool finished)
+{
+    unsigned received = 0;
+    char names[128] = "";
+    size_t used = 0;
+    for (unsigned i = 0; i < WAVE_SOURCE_COUNT; i++) {
+        if (wave_received_mask & (1U << i)) { received++; continue; }
+        int written = snprintf(names + used, sizeof(names) - used, "%s%s",
+                               used ? ", " : "", ui_tr(wave_names[i]));
+        if (written < 0 || (size_t)written >= sizeof(names) - used) break;
+        used += (size_t)written;
+    }
+    char status[192];
+    if (finished) snprintf(status, sizeof(status), ui_tr(UI_N_("Missing channels: %s")), names);
+    else snprintf(status, sizeof(status), ui_tr(UI_N_("Received %u / %u channels")), received, WAVE_SOURCE_COUNT);
+    wave_set_status(status, lv_color_hex(0x586B78));
 }
 
 static void wave_refresh_sources(void)
@@ -178,6 +205,13 @@ static void wave_clear_data(void)
     }
 }
 
+static void wave_clear_capture_values(void)
+{
+    wave_received_mask = 0;
+    memset(wave_value_counts, 0, sizeof(wave_value_counts));
+    wave_clear_data();
+}
+
 static void wave_draw_values(void)
 {
     if (!wave_line || !lv_obj_is_valid(wave_line) || wave_current_count == 0) return;
@@ -194,13 +228,17 @@ static void wave_draw_values(void)
     if (wave_placeholder && lv_obj_is_valid(wave_placeholder)) {
         lv_obj_add_flag(wave_placeholder, LV_OBJ_FLAG_HIDDEN);
     }
-    lv_obj_invalidate(wave_chart_host);
 }
 
 static void wave_show_selected_values(void)
 {
     wave_current_count = wave_value_counts[wave_source_index(selected_wave_id)];
     if (wave_current_count == 0) {
+        if (wave_placeholder) {
+            lv_label_set_text(wave_placeholder, ui_tr(wave_capture_attempted ?
+                UI_N_("Not received") : UI_N_("Capture a note to view its signal")));
+            lv_obj_center(wave_placeholder);
+        }
         wave_clear_data();
         return;
     }
@@ -213,11 +251,6 @@ static void wave_store_values(uint8_t wave_id, const uint8_t* values, uint16_t l
     uint16_t step;
     size_t index;
     uint16_t count = 0;
-
-    if (wave_id < 1 || wave_id > WAVE_SOURCE_COUNT || !values || len == 0) {
-        wave_notice(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_SETTINGS_WAVE_GET_NO_DATA));
-        return;
-    }
 
     index = wave_source_index(wave_id);
     wave_value_counts[index] = 0;
@@ -256,20 +289,21 @@ bool ui_page_31_get_wave_request(void)
     uint32_t now_ms = app_clock_uptime_ms();
 
     if (!wave_page || !lv_obj_is_valid(wave_page)) return false;
-    if (wave_request_active || wave_guard_active(now_ms) || !work_mode_service_diagnostic_ready()) return false;
+    if (protocol_request_is_pending(&wave_request) || wave_guard_active(now_ms) || !work_mode_service_diagnostic_ready()) return false;
 
+    if (!protocol_request_begin_for_command(&wave_request, 0x48)) return false;
+    wave_capture_started_ms = protocol_request_now_ms();
+    wave_capture_attempted = true;
+    wave_capture_lock(true);
     if (wave_send_request()) {
-        wave_clear_data();
-        wave_received_mask = 0;
-        wave_request_active = true;
-        wave_request_touch(now_ms);
+        wave_clear_capture_values();
         wave_refresh_request_button(now_ms);
-        for (size_t i = 0; i < WAVE_SOURCE_COUNT; i++) {
-            wave_value_counts[i] = 0;
-        }
         wave_notice(UI_NOTICE_PROGRESS,ui_text_msgid(UI_TEXT_SETTINGS_WAVE_GET_WAITING));
+        wave_update_capture_status(false);
+        wave_show_selected_values();
         return true;
     }
+    wave_request_finish(now_ms, false);
 
     wave_notice(UI_NOTICE_ERROR,UI_N_("Could not send capture request. Try again."));
     return false;
@@ -292,12 +326,14 @@ static void wave_source_cb(lv_event_t* e)
 static void wave_esc_cb(lv_event_t* e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    ui_manager_pop_page();
+    if (!protocol_request_is_pending(&wave_request)) ui_manager_pop_page();
 }
 
 void ui_page_31_get_wave_create(lv_obj_t *parent)
 {
     if (wave_page) return;
+    wave_capture_lock(false);
+    wave_capture_attempted = false;
     lv_settings_header_t header={ui_tr("Waveform"),ui_tr("Maintenance / Magnetic and UV channels"),"Layers",wave_esc_cb,NULL};
     wave_frame=lv_settings_frame_create(parent,&header);wave_page=wave_frame.root;
     settings_detail_add_run(wave_page);
@@ -340,12 +376,13 @@ void ui_page_31_get_wave_create(lv_obj_t *parent)
 
 void ui_page_31_get_wave_destroy(void)
 {
-    if(wave_request_active)ui_notice_clear("capture.wave");
+    ui_notice_clear("capture.wave");
     uint32_t now_ms = app_clock_uptime_ms();
 
-    if (wave_request_active) {
+    if (protocol_request_is_pending(&wave_request)) {
         wave_request_finish(now_ms, true);
     }
+    wave_capture_lock(false);
     if (wave_page && lv_obj_is_valid(wave_page)) {
         lv_obj_del(wave_page);
     }
@@ -360,10 +397,8 @@ void ui_page_31_get_wave_destroy(void)
     wave_title_label = NULL;
     wave_request_button = NULL;
     selected_wave_id = 1;
-    wave_current_count = 0;
-    for (size_t i = 0; i < WAVE_SOURCE_COUNT; i++) {
-        wave_value_counts[i] = 0;
-    }
+    wave_capture_attempted = false;
+    wave_clear_capture_values();
 
     for (size_t i = 0; i < WAVE_SOURCE_COUNT; i++) {
         source_items[i].card = NULL;
@@ -373,46 +408,47 @@ void ui_page_31_get_wave_destroy(void)
 
 void ui_page_31_get_wave_on_frame(const uint8_t* data, uint16_t len)
 {
-    uint8_t sub;
+    wave_data_reply_view_t reply;
     uint32_t now_ms;
 
-    if (!data || len < 1) return;
     if (!wave_page || !lv_obj_is_valid(wave_page)) return;
-    if (!wave_request_active) return;
+    if (!protocol_request_can_take_result(&wave_request)) return;
 
-    sub = data[0];
+    reply = wave_data_reply_parse(data, len);
+    if (reply.kind == WAVE_DATA_REPLY_INVALID) return;
     now_ms = app_clock_uptime_ms();
-    if (sub == 0x00) {
+    if (reply.kind == WAVE_DATA_REPLY_NO_DATA) {
         wave_request_finish(now_ms, false);
-        wave_clear_data();
+        wave_clear_capture_values();
         wave_notice(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_SETTINGS_WAVE_GET_NO_DATA));
         return;
     }
 
-    if (sub < 0x01 || sub > WAVE_SOURCE_COUNT) return;
-    wave_request_touch(now_ms);
-
-    if (sub == selected_wave_id) {
-        if (wave_line && lv_obj_is_valid(wave_line)) {
-            lv_obj_set_style_line_color(wave_line, lv_color_hex(0x79AEF2), 0);
-        }
-        wave_refresh_sources();
-    }
-    wave_store_values(sub, &data[1], (uint16_t)(len - 1));
-    if (sub == WAVE_SOURCE_COUNT) {
+    uint8_t before = wave_received_mask;
+    wave_store_values(reply.channel, reply.values, reply.value_count);
+    if (wave_received_mask != before) protocol_request_touch_result(&wave_request);
+    wave_update_capture_status(false);
+    if (wave_received_mask == (1U << WAVE_SOURCE_COUNT) - 1U) {
         wave_request_finish(now_ms, false);
-        bool complete = wave_received_mask == (1U << WAVE_SOURCE_COUNT) - 1U;
-        wave_notice(complete?UI_NOTICE_SUCCESS:UI_NOTICE_WARNING,complete?UI_N_("Capture complete. 7 channels received."):UI_N_("Channels missing. Capture again."));
+        wave_notice(UI_NOTICE_SUCCESS, UI_N_("Capture complete. 7 channels received."));
     }
+}
+
+bool ui_page_31_get_wave_is_capturing(void)
+{
+    return wave_page && protocol_request_is_pending(&wave_request);
 }
 
 bool ui_page_31_get_wave_poll(uint32_t now_ms)
 {
     bool timed_out = false;
 
-    if (wave_request_active && wave_time_reached(now_ms, wave_request_deadline)) {
+    if (protocol_request_take_timeout(&wave_request) ||
+        (protocol_request_is_pending(&wave_request) &&
+         protocol_request_now_ms() - wave_capture_started_ms >= WAVE_CAPTURE_LIMIT_MS)) {
         wave_request_finish(now_ms, true);
         wave_notice(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_SETTINGS_WAVE_GET_TIMEOUT));
+        wave_update_capture_status(true);
         timed_out = true;
     } else {
         wave_refresh_request_button(now_ms);

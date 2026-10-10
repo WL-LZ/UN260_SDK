@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 from build_delta import load
+from boot_bundle import verify_metadata
 from build_storage_bootstrap import APPROVED, POLICY_V2, POLICY_V3, PATHS, POLICY_COMPONENTS
 
 
@@ -15,8 +16,9 @@ def verify(images, target, migration):
                 'bootstrap': packages_dir / 'UN260_STORAGE_BOOTSTRAP.upk', 'migration': migration}
     loaded = {k: load(v) for k, v in packages.items()}
     full_meta, full = loaded['normal']
+    verify_metadata(full_meta, full, target)
     assert full_meta['storage_layout'] == 'app-volume-v1'
-    assert full_meta['storage_guard'] == 'syncfs-v1'
+    assert full_meta['storage_guard'] == ('syncfs-boot-bundle-v1' if full_meta.get('boot_bundle_id') else 'syncfs-v1')
     assert full['usr/local/bin/un260_storage_sync'][0].startswith(b'\x7fELF')
     mismatches = []
     for name, (data, mode) in full.items():
@@ -31,7 +33,7 @@ def verify(images, target, migration):
         assert set(files) == set(PATHS)
         assert files == {p: full[p] for p in PATHS}
         assert meta['storage_layout'] == 'app-volume-v1'
-        assert meta['storage_guard'] == 'syncfs-v1'
+        assert meta['storage_guard'] == full_meta['storage_guard']
         assert ('usr/local/bin/test_lvgl' not in files and 'etc/un260/package-version' not in files)
     assert 'storage_migration' not in full_meta
     assert 'storage_migration' not in loaded['bootstrap'][0]

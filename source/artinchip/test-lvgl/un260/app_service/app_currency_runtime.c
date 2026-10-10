@@ -5,6 +5,7 @@
 
 #include "un260/lv_system/app_clock.h"
 #include "un260/app_service/app_counting_runtime.h"
+#include "un260/app_service/app_fault_recovery.h"
 #include "un260/boot/boot_service.h"
 #include "un260/counting/counting_denom_query_service.h"
 #include "un260/counting/counting_multi.h"
@@ -17,6 +18,10 @@
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/page_07_curr.h"
 #include "un260/lv_components/smart_island.h"
+#include "un260/lv_components/ui_notice.h"
+#include "un260/lv_components/lv_fault_popup.h"
+#include "un260/lv_system/ui_i18n.h"
+#include "un260/machine_state/machine_fault.h"
 #include "un260/lv_drivers/lv_drivers.h"
 #include "un260/lv_system/counting_ui_runtime.h"
 #include "un260/counting/counting_data_store_internal.h"
@@ -62,6 +67,7 @@ void app_currency_runtime_handle_reply(counting_detail_state_t *detail_state,
                                         app_clock_uptime_ms())) return;
     reply = currency_reply_handle(buf, len);
     if (reply.kind == CURRENCY_REPLY_SWITCH_SUCCESS) {
+        app_fault_recovery_resolve_setting_rejection(0x03);
         ui_manager_publish_data_changed(UI_DATA_TOPIC_CURRENCY_CATALOG);
         if (!app_counting_runtime_reset_session(session, "currency change")) return;
         sim_reset_for_currency(counting_data_mutable());
@@ -74,7 +80,10 @@ void app_currency_runtime_handle_reply(counting_detail_state_t *detail_state,
         app_currency_runtime_expect_denom_refresh(detail_state);
     } else if (reply.kind == CURRENCY_REPLY_SWITCH_FAILURE) {
         page_07_curr_apply_switch_result(&reply.switch_result);
-        uart_debug_printf("Set %s curr fail\n", reply.active_code);
+        if (reply.switch_result.controller_rejected)
+            (void)app_fault_recovery_report_setting_rejection(0x03);
+        uart_debug_printf("Set %s curr fail; retained %s\n",
+                          reply.switch_result.target_code, reply.active_code);
     } else if (reply.kind == CURRENCY_REPLY_BOOT_ACTIVE) {
         if (currency_state_auto_selected()) {
             /* Keep the controller's last real currency as fallback, but AUTO

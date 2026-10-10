@@ -3,11 +3,12 @@
 No binary patching; deletions explicit. The pinned baseline never advances here.
 """
 import argparse, hashlib, io, json, os, pathlib, re, tarfile
+from release_manifest import table, MAX_MEMBER_BYTES, MAX_ARCHIVE_BYTES, validate_payload_budget
 
 def sha(data): return hashlib.sha256(data).hexdigest()
 def load(path):
     with tarfile.open(path, 'r:gz') as t:
-        names=set(); files={}
+        names=set(); files={}; archive_bytes=0
         for m in t.getmembers():
             n=m.name.rstrip('/')
             if n in names or '..' in n or n.startswith('/') or not re.fullmatch(r'[A-Za-z0-9_./-]+',n):
@@ -15,7 +16,9 @@ def load(path):
             names.add(n)
             if not (m.isfile() or m.isdir()): raise ValueError('Unsupported member type')
             if m.isfile():
-                if m.size>24*1024*1024: raise ValueError('Oversized member')
+                if m.size>MAX_MEMBER_BYTES: raise ValueError('Oversized member')
+                archive_bytes+=m.size
+                if archive_bytes>MAX_ARCHIVE_BYTES: raise ValueError('Archive budget exceeded')
                 files[n]=(t.extractfile(m).read(),m.mode & 0o777)
         manifest=dict(x.split('=',1) for x in files['manifest.ini'][0].decode().splitlines())
         if manifest.get('schema')!='1' or manifest.get('product')!='UN260': raise ValueError('Baseline/target must be full UN260 packages')
@@ -30,16 +33,13 @@ def load(path):
         if set(expected)!={'payload/'+n for n in payload}: raise ValueError('Payload/checksum mismatch')
         for n,(data,mode) in payload.items():
             if mode not in (0o644,0o755): raise ValueError('Unsupported mode')
-        if sum(len(v[0]) for v in payload.values())>24*1024*1024: raise ValueError('Payload budget exceeded')
+        validate_payload_budget(manifest,payload)
         return manifest,payload
-
-def table(files):
-    return ''.join(f'{sha(d)}|{m:04o}|{len(d)}|{p}\n' for p,(d,m) in sorted(files.items())).encode()
 
 def build(base,full,out):
     bm,b=load(base); fm,f=load(full)
     changed={p:v for p,v in f.items() if b.get(p)!=v}
-    removed=sorted(set(b)-set(f))
+    removed=sorted(p for p in set(b)-set(f) if not p.startswith('usr/local/lib/un260-boot/versions/'))
     bt,ft=table(b),table(f)
     checks=''.join(f'{sha(d)}  payload/{p}\n' for p,(d,m) in sorted(changed.items())).encode()
     # The new scripts must never reach disk before their writeback executable.
@@ -52,6 +52,8 @@ def build(base,full,out):
         meta['storage_layout']=fm['storage_layout']
     if fm.get('storage_guard'):
         meta['storage_guard']=fm['storage_guard']
+    for key in ('boot_bundle_id', 'boot_manifest_sha256', 'updater_envelope', 'updater_platform', 'updater_engine_abi'):
+        if fm.get(key): meta[key]=fm[key]
     entries={'manifest.ini':('\n'.join(f'{k}={v}' for k,v in meta.items())+'\n').encode(),
              'checksums.sha256':checks,'install.tsv':install.encode(),'baseline.tsv':bt,'target.tsv':ft}
     out=pathlib.Path(out);out.parent.mkdir(parents=True,exist_ok=True)

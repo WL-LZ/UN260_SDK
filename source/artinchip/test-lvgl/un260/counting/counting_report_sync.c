@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { REPORT_IDLE, REPORT_REJECT, REPORT_SERIAL };
+enum { REPORT_IDLE, REPORT_REJECT_LIVE, REPORT_REJECT, REPORT_SERIAL };
 enum { REPORT_IDLE_TIMEOUT_MS = 3000, REPORT_TOTAL_TIMEOUT_MS = 120000 };
 static struct {
     unsigned stage;
@@ -48,11 +48,12 @@ static void fail(counting_report_failure_t reason)
 
 void counting_report_begin(bool add, counting_sim_t *data)
 {
-    ++report.generation;
+    if (++report.generation == 0) ++report.generation;
     /* An old query remains owned until its END arrives. Without a wire
      * transaction id, a timeout is not permission to overlap another query. */
     counting_data_clear_serials(&report.staging);
     report.enabled = true;
+    if (report.stage == REPORT_IDLE) report.invalid = report.started = false;
     report.add = add;
     report.reusable = add && report.cache.valid && report.stage == REPORT_IDLE;
     report.live_seen = report.due = report.scheduled = false;
@@ -63,7 +64,11 @@ void counting_report_begin(bool add, counting_sim_t *data)
         report.published_rows = 0;
         /* The previous result has already transferred to history before
          * START. Never attach its serials to a new non-ADD count. */
-        if (data) counting_data_clear_serials(data);
+        if (data) {
+            counting_data_clear_serials(data);
+            counting_data_clear_errors(data);
+            data->err_expected = 0;
+        }
     }
 }
 
@@ -119,7 +124,7 @@ void counting_report_poll(const counting_session_state_t *s,
         if (!report.invalid &&
             ((uint32_t)(now - report.activity) >= REPORT_IDLE_TIMEOUT_MS ||
              (uint32_t)(now - report.requested) >= REPORT_TOTAL_TIMEOUT_MS))
-            fail(report.stage == REPORT_REJECT ? COUNTING_REPORT_FAILURE_REJECT
+            fail(report.stage != REPORT_SERIAL ? COUNTING_REPORT_FAILURE_REJECT
                                               : COUNTING_REPORT_FAILURE_SERIAL);
         return;
     }
@@ -143,16 +148,48 @@ void counting_report_schedule(const counting_session_state_t *s,
 
 bool counting_report_discard_stale(uint8_t cmd, const uint8_t *buf, uint8_t len)
 {
-    unsigned stage = cmd == 0x0C ? REPORT_REJECT : cmd == 0x0D ? REPORT_SERIAL : REPORT_IDLE;
+    unsigned stage = cmd == 0x0C
+        ? (report.stage == REPORT_REJECT_LIVE ? REPORT_REJECT_LIVE : REPORT_REJECT)
+        : cmd == 0x0D ? REPORT_SERIAL : REPORT_IDLE;
     if (!stage || report.stage != stage ||
         (!report.invalid && report.owner == report.generation)) return false;
     if ((cmd == 0x0C && len == 7) || (cmd == 0x0D && len == 25)) {
         if (marker(buf, len, 0xFF)) {
             report.stage = REPORT_IDLE;
+            report.invalid = report.started = false;
             counting_data_clear_serials(&report.staging);
         }
     }
     return true;
+}
+
+uint32_t counting_report_live_owner(const counting_session_state_t *s)
+{
+    if (!s || !report.enabled || (report.invalid && report.stage != REPORT_IDLE) ||
+        (report.stage != REPORT_IDLE && report.stage != REPORT_REJECT_LIVE)) return 0;
+    if (report.stage == REPORT_REJECT_LIVE && report.owner != report.generation) return 0;
+    if ((s->start_confirmed && s->phase != COUNTING_SESSION_FINISHED_WAIT_START) ||
+        (report.stage == REPORT_REJECT_LIVE && settled(s))) return report.generation;
+    return 0;
+}
+
+bool counting_report_live_reject_start(const counting_session_state_t *s, uint32_t now)
+{
+    if (!s || !s->start_confirmed || !counting_report_live_owner(s)) return false;
+    if (report.stage == REPORT_IDLE) {
+        report.stage = REPORT_REJECT_LIVE;
+        report.invalid = report.started = false;
+        report.owner = report.generation;
+        report.requested = report.activity = now;
+    }
+    return true;
+}
+
+void counting_report_live_reject_end(const counting_session_state_t *s, uint32_t now)
+{
+    if (report.stage != REPORT_REJECT_LIVE || !counting_report_live_owner(s)) return;
+    report.stage = REPORT_IDLE;
+    counting_report_poll(s, now);
 }
 
 bool counting_report_accept_reject(const counting_session_state_t *s)

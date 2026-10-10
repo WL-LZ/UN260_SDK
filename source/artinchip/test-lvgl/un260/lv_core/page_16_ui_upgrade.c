@@ -251,7 +251,6 @@ static void start_clicked(lv_event_t *event)
     case UI_UPGRADE_START_BUSY: page.start_error = UI_N_("Another update is still running. Wait for its result."); break;
     case UI_UPGRADE_START_SCRIPT_NOT_FOUND: page.start_error = UI_N_("The UI updater is unavailable. Contact service support."); break;
     case UI_UPGRADE_START_PACKAGE_NOT_READY: page.start_error = UI_N_("The update package is not ready. Check the USB drive and file."); break;
-    case UI_UPGRADE_START_STATUS_CLEANUP_FAILED: page.start_error = UI_N_("Previous update status could not be cleared. Contact service support."); break;
     case UI_UPGRADE_START_FORK_FAILED: page.start_error = UI_N_("The updater could not start. Try again when the device is idle."); break;
     case UI_UPGRADE_START_DATA_BUSY: page.start_error = UI_N_("Counting is in progress. Stop counting before updating."); break;
     case UI_UPGRADE_START_DATA_SAVE_FAILED: page.start_error = UI_N_("Records could not be saved. Please try again."); break;

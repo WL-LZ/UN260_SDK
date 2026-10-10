@@ -50,6 +50,7 @@ static ui_page_t g_page_prewarming = UI_PAGE_INVALID;
 static bool g_page_switch_committing;
 static lv_timer_t *g_page_input_unlock_timer;
 static uint64_t g_transition_input_owners;
+static uint64_t g_navigation_owners;
 static void ui_manager_reset_navigation_sessions(void);
 static bool ui_manager_is_navigation_root(ui_page_t page);
 
@@ -433,6 +434,21 @@ static void ui_manager_set_input_enabled(bool enabled)
     }
 }
 
+bool ui_manager_navigation_is_blocked(void)
+{
+    ui_page_t current = g_page_manager.current;
+    return current >= UI_PAGE_BOOT_ANIM && current < UI_PAGE_COUNT && current < 64 &&
+        (g_navigation_owners & (UINT64_C(1) << current)) != 0;
+}
+
+void ui_manager_hold_navigation(ui_page_t owner, bool hold)
+{
+    if (owner < UI_PAGE_BOOT_ANIM || owner >= UI_PAGE_COUNT || owner >= 64) return;
+    uint64_t bit = UINT64_C(1) << owner;
+    if (hold) g_navigation_owners |= bit;
+    else g_navigation_owners &= ~bit;
+}
+
 void ui_manager_hold_transition_input(ui_page_t owner, bool hold)
 {
     if (owner < UI_PAGE_BOOT_ANIM || owner >= UI_PAGE_COUNT || owner >= 64) return;
@@ -517,7 +533,8 @@ static void ui_manager_update_diagnostic_scope(ui_page_t page)
                 page==UI_PAGE_WAVE_GET || page==UI_PAGE_MOTOR_TEST ||
                 page==UI_PAGE_AGING_SETTING ||
                 (page==UI_PAGE_SETTING && page_06_settings_is_collection());
-    work_mode_service_set_diagnostic(active);
+    work_mode_service_set_diagnostic_mode(active,
+        page == UI_PAGE_IMAGE_GET ? WORK_MODE_AUTO : WORK_MODE_MANUAL);
 }
 
 static void ui_manager_notify_page_switch(ui_page_t from, ui_page_t to)
@@ -540,6 +557,7 @@ static void ui_manager_notify_page_switch(ui_page_t from, ui_page_t to)
 void ui_manager_switch(ui_page_t page)
 {
     if (ui_factory_reset_blocks_navigation()) return;
+    if (ui_manager_navigation_is_blocked()) return;
     /* Legacy route now opens a modal without disturbing the visible page or
      * its history. The PIN is never a resumable navigation destination. */
     if(page==UI_PAGE_SET_PASSAGE){ui_page_05_set_password_open();return;}
@@ -631,6 +649,7 @@ void ui_manager_init(void) {
         g_page_input_unlock_timer = NULL;
     }
     g_transition_input_owners = 0;
+    g_navigation_owners = 0;
     ui_manager_set_input_enabled(true);
 
     // 显示主页面
@@ -644,6 +663,7 @@ void ui_manager_init(void) {
 void ui_manager_push_page(ui_page_t page)
 {
     if (ui_factory_reset_blocks_navigation()) return;
+    if (ui_manager_navigation_is_blocked()) return;
     int i;
 
     if (g_page_switch_committing || page == g_page_manager.current ||
@@ -673,6 +693,7 @@ void ui_manager_push_page(ui_page_t page)
 bool ui_manager_adopt_precreated_page(ui_page_t page)
 {
     if (ui_factory_reset_blocks_navigation()) return false;
+    if (ui_manager_navigation_is_blocked()) return false;
     int i;
     ui_page_t from = g_page_manager.current;
     perf_profile_page_switch_sample_t sample = {
@@ -753,6 +774,7 @@ bool ui_manager_is_prewarming_page(ui_page_t page)
 bool ui_manager_pop_page(void)
 {
     if (ui_factory_reset_blocks_navigation()) return false;
+    if (ui_manager_navigation_is_blocked()) return false;
     ui_page_t previous_page;
 
     if (g_page_switch_committing) return false;
@@ -783,6 +805,7 @@ bool ui_manager_pop_page(void)
 
 void ui_manager_clear_stack(void)
 {
+    if (ui_manager_navigation_is_blocked()) return;
     g_page_manager.stack_top = -1;
     g_home_bookmark_valid=false;
 }
@@ -790,6 +813,7 @@ void ui_manager_clear_stack(void)
 bool ui_manager_suspend_to_home(void)
 {
     if (ui_factory_reset_blocks_navigation()) return false;
+    if (ui_manager_navigation_is_blocked()) return false;
     if(g_page_switch_committing||ui_manager_is_navigation_root(g_page_manager.current)||
        !ui_manager_page_is_registered(g_page_manager.current))return false;
     ui_page_manager_context_t saved=g_page_manager;
@@ -804,6 +828,7 @@ bool ui_manager_suspend_to_home(void)
 bool ui_manager_restore_from_home(void)
 {
     if (ui_factory_reset_blocks_navigation()) return false;
+    if (ui_manager_navigation_is_blocked()) return false;
     if(g_page_switch_committing||g_page_manager.current!=UI_PAGE_MAIN||
        !g_home_bookmark_valid||!ui_manager_page_is_registered(g_home_bookmark.current))return false;
     ui_page_manager_context_t saved=g_page_manager;

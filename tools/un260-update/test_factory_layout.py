@@ -3,7 +3,7 @@
 from pathlib import Path
 import tempfile
 import unittest
-from factory_layout import enroll, APP, STATE, OWNER, LAUNCHER
+from factory_layout import enroll, APP, STATE, OWNER, LAUNCHER, validate_app_size, APP_RELEASE_MAX_BYTES, APP_QUALIFIED_VOLUME_BYTES, APP_REPLACEMENT_RESERVE_BYTES, APP_RETAINED_GENERATIONS, LEGACY_TEST_APP_MAX_BYTES
 from release_version import version
 
 SDK = Path(__file__).resolve().parents[2]
@@ -70,6 +70,33 @@ class FactoryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'headroom'): self.enroll()
         self.assertFalse(self.vol.exists())
 
+    def test_shared_app_budget_exact_boundary_and_legacy_isolation(self):
+        self.assertEqual(APP_RELEASE_MAX_BYTES, 14155776)  # 13.5 MiB
+        self.assertEqual(APP_RELEASE_MAX_BYTES * APP_RETAINED_GENERATIONS + APP_REPLACEMENT_RESERVE_BYTES,
+                         APP_QUALIFIED_VOLUME_BYTES)
+        self.assertEqual(validate_app_size(APP_RELEASE_MAX_BYTES), APP_RELEASE_MAX_BYTES)
+        with self.assertRaisesRegex(ValueError, 'headroom'): validate_app_size(APP_RELEASE_MAX_BYTES + 1)
+        self.assertEqual(validate_app_size(LEGACY_TEST_APP_MAX_BYTES, legacy_test=True), 16 * 1024 * 1024)
+        with self.assertRaises(ValueError): validate_app_size(LEGACY_TEST_APP_MAX_BYTES + 1, legacy_test=True)
+
+    def test_exact_13_5mib_factory_enrollment_keeps_geometry_and_modes(self):
+        data = b'\x7fELF' + bytes(APP_RELEASE_MAX_BYTES - 4)
+        (self.base / APP).write_bytes(data); (self.root / APP).write_bytes(data)
+        report = self.enroll()
+        self.assertEqual(report['app_bytes'], APP_RELEASE_MAX_BYTES)
+        self.assertEqual(report['geometry']['root_bytes'], 67108864)
+        self.assertEqual(report['geometry']['app_partition_bytes'], 39845888)
+        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), data)
+        self.assertEqual((self.vol / 'test_lvgl').stat().st_mode & 0o777, 0o755)
+        self.assertEqual((self.root / APP).stat().st_mode & 0o777, 0o755)
+
+    def test_one_byte_over_factory_budget_rejected_before_mutation(self):
+        data = b'\x7fELF' + bytes(APP_RELEASE_MAX_BYTES - 3)
+        (self.base / APP).write_bytes(data); (self.root / APP).write_bytes(data)
+        with self.assertRaisesRegex(ValueError, 'headroom'): self.enroll()
+        self.assertEqual((self.root / APP).read_bytes(), data)
+        self.assertFalse(self.vol.exists())
+
     def test_launcher_exactly_matches_runtime_helper(self):
         helper = SDK / 'target/d211/d213_devkitf/rootfs_overlay/usr/local/bin/un260_app_storage'
         import subprocess
@@ -87,6 +114,6 @@ class FactoryTests(unittest.TestCase):
         config = sdk / 'target/d211/d213_devkitf/image_cfg.json'
         config.parent.mkdir(parents=True)
         config.write_text('{"version": "1.2.3"}')
-        self.assertEqual(version(sdk), '1.2.3-local')
+        self.assertRegex(version(sdk), r'^1\.2\.3-local-[0-9a-f]{12}$')
 
 if __name__ == '__main__': unittest.main()

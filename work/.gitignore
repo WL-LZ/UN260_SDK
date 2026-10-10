@@ -1,0 +1,4 @@
+# Local host-test output; permanent tests live in tools.
+*
+!.gitignore
+!README.md

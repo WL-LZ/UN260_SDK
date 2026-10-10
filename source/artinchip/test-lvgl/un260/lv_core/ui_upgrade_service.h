@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 
+#define UI_UPGRADE_RESULT_TEXT_CAPACITY 384U
+
 typedef enum {
     UI_UPGRADE_STAGE_NONE = 0,
     UI_UPGRADE_STAGE_PREPARE,
@@ -30,7 +32,6 @@ typedef enum {
     UI_UPGRADE_START_BUSY,
     UI_UPGRADE_START_SCRIPT_NOT_FOUND,
     UI_UPGRADE_START_PACKAGE_NOT_READY,
-    UI_UPGRADE_START_STATUS_CLEANUP_FAILED,
     UI_UPGRADE_START_FORK_FAILED,
     UI_UPGRADE_START_DATA_BUSY,
     UI_UPGRADE_START_DATA_SAVE_FAILED
@@ -50,7 +51,7 @@ typedef struct {
     int progress;
     ui_upgrade_stage_t stage;
     char step_text[64];
-    char result_text[128];
+    char result_text[UI_UPGRADE_RESULT_TEXT_CAPACITY];
 } ui_upgrade_service_status_t;
 
 void ui_upgrade_service_reset(void);

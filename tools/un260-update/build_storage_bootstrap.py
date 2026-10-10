@@ -22,7 +22,10 @@ POLICY_COMPONENTS = ('usr/local/bin/un260_app_storage', 'usr/bin/ui_update.sh', 
 def build(full, output, migrate=False, policy=APPROVED):
     if policy not in (APPROVED, POLICY_V2, POLICY_V3):
         raise ValueError('Unknown migration policy')
-    _, files = load(full)
+    full_meta, files = load(full)
+    guard = full_meta.get('storage_guard', 'syncfs-v1')
+    if guard not in ('syncfs-v1', 'syncfs-boot-bundle-v1'):
+        raise ValueError('Unknown storage/boot platform guard')
     payload = {}
     for name in PATHS:
         if name not in files or files[name][1] != 0o755:
@@ -40,9 +43,9 @@ def build(full, output, migrate=False, policy=APPROVED):
                      for name, (data, _) in sorted(payload.items())).encode()
     metadata = ('format=UN260_UPGRADE\nschema=1\nproduct=UN260\n'
                 'package_type=%s\nversion=storage-%s-20261005-r8\n'
-                'package_id=%s\nrequires_reboot=1\nstorage_layout=app-volume-v1\nstorage_guard=syncfs-v1\n%s'
+                'package_id=%s\nrequires_reboot=1\nstorage_layout=app-volume-v1\nstorage_guard=%s\n%s'
                 % ('storage-migration' if migrate else 'ui-maintenance',
-                   'migration' if migrate else 'bootstrap', hashlib.sha256(checks).hexdigest(),
+                   'migration' if migrate else 'bootstrap', hashlib.sha256(checks).hexdigest(), guard,
                    'storage_migration=%s\n' % policy if migrate else '')).encode()
     entries = {'manifest.ini': (metadata, 0o644), 'checksums.sha256': (checks, 0o644),
                'install.tsv': ((''.join('file|0755|%s\n' % name for name in PATHS) +

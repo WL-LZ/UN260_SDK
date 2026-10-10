@@ -1,6 +1,7 @@
 #include "un260/lv_system/ui_i18n.h"
 #include "app_setting_runtime.h"
 #include "app_setting_notice.h"
+#include "app_fault_recovery.h"
 #include "ui_factory_reset_service.h"
 #include "un260/lv_components/ui_notice.h"
 
@@ -228,6 +229,7 @@ void app_setting_runtime_poll(uint32_t now_ms)
 
 void app_setting_runtime_stop(void)
 {
+    app_fault_recovery_cancel_setting_presentation();
     work_mode_service_stop();
     app_setting_runtime_cancel_mode_clear();
     setting_service_cancel_all();

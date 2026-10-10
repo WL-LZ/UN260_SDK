@@ -97,7 +97,9 @@ static void app_counting_visual_commit(void *context, uint32_t flags)
                                        sim_data->total_amount);
         page_01_main_refresh_totals(sim_data->total_pcs, amount_buf);
     }
-    if ((flags & 4U) || ((flags & 2U) && page_01_detail_section_get() == PAGE_01_DETAIL_SECTION_B))
+    if ((flags & 4U) ||
+        ((flags & 2U) && page_01_detail_section_get() == PAGE_01_DETAIL_SECTION_B) ||
+        ((flags & 8U) && page_01_detail_section_get() == PAGE_01_DETAIL_SECTION_C))
         page_01_main_detail_refresh_rows_only();
 }
 
@@ -120,6 +122,8 @@ static bool app_counting_runtime_main_page_active(void)
 }
 
 
+static void app_counting_runtime_on_reject_report_changed(void *context);
+
 static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t len)
 {
     page_01_main_set_counting_locked(true);
@@ -135,6 +139,7 @@ static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t le
     if (currency_state_multi_selected())
         counting_data_mark_multi_result(counting_data_mutable());
     page_02_list_report_reset();
+    app_counting_runtime_on_reject_report_changed(NULL);
     page_01_curr_img_refre();
     fault_popup_clear_runtime();
     fault_popup_clear_preset();
@@ -326,6 +331,8 @@ static void app_counting_runtime_on_reject_report_changed(void *context)
 {
     (void)context;
     page_02_list_section_data_ready(PAGE_02_SECTION_C);
+    if (!ui_frame_commit_defer(app_counting_visual_commit, NULL, 8U))
+        app_counting_visual_commit(NULL, 8U);
 }
 
 static void app_counting_runtime_on_summary_changed(void *context,

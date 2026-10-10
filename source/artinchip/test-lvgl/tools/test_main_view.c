@@ -257,6 +257,27 @@ static void test_main(void)
     assert(!strcmp(lv_label_get_text(s_total_amount_label),"10,692"));
     assert(lv_obj_get_style_text_font(s_total_pcs_label,0)==&lv_font_main_numeric_64);
     assert(lv_obj_get_style_text_font(s_total_amount_label,0)==&lv_font_main_numeric_64);
+    /* Live 0x0E can change only rejects while accepted totals stay fixed. */
+    counting_sim_t *live_data=counting_data_mutable();
+    const uint16_t saved_rejects=live_data->err_expected;
+    lv_obj_t *reject_label=page_01_main_find_obj("reject_num_label");
+    assert(reject_label);
+    for(unsigned rejects=1;rejects<=8;++rejects) {
+        char expected[16];snprintf(expected,sizeof(expected),"%u",rejects);
+        live_data->err_expected=rejects;
+        page_01_main_refresh_totals(231,"10,692");ui_frame_commit_flush();
+        assert(!strcmp(lv_label_get_text(reject_label),expected));
+        assert(!strcmp(lv_label_get_text(s_total_pcs_label),"231"));
+        assert(!strcmp(lv_label_get_text(s_total_amount_label),"10,692"));
+    }
+    page_01_main_suspend();
+    live_data->err_expected=9;
+    page_01_main_refresh_totals(231,"10,692");ui_frame_commit_flush();
+    assert(!strcmp(lv_label_get_text(reject_label),"8"));
+    assert(page_01_main_resume());ui_frame_commit_flush();
+    assert(!strcmp(lv_label_get_text(reject_label),"9"));
+    live_data->err_expected=saved_rejects;
+    ui_refresh_main_page();ui_frame_commit_flush();
     pointer(850,180,true);
     for(unsigned packet=0;packet<4;++packet) { ui_refresh_main_page();tick(40); }
     pointer(850,180,false);assert(pushes==++opened); /* Full refresh/currency-layout chain retains stationary touch. */

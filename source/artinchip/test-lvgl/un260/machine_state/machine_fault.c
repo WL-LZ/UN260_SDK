@@ -48,6 +48,8 @@ void machine_fault_clear_code(machine_fault_source_t source, uint8_t code)
 
 bool machine_fault_report(machine_fault_key_t key)
 {
+    /* Operation refusals reuse guide visuals, never physical recovery state. */
+    if (key.source == MACHINE_FAULT_SETTING) return false;
     if (machine_fault_find(key, NULL)) return false;
     if (key.source == MACHINE_FAULT_START || key.source == MACHINE_FAULT_RUNTIME ||
         key.source == MACHINE_FAULT_PRESET)

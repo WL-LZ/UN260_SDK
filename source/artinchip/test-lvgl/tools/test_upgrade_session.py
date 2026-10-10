@@ -17,7 +17,7 @@ def function(source,name):
     raise AssertionError(name)
 
 source=(root/'un260/lv_core/ui_upgrade_service.c').read_text()
-names=['ui_upgrade_service_set_status','ui_upgrade_service_update_child_state',
+names=['ui_upgrade_service_set_status','ui_upgrade_service_child_busy','ui_upgrade_service_update_child_state',
        'ui_upgrade_service_reset','ui_upgrade_service_launch','ui_upgrade_service_start',
        'ui_upgrade_service_is_preparing_data','ui_upgrade_service_cancel_prepare',
        'ui_upgrade_service_prepare_data_poll','ui_upgrade_service_poll']

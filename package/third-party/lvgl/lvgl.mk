@@ -31,3 +31,7 @@ LVGL_CONF_OPTS += -DCMAKE_INSTALL_PREFIX=/usr/local
 LVGL_CONF_OPTS += -DLV_CONF_PATH=$(abspath $(LVGL_APPLICATION)/lv_conf_library.h)
 
 $(eval $(cmake-package))
+
+# These configuration headers live outside LVGL's own source inventory.
+$(LVGL_TARGET_BUILD): $(abspath $(LVGL_APPLICATION)/lv_conf_library.h) $(abspath $(LVGL_APPLICATION)/lv_conf.h)
+$(LVGL_TARGET_CONFIGURE): $(abspath package/third-party/lvgl/lvgl.mk)

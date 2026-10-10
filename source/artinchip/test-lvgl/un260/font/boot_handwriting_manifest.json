@@ -1,0 +1,111 @@
+{
+  "locales": [
+    {
+      "tag": "en",
+      "text": "Welcome",
+      "font": "OoohBaby-Regular.ttf",
+      "font_sha256": "904d1b79093da1ae4b7436ac2190ddf5048e3cb839b2dc0c0516d0f58a1c25ee",
+      "width": 366,
+      "height": 92,
+      "y": 0,
+      "bytes": 16836
+    },
+    {
+      "tag": "zh-Hans",
+      "text": "欢迎",
+      "font": "MaShanZheng-Regular.ttf",
+      "font_sha256": "6d2546bb189c732a8ca29af9e22457b152387d158aa459e4ac2ce1e51788b7fb",
+      "width": 171,
+      "height": 76,
+      "y": 8,
+      "bytes": 6498
+    },
+    {
+      "tag": "ko",
+      "text": "환영합니다",
+      "font": "NanumPenScript-Regular.ttf",
+      "font_sha256": "6f0d1ab29c7894010dc88831fb7a0a51edb79136e450344183de5b1a8b52bd43",
+      "width": 333,
+      "height": 76,
+      "y": 8,
+      "bytes": 12654
+    },
+    {
+      "tag": "ja",
+      "text": "ようこそ",
+      "font": "Yomogi-Regular.ttf",
+      "font_sha256": "ec280f473a03187292905618f24fdb08a6dcbf8620b52637e3b589fe745259b9",
+      "width": 324,
+      "height": 76,
+      "y": 8,
+      "bytes": 12312
+    },
+    {
+      "tag": "ar",
+      "text": "مرحبا",
+      "font": "ArefRuqaa-Regular.ttf",
+      "font_sha256": "ceb786d83ba92f35e96efcd8623c2858d288e0c543c8761ba35b1020989464f9",
+      "width": 124,
+      "height": 76,
+      "y": 8,
+      "bytes": 4712
+    },
+    {
+      "tag": "tr",
+      "text": "Hoş geldiniz",
+      "font": "OoohBaby-Regular.ttf",
+      "font_sha256": "904d1b79093da1ae4b7436ac2190ddf5048e3cb839b2dc0c0516d0f58a1c25ee",
+      "width": 318,
+      "height": 76,
+      "y": 8,
+      "bytes": 12084
+    },
+    {
+      "tag": "fr",
+      "text": "Bienvenue",
+      "font": "OoohBaby-Regular.ttf",
+      "font_sha256": "904d1b79093da1ae4b7436ac2190ddf5048e3cb839b2dc0c0516d0f58a1c25ee",
+      "width": 346,
+      "height": 76,
+      "y": 8,
+      "bytes": 13148
+    },
+    {
+      "tag": "pl",
+      "text": "Witamy",
+      "font": "OoohBaby-Regular.ttf",
+      "font_sha256": "904d1b79093da1ae4b7436ac2190ddf5048e3cb839b2dc0c0516d0f58a1c25ee",
+      "width": 210,
+      "height": 76,
+      "y": 8,
+      "bytes": 7980
+    },
+    {
+      "tag": "ru",
+      "text": "Добро пожаловать",
+      "font": "Caveat[wght].ttf",
+      "font_sha256": "0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988",
+      "width": 430,
+      "height": 62,
+      "y": 15,
+      "bytes": 13330
+    },
+    {
+      "tag": "de",
+      "text": "Willkommen",
+      "font": "OoohBaby-Regular.ttf",
+      "font_sha256": "904d1b79093da1ae4b7436ac2190ddf5048e3cb839b2dc0c0516d0f58a1c25ee",
+      "width": 397,
+      "height": 76,
+      "y": 8,
+      "bytes": 15086
+    }
+  ],
+  "outputs": {
+    "un260/font/lv_font_boot_welcome.c": "81338cf95d51526af578a072b1949c3cc2bee24936ba44837b53e9a2591dd9a6",
+    "un260/font/lv_font_boot_welcome_compact.c": "ad38f025015b62cc83f27e219255141f61225dc59aa3486a5b4a595b7b66bf5d",
+    "un260/font/boot_welcome_native.h": "52e528ece0d791cfeed6002ddb4aa310712ce4281c5427aa3325719cacd5efcd",
+    "un260/lv_core/boot_anim/boot_welcome_registry.h": "033161b7ff69906bb0bffaa7e8d9d4303b5ffdf5f8035812a7fb0e91a5f105b5"
+  },
+  "generator_sha256": "b9cf89f4d92aba0f35a2dc244db30f1c527900d4d055e21b1c57378c401c16a0"
+}

@@ -30,6 +30,10 @@ void work_mode_service_set_reset_pending(bool pending);
  * Changing active does not transmit synchronously, so multiple owner changes
  * within one page transition coalesce before the next UI poll. */
 void work_mode_service_set_diagnostic(bool active);
+/* Navigation-owned temporary requirement; preserves the user's preference.
+ * In-flight replies are retained and converge to the latest required mode.
+ * The legacy bool API requires MANUAL. This does not transmit synchronously. */
+void work_mode_service_set_diagnostic_mode(bool active, uint8_t mode);
 bool work_mode_service_diagnostic_active(void);
 bool work_mode_service_diagnostic_ready(void);
 const char *work_mode_service_status_text(void);
@@ -48,7 +52,7 @@ enum {
 void work_mode_service_hold_operation(uint32_t owner, bool active);
 
 /* Sole 0x38 command owner. Normal UI requests change preference only on a
- * matching controller reply. Diagnostic mode rejects ordinary AUTO changes. */
+ * matching controller reply. A diagnostic requirement rejects ordinary user mode changes. */
 bool work_mode_service_request(uint8_t mode);
 /* Frame is already CRC checked by the protocol parser. Accepts only 6-byte
  * mode echoes or 7-byte 02+mode controller synchronization frames. */

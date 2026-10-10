@@ -42,12 +42,26 @@ bool work_mode_store_poll(work_mode_record_t *record, bool *load, bool *ok)
     io_pending = false;
     return true;
 }
+/* Production request timing with one deterministic pending-RX probe. */
+static bool queued_reply;
+static uint8_t queued_command;
+static uint64_t queued_received_ms;
+uint64_t app_clock_monotonic_ms(void) { return fake_now; }
+static bool pending_reply(uint8_t command, uint64_t started_ms, uint64_t deadline_ms)
+{
+    return queued_reply && queued_command == command &&
+        queued_received_ms >= started_ms && queued_received_ms < deadline_ms;
+}
+#include "un260/protocol/protocol_request.c"
 #include "un260/app_service/work_mode_service.c"
 
 static void reset(work_mode_record_t disk)
 {
     memset(&state, 0, sizeof(state));
     disk_record = disk;
+    protocol_request_result_context_end();
+    protocol_request_set_pending_reply_probe(pending_reply);
+    queued_reply = false; queued_command = 0; queued_received_ms = 0;
     fake_now = 100; sent = 0; confirmed = 99;
     tx_ok = io_ok = complete_io = true; io_pending = false;
     work_mode_service_init();
@@ -67,6 +81,17 @@ static bool ack(uint8_t mode)
 {
     uint8_t frame[] = {0xFD,0xDF,6,0x38,mode == WORK_MODE_AUTO ? 1 : 0,0};
     return work_mode_service_handle_reply(frame, sizeof(frame));
+}
+static bool ack_received(uint8_t mode, uint64_t received_ms)
+{
+    protocol_request_result_context_begin(received_ms);
+    bool accepted = ack(mode);
+    protocol_request_result_context_end();
+    return accepted;
+}
+static void queue_echo(uint64_t received_ms)
+{
+    queued_reply = true; queued_command = 0x38; queued_received_ms = received_ms;
 }
 static void begin_auto_diagnostic(void)
 {
@@ -105,16 +130,16 @@ static void test_ack_matching_timeout_retry(void)
 {
     reset((work_mode_record_t){0});sync_mode(WORK_MODE_AUTO);flush();
     work_mode_service_set_diagnostic(true);flush();
-    work_mode_service_poll(state.request_tick-1,false);
-    assert(state.failure==FAILURE_NONE&&state.request==REQUEST_MANUAL);
-    fake_now+=1550;poll(false);assert(state.request==REQUEST_MANUAL);
+    work_mode_service_poll(fake_now-1,false);
+    assert(state.failure==FAILURE_NONE&&state.request==REQUEST_TEMPORARY);
+    fake_now+=1550;poll(false);assert(state.request==REQUEST_TEMPORARY);
     assert(ack(WORK_MODE_MANUAL));flush();assert(work_mode_service_diagnostic_ready());
     reset((work_mode_record_t){0});sync_mode(WORK_MODE_AUTO);flush();
     work_mode_service_set_diagnostic(true);flush();fake_now+=REQUEST_TIMEOUT_MS+1;
     assert(ack(WORK_MODE_MANUAL));flush();assert(work_mode_service_diagnostic_ready());
     reset((work_mode_record_t){0}); sync_mode(WORK_MODE_AUTO); flush();
     work_mode_service_set_diagnostic(true); flush();
-    assert(!ack(WORK_MODE_AUTO) && state.request == REQUEST_MANUAL);
+    assert(!ack(WORK_MODE_AUTO) && state.request == REQUEST_TEMPORARY);
     fake_now += REQUEST_TIMEOUT_MS; poll(false);
     assert(state.failure == FAILURE_TIMEOUT && !state.actual_valid);
     assert(ack(WORK_MODE_MANUAL));poll(false);
@@ -326,8 +351,178 @@ static void test_reset_owns_mode_recovery(void)
     work_mode_service_set_reset_pending(false);flush();assert(sent==before+1);
     assert(ack(WORK_MODE_AUTO));flush();
 }
+static void test_uart_arrival_deadline(void)
+{
+    /* A USER echo is already in RX while UI work holds its dispatch. */
+    reset((work_mode_record_t){0}); sync_mode(WORK_MODE_AUTO); flush();
+    assert(work_mode_service_request(WORK_MODE_MANUAL));
+    uint64_t started = state.lifecycle.started_ms;
+    queue_echo(started + 20);
+    fake_now += REQUEST_TIMEOUT_MS + 200; poll(false);
+    assert(state.request == REQUEST_USER && state.failure == FAILURE_NONE);
+    queued_reply = false;
+    assert(ack_received(WORK_MODE_MANUAL, started + 20)); flush();
+    assert(confirmed == WORK_MODE_MANUAL && work_mode_service_take_user_confirmation());
+
+    /* Temporary MANUAL also waits for an echo that has already arrived. */
+    reset((work_mode_record_t){0}); sync_mode(WORK_MODE_AUTO); flush();
+    work_mode_service_set_diagnostic(true); flush();
+    started = state.lifecycle.started_ms;
+    queue_echo(started + 20);
+    fake_now += REQUEST_TIMEOUT_MS + 200; poll(false);
+    assert(state.request == REQUEST_TEMPORARY && state.failure == FAILURE_NONE);
+    queued_reply = false;
+    assert(ack_received(WORK_MODE_MANUAL, started + 20)); flush();
+    assert(work_mode_service_diagnostic_ready());
+
+    /* Leaving diagnostics must restore AUTO even if a timely echo is dispatched late. */
+    begin_auto_diagnostic(); work_mode_service_set_diagnostic(false); poll(false);
+    assert(state.request == REQUEST_RESTORE && sent == 2);
+    started = state.lifecycle.started_ms;
+    queue_echo(started + REQUEST_TIMEOUT_MS - 1);
+    fake_now += REQUEST_TIMEOUT_MS + 200; poll(false);
+    assert(state.request == REQUEST_RESTORE && state.failure == FAILURE_NONE);
+    assert(disk_record.restore_pending && confirmed == WORK_MODE_MANUAL);
+    queued_reply = false;
+    assert(ack_received(WORK_MODE_AUTO, started + REQUEST_TIMEOUT_MS - 1)); flush();
+    assert(confirmed == WORK_MODE_AUTO && !disk_record.restore_pending);
+    assert(!work_mode_service_take_user_confirmation());
+
+    /* A truly late RESTORE echo keeps the prior explicit-retry policy. */
+    begin_auto_diagnostic(); work_mode_service_set_diagnostic(false); poll(false);
+    started = state.lifecycle.started_ms;
+    queue_echo(started + REQUEST_TIMEOUT_MS);
+    fake_now += REQUEST_TIMEOUT_MS + 20; poll(false);
+    assert(state.failure == FAILURE_TIMEOUT && state.request == REQUEST_NONE);
+    queued_reply = false;
+    assert(!ack_received(WORK_MODE_AUTO, started + REQUEST_TIMEOUT_MS));
+    assert(disk_record.restore_pending);
+
+    /* A matching pre-request frame cannot postpone timeout or acknowledge a retry. */
+    reset((work_mode_record_t){0}); sync_mode(WORK_MODE_AUTO); flush();
+    assert(work_mode_service_request(WORK_MODE_MANUAL));
+    started = state.lifecycle.started_ms;
+    assert(!ack_received(WORK_MODE_MANUAL, started - 1));
+    assert(state.request == REQUEST_USER && confirmed == WORK_MODE_AUTO);
+    queue_echo(started - 1);
+    fake_now += REQUEST_TIMEOUT_MS; poll(false);
+    assert(state.failure == FAILURE_TIMEOUT);
+    queued_reply = false;
+    fake_now += LATE_REPLY_GUARD_MS; poll(false);
+    assert(work_mode_service_request(WORK_MODE_MANUAL));
+    assert(!ack_received(WORK_MODE_MANUAL, started + 20));
+    assert(state.request == REQUEST_USER && ack(WORK_MODE_MANUAL)); flush();
+
+    /* MANUAL retains late recovery, but even its recovery rejects an older echo. */
+    reset((work_mode_record_t){0}); sync_mode(WORK_MODE_AUTO); flush();
+    work_mode_service_set_diagnostic(true); flush();
+    started = state.lifecycle.started_ms;
+    assert(!ack_received(WORK_MODE_MANUAL, started - 1));
+    fake_now += REQUEST_TIMEOUT_MS; poll(false);
+    assert(state.failure == FAILURE_TIMEOUT && state.late_request);
+    assert(!ack_received(WORK_MODE_MANUAL, started - 1));
+    assert(ack_received(WORK_MODE_MANUAL, started + REQUEST_TIMEOUT_MS + 20)); flush();
+    assert(work_mode_service_diagnostic_ready());
+    puts("PASS mode RX timing: timely queued USER/RESTORE, late MANUAL recovery, true timeout and stale echoes");
+}
+static void begin_manual_auto_lease(void)
+{
+    reset((work_mode_record_t){0});assert(sync_mode(WORK_MODE_MANUAL));flush();
+    work_mode_service_set_diagnostic_mode(true,WORK_MODE_AUTO);flush();
+    assert(sent==1&&wire_sent[0]==1&&disk_record.restore_pending);
+    assert(disk_record.preferred==WORK_MODE_MANUAL&&!work_mode_service_diagnostic_ready());
+}
+static void test_automatic_diagnostic_requirement(void)
+{
+    begin_manual_auto_lease();assert(!ack(WORK_MODE_MANUAL));
+    assert(ack(WORK_MODE_AUTO));flush();assert(work_mode_service_diagnostic_ready());
+    assert(confirmed==WORK_MODE_AUTO&&disk_record.preferred==WORK_MODE_MANUAL);
+    assert(!work_mode_service_take_user_confirmation());
+    work_mode_service_set_diagnostic(false);poll(true);
+    assert(sent==1&&state.phase==WORK_MODE_WAITING_IDLE);poll(false);
+    assert(sent==2&&wire_sent[1]==0&&state.request==REQUEST_RESTORE);
+    assert(ack(WORK_MODE_MANUAL));flush();
+    assert(confirmed==WORK_MODE_MANUAL&&!disk_record.restore_pending&&disk_record.preferred==WORK_MODE_MANUAL);
+
+    reset((work_mode_record_t){0});assert(sync_mode(WORK_MODE_AUTO));flush();
+    work_mode_service_set_diagnostic_mode(true,WORK_MODE_AUTO);flush();
+    assert(sent==0&&work_mode_service_diagnostic_ready()&&!disk_record.restore_pending);
+    work_mode_service_set_diagnostic(false);flush();
+    assert(sent==0&&disk_record.preferred==WORK_MODE_AUTO&&!disk_record.restore_pending);
+
+    reset((work_mode_record_t){0});assert(sync_mode(WORK_MODE_MANUAL));flush();
+    complete_io=false;work_mode_service_set_diagnostic_mode(true,WORK_MODE_AUTO);flush();
+    assert(sent==0&&state.phase==WORK_MODE_SAVING);complete_io=true;poll(false);
+    assert(sent==1&&disk_record.restore_pending&&ack(WORK_MODE_AUTO));flush();
+    assert(work_mode_service_diagnostic_ready());
+}
+static void test_automatic_lease_navigation_convergence(void)
+{
+    begin_manual_auto_lease();work_mode_service_set_diagnostic(false);
+    assert(ack(WORK_MODE_AUTO));flush();
+    assert(sent==2&&wire_sent[1]==0&&ack(WORK_MODE_MANUAL));flush();
+    assert(!disk_record.restore_pending);
+
+    begin_manual_auto_lease();work_mode_service_set_diagnostic(true);
+    assert(ack(WORK_MODE_AUTO));flush();
+    assert(sent==2&&wire_sent[1]==0&&state.request==REQUEST_TEMPORARY);
+    assert(ack(WORK_MODE_MANUAL));flush();assert(work_mode_service_diagnostic_ready());
+    work_mode_service_set_diagnostic(false);flush();assert(sent==2&&!disk_record.restore_pending);
+
+    begin_manual_auto_lease();assert(ack(WORK_MODE_AUTO));flush();
+    work_mode_service_set_diagnostic(false);poll(false);
+    work_mode_service_set_diagnostic_mode(true,WORK_MODE_AUTO);
+    assert(ack(WORK_MODE_MANUAL));flush();assert(sent==3&&wire_sent[2]==1);
+    assert(ack(WORK_MODE_AUTO));flush();assert(work_mode_service_diagnostic_ready());
+    work_mode_service_set_diagnostic(false);flush();assert(sent==4&&ack(WORK_MODE_MANUAL));flush();
+    assert(!disk_record.restore_pending&&disk_record.preferred==WORK_MODE_MANUAL);
+}
+static void test_automatic_lease_failures_and_arrival(void)
+{
+    begin_manual_auto_lease();uint64_t started=state.lifecycle.started_ms;
+    queue_echo(started+20);fake_now=(uint32_t)started+REQUEST_TIMEOUT_MS+1;poll(false);
+    assert(state.request==REQUEST_TEMPORARY&&state.failure==FAILURE_NONE);
+    queued_reply=false;assert(!ack_received(WORK_MODE_AUTO,started-1));
+    assert(ack_received(WORK_MODE_AUTO,started+20));flush();assert(work_mode_service_diagnostic_ready());
+
+    begin_manual_auto_lease();fake_now+=REQUEST_TIMEOUT_MS;poll(false);
+    assert(state.failure==FAILURE_TIMEOUT&&!work_mode_service_diagnostic_ready());
+    assert(ack(WORK_MODE_AUTO));flush();assert(work_mode_service_diagnostic_ready());
+    work_mode_service_set_diagnostic(false);fake_now+=LATE_REPLY_GUARD_MS;
+    flush();assert(sent==2&&ack(WORK_MODE_MANUAL));flush();
+
+    begin_manual_auto_lease();work_mode_service_set_diagnostic(false);
+    fake_now+=REQUEST_TIMEOUT_MS;poll(false);
+    assert(sent==1&&state.guard_active&&work_mode_service_take_failure());
+    fake_now+=LATE_REPLY_GUARD_MS;flush();
+    assert(sent==2&&wire_sent[1]==0&&state.request==REQUEST_RESTORE);
+    assert(ack(WORK_MODE_MANUAL));flush();assert(!disk_record.restore_pending);
+
+    reset((work_mode_record_t){0});assert(sync_mode(WORK_MODE_AUTO));flush();
+    work_mode_service_set_diagnostic(true);flush();assert(sent==1&&wire_sent[0]==0);
+    work_mode_service_set_diagnostic(false);fake_now+=REQUEST_TIMEOUT_MS;poll(false);
+    assert(sent==1&&work_mode_service_take_failure());fake_now+=LATE_REPLY_GUARD_MS;flush();
+    assert(sent==2&&wire_sent[1]==1&&ack(WORK_MODE_AUTO));flush();
+    assert(!disk_record.restore_pending&&disk_record.preferred==WORK_MODE_AUTO);
+
+    begin_manual_auto_lease();work_mode_service_set_diagnostic(true);
+    fake_now+=REQUEST_TIMEOUT_MS;poll(false);assert(sent==1&&work_mode_service_take_failure());
+    fake_now+=LATE_REPLY_GUARD_MS;flush();assert(sent==2&&wire_sent[1]==0);
+    assert(ack(WORK_MODE_MANUAL));flush();assert(work_mode_service_diagnostic_ready());
+
+    reset((work_mode_record_t){0});assert(sync_mode(WORK_MODE_MANUAL));flush();tx_ok=false;
+    work_mode_service_set_diagnostic_mode(true,WORK_MODE_AUTO);flush();
+    assert(sent==0&&state.failure==FAILURE_SEND&&disk_record.restore_pending);
+    tx_ok=true;work_mode_service_retry();flush();assert(sent==1&&wire_sent[0]==1);
+    assert(ack(WORK_MODE_AUTO));flush();assert(work_mode_service_diagnostic_ready());
+    assert(disk_record.preferred==WORK_MODE_MANUAL);
+}
 int main(void)
 {
+    test_automatic_diagnostic_requirement();
+    test_automatic_lease_navigation_convergence();
+    test_automatic_lease_failures_and_arrival();
+    test_uart_arrival_deadline();
     test_reset_owns_mode_recovery();
     test_user_confirmation_event();
     test_confirmation_and_restore();

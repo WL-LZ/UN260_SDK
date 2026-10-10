@@ -7,6 +7,7 @@
 
 #include <string.h>
 #include "un260/font/boot_fonts.h"
+#include "boot_welcome_locale.h"
 #include "boot_welcome_timing.h"
 #include "boot_d_motion.h"
 #include "un260/lv_core/lv_page_manager.h"
@@ -163,12 +164,7 @@ void ui_page_00_boot_anim_set_startup_ready(bool ready)
     if (!g_intro.root || g_intro.failed) return;
     g_intro.managed = true;
     g_intro.startup_ready = ready;
-    if(ready && g_intro.welcome) {
-        bool english=ui_lang_get()==LANGUAGE_EN;
-        lv_obj_set_style_text_font(g_intro.welcome,english?&lv_font_boot_welcome_compact:
-            ui_message_font_sized(&lv_font_open_runde_medium_40,36),0);
-        lv_label_set_text(g_intro.welcome,english?BOOT_WELCOME_TEXT:ui_tr("Welcome"));
-    }
+    /* Keep the welcome selected at creation; errors remain localized below. */
 }
 
 static void startup_diagnostics(lv_event_t *event)
@@ -235,6 +231,9 @@ static void timer_cb(lv_timer_t *timer)
     if (g_intro.selftest_covered && !g_intro.selftest_prepared && g_intro.first_drawn && quiet) {
         if (ui_page_08_curr_prepare_step()) {
             g_intro.selftest_prepared = true;
+        } else if (ui_page_08_curr_prepare_failed()) {
+            ui_page_00_boot_anim_set_startup_error(false);
+            return;
         }
     }
     if (g_intro.managed && g_intro.startup_ready && !g_intro.revealing &&
@@ -258,7 +257,7 @@ static lv_obj_t *label(lv_obj_t *parent, const char *text,
     lv_obj_remove_style_all(obj);
     lv_obj_set_pos(obj, 390, BOOT_TEXT_Y);
     lv_obj_set_width(obj, 500);
-    lv_obj_set_style_text_font(obj,font==&lv_font_open_runde_medium_40?ui_message_font_sized(font,36):ui_message_font(font), 0);
+    lv_obj_set_style_text_font(obj,font==&lv_font_boot_welcome_compact?font:(font==&lv_font_open_runde_medium_40?ui_message_font_sized(font,36):ui_message_font(font)), 0);
     lv_obj_set_style_text_color(obj, lv_color_hex(0x526D82), 0);
     lv_obj_set_style_text_align(obj, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_letter_space(obj, spacing, 0);
@@ -306,9 +305,10 @@ void ui_page_00_boot_anim_create(lv_obj_t *parent)
     if (!g_intro.icon_ready) lv_obj_add_flag(g_intro.icon, LV_OBJ_FLAG_HIDDEN);
 
     g_intro.brand = label(g_intro.root, "UN260", &lv_font_open_runde_medium_48, 1);
-    bool english = ui_lang_get() == LANGUAGE_EN;
-    g_intro.welcome = label(g_intro.root, english ? BOOT_WELCOME_TEXT : ui_tr("Welcome"),
-                            english ? &lv_font_boot_welcome_compact : &lv_font_open_runde_medium_40, 0);
+    unsigned welcome_index=boot_welcome_initial_index(ui_lang_get());
+    g_intro.welcome = label(g_intro.root, boot_welcome_texts[welcome_index],
+                            &lv_font_boot_welcome_compact, 0);
+    if(g_intro.welcome)lv_obj_set_style_base_dir(g_intro.welcome,LV_BASE_DIR_LTR,0);
     if (!g_intro.brand || !g_intro.welcome) { create_failed(); return; }
     for (unsigned i = 0; i < 3; ++i) {
         g_intro.dots[i] = lv_obj_create(g_intro.root);

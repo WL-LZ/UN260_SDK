@@ -8,6 +8,7 @@
 void ui_page_28_get_image_create(lv_obj_t* parent);
 void ui_page_28_get_image_destroy(void);
 void ui_page_28_get_image_on_frame(const uint8_t* data, uint16_t len);
+bool ui_page_28_get_image_is_capturing(void);
 bool ui_page_28_get_image_poll(uint32_t now_ms);
 
 #endif

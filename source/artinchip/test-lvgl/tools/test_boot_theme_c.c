@@ -8,6 +8,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include "lvgl/lvgl.h"
+#include "un260/lv_system/ui_lang.h"
+const lv_font_t *ui_message_font(const lv_font_t *f){return f;}
+const lv_font_t *ui_message_font_sized(const lv_font_t *f,unsigned pixels){(void)pixels;return f;}
+const char *ui_tr(const char *s){return s;}
+language_t ui_lang_get(void){return LANGUAGE_EN;}
+uint32_t ui_lang_generation(void){return 1;}
+
 #include "un260/lv_core/lv_page_manager.h"
 #include "boot_theme_c_assets.h"
 #include "un260/lv_core/boot_anim/page_00_boot_anim_theme_c.c"

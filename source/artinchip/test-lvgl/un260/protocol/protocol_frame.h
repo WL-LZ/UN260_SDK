@@ -12,6 +12,10 @@
 #define PROTOCOL_FRAME_OVERHEAD        5
 #define PROTOCOL_FRAME_MIN_SIZE        PROTOCOL_FRAME_OVERHEAD
 #define PROTOCOL_FRAME_MAX_SIZE        0xFF
+/* TX retains its one-byte length limit. Only controller 0x47 data blocks use
+ * the low length byte of a larger RX frame. RX capacity includes compatibility
+ * headroom; the image header/layout helpers determine the accepted block size. */
+#define PROTOCOL_FRAME_RX_MAX_SIZE     776U
 #define PROTOCOL_FRAME_MAX_PAYLOAD     \
     (PROTOCOL_FRAME_MAX_SIZE - PROTOCOL_FRAME_OVERHEAD)
 
@@ -21,6 +25,8 @@ int protocol_frame_build(uint8_t *output, size_t output_capacity, uint8_t cmd, c
  * Validate the common receive-frame structure only. The local command
  * builder appends PROTOCOL_FRAME_TRAILER, but controller replies are framed
  * by their declared length and do not guarantee that value in the final byte.
+ * Large RX frames are restricted to 0x47 source-data packets; the parser
+ * additionally requires a matching valid image header before extending LEN.
  */
 bool protocol_frame_is_valid(const uint8_t *data, size_t len);
 

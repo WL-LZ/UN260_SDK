@@ -1,4 +1,5 @@
 #include "protocol_frame.h"
+#include "stream_data_reply.h"
 
 #include <string.h>
 
@@ -33,14 +34,17 @@ int protocol_frame_build(uint8_t *output, size_t output_capacity, uint8_t cmd, c
 bool protocol_frame_is_valid(const uint8_t *data, size_t len)
 {
     if (data == NULL || len < PROTOCOL_FRAME_MIN_SIZE ||
-        len > PROTOCOL_FRAME_MAX_SIZE) {
+        len > PROTOCOL_FRAME_RX_MAX_SIZE) {
         return false;
     }
     if (data[0] != PROTOCOL_FRAME_HEADER_FIRST ||
         data[1] != PROTOCOL_FRAME_HEADER_SECOND) {
         return false;
     }
-    return (size_t)data[2] == len;
+    if (len > PROTOCOL_FRAME_MAX_SIZE &&
+        (data[3] != 0x47 || data[4] == 0 ||
+         data[4] > IMAGE_DATA_REPLY_SOURCE_COUNT)) return false;
+    return data[2] == (uint8_t)len;
 }
 
 size_t protocol_frame_format_hex(const uint8_t *data, size_t len, char *output, size_t output_size)

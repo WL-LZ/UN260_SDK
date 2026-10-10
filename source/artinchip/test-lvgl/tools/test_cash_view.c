@@ -103,6 +103,49 @@ static void cached_pin_locales(void){
  lv_pin_keypad_destroy(&pin);
 }
 
+
+#include "un260/font/boot_fonts.h"
+#include "un260/lv_core/boot_anim/boot_welcome_locale.h"
+#include "un260/font/boot_welcome_native.h"
+static lv_obj_t *welcome_label(lv_obj_t *p,const char *text){
+ if(lv_obj_check_type(p,&lv_label_class)&&!strcmp(lv_label_get_text(p),text))return p;
+ for(unsigned i=0;i<lv_obj_get_child_cnt(p);++i){lv_obj_t *o=welcome_label(lv_obj_get_child(p,i),text);if(o)return o;}return NULL;
+}
+static void handwritten_welcome_locales(void){
+ ui_page_t previous=current;current=UI_PAGE_BOOT;
+ uint8_t native[500*128*4];
+ for(unsigned i=0;i<BOOT_WELCOME_COUNT;++i){
+  assert(ui_lang_prepare_resources(boot_welcome_ids[i]));ui_lang_set(boot_welcome_ids[i]);
+  lv_font_glyph_dsc_t d={0};
+  assert(lv_font_get_glyph_dsc(&lv_font_boot_welcome_compact,&d,0xe000+i,0));
+  assert(d.resolved_font==&lv_font_boot_welcome_compact&&d.box_w<=430&&d.box_h<=92);
+  const uint8_t *bits=lv_font_get_glyph_bitmap(&lv_font_boot_welcome_compact,0xe000+i);
+  assert(bits);boot_welcome_native_apply(native,i);
+  unsigned top=128-d.box_h-d.ofs_y,left=(500-d.box_w)/2;
+  for(unsigned y=0;y<128;++y)for(unsigned x=0;x<500;++x){
+   unsigned alpha=0;
+   if(x>=left&&x<left+d.box_w&&y>=top&&y<top+d.box_h){
+    unsigned n=(y-top)*d.box_w+x-left;alpha=((n&1)?bits[n/2]&15:bits[n/2]>>4)*17;
+   }
+   assert(native[(y*500+x)*4+3]==alpha);
+  }
+  ui_page_08_curr_create(lv_scr_act());ui_page_00_boot_anim_create(lv_layer_top());
+  ui_page_00_boot_anim_set_startup_ready(false);ui_page_00_boot_anim_adopt_elapsed(4300);tick(40);
+  lv_obj_t *word=welcome_label(lv_layer_top(),boot_welcome_texts[i]);assert(word);
+  assert(lv_obj_get_style_text_font(word,0)==&lv_font_boot_welcome_compact);
+  assert(lv_obj_get_x(word)==390&&lv_obj_get_y(word)==141);
+  assert(lv_obj_get_style_base_dir(word,0)==LV_BASE_DIR_LTR);
+  char file[64];snprintf(file,sizeof(file),"handwritten-welcome-%s",boot_welcome_tags[i]);raster(file);
+  /* Preferences completion must not replace a visible word or reset opacity. */
+  ui_lang_set(LANGUAGE_EN);ui_page_00_boot_anim_set_startup_ready(true);tick(40);
+  assert(welcome_label(lv_layer_top(),boot_welcome_texts[i])==word);
+  assert(lv_obj_get_style_text_opa(word,0)==LV_OPA_COVER);
+  ui_page_00_boot_anim_destroy();ui_page_08_curr_destroy();
+ }
+ ui_lang_set(LANGUAGE_EN);current=previous;
+ puts("PASS ten handwritten welcomes: native/LVGL alpha identity, bounds, direction, snapshot and lifecycle");
+}
+
 static void early_boot_locales(void){
  ui_page_t previous=current;current=UI_PAGE_BOOT;
  for(size_t i=0;i<ui_lang_count();++i){
@@ -136,6 +179,7 @@ int main(void){
  lv_indev_drv_t in;lv_indev_drv_init(&in);in.type=LV_INDEV_TYPE_POINTER;in.read_cb=read_pointer;assert(lv_indev_drv_register(&in));
  lv_img_decoder_t *decoder=lv_img_decoder_create();lv_img_decoder_set_info_cb(decoder,cash_asset_info);lv_img_decoder_set_open_cb(decoder,cash_asset_open);lv_img_decoder_set_close_cb(decoder,asset_close);
  cached_pin_locales();
+ handwritten_welcome_locales();
  early_boot_locales();
  current=UI_PAGE_CALCULATOR;ui_calculator_create(lv_scr_act());tick(250);cash_click("1");cash_click("2");cash_click("+");cash_click("3");cash_click("=");assert(find(lv_scr_act(),"15"));check_single_line(lv_scr_act());raster("cash-calculator");
  cash_click("Exchange rate");cash_click("Import count");assert(find(lv_scr_act(),"1680.00"));check_single_line(lv_scr_act());raster("cash-fx");ui_calculator_destroy();tick(300);

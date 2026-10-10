@@ -12,6 +12,7 @@ delta=importlib.util.module_from_spec(spec);spec.loader.exec_module(delta)
 unpack=work/'unpack'
 subprocess.run(['cc','-O2','-Wall','-Wextra',str(root/'source/artinchip/test-lvgl/tools/un260_unpack.c'),'-lz','-o',str(unpack)],check=True)
 updater=root/'target/d211/d213_devkitf/rootfs_overlay/usr/bin/ui_update.sh'
+shell=['busybox','sh'] if os.environ.get('TEST_BUSYBOX')=='1' else ['sh']
 def archive(path,files,extra=None):
     checks=''.join(f'{hashlib.sha256(d).hexdigest()}  payload/{p}\n' for p,(d,m) in sorted(files.items())).encode()
     meta=f'format=UN260_UPGRADE\nschema=1\nproduct=UN260\nversion=test\npackage_id={hashlib.sha256(checks).hexdigest()}\n'.encode()
@@ -43,6 +44,7 @@ set -eu
 UN260_UPDATER_LIBRARY_ONLY=1
 . '{updater}'
 ROOT_PREFIX='{dev}'
+SYNC_TOOL=$ROOT_PREFIX/usr/local/bin/un260_storage_sync
 USB_MNT='{usb}'
 UPDATE_DIR=$USB_MNT/update
 BUNDLE_PATH=$UPDATE_DIR/UN260_UPDATE.upk
@@ -72,7 +74,7 @@ if (install_bundle); then exit 2; fi
 unset -f rm
 recover_transaction
 ''' if crash else 'install_bundle\n'))
-    r=subprocess.run(['sh',str(runner)],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+    r=subprocess.run(shell+[str(runner)],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=30)
     (case/'output.log').write_text(r.stdout)
     assert (r.returncode==0)==ok,(name,r.stdout,(usb/'log').read_text())
     expected=initial if crash or not ok else target

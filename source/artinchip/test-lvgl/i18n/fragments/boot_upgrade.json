@@ -1,0 +1,72 @@
+{
+  "en": {
+    "Invalid or incomplete boot bundle publication": "Invalid or incomplete boot bundle publication",
+    "Cannot prepare complete boot bundle publication": "Cannot prepare complete boot bundle publication",
+    "Committed boot publication requires recovery": "Committed boot publication requires recovery",
+    "Package would downgrade boot bundle recovery": "Package would downgrade boot bundle recovery",
+    "Boot package requires matching factory firmware": "Boot package requires matching factory firmware"
+  },
+  "zh-Hans": {
+    "Invalid or incomplete boot bundle publication": "启动包无效或不完整",
+    "Cannot prepare complete boot bundle publication": "无法准备完整启动包",
+    "Committed boot publication requires recovery": "已提交的启动包需要恢复",
+    "Package would downgrade boot bundle recovery": "此升级包会降级启动恢复机制",
+    "Boot package requires matching factory firmware": "此启动包需要匹配的整机固件"
+  },
+  "ko": {
+    "Invalid or incomplete boot bundle publication": "시작 패키지가 잘못되었거나 불완전합니다",
+    "Cannot prepare complete boot bundle publication": "완전한 시작 패키지를 준비할 수 없습니다",
+    "Committed boot publication requires recovery": "적용된 시작 패키지를 복구해야 합니다",
+    "Package would downgrade boot bundle recovery": "이 패키지는 시작 복구 기능을 이전 버전으로 변경합니다",
+    "Boot package requires matching factory firmware": "이 시작 패키지에는 호환되는 공장 펌웨어가 필요합니다"
+  },
+  "ja": {
+    "Invalid or incomplete boot bundle publication": "起動パッケージが無効または不完全です",
+    "Cannot prepare complete boot bundle publication": "完全な起動パッケージを準備できません",
+    "Committed boot publication requires recovery": "適用済みの起動パッケージに復旧が必要です",
+    "Package would downgrade boot bundle recovery": "このパッケージは起動復旧機能を旧版に戻します",
+    "Boot package requires matching factory firmware": "この起動パッケージには対応する工場ファームウェアが必要です"
+  },
+  "ar": {
+    "Invalid or incomplete boot bundle publication": "حزمة بدء التشغيل غير صالحة أو غير مكتملة",
+    "Cannot prepare complete boot bundle publication": "تعذر تجهيز حزمة بدء التشغيل كاملة",
+    "Committed boot publication requires recovery": "تحتاج حزمة بدء التشغيل المعتمدة إلى الاستعادة",
+    "Package would downgrade boot bundle recovery": "سترجع هذه الحزمة آلية استعادة بدء التشغيل إلى إصدار أقدم",
+    "Boot package requires matching factory firmware": "تتطلب حزمة بدء التشغيل هذه برنامجاً ثابتاً متوافقاً من المصنع"
+  },
+  "de": {
+    "Invalid or incomplete boot bundle publication": "Startpaket ungültig oder unvollständig",
+    "Cannot prepare complete boot bundle publication": "Vollständiges Startpaket kann nicht vorbereitet werden",
+    "Committed boot publication requires recovery": "Das bestätigte Startpaket muss wiederhergestellt werden",
+    "Package would downgrade boot bundle recovery": "Dieses Paket würde die Startwiederherstellung auf eine ältere Version zurücksetzen",
+    "Boot package requires matching factory firmware": "Dieses Startpaket benötigt passende Werksfirmware"
+  },
+  "fr": {
+    "Invalid or incomplete boot bundle publication": "Paquet de démarrage invalide ou incomplet",
+    "Cannot prepare complete boot bundle publication": "Impossible de préparer le paquet de démarrage complet",
+    "Committed boot publication requires recovery": "Le paquet de démarrage validé doit être restauré",
+    "Package would downgrade boot bundle recovery": "Ce paquet réduirait la version du mécanisme de récupération au démarrage",
+    "Boot package requires matching factory firmware": "Ce paquet de démarrage nécessite un micrologiciel d’usine compatible"
+  },
+  "pl": {
+    "Invalid or incomplete boot bundle publication": "Nieprawidłowy lub niepełny pakiet startowy",
+    "Cannot prepare complete boot bundle publication": "Nie można przygotować pełnego pakietu startowego",
+    "Committed boot publication requires recovery": "Zatwierdzony pakiet startowy wymaga odzyskania",
+    "Package would downgrade boot bundle recovery": "Ten pakiet obniżyłby wersję mechanizmu odzyskiwania przy uruchamianiu",
+    "Boot package requires matching factory firmware": "Ten pakiet startowy wymaga zgodnego oprogramowania fabrycznego"
+  },
+  "ru": {
+    "Invalid or incomplete boot bundle publication": "Пакет запуска недействителен или неполон",
+    "Cannot prepare complete boot bundle publication": "Не удалось подготовить полный пакет запуска",
+    "Committed boot publication requires recovery": "Подтверждённый пакет запуска требует восстановления",
+    "Package would downgrade boot bundle recovery": "Этот пакет понизит версию механизма восстановления запуска",
+    "Boot package requires matching factory firmware": "Для этого пакета запуска нужна совместимая заводская прошивка"
+  },
+  "tr": {
+    "Invalid or incomplete boot bundle publication": "Önyükleme paketi geçersiz veya eksik",
+    "Cannot prepare complete boot bundle publication": "Tam önyükleme paketi hazırlanamadı",
+    "Committed boot publication requires recovery": "Onaylanan önyükleme paketinin kurtarılması gerekiyor",
+    "Package would downgrade boot bundle recovery": "Bu paket önyükleme kurtarma mekanizmasını eski sürüme düşürür",
+    "Boot package requires matching factory firmware": "Bu önyükleme paketi uyumlu fabrika yazılımı gerektirir"
+  }
+}

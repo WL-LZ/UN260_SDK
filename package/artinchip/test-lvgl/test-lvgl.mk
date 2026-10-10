@@ -23,3 +23,9 @@ endef
 TEST_LVGL_POST_INSTALL_TARGET_HOOKS += TEST_LVGL_POST_TARGET_INSTALL
 
 $(eval $(cmake-package))
+
+# Enter CMake's incremental dependency check on every normal make. This also
+# orders the SDK source check before compiling and reinstalling the app.
+.PHONY: un260-test-lvgl-fresh
+un260-test-lvgl-fresh: $(HIDDEN_PREFIX)-test-lvgl-check-update
+$(TEST_LVGL_TARGET_BUILD): un260-test-lvgl-fresh

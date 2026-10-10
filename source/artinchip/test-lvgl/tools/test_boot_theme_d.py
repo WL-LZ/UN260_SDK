@@ -9,4 +9,5 @@ s=s.replace('metadata = write_assets(root, work)', '''metadata = write_assets(ro
         with Image.open(root / "aic_ui/lvgl_data/backgrounds/boot.png") as ready:
             (work / "boot.bgra").write_bytes(ready.convert("RGBA").tobytes("raw", "BGRA"))''')
 s=s.replace('"-DUI_BOOT_ANIM_THEME=3"','"-DUI_BOOT_ANIM_THEME=4"')
+s=s.replace('"-Wl,--wrap=lv_timer_create"', '"-Wl,--wrap=lv_timer_create", "-Wl,--wrap=lv_obj_create"')
 exec(compile(s,str(Path(__file__)), 'exec'))

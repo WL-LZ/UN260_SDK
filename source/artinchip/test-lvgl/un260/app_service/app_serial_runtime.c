@@ -1,4 +1,5 @@
 #include "app_serial_runtime.h"
+#include "app_command_runtime.h"
 #include "runtime_guard.h"
 
 #include <stdio.h>
@@ -9,6 +10,7 @@
 #include "un260/protocol/protocol_frame_queue.h"
 #include "un260/protocol/protocol_rx_service.h"
 #include "un260/protocol/protocol_send.h"
+#include "un260/protocol/protocol_request.h"
 
 #define APP_UART_CONTROLLER_DEVICE "/dev/ttyS4"
 #define APP_UART_BRIDGE_DEVICE     "/dev/ttyS5"
@@ -23,6 +25,17 @@ static int fd6 = -1;
 
 static bool g_rx_started;
 static bool g_bridge_started;
+
+static bool app_serial_runtime_reply_pending(uint8_t command,
+                                              uint64_t started_ms,
+                                              uint64_t deadline_ms)
+{
+    /* UI may retain a reply after dequeuing it for history preflight. RX
+     * publishes before queueing; observe every owner without reordering. */
+    return app_command_runtime_has_command_between(command, started_ms, deadline_ms) ||
+           protocol_rx_service_has_command_between(command, started_ms, deadline_ms) ||
+           protocol_frame_queue_has_command_between(command, started_ms, deadline_ms);
+}
 
 bool protocol_send_is_ready(void)
 {
@@ -97,6 +110,7 @@ bool app_serial_runtime_start(void)
     uart_debug_set_fd(fd6);
 
     protocol_frame_queue_clear();
+    protocol_request_set_pending_reply_probe(app_serial_runtime_reply_pending);
     if (!protocol_rx_service_start(fd4, fd6)) {
         printf("UART4接收服务启动失败\n");
         app_serial_runtime_stop();
@@ -125,6 +139,7 @@ void app_serial_runtime_stop(void)
         protocol_rx_service_stop();
         g_rx_started = false;
     }
+    protocol_request_set_pending_reply_probe(NULL);
     protocol_frame_queue_clear();
     app_serial_runtime_close_devices();
 }

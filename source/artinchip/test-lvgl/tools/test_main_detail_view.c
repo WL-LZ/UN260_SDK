@@ -9,6 +9,8 @@
 /* Inspect actual private projection, without firmware test accessors. */
 #include "un260/lv_core/page_01_main_detail.c"
 
+/* History durability is unrelated to this view-only fixture. */
+void counting_history_current_invalidate(void) {}
 static unsigned navigations;
 static bool auto_selected;
 bool currency_state_auto_selected(void) { return auto_selected; }
@@ -302,6 +304,34 @@ static void test_lifecycle(void)
     assert(after.free_size == before.free_size);
 }
 
+
+static void test_reject_live_projection(void)
+{
+    counting_sim_t *data=counting_data_mutable();
+    counting_data_clear_errors(data);
+    assert(counting_data_ensure_error_capacity(data,2));
+    data->err_num=1;data->err_code[0]=0x1C;data->err_pcs[0]=1;
+    page_01_main_detail_refresh(PAGE_01_DETAIL_SECTION_C);render();
+    assert(window()->count==1&&!strcmp(cell(0,1),"1"));
+    /* Cardinality stays one: the same reason's cumulative PCS must redraw. */
+    data->err_pcs[0]=2;page_01_main_detail_refresh(PAGE_01_DETAIL_SECTION_C);render();
+    assert(window()->count==1&&!strcmp(cell(0,1),"2"));
+    page_01_main_detail_set_visible(false);data->err_pcs[0]=3;
+    page_01_main_detail_refresh(PAGE_01_DETAIL_SECTION_C);
+    assert(detail_view->section[PAGE_01_DETAIL_SECTION_C].dirty);
+    page_01_main_detail_set_visible(true);render();
+    assert(window()->count==1&&!strcmp(cell(0,1),"3"));
+    page_01_main_detail_refresh(PAGE_01_DETAIL_SECTION_A);
+    data->err_pcs[0]=4;page_01_main_detail_refresh(PAGE_01_DETAIL_SECTION_C);render();
+    assert(window()->count==1&&!strcmp(cell(0,1),"4"));
+    data->err_num=2;data->err_code[1]=0x15;data->err_pcs[1]=1;
+    page_01_main_detail_refresh(PAGE_01_DETAIL_SECTION_C);render();
+    assert(window()->count==2&&!strcmp(cell(1,1),"1"));
+    counting_data_clear_errors(data);page_01_main_detail_refresh(PAGE_01_DETAIL_SECTION_C);render();
+    assert(window()->count==0&&lv_obj_is_visible(active()->empty));
+    puts("PASS real Main C projection: unchanged row count redraws 1/2/3 PCS, hidden dirty/resume, tab switch, multiple reasons and fresh empty state");
+}
+
 int main(void)
 {
     assert(sizeof(lv_coord_t) == 2);
@@ -332,6 +362,7 @@ int main(void)
     data->total_pcs=0; auto_selected=false;
     page_01_main_detail_refresh(PAGE_01_DETAIL_SECTION_A);
     assert(window()->count>0);
+    test_reject_live_projection();
     lv_obj_del(parent);
     counting_data_clear_serials(counting_data_mutable());
     counting_data_clear_errors(counting_data_mutable());

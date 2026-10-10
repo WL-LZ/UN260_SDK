@@ -20,6 +20,21 @@ LAUNCHER = b'#!/bin/sh\nexec /usr/local/bin/un260_app_storage --launch "$@"\n'
 APP = 'usr/local/bin/test_lvgl'
 STATE = 'etc/un260/app-storage'
 APP_IMAGE = 'un260_app_page_2k_block_128k.ubifs'
+APP_QUALIFIED_VOLUME_BYTES = 31 * 1024 * 1024
+APP_REPLACEMENT_RESERVE_BYTES = 4 * 1024 * 1024
+APP_RETAINED_GENERATIONS = 2
+APP_RELEASE_MAX_BYTES = (APP_QUALIFIED_VOLUME_BYTES - APP_REPLACEMENT_RESERVE_BYTES) // APP_RETAINED_GENERATIONS
+LEGACY_TEST_APP_MAX_BYTES = 16 * 1024 * 1024
+
+
+def validate_app_size(size, legacy_test=False):
+    """One safety bound for factory enrollment and normal full publication."""
+    maximum = LEGACY_TEST_APP_MAX_BYTES if legacy_test else APP_RELEASE_MAX_BYTES
+    if not 0 < size <= maximum:
+        profile = 'legacy-test' if legacy_test else 'factory V1'
+        raise ValueError('App leaves insufficient uncompressed replacement headroom: '
+                         '%d bytes exceeds %s budget %d bytes' % (size, profile, maximum))
+    return maximum
 
 def regular(path):
     if path.is_symlink() or any(p.is_symlink() for p in path.parents) or not path.is_file():
@@ -37,8 +52,7 @@ def enroll(root, base, appdir, release):
     app = regular(base / APP)
     if not app.startswith(b'\x7fELF') or regular(root / APP) != app:
         raise ValueError('Factory app is not the matching built ELF')
-    if len(app) * 2 + 4 * 1024 * 1024 > 31 * 1024 * 1024:
-        raise ValueError('App leaves insufficient uncompressed replacement headroom')
+    validate_app_size(len(app))
     for forbidden in (STATE, 'etc/un260/unified-request', 'var/lib/un260-updater', 'etc/ui_state'):
         if (root / forbidden).exists() or (root / forbidden).is_symlink():
             raise ValueError('Factory copy contains runtime/customer state: ' + forbidden)
@@ -58,8 +72,16 @@ def enroll(root, base, appdir, release):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--root', type=Path, required=True)
+    action = parser.add_mutually_exclusive_group(required=True)
+    action.add_argument('--root', type=Path)
+    action.add_argument('--check-app-size', type=int)
+    parser.add_argument('--legacy-test', action='store_true', help='Explicit old-base test budget; not factory publication')
     args = parser.parse_args()
+    if args.check_app_size is not None:
+        print(validate_app_size(args.check_app_size, args.legacy_test))
+        return
+    if args.legacy_test:
+        parser.error('--legacy-test applies only to --check-app-size')
     sdk = Path(__file__).resolve().parents[2]
     output = sdk / 'output/d211_d213_devkitf'
     root = args.root.absolute()

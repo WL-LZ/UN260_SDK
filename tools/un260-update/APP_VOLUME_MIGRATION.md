@@ -1,3 +1,5 @@
+历史方案记录。当前正式 V1 基座与单个全量 UPK 流程以 README.md、FACTORY_FLEET.md 为准；下文旧迁移入口和预算不作为日常发布指引。
+
 # Application volume v1
 
 ## Ownership

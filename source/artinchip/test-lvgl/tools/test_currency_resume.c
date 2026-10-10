@@ -1,4 +1,5 @@
 #include <assert.h>
+#include "un260/lv_system/ui_i18n.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>

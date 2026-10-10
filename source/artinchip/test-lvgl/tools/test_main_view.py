@@ -37,6 +37,7 @@ def main():
     parser.add_argument("--skin-fallback", action="store_true", help="Exercise cache allocation failure")
     parser.add_argument("--layout-default-disabled", action="store_true")
     parser.add_argument("--harness", type=Path, help="Optional focused harness using the same real LVGL build")
+    parser.add_argument("--timeout", type=float, default=60, help="Runtime limit for a larger focused harness (seconds)")
     parser.add_argument("--extra-source", action="append", default=[], type=Path)
     parser.add_argument("--wrap", action="append", default=[], help="Linker-wrapped function for fault injection")
     args = parser.parse_args()
@@ -151,6 +152,12 @@ void host_external_assets_release(void) {
         (work / "lvgl/src/misc").mkdir(parents=True)
         (work / "lvgl/lvgl.h").write_text(f'#include "{(lvgl / "lvgl.h").as_posix()}"\n')
         (work / "lvgl/src/misc/lv_txt.h").write_text(f'#include "{(lvgl / "src/misc/lv_txt.h").as_posix()}"\n')
+        (work / "lvgl/src/misc/lv_txt_ap.h").write_text(f'#include "{(lvgl / "src/misc/lv_txt_ap.h").as_posix()}"\n')
+        if args.harness and args.harness.name == "test_fault_recovery_integration.c":
+            from test_currency_modes import function as fault_function
+            (work / "fault_standby_under_test.inc").write_text(
+                fault_function((ROOT / "un260/app_service/app_standby_runtime.c").read_text(),
+                         "standby_operation_blocker"), encoding="utf-8")
         conf = work / "lv_conf.h"
         conf.write_text("""#ifndef LV_CONF_H
 #define LV_CONF_H
@@ -234,7 +241,7 @@ const gesture_definition_t *gesture_service_definition(size_t index) {
         if args.output_dir:
             args.output_dir.mkdir(parents=True, exist_ok=True)
             environment["MAIN_RASTER_OUTPUT"] = str(args.output_dir.resolve())
-        subprocess.run([str(executable)], env=environment, check=True, timeout=60)
+        subprocess.run([str(executable)], env=environment, check=True, timeout=args.timeout)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,52 @@
+[
+  {
+    "file": "MaShanZheng-Regular.ttf",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/mashanzheng/MaShanZheng-Regular.ttf",
+    "sha256": "6d2546bb189c732a8ca29af9e22457b152387d158aa459e4ac2ce1e51788b7fb"
+  },
+  {
+    "file": "mashanzheng-OFL.txt",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/mashanzheng/OFL.txt",
+    "sha256": "d7bdb1cee215b689e23c2f95672a6084c790542170648267a55114103d756a08"
+  },
+  {
+    "file": "Yomogi-Regular.ttf",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/yomogi/Yomogi-Regular.ttf",
+    "sha256": "ec280f473a03187292905618f24fdb08a6dcbf8620b52637e3b589fe745259b9"
+  },
+  {
+    "file": "yomogi-OFL.txt",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/yomogi/OFL.txt",
+    "sha256": "bc0330d5973ab1f200553f51b4cb4ef11b81187fdcd0249f7f83992726c02a48"
+  },
+  {
+    "file": "NanumPenScript-Regular.ttf",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/nanumpenscript/NanumPenScript-Regular.ttf",
+    "sha256": "6f0d1ab29c7894010dc88831fb7a0a51edb79136e450344183de5b1a8b52bd43"
+  },
+  {
+    "file": "nanumpenscript-OFL.txt",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/nanumpenscript/OFL.txt",
+    "sha256": "eeacf16032901d0ed0456876ec77b8f0fda6b3fecec7d972f8543eb602e6c30f"
+  },
+  {
+    "file": "ArefRuqaa-Regular.ttf",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/arefruqaa/ArefRuqaa-Regular.ttf",
+    "sha256": "ceb786d83ba92f35e96efcd8623c2858d288e0c543c8761ba35b1020989464f9"
+  },
+  {
+    "file": "arefruqaa-OFL.txt",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/arefruqaa/OFL.txt",
+    "sha256": "41ac14451a624c69490e24b9aaaaa1f65dc9dc17c3f6f38172fc43d5ba654a1b"
+  },
+  {
+    "file": "Caveat[wght].ttf",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/caveat/Caveat%5Bwght%5D.ttf",
+    "sha256": "0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988"
+  },
+  {
+    "file": "caveat-OFL.txt",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/caveat/OFL.txt",
+    "sha256": "1f9d81d094273d82f3898a1ee8b598a717d050ecbf5ff7bede105b704880157b"
+  }
+]

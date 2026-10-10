@@ -115,7 +115,7 @@ typedef struct {
     bool reboot_reserved;
     bool reboot_clear_sent;
     uint32_t reboot_prepare_started_ms;
-    char result_text[128];
+    char result_text[UI_UPGRADE_RESULT_TEXT_CAPACITY];
     bool prompt_hiding;
     bool hide_to_prompt;
 } upgrade_popup_ctx_t;

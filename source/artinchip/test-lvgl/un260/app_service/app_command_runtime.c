@@ -35,6 +35,8 @@
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/page_01_main.h"
 #include "un260/lv_core/page_10_debug.h"
+#include "un260/lv_core/page_28_get_image.h"
+#include "un260/lv_core/page_31_get_wave.h"
 #include "un260/lv_components/smart_island.h"
 #include "un260/lv_drivers/lv_drivers.h"
 #include "un260/lv_system/counting_ui_runtime.h"
@@ -44,6 +46,7 @@
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/protocol/protocol_frame.h"
 #include "un260/protocol/protocol_frame_queue.h"
+#include "un260/protocol/protocol_request.h"
 #include "un260/storage/cashbook_store.h"
 #include "un260/storage/workspace_store.h"
 #include "un260/storage/standby_store.h"
@@ -53,6 +56,7 @@
 
 static counting_detail_state_t g_counting_detail_state;
 static counting_session_state_t g_counting_session;
+static uint32_t g_count_end_generation;
 /* One indivisible transition frame retained ahead of the RX queue when its
  * predecessor's history cannot yet be preserved. Never dequeue past it. */
 static protocol_frame_t g_deferred_frame;
@@ -68,6 +72,8 @@ static bool app_command_runtime_main_page_active(void)
 
 static const char *diagnostic_operation_blocker(bool allow_calibration_feed)
 {
+    if(ui_page_28_get_image_is_capturing() || ui_page_31_get_wave_is_capturing())
+        return UI_N_("The previous capture is still being received. Please wait.");
     if(!work_mode_service_diagnostic_ready())return work_mode_service_status_msgid();
     if(!protocol_send_is_ready())return UI_N_("Controller connection is unavailable.");
     if(upgrade_session_owner()!=UPGRADE_SESSION_NONE)return UI_N_("Wait for the update to finish.");
@@ -116,6 +122,11 @@ bool app_command_runtime_request_count_start(void)
 bool app_command_runtime_result_pending(void)
 {
     return g_counting_session.history_record.valid;
+}
+
+uint32_t app_command_runtime_count_end_generation(void)
+{
+    return g_count_end_generation;
 }
 
 bool app_command_runtime_count_start_busy(void)
@@ -210,8 +221,15 @@ static bool app_command_runtime_handle_stacker_clear(const uint8_t *buf, uint8_t
 
 static bool app_command_runtime_dispatch(uint8_t cmd,
                                          uint8_t *buf,
-                                         uint8_t len)
+                                         uint16_t frame_len)
 {
+    if (app_fault_recovery_observe_setting_detail(
+            cmd, buf, frame_len, &g_counting_session)) return true;
+    if (cmd == 0x47 || cmd == 0x48)
+        return app_protocol_runtime_handle_reply(cmd, buf, frame_len);
+    /* Every other controller reply keeps its original one-byte length ABI. */
+    if (frame_len > PROTOCOL_FRAME_MAX_SIZE) return true;
+    uint8_t len = (uint8_t)frame_len;
     /* Keep the transition ahead of generic reply side effects. Returning
      * false retains this frame and holds the next START until history is safe. */
     if (cmd == 0x51) return app_command_runtime_handle_stacker_clear(buf, len);
@@ -238,10 +256,15 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
                                         app_clock_uptime_ms())) return false;
     if (cmd == 0x0A && len >= 7 && buf[4] == 1 && buf[5] == 1) {
         counting_report_begin(machine_state_add_enabled(), counting_data_mutable());
-        /* An interrupted denomination snapshot cannot straddle a new run. */
+        /* Interrupted snapshots cannot publish into a new run. The report
+         * owner still drains any already-open untagged reply through END. */
         g_counting_detail_state.live_denom_started = false;
+        g_counting_detail_state.live_reject_started = false;
     }
-    if (counting_report_discard_stale(cmd, buf, len)) return true;
+    if (counting_report_discard_stale(cmd, buf, len)) {
+        if (cmd == 0x0C) g_counting_detail_state.live_reject_started = false;
+        return true;
+    }
     counting_action_handle_reply(cmd, buf, len);
 
     /* New 0x49/8 currency detection shares a command with 0x49/24 serials. */
@@ -279,9 +302,16 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
     case 0x50:
         app_currency_runtime_handle_detected(buf, len);
         break;
-    case 0x0E:
+    case 0x0E: {
+        const bool armed = g_counting_session.start_confirmed;
+        const counting_session_phase_t previous = g_counting_session.phase;
         app_counting_runtime_handle_info(&g_counting_session, counting_data_mutable(), buf, len);
+        if (armed && previous != COUNTING_SESSION_FINISHED_WAIT_START &&
+            !g_counting_session.start_confirmed &&
+            g_counting_session.phase == COUNTING_SESSION_FINISHED_WAIT_START)
+            ++g_count_end_generation;
         break;
+    }
     case 0x0F:
     case 0x0A:
         app_counting_runtime_handle_control(cmd,
@@ -317,6 +347,16 @@ void app_command_runtime_process_frames(void)
     (void)app_command_runtime_process_frames_budget(APP_COMMAND_FRAME_BUDGET_US);
 }
 
+bool app_command_runtime_has_command_between(uint8_t command,
+                                              uint64_t started_ms,
+                                              uint64_t deadline_ms)
+{
+    return g_deferred_frame_valid && started_ms < deadline_ms &&
+           g_deferred_frame.data[3] == command &&
+           g_deferred_frame.received_ms >= started_ms &&
+           g_deferred_frame.received_ms < deadline_ms;
+}
+
 bool app_command_runtime_frames_pending(void)
 {
     /* Blocked work retries on the existing <=10ms loop ceiling; do not turn a
@@ -334,7 +374,7 @@ uint32_t app_command_runtime_process_frames_budget(uint32_t budget_us)
            (processed == 0U ||
             app_clock_elapsed_us32(started_us, app_clock_monotonic_us()) < budget_us)) {
         uint8_t *buf;
-        uint8_t len;
+        uint16_t len;
         bool fresh = !g_deferred_frame_valid;
         if (fresh) {
             if (!protocol_frame_queue_pop(&g_deferred_frame)) break;
@@ -358,7 +398,10 @@ uint32_t app_command_runtime_process_frames_budget(uint32_t budget_us)
         }
 
         if (fresh) app_standby_runtime_protocol_activity();
-        if (!app_command_runtime_dispatch(buf[3], buf, len)) {
+        protocol_request_result_context_begin(g_deferred_frame.received_ms);
+        bool dispatched = app_command_runtime_dispatch(buf[3], buf, len);
+        protocol_request_result_context_end();
+        if (!dispatched) {
             /* Initial history loading is normal backpressure, not a storage
              * fault. Keep the frame and the bounded wait, but leave its warning
              * unconsumed so a failed load/full queue can report after loading. */

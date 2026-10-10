@@ -25,6 +25,8 @@ typedef struct {
 } fault_popup_t;
 static fault_popup_t popup;
 static bool auto_enabled=true;
+static bool setting_notice_active;
+static machine_fault_key_t setting_notice_key;
 static fault_popup_confirm_handler_t confirm_handler;
 void fault_popup_set_confirm_handler(fault_popup_confirm_handler_t handler)
 {
@@ -38,7 +40,9 @@ static void post_island_notice(machine_fault_key_t key)
     mf_guide_t guide;fault_guide_lookup(key,&guide);
     const char *description = key.source == MACHINE_FAULT_START && key.type == 2 ? machine_start_error_desc(key.code) :
         key.source == MACHINE_FAULT_RUNTIME ? machine_runtime_error_desc(key.code) : NULL;
-    if (key.source == MACHINE_FAULT_PRESET)
+    if (key.source == MACHINE_FAULT_SETTING)
+        smart_island_notify_fault(ui_tr("Stacker full"), key);
+    else if (key.source == MACHINE_FAULT_PRESET)
         smart_island_notify_preset_full(key);
     else if (key.source == MACHINE_FAULT_START && key.type == 1 && key.code == 2)
         smart_island_notify_no_note(key);
@@ -72,6 +76,10 @@ static lv_obj_t *button(lv_obj_t *parent,int x,int y,int w,int h,const char *val
 static void deleted(lv_event_t *event)
 {
     (void)event;
+    if (popup.key.source == MACHINE_FAULT_SETTING) {
+        setting_notice_active = false;
+        smart_island_cancel_fault_notice(popup.key);
+    }
     if(popup.model.timer)lv_timer_del(popup.model.timer);
     memset(&popup,0,sizeof(popup));
     ui_notice_set_suspended(UI_NOTICE_SUSPEND_FAULT,false);
@@ -88,6 +96,10 @@ static void confirm(lv_event_t *event)
     (void)event;
     if(!popup.overlay)return;
     machine_fault_key_t confirmed=popup.key;
+    if (confirmed.source == MACHINE_FAULT_SETTING) {
+        hide_fault_popup();
+        return;
+    }
     if (!app_fault_recovery_request_clear(confirmed)) {
         lv_label_set_text(popup.safety,ui_tr("Clear request not sent. Try Confirm again shortly."));
         return;
@@ -190,6 +202,7 @@ void fault_popup_language_changed(void)
 }
 static void report(machine_fault_key_t key,bool allow_auto)
 {
+    fault_popup_resolve_setting_rejection(0);
     bool event=key.source==MACHINE_FAULT_START;
     bool changed=event?machine_fault_report_event(key):machine_fault_report(key);
     if(changed){
@@ -208,7 +221,7 @@ static void refresh_after_clear(void)
     smart_island_faults_changed();
     smart_island_refresh_summary();
     if(!popup.overlay)return;
-    if(machine_fault_find(popup.key,NULL))return;
+    if(popup.key.source == MACHINE_FAULT_SETTING || machine_fault_find(popup.key,NULL))return;
     machine_fault_record_t record;
     if(machine_fault_first_unread(&record))present(record.key);else hide_fault_popup();
 }
@@ -246,6 +259,37 @@ void fault_popup_report_runtime_fault(uint8_t code)
     if(code==0){fault_popup_clear_runtime();return;}
     report((machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,code},true);
 }
+void fault_popup_report_setting_rejection(uint8_t command, uint8_t reason)
+{
+    /* These are operation notices, not unresolved physical faults. Reuse the
+     * guide renderer while keeping physical blockers and recovery untouched. */
+    machine_fault_key_t active;
+    if ((popup.overlay && popup.key.source != MACHINE_FAULT_SETTING) ||
+        (smart_island_active_fault_notice(&active) && active.source != MACHINE_FAULT_SETTING)) return;
+    machine_fault_key_t key = {MACHINE_FAULT_SETTING, reason, command};
+    if (auto_enabled) present(key);
+    post_island_notice(key);
+    setting_notice_key = key;
+    setting_notice_active = smart_island_active_fault_notice(&active) &&
+        machine_fault_key_equal(active, key);
+}
+void fault_popup_resolve_setting_rejection(uint8_t command)
+{
+    if (popup.overlay && popup.key.source == MACHINE_FAULT_SETTING &&
+        (!command || popup.key.code == command))
+        hide_fault_popup();
+    if (setting_notice_active && (!command || setting_notice_key.code == command)) {
+        machine_fault_key_t key = setting_notice_key;
+        setting_notice_active = false;
+        smart_island_cancel_fault_notice(key);
+    }
+}
+void fault_popup_setting_notice_finished(machine_fault_key_t key)
+{
+    if (setting_notice_active && machine_fault_key_equal(setting_notice_key, key))
+        setting_notice_active = false;
+}
+
 void fault_popup_record_runtime_notice(uint8_t code)
 {
     if(code)report((machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,code},false);
@@ -270,6 +314,7 @@ void fault_popup_report_sensor_mask(uint32_t mask)
     /* A recovered bit must not restart another fault's current step or open
      * unrelated unread reports. Only a newly asserted bit raises a popup. */
     if(fresh.code<32) {
+        fault_popup_resolve_setting_rejection(0);
         post_island_notice(fresh);
         if(auto_enabled && (!popup.overlay || !machine_fault_key_equal(popup.key,fresh)))present(fresh);
     }
@@ -296,12 +341,14 @@ bool fault_popup_get_pending_fault(fault_source_t *source,uint8_t *type,uint8_t 
 }
 void fault_popup_clear_runtime(void)
 {
-    machine_fault_clear_source(MACHINE_FAULT_START);machine_fault_clear_source(MACHINE_FAULT_RUNTIME);refresh_after_clear();
+    machine_fault_clear_source(MACHINE_FAULT_START);machine_fault_clear_source(MACHINE_FAULT_RUNTIME);
+    fault_popup_resolve_setting_rejection(0);refresh_after_clear();
 }
 void fault_popup_stacker_cleared(void)
 {
     /* 0x51/01 confirms only the genuine-note pocket, not both pockets or a jam. */
     machine_fault_key_t key={MACHINE_FAULT_START,2,7};
     if(machine_fault_find(key,NULL))machine_fault_clear_code(MACHINE_FAULT_START,7);
+    fault_popup_resolve_setting_rejection(0);
     refresh_after_clear();
 }

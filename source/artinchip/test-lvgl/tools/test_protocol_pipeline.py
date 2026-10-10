@@ -30,6 +30,7 @@ source = (ROOT / "un260/app_service/app_command_runtime.c").read_text(encoding="
 budget_function = extract_function(
     source, "uint32_t app_command_runtime_process_frames_budget(uint32_t budget_us)")
 pending_function = extract_function(source, "bool app_command_runtime_frames_pending(void)")
+deferred_function = extract_function(source, "bool app_command_runtime_has_command_between(")
 max_frames = re.search(r"#define APP_COMMAND_MAX_FRAMES_PER_TICK\s+\d+", source).group()
 code = r'''
 #include <assert.h>
@@ -50,6 +51,16 @@ static unsigned warning_logs;
 static protocol_frame_t g_deferred_frame;
 static bool g_deferred_frame_valid, g_deferred_frame_blocked;
 static bool g_deferred_frame_warning_reported;
+#define UI_N_(text) (text)
+typedef struct { int total_pcs; float total_amount; bool multi_currency_result; } counting_sim_t;
+static counting_sim_t count_snapshot;
+static struct { unsigned phase; } g_counting_session;
+static const counting_sim_t *counting_data_current(void) { return &count_snapshot; }
+static bool app_command_runtime_count_start_busy(void) { return false; }
+static bool app_command_runtime_result_pending(void) { return false; }
+void runtime_guard_count(int pcs, float amount, unsigned phase, bool busy, bool pending, bool multi) {
+    (void)pcs; (void)amount; (void)phase; (void)busy; (void)pending; (void)multi;
+}
 #define SMART_ISLAND_WARNING_LEVEL_ERROR 2
 static void smart_island_notify_warning_level(const char *text, int level) {
     assert(level == SMART_ISLAND_WARNING_LEVEL_ERROR);
@@ -59,6 +70,8 @@ static bool ui_history_data_is_initialized(void) { return history_initialized; }
 static bool ui_history_data_is_available(void) { return history_available; }
 static void page_01_main_refresh_start_state(void) {}
 static void app_standby_runtime_protocol_activity(void) {}
+void protocol_request_result_context_begin(uint64_t received_ms) { (void)received_ms; }
+void protocol_request_result_context_end(void) {}
 static uint64_t app_clock_monotonic_us(void) { return now_us; }
 static uint32_t app_clock_elapsed_us32(uint64_t start, uint64_t end) {
     return (uint32_t)(end - start);
@@ -66,6 +79,7 @@ static uint32_t app_clock_elapsed_us32(uint64_t start, uint64_t end) {
 bool protocol_frame_queue_pop(protocol_frame_t *frame) {
     if (next_frame == end_frame) return false;
     frame->len = 7;
+    frame->received_ms = now_us / 1000U;
     frame->data[3] = 0x49;
     frame->data[4] = (uint8_t)next_frame;
     frame->data[5] = (uint8_t)(next_frame >> 8);
@@ -86,7 +100,7 @@ static void uart_debug_printf(const char *format, ...) {
     va_end(args);
     warning_logs++;
 }
-static bool app_command_runtime_dispatch(uint8_t cmd, uint8_t *data, uint8_t len) {
+static bool app_command_runtime_dispatch(uint8_t cmd, uint8_t *data, uint16_t len) {
     assert(cmd == 0x49 && len == 7);
     assert(data[4] == (uint8_t)dispatched && data[5] == (uint8_t)(dispatched >> 8));
     if (block_dispatch || !history_initialized || !history_available || !history_capacity) return false;
@@ -186,6 +200,99 @@ int main(void) {
 }
 '''
 
+# Link the real request lifecycle to the real retained-frame query and dispatcher
+# budget. Hardware/history admission is the only stubbed boundary here.
+arrival_code = r'''
+#include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdarg.h>
+#include <string.h>
+#include "un260/protocol/protocol_frame_queue.h"
+#include "un260/protocol/protocol_request.h"
+static uint64_t now_ms, received_ms;
+static uint8_t command;
+static bool queued, history_blocked, accepted;
+static protocol_request_t request;
+static protocol_frame_t g_deferred_frame;
+static bool g_deferred_frame_valid, g_deferred_frame_blocked;
+static bool g_deferred_frame_warning_reported;
+#define UI_N_(text) (text)
+#define SMART_ISLAND_WARNING_LEVEL_ERROR 2
+typedef struct { int total_pcs; float total_amount; bool multi_currency_result; } counting_sim_t;
+static counting_sim_t count_snapshot;
+static struct { unsigned phase; } g_counting_session;
+static const counting_sim_t *counting_data_current(void) { return &count_snapshot; }
+static bool app_command_runtime_count_start_busy(void) { return false; }
+static bool app_command_runtime_result_pending(void) { return false; }
+void runtime_guard_count(int pcs, float amount, unsigned phase, bool busy, bool pending, bool multi) {
+    (void)pcs; (void)amount; (void)phase; (void)busy; (void)pending; (void)multi;
+}
+uint64_t app_clock_monotonic_us(void) { return now_ms * 1000U; }
+uint64_t app_clock_monotonic_ms(void) { return now_ms; }
+uint32_t app_clock_elapsed_us32(uint64_t start, uint64_t end) { return (uint32_t)(end - start); }
+static bool ui_history_data_is_initialized(void) { return true; }
+static bool ui_history_data_is_available(void) { return true; }
+static void smart_island_notify_warning_level(const char *text, int level) { (void)text; (void)level; }
+static void page_01_main_refresh_start_state(void) {}
+static void app_standby_runtime_protocol_activity(void) {}
+static bool debug_page_rx_log_is_active(void) { return false; }
+static void debug_append_rx_log(const char *text) { (void)text; }
+static void uart_debug_printf(const char *format, ...) { (void)format; }
+size_t protocol_frame_format_hex(const uint8_t *data, size_t len, char *out, size_t cap) {
+    (void)data; (void)len; assert(cap); out[0] = 0; return 0;
+}
+bool protocol_frame_queue_pop(protocol_frame_t *frame) {
+    if (!queued) return false;
+    memset(frame, 0, sizeof(*frame));
+    frame->len = command == 0x0A ? 7 : 6;
+    frame->data[3] = command; frame->data[4] = frame->data[5] = 1;
+    frame->received_ms = received_ms; queued = false; return true;
+}
+bool protocol_frame_queue_has_pending(void) { return queued; }
+static bool app_command_runtime_dispatch(uint8_t cmd, uint8_t *data, uint16_t len) {
+    (void)data; assert(cmd == command && len >= 6);
+    if (history_blocked) return false;
+    accepted = protocol_request_take_result(&request);
+    return true;
+}
+#include "un260/protocol/protocol_request.c"
+'''
+arrival_code += max_frames + "\n" + deferred_function + "\n" + budget_function + r'''
+static void replay(uint8_t cmd, uint32_t timeout_ms, int arrival) {
+    now_ms = 100; command = cmd; queued = true; history_blocked = true; accepted = false;
+    g_deferred_frame_valid = g_deferred_frame_blocked = g_deferred_frame_warning_reported = false;
+    request = (protocol_request_t)PROTOCOL_REQUEST_INITIALIZER(timeout_ms);
+    protocol_request_set_pending_reply_probe(app_command_runtime_has_command_between);
+    assert(protocol_request_begin_for_command(&request, cmd));
+    uint64_t start = request.started_ms;
+    received_ms = arrival < 0 ? start - 1 : arrival > 0 ? start + timeout_ms : start + 20;
+    now_ms = received_ms;
+    assert(app_command_runtime_process_frames_budget(2000) == 0);
+    assert(!queued && g_deferred_frame_valid && g_deferred_frame_blocked);
+    assert(!app_command_runtime_has_command_between((uint8_t)(cmd + 1), start, start + timeout_ms));
+    assert(app_command_runtime_has_command_between(cmd, start, start + timeout_ms) == (arrival == 0));
+    now_ms = start + timeout_ms + 200;
+    assert(protocol_request_take_timeout(&request) == (arrival != 0));
+    assert(protocol_request_is_pending(&request) == (arrival == 0));
+    history_blocked = false;
+    assert(app_command_runtime_process_frames_budget(2000) == 1);
+    assert(accepted == (arrival == 0) && !protocol_request_is_pending(&request));
+    assert(!g_deferred_frame_valid && !app_command_runtime_has_command_between(cmd, start, start + timeout_ms));
+    assert(protocol_request_result_time_ms() == now_ms); /* dispatch context cleared */
+    protocol_request_set_pending_reply_probe(NULL);
+}
+int main(void) {
+    for (int arrival = -1; arrival <= 1; ++arrival) {
+        replay(0x0A, 5000, arrival);
+        replay(0x03, 800, arrival);
+    }
+    puts("PASS retained ACK: timely START/currency survives history wait; old and late frames keep timeouts");
+    return 0;
+}
+'''
+
 # Compile the actual final-loop deadline calculation so display recovery cannot
 # accidentally turn an overdue-but-uncommittable visual projection into a spin.
 main_source = (ROOT / "main.c").read_text(encoding="utf-8")
@@ -267,8 +374,8 @@ with tempfile.TemporaryDirectory(prefix="un260-protocol-pipeline-") as directory
     pipeline = work / ("pipeline" + suffix)
     sources = ["tools/test_protocol_pipeline.c", "un260/app_service/app_runtime_wakeup.c",
                "un260/lv_system/app_clock.c", "un260/protocol/protocol_frame.c",
-               "un260/protocol/protocol_frame_parser.c", "un260/protocol/protocol_frame_queue.c",
-               "un260/protocol/protocol_rx_service.c"]
+               "un260/protocol/protocol_frame_parser.c", "un260/protocol/stream_data_reply.c", "un260/protocol/protocol_frame_queue.c",
+               "un260/protocol/protocol_rx_service.c", "un260/protocol/protocol_request.c"]
     subprocess.run(flags + [str(ROOT / item) for item in sources] + ["-o", str(pipeline)], check=True)
     subprocess.run([str(pipeline)], check=True)
     budget_source = work / "budget.c"
@@ -276,6 +383,12 @@ with tempfile.TemporaryDirectory(prefix="un260-protocol-pipeline-") as directory
     budget = work / ("budget" + suffix)
     subprocess.run(flags + [str(budget_source), "-o", str(budget)], check=True)
     subprocess.run([str(budget)], check=True)
+    arrival_source = work / "arrival.c"
+    arrival_source.write_text(arrival_code, encoding="utf-8")
+    for optimization in ("-O0", "-O2"):
+        arrival = work / ("arrival" + suffix)
+        subprocess.run(flags + [optimization, str(arrival_source), "-o", str(arrival)], check=True)
+        subprocess.run([str(arrival)], check=True)
     wait_source = work / "wait.c"
     wait_source.write_text(wait_code, encoding="utf-8")
     wait_test = work / ("wait" + suffix)

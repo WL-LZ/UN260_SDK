@@ -408,6 +408,8 @@ bool ui_page_08_curr_prepare_step(void)
     return true;
 }
 
+bool ui_page_08_curr_prepare_failed(void) { return false; }
+
 void ui_page_08_curr_set_covered(bool covered)
 {
     if (!g_boot_page.page || !lv_obj_is_valid(g_boot_page.page)) return;

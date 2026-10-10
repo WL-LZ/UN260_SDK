@@ -13,6 +13,7 @@ code=r'''
 #include <stddef.h>
 #include <assert.h>
 #include <stdio.h>
+#define UI_N_(message) (message)
 #define BOOT_STAGE_DONE 3
 #define BOOT_STAGE_FAIL 4
 typedef int boot_stage_t;
@@ -25,7 +26,7 @@ int ui_manager_get_current_page(void){return page;}
 bool diagnostic_calibration_allows_feed(void){return feed;}
 static int boot=3,upgrade,starts;
 bool work_mode_service_diagnostic_ready(void){return mode;}
-const char *work_mode_service_status_text(void){return "Manual mode not confirmed";}
+const char *work_mode_service_status_msgid(void){return "Manual mode not confirmed";}
 bool protocol_send_is_ready(void){return link;}
 int boot_service_get_stage(void){return boot;}
 int upgrade_session_owner(void){return upgrade;}

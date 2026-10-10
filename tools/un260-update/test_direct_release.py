@@ -2,7 +2,10 @@
 """Routine full packages use the deployed updater's existing transaction now."""
 import hashlib
 import unittest
+import tempfile
 from pathlib import Path
+import tarfile
+import io
 import test_app_volume_updater as volume
 from verify_direct_release import verify
 
@@ -45,26 +48,54 @@ class DirectReleaseTests(volume.VolumeUpdaterTests):
         self.assertEqual((self.vol/'test_lvgl').read_bytes(),b'old app')
         self.assertIn('Finish the pending storage migration',(self.root/'status').read_text())
 
-    def target_fixture(self):
-        target=self.p/'built-target'
-        for name,(data,mode) in self.files.items():
-            path=target/name;path.parent.mkdir(parents=True,exist_ok=True)
-            path.write_bytes(data);path.chmod(mode)
-        return target
+class DirectQualificationTests(unittest.TestCase):
+    def setUp(self):
+        from test_legacy_test_release import fixture_target, package
+        self.temp = tempfile.TemporaryDirectory(prefix='un260-direct-qualification-')
+        self.addCleanup(self.temp.cleanup)
+        self.p = Path(self.temp.name)
+        self.target = self.p / 'target'
+        fixture_target(self.target)
+        self.full = self.p / 'full.upk'
+        result = package(self.target, self.full, legacy=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def rewrite(self, name, data):
+        changed = self.p / 'changed.upk'
+        with tarfile.open(self.full) as src, tarfile.open(changed, 'w:gz') as dst:
+            for item in src.getmembers():
+                content = src.extractfile(item).read() if item.isfile() else None
+                if item.name == name:
+                    content = data
+                    item.size = len(data)
+                dst.addfile(item, io.BytesIO(content) if content is not None else None)
+        return changed
 
     def test_qualification_checks_application_identity_and_no_request(self):
-        target=self.target_fixture()
-        self.assertEqual(verify(self.full,target),len(self.files))
-        (target/volume.APP).write_bytes(b'WRONG BUILD')
-        with self.assertRaises(AssertionError):verify(self.full,target)
-        target=self.target_fixture()
-        self.files['etc/un260/unified-request']=(b'UNWANTED REQUEST',0o644)
-        self.pack()
-        with self.assertRaises(AssertionError):verify(self.full,target)
+        self.assertGreater(verify(self.full, self.target), 10)
+        (self.target / volume.APP).write_bytes(b'WRONG BUILD')
+        with self.assertRaises(AssertionError): verify(self.full, self.target)
+
+    def test_qualification_rejects_missing_factory_platform(self):
+        (self.target / 'etc/un260/updater-platform').unlink()
+        with self.assertRaises(ValueError): verify(self.full, self.target)
+
+    def test_qualification_rejects_continuation_request(self):
+        from test_legacy_test_release import package
+        extra = self.p / 'extra'
+        path = extra / 'etc/un260/unified-request'
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b'UNWANTED REQUEST\n')
+        path.chmod(0o644)
+        result = package(self.target, self.full, legacy=False, extra=extra)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with self.assertRaises(AssertionError): verify(self.full, self.target)
 
     def test_qualification_rejects_two_stage_package_type(self):
-        self.pack(volume.CAPABILITY+'package_type=ui-unified\n')
-        with self.assertRaises(AssertionError):verify(self.full,self.target_fixture())
+        with tarfile.open(self.full) as archive:
+            metadata = archive.extractfile('manifest.ini').read()
+        changed = self.rewrite('manifest.ini', metadata.replace(b'package_type=ui\n', b'package_type=ui-unified\n'))
+        with self.assertRaises(AssertionError): verify(changed, self.target)
 
 
 if __name__=='__main__':unittest.main()

@@ -1,5 +1,4 @@
 #!/bin/bash
-
 set -euo pipefail
 
 SDK_ROOT=$(pwd)
@@ -7,95 +6,79 @@ BUILDER="$SDK_ROOT/tools/un260-update/build_un260_update.sh"
 INTERNAL_DIR="${BINARIES_DIR}/un260_internal"
 OUTPUT_PACKAGE="${INTERNAL_DIR}/UN260_APPLICATION.upk"
 PUBLIC_PACKAGE="${BINARIES_DIR}/UN260_UPDATE.upk"
-MIGRATION_PACKAGE="${INTERNAL_DIR}/UN260_FIRST_MIGRATION.upk"
+PUBLIC_README="${BINARIES_DIR}/UN260_UPK_README.md"
 EXTRA_ROOT="${TARGET_BOARD_DIR}/update_extra_root"
 
-# Public files stay at images/; intermediates and the pinned delta baseline
-# are not operator packages. Never generate/overwrite archived expansion UPKs.
-if [ -L "$INTERNAL_DIR" ]; then
-    echo "Refusing symlinked internal package directory: $INTERNAL_DIR" >&2
-    exit 1
-fi
+[ ! -L "$INTERNAL_DIR" ] || { echo "Refusing symlinked internal package directory" >&2; exit 1; }
 mkdir -p "$INTERNAL_DIR"
-
-if [ ! -x "$BUILDER" ]; then
-	echo "UN260 package builder is missing or not executable: $BUILDER" >&2
-	exit 1
-fi
-
+[ -x "$BUILDER" ] || { echo "UN260 package builder missing: $BUILDER" >&2; exit 1; }
 PACKAGE_VERSION=$(python3 "$SDK_ROOT/tools/un260-update/release_version.py")
+BUILD_ARGS=(--version "$PACKAGE_VERSION" --output "$OUTPUT_PACKAGE")
+if [ -d "$EXTRA_ROOT" ]; then BUILD_ARGS+=(--extra-root "$EXTRA_ROOT"); fi
 
-echo "Generate UN260 U-disk package: version=$PACKAGE_VERSION"
-BUILD_ARGS=(
-	--version "$PACKAGE_VERSION"
-	--output "$OUTPUT_PACKAGE"
-	--unified-route
-)
-if [ -d "$EXTRA_ROOT" ]; then
-	echo "Include UN260 incremental root: $EXTRA_ROOT"
-	BUILD_ARGS+=(--extra-root "$EXTRA_ROOT")
+# The factory IMG owns the platform and pre-enrolled app volume. Routine
+# updates are one full transaction; migration/delta tools are explicit only.
+"$BUILDER" "${BUILD_ARGS[@]}"
+python3 "$SDK_ROOT/tools/un260-update/verify_direct_release.py" \
+    --package "$OUTPUT_PACKAGE" --target "$TARGET_DIR" --report "$INTERNAL_DIR/UN260_RELEASE.json"
+BASE_VERSION=$(python3 "$SDK_ROOT/tools/un260-update/release_version.py" --base)
+FACTORY_ARGS=(
+    --image "${BINARIES_DIR}/d211_d213_devkitf_page_2k_block_128k_v${BASE_VERSION}.img" \
+    --application "$OUTPUT_PACKAGE" --target "$TARGET_DIR")
+if [ -n "${UN260_FACTORY_DEEP_QA_PYTHON:-}" ]; then
+    [ -x "$UN260_FACTORY_DEEP_QA_PYTHON" ] || { echo "Deep factory QA interpreter is not executable" >&2; exit 1; }
+    "$UN260_FACTORY_DEEP_QA_PYTHON" "$SDK_ROOT/tools/un260-update/verify_factory_release.py" "${FACTORY_ARGS[@]}" --deep
+else
+    python3 "$SDK_ROOT/tools/un260-update/verify_factory_release.py" "${FACTORY_ARGS[@]}"
+    echo "Factory component CRCs, UBIFS image bytes, release contract and TARGET checked; deep UBIFS inode readback not performed (set UN260_FACTORY_DEEP_QA_PYTHON for release QA)."
 fi
 
-BASELINE=${UN260_UPDATE_BASELINE:-"${INTERNAL_DIR}/UN260_UPDATE_BASE.upk"}
-# Adopt a pre-organization baseline without silently replacing its identity.
-# This is a host build hook (GNU cmp), not a BusyBox device script.
-LEGACY_BASELINE="${BINARIES_DIR}/UN260_UPDATE_BASE.upk"
-if [ -z "${UN260_UPDATE_BASELINE:-}" ] && [ -e "$LEGACY_BASELINE" ]; then
-    [ -f "$LEGACY_BASELINE" ] && [ ! -L "$LEGACY_BASELINE" ] && [ ! -L "$BASELINE" ] || exit 1
-    if [ -e "$BASELINE" ]; then
-        cmp -s "$LEGACY_BASELINE" "$BASELINE" || {
-            echo "Conflicting pinned baselines; review before building" >&2
-            exit 1
-        }
-    else
-        cp -p "$LEGACY_BASELINE" "$BASELINE"
-    fi
-fi
-for GENERATED in "$OUTPUT_PACKAGE" "${BINARIES_DIR}/UN260_UPDATE.upk" \
-    "$MIGRATION_PACKAGE" "${INTERNAL_DIR}/UN260_STORAGE_BOOTSTRAP.upk" "${INTERNAL_DIR}/UN260_UPDATE_DELTA.upk"; do
-    if [ "$(readlink -m "$BASELINE")" = "$(readlink -m "$GENERATED")" ]; then
-        echo "Baseline must be a separate pinned file, not a build output" >&2
+# Preserve only known historical operator packages away from the current
+# release slot. Unknown files and user archives are never enumerated/deleted.
+ARCHIVE_DIR="$INTERNAL_DIR/archived-public"
+archive_public_file()
+{
+    local source="$BINARIES_DIR/$1" destination="$ARCHIVE_DIR/$1"
+    if [ ! -e "$source" ] && [ ! -L "$source" ]; then return; fi
+    [ -f "$source" ] && [ ! -L "$source" ] || { echo "Unsafe historical output: $source" >&2; exit 1; }
+    [ ! -L "$ARCHIVE_DIR" ] || { echo "Unsafe archive directory" >&2; exit 1; }
+    mkdir -p "$ARCHIVE_DIR"
+    if [ -e "$destination" ] || [ -L "$destination" ]; then
+        echo "Historical output already archived; preserve both and review: $source" >&2
         exit 1
     fi
+    if [ -e "$source.sha256" ] || [ -L "$source.sha256" ]; then
+        [ -f "$source.sha256" ] && [ ! -L "$source.sha256" ] && [ ! -e "$destination.sha256" ] && [ ! -L "$destination.sha256" ] || exit 1
+    fi
+    mv "$source" "$destination"
+    if [ -e "$source.sha256" ]; then mv "$source.sha256" "$destination.sha256"; fi
+}
+for HISTORICAL in UN260_APPLICATION.upk UN260_UPDATE_BASE.upk UN260_UPDATE_DELTA.upk \
+    UN260_UNIFIED_UPDATE.upk UN260_FIRST_MIGRATION.upk UN260_STORAGE_BOOTSTRAP.upk \
+    UN260_STORAGE_EXPANSION_R7_20260929.upk UN260_STORAGE_EXPANSION_R8_20260930.upk; do
+    archive_public_file "$HISTORICAL"
 done
-"$BUILDER" "${BUILD_ARGS[@]}"
-python3 "$SDK_ROOT/tools/un260-update/build_storage_bootstrap.py" --full "$OUTPUT_PACKAGE" \
-    --output "${INTERNAL_DIR}/UN260_STORAGE_BOOTSTRAP.upk"
-# One public package handles both legacy enrollment and managed-volume updates.
-# Its tiny bridge remains compatible with installed R7/R8 updaters; the current
-# updater routes managed devices directly to the same final application.
-MIGRATION_POLICY=${UN260_MIGRATION_POLICY:-${UN260_MIGRATION_APPROVED:-un260-backed-up-legacy-v3}}
-python3 "$SDK_ROOT/tools/un260-update/build_unified.py" --full "$OUTPUT_PACKAGE" \
-    --output "$MIGRATION_PACKAGE" \
-    --migration-policy "$MIGRATION_POLICY"
 
-# Pin the first full package made by this upgraded builder. Do not silently
-# move this baseline on later development builds. First deployment uses FULL.
-if [ ! -f "$BASELINE" ]; then
-    if [ -n "${UN260_UPDATE_BASELINE:-}" ]; then echo "Specified baseline missing: $BASELINE" >&2; exit 1; fi
-    cp "$OUTPUT_PACKAGE" "$BASELINE"
-    echo "Pinned initial baseline; install full UN260_UPDATE.upk before future deltas."
-fi
-python3 "$SDK_ROOT/tools/un260-update/build_delta.py" --base "$BASELINE" --full "$OUTPUT_PACKAGE" \
-    --output "${INTERNAL_DIR}/UN260_UPDATE_DELTA.upk"
-
-python3 "$SDK_ROOT/tools/un260-update/verify_unified_release.py" \
-    --unified "$MIGRATION_PACKAGE" --full "$OUTPUT_PACKAGE" --target "$TARGET_DIR" \
-    --migration-policy "$MIGRATION_POLICY"
-python3 "$SDK_ROOT/tools/un260-update/verify_direct_release.py" \
-    --package "$OUTPUT_PACKAGE" --target "$TARGET_DIR"
-BASE_VERSION=$(python3 "$SDK_ROOT/tools/un260-update/release_version.py" --base)
-python3 "$SDK_ROOT/tools/un260-update/verify_factory_release.py" \
-    --image "${BINARIES_DIR}/d211_d213_devkitf_page_2k_block_128k_v${BASE_VERSION}.img" \
-    --application "$OUTPUT_PACKAGE" --target "$TARGET_DIR"
-# Publish the verified unified package and its matching public checksum.
-for PUBLISH_PATH in "$PUBLIC_PACKAGE" "$PUBLIC_PACKAGE.tmp" "$PUBLIC_PACKAGE.sha256" "$PUBLIC_PACKAGE.sha256.tmp"; do
+for PUBLISH_PATH in "$PUBLIC_PACKAGE" "$PUBLIC_PACKAGE.tmp" "$PUBLIC_PACKAGE.sha256" "$PUBLIC_PACKAGE.sha256.tmp" "$PUBLIC_PACKAGE.release.json" "$PUBLIC_PACKAGE.release.json.tmp" "$PUBLIC_README" "$PUBLIC_README.tmp"; do
     [ ! -L "$PUBLISH_PATH" ] || { echo "Refusing symlinked release output: $PUBLISH_PATH" >&2; exit 1; }
 done
-cp "$MIGRATION_PACKAGE" "$PUBLIC_PACKAGE.tmp"
-cmp -s "$MIGRATION_PACKAGE" "$PUBLIC_PACKAGE.tmp"
+cat > "$PUBLIC_README.tmp" <<'EOF'
+# UN260 正式升级包
+
+本轮先烧录配套的正式 IMG，建立 V1 升级基座。此后普通完整 make 只向客户交付一个升级包：`UN260_UPDATE.upk`，以及配套的校验文件。
+
+将升级包放在 U 盘的 `update/UN260_UPDATE.upk`，在机器界面发起一次升级。升级在一次事务中完成；按界面提示重启后，系统进行健康确认。
+
+`un260_internal/` 中的包、验证报告和历史归档仅供内部使用，不交付客户。
+EOF
+chmod 0644 "$PUBLIC_README.tmp"
+cp "$OUTPUT_PACKAGE" "$PUBLIC_PACKAGE.tmp"
+cmp -s "$OUTPUT_PACKAGE" "$PUBLIC_PACKAGE.tmp"
 mv -f "$PUBLIC_PACKAGE.tmp" "$PUBLIC_PACKAGE"
 (cd "$BINARIES_DIR" && sha256sum UN260_UPDATE.upk) > "$PUBLIC_PACKAGE.sha256.tmp"
 mv -f "$PUBLIC_PACKAGE.sha256.tmp" "$PUBLIC_PACKAGE.sha256"
-echo "UN260 unified U-disk update is ready: $PUBLIC_PACKAGE"
+cp "$INTERNAL_DIR/UN260_RELEASE.json" "$PUBLIC_PACKAGE.release.json.tmp"
+mv -f "$PUBLIC_PACKAGE.release.json.tmp" "$PUBLIC_PACKAGE.release.json"
+mv -f "$PUBLIC_README.tmp" "$PUBLIC_README"
+echo "UN260 direct U-disk update ready: $PUBLIC_PACKAGE"
 echo "Verified internal application: $OUTPUT_PACKAGE"

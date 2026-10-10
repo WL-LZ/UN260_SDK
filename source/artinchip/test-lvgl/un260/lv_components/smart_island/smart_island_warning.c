@@ -37,7 +37,23 @@ static void fault_phase(smart_island_fault_phase_t phase)
 }
 void smart_island_faults_changed(void)
 {
-    if (g_si_ctx.warning.fault.valid && !machine_fault_find(warning_key(),NULL))
+    if (g_si_ctx.warning.fault.valid &&
+        g_si_ctx.warning.fault.source != MACHINE_FAULT_SETTING &&
+        !machine_fault_find(warning_key(),NULL))
+        smart_island_restore_idle();
+}
+
+bool smart_island_active_fault_notice(machine_fault_key_t *key)
+{
+    if (!g_si_ctx.warning.fault.valid || g_si_ctx.view.scene != SMART_ISLAND_SCENE_WARNING)
+        return false;
+    if (key) *key = warning_key();
+    return true;
+}
+
+void smart_island_cancel_fault_notice(machine_fault_key_t key)
+{
+    if (g_si_ctx.warning.fault.valid && machine_fault_key_equal(warning_key(), key))
         smart_island_restore_idle();
 }
 

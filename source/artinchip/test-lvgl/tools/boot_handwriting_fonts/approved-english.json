@@ -1,0 +1,13 @@
+{
+  "approved-welcome.png": {
+    "width": 446,
+    "height": 112,
+    "sha256": "d64a2a6d60382b6a068981bcc976c1963224a8c2a57b7f519e460324729bf243"
+  },
+  "approved-welcome_compact.png": {
+    "width": 366,
+    "height": 92,
+    "sha256": "3868e5cb9103f2cc94b1fa0dafab0dbe1f8f033475ca77151d3ed2e6df56805f"
+  },
+  "git_revision": "d440266ca8729d95e02d8a334733096c04fc9cc9"
+}

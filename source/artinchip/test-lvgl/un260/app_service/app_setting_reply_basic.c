@@ -53,6 +53,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
         }
         else if (status == 0x02)
         {
+            if (len != 6 || buf[2] != len || buf[3] != cmd) break;
             uint8_t requested_mode;
             if (!setting_service_take_mode_result(&requested_mode)) {
                 uart_debug_printf("Set work mode fail ignored: no pending request\n");
@@ -102,6 +103,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
         }
         else if (status == 0x02)
         {
+            if (len != 6 || buf[2] != len || buf[3] != cmd) break;
             setting_batch_result_t result;
             if (!setting_service_batch_take_result(status, &result)) {
                 uart_debug_printf("Set batch num fail ignored: no pending request\n");
@@ -273,7 +275,6 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
             } else {
                 uart_debug_printf("FO boot sync: invalid mode=0x%02X\n", val);
             }
-            (void)setting_service_take_fo_mode_result(NULL);
             page_01_bottom_a_refresh_fo(false);
             smart_island_refresh_summary();
             break;
@@ -292,8 +293,11 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                 uart_debug_printf("FO set SUCCESS: type=0x%02X -> ui=%u\n", type, machine_state_fo_mode());
                 smart_island_refresh_summary();
             } else if (val == 0x02) {
+                if (len != 7 || buf[2] != len || buf[3] != cmd) break;
+                /* A controller may refuse with 00/02 without echoing the target.
+                 * Bind the valid set NAK to its pending owner and RX window. */
                 if (!setting_service_take_fo_mode_result(NULL)) {
-                    uart_debug_printf("FO set FAIL ignored: no pending request\n");
+                    uart_debug_printf("FO set FAIL ignored: unmatched or expired request\n");
                     break;
                 }
                 uart_debug_printf("FO set FAIL: type=0x%02X\n", type);

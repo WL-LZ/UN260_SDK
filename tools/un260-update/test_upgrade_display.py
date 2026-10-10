@@ -54,7 +54,7 @@ int main(int argc,char **argv) {
 ''' % (path / 'status', HEADER))
             executable = path / 'render'
             subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined', '-fno-pie', '-no-pie', '-I', str(APP), str(source),
-                            *(str(item) for item in I18N_SOURCES), '-o', str(executable)], check=True)
+                            *(str(item) for item in I18N_SOURCES), '-lz', '-o', str(executable)], check=True)
             cases = {'running': 'progress=42\nstage=install\nmessage=Installing application\n',
                      'failure': 'progress=110\nstage=fail\nsuccess=0\nmessage=Storage migration paused keep USB backup and log no IMG required for diagnosis\n',
                      'success': 'progress=100\nsuccess=1\nmessage=Unified upgrade completed application is starting\n',

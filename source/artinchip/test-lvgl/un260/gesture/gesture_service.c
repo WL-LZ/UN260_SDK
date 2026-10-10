@@ -77,7 +77,7 @@ static bool page_policy_active(void)
 }
 static const gesture_definition_t g_definitions[] = {
     {1, false, GESTURE_ACTION_EXIT_PAGE, UI_TEXT_GESTURE_EXIT_TITLE, UI_TEXT_GESTURE_EXIT_BODY},
-    {2, false, GESTURE_ACTION_RETURN, UI_TEXT_GESTURE_HOME_TITLE, UI_TEXT_GESTURE_HOME_BODY},
+    {2, false, GESTURE_ACTION_RETURN, UI_TEXT_GESTURE_RETURN_TITLE, UI_TEXT_GESTURE_RETURN_BODY},
     {2, false, GESTURE_ACTION_HOME, UI_TEXT_GESTURE_HOME_TITLE, UI_TEXT_GESTURE_HOME_BODY},
 };
 static bool gesture_page_is_safe(ui_page_t page)

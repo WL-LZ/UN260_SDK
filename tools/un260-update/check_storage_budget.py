@@ -14,21 +14,28 @@ ROOT_RESERVE_KB = 2048
 APP_FREE_FLOOR_KB = 16384
 APP_RESERVE_KB = 2048
 APP_PATH = 'usr/local/bin/test_lvgl'
+BOOT_PREFIX = 'usr/local/lib/un260-boot/versions/'
+BOOT_PUBLICATION_KB = 8
 
 def budget(old, new, route='legacy-root'):
-    if route not in ('legacy-root', 'unified-app-volume'):
+    if route not in ('legacy-root', 'unified-app-volume', 'factory-app-volume'):
         raise ValueError('Unknown qualification route: ' + route)
     changed = {p: v for p, v in new.items() if old.get(p) != v}
     costs = {p: (len(v[0]) + 1023) // 1024 + 4 for p, v in changed.items()}
-    app_staged = costs.get(APP_PATH, 0) if route == 'unified-app-volume' else 0
-    staged = sum(costs.values()) - app_staged
+    app_volume = route != 'legacy-root'
+    app_staged = costs.get(APP_PATH, 0) if app_volume else 0
+    boot_publication = BOOT_PUBLICATION_KB if changed and any(p.startswith(BOOT_PREFIX) for p in new) else 0
+    staged = sum(costs.values()) - app_staged + boot_publication
+    # The old immutable version remains resident for rollback; do not charge
+    # its already allocated blocks again as new staging or assume deletion.
+    boot_retained = sum((len(v[0]) + 1023) // 1024 for p, v in old.items() if p.startswith(BOOT_PREFIX))
     backup = sum((len(old[p][0]) + 1023) // 1024 + 4 for p in changed if p in old)
     return dict(changed=len(changed), unchanged=len(new)-len(changed), route=route,
-                root_staged_kb=staged,
+                root_staged_kb=staged, boot_publication_kb=boot_publication, boot_retained_kb=boot_retained,
                 root_required_kb=staged + ROOT_RESERVE_KB if changed else 0,
                 app_staged_kb=app_staged,
-                app_required_kb=app_staged + APP_RESERVE_KB if changed and route == 'unified-app-volume' else 0,
-                qualified_app_free_kb=APP_FREE_FLOOR_KB if route == 'unified-app-volume' else 0,
+                app_required_kb=app_staged + APP_RESERVE_KB if changed and app_volume else 0,
+                qualified_app_free_kb=APP_FREE_FLOOR_KB if app_volume else 0,
                 usb_backup_required_kb=backup + 4096 if changed else 0,
                 qualified_root_free_kb=ROOT_FREE_FLOOR_KB)
 
@@ -36,8 +43,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--base', required=True)
     ap.add_argument('--payload', required=True)
-    ap.add_argument('--route', choices=('legacy-root','unified-app-volume'), default='legacy-root',
-                    help='Unified route requires verified migration before installing the inner application')
+    ap.add_argument('--route', choices=('legacy-root','unified-app-volume','factory-app-volume'), default='legacy-root',
+                    help='Factory route uses the pre-enrolled application volume; unified route requires migration')
     args = ap.parse_args()
     _, old = load(args.base)
     root = Path(args.payload)

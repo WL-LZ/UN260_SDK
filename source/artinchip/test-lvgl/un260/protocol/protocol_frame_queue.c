@@ -5,6 +5,7 @@
 #include <time.h>
 
 #include "protocol_frame.h"
+#include "un260/lv_system/app_clock.h"
 #include "un260/app_service/app_runtime_wakeup.h"
 
 static protocol_frame_t g_frames[PROTOCOL_FRAME_QUEUE_CAPACITY];
@@ -36,6 +37,13 @@ bool protocol_frame_queue_push(const uint8_t *data, int len)
 bool protocol_frame_queue_push_wait(const uint8_t *data, int len,
                                     uint32_t timeout_ms)
 {
+    return protocol_frame_queue_push_wait_at(data, len, timeout_ms,
+                                              app_clock_monotonic_ms());
+}
+
+bool protocol_frame_queue_push_wait_at(const uint8_t *data, int len,
+                                       uint32_t timeout_ms, uint64_t received_ms)
+{
     bool pushed = false;
     struct timespec deadline;
 
@@ -61,7 +69,8 @@ bool protocol_frame_queue_push_wait(const uint8_t *data, int len,
     }
     if (g_count < PROTOCOL_FRAME_QUEUE_CAPACITY) {
         memcpy(g_frames[g_tail].data, data, (size_t)len);
-        g_frames[g_tail].len = (uint8_t)len;
+        g_frames[g_tail].len = (uint16_t)len;
+        g_frames[g_tail].received_ms = received_ms;
         g_tail = (g_tail + 1) % PROTOCOL_FRAME_QUEUE_CAPACITY;
         g_count++;
         pushed = true;
@@ -71,6 +80,26 @@ bool protocol_frame_queue_push_wait(const uint8_t *data, int len,
     if (pushed) app_runtime_wakeup_notify();
 
     return pushed;
+}
+
+bool protocol_frame_queue_has_command_between(uint8_t command,
+                                              uint64_t started_ms,
+                                              uint64_t deadline_ms)
+{
+    bool found = false;
+    if (started_ms >= deadline_ms) return false;
+    pthread_mutex_lock(&g_mutex);
+    for (int i = 0, slot = g_head; i < g_count;
+         i++, slot = (slot + 1) % PROTOCOL_FRAME_QUEUE_CAPACITY) {
+        const protocol_frame_t *frame = &g_frames[slot];
+        if (frame->data[3] == command && frame->received_ms >= started_ms &&
+            frame->received_ms < deadline_ms) {
+            found = true;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_mutex);
+    return found;
 }
 
 bool protocol_frame_queue_pop(protocol_frame_t *frame)

@@ -12,6 +12,20 @@ MODE=${1:---check}
 UPDATER_PID=${3:-}
 REQUIRED_APP_SHA256=@APP_SHA256@
 SYNC_TOOL=$ROOT/usr/local/bin/un260_storage_sync
+if [ -n "${UN260_ENGINE_SYNC:-}" ]; then
+    # Only the same-PID dispatcher engine may pass its verified RAM snapshot.
+    [ "$MODE" = --apply ] && [ "$#" = 3 ] && [ "$2" = --updater ] || exit 2
+    case "$UN260_ENGINE_SYNC" in
+        /tmp/un260-update-engine.[A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9]/sync) ;;
+        *) exit 1 ;;
+    esac
+    engine_dir=${UN260_ENGINE_SYNC%/sync}
+    [ -d /tmp ] && [ ! -L /tmp ] && [ -d "$engine_dir" ] && [ ! -L "$engine_dir" ] &&
+        [ "$(LC_ALL=C ls -ldn "$engine_dir" | awk '{print $1 ":" $3}')" = "drwx------:$(id -u)" ] &&
+        [ -f "$UN260_ENGINE_SYNC" ] && [ ! -L "$UN260_ENGINE_SYNC" ] &&
+        [ "$(LC_ALL=C ls -ldn "$UN260_ENGINE_SYNC" | awk '{print $1 ":" $3}')" = "-rwxr-xr-x:$(id -u)" ] || exit 1
+    SYNC_TOOL=$UN260_ENGINE_SYNC
+fi
 case "$MODE" in --check|--apply|--restore) ;; *) echo 'Usage: sh UN260_RESOURCE_CLEANUP.sh [--check|--apply|--restore]' >&2; exit 2;; esac
 [ "$#" -le 1 ] || { [ "$#" = 3 ] && [ "$MODE" = --apply ] && [ "$2" = --updater ]; } || exit 2
 fail() { echo "ERROR: $*" >&2; exit 1; }

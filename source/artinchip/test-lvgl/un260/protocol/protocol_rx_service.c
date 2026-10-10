@@ -9,6 +9,7 @@
 
 #include "protocol_frame_parser.h"
 #include "protocol_frame_queue.h"
+#include "un260/lv_system/app_clock.h"
 #include "un260/lv_drivers/lv_drivers.h"
 
 static pthread_mutex_t g_state_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -17,6 +18,47 @@ static bool g_started;
 static bool g_running;
 static int g_uart_fd = -1;
 static int g_log_fd = -1;
+static struct {
+    bool valid;
+    uint8_t command;
+    uint64_t received_ms;
+} g_pending_frame;
+
+bool protocol_rx_service_has_command_between(uint8_t command,
+                                             uint64_t started_ms,
+                                             uint64_t deadline_ms)
+{
+    bool found;
+    pthread_mutex_lock(&g_state_mutex);
+    found = g_running && g_pending_frame.valid &&
+            g_pending_frame.command == command &&
+            g_pending_frame.received_ms >= started_ms &&
+            g_pending_frame.received_ms < deadline_ms;
+    pthread_mutex_unlock(&g_state_mutex);
+    return found;
+}
+
+static uint64_t protocol_rx_service_publish_pending(const protocol_frame_view_t *frame)
+{
+    uint64_t received_ms;
+    pthread_mutex_lock(&g_state_mutex);
+    received_ms = app_clock_monotonic_ms();
+    g_pending_frame.command = frame->data[3];
+    g_pending_frame.received_ms = received_ms;
+    g_pending_frame.valid = true;
+    pthread_mutex_unlock(&g_state_mutex);
+    return received_ms;
+}
+
+static void protocol_rx_service_clear_pending(void)
+{
+    pthread_mutex_lock(&g_state_mutex);
+    g_pending_frame.valid = false;
+    g_pending_frame.command = 0;
+    g_pending_frame.received_ms = 0;
+    pthread_mutex_unlock(&g_state_mutex);
+}
+
 
 #define PROTOCOL_RX_LOG_PREVIEW_BYTES 32U
 #define PROTOCOL_RX_QUEUE_WAIT_REPORT_STEP 100U
@@ -25,6 +67,7 @@ static int g_log_fd = -1;
 #define PROTOCOL_RX_ERROR_BACKOFF_US  10000U
 #define PROTOCOL_RX_READ_BUFFER_SIZE 256U
 #define PROTOCOL_RX_QUEUE_WAIT_MS    10U
+#define PROTOCOL_RX_IMAGE_IDLE_MS    1000U
 
 static bool protocol_rx_service_should_run(void)
 {
@@ -36,13 +79,14 @@ static bool protocol_rx_service_should_run(void)
     return running;
 }
 
-static bool protocol_rx_service_enqueue(const protocol_frame_view_t *frame)
+static bool protocol_rx_service_enqueue(const protocol_frame_view_t *frame,
+                                         uint64_t received_ms)
 {
     unsigned int waits = 0;
 
     while (protocol_rx_service_should_run()) {
-        if (protocol_frame_queue_push_wait(frame->data, frame->len,
-                                            PROTOCOL_RX_QUEUE_WAIT_MS)) {
+        if (protocol_frame_queue_push_wait_at(frame->data, frame->len,
+                                               PROTOCOL_RX_QUEUE_WAIT_MS, received_ms)) {
             if (waits > 0U) {
                 uart_printf(g_log_fd, "UART4: queue recovered, waits=%u\n", waits);
             }
@@ -66,6 +110,7 @@ static void *protocol_rx_service_thread(void *arg)
     uint8_t bytes[PROTOCOL_RX_READ_BUFFER_SIZE];
     unsigned int invalid_frames = 0;
     unsigned int receive_errors = 0;
+    uint64_t last_input_ms = 0;
 
     (void)arg;
     protocol_frame_parser_init(&parser);
@@ -95,15 +140,27 @@ static void *protocol_rx_service_thread(void *arg)
             receive_errors = 0;
         }
 
+        if (len > 0) {
+            last_input_ms = app_clock_monotonic_ms();
+        } else if (last_input_ms &&
+                   app_clock_monotonic_ms() - last_input_ms >= PROTOCOL_RX_IMAGE_IDLE_MS) {
+            if (protocol_frame_parser_reset_partial_image(&parser))
+                uart_printf(g_log_fd, "UART4: incomplete image frame discarded after idle\n");
+            last_input_ms = 0;
+        }
+
         for (int i = 0; i < len; i++) {
             protocol_frame_parse_result_t result;
 
             result = protocol_frame_parser_feed(&parser, bytes[i], &frame);
             if (result == PROTOCOL_FRAME_PARSE_READY) {
                 char prefix[32];
+                uint64_t received_ms = protocol_rx_service_publish_pending(&frame);
 
                 runtime_guard_rx(frame.data, frame.len);
-                if (!protocol_rx_service_enqueue(&frame)) goto stopped;
+                bool enqueued = protocol_rx_service_enqueue(&frame, received_ms);
+                protocol_rx_service_clear_pending();
+                if (!enqueued) goto stopped;
                 snprintf(prefix, sizeof(prefix), "RX[%u]: ",
                          (unsigned int)frame.len);
                 uart_log_hex(g_log_fd, prefix, frame.data, frame.len,
@@ -146,6 +203,9 @@ bool protocol_rx_service_start(int uart_fd, int log_fd)
         return false;
     }
 
+    g_pending_frame.valid = false;
+    g_pending_frame.command = 0;
+    g_pending_frame.received_ms = 0;
     g_uart_fd = uart_fd;
     g_log_fd = log_fd;
     g_running = true;
@@ -173,6 +233,9 @@ void protocol_rx_service_stop(void)
         return;
     }
     g_running = false;
+    g_pending_frame.valid = false;
+    g_pending_frame.command = 0;
+    g_pending_frame.received_ms = 0;
     thread = g_thread;
     pthread_mutex_unlock(&g_state_mutex);
 

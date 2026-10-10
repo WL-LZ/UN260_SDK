@@ -1091,7 +1091,6 @@ void ui_refresh_main_page(void)
     format_amount_with_comma(amount, sizeof(amount), data ? data->total_amount : 0);
     page_01_curr_img_refre();
     page_01_main_refresh_totals(data ? data->total_pcs : 0, amount);
-    page_01_err_num_refre();
     if (!s_multi_layout) page_01_main_detail_refresh(s_detail_section);
     page_01_main_refresh_start_state();
     page_01_main_snapshot_capture();
@@ -1313,6 +1312,7 @@ void page_01_main_refresh_totals(int total_pcs, const char *amount_text)
     char pcs_text[32];
     if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_COUNTING)) return;
     lv_snprintf(pcs_text, sizeof(pcs_text), "%d", total_pcs);
+    page_01_err_num_refre();
     if (s_multi_layout) { page_01_multi_refresh(); return; }
     page_01_main_summary_label_set(&s_total_pcs_label, &s_total_pcs_compact,
         "01_pcs_label", pcs_text);

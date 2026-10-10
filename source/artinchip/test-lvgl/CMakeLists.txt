@@ -15,6 +15,10 @@ add_executable(un260_upgrade_display un260/lv_drivers/boot_light.c un260/lv_syst
     un260/lv_system/ui_update_message.c un260/lv_system/ui_update_catalog.c)
 target_compile_definitions(un260_upgrade_display PRIVATE UN260_UPDATE_DISPLAY=1)
 target_link_libraries(un260_upgrade_display z)
+# The fixed rescue screen must survive replacement of application libraries.
+set_target_properties(un260_upgrade_display PROPERTIES LINK_FLAGS "-static")
+add_custom_command(TARGET un260_upgrade_display POST_BUILD
+    COMMAND ${CMAKE_STRIP} --strip-all $<TARGET_FILE:un260_upgrade_display>)
 install(TARGETS un260_upgrade_display RUNTIME DESTINATION bin)
 
 # Suppress cmake unused warning
@@ -40,6 +44,11 @@ execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/
                 RESULT_VARIABLE UPDATE_MESSAGE_RESULT)
 if(NOT UPDATE_MESSAGE_RESULT EQUAL 0)
     message(FATAL_ERROR "Updater display catalogue needs refresh")
+endif()
+execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_upgrade_art.py --check
+                RESULT_VARIABLE UPGRADE_ART_RESULT)
+if(NOT UPGRADE_ART_RESULT EQUAL 0)
+    message(FATAL_ERROR "Native recovery words need offline shaped artwork refresh")
 endif()
 execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_i18n.py --check
                 RESULT_VARIABLE I18N_RESULT)
@@ -69,6 +78,14 @@ execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/
 if(NOT BOOT_LIGHT_ASSET_RESULT EQUAL 0)
     message(FATAL_ERROR "boot-light asset generation failed")
 endif()
+execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/build_boot_bundle.py --validate-config
+                RESULT_VARIABLE BOOT_BUNDLE_CONFIG_RESULT)
+if(NOT BOOT_BUNDLE_CONFIG_RESULT EQUAL 0)
+    message(FATAL_ERROR "Invalid persistent boot bundle configuration")
+endif()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/build_boot_bundle.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/un260/boot/boot_bundle_config.json")
 execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_page_backgrounds.py
                 RESULT_VARIABLE PAGE_BACKGROUND_RESULT)
 if(NOT PAGE_BACKGROUND_RESULT EQUAL 0)
@@ -121,12 +138,30 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/lv_font_roboto_12.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/lv_font_roboto_16.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/build_boot_light_assets.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_boot_handwriting.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/boot_welcome_native.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/boot_handwriting_manifest.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/lv_font_open_runde_medium_48.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/lv_font_boot_welcome.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/un260/lv_core/boot_anim/boot_welcome_timing.h")
-add_executable(un260_boot_light un260/lv_drivers/boot_light.c un260/lv_system/backlight_service.c)
-target_link_libraries(un260_boot_light z)
-install(TARGETS un260_boot_light RUNTIME DESTINATION bin)
+# Versioned root player: its code and artwork update through UPK, while
+# initramfs only mounts root and launches an already verified immutable pair.
+add_executable(un260_boot_player un260/lv_drivers/boot_light.c
+    un260/lv_drivers/boot_theme_pack.c un260/lv_system/backlight_service.c)
+target_compile_definitions(un260_boot_player PRIVATE UN260_BOOT_BUNDLE=1)
+target_compile_options(un260_boot_player PRIVATE -ffunction-sections -fdata-sections)
+set_target_properties(un260_boot_player PROPERTIES LINK_FLAGS "-static -Wl,--gc-sections")
+target_link_libraries(un260_boot_player z)
+# Post-install publishes player/theme/manifest under its content version,
+# then removes this temporary build path from the factory rootfs.
+install(TARGETS un260_boot_player RUNTIME DESTINATION bin)
+add_executable(un260_boot_launch
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../tools/un260-startup/early_init.c
+    un260/boot/boot_bundle.c)
+target_compile_definitions(un260_boot_launch PRIVATE UN260_BOOT_LAUNCH_ONLY=1)
+target_compile_options(un260_boot_launch PRIVATE -ffunction-sections -fdata-sections)
+set_target_properties(un260_boot_launch PROPERTIES LINK_FLAGS "-static -Wl,--gc-sections")
+install(TARGETS un260_boot_launch RUNTIME DESTINATION bin)
 add_executable(${PROJECT_NAME} main.c
     un260/app_service/runtime_guard.c
     un260/font/lv_font_standby_112.c

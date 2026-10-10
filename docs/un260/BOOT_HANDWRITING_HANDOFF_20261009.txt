@@ -1,0 +1,60 @@
+2026-10-09 — 多语言手写欢迎词交接
+
+用户要求：所有窗口完成后统一烧录，不再分次升级。本任务没有替换板上程序。
+当前 Linux images 下的 IMG/UPK 是阶段构建，不应标记为三个任务全部完成后的最终包。
+实证：本次应用安装时间 09:27:51，而另一任务 app_fault_recovery.c 于 09:27:57 再次更新。
+
+本任务已完成的源码
+source/artinchip/test-lvgl/tools/gen_boot_handwriting.py
+source/artinchip/test-lvgl/tools/check_boot_handwriting.py
+source/artinchip/test-lvgl/tools/boot_handwriting_fonts/
+source/artinchip/test-lvgl/un260/font/lv_font_boot_welcome{,_compact}.c
+source/artinchip/test-lvgl/un260/font/boot_welcome_native.h
+source/artinchip/test-lvgl/un260/font/boot_handwriting_manifest.json
+source/artinchip/test-lvgl/un260/lv_core/boot_anim/boot_welcome_{locale,registry}.h
+source/artinchip/test-lvgl/un260/storage/ui_locale_reader.h
+source/artinchip/test-lvgl/un260/storage/ui_locale_store.c（复用原来的读取校验，不改变保存事务）
+source/artinchip/test-lvgl/un260/lv_core/boot_anim/page_00_boot_anim_theme_{c,d}.c
+source/artinchip/test-lvgl/aic_ui/lvgl_data/licenses/boot_handwriting/
+法语、波兰语、土耳其语 Welcome 译文及相应生成目录。
+
+启动重构的集成注意事项
+1. 当前十语种整词字形来自现有 i18n Welcome 键，不能用常规 UI 字体替代。
+2. 英文直接保留 d440266ca 的已批准字形像素；其他语种离线整形。阿拉伯语不能再次镜像或打散。
+3. 原生和 LVGL 资源像素一一对应，D 主题 welcome 坐标为 x=390,y=141，宽500、高128。
+4. 现阶段使用根分区挂载后的只读语言管道解决 initramfs 尚不能读取配置的问题。
+   新统一播放器方案可替换这段机制，但应保留“一次开机固定同一语言与资源版本”的约束和失败回退。
+5. 当前 BOOT_LIGHT_MAGIC D=0x554e4238，C=0x554e4233。另一窗口新增的统一协议结构已保留，未被本任务覆盖。
+6. UI startup_ready 不再替换欢迎词；错误、自检仍正常本地化。新流程若跳过 LVGL 开场，仍需保留它的失败回退路径。
+7. 原始手写字体只用于电脑离线生成，设备不加载整套手写字体。不引入逐帧分配或解码。
+8. 普通构建运行资源过期检查；修改翻译、字体或生成器后，需要显式重新生成并审阅。
+
+已通过的验证
+- 十语言实际 LVGL 渲染：字形覆盖、边界、方向、位置、语言快照及反复创建销毁。
+- 十语言原生/LVGL 欢迎词 alpha 像素完全一致。
+- 英文原始像素与 d440266ca 逐字节一致。
+- 真正 native 进程+模拟 framebuffer：延迟语言读取前无英文闪现，阿拉伯/法语帧，EOF/短读回退，IPC交接。
+- 14 个 PID 1 启动控制流，包括管道创建失败和发送失败。
+- C/D 主题动画、覆盖/恢复、缺图、定时器失败、回退、tick回绕和销毁。
+- 语言保存、恢复、配置损坏、资源缺失及译文/复数检查。
+- locale_font_assets 校验通过；现金工具/操作员/键盘/菜单关联主机回归通过。
+- 完整 make 与阶段 IMG/UPK 一致性检查通过。随后有其他窗口新修改，所以必须最终重新构建。
+
+Linux 测试证据
+/tmp/un260-handwriting-cash.log
+/tmp/un260-handwriting-native.log
+/tmp/un260-handwriting-pipe.log
+/tmp/un260-handwriting-early.log
+/tmp/un260-handwriting-boot.log
+/tmp/un260-handwriting-theme-c.log
+/tmp/un260-handwriting-i18n.log
+/tmp/un260-handwriting-frozen-build.log
+
+最终统一构建的建议顺序
+待三个任务确认源代码稳定后，先运行各自定向测试；串行执行应用/内核重建及完整 make，
+核对 target、内层应用包、外层 UPK、2K IMG 及字库资源，输出 SHA-256。
+构建期间避免其他窗口再次修改同一源码或同时运行 make。
+最后提供一套最终文件给用户统一烧录。冷启动、物理屏幕/触摸及真实主控恢复仍按各任务要求实机验收。
+
+本任务没有 Git 提交或推送；保留原有 page_01_main.c 与 test_main_view.c 修改。
+不应回退、覆盖另一任务的故障恢复改动，也不应把本任务阶段包作为最终统一结果。

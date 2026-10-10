@@ -35,6 +35,57 @@
 #include "aic_ui/render_scratch.h"
 #include "un260/storage/ui_factory_reset_store.h"
 
+/* Presentation tracing is attached only by explicit startup opt-in. A
+ * fallback changes phase inside the actual successful-present callback, so
+ * its first self-test frame cannot disappear between two main-loop polls. */
+static struct {
+    bool active,selfcheck;
+    uint64_t first_us;
+} startup_frame_trace;
+
+static void startup_frame_present(uint64_t present_us)
+{
+    if (!startup_frame_trace.active) return;
+    if (!startup_frame_trace.selfcheck && !ui_page_00_boot_anim_is_active()) {
+        app_startup_frames_finish();
+        if (ui_manager_get_current_page() != UI_PAGE_BOOT ||
+            ui_page_08_curr_prepare_failed()) {
+            startup_frame_trace.active = false;
+            lv_port_disp_set_present_observer(NULL);
+            return;
+        }
+        startup_frame_trace.active = app_startup_frames_begin_selfcheck();
+        startup_frame_trace.selfcheck = true;
+    }
+    if (!startup_frame_trace.active) return;
+    if (startup_frame_trace.selfcheck && !startup_frame_trace.first_us) {
+        startup_frame_trace.first_us = present_us;
+        app_startup_trace_mark("selftest_first_frame_presented");
+    }
+    app_startup_frames_present(present_us);
+}
+
+static void startup_frame_trace_begin(bool selfcheck)
+{
+    startup_frame_trace.selfcheck = selfcheck;
+    startup_frame_trace.first_us = 0;
+    startup_frame_trace.active = selfcheck ? app_startup_frames_begin_selfcheck() :
+                                           app_startup_frames_begin();
+    if (startup_frame_trace.active) lv_port_disp_set_present_observer(startup_frame_present);
+}
+
+static void startup_frame_trace_poll(uint64_t now_us)
+{
+    if (startup_frame_trace.active && startup_frame_trace.selfcheck &&
+        startup_frame_trace.first_us &&
+        now_us >= startup_frame_trace.first_us &&
+        now_us - startup_frame_trace.first_us >= 5000000U) {
+        lv_port_disp_set_present_observer(NULL);
+        app_startup_frames_finish();
+        startup_frame_trace.active = false;
+    }
+}
+
 //-------------------- 主函数 --------------------
 static int application_main(void) {
     app_startup_trace_mark("main_enter");
@@ -63,6 +114,17 @@ static int application_main(void) {
         return 1;
     }
     app_startup_trace_mark("backlight_initialized");
+    bool native_waiting = false;
+#if UI_BOOT_EARLY_ENABLED
+    int native_visual = startup_visual_begin(NULL);
+    if (native_visual < 0) {
+        fprintf(stderr, "Root startup player ABI unavailable; refusing concurrent draw\n");
+        return 1;
+    }
+    native_waiting = native_visual > 0;
+    bool native_surface_prepared = false;
+    uint32_t native_poll_tick = app_clock_uptime_ms() - 50U;
+#endif
 #if !UI_BOOT_EARLY_ENABLED
     lv_port_indev_init();
     app_startup_trace_mark("input_initialized");
@@ -86,10 +148,18 @@ static int application_main(void) {
     perf_profile_set_enabled(user_cfg_performance_profile_enabled());
     app_ui_runtime_init();
 #endif
-    ui_page_00_boot_anim_create(lv_layer_top());
+    if (!native_waiting) ui_page_00_boot_anim_create(lv_layer_top());
 #if UI_BOOT_EARLY_ENABLED
-    if (!ui_page_00_boot_anim_is_active())
-        while (!ui_page_08_curr_prepare_step()) { }
+    if (!native_waiting && !ui_page_00_boot_anim_is_active()) {
+        while (!ui_page_08_curr_prepare_step()) {
+            if (ui_page_08_curr_prepare_failed()) {
+                fprintf(stderr, "Self-test display preparation failed; restart required\n");
+                app_startup_trace_mark("selftest_prepare_failed");
+                return 1;
+            }
+        }
+    }
+    if (native_waiting) ui_page_08_curr_set_covered(true);
 #endif
     app_startup_trace_mark("intro_assets_ready");
 
@@ -100,6 +170,7 @@ static int application_main(void) {
     ui_page_00_boot_anim_set_startup_ready(false);
     bool startup_started = false, startup_ready = false, startup_input_ready = false;
     bool startup_error_reported = false;
+    uint32_t startup_health_sequence = fbdev_present_sequence();
 #else
     if (!app_serial_runtime_start()) {
         app_startup_trace_mark("serial_failed");
@@ -110,24 +181,25 @@ static int application_main(void) {
     app_startup_trace_mark("history_load_started");
 #endif
     bool first_frame_presented = false;
-    bool boot_frames_active = ui_page_00_boot_anim_is_active() && app_startup_frames_begin();
-    if (boot_frames_active)
-        lv_port_disp_set_present_observer(app_startup_frames_present);
-    uint32_t early_elapsed = 0;
-    int early_visual = startup_visual_acquire(&early_elapsed);
-    if (early_visual < 0) {
-        fprintf(stderr,"Startup display ownership unavailable; refusing concurrent draw\n");
-        return 1;
-    }
-    if (getenv("UN260_BOOT_LIGHT_ACTIVE")) {
-        bool adopted_scanout = lv_port_disp_adopt_scanout();
-        if (early_visual > 0 && !adopted_scanout) return 1;
-    }
-    if (early_visual > 0) {
+    if (!native_waiting)
+        startup_frame_trace_begin(!ui_page_00_boot_anim_is_active());
+    if (!native_waiting) {
+        uint32_t early_elapsed = 0;
+        int early_visual = startup_visual_acquire(&early_elapsed);
+        if (early_visual < 0) {
+            fprintf(stderr,"Startup display ownership unavailable; refusing concurrent draw\n");
+            return 1;
+        }
+        if (getenv("UN260_BOOT_LIGHT_ACTIVE")) {
+            bool adopted_scanout = lv_port_disp_adopt_scanout();
+            if (early_visual > 0 && !adopted_scanout) return 1;
+        }
+        if (early_visual > 0) {
 #if UI_BOOT_EARLY_ENABLED
-        ui_page_00_boot_anim_adopt_elapsed(early_elapsed);
+            ui_page_00_boot_anim_adopt_elapsed(early_elapsed);
 #endif
-        app_startup_trace_mark("early_visual_adopted");
+            app_startup_trace_mark("early_visual_adopted");
+        }
     }
     bool history_load_reported = false;
     bool previous_fault_notified = false;
@@ -137,12 +209,9 @@ static int application_main(void) {
         uint64_t wake_sequence = app_runtime_wakeup_snapshot();
         uint64_t loop_start_us = app_clock_monotonic_us();
         ui_page_00_boot_anim_poll();
-        if (boot_frames_active && !ui_page_00_boot_anim_is_active()) {
-            lv_port_disp_set_present_observer(NULL);
-            app_startup_frames_finish();
-            boot_frames_active = false;
-        }
         uint32_t now = app_clock_uptime_ms();
+        if (startup_frame_trace.active)
+            startup_frame_trace_poll(app_clock_monotonic_us());
         ui_page_t current_page = ui_manager_get_current_page();
         uint64_t lvgl_start_us;
         uint64_t lvgl_end_us;
@@ -153,7 +222,9 @@ static int application_main(void) {
 
         profile_frame_seq = perf_profile_frame_sequence();
         lvgl_start_us = app_clock_monotonic_us();
-        bool display_ready = lv_port_disp_poll();
+        /* Object preparation is safe while the native player owns scanout;
+         * framebuffer flushes and input timers start only after its lease. */
+        bool display_ready = !native_waiting && lv_port_disp_poll();
         if (display_ready) {
             if ((uint32_t)(now - visual_commit_tick) >= LV_DISP_DEF_REFR_PERIOD) {
                 ui_frame_commit_flush();
@@ -167,7 +238,7 @@ static int application_main(void) {
             app_startup_trace_mark("first_frame_presented");
         }
 #if UI_BOOT_EARLY_ENABLED
-        if (!startup_started && first_frame_presented) {
+        if (!startup_started && (first_frame_presented || native_waiting)) {
             startup_started = true;
             (void)app_startup_runtime_begin(app_clock_uptime_ms());
             app_startup_trace_mark("startup_io_started");
@@ -183,6 +254,7 @@ static int application_main(void) {
                 app_startup_trace_mark("input_initialized");
             }
             if (status == APP_STARTUP_READY) {
+                startup_health_sequence = fbdev_present_sequence();
                 startup_ready = true;
                 ui_page_00_boot_anim_set_startup_ready(true);
                 app_startup_trace_mark("startup_ready");
@@ -193,9 +265,60 @@ static int application_main(void) {
                     app_startup_trace_mark("startup_failed");
                     startup_error_reported = true;
                 }
-                ui_page_00_boot_anim_set_startup_error(startup_input_ready);
+                if (!native_waiting)
+                    ui_page_00_boot_anim_set_startup_error(startup_input_ready);
             }
         }
+        if (!native_waiting && ui_page_08_curr_prepare_failed()) {
+            if (!startup_error_reported) {
+                fprintf(stderr, "Self-test display preparation failed; restart required\n");
+                app_startup_trace_mark("selftest_prepare_failed");
+                startup_error_reported = true;
+            }
+            if (!ui_page_00_boot_anim_is_active()) return 1;
+            ui_page_00_boot_anim_set_startup_error(startup_input_ready);
+        }
+        if (native_waiting) {
+            /* Preferences have been published before creating translated
+             * self-test rows. Preparation never waits for controller self-test. */
+            if (startup_input_ready && !native_surface_prepared && !startup_error_reported) {
+                native_surface_prepared = ui_page_08_curr_prepare_step();
+                if (ui_page_08_curr_prepare_failed()) {
+                    fprintf(stderr, "Self-test display preparation failed; restart required\n");
+                    app_startup_trace_mark("selftest_prepare_failed");
+                    startup_error_reported = true;
+                }
+            }
+            uint32_t native_now = app_clock_uptime_ms();
+            if ((uint32_t)(native_now - native_poll_tick) >= 50U) {
+                native_poll_tick = native_now;
+                int handoff = startup_visual_poll(
+                    startup_ready && native_surface_prepared, startup_error_reported);
+                if (handoff < 0) {
+                    fprintf(stderr, "Root startup display ownership unavailable; refusing concurrent draw\n");
+                    return 1;
+                }
+                if (handoff > 0) {
+                    if (!lv_port_disp_adopt_scanout()) return 1;
+                    native_waiting = false;
+                    if (startup_error_reported) {
+                        ui_page_00_boot_anim_create(lv_layer_top());
+                        ui_page_00_boot_anim_set_startup_ready(false);
+                        ui_page_00_boot_anim_set_startup_error(startup_input_ready);
+                    } else {
+                        ui_page_08_curr_set_covered(false);
+                        startup_frame_trace_begin(true);
+                    }
+                    app_startup_trace_mark("root_visual_handoff");
+                }
+            }
+        }
+        /* Confirm usable startup only after a successful frame following readiness.
+         * A Welcome error frame must leave the trial unconfirmed. */
+        if (startup_ready && !native_waiting &&
+            !startup_error_reported &&
+            fbdev_present_sequence() != startup_health_sequence)
+            startup_visual_note_ui_presented();
         /* Preferences and UART must be published before any consumer runs.
          * Once they are ready, keep draining unrelated replies while history
          * loads; the existing counting preflight retains record backpressure. */
@@ -207,6 +330,8 @@ static int application_main(void) {
         }
 #else
         ui_history_data_init_poll();
+        if (first_frame_presented && ui_history_data_is_initialized())
+            startup_visual_note_ui_presented();
 #endif
         if (!history_load_reported && ui_history_data_is_initialized()) {
             history_load_reported = true;
@@ -233,7 +358,7 @@ static int application_main(void) {
         app_command_runtime_poll(now);
 
         app_boot_runtime_poll(
-            now, current_page == UI_PAGE_BOOT &&
+            now, first_frame_presented && !native_waiting && current_page == UI_PAGE_BOOT &&
                  !ui_page_00_boot_anim_is_active() &&
                  ui_history_data_is_initialized());
         ui_frame_commit_end_batch();

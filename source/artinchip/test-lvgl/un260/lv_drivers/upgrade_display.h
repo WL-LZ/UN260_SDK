@@ -4,10 +4,15 @@
 #define UN260_UPGRADE_DISPLAY_H
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_system/ui_update_message.h"
-/* The emergency framebuffer font only supports Latin A-Z/0-9. Resolve through
- * the shared catalogue in its supported locale until a localized native font
- * profile is installed. Do not attempt unreadable CJK/RTL with this renderer. */
-static const char *upgrade_copy(const char *key) { return ui_tr_for(LANGUAGE_EN, key); }
+/* Fixed localized labels are pre-shaped offline and frozen into this executable.
+ * They remain usable when the normal UI or installed font assets cannot start. */
+#include "un260/storage/ui_locale_reader.h"
+#include "un260/font/upgrade_native_art.h"
+#include <zlib.h>
+#ifndef UPGRADE_LOCALE_PATH
+#define UPGRADE_LOCALE_PATH "/etc/ui_state/language.cfg"
+#endif
+static const char *upgrade_copy(const char *key) { return key; }
 #ifndef UPGRADE_STATUS_PATH
 #define UPGRADE_STATUS_PATH "/tmp/ui_update.status"
 #endif
@@ -27,8 +32,56 @@ static void upgrade_rect(uint8_t *pixels,unsigned stride,int x,int y,int w,int h
     for(int row=y;row<y+h&&row<400;row++) for(int col=x;col<x+w&&col<1280;col++)
         if(row>=0&&col>=0)memcpy(pixels+(size_t)row*stride+(size_t)col*4,&color,4);
 }
+/* Cache each immutable 4bpp word only on first use; no per-frame decode. */
+static unsigned char *upgrade_native_cache[UPGRADE_ART_KEY_COUNT];
+static unsigned upgrade_native_locale;
+static int upgrade_native_locale_ready;
+static int upgrade_native_key(const char *key)
+{
+    for(unsigned n=0;n<UPGRADE_ART_KEY_COUNT;n++)
+        if(!strcmp(key,upgrade_art_keys[n]))return (int)n;
+    return -1;
+}
+static int upgrade_native_text(uint8_t *pixels,unsigned stride,int x,int y,const char *key,uint32_t color)
+{
+    int index=upgrade_native_key(key);
+    if(index<0)return 0;
+    if(!upgrade_native_locale_ready) {
+        char tag[UI_LOCALE_TAG_CAPACITY];
+        if(ui_locale_read_file(UPGRADE_LOCALE_PATH,tag))
+            for(unsigned n=0;n<UPGRADE_ART_LOCALE_COUNT;n++)
+                if(!strcmp(tag,upgrade_art_tags[n])) { upgrade_native_locale=n;break; }
+        upgrade_native_locale_ready=1;
+    }
+    unsigned entry=upgrade_native_locale*UPGRADE_ART_KEY_COUNT+(unsigned)index;
+    unsigned w=upgrade_art_rows[entry].w,h=upgrade_art_rows[entry].h;
+    size_t size=((size_t)w*h+1)/2;
+    if(!w||!h||w>1152||h>56||size>32256)return 0;
+    if(!upgrade_native_cache[index]) {
+        unsigned char *data=malloc(size);
+        if(!data)return 0;
+        uLongf decoded=(uLongf)size;
+        if(uncompress(data,&decoded,upgrade_art_pixels+upgrade_art_rows[entry].offset,
+                      upgrade_art_rows[entry].bytes)!=Z_OK||decoded!=size) {free(data);return 0;}
+        upgrade_native_cache[index]=data;
+    }
+    const unsigned char *data=upgrade_native_cache[index];
+    for(unsigned row=0;row<h;row++)for(unsigned column=0;column<w;column++) {
+        int px=x+(int)column,py=y+(int)row;
+        if(px<0||px>=1280||py<0||py>=400)continue;
+        unsigned position=row*w+column;
+        unsigned alpha=((position&1)?data[position/2]&15:data[position/2]>>4)*17U;
+        if(!alpha)continue;
+        uint8_t *destination=pixels+(size_t)py*stride+(size_t)px*4;
+        for(unsigned channel=0;channel<3;channel++)
+            destination[channel]=(uint8_t)((((color>>(channel*8))&255U)*alpha+destination[channel]*(255U-alpha)+127U)/255U);
+        destination[3]=255;
+    }
+    return 1;
+}
 static void upgrade_text(uint8_t *pixels,unsigned stride,int x,int y,const char *text,int scale,uint32_t color)
 {
+    if(upgrade_native_text(pixels,stride,x,y,text,color))return;
     for(;*text&&x<1220;text++,x+=6*scale) {
         unsigned char c=(unsigned char)*text;
         if(c>='a'&&c<='z')c-=32;
@@ -42,16 +95,16 @@ static void upgrade_render(uint8_t *pixels,unsigned stride)
 {
     const char *fault=getenv("UN260_RUNTIME_FAULT_DISPLAY");
     if(fault && !strcmp(fault,"1")) {
-        /* Minimal Latin emergency font remains usable without LVGL/assets. */
+        /* Frozen regional words remain usable without LVGL/assets. */
         upgrade_rect(pixels,stride,0,0,1280,400,0xfff3f5f6);
-        upgrade_text(pixels,stride,64,42,"UN260 PROTECTION MODE",4,0xffb76313);
-        upgrade_text(pixels,stride,64,116,"STOP FEEDING BANKNOTES",4,0xff20313b);
-        upgrade_text(pixels,stride,64,184,"KEEP NOTES SEPARATE AND RECOUNT",3,0xff20313b);
-        upgrade_text(pixels,stride,64,242,"COUNT AND CONTROLLER STATE REQUIRE CHECKING",3,0xff20313b);
-        upgrade_text(pixels,stride,64,320,"CONTACT SERVICE  DO NOT RESUME COUNTING",3,0xff576c79);
+        upgrade_text(pixels,stride,64,42,upgrade_copy(UI_N_("UN260 PROTECTION MODE")),4,0xffb76313);
+        upgrade_text(pixels,stride,64,116,upgrade_copy(UI_N_("STOP FEEDING BANKNOTES")),4,0xff20313b);
+        upgrade_text(pixels,stride,64,184,upgrade_copy(UI_N_("KEEP NOTES SEPARATE AND RECOUNT")),3,0xff20313b);
+        upgrade_text(pixels,stride,64,242,upgrade_copy(UI_N_("COUNT AND CONTROLLER STATE REQUIRE CHECKING")),3,0xff20313b);
+        upgrade_text(pixels,stride,64,320,upgrade_copy(UI_N_("CONTACT SERVICE  DO NOT RESUME COUNTING")),3,0xff576c79);
         return;
     }
-    int progress=0,failed=0,success=0;
+    int progress=0,failed=0,success=0,waiting=0;
     char line[256],message[160];
     snprintf(message,sizeof(message),"%s",upgrade_copy(UI_N_("CHECKING THE SAME USB PACKAGE")));
     FILE *status=fopen(UPGRADE_STATUS_PATH,"r");
@@ -67,20 +120,26 @@ static void upgrade_render(uint8_t *pixels,unsigned stride)
         }
         fclose(status);
     }
+    waiting=!strcmp(message,UI_N_("Insert USB drive with update/UN260_UPDATE.upk"));
     if(progress<0)progress=0;
     if(progress>100)progress=100;
     uint32_t accent=failed?0xffb76313:0xff195bbb;
     upgrade_rect(pixels,stride,0,0,1280,400,0xfff3f5f6);
     upgrade_text(pixels,stride,64,42,upgrade_copy(UI_N_("UN260 SYSTEM UPDATE")),3,0xff576c79);
-    upgrade_text(pixels,stride,64,104,upgrade_copy(failed?UI_N_("UPDATE PAUSED"):success?UI_N_("UPDATE COMPLETE"):UI_N_("UPDATING YOUR DEVICE")),5,accent);
+    upgrade_text(pixels,stride,64,104,upgrade_copy((failed||waiting)?UI_N_("UPDATE PAUSED"):success?UI_N_("UPDATE COMPLETE"):UI_N_("UPDATING YOUR DEVICE")),5,accent);
     upgrade_text(pixels,stride,64,179,upgrade_copy(failed?UI_N_("KEEP BACKUPS AND CHECK THE ERROR"):UI_N_("KEEP USB AND POWER CONNECTED")),3,0xff20313b);
     upgrade_rect(pixels,stride,64,238,1152,12,0xffdce3e8);
     upgrade_rect(pixels,stride,64,238,1152*progress/100,12,accent);
-    /* Wrap the diagnostic instead of cropping away the actionable suffix. */
-    char resolved[320];ui_update_message_render(LANGUAGE_EN,message,resolved,sizeof(resolved));
-    char first[91];snprintf(first,sizeof(first),"%.90s",resolved);
-    upgrade_text(pixels,stride,64,283,first,2,0xff576c79);
-    if(strlen(resolved)>90)upgrade_text(pixels,stride,64,307,resolved+90,2,0xff576c79);
+    /* Known recovery hints use frozen localized artwork. Detailed engine text
+     * stays in the log; unknown future text is a stable service code, never an
+     * unreadable partial UTF-8 or printf-format string. */
+    if(upgrade_native_key(message)>=0)upgrade_text(pixels,stride,64,283,message,2,0xff576c79);
+    else if(failed) {
+        uint32_t code=2166136261U;
+        for(const unsigned char *c=(const unsigned char *)message;*c;c++)code=(code^*c)*16777619U;
+        char diagnostic[24];snprintf(diagnostic,sizeof(diagnostic),"E %08X",code);
+        upgrade_text(pixels,stride,64,283,diagnostic,2,0xff576c79);
+    }
     upgrade_text(pixels,stride,64,353,upgrade_copy(failed?UI_N_("RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE"):UI_N_("BACKUP   STORAGE   APPLICATION   VERIFY")),2,0xff576c79);
 }
 #endif

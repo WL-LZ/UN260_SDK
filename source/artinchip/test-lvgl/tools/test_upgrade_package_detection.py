@@ -30,6 +30,7 @@ globals_ = service[service.index('static ui_upgrade_service_ctx_t g_ui_upgrade_s
                    service.index('static bool ui_upgrade_service_file_exists')]
 names = ('ui_upgrade_service_file_exists', 'ui_upgrade_service_hash_file_fnv1a64',
          'ui_upgrade_service_hash_cache_clear', 'ui_upgrade_service_hash_file_cached',
+         'ui_upgrade_service_parse_hash',
          'ui_upgrade_service_read_installed_bundle_hash',
          'ui_upgrade_service_get_package_hash_status', 'ui_upgrade_service_set_status',
          'ui_upgrade_service_reset', 'ui_upgrade_service_detect',

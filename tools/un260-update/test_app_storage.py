@@ -5,6 +5,7 @@ NAND and UBI are fixture functions. Does not establish physical power-cut safety
 """
 import hashlib
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -489,7 +490,7 @@ backup_digest() {
                     self.assertEqual(calls, after)
                     self.run_helper(action='migrate "$POLICY_V2"'); self.assert_active()
 
-    def query_public(self, action):
+    def query_public(self, action, sync_tool=None, engine_sync=None):
         # Execute the actual public query, including its early dispatch before
         # the writeback guard; only path constants point into this fixture.
         script = HELPER.read_text()
@@ -502,10 +503,14 @@ backup_digest() {
                          ('DEV=/dev', 'DEV=' + str(self.dev)),
                          ('VOLUME=/mnt/un260-app', 'VOLUME=' + str(self.vol)),
                          ('RAW_BYTES=39845888', 'RAW_BYTES=4096'),
-                         ('SYNC_TOOL=/usr/local/bin/un260_storage_sync', 'SYNC_TOOL=/nonexistent-for-readonly-query')]:
+                         ('SYNC_TOOL=/usr/local/bin/un260_storage_sync', 'SYNC_TOOL=' + str(sync_tool or '/nonexistent-for-readonly-query'))]:
             script = script.replace(old, new)
         path = self.p / 'query-helper'; path.write_text(script)
-        return subprocess.run(SHELL + [str(path), action], capture_output=True, text=True)
+        env = dict(os.environ)
+        env.pop('UN260_ENGINE_SYNC', None)
+        if engine_sync is not None:
+            env['UN260_ENGINE_SYNC'] = str(engine_sync)
+        return subprocess.run(SHELL + [str(path), action], capture_output=True, text=True, env=env)
 
     def query_legacy(self):
         return self.query_public('--can-launch-legacy')
@@ -823,6 +828,187 @@ sync() {
         self.app.chmod(0o755)
         saved = self.p / 'saved-app'; self.app.rename(saved); self.app.symlink_to(saved)
         self.assertNotEqual(self.query_legacy().returncode, 0)
+
+
+    def prepare_public(self, action='--prepare-storage', engine_sync=None):
+        return self.query_public(action, sync_tool=native_tool(), engine_sync=engine_sync)
+
+    def release_fixture_lock(self):
+        self.p.joinpath('lock/pid').unlink()
+        self.p.joinpath('lock').rmdir()
+
+    def engine_snapshot(self):
+        result = subprocess.run(['mktemp', '-d', '/tmp/un260-update-engine.XXXXXX'],
+                                capture_output=True, text=True, check=True)
+        context = Path(result.stdout.strip())
+        (self.p / 'lock/pid').write_text(str(os.getpid()) + '\n')
+        self.addCleanup(lambda: shutil.rmtree(context) if context.exists() else None)
+        tool = context / 'sync'
+        shutil.copyfile(native_tool(), tool)
+        tool.chmod(0o755)
+        return context, tool
+
+    def test_prepare_storage_missing_app_allows_repair_but_not_launch(self):
+        self.run_helper()
+        calls = self.dev.joinpath('format-calls').read_bytes()
+        self.vol.joinpath('test_lvgl').unlink()
+        self.usb.rename(self.p / 'removed-usb')
+        self.release_fixture_lock()
+        self.assertEqual(self.prepare_public().returncode, 0)
+        self.assertNotEqual(self.prepare_public('--prepare').returncode, 0)
+        self.assertNotEqual(self.query_public('--can-launch-current').returncode, 0)
+        self.assertFalse(self.vol.joinpath('test_lvgl').exists())
+        self.assertEqual(self.dev.joinpath('format-calls').read_bytes(), calls)
+
+    def test_prepare_storage_nonexecutable_app_allows_repair_but_not_launch(self):
+        self.run_helper()
+        self.vol.joinpath('test_lvgl').chmod(0o644)
+        self.release_fixture_lock()
+        self.assertEqual(self.prepare_public().returncode, 0)
+        self.assertNotEqual(self.prepare_public('--prepare').returncode, 0)
+        self.assertNotEqual(self.query_public('--can-launch-current').returncode, 0)
+        self.assertEqual(self.vol.joinpath('test_lvgl').stat().st_mode & 0o777, 0o644)
+
+    def test_prepare_storage_corrupt_regular_app_retains_prepare_semantics(self):
+        self.run_helper()
+        self.vol.joinpath('test_lvgl').write_bytes(b'broken application bytes')
+        self.release_fixture_lock()
+        self.assertEqual(self.prepare_public().returncode, 0)
+        # --prepare retains the original regular+x contract; query checks ELF.
+        self.assertEqual(self.prepare_public('--prepare').returncode, 0)
+        self.assertNotEqual(self.query_public('--can-launch-current').returncode, 0)
+
+    def test_prepare_storage_rejects_unsafe_app_shapes(self):
+        self.run_helper()
+        app = self.vol / 'test_lvgl'
+        original = app.read_bytes()
+        for shape in ('symlink', 'directory', 'fifo'):
+            with self.subTest(shape=shape):
+                app.unlink()
+                if shape == 'symlink': app.symlink_to(self.app)
+                elif shape == 'directory': app.mkdir()
+                else: os.mkfifo(app)
+                self.assertNotEqual(self.prepare_public().returncode, 0)
+                if shape == 'directory': app.rmdir()
+                else: app.unlink()
+                app.write_bytes(original); app.chmod(0o755)
+
+    def test_prepare_storage_rejects_wrong_owner_geometry_and_mount(self):
+        self.run_helper()
+        owner = self.vol / '.un260-owner'
+        owner.write_text('OTHER')
+        self.assertNotEqual(self.prepare_public().returncode, 0)
+        owner.write_text('UN260_APP_VOLUME_V1\n')
+        geometry = self.p / 'sys/class/mtd/mtd11/size'
+        geometry.write_text('999\n')
+        self.assertNotEqual(self.prepare_public().returncode, 0)
+        geometry.write_text('4096\n')
+        mounts = self.p / 'proc/mounts'
+        original = mounts.read_text()
+        for broken in (original.replace('ubifs rw', 'ubifs ro'),
+                       original.replace('ubi1:un260_app', 'other-volume')):
+            mounts.write_text(broken)
+            self.assertNotEqual(self.prepare_public().returncode, 0)
+        mounts.write_text(original)
+        self.assertEqual(self.prepare_public().returncode, 0)
+
+    def test_prepare_storage_rejects_root_launcher_and_marker_corruption(self):
+        self.run_helper()
+        original = self.app.read_bytes()
+        self.app.write_bytes(b'not managed launcher')
+        self.assertEqual(self.prepare_public().returncode, 0)
+        self.assertNotEqual(self.prepare_public('--prepare').returncode, 0)
+        self.app.unlink()
+        self.assertEqual(self.prepare_public().returncode, 0)
+        self.assertNotEqual(self.prepare_public('--prepare').returncode, 0)
+        self.app.write_bytes(original); self.app.chmod(0o755)
+        active = self.state / 'active'
+        active.write_text('WRONG')
+        self.assertNotEqual(self.prepare_public().returncode, 0)
+
+    def test_prepare_storage_preserves_pending_migration_without_advancing(self):
+        self.run_helper()
+        calls = self.dev.joinpath('format-calls').read_bytes()
+        for name in ('pending', 'pending.tmp', 'active.tmp'):
+            with self.subTest(name=name):
+                marker = self.state / name
+                marker.write_bytes(b'PRESERVE INTENT')
+                self.assertNotEqual(self.prepare_public().returncode, 0)
+                self.assertEqual(marker.read_bytes(), b'PRESERVE INTENT')
+                marker.unlink()
+        self.assertEqual(self.dev.joinpath('format-calls').read_bytes(), calls)
+
+    def test_prepare_storage_before_enrollment_never_initializes(self):
+        self.app.unlink()
+        self.assertEqual(self.prepare_public().returncode, 0)
+        self.assertFalse(self.p.joinpath('sys/class/ubi/ubi1').exists())
+        self.assertFalse(self.dev.joinpath('format-calls').exists())
+        self.assertFalse(self.state.exists())
+
+    def test_prepare_storage_rejects_metadata_symlink_and_nondirectory(self):
+        self.run_helper()
+        active = self.state / 'active'
+        data = active.read_bytes(); active.unlink()
+        active.symlink_to(self.p / 'absent')
+        self.assertNotEqual(self.prepare_public().returncode, 0)
+        active.unlink(); active.write_bytes(data)
+        self.assertEqual(self.prepare_public().returncode, 0)
+        # The new route must not silently treat a state file as unenrolled.
+        other = self.p / 'state-file'; other.write_bytes(b'unsafe')
+        result = self.run_helper(action='STATE="$VOLUME/../state-file"; prepare_storage', ok=False)
+        self.assertIn('state directory', result.stderr)
+
+    def test_matching_engine_sync_snapshot_uses_verified_private_tool(self):
+        self.run_helper()
+        context, tool = self.engine_snapshot()
+        self.assertEqual(self.prepare_public(engine_sync=tool).returncode, 0)
+        self.assertTrue(context.is_dir())
+        self.assertTrue(tool.is_file())
+
+    def test_matching_engine_sync_rejects_untrusted_context_or_tool_modes(self):
+        self.run_helper()
+        context, tool = self.engine_snapshot()
+        context.chmod(0o755)
+        self.assertNotEqual(self.prepare_public(engine_sync=tool).returncode, 0)
+        context.chmod(0o700); tool.chmod(0o644)
+        self.assertNotEqual(self.prepare_public(engine_sync=tool).returncode, 0)
+        tool.chmod(0o755); tool.unlink(); tool.symlink_to(native_tool())
+        self.assertNotEqual(self.prepare_public(engine_sync=tool).returncode, 0)
+
+    def test_matching_engine_sync_rejects_real_nested_six_character_context(self):
+        self.run_helper()
+        context, tool = self.engine_snapshot()
+        for suffix in ('ab', 'cd', 'ef', 'gh'):
+            outer = Path('/tmp/un260-update-engine.' + context.name[-2:] + suffix)
+            # Four chars plus slash + one char is exactly six wildcard chars.
+            try: outer.mkdir(mode=0o700)
+            except FileExistsError: continue
+            break
+        else: self.fail('cannot allocate isolated nested context')
+        self.addCleanup(lambda: shutil.rmtree(outer))
+        nested = outer / 'x'; nested.mkdir(mode=0o700)
+        nested_tool = nested / 'sync'
+        shutil.copyfile(native_tool(), nested_tool); nested_tool.chmod(0o755)
+        self.assertNotEqual(self.prepare_public(engine_sync=nested_tool).returncode, 0)
+
+    def test_matching_engine_sync_rejects_unmatched_parent_lock(self):
+        self.run_helper()
+        context, tool = self.engine_snapshot()
+        (self.p / 'lock/pid').write_text('1\n')
+        self.assertNotEqual(self.prepare_public(engine_sync=tool).returncode, 0)
+        (self.p / 'lock/pid').write_text(str(os.getpid()) + '\n')
+        self.assertEqual(self.prepare_public(engine_sync=tool).returncode, 0)
+
+    def test_matching_engine_sync_rejects_paths_and_bad_probe(self):
+        self.run_helper()
+        for value in ('', '/tmp/sync', '/usr/local/bin/un260_storage_sync',
+                      '/tmp/un260-update-engine.abcdefg/sync',
+                      '/tmp/un260-update-engine.abcdef/sub/sync'):
+            with self.subTest(value=value):
+                self.assertNotEqual(self.prepare_public(engine_sync=value).returncode, 0)
+        context, tool = self.engine_snapshot()
+        tool.write_text('#!/bin/sh\necho WRONG_PROBE\n'); tool.chmod(0o755)
+        self.assertNotEqual(self.prepare_public(engine_sync=tool).returncode, 0)
 
 
 if __name__ == '__main__':

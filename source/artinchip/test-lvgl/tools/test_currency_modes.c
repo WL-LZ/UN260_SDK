@@ -87,7 +87,7 @@ static void choose(const char *code)
 }
 static void reply_mode(uint8_t status, uint8_t value)
 {
-    uint8_t reply[7] = {0, 0, 0, 0x04, status, value, 0};
+    uint8_t reply[7] = {0xFD, 0xDF, status == 3 ? 7 : 6, 0x04, status, value, 0};
     app_setting_reply_action_t action = app_setting_reply_handle_basic(
         0x04, reply, status == 3 ? 7 : 6);
     if (action & APP_SETTING_REPLY_ACTION_SCHEDULE_MODE_CLEAR) mode_clear = true;
@@ -172,7 +172,9 @@ static void test_requests_replies_and_boot(void)
     assert(sends==1 && last_cmd==3 && last_length==3 && !memcmp(last_payload,"MUL",3));
     selected("CNY"); assert(currency_service_switch_pending());
     choose("AUT"); assert(sends==1);
+    unsigned previous_nav=navigations, previous_notices=test_notice_count;
     currency_ack(2); selected("CNY");
+    assert(navigations==previous_nav+1 && test_notice_count==previous_notices && !test_notice_visible);
     choose("MUL"); currency_ack(1); selected("MUL");
     assert(machine_state_mode()==MODE_MDC);
     choose("AUT"); selected("MUL");

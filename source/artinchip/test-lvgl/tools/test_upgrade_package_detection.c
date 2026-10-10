@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <fcntl.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -197,26 +198,26 @@ int main(int argc, char **argv)
     before = prompts;
     unsigned before_notices = notices;
     info = detect_and_prompt();
-    assert(info.package_hash_status == UI_UPGRADE_PACKAGE_HASH_MATCH);
+    assert(info.package_hash_status == UI_UPGRADE_PACKAGE_HASH_NOT_CHECKED && !info.package_found);
     assert(!ui_upgrade_service_can_reinstall());
-    assert(prompts == before && notices == before_notices + 1);
+    assert(prompts == before && notices == before_notices);
     upgrade_popup_on_retry_click(NULL);
     assert(prompts == before && !g_upgrade_popup.root);
 
     reset_idle();
     write_file(delta_path, "new delta fixture");
     info = detect_and_prompt();
-    assert(info.package_hash_status == UI_UPGRADE_PACKAGE_HASH_DIFFERENT);
-    assert(!ui_upgrade_service_can_reinstall() && prompts == before + 1);
+    assert(info.package_hash_status == UI_UPGRADE_PACKAGE_HASH_NOT_CHECKED && !info.package_found);
+    assert(!ui_upgrade_service_can_reinstall() && prompts == before);
     reset_idle();
     assert(!unlink(delta_path));
     info = detect_and_prompt();
-    assert(info.package_hash_status == UI_UPGRADE_PACKAGE_HASH_MATCH);
-    assert(!g_ui_upgrade_bundle_selected && !ui_upgrade_service_can_reinstall());
+    assert(info.package_hash_status == UI_UPGRADE_PACKAGE_HASH_NOT_CHECKED && !info.package_found);
+    assert(!info.package_found && !ui_upgrade_service_can_reinstall());
     write_file(legacy_path, "new legacy ELF fixture");
     reset_idle();
     info = detect_and_prompt();
-    assert(info.package_hash_status == UI_UPGRADE_PACKAGE_HASH_DIFFERENT);
+    assert(info.package_hash_status == UI_UPGRADE_PACKAGE_HASH_NOT_CHECKED && !info.package_found);
     assert(!ui_upgrade_service_can_reinstall());
 
     reset_idle();
@@ -236,6 +237,6 @@ int main(int argc, char **argv)
     upgrade_session_end(UPGRADE_SESSION_IMAGE);
     ui_upgrade_service_reset();
     assert(!ui_upgrade_service_can_reinstall());
-    puts("PASS MATCH never auto-prompts on boot/rebuild/reinsert; DIFFERENT prompts once per connection/boot; explicit MATCH repeat/retry remains available; legacy/delta/media/owner guards unchanged");
+    puts("PASS full MATCH/repeat/retry and media/owner guards; internal delta and raw app never trigger normal GUI update");
     return 0;
 }

@@ -26,6 +26,9 @@ void fault_popup_clear_preset(void);
 void fault_popup_resolve_key(machine_fault_key_t key);
 void fault_popup_repeat_notice(machine_fault_key_t key);
 void fault_popup_report_runtime_fault(uint8_t code);
+void fault_popup_report_setting_rejection(uint8_t command, uint8_t reason);
+void fault_popup_resolve_setting_rejection(uint8_t command);
+void fault_popup_setting_notice_finished(machine_fault_key_t key);
 void fault_popup_report_boot_result(uint8_t step, uint8_t result);
 /* Collect every accepted self-test step before presenting the complete set. */
 void fault_popup_record_boot_result(uint8_t step, uint8_t result);

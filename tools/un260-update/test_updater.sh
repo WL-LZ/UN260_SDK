@@ -5,11 +5,15 @@ SCRIPT=${1:?Pass device ui_update.sh}
 SCRIPT=$(readlink -f "$SCRIPT")
 TEST_BASE=$(mktemp -d /tmp/un260-updater-test.XXXXXX)
 echo "Fixtures: $TEST_BASE"
+SDK_ROOT=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
+gcc -std=gnu11 -Wall -Wextra -Werror -O2 \
+    "$SDK_ROOT/source/artinchip/test-lvgl/tools/un260_storage_sync.c" -o "$TEST_BASE/native_sync"
 
 run_case() (
     case_name=$1
     UN260_UPDATER_LIBRARY_ONLY=1
     . "$SCRIPT"
+    SYNC_TOOL=$TEST_BASE/native_sync
     ROOT_PREFIX=$TEST_BASE/$case_name/root
     USB_MNT=$TEST_BASE/$case_name/usb
     UPDATE_DIR=$USB_MNT/update
@@ -38,12 +42,15 @@ run_case() (
     printf library > "$ROOT_PREFIX/usr/local/lib/liblvgl.so"
     chmod 0755 "$ROOT_PREFIX/usr/local/lib/liblvgl.so"
     printf picture > "$ROOT_PREFIX/usr/local/share/lvgl_data/a.png"
-    printf user-owned > "$ROOT_PREFIX/usr/local/share/lvgl_data/extra.png"
+    printf retired-asset > "$ROOT_PREFIX/usr/local/share/lvgl_data/extra.png"
+    mkdir -p "$ROOT_PREFIX/var/lib/customer"
+    printf history-data > "$ROOT_PREFIX/var/lib/customer/history"
     cp -R "$ROOT_PREFIX/usr" "$STAGE_DIR/payload/usr"
     rm "$STAGE_DIR/payload/usr/local/share/lvgl_data/extra.png"
     printf replacement > "$STAGE_DIR/payload/usr/local/bin/test_lvgl"
     printf new-image > "$STAGE_DIR/payload/usr/local/share/lvgl_data/new.png"
     printf 'file|0755|usr/local/bin/test_lvgl\nfile|0755|usr/local/lib/liblvgl.so\ntree|0755|usr/local/share/lvgl_data\n' > "$STAGE_DIR/install.tsv"
+    printf "format=UN260_UPGRADE\nschema=1\nproduct=UN260\npackage_type=ui\nversion=test\n" > "$STAGE_DIR/manifest.ini"
     : > "$LOG"
     # Tests simulate ordered crash points, not real flash power-loss durability.
     sync() { :; }
@@ -53,7 +60,7 @@ run_case() (
         bundle|badchecksum|badarchive)
             (cd "$STAGE_DIR" && find payload -type f | sort | while IFS= read -r f; do sha256sum "$f"; done) > "$STAGE_DIR/checksums.sha256"
             pkg_id=$(sha256sum "$STAGE_DIR/checksums.sha256" | awk '{print $1}')
-            printf 'format=UN260_UPGRADE\nschema=1\nproduct=UN260\nversion=test\npackage_id=%s\n' "$pkg_id" > "$STAGE_DIR/manifest.ini"
+            printf 'format=UN260_UPGRADE\nschema=1\nproduct=UN260\npackage_type=ui\nversion=test\npackage_id=%s\n' "$pkg_id" > "$STAGE_DIR/manifest.ini"
             if [ "$case_name" = badchecksum ]; then
                 printf corrupted > "$STAGE_DIR/payload/usr/local/bin/test_lvgl"
             elif [ "$case_name" = badarchive ]; then
@@ -71,19 +78,25 @@ run_case() (
             [ -f "$BUNDLE_PATH" ] && [ ! -d "$STAGE_DIR" ]
             ;;
         plan)
+            PRUNE_STATIC_TREE=1
             validate_install_manifest
-            [ "$INSTALL_ENTRY_COUNT" = 2 ] && [ "$SKIPPED_COUNT" = 2 ]
+            [ "$INSTALL_ENTRY_COUNT" = 3 ] && [ "$SKIPPED_COUNT" = 2 ]
             ;;
         success|nochange)
             if [ "$case_name" = nochange ]; then
                 cp "$ROOT_PREFIX/usr/local/bin/test_lvgl" "$STAGE_DIR/payload/usr/local/bin/test_lvgl"
                 rm "$STAGE_DIR/payload/usr/local/share/lvgl_data/new.png"
+                cp "$ROOT_PREFIX/usr/local/share/lvgl_data/extra.png" "$STAGE_DIR/payload/usr/local/share/lvgl_data/extra.png"
             fi
             lib_inode=$(stat -c %i "$ROOT_PREFIX/usr/local/lib/liblvgl.so")
             execute_plan
             [ "$lib_inode" = "$(stat -c %i "$ROOT_PREFIX/usr/local/lib/liblvgl.so")" ]
             [ ! -d "$JOURNAL" ] && [ ! -d "$STAGE_DIR" ]
-            [ -f "$ROOT_PREFIX/usr/local/share/lvgl_data/extra.png" ]
+            if [ "$case_name" = nochange ]; then
+                [ -f "$ROOT_PREFIX/usr/local/share/lvgl_data/extra.png" ]
+            else
+                [ ! -e "$ROOT_PREFIX/usr/local/share/lvgl_data/extra.png" ]
+            fi
             grep -q 'result=success' "$RESULT_FILE"
             ;;
         lowspace)
@@ -169,6 +182,7 @@ run_case() (
             grep -q 'result=success' "$RESULT_FILE"
             ;;
     esac
+    [ "$(cat "$ROOT_PREFIX/var/lib/customer/history")" = history-data ]
     echo "PASS $case_name"
 )
 for name in bundle badchecksum badarchive plan success nochange lowspace copyfail recoveryfail crash commitcrash symlink traversal oldbackup legacy; do

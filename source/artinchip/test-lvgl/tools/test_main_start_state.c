@@ -13,15 +13,17 @@ enum { SMART_ISLAND_WARNING_LEVEL_ERROR = 1 };
 static protocol_request_t g_start_request, g_clear_request;
 static counting_session_state_t g_counting_session;
 static counting_sim_t data;
-static bool reset_allowed, send_ok, observed_busy;
+static bool reset_allowed, send_ok, observed_busy, transport_ready, guard_fault;
 static unsigned sequence, reset_projection_at, finish_start_at, begin_clear_at;
 static unsigned send_at, finish_clear_at, refresh_at, refreshes, warnings;
 bool app_command_runtime_count_start_busy(void);
 
 static bool protocol_request_is_pending(protocol_request_t *request) { return request->pending; }
-static bool protocol_request_begin(protocol_request_t *request)
+static bool protocol_send_is_ready(void) { return transport_ready; }
+static bool runtime_guard_has_fault(void) { return guard_fault; }
+static bool protocol_request_begin_for_command(protocol_request_t *request, uint8_t command)
 {
-    assert(request == &g_clear_request); begin_clear_at = ++sequence;
+    assert(request == &g_clear_request && command == 0x3B); begin_clear_at = ++sequence;
     if (request->pending) return false;
     request->pending = true; return true;
 }
@@ -70,6 +72,7 @@ static void fixture(bool existing_clear, bool successful_send)
     g_start_request.pending = true; g_clear_request.pending = existing_clear;
     g_counting_session = (counting_session_state_t){true, COUNTING_SESSION_ACTIVE};
     reset_allowed = true; send_ok = successful_send; observed_busy = true;
+    transport_ready = true; guard_fault = false;
     sequence = reset_projection_at = finish_start_at = begin_clear_at = 0;
     send_at = finish_clear_at = refresh_at = refreshes = warnings = 0;
 }
@@ -113,13 +116,30 @@ static void test_busy_sources_and_history_guard(void)
     assert(warnings == 1 && g_start_request.pending && g_counting_session.start_confirmed);
     assert(!refreshes && !finish_start_at && !begin_clear_at && !reset_projection_at);
 }
+static void test_uncertain_transport_preserves_projection(void)
+{
+    for (unsigned condition = 0; condition < 2; ++condition) {
+        fixture(false, true);
+        transport_ready = condition != 0;
+        guard_fault = condition != 0;
+        assert(!app_command_runtime_clear_counting_data("transport guard"));
+        assert(g_start_request.pending && !g_clear_request.pending);
+        assert(g_counting_session.start_confirmed &&
+               g_counting_session.phase == COUNTING_SESSION_ACTIVE);
+        assert(!sequence && !warnings && !refreshes && !reset_projection_at);
+        assert(!finish_start_at && !begin_clear_at && !send_at && !finish_clear_at);
+    }
+}
+
 int main(void)
 {
     test_clear_projection(false, true);
     test_clear_projection(false, false);
     test_clear_projection(true, true);
     test_busy_sources_and_history_guard();
+    test_uncertain_transport_preserves_projection();
     puts("PASS: actual CLEAR success, send failure and already-pending CLEAR all project settled START after request cancellation");
     puts("PASS: pending/confirmed/active busy sources and history-reset refusal preserve the existing request/session boundary");
+    puts("PASS: transport-not-ready and runtime-fault guards preserve model, requests and visible projection without CLEAR send");
     return 0;
 }

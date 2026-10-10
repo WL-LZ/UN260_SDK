@@ -59,7 +59,7 @@ bool print_config_request(uint8_t sub_command,
                           const print_config_value_t *target)
 {
     if (payload == NULL || payload_len == 0 || target == NULL ||
-        !protocol_request_begin(&g_print_request)) {
+        !protocol_request_begin_for_command(&g_print_request, PRINT_CONFIG_COMMAND)) {
         return false;
     }
 

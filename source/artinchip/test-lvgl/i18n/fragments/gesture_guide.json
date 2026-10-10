@@ -1,0 +1,42 @@
+{
+  "en": {
+    "UI_TEXT_GESTURE_RETURN_TITLE": "Reopen page",
+    "UI_TEXT_GESTURE_RETURN_BODY": "From Main, swipe up with two fingers to reopen the previous page."
+  },
+  "zh-Hans": {
+    "UI_TEXT_GESTURE_RETURN_TITLE": "恢复上一页",
+    "UI_TEXT_GESTURE_RETURN_BODY": "在主界面双指向上滑动，恢复刚才的页面。"
+  },
+  "ko": {
+    "UI_TEXT_GESTURE_RETURN_TITLE": "이전 화면 열기",
+    "UI_TEXT_GESTURE_RETURN_BODY": "메인 화면에서 두 손가락으로 위로 밀어 이전 화면을 다시 엽니다."
+  },
+  "ja": {
+    "UI_TEXT_GESTURE_RETURN_TITLE": "前の画面を開く",
+    "UI_TEXT_GESTURE_RETURN_BODY": "メイン画面で2本の指を上へスワイプすると、直前の画面を再び開きます。"
+  },
+  "ar": {
+    "UI_TEXT_GESTURE_RETURN_TITLE": "إعادة فتح الصفحة",
+    "UI_TEXT_GESTURE_RETURN_BODY": "على الشاشة الرئيسية، اسحب لأعلى بإصبعين لإعادة فتح الشاشة السابقة."
+  },
+  "tr": {
+    "UI_TEXT_GESTURE_RETURN_TITLE": "Sayfayı yeniden aç",
+    "UI_TEXT_GESTURE_RETURN_BODY": "Ana ekranda iki parmağınızla yukarı kaydırarak önceki sayfayı yeniden açın."
+  },
+  "fr": {
+    "UI_TEXT_GESTURE_RETURN_TITLE": "Rouvrir la page",
+    "UI_TEXT_GESTURE_RETURN_BODY": "Sur l'écran principal, glissez vers le haut avec deux doigts pour rouvrir la page précédente."
+  },
+  "pl": {
+    "UI_TEXT_GESTURE_RETURN_TITLE": "Otwórz ponownie",
+    "UI_TEXT_GESTURE_RETURN_BODY": "Na ekranie głównym przesuń dwoma palcami w górę, aby ponownie otworzyć poprzednią stronę."
+  },
+  "ru": {
+    "UI_TEXT_GESTURE_RETURN_TITLE": "Открыть снова",
+    "UI_TEXT_GESTURE_RETURN_BODY": "На главном экране проведите двумя пальцами вверх, чтобы снова открыть предыдущую страницу."
+  },
+  "de": {
+    "UI_TEXT_GESTURE_RETURN_TITLE": "Seite wieder öffnen",
+    "UI_TEXT_GESTURE_RETURN_BODY": "Wischen Sie auf dem Hauptbildschirm mit zwei Fingern nach oben, um die vorherige Seite wieder zu öffnen."
+  }
+}

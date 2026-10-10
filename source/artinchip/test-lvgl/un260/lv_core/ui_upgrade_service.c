@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,10 +23,7 @@
 #include "un260/lv_system/app_clock.h"
 
 #define UI_UPGRADE_BUNDLE_FILE_PATH    USB_STORAGE_MOUNT_POINT "/update/UN260_UPDATE.upk"
-#define UI_UPGRADE_DELTA_FILE_PATH     USB_STORAGE_MOUNT_POINT "/update/UN260_UPDATE_DELTA.upk"
-#define UI_UPGRADE_LEGACY_FILE_PATH    USB_STORAGE_MOUNT_POINT "/update/test_lvgl"
-#define UI_UPGRADE_RUNNING_FILE_PATH   "/proc/self/exe"
-#define UI_UPGRADE_SCRIPT_PATH         "/usr/bin/ui_update.sh"  
+#define UI_UPGRADE_SCRIPT_PATH         "/usr/local/bin/un260_update_dispatch"
 #define UI_UPGRADE_STATUS_FILE_PATH    "/tmp/ui_update.status"
 #define UI_UPGRADE_INSTALLED_HASH_PATH "/var/lib/un260-updater/installed.fnv64"
 #define UI_UPGRADE_STATUS_MAX_SIZE     512U
@@ -38,6 +36,8 @@ typedef struct {
     off_t size;
     time_t mtime;
     time_t ctime;
+    long mtime_nsec;
+    long ctime_nsec;
     uint64_t hash;
 } ui_upgrade_hash_cache_t;
 
@@ -48,16 +48,15 @@ typedef struct {
     bool preparing_data;
     uint32_t data_prepare_started_ms;
     pid_t child_pid;
+    uint64_t selected_hash;
+    char child_log_path[96];
     char status_content[UI_UPGRADE_STATUS_MAX_SIZE];
     size_t status_content_len;
     ui_upgrade_service_status_t status;
 } ui_upgrade_service_ctx_t;
 
 static ui_upgrade_service_ctx_t g_ui_upgrade_service;
-static bool g_ui_upgrade_running_hash_ready = false;
-static uint64_t g_ui_upgrade_running_hash = 0;
 static ui_upgrade_hash_cache_t g_ui_upgrade_pkg_hash_cache;
-static bool g_ui_upgrade_bundle_selected = false;
 static bool g_ui_upgrade_full_bundle_selected = false;
 
 static bool ui_upgrade_service_file_exists(const char* path)
@@ -129,7 +128,9 @@ static bool ui_upgrade_service_hash_file_cached(const char* path,
         cache->inode == before.st_ino &&
         cache->size == before.st_size &&
         cache->mtime == before.st_mtime &&
-        cache->ctime == before.st_ctime) {
+        cache->ctime == before.st_ctime &&
+        cache->mtime_nsec == before.st_mtim.tv_nsec &&
+        cache->ctime_nsec == before.st_ctim.tv_nsec) {
         *hash_out = cache->hash;
         return true;
     }
@@ -143,7 +144,9 @@ static bool ui_upgrade_service_hash_file_cached(const char* path,
         before.st_ino != after.st_ino ||
         before.st_size != after.st_size ||
         before.st_mtime != after.st_mtime ||
-        before.st_ctime != after.st_ctime) {
+        before.st_ctime != after.st_ctime ||
+        before.st_mtim.tv_nsec != after.st_mtim.tv_nsec ||
+        before.st_ctim.tv_nsec != after.st_ctim.tv_nsec) {
         ui_upgrade_service_hash_cache_clear(cache);
         return false;
     }
@@ -154,32 +157,48 @@ static bool ui_upgrade_service_hash_file_cached(const char* path,
     cache->size = after.st_size;
     cache->mtime = after.st_mtime;
     cache->ctime = after.st_ctime;
+    cache->mtime_nsec = after.st_mtim.tv_nsec;
+    cache->ctime_nsec = after.st_ctim.tv_nsec;
     cache->hash = hash;
     *hash_out = hash;
+    return true;
+}
+
+static bool ui_upgrade_service_parse_hash(const char *text, uint64_t *hash_out)
+{
+    uint64_t value = 0;
+    if (!text || !hash_out || strlen(text) != 16U) return false;
+    for (unsigned i = 0; i < 16U; ++i) {
+        unsigned digit;
+        if (text[i] >= '0' && text[i] <= '9') digit = (unsigned)(text[i] - '0');
+        else if (text[i] >= 'a' && text[i] <= 'f') digit = (unsigned)(text[i] - 'a') + 10U;
+        else return false;
+        value = (value << 4) | digit;
+    }
+    *hash_out = value;
     return true;
 }
 
 static bool ui_upgrade_service_read_installed_bundle_hash(uint64_t* hash_out)
 {
     FILE* fp;
-    uint64_t hash = 0;
+    char text[19];
+    size_t size;
 
     if (hash_out == NULL) return false;
 
     fp = fopen(UI_UPGRADE_INSTALLED_HASH_PATH, "r");
     if (fp == NULL) return false;
-    if (fscanf(fp, "%16" SCNx64, &hash) != 1) {
-        fclose(fp);
-        return false;
-    }
+    size = fread(text, 1, sizeof(text) - 1U, fp);
+    bool valid = !ferror(fp) && feof(fp) && size == 17U && text[16] == '\n';
     fclose(fp);
-    *hash_out = hash;
-    return true;
+    if (!valid) return false;
+    text[16] = '\0';
+    return ui_upgrade_service_parse_hash(text, hash_out);
 }
 
 static ui_upgrade_package_hash_status_t
-ui_upgrade_service_get_package_hash_status(const char* package_path,
-                                           bool bundle_package)
+ui_upgrade_service_get_package_hash_status(const char* package_path)
 {
     uint64_t package_hash = 0;
     uint64_t installed_hash = 0;
@@ -190,24 +209,10 @@ ui_upgrade_service_get_package_hash_status(const char* package_path,
         return UI_UPGRADE_PACKAGE_HASH_ERROR;
     }
 
-    if (bundle_package) {
-        if (!ui_upgrade_service_read_installed_bundle_hash(&installed_hash)) {
-            return UI_UPGRADE_PACKAGE_HASH_DIFFERENT;
-        }
-        return package_hash == installed_hash ?
-               UI_UPGRADE_PACKAGE_HASH_MATCH :
-               UI_UPGRADE_PACKAGE_HASH_DIFFERENT;
+    if (!ui_upgrade_service_read_installed_bundle_hash(&installed_hash)) {
+        return UI_UPGRADE_PACKAGE_HASH_DIFFERENT;
     }
-
-    if (!g_ui_upgrade_running_hash_ready) {
-        if (!ui_upgrade_service_hash_file_fnv1a64(UI_UPGRADE_RUNNING_FILE_PATH,
-                                                  &g_ui_upgrade_running_hash)) {
-            return UI_UPGRADE_PACKAGE_HASH_ERROR;
-        }
-        g_ui_upgrade_running_hash_ready = true;
-    }
-
-    return package_hash == g_ui_upgrade_running_hash ?
+    return package_hash == installed_hash ?
            UI_UPGRADE_PACKAGE_HASH_MATCH :
            UI_UPGRADE_PACKAGE_HASH_DIFFERENT;
 }
@@ -287,15 +292,21 @@ static void ui_upgrade_service_load_status_file(void)
     char* line;
     char* save_ptr = NULL;
     char step_text[64] = {0};
-    char result_text[128] = {0};
+    char result_text[UI_UPGRADE_RESULT_TEXT_CAPACITY] = {0};
     char stage_name[32] = {0};
     ui_upgrade_stage_t stage;
     size_t content_len;
     bool has_progress = false;
     bool has_stage = false;
     bool has_step = false;
+    bool has_writer = false;
+    bool has_hash = false;
+    int writer = -1;
+    uint64_t selected_hash = 0;
     int progress = -1;
     int success = -1;
+
+    if (g_ui_upgrade_service.child_pid <= 0) return;
 
     fp = fopen(UI_UPGRADE_STATUS_FILE_PATH, "r");
     if (fp == NULL) return;
@@ -320,16 +331,18 @@ static void ui_upgrade_service_load_status_file(void)
     line = strtok_r(parse_content, "\n", &save_ptr);
     while (line != NULL) {
         if (strncmp(line, "progress=", 9) == 0) {
-            if (!ui_upgrade_service_parse_int(line + 9, 0, 100, &progress)) {
+            if (has_progress || !ui_upgrade_service_parse_int(line + 9, 0, 100, &progress)) {
                 return;
             }
             has_progress = true;
         } else if (strncmp(line, "stage=", 6) == 0) {
-            if (sscanf(line + 6, "%31s", stage_name) != 1) {
+            if (has_stage || strlen(line + 6) >= sizeof(stage_name)) {
                 return;
             }
+            snprintf(stage_name, sizeof(stage_name), "%s", line + 6);
             has_stage = true;
         } else if (strncmp(line, "step=", 5) == 0) {
+            if (has_step) return;
             snprintf(step_text, sizeof(step_text), "%s", line + 5);
             has_step = true;
         } else if (strncmp(line, "message=", 8) == 0) {
@@ -341,14 +354,25 @@ static void ui_upgrade_service_load_status_file(void)
                 !ui_upgrade_service_parse_int(line + 8, -1, 1, &success)) {
                 return;
             }
+        } else if (strncmp(line, "writer_pid=", 11) == 0) {
+            if (has_writer || !ui_upgrade_service_parse_int(line + 11, 1, INT_MAX, &writer)) return;
+            has_writer = true;
+        } else if (strncmp(line, "bundle_fnv64=", 13) == 0) {
+            if (has_hash || !ui_upgrade_service_parse_hash(line + 13, &selected_hash)) return;
+            has_hash = true;
         }
         line = strtok_r(NULL, "\n", &save_ptr);
     }
 
-    if (!has_progress || !has_stage || !has_step) {
+    if (!has_progress || !has_stage || !has_step || !has_writer ||
+        writer != g_ui_upgrade_service.child_pid) {
         return;
     }
     stage = ui_upgrade_service_stage_from_name(stage_name);
+    /* Before the dispatcher fingerprints USB it may report only its own
+     * failure. Progress/completion always belongs to the selected package. */
+    if ((has_hash && selected_hash != g_ui_upgrade_service.selected_hash) ||
+        (!has_hash && !(stage == UI_UPGRADE_STAGE_FAIL && success == 0))) return;
     if (stage == UI_UPGRADE_STAGE_NONE ||
         (success == 1 && stage != UI_UPGRADE_STAGE_SUCCESS) ||
         (success == 0 && stage != UI_UPGRADE_STAGE_FAIL) ||
@@ -399,6 +423,22 @@ static void ui_upgrade_service_load_status_file(void)
     }
 }
 
+static bool ui_upgrade_service_child_busy(void)
+{
+    FILE *fp = fopen(g_ui_upgrade_service.child_log_path, "r");
+    char line[192];
+    if (!fp) return false;
+    bool busy = false;
+    size_t total = 0;
+    while (total < 4096U && fgets(line, sizeof(line), fp)) {
+        total += strlen(line);
+        if (!strcmp(line, "Updater already running or stale lock\n") ||
+            !strcmp(line, "Updater already running or unsafe lock record\n")) { busy = true; break; }
+    }
+    fclose(fp);
+    return busy;
+}
+
 static void ui_upgrade_service_update_child_state(void)
 {
     int status = 0;
@@ -421,18 +461,16 @@ static void ui_upgrade_service_update_child_state(void)
         ui_upgrade_service_set_status(false, true, false,
                                       g_ui_upgrade_service.status.progress,
                                       UI_UPGRADE_STAGE_FAIL,
-                                      "Update result unknown",
+                                      UI_N_("Update result unknown"),
                                       UI_N_("The updater process result could not be confirmed. Keep power connected."));
         return;
     }
 
-    g_ui_upgrade_service.child_pid = -1;
     /* A status file alone can precede the updater process exit. Keep the
      * shared lease until waitpid proves that the writer has stopped. */
     upgrade_session_end(UPGRADE_SESSION_UI);
-    if (!g_ui_upgrade_service.status.finished) {
-        ui_upgrade_service_load_status_file();
-    }
+    ui_upgrade_service_load_status_file();
+    g_ui_upgrade_service.child_pid = -1;
     g_ui_upgrade_service.running = false;
     g_ui_upgrade_service.finished = true;
 
@@ -447,7 +485,7 @@ static void ui_upgrade_service_update_child_state(void)
             ui_upgrade_service_set_status(false, true, false,
                                           g_ui_upgrade_service.status.progress,
                                           UI_UPGRADE_STAGE_FAIL,
-                                          "Updater exited with an error",
+                                          UI_N_("Updater exited with an error"),
                                           UI_N_("The updater did not finish successfully. Check the update result before retrying."));
         }
         return;
@@ -458,14 +496,16 @@ static void ui_upgrade_service_update_child_state(void)
         ui_upgrade_service_set_status(false, true, false,
                                       g_ui_upgrade_service.status.progress,
                                       UI_UPGRADE_STAGE_FAIL,
-                                      "Update result unknown",
+                                      UI_N_("Update result unknown"),
                                       UI_N_("The updater did not report a completed result. Check the update result before retrying."));
     } else {
         g_ui_upgrade_service.success = false;
+        bool busy = (WIFEXITED(status) && WEXITSTATUS(status) == 75) || ui_upgrade_service_child_busy();
         ui_upgrade_service_set_status(false, true, false, 12,
                                       UI_UPGRADE_STAGE_FAIL,
-                                      "Upgrade package verification failed",
-                                      UI_N_("The upgrade package is invalid. Please check the file and try again."));
+                                      UI_N_("Updater exited with an error"),
+                                      busy ? UI_N_("Wait for the update to finish.") :
+                                      UI_N_("The updater did not finish successfully. Check the update result before retrying."));
     }
 }
 
@@ -476,9 +516,9 @@ void ui_upgrade_service_reset(void)
         return;
     }
 
+    if (g_ui_upgrade_service.child_log_path[0]) unlink(g_ui_upgrade_service.child_log_path);
     memset(&g_ui_upgrade_service, 0, sizeof(g_ui_upgrade_service));
     ui_upgrade_service_hash_cache_clear(&g_ui_upgrade_pkg_hash_cache);
-    g_ui_upgrade_bundle_selected = false;
     g_ui_upgrade_full_bundle_selected = false;
     g_ui_upgrade_service.child_pid = -1;
     ui_upgrade_service_set_status(false, false, false, 0,
@@ -488,34 +528,22 @@ void ui_upgrade_service_reset(void)
 void ui_upgrade_service_detect(ui_upgrade_detect_info_t* info)
 {
     usb_storage_status_t storage_status;
-    bool full_bundle_found;
     bool bundle_found;
-    bool legacy_found;
-    const char* package_path = NULL;
 
     if (info == NULL) return;
 
     usb_storage_refresh(&storage_status);
     info->usb_present = storage_status.device_present;
     info->usb_mounted = storage_status.mounted;
-    full_bundle_found = ui_upgrade_service_file_exists(UI_UPGRADE_BUNDLE_FILE_PATH);
-    const char *bundle_path = full_bundle_found ?
-                              UI_UPGRADE_BUNDLE_FILE_PATH : UI_UPGRADE_DELTA_FILE_PATH;
     bundle_found = info->usb_present && info->usb_mounted &&
-                   ui_upgrade_service_file_exists(bundle_path);
-    legacy_found = info->usb_present && info->usb_mounted &&
-                   ui_upgrade_service_file_exists(UI_UPGRADE_LEGACY_FILE_PATH);
-    info->package_found = bundle_found || legacy_found;
+                   ui_upgrade_service_file_exists(UI_UPGRADE_BUNDLE_FILE_PATH);
+    info->package_found = bundle_found;
     info->package_hash_status = UI_UPGRADE_PACKAGE_HASH_NOT_CHECKED;
-    g_ui_upgrade_bundle_selected = bundle_found;
-    g_ui_upgrade_full_bundle_selected = bundle_found && full_bundle_found;
+    g_ui_upgrade_full_bundle_selected = bundle_found;
 
     if (info->package_found) {
-        package_path = bundle_found ? bundle_path :
-                                     UI_UPGRADE_LEGACY_FILE_PATH;
         info->package_hash_status =
-            ui_upgrade_service_get_package_hash_status(package_path,
-                                                       bundle_found);
+            ui_upgrade_service_get_package_hash_status(UI_UPGRADE_BUNDLE_FILE_PATH);
     } else {
         ui_upgrade_service_hash_cache_clear(&g_ui_upgrade_pkg_hash_cache);
     }
@@ -535,6 +563,9 @@ static ui_upgrade_start_result_t ui_upgrade_service_launch(void)
         return UI_UPGRADE_START_SCRIPT_NOT_FOUND;
     }
 
+    /* USB timestamps may be coarse. The start boundary always fingerprints
+     * the current bytes; the dispatcher rechecks them before extraction. */
+    ui_upgrade_service_hash_cache_clear(&g_ui_upgrade_pkg_hash_cache);
     ui_upgrade_service_detect(&detect_info);
     if (!detect_info.usb_present ||
         !detect_info.usb_mounted ||
@@ -544,31 +575,22 @@ static ui_upgrade_start_result_t ui_upgrade_service_launch(void)
         return UI_UPGRADE_START_PACKAGE_NOT_READY;
     }
 
-    if (unlink(UI_UPGRADE_STATUS_FILE_PATH) != 0 && errno != ENOENT) {
-        return UI_UPGRADE_START_STATUS_CLEANUP_FAILED;
-    }
-
     pid = fork();
     if (pid < 0) {
         return UI_UPGRADE_START_FORK_FAILED;
     }
 
     if (pid == 0) {
-        char bundle_hash[17] = {0};
-        FILE* fp = fopen("/tmp/ui_update_child.log", "a");
-        if (fp) {
-            dup2(fileno(fp), STDOUT_FILENO);
-            dup2(fileno(fp), STDERR_FILENO);
-            fclose(fp);
-        }
-        if (g_ui_upgrade_bundle_selected && g_ui_upgrade_pkg_hash_cache.valid) {
-            snprintf(bundle_hash, sizeof(bundle_hash), "%016" PRIx64,
-                     g_ui_upgrade_pkg_hash_cache.hash);
-            execl("/bin/sh", "sh", UI_UPGRADE_SCRIPT_PATH,
-                  "--bundle-fnv", bundle_hash, (char*)NULL);
-        } else {
-            execl("/bin/sh", "sh", UI_UPGRADE_SCRIPT_PATH, (char*)NULL);
-        }
+        char bundle_hash[17], child_log[96];
+        snprintf(child_log, sizeof(child_log), "/tmp/un260-update-ui.%ld.log", (long)getpid());
+        int log_fd = open(child_log, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
+        if (log_fd < 0) _exit(126);
+        if (dup2(log_fd, STDOUT_FILENO) < 0 || dup2(log_fd, STDERR_FILENO) < 0) _exit(126);
+        close(log_fd);
+        snprintf(bundle_hash, sizeof(bundle_hash), "%016" PRIx64,
+                 g_ui_upgrade_pkg_hash_cache.hash);
+        execl("/bin/sh", "sh", UI_UPGRADE_SCRIPT_PATH,
+              "--bundle-fnv", bundle_hash, (char*)NULL);
         _exit(127);
     }
 
@@ -576,6 +598,10 @@ static ui_upgrade_start_result_t ui_upgrade_service_launch(void)
     g_ui_upgrade_service.finished = false;
     g_ui_upgrade_service.success = false;
     g_ui_upgrade_service.child_pid = pid;
+    g_ui_upgrade_service.selected_hash = g_ui_upgrade_pkg_hash_cache.hash;
+    if (g_ui_upgrade_service.child_log_path[0]) unlink(g_ui_upgrade_service.child_log_path);
+    snprintf(g_ui_upgrade_service.child_log_path, sizeof(g_ui_upgrade_service.child_log_path),
+             "/tmp/un260-update-ui.%ld.log", (long)pid);
     g_ui_upgrade_service.status_content[0] = '\0';
     g_ui_upgrade_service.status_content_len = 0;
 
@@ -682,7 +708,7 @@ static void ui_upgrade_service_prepare_data_poll(void)
 void ui_upgrade_service_poll(ui_upgrade_service_status_t* status)
 {
     ui_upgrade_service_prepare_data_poll();
-    if (g_ui_upgrade_service.running && g_ui_upgrade_service.child_pid > 0) {
+    if (g_ui_upgrade_service.child_pid > 0) {
         ui_upgrade_service_load_status_file();
     }
     ui_upgrade_service_update_child_state();

@@ -64,6 +64,9 @@ void smart_island_notify_no_note(machine_fault_key_t key);
 void smart_island_notify_preset_full(machine_fault_key_t key);
 void smart_island_show_qr_popup(void);
 void smart_island_faults_changed(void);
+/* Cancel only the displayed notice belonging to this key. */
+void smart_island_cancel_fault_notice(machine_fault_key_t key);
+bool smart_island_active_fault_notice(machine_fault_key_t *key);
 /* During a counting input gate, only the visible fault island accepts a tap. */
 bool smart_island_fault_hit_test(const lv_point_t *point);
 void smart_island_restore_idle(void); //恢复默认待机态

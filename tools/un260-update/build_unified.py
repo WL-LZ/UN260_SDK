@@ -11,6 +11,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 from build_delta import load
+from release_profile import check_profile
 from build_storage_bootstrap import build as build_migration, PATHS, APPROVED, POLICY_V2, POLICY_V3
 
 REQUEST = 'etc/un260/unified-request'
@@ -23,10 +24,11 @@ def build(full, output, approved):
     if approved not in (APPROVED, POLICY_V2, POLICY_V3):
         raise ValueError('An explicit supported migration policy is required')
     metadata, files = load(full)
+    check_profile(metadata, files, legacy_test=metadata.get('release_profile') == 'legacy-test')
     for name in PATHS + (DISPLAY,):
         if name not in files or files[name][1] != 0o755:
             raise ValueError('Missing executable bridge component: ' + name)
-    if metadata.get('storage_guard') != 'syncfs-v1' or metadata.get('storage_layout') != 'app-volume-v1':
+    if metadata.get('storage_guard') not in ('syncfs-v1', 'syncfs-boot-bundle-v1') or metadata.get('storage_layout') != 'app-volume-v1':
         raise ValueError('Full application lacks storage capabilities')
     for name in ('usr/bin/ui_update.sh', 'etc/init.d/S00lvgl'):
         if b'UN260_UNIFIED_1' not in files[name][0]:
@@ -48,8 +50,10 @@ def build(full, output, approved):
                      for n, (d, _) in sorted(payload.items())).encode()
     manifest = ('format=UN260_UPGRADE\nschema=1\nproduct=UN260\npackage_type=ui-unified\n'
                 'version=%s\npackage_id=%s\nrequires_reboot=1\n'
-                'storage_layout=app-volume-v1\nstorage_guard=syncfs-v1\n' %
-                (metadata['version'], hashlib.sha256(checks).hexdigest())).encode()
+                'storage_layout=app-volume-v1\nstorage_guard=%s\n' %
+                (metadata['version'], hashlib.sha256(checks).hexdigest(), metadata['storage_guard'])).encode()
+    if metadata.get('release_profile'):
+        manifest += ('release_profile=' + metadata['release_profile'] + '\n').encode()
     # The old upgrader understands this subset manifest without new opcodes.
     plan = ''.join('file|%04o|%s\n' % (payload[n][1], n) for n in BRIDGE)
     plan += 'tree|0755|usr/local/share/ge_data\n'

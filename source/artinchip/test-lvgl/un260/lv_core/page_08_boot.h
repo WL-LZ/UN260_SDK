@@ -13,6 +13,7 @@ bool ui_page_08_curr_ready_hold_complete(void);
 /* One-shot startup policy; construction still belongs to the UI thread. */
 void ui_page_08_curr_defer_next_create(void);
 bool ui_page_08_curr_prepare_step(void);
+bool ui_page_08_curr_prepare_failed(void);
 /* Startup overlay owns this cover; false restores the existing self-test page. */
 void ui_page_08_curr_set_covered(bool covered);
 void boot_progress_set(uint8_t percent);

@@ -1,6 +1,7 @@
 #include "gesture_guide.h"
 
 #include "un260/font/manrope_fonts.h"
+#include "un260/font/ui_message_font.h"
 #include "un260/gesture/gesture_service.h"
 #include "un260/lv_components/lv_content_pager.h"
 #include "un260/lv_components/lv_damped_button.h"
@@ -12,11 +13,12 @@ static lv_obj_t *g_overlay;
 static lv_obj_t *g_panel;
 
 static lv_obj_t *guide_label(lv_obj_t *parent, const char *text,
-                             const lv_font_t *font, uint32_t color)
+                             const lv_font_t *font, unsigned pixels, uint32_t color)
 {
     lv_obj_t *label = lv_label_create(parent);
     lv_label_set_text(label, text);
-    lv_obj_set_style_text_font(label, font, 0);
+    lv_obj_set_style_text_font(label, ui_message_font_sized(font, pixels), 0);
+    lv_obj_set_style_base_dir(label, LV_BASE_DIR_AUTO, 0);
     lv_obj_set_style_text_color(label, lv_color_hex(color), 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     return label;
@@ -158,7 +160,7 @@ void gesture_guide_show(void)
     lv_obj_set_style_shadow_opa(g_panel, LV_OPA_20, 0);
 
     lv_obj_t *title = guide_label(g_panel, ui_text_get(UI_TEXT_GESTURE_GUIDE_TITLE),
-                                  &lv_font_instrument_sans_bold_20, 0x24313D);
+                                  &lv_font_instrument_sans_bold_20, 20, 0x24313D);
     lv_obj_set_pos(title, 28, 18);
     lv_obj_set_width(title, 580);
     lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_LEFT, 0);
@@ -169,17 +171,13 @@ void gesture_guide_show(void)
         lv_obj_t *page = lv_content_pager_get_page(pager, (uint8_t)i);
         lv_obj_t *label;
         guide_add_motion(page, definition);
-        label = guide_label(page, definition->action == GESTURE_ACTION_EXIT_PAGE ? "EDGE BACK" : definition->action == GESTURE_ACTION_RETURN ? "RETURN TO PAGE" : "HOME",
-                            &lv_font_instrument_sans_bold_18, 0x24313D);
+        label = guide_label(page, ui_text_get(definition->title_text),
+                            &lv_font_instrument_sans_bold_18, 18, 0x24313D);
         lv_obj_set_pos(label, 310, 28);
         lv_obj_set_width(label, 400);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
-        label = guide_label(page, definition->action == GESTURE_ACTION_EXIT_PAGE ?
-                            "Swipe inward from either side edge, then release to go back." :
-                            definition->action == GESTURE_ACTION_RETURN ?
-                            "After swiping down to Main, swipe up with two fingers to reopen your previous page." :
-                            "Swipe down with two fingers to return to Main.",
-                            &lv_font_instrument_sans_medium_14, 0x66737E);
+        label = guide_label(page, ui_text_get(definition->body_text),
+                            &lv_font_instrument_sans_medium_14, 14, 0x66737E);
         lv_obj_set_pos(label, 310, 70);
         lv_obj_set_size(label, 400, 70);
         lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
