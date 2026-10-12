@@ -512,7 +512,7 @@ int main(void)
     click("Preferences");assert(find(menu.body,"Manage operators"));raster("menu-operators-entry");click("Manage operators");assert(current==UI_PAGE_OPERATORS);current=UI_PAGE_MENU;assert(model.user_count==2);
     click("Interaction");raster("menu-interaction");
     assert(menu.interaction_created && quick_pointer_policy && !quick_navigation_blocked);
-    assert(lv_content_pager_get_count(menu.interaction_controls.pager)==3);
+    assert(lv_content_pager_get_count(menu.interaction_controls.pager)==2);
     lv_area_t controls_bounds;lv_obj_get_coords(menu.interaction_controls.viewport,&controls_bounds);
     bool swipe_layout=layout,swipe_gestures=gestures;
     point=(lv_point_t){controls_bounds.x1+800,controls_bounds.y1+50};down=LV_INDEV_STATE_PRESSED;tick(40);
@@ -658,7 +658,7 @@ int main(void)
     menu.tab=5;menu.sub=0;menu.reject_all=true;
     menu.tab=4;menu.sub=1;menu.shortcut_visibility=true;menu.dirty=true;tick(100);
     assert(menu.task_scroll);
-    for(unsigned i=0;i<QUICK_CONTROL_COUNT;++i){
+    for(unsigned i=0;i<QUICK_CONTROL_COUNT-1;++i){
         lv_obj_t *item=lv_obj_get_child(menu.task_scroll,i);
         assert(lv_obj_get_x(item)+lv_obj_get_width(item)<=ui_scrollbar_content_width(menu.task_scroll));
         assert(lv_obj_get_style_border_width(item,0)==0);
@@ -666,7 +666,7 @@ int main(void)
     }
     lv_obj_scroll_to_y(menu.task_scroll,100,LV_ANIM_OFF);tick(200);
     lv_coord_t shortcut_y=lv_obj_get_scroll_y(menu.task_scroll);assert(shortcut_y>0);
-    lv_event_send(lv_obj_get_child(menu.task_scroll,QUICK_CONTROL_COUNT-1),LV_EVENT_CLICKED,NULL);tick(200);
+    lv_event_send(lv_obj_get_child(menu.task_scroll,QUICK_CONTROL_COUNT-2),LV_EVENT_CLICKED,NULL);tick(200);
     assert(lv_obj_get_scroll_y(menu.task_scroll)==shortcut_y);raster("shortcuts-selected-scrolled");
     menu.tab=5;menu.sub=0;menu.reject_all=true;
     for(unsigned code=0;code<0x32;code++){menu.reject_code=code;menu.dirty=true;tick(100);
@@ -701,7 +701,7 @@ int main(void)
         menu.tab=4;menu.sub=1;menu.shortcut_visibility=false;menu.dirty=true;tick(100);
         lv_obj_t *interaction_content=lv_obj_get_child(menu.body,1);
         check_interaction_header(interaction_content);
-        for(unsigned page=0;page<3;page++){
+        for(unsigned page=0;page<lv_content_pager_get_count(menu.interaction_controls.pager);page++){
             lv_content_pager_set_active(menu.interaction_controls.pager,page,false);
             char name[80];snprintf(name,sizeof(name),"controls-%s-page-%u",locale->tag,page+1);raster(name);
         }
@@ -736,7 +736,8 @@ int main(void)
             if(natural>lv_obj_get_width(caption))fprintf(stderr,"Toggle title clipped %s: %s %d/%d\n",locale->tag,lv_label_get_text(caption),natural,lv_obj_get_width(caption));
             assert(natural<=lv_obj_get_width(caption));
         }
-        for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
+        assert(lv_obj_get_child_cnt(menu.task_scroll)==QUICK_CONTROL_COUNT-1);
+        for(unsigned i=0;i<QUICK_CONTROL_COUNT-1;i++){
             lv_obj_t *item=lv_obj_get_child(menu.task_scroll,i),*title=lv_obj_get_child(item,0);
             const char *text=lv_label_get_text(title);int width=lv_txt_get_width(text,strlen(text),lv_obj_get_style_text_font(title,0),0,LV_TEXT_FLAG_NONE);
             if(width>lv_obj_get_width(title))fprintf(stderr,"Shortcut title clipped %s: %s %d/%d\n",locale->tag,text,width,lv_obj_get_width(title));
@@ -774,12 +775,13 @@ int main(void)
     open_quick();raster("quick-filtered-order");
     assert(lv_obj_has_flag(menu.quick_controls.tiles[QUICK_LAYOUT],LV_OBJ_FLAG_HIDDEN));
     assert(lv_obj_has_flag(menu.quick_controls.tiles[QUICK_TOUCH],LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_has_flag(menu.quick_controls.tiles[QUICK_CASH_JOURNAL],LV_OBJ_FLAG_HIDDEN));
     assert(lv_obj_get_x(menu.quick_controls.tiles[QUICK_STANDBY])==0 && lv_obj_get_y(menu.quick_controls.tiles[QUICK_STANDBY])==0);
     assert(!memcmp(menu.quick_controls.state.order,quick_order,sizeof(quick_order)));
     destroy_quick();memcpy(quick_order,hidden_order,sizeof(hidden_order));quick_visible=UI_STATE_QUICK_VISIBLE_ALL;
     menu.shortcut_visibility=true;menu.dirty=true;tick(100);
     test_alnum_keyboard_cases();
-    puts("PASS Controls and pull-down visibility in ten languages: actual locale fonts, complete titles, three pages, independent empty selection");
+    puts("PASS Controls and pull-down visibility in ten languages: actual locale fonts, complete titles, compact pages, independent empty selection");
 #endif
     settings_detail_keyboard_show("Lifecycle check","10",3,SETTINGS_DETAIL_KEYBOARD_UINT,batch_submit,NULL);
     assert(settings_detail_overlay_is_open());ui_page_03_menu_destroy();assert(!menu.root&&!settings_detail_overlay_is_open());

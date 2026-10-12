@@ -182,11 +182,14 @@ bool lv_quick_controls_refresh(lv_quick_controls_t *v,lv_quick_controls_state_t 
         if(id>=QUICK_CONTROL_COUNT || (used&(1U<<id)))return false;
         used|=1U<<id;
     }
-    uint16_t mask=v->show_all?UI_STATE_QUICK_VISIBLE_ALL:state.visible_mask;
-    bool layout_changed=!v->initialized || mask!=(v->show_all?UI_STATE_QUICK_VISIBLE_ALL:v->state.visible_mask) ||
+    /* Keep persisted IDs/order intact while this unfinished action is hidden. */
+    const uint16_t available=UI_STATE_QUICK_VISIBLE_ALL & ~(1U<<QUICK_CASH_JOURNAL);
+    uint16_t mask=(v->show_all?UI_STATE_QUICK_VISIBLE_ALL:state.visible_mask)&available;
+    uint16_t previous=(v->show_all?UI_STATE_QUICK_VISIBLE_ALL:v->state.visible_mask)&available;
+    bool layout_changed=!v->initialized || mask!=previous ||
         memcmp(state.order,v->state.order,sizeof(state.order));
     if(layout_changed){
-        uint8_t active=v->initialized && mask==(v->show_all?UI_STATE_QUICK_VISIBLE_ALL:v->state.visible_mask)?
+        uint8_t active=v->initialized && mask==previous?
             lv_quick_controls_page(v):0;
         lv_quick_controls_reset(v);
         unsigned count=0;
@@ -238,7 +241,7 @@ bool lv_quick_controls_execute(quick_control_action_t action)
         case QUICK_QR:smart_island_show_qr_popup();return true;
         case QUICK_STANDBY:return app_standby_runtime_request();
         case QUICK_CALCULATOR:ui_manager_push_page(UI_PAGE_CALCULATOR);return true;
-        case QUICK_CASH_JOURNAL:ui_cash_journal_filter_operator(0);ui_manager_push_page(UI_PAGE_CASH_JOURNAL);return true;
+        case QUICK_CASH_JOURNAL:return false;
         case QUICK_HISTORY:ui_page_19_history_open_all();return true;
         case QUICK_OPERATORS:ui_manager_push_page(UI_PAGE_OPERATORS);return true;
         default:return false;

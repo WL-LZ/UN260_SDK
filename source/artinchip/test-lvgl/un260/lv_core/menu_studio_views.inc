@@ -246,10 +246,13 @@ static void interaction_view(lv_obj_t *b)
     int item_width=(ui_scrollbar_content_width(shortcuts)-8)/2;
     uint8_t order[QUICK_CONTROL_COUNT];ui_state_quick_order_get(order);
     uint16_t mask=ui_state_quick_visible_get();
+    unsigned shown=0;
     for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
+        if(order[i]==QUICK_CASH_JOURNAL)continue;
         bool selected=(mask&(1U<<order[i]))!=0;
-        lv_obj_t *item=button(shortcuts,(i%2)*(item_width+8),(i/2)*38,item_width,34,
+        lv_obj_t *item=button(shortcuts,(shown%2)*(item_width+8),(shown/2)*38,item_width,34,
             lv_quick_controls_title(order[i]),A_QUICK_ORDER_BASE+order[i],false);
+        shown++;
         lv_obj_set_style_radius(item,9,0);
         palette(item,selected?0xE1EEFC:0xFFFFFF);
         lv_obj_t *title=lv_obj_get_child(item,0);
