@@ -432,6 +432,8 @@ void smart_island_notify_fault(const char *text, machine_fault_key_t key)
 }
 void smart_island_notify_no_note(machine_fault_key_t key)
 {
+    /* Only restore the no-note warning visual. Motor replies still own the
+     * touch lock and idle reset; this notice never starts a count session. */
     notify_warning(ui_tr("No banknotes detected"),SMART_ISLAND_WARNING_LEVEL_WARNING,&key);
 }
 void smart_island_notify_preset_full(machine_fault_key_t key)

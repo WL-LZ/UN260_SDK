@@ -200,7 +200,8 @@ static void app_counting_runtime_on_start_failure(uint8_t type, uint8_t code)
 
     if (type == 0x01 && code == 0x02) {
         description = UI_N_("No banknotes detected");
-        fault_popup_report_start_no_note();
+        fault_popup_resolve_key((machine_fault_key_t){MACHINE_FAULT_START,1,2});
+        smart_island_notify_no_note((machine_fault_key_t){MACHINE_FAULT_START,1,2});
         uart_debug_printf("0x0A start fail (no note)\n");
 
     } else if (type == 0x01 || type == 0x02) {

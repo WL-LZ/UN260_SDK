@@ -56,6 +56,9 @@
 static counting_detail_state_t g_counting_detail_state;
 static counting_session_state_t g_counting_session;
 static uint32_t g_count_end_generation;
+/* START/no-note runs the three motors, but never owns a counted result.
+ * Only the subsequent motor-test terminal reply releases this application gate. */
+static bool g_no_note_motor_active;
 /* One indivisible transition frame retained ahead of the RX queue when its
  * predecessor's history cannot yet be preserved. Never dequeue past it. */
 static protocol_frame_t g_deferred_frame;
@@ -114,6 +117,7 @@ bool app_command_runtime_request_count_start(void)
         uart_debug_printf("count start request rejected or send failed\n");
         return false;
     }
+    page_01_main_set_counting_locked(true);
     page_01_main_refresh_start_state();
     return true;
 }
@@ -130,7 +134,7 @@ uint32_t app_command_runtime_count_end_generation(void)
 
 bool app_command_runtime_count_start_busy(void)
 {
-    return counting_action_start_pending() || g_counting_session.start_confirmed ||
+    return g_no_note_motor_active || counting_action_start_pending() || g_counting_session.start_confirmed ||
         g_counting_session.phase == COUNTING_SESSION_ACTIVE;
 }
 
@@ -172,7 +176,7 @@ app_ui_upgrade_readiness_t app_command_runtime_prepare_ui_upgrade(void)
 bool app_command_runtime_clear_counting_data(const char *reason)
 {
     /* Preserve the current model when the controller channel is uncertain. */
-    if (!protocol_send_is_ready() || runtime_guard_has_fault()) return false;
+    if (g_no_note_motor_active || !protocol_send_is_ready() || runtime_guard_has_fault()) return false;
     if (!app_counting_runtime_reset_session(&g_counting_session, reason)) {
         smart_island_notify_warning_level(UI_N_("History full: clear deferred"),
                                            SMART_ISLAND_WARNING_LEVEL_ERROR);
@@ -184,6 +188,7 @@ bool app_command_runtime_clear_counting_data(const char *reason)
     currency_state_clear_detected_result();
     page_01_curr_img_refre();
     const bool clear_requested = counting_action_request_clear();
+    page_01_main_set_counting_locked(false);
     /* CLEAR cancels a pending START even when its own send fails. Reflect the
      * settled request state, not the pre-clear state seen by the data reset. */
     page_01_main_refresh_start_state();
@@ -222,6 +227,31 @@ static bool app_command_runtime_handle_stacker_clear(const uint8_t *buf, uint8_t
     sim_reset_counting_result(counting_data_mutable());
     counting_data_mark_multi_result(counting_data_mutable());
     return true;
+}
+
+static bool app_command_runtime_handle_no_note_motion(uint8_t cmd,const uint8_t *buf,uint8_t len)
+{
+    if (!protocol_frame_is_valid(buf,len)) return false;
+    if (cmd == 0x0A && len == 7 && !work_mode_service_diagnostic_active()) {
+        if (buf[4] == 1 && buf[5] == 2) {
+            g_no_note_motor_active = true;
+            page_01_main_set_counting_locked(true);
+        } else if (buf[4] == 1 && buf[5] == 1) {
+            g_no_note_motor_active = false;
+        } else if (!g_no_note_motor_active && !g_counting_session.start_confirmed &&
+                   g_counting_session.phase != COUNTING_SESSION_ACTIVE) {
+            page_01_main_set_counting_locked(false);
+        }
+    }
+    if (g_no_note_motor_active && cmd == 0x37 && len == 7 && buf[4] == 2 &&
+        (buf[5] == 1 || buf[5] == 2)) {
+        g_no_note_motor_active = false;
+        page_01_main_set_counting_locked(false);
+        smart_island_notify_count_reset();
+        if (buf[5] == 2) fault_popup_report_boot_result(2,2);
+        return true;
+    }
+    return false;
 }
 
 static bool app_command_runtime_dispatch(uint8_t cmd,
@@ -271,6 +301,7 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
         return true;
     }
     counting_action_handle_reply(cmd, buf, len);
+    if (app_command_runtime_handle_no_note_motion(cmd,buf,len)) return true;
 
     /* New 0x49/8 currency detection shares a command with 0x49/24 serials. */
     if (cmd == 0x49 && len == 8) {
@@ -446,6 +477,7 @@ void app_command_runtime_poll(uint32_t now_ms)
 
     if ((action_timeouts & COUNTING_ACTION_TIMEOUT_START) != 0U) {
         uart_debug_printf("count start request timeout\n");
+        if (!app_command_runtime_count_start_busy()) page_01_main_set_counting_locked(false);
         page_01_main_refresh_start_state();
     }
     if ((action_timeouts & COUNTING_ACTION_TIMEOUT_CLEAR) != 0U) {

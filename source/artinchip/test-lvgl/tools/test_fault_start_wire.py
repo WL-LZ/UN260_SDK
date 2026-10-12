@@ -37,6 +37,8 @@ code=r'''
 static uint64_t now;static unsigned tx,refresh,resolved,repeated;static uint8_t cmds[64];
 static bool history_ready=true,busy,modal,auto_popup;static uint8_t fail_cmd;
 static unsigned controller_starts,operation_guides;
+void page_01_main_set_counting_locked(bool locked){(void)locked;}
+void smart_island_notify_no_note(machine_fault_key_t key){(void)key;}
 static counting_session_state_t race_session;
 static upgrade_session_owner_t session_owner=UPGRADE_SESSION_NONE;
 upgrade_session_owner_t upgrade_session_owner(void){return session_owner;}

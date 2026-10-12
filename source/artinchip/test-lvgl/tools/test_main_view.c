@@ -589,6 +589,31 @@ static void test_multi_expanded(void)
     tick(40);ui_detail_reveal_update(&reveal,true);assert(!reveal.active&&!reveal.orbit);
     ui_detail_reveal_cancel(&reveal);lv_obj_del(container);
 }
+static void test_no_note_motion(void)
+{
+    fixture(false);ui_main_create(lv_scr_act());page_01_main_resume();
+    const int pcs=counting_data_current()->total_pcs;
+    const float amount=counting_data_current()->total_amount;
+    smart_island_notify_no_note((machine_fault_key_t){MACHINE_FAULT_START,1,2});
+    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING);
+    assert(g_si_ctx.warning.level==SMART_ISLAND_WARNING_LEVEL_WARNING);
+    assert(!strcmp(g_si_ctx.warning.text,ui_tr("No banknotes detected")));
+    assert(!g_si_ctx.lifecycle.count_session_active && g_si_ctx.warning.fault.valid);
+    tick(100);write_bmp("no-note-motor-warning");
+    page_01_main_suspend();tick(100);assert(page_01_main_resume());
+    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING);
+    tick(5000);assert(g_si_ctx.view.scene!=SMART_ISLAND_SCENE_RESULT);
+    assert(!g_si_ctx.lifecycle.count_session_active);
+    smart_island_notify_count_reset();tick(400);
+    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE);
+    assert(counting_data_current()->total_pcs==pcs && counting_data_current()->total_amount==amount);
+    smart_island_notify_count_start();smart_island_notify_count_end(NULL);tick(600);
+    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_RESULT);
+    smart_island_notify_count_reset();
+    smart_island_notify_warning("Ordinary warning");
+    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING);
+    tick(10000);ui_main_destroy();
+}
 static void test_lifecycle(void)
 {
     unsigned baseline=timers();render();lv_mem_monitor_t before,after;lv_mem_monitor(&before);
@@ -692,7 +717,7 @@ int main(void)
     lv_indev_t *indev=lv_indev_drv_register(&driver);assert(indev);
     g_pointer_indev=indev;
     assert(page_01_main_layout_is_enabled()==(UI_MAIN_LAYOUT_EDIT_DEFAULT_ENABLED!=0));
-    test_list_initial_font();test_main();test_lifecycle();test_multi_expanded();
+    test_list_initial_font();test_main();test_no_note_motion();test_lifecycle();test_multi_expanded();
     test_main_layout();
     test_main_footer_layout();
     test_main_quick();

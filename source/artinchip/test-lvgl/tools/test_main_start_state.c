@@ -12,6 +12,7 @@ enum { COUNTING_SESSION_IDLE, COUNTING_SESSION_ACTIVE, COUNTING_SESSION_FINISHED
 enum { SMART_ISLAND_WARNING_LEVEL_ERROR = 1 };
 static protocol_request_t g_start_request, g_clear_request;
 static counting_session_state_t g_counting_session;
+static bool g_no_note_motor_active;
 static counting_sim_t data;
 static bool reset_allowed, send_ok, observed_busy, transport_ready, guard_fault;
 static unsigned sequence, reset_projection_at, finish_start_at, begin_clear_at;
@@ -64,6 +65,7 @@ static void page_01_main_refresh_start_state(void)
     refresh_at = ++sequence; refreshes++;
     observed_busy = app_command_runtime_count_start_busy();
 }
+static void page_01_main_set_counting_locked(bool locked){assert(!locked);}
 static void uart_debug_printf(const char *format, ...) { assert(format); }
 #include "main_start_state_under_test.h"
 
