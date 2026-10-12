@@ -56,6 +56,7 @@ void smart_island_destroy(void)
     g_si_ctx.text.idle_has_data = false;
     g_si_ctx.text.idle_no_count = true;
     g_si_ctx.lifecycle.count_session_active = false;
+    g_si_ctx.lifecycle.batch_counting_paused = false;
     g_si_ctx.lifecycle.result_transition_pending = false;
     memset(&g_si_ctx.counting, 0, sizeof(g_si_ctx.counting));
 
@@ -165,9 +166,10 @@ void smart_island_restore_idle(void)
 {
     bool from_result = g_si_ctx.view.scene == SMART_ISLAND_SCENE_RESULT;
 
-    /* Dismissing a notice is not a machine STOP. Only count_end/reset own
-     * count_session_active; a clear-fault reply during counting resumes it. */
-    if (g_si_ctx.lifecycle.count_session_active) {
+    /* Dismissing a notice is not a machine STOP. Batch holds only its running
+     * view; count_end/reset still own the actual counting lifecycle. */
+    if (g_si_ctx.lifecycle.count_session_active &&
+        !g_si_ctx.lifecycle.batch_counting_paused) {
         smart_island_warning_stop();
         smart_island_warning_fault_clear();
         g_si_ctx.warning.text[0] = '\0';

@@ -6,6 +6,9 @@
 #include "un260/lv_components/lv_fault_popup.c"
 #include "un260/app_service/app_boot_runtime.h"
 #include "un260/lv_core/lv_page_manager.h"
+#ifdef UN260_FAULT_TEST_LOCALE_BANK
+#include "un260/font/ui_locale_font_bank.h"
+#endif
 static ui_page_t current_page=UI_PAGE_MAIN;
 static unsigned navigations;
 ui_page_t ui_manager_get_current_page(void){return current_page;}
@@ -24,12 +27,15 @@ void smart_island_notify_warning_level(const char *value,smart_island_warning_le
 void smart_island_notify_warning(const char *value){smart_island_notify_warning_level(value,SMART_ISLAND_WARNING_LEVEL_WARNING);}
 void smart_island_refresh_summary(void) {}
 void smart_island_faults_changed(void) {}
+bool smart_island_active_fault_notice(machine_fault_key_t *key) {(void)key;return false;}
+void smart_island_cancel_fault_notice(machine_fault_key_t key) {(void)key;}
 void smart_island_notify_fault(const char *text,machine_fault_key_t key)
 {(void)key;smart_island_notify_warning_level(text,SMART_ISLAND_WARNING_LEVEL_ERROR);}
 void smart_island_notify_no_note(machine_fault_key_t key)
 {(void)key;smart_island_notify_warning_level("No banknotes detected",SMART_ISLAND_WARNING_LEVEL_WARNING);}
 void smart_island_notify_preset_full(machine_fault_key_t key)
-{(void)key;smart_island_notify_warning_level("Preset count reached",SMART_ISLAND_WARNING_LEVEL_PRESET);}
+{(void)key;smart_island_notify_warning_level("Batch full",SMART_ISLAND_WARNING_LEVEL_PRESET);}
+void app_fault_recovery_report(machine_fault_key_t key){(void)key;}
 bool app_fault_recovery_request_clear(machine_fault_key_t key){(void)key;return true;}
 void ui_notice_set_suspended(uint32_t reason,bool value) {if(value)suspended|=reason;else suspended&=~reason;}
 void ui_notice_post(ui_notice_kind_t kind,const char *key,const char *title,const char *detail)
@@ -271,11 +277,39 @@ int main(void)
     }
     }
     fault_popup_report_runtime_fault(2);advance(3200);capture("upper-open-zh");hide_fault_popup();
+    ui_lang_set(LANGUAGE_EN);
+    present((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4});
+    assert(!strcmp(lv_label_get_text(popup.title),"Batch full"));
+    assert(!strcmp(popup.guide.location.key,"Lower front · Stacker pocket ST"));
+    assert(!strcmp(popup.guide.steps[0].title.key,"Empty the stacker pocket"));
+    assert(popup.guide.step_count==1 && popup.guide.steps[0].view==MF_FRONT);
+    assert(popup.guide.steps[0].zone==MF_STACKER && popup.guide.steps[0].action==MF_REMOVE);
+    advance(1500);verify_layout();capture("batch-full-en");hide_fault_popup();
     ui_lang_set(LANGUAGE_CN);
     present((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4});
-    assert(!strcmp(lv_label_get_text(popup.title),"预置数已满"));
-    assert(popup.guide.steps[0].view==MF_FRONT);
-    advance(1500);capture("preset-full-zh");hide_fault_popup();
+    assert(!strcmp(lv_label_get_text(popup.title),"预置满"));
+    assert(!strcmp(lv_label_get_text(popup.step_title),"取出接钞口钞票"));
+    advance(1500);verify_layout();capture("batch-full-zh");hide_fault_popup();
+#ifdef UN260_FAULT_TEST_LOCALE_BANK
+    /* Opt-in QA links the production bank and verifies every shipped locale. */
+    ui_message_font_set_provider(ui_locale_font_compose);
+    for(size_t i=0;i<ui_lang_count();++i) {
+        const ui_locale_t *locale=ui_lang_at(i);
+        static const unsigned sizes[]={12,14,16,18,20,22,24,28};
+        for(size_t s=0;s<sizeof(sizes)/sizeof(sizes[0]);++s)
+            assert(ui_locale_font_prepare_size(locale->id,sizes[s]));
+        ui_lang_set(locale->id);
+        present((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4});
+        assert(!strcmp(fault_guide_text(popup.guide.title),ui_tr("Batch full")));
+        assert(popup.guide.steps[0].zone==MF_STACKER && popup.guide.steps[0].action==MF_REMOVE);
+        advance(1500);verify_layout();
+        assert(lv_obj_get_height(popup.title)==lv_obj_get_style_text_font(popup.title,0)->line_height);
+        char name[64];snprintf(name,sizeof(name),"batch-full-%s",locale->tag);capture(name);
+        printf("Batch locale PASS: %s | %s\n",locale->tag,ui_tr("Batch full"));
+        hide_fault_popup();
+    }
+    ui_lang_set(LANGUAGE_CN);
+#endif
     present((machine_fault_key_t){MACHINE_FAULT_BOOT,2,1});
     assert(popup.guide.steps[0].view==MF_FRONT);capture("sensor-self-test-front");hide_fault_popup();
     present((machine_fault_key_t){MACHINE_FAULT_BOOT,2,4});

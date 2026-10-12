@@ -14,6 +14,7 @@ bool app_fault_recovery_observe_setting_detail(uint8_t command,
     const uint8_t *frame, uint16_t length, const counting_session_state_t *session);
 void app_fault_recovery_clear(void);
 void app_fault_recovery_stacker_cleared(void);
+/* Timeout releases only the in-flight request; it never reopens a read guide. */
 void app_fault_recovery_poll(void);
 /* Full pockets 0x0A/02/{05,07,08}, jams 0x0F/01..05 and preset 0x06/04 use
  * 0x3D. A full-pocket ACK releases the latch without proving physical recovery. */

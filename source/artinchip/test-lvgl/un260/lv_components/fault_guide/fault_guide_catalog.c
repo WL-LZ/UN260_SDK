@@ -103,7 +103,7 @@ void fault_guide_lookup(machine_fault_key_t key, mf_guide_t *g)
     }
     entry_t e = runtime[0];
     if (key.source == MACHINE_FAULT_PRESET) {
-        e = (entry_t)E("Preset count reached","Feeder · Preset count full",MF_FRONT,MF_PRESET,GUIDE_FOCUS);
+        e = (entry_t)E("Batch full","Lower front · Stacker pocket ST",MF_FRONT,MF_STACKER,GUIDE_REMOVE);
     }
     else if (key.source == MACHINE_FAULT_START && key.type == 1 && key.code == 2) {
         e = (entry_t)E("No banknotes detected","Feeder · No jam location",MF_FRONT,MF_HOPPER,GUIDE_FOCUS);
@@ -130,9 +130,7 @@ void fault_guide_lookup(machine_fault_key_t key, mf_guide_t *g)
     memset(g, 0, sizeof(*g));
     g->title=e.title; g->location=e.location; g->step_count=1;
     if (key.source == MACHINE_FAULT_PRESET) {
-        g->steps[0]=step(T("Remove notes"),T("Remove banknotes from the feeder"),
-            T("Take the banknotes out of the feeder, then confirm to clear the preset stop."),
-            MF_FRONT,MF_PRESET,MF_FOCUS); return;
+        g->steps[0]=remove_notes(MF_STACKER); return;
     }
     if (key.source == MACHINE_FAULT_START && key.type == 1 && key.code == 2) {
         g->steps[0]=step(T("Check feeder"),T("Place notes in the feeder"),

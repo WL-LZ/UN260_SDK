@@ -163,7 +163,8 @@ static void smart_island_warning_finish_commit(void)
     smart_island_warning_stop();
     bool is_fault = g_si_ctx.warning.fault.valid;
     machine_fault_key_t key = warning_key();
-    if (resume_counting && g_si_ctx.lifecycle.count_session_active) {
+    if (resume_counting && g_si_ctx.lifecycle.count_session_active &&
+        !g_si_ctx.lifecycle.batch_counting_paused) {
         g_si_ctx.warning.text[0] = '\0';
         g_si_ctx.warning.resume_counting = false;
         smart_island_warning_fault_clear();
@@ -342,6 +343,13 @@ static void notify_warning(const char *warn_text,
                     ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_COUNT_ERROR));
     }
 
+    if (key && key->source == MACHINE_FAULT_PRESET &&
+        key->type == 0 && key->code == 4) {
+        /* A missing final 0x0E must not revive the pre-Batch running view. */
+        g_si_ctx.lifecycle.batch_counting_paused = true;
+        g_si_ctx.warning.resume_counting = false;
+    }
+
     /* 同一条异常重复上报时不重启动画，避免按键动作触发重复闪烁。 */
     if (g_si_ctx.view.scene == SMART_ISLAND_SCENE_WARNING &&
         g_si_ctx.warning.level == level &&
@@ -371,7 +379,8 @@ static void notify_warning(const char *warn_text,
     }
 
     g_si_ctx.warning.resume_counting =
-        g_si_ctx.lifecycle.count_session_active;
+        g_si_ctx.lifecycle.count_session_active &&
+        !g_si_ctx.lifecycle.batch_counting_paused;
     g_si_ctx.warning.level = level;
     lv_snprintf(g_si_ctx.warning.text, sizeof(g_si_ctx.warning.text), "%s",
                 next_warning_text);
@@ -427,5 +436,5 @@ void smart_island_notify_no_note(machine_fault_key_t key)
 }
 void smart_island_notify_preset_full(machine_fault_key_t key)
 {
-    notify_warning(UI_N_("Preset count reached"),SMART_ISLAND_WARNING_LEVEL_PRESET,&key);
+    notify_warning(UI_N_("Batch full"),SMART_ISLAND_WARNING_LEVEL_PRESET,&key);
 }

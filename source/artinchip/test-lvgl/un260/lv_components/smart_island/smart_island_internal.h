@@ -154,6 +154,7 @@ typedef struct {
     bool created;
     bool pure_count_enabled;
     bool count_session_active;
+    bool batch_counting_paused; /* Display hold; the transport session remains active. */
     bool result_transition_pending;
     bool suspended;
     bool dirty;

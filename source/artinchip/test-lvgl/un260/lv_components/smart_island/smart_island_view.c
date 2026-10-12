@@ -1908,6 +1908,7 @@ void smart_island_create(lv_obj_t *parent)
     g_si_ctx.text.idle_has_data = false;
     g_si_ctx.text.idle_no_count = true;
     g_si_ctx.lifecycle.count_session_active = false;
+    g_si_ctx.lifecycle.batch_counting_paused = false;
     g_si_ctx.view.bg_current = SMART_ISLAND_BG_IDLE;
     g_si_ctx.view.bg_from = SMART_ISLAND_BG_IDLE;
     g_si_ctx.view.bg_to = SMART_ISLAND_BG_IDLE;

@@ -130,8 +130,15 @@ static void clear_before_start(machine_fault_key_t key){
  assert(!app_command_runtime_request_count_start()&&tx==3);
  finish_start_request();
  app_fault_recovery_handle_clear_result(1);
- assert(resolved==1&&!machine_fault_find(key,NULL));
+ bool batch=key.source==MACHINE_FAULT_PRESET&&key.type==0&&key.code==4;
+ if(batch)assert(!resolved&&machine_fault_find(key,NULL)); /* ACK only releases the Batch latch. */
+ else assert(resolved==1&&!machine_fault_find(key,NULL));
  assert(app_command_runtime_request_count_start()&&tx==4&&cmds[3]==0x0A);
+ if(batch){
+  app_fault_recovery_stacker_cleared();assert(resolved==1&&!machine_fault_find(key,NULL));
+  unsigned before=tx;app_fault_recovery_stacker_cleared();now+=30000;app_fault_recovery_poll();
+  assert(tx==before&&resolved==1); /* Physical recovery stops Batch retries; duplicate 51 is inert. */
+ }
 }
 static void start_gates(void){
  reset();report((machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,2});
@@ -161,7 +168,7 @@ static void clear_failures(void){
  assert(repeated==1&&machine_fault_find(jam,NULL)&&tx==2);
  assert(app_command_runtime_request_count_start()&&tx==4&&cmds[2]==0x3D&&cmds[3]==0x0A);
  finish_start_request();now=2999;app_fault_recovery_poll();assert(repeated==1&&tx==4);
- now=3000;app_fault_recovery_poll();assert(repeated==2&&machine_fault_find(jam,NULL)&&tx==4);
+ now=3000;app_fault_recovery_poll();assert(repeated==1&&machine_fault_find(jam,NULL)&&tx==4); /* No ACK is not a new fault. */
  assert(app_command_runtime_request_count_start()&&tx==6&&cmds[4]==0x3D&&cmds[5]==0x0A);
  /* A clear response has no fault id, so a different pending key blocks START. */
  reset();report(jam);assert(app_fault_recovery_request_clear(jam)&&tx==1);
@@ -270,7 +277,7 @@ int main(void){
  for(uint8_t code=1;code<=5;++code)clear_before_start((machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,code});
  clear_before_start((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4});
  start_gates();clear_failures();send_and_clear_guards();upgrade_start_gate();maintenance_start_gate();full_pocket_control();
- puts("PASS production CONTROL+START wire: real 0A success preserves pending04; late04/02 defers presentation without committing, late04/01 still confirms; RX full pockets 05/07/08 auto-send only 3D in both Popup modes without Confirm; repeated pending reports coalesce, old ACK cannot clear new generation; latch ACK retains physical fault until 0F00/real START; non-pocket direct 0A, jam/preset, upgrade/maintenance gates, send failure and timeouts retained");
+ puts("PASS production CONTROL+START wire: real 0A success preserves pending04; late04/02 defers presentation without committing, late04/01 still confirms; RX full pockets 05/07/08 auto-send only 3D in both Popup modes without Confirm; repeated pending reports coalesce, old ACK cannot clear new generation; latch ACK retains physical fault until 0F00/real START; non-pocket direct 0A, jam policy, Batch ACK retains record until 51 and stops retries, upgrade/maintenance gates, send failure and timeouts retained");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='un260-start-wire-') as d:

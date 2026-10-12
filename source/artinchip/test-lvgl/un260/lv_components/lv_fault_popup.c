@@ -203,16 +203,19 @@ void fault_popup_language_changed(void)
 static void report(machine_fault_key_t key,bool allow_auto)
 {
     fault_popup_resolve_setting_rejection(0);
-    bool event=key.source==MACHINE_FAULT_START;
+    bool batch=key.source==MACHINE_FAULT_PRESET && key.type==0 && key.code==4;
+    bool event=key.source==MACHINE_FAULT_START || batch;
     bool changed=event?machine_fault_report_event(key):machine_fault_report(key);
     if(changed){
+        if(key.source==MACHINE_FAULT_BOOT || key.source==MACHINE_FAULT_SENSOR)
+            app_fault_recovery_report(key);
         smart_island_faults_changed();
         smart_island_refresh_summary();
     }
     /* The island receives controller reports in either Popup mode. Popup only
      * selects automatic guide opening; Top popup belongs to ui_notice. */
     if(allow_auto)post_island_notice(key);
-    if(!changed && !event)return;
+    if(!changed && (!event || batch))return;
     if(allow_auto && auto_enabled)present(key);
     else if(popup.overlay && !machine_fault_find(popup.key,NULL))present(key);
 }
@@ -314,6 +317,7 @@ void fault_popup_report_sensor_mask(uint32_t mask)
     /* A recovered bit must not restart another fault's current step or open
      * unrelated unread reports. Only a newly asserted bit raises a popup. */
     if(fresh.code<32) {
+        app_fault_recovery_report(fresh);
         fault_popup_resolve_setting_rejection(0);
         post_island_notice(fresh);
         if(auto_enabled && (!popup.overlay || !machine_fault_key_equal(popup.key,fresh)))present(fresh);

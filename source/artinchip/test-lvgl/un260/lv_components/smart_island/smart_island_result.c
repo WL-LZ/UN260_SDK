@@ -91,6 +91,7 @@ void smart_island_notify_count_start(void)
      * counting scene again would clear the live serial, rebuild the complete
      * island and restart its animation once per banknote. */
     if (g_si_ctx.lifecycle.count_session_active &&
+        !g_si_ctx.lifecycle.batch_counting_paused &&
         g_si_ctx.view.scene == SMART_ISLAND_SCENE_COUNTING) {
         return;
     }
@@ -101,6 +102,7 @@ void smart_island_notify_count_start(void)
     smart_island_result_cancel_transition();
 
     g_si_ctx.lifecycle.count_session_active = true;
+    g_si_ctx.lifecycle.batch_counting_paused = false;
     g_si_ctx.warning.level = SMART_ISLAND_WARNING_LEVEL_WARNING;
     g_si_ctx.warning.resume_animation_pending = false;
     g_si_ctx.warning.resume_counting = false;
@@ -186,6 +188,7 @@ void smart_island_notify_count_end(const char *result_text)
     }
 
     g_si_ctx.lifecycle.count_session_active = false;
+    g_si_ctx.lifecycle.batch_counting_paused = false;
     if (result_text && result_text[0] != '\0') {
         lv_snprintf(g_si_ctx.text.result, sizeof(g_si_ctx.text.result), "%s", result_text);
     } else {
@@ -226,6 +229,7 @@ void smart_island_notify_count_reset(void)
     bool from_result = g_si_ctx.view.scene == SMART_ISLAND_SCENE_RESULT;
 
     g_si_ctx.lifecycle.count_session_active = false;
+    g_si_ctx.lifecycle.batch_counting_paused = false;
     g_si_ctx.warning.resume_counting = false;
     smart_island_result_cancel_transition();
     smart_island_result_stop_timer();
