@@ -22,7 +22,7 @@
       "family": "Noto Sans CJK SC",
       "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
       "face_index": 2,
-      "candidate_entries": 3673,
+      "candidate_entries": 3682,
       "missing_translation_count": 0,
       "codepoints": [
         183,
@@ -11575,7 +11575,7 @@
       "family": "Noto Sans CJK KR",
       "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
       "face_index": 1,
-      "candidate_entries": 3673,
+      "candidate_entries": 3682,
       "missing_translation_count": 0,
       "codepoints": [
         183,
@@ -18981,7 +18981,7 @@
       "family": "Noto Sans CJK JP",
       "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
       "face_index": 0,
-      "candidate_entries": 3673,
+      "candidate_entries": 3682,
       "missing_translation_count": 0,
       "codepoints": [
         183,
@@ -18992,6 +18992,7 @@
         12290,
         12300,
         12301,
+        12316,
         12354,
         12356,
         12358,
@@ -19714,8 +19715,8 @@
         {
           "size": 10,
           "file": "font-10.bin",
-          "bytes": 38424,
-          "sha256": "89b335547da2f9f3b16181ccf1ee3a8889b8881cd8a37180846bdd318eda00f5",
+          "bytes": 38448,
+          "sha256": "1a4d0964f2846f88948ce5422aaa01c9913a80275ad9ccd7575a0da2c36a644e",
           "codepoints": [
             183,
             215,
@@ -19725,6 +19726,7 @@
             12290,
             12300,
             12301,
+            12316,
             12354,
             12356,
             12358,
@@ -20447,8 +20449,8 @@
         {
           "size": 12,
           "file": "font-12.bin",
-          "bytes": 52720,
-          "sha256": "dc2100a1a0391626113a70dc99484a70668875f36d830396f5376276c28e7d91",
+          "bytes": 52760,
+          "sha256": "c32caeefd50134f6a820e8f9478a329bac765dc680c2bff8589f825e095a9407",
           "codepoints": [
             183,
             215,
@@ -20458,6 +20460,7 @@
             12290,
             12300,
             12301,
+            12316,
             12354,
             12356,
             12358,
@@ -21180,8 +21183,8 @@
         {
           "size": 14,
           "file": "font-14.bin",
-          "bytes": 68456,
-          "sha256": "11f15efd32ab0716bae81014299d609fde64b188e2b5ca0d76a9e7dbbcd4d7cc",
+          "bytes": 69952,
+          "sha256": "d8869bf348adb5a934b1642658b177d77af06087cce7dabfa56a9adea976530e",
           "codepoints": [
             183,
             215,
@@ -21191,6 +21194,7 @@
             12290,
             12300,
             12301,
+            12316,
             12354,
             12356,
             12358,
@@ -21913,8 +21917,8 @@
         {
           "size": 16,
           "file": "font-16.bin",
-          "bytes": 87532,
-          "sha256": "7f2d6bbae743168e5fe688ab6f8399fd56a9811a2a761fc5bd39d6836e2ba184",
+          "bytes": 87592,
+          "sha256": "376191f9fc0f3ba6832859680377b17bdde0ab6d66dbd6a355695eb0db99006a",
           "codepoints": [
             183,
             215,
@@ -21924,6 +21928,7 @@
             12290,
             12300,
             12301,
+            12316,
             12354,
             12356,
             12358,
@@ -22646,8 +22651,8 @@
         {
           "size": 18,
           "file": "font-18.bin",
-          "bytes": 109152,
-          "sha256": "3b657b4e21b07cdea723446f36a9c3bda4c4c7d9cc81b1b089ee1daf7c27a793",
+          "bytes": 109220,
+          "sha256": "a1987e472eddec3e3500aa3ca0c03b3cbcd8de52a9abeb45c6d8eedcfcaabef8",
           "codepoints": [
             183,
             215,
@@ -22657,6 +22662,7 @@
             12290,
             12300,
             12301,
+            12316,
             12354,
             12356,
             12358,
@@ -23379,8 +23385,8 @@
         {
           "size": 20,
           "file": "font-20.bin",
-          "bytes": 132880,
-          "sha256": "369da69937dc378e097fe3ad8619c73c2c112d49d08f3ba4cc590f30c8cf4139",
+          "bytes": 132960,
+          "sha256": "2d2a0392f0d500bf1c24510bddb31a084369bd1f593836e361b8271abb12a761",
           "codepoints": [
             183,
             215,
@@ -23390,6 +23396,7 @@
             12290,
             12300,
             12301,
+            12316,
             12354,
             12356,
             12358,
@@ -24112,8 +24119,8 @@
         {
           "size": 22,
           "file": "font-22.bin",
-          "bytes": 158128,
-          "sha256": "0a79466ee2d1ff0498cb6c8aa5c684137508e230a142cd41ea52cea3f5b24481",
+          "bytes": 158216,
+          "sha256": "05922fb1bf49f7cd2e9fe46895d7f2580d5cd204d9afba57fc5b4dc6a98e367b",
           "codepoints": [
             183,
             215,
@@ -24123,6 +24130,7 @@
             12290,
             12300,
             12301,
+            12316,
             12354,
             12356,
             12358,
@@ -24845,8 +24853,8 @@
         {
           "size": 24,
           "file": "font-24.bin",
-          "bytes": 184636,
-          "sha256": "99505c9e67b4c62127816ddf57996dfcf9203c7ce9e45b3c4d024b78d5b718cb",
+          "bytes": 184736,
+          "sha256": "4fcfcf380122a0ab015e2a0463ee9d027c001f45d9500aae27c7e9fd112c4bde",
           "codepoints": [
             183,
             215,
@@ -24856,6 +24864,7 @@
             12290,
             12300,
             12301,
+            12316,
             12354,
             12356,
             12358,
@@ -25578,8 +25587,8 @@
         {
           "size": 26,
           "file": "font-26.bin",
-          "bytes": 210952,
-          "sha256": "b8a46e3f10292a4b94df0dc36500690e02ad8405d790f753273b66caea894215",
+          "bytes": 211060,
+          "sha256": "1702a0eba6f6a5191c32a203c1b1b6a53724c24bab49d0345495f7d5e618b2ac",
           "codepoints": [
             183,
             215,
@@ -25589,6 +25598,7 @@
             12290,
             12300,
             12301,
+            12316,
             12354,
             12356,
             12358,
@@ -26311,8 +26321,8 @@
         {
           "size": 28,
           "file": "font-28.bin",
-          "bytes": 243388,
-          "sha256": "157c9c52a012ff0e9c53e19ba87844707dc77550d815fc5e6e4c4bdc027c5441",
+          "bytes": 243516,
+          "sha256": "c7bd72612e3bf65a57ce27077ad9e383360299396fbd2d5897af8030d183c7d2",
           "codepoints": [
             183,
             215,
@@ -26322,6 +26332,7 @@
             12290,
             12300,
             12301,
+            12316,
             12354,
             12356,
             12358,
@@ -27044,8 +27055,8 @@
         {
           "size": 32,
           "file": "font-32.bin",
-          "bytes": 309216,
-          "sha256": "207cfd77b095f3388bed3d79eef428cf5823f765b5c41aff04a3d453d0eb3663",
+          "bytes": 309380,
+          "sha256": "9ea4dc58212f7cb3665a97d0ef0e911a5f165b51f7a9436889dae55ab4cbd92a",
           "codepoints": [
             183,
             215,
@@ -27055,6 +27066,7 @@
             12290,
             12300,
             12301,
+            12316,
             12354,
             12356,
             12358,
@@ -27777,8 +27789,8 @@
         {
           "size": 36,
           "file": "font-36.bin",
-          "bytes": 390952,
-          "sha256": "0fb850c81e99d406370056b16fe3eef0a10e6835ecffb4ed41a9ff53c1f0f0ab",
+          "bytes": 391148,
+          "sha256": "84228eda3919e06531fe7227991db19ac8ac63cc9f63be4f70b0c7df3d43cbb4",
           "codepoints": [
             183,
             215,
@@ -27788,6 +27800,7 @@
             12290,
             12300,
             12301,
+            12316,
             12354,
             12356,
             12358,
@@ -28552,13 +28565,13 @@
         "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.",
         "14": "http://scripts.sil.org/OFL"
       },
-      "bytes": 1991100
+      "bytes": 1993652
     },
     "ar": {
       "family": "DejaVu Sans",
       "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
       "face_index": 0,
-      "candidate_entries": 3673,
+      "candidate_entries": 3682,
       "missing_translation_count": 0,
       "codepoints": [
         183,
@@ -28605,6 +28618,7 @@
         1610,
         1611,
         1613,
+        1614,
         1615,
         1616,
         1617,
@@ -29115,8 +29129,8 @@
         {
           "size": 10,
           "file": "font-10.bin",
-          "bytes": 8676,
-          "sha256": "de439c1ae333bd3b2912fcbcb29e829eee66783d3b8d6e1861f61a8d7a7156d2",
+          "bytes": 8688,
+          "sha256": "dfc57930477f43573b1154a146ebdeb424709717788317277c9f7e2a379b7b01",
           "codepoints": [
             183,
             215,
@@ -29162,6 +29176,7 @@
             1610,
             1611,
             1613,
+            1614,
             1615,
             1616,
             1617,
@@ -29422,8 +29437,8 @@
         {
           "size": 12,
           "file": "font-12.bin",
-          "bytes": 11444,
-          "sha256": "e2d6971382e98f7739585d215663df772978fa3781f8e59443a83e5e20db8850",
+          "bytes": 11456,
+          "sha256": "5aded6947b29c334a39c07dce7fed38abd17fdcdc8f3e6ecb97611c220a94581",
           "codepoints": [
             183,
             215,
@@ -29469,6 +29484,7 @@
             1610,
             1611,
             1613,
+            1614,
             1615,
             1616,
             1617,
@@ -29729,8 +29745,8 @@
         {
           "size": 14,
           "file": "font-14.bin",
-          "bytes": 15220,
-          "sha256": "15419fa6c205efbf7b6cea0408dac2cb53647b4c1acf2f20d9e1d9c9879fd429",
+          "bytes": 15232,
+          "sha256": "b4018119358b92dc589599f9c9d8e80d251400bf0217cf1a3f6b0db845ffce81",
           "codepoints": [
             183,
             215,
@@ -29776,6 +29792,7 @@
             1610,
             1611,
             1613,
+            1614,
             1615,
             1616,
             1617,
@@ -30036,8 +30053,8 @@
         {
           "size": 16,
           "file": "font-16.bin",
-          "bytes": 18440,
-          "sha256": "e71b892c3bb07320b6dbd1b12cf2c1767ed98f5d7478075e31d92619999b0c6e",
+          "bytes": 18456,
+          "sha256": "15bb1ab510f10db483abbe6fc80016a81c0a13f1e42fe5f2dfe6c5b8fe44f7af",
           "codepoints": [
             183,
             215,
@@ -30083,6 +30100,7 @@
             1610,
             1611,
             1613,
+            1614,
             1615,
             1616,
             1617,
@@ -30343,8 +30361,8 @@
         {
           "size": 18,
           "file": "font-18.bin",
-          "bytes": 22488,
-          "sha256": "a58afaa2b98014adab42f1273779c08e3d515e7f22e91bee906302105f7568ab",
+          "bytes": 22504,
+          "sha256": "bf31456885a7c6fc3e5a391ae02f54730efd6defea38aff3717f88a0e85bf6df",
           "codepoints": [
             183,
             215,
@@ -30390,6 +30408,7 @@
             1610,
             1611,
             1613,
+            1614,
             1615,
             1616,
             1617,
@@ -30650,8 +30669,8 @@
         {
           "size": 20,
           "file": "font-20.bin",
-          "bytes": 26748,
-          "sha256": "2308b2aea45318c245b7d37d761486d03876794b6b4a237fea14b058c2eac723",
+          "bytes": 26768,
+          "sha256": "eede414288d2204d78ab54d02c5aad4ad18d560dc1c177d7ea42abdfd15de808",
           "codepoints": [
             183,
             215,
@@ -30697,6 +30716,7 @@
             1610,
             1611,
             1613,
+            1614,
             1615,
             1616,
             1617,
@@ -30957,8 +30977,8 @@
         {
           "size": 22,
           "file": "font-22.bin",
-          "bytes": 30868,
-          "sha256": "e4a54602245d0041c4c8775b174311b61ca14bcd8c8eca4c41fe6792db61ca2c",
+          "bytes": 30884,
+          "sha256": "b404d934653f8427a60f6f100ef4113d0c16fdd9679c43aabd3eb427b039233f",
           "codepoints": [
             183,
             215,
@@ -31004,6 +31024,7 @@
             1610,
             1611,
             1613,
+            1614,
             1615,
             1616,
             1617,
@@ -31264,8 +31285,8 @@
         {
           "size": 24,
           "file": "font-24.bin",
-          "bytes": 36316,
-          "sha256": "d88725d522f2d0902162ed86c601965f7390b004c2ab90e3bfa1997095477f40",
+          "bytes": 36336,
+          "sha256": "9ecef3f1040e32d79114c4d7c6eacb9e5fff4f800e8eb53b492e72b4b3edee70",
           "codepoints": [
             183,
             215,
@@ -31311,6 +31332,7 @@
             1610,
             1611,
             1613,
+            1614,
             1615,
             1616,
             1617,
@@ -31571,8 +31593,8 @@
         {
           "size": 26,
           "file": "font-26.bin",
-          "bytes": 42768,
-          "sha256": "29cecd95b664fd3e92a8dc2ff4d8c8a2068ea3f868f2487dce5570a770b5bcc5",
+          "bytes": 42796,
+          "sha256": "3c94615faf52401a81391c708d70342d339663b4df64d22d53b21ba665cbf793",
           "codepoints": [
             183,
             215,
@@ -31618,6 +31640,7 @@
             1610,
             1611,
             1613,
+            1614,
             1615,
             1616,
             1617,
@@ -31878,8 +31901,8 @@
         {
           "size": 28,
           "file": "font-28.bin",
-          "bytes": 48920,
-          "sha256": "02cca922ad26de49a1abf05ec54069d090b50325e7e3d4f8ad8ca121be33340e",
+          "bytes": 48944,
+          "sha256": "4304b64d17ce91d1f577258eef3282adce83da2a9af96a254e83edc2f3dec77c",
           "codepoints": [
             183,
             215,
@@ -31925,6 +31948,7 @@
             1610,
             1611,
             1613,
+            1614,
             1615,
             1616,
             1617,
@@ -32185,8 +32209,8 @@
         {
           "size": 32,
           "file": "font-32.bin",
-          "bytes": 61248,
-          "sha256": "2aab031526efde463bdf8e87c8b05a449a0e4076fe0b575bc19577d4c2f01b36",
+          "bytes": 61284,
+          "sha256": "533e54125a6bce58866cf50b6b82b8f89d33e40e9c8296de44244f18656799b9",
           "codepoints": [
             183,
             215,
@@ -32232,6 +32256,7 @@
             1610,
             1611,
             1613,
+            1614,
             1615,
             1616,
             1617,
@@ -32492,8 +32517,8 @@
         {
           "size": 36,
           "file": "font-36.bin",
-          "bytes": 77392,
-          "sha256": "0b7ec05a620e3857c44441176c7973398ae985784d2939a0f0fc0f20bcf49a6d",
+          "bytes": 77436,
+          "sha256": "49ce1f990f98ca99b3e29a91685759f6020a9b1f6e99c1818d81536498788478",
           "codepoints": [
             183,
             215,
@@ -32539,6 +32564,7 @@
             1610,
             1611,
             1613,
+            1614,
             1615,
             1616,
             1617,
@@ -33597,13 +33623,13 @@
         "13": "Fonts are (c) Bitstream (see below). DejaVu changes are in public domain. Glyphs imported from Arev fonts are (c) Tavmjung Bah (see below)\n\nBitstream Vera Fonts Copyright\n------------------------------\n\nCopyright (c) 2003 by Bitstream, Inc. All Rights Reserved. Bitstream Vera is\na trademark of Bitstream, Inc.\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof the fonts accompanying this license (\"Fonts\") and associated\ndocumentation files (the \"Font Software\"), to reproduce and distribute the\nFont Software, including without limitation the rights to use, copy, merge,\npublish, distribute, and/or sell copies of the Font Software, and to permit\npersons to whom the Font Software is furnished to do so, subject to the\nfollowing conditions:\n\nThe above copyright and trademark notices and this permission notice shall\nbe included in all copies of one or more of the Font Software typefaces.\n\nThe Font Software may be modified, altered, or added to, and in particular\nthe designs of glyphs or characters in the Fonts may be modified and\nadditional glyphs or characters may be added to the Fonts, only if the fonts\nare renamed to names not containing either the words \"Bitstream\" or the word\n\"Vera\".\n\nThis License becomes null and void to the extent applicable to Fonts or Font\nSoftware that has been modified and is distributed under the \"Bitstream\nVera\" names.\n\nThe Font Software may be sold as part of a larger software package but no\ncopy of one or more of the Font Software typefaces may be sold by itself.\n\nTHE FONT SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS\nOR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF COPYRIGHT, PATENT,\nTRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL BITSTREAM OR THE GNOME\nFOUNDATION BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, INCLUDING\nANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL DAMAGES,\nWHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF\nTHE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM OTHER DEALINGS IN THE\nFONT SOFTWARE.\n\nExcept as contained in this notice, the names of Gnome, the Gnome\nFoundation, and Bitstream Inc., shall not be used in advertising or\notherwise to promote the sale, use or other dealings in this Font Software\nwithout prior written authorization from the Gnome Foundation or Bitstream\nInc., respectively. For further information, contact: fonts at gnome dot\norg. \n\nArev Fonts Copyright\n------------------------------\n\nCopyright (c) 2006 by Tavmjong Bah. All Rights Reserved.\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of the fonts accompanying this license (\"Fonts\") and\nassociated documentation files (the \"Font Software\"), to reproduce\nand distribute the modifications to the Bitstream Vera Font Software,\nincluding without limitation the rights to use, copy, merge, publish,\ndistribute, and/or sell copies of the Font Software, and to permit\npersons to whom the Font Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright and trademark notices and this permission notice\nshall be included in all copies of one or more of the Font Software\ntypefaces.\n\nThe Font Software may be modified, altered, or added to, and in\nparticular the designs of glyphs or characters in the Fonts may be\nmodified and additional glyphs or characters may be added to the\nFonts, only if the fonts are renamed to names not containing either\nthe words \"Tavmjong Bah\" or the word \"Arev\".\n\nThis License becomes null and void to the extent applicable to Fonts\nor Font Software that has been modified and is distributed under the \n\"Tavmjong Bah Arev\" names.\n\nThe Font Software may be sold as part of a larger software package but\nno copy of one or more of the Font Software typefaces may be sold by\nitself.\n\nTHE FONT SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT\nOF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL\nTAVMJONG BAH BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,\nINCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL\nDAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\nFROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM\nOTHER DEALINGS IN THE FONT SOFTWARE.\n\nExcept as contained in this notice, the name of Tavmjong Bah shall not\nbe used in advertising or otherwise to promote the sale, use or other\ndealings in this Font Software without prior written authorization\nfrom Tavmjong Bah. For further information, contact: tavmjong @ free\n. fr.",
         "14": "http://dejavu.sourceforge.net/wiki/index.php/License"
       },
-      "bytes": 751256
+      "bytes": 751512
     },
     "tr": {
       "family": "DejaVu Sans",
       "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
       "face_index": 0,
-      "candidate_entries": 3673,
+      "candidate_entries": 3682,
       "missing_translation_count": 0,
       "codepoints": [
         183,
@@ -33982,7 +34008,7 @@
       "family": "DejaVu Sans",
       "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
       "face_index": 0,
-      "candidate_entries": 3673,
+      "candidate_entries": 3682,
       "missing_translation_count": 0,
       "codepoints": [
         160,
@@ -34475,7 +34501,7 @@
       "family": "DejaVu Sans",
       "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
       "face_index": 0,
-      "candidate_entries": 3673,
+      "candidate_entries": 3682,
       "missing_translation_count": 0,
       "codepoints": [
         183,
@@ -34932,7 +34958,7 @@
       "family": "DejaVu Sans",
       "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
       "face_index": 0,
-      "candidate_entries": 3673,
+      "candidate_entries": 3682,
       "missing_translation_count": 0,
       "codepoints": [
         160,
@@ -36052,7 +36078,7 @@
       "family": "DejaVu Sans",
       "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
       "face_index": 0,
-      "candidate_entries": 3673,
+      "candidate_entries": 3682,
       "missing_translation_count": 0,
       "codepoints": [
         183,

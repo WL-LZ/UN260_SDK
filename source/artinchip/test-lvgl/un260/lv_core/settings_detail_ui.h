@@ -58,6 +58,8 @@ bool settings_detail_dialog_show(const char* title,
                                  void* user_data);
 void settings_detail_dialog_hide(void);
 bool settings_detail_overlay_is_open(void);
+/* A private non-NULL context identifies the owner of the current dialog. */
+bool settings_detail_dialog_is_owned_by(const void *context);
 /* Diagnostic page shortcut; owned by its parent. No calibration command is sent. */
 void settings_detail_add_run(lv_obj_t *page);
 /* reason is an English message ID (UI_N_), translated when displayed.

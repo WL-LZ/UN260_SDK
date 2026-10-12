@@ -223,9 +223,9 @@ static void search_input_event(lv_event_t *e)
         const lv_alnum_keyboard_config_t config={
             .title=ui_text_get(UI_TEXT_QUERY_SERIAL),
             .placeholder=ui_text_get(UI_TEXT_SERIAL_INPUT_HINT),
-            .apply_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_SERIAL_SEARCH)),
-            .clear_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_SERIAL_CLEAR)),
-            .cancel_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_SERIAL_ESC)),
+            .apply_text=ui_text_get(UI_TEXT_SERIAL_SEARCH),
+            .clear_text=ui_text_get(UI_TEXT_SERIAL_CLEAR),
+            .cancel_text=ui_text_get(UI_TEXT_SERIAL_ESC),
             .max_length=sizeof(s->query.text)-1,
             .submit=search_input_submit,.cancel=search_input_cancel,.context=s};
         s->keyboard=lv_alnum_keyboard_create(s->root,&config);

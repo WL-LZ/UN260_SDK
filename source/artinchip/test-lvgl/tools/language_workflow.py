@@ -173,6 +173,7 @@ def main():
             run('prepare_locale_font_assets.py', candidate)
         run('gen_i18n.py', '--generate')
         run('gen_i18n.py', '--check')
+        run('audit_translation_language.py', '--check', '--output', args.output / 'translation-language.json')
         run('prepare_locale_font_assets.py', '--check')
         run('test_locale_fonts.py', g.ROOT / 'aic_ui/lvgl_data/locale_fonts', args.output / 'fonts')
         run('test_i18n.py', '--sanitize')

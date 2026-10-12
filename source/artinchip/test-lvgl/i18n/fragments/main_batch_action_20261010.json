@@ -1,0 +1,52 @@
+{
+  "en": {
+    "Main Batch button": "Main Batch button",
+    "Main Batch: Settings": "Main Batch: Settings",
+    "Main Batch: Cycle": "Main Batch: Cycle"
+  },
+  "zh-Hans": {
+    "Main Batch button": "主页预置功能",
+    "Main Batch: Settings": "主页预置：设置",
+    "Main Batch: Cycle": "主页预置：轮询"
+  },
+  "ko": {
+    "Main Batch button": "메인 배치 기능",
+    "Main Batch: Settings": "메인 배치: 설정",
+    "Main Batch: Cycle": "메인 배치: 순환"
+  },
+  "ja": {
+    "Main Batch button": "メインバッチボタン",
+    "Main Batch: Settings": "メインバッチ：設定",
+    "Main Batch: Cycle": "メインバッチ：切替"
+  },
+  "ar": {
+    "Main Batch button": "زر دفعة الرئيسية",
+    "Main Batch: Settings": "دفعة الرئيسية: الإعدادات",
+    "Main Batch: Cycle": "دفعة الرئيسية: التنقل"
+  },
+  "tr": {
+    "Main Batch button": "Ana deste düğmesi",
+    "Main Batch: Settings": "Ana deste: Ayarlar",
+    "Main Batch: Cycle": "Ana deste: Döngü"
+  },
+  "fr": {
+    "Main Batch button": "Bouton lot principal",
+    "Main Batch: Settings": "Lot principal : Réglages",
+    "Main Batch: Cycle": "Lot principal : Cycle"
+  },
+  "pl": {
+    "Main Batch button": "Przycisk partii głównej",
+    "Main Batch: Settings": "Główna partia: Ustawienia",
+    "Main Batch: Cycle": "Główna partia: Cykl"
+  },
+  "ru": {
+    "Main Batch button": "Кнопка Batch на главной",
+    "Main Batch: Settings": "Batch на главной: Настройки",
+    "Main Batch: Cycle": "Batch на главной: Перебор"
+  },
+  "de": {
+    "Main Batch button": "Haupt-Batch-Taste",
+    "Main Batch: Settings": "Haupt-Batch: Einstellungen",
+    "Main Batch: Cycle": "Haupt-Batch: Zyklus"
+  }
+}

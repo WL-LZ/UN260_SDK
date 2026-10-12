@@ -1,4 +1,6 @@
 #include "test_notice_sink.h"
+#include "un260/font/ui_locale_font_bank.h"
+#include "un260/font/ui_message_font.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include <assert.h>
 #include <stdio.h>
@@ -21,6 +23,8 @@
 #include "un260/lv_core/page_33_set_brightness.h"
 #include "un260/lv_core/page_36_display_test.h"
 #include "un260/lv_components/lv_nav_button.h"
+#include "un260/lv_components/lv_pin_keypad.h"
+#include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_components/lv_settings.h"
 #include "un260/gesture/gesture_service.h"
 #include "un260/lv_system/ui_text.h"
@@ -316,15 +320,14 @@ static void password_page_test(void)
     puts("PASS real LVGL login: first-concept geometry/colors/labels, opaque surface, 4s stable pixels, Clear/backspace/x/outside dismissal and repeated lifecycle");
     ui_page_29_set_password_create(lv_scr_act());snapshot("password");click("Current password");
     snapshot("password-keypad");
-    click("9");click("9");click("9");click("9");click("Confirm");
+    click("9");click("9");click("9");click("9");
     assert(find_label(lv_scr_act(),"Incorrect current PIN. Try again."));
-    click("Cancel");click("Current password");
-    for(unsigned i=0;i<4;i++){char key[2]={password[i],0};click(key);}click("Confirm");
+    for(unsigned i=0;i<4;i++){char key[2]={password[i],0};click(key);}
     assert(find_label(lv_scr_act(),"New password"));
-    click("0");click("0");click("2");click("2");click("Confirm");
-    click("0");click("0");click("2");click("3");click("Confirm");
+    click("0");click("0");click("2");click("2");
+    click("0");click("0");click("2");click("3");
     assert(find_label(lv_scr_act(),"PINs do not match. Re-enter the new PIN."));
-    click("Cancel");click("Confirm password");click("0");click("0");click("2");click("2");click("Confirm");
+    click("0");click("0");click("2");click("2");
     assert(strcmp(password,"0022"));click("Save");assert(!strcmp(password,"0022"));
     ui_page_29_set_password_destroy();assert(!gesture_policy);
     puts("PASS PIN wizard: wrong old PIN blocked, staged progression, mismatch blocked, Save only");
@@ -387,9 +390,70 @@ static void color_calibration_test(void)
     puts("PASS color references, shared brightness route, refreshed value, unavailable driver and timer teardown");
 }
 
+#include "test_locale_view_checks.h"
+static void locale_keypad_cancel(void *context){(void)context;}
+static void locale_action_bounds(lv_obj_t *button)
+{
+    lv_obj_t *label=lv_damped_button_get_label(button);
+    const lv_font_t *font=lv_obj_get_style_text_font(label,0);
+    lv_point_t size;lv_txt_get_size(&size,lv_label_get_text(label),font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+    if(size.x>lv_obj_get_width(button)-12||size.y>lv_obj_get_height(button))fprintf(stderr,"PIN action %s: %s size %d,%d in %d,%d\\n",ui_lang_current()->tag,lv_label_get_text(label),size.x,size.y,lv_obj_get_width(button),lv_obj_get_height(button));
+    assert(size.x<=lv_obj_get_width(button)-12&&size.y<=lv_obj_get_height(button));
+}
+static void locale_pin_keypad_test(void)
+{
+    lv_pin_keypad_t keypad={0};assert(lv_pin_keypad_create(&keypad,lv_scr_act(),80,40));
+    for(size_t language=0;language<ui_lang_count();++language){
+        const ui_locale_t *locale=ui_lang_at(language);assert(ui_lang_prepare_resources(locale->id));ui_lang_set(locale->id);
+        lv_pin_keypad_config_t config={.cancel_cb=locale_keypad_cancel};
+        assert(lv_pin_keypad_show(&keypad,&config,"1234"));
+        lv_obj_update_layout(keypad.root);check_single_line(keypad.root);
+        locale_action_bounds(keypad.eye);locale_action_bounds(keypad.cancel);locale_action_bounds(keypad.keys[11]);
+        lv_event_send(keypad.eye,LV_EVENT_CLICKED,NULL);assert(keypad.digits_visible);
+        lv_obj_update_layout(keypad.root);check_single_line(keypad.root);locale_action_bounds(keypad.eye);
+        char name[80];snprintf(name,sizeof(name),"locale-%s-pin-regular",locale->tag);snapshot(name);
+        lv_pin_keypad_hide(&keypad);assert(keypad.input.length==0&&!lv_pin_keypad_is_visible(&keypad));
+        config.compact=true;config.auto_confirm=true;
+        assert(lv_pin_keypad_show(&keypad,&config,NULL));
+        lv_obj_set_pos(keypad.root,215,18);lv_obj_update_layout(keypad.root);check_single_line(keypad.root);
+        locale_action_bounds(keypad.keys[11]);
+        snprintf(name,sizeof(name),"locale-%s-pin-compact",locale->tag);snapshot(name);
+        lv_pin_keypad_hide(&keypad);lv_obj_set_pos(keypad.root,80,40);
+    }
+    lv_pin_keypad_destroy(&keypad);ui_lang_set(LANGUAGE_EN);
+    puts("PASS reused PIN in ten locales: Show/Hide/Cancel/Confirm/Clear, actual glyphs, single-line action bounds, hidden draft clearing");
+}
+static void locale_parameters_test(void)
+{
+    const struct { const char *name; void (*create)(lv_obj_t *); void (*destroy)(void); } pages[] = {
+        {"print",ui_page_20_set_print_create,ui_page_20_set_print_destroy},
+        {"double",ui_page_22_set_double_note_create,ui_page_22_set_double_note_destroy},
+        {"flap",ui_page_23_set_flap_create,ui_page_23_set_flap_destroy},
+        {"reject",ui_page_24_set_reject_pocket_create,ui_page_24_set_reject_pocket_destroy},
+        {"serial",ui_page_25_set_serial_number_create,ui_page_25_set_serial_number_destroy},
+        {"cfd",ui_page_27_set_cfd_level_create,ui_page_27_set_cfd_level_destroy},
+        {"password",ui_page_29_set_password_create,ui_page_29_set_password_destroy},
+        {"factory",ui_page_30_set_factory_create,ui_page_30_set_factory_destroy},
+    };
+    for(size_t language=0;language<ui_lang_count();++language){
+        const ui_locale_t *locale=ui_lang_at(language);assert(ui_lang_prepare_resources(locale->id));ui_lang_set(locale->id);
+        for(size_t page=0;page<sizeof(pages)/sizeof(pages[0]);++page){
+            factory_phase=UI_FACTORY_RESET_IDLE;pages[page].create(lv_scr_act());
+            if(!strcmp(pages[page].name,"cfd")){
+                uint8_t reply[16]={'C','N','Y',1,3,3,3,3,3,3,3,3,3,3,3,3};
+                ui_page_27_set_cfd_level_on_info(reply,sizeof(reply));advance(920);
+            }
+            lv_obj_update_layout(lv_scr_act());check_single_line(lv_scr_act());
+            char name[80];snprintf(name,sizeof(name),"locale-%s-%s",locale->tag,pages[page].name);snapshot(name);
+            pages[page].destroy();
+        }
+    }
+    ui_lang_set(LANGUAGE_EN);
+    puts("PASS ordinary parameter titles/controls in ten languages with production locale fonts");
+}
 int main(void)
 {
-    lv_init();lv_disp_draw_buf_t db;lv_disp_draw_buf_init(&db,buffer,NULL,1280*40);
+    lv_init();ui_lang_set_resource_preparer(ui_locale_font_prepare);ui_message_font_set_provider(ui_locale_font_compose);lv_disp_draw_buf_t db;lv_disp_draw_buf_init(&db,buffer,NULL,1280*40);
     lv_disp_drv_t driver;lv_disp_drv_init(&driver);driver.hor_res=1280;driver.ver_res=400;driver.draw_buf=&db;driver.flush_cb=flush;lv_disp_drv_register(&driver);
     lv_img_decoder_t *decoder=lv_img_decoder_create();lv_img_decoder_set_info_cb(decoder,info);lv_img_decoder_set_open_cb(decoder,image_open);
     lv_indev_drv_t input;lv_indev_drv_init(&input);input.type=LV_INDEV_TYPE_POINTER;input.read_cb=pointer_read;lv_indev_drv_register(&input);
@@ -411,6 +475,6 @@ int main(void)
     assert(lv_color_to32(lv_obj_get_style_bg_color(palette,0))==lv_color_to32(lv_color_hex(0xE2E9EE)));
     lv_obj_del(palette);
     immediate_pages();print_page_test();cfd_page_test();password_page_test();brightness_test();
-    color_calibration_test();factory_test();
+    color_calibration_test();factory_test();locale_parameters_test();locale_pin_keypad_test();
     puts("PASS 10 ordinary settings actual-LVGL host renders and state transitions (not board verification)");return 0;
 }

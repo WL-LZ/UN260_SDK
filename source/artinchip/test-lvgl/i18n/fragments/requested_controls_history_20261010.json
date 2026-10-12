@@ -1,0 +1,122 @@
+{
+  "en": {
+    "History capacity": "History capacity",
+    "Capacity: %u": "Capacity: %u",
+    "Enter an integer from 100 to 1000.": "Enter an integer from 100 to 1000.",
+    "Keep the newest %u records and delete the oldest %u? This cannot be undone.": "Keep the newest %u records and delete the oldest %u? This cannot be undone.",
+    "Controls": "Controls",
+    "Pull-down shortcuts": "Pull-down shortcuts",
+    "Tap to show or hide in pull-down controls.": "Tap to show or hide in pull-down controls.",
+    "Hiding a shortcut keeps its function available in Controls.": "Hiding a shortcut keeps its function available in Controls.",
+    "No shortcuts selected.": "No shortcuts selected.",
+    "PURE\u0004ESC": "ESC"
+  },
+  "zh-Hans": {
+    "History capacity": "历史容量",
+    "Capacity: %u": "容量：%u",
+    "Enter an integer from 100 to 1000.": "请输入 100 至 1000 的整数。",
+    "Keep the newest %u records and delete the oldest %u? This cannot be undone.": "保留最新 %u 条记录并删除最老的 %u 条？此操作无法撤销。",
+    "Controls": "控件",
+    "Pull-down shortcuts": "下拉入口",
+    "Tap to show or hide in pull-down controls.": "点选控制下拉显示。",
+    "Hiding a shortcut keeps its function available in Controls.": "隐藏入口后仍可在控件中使用。",
+    "No shortcuts selected.": "未选择下拉入口。",
+    "PURE\u0004ESC": "ESC"
+  },
+  "ko": {
+    "History capacity": "기록 용량",
+    "Capacity: %u": "용량: %u",
+    "Enter an integer from 100 to 1000.": "100에서 1000 사이의 정수를 입력하세요.",
+    "Keep the newest %u records and delete the oldest %u? This cannot be undone.": "최신 기록 %u개를 보관하고 가장 오래된 기록 %u개를 삭제할까요? 이 작업은 되돌릴 수 없습니다.",
+    "Controls": "컨트롤",
+    "Pull-down shortcuts": "빠른 실행 표시",
+    "Tap to show or hide in pull-down controls.": "탭하여 빠른 실행 패널에 표시하거나 숨기세요.",
+    "Hiding a shortcut keeps its function available in Controls.": "바로가기를 숨겨도 컨트롤에서 기능을 사용할 수 있습니다.",
+    "No shortcuts selected.": "선택한 바로가기가 없습니다.",
+    "PURE\u0004ESC": "ESC"
+  },
+  "ja": {
+    "History capacity": "履歴の保存件数",
+    "Capacity: %u": "保存件数: %u",
+    "Enter an integer from 100 to 1000.": "100〜1000の整数を入力してください。",
+    "Keep the newest %u records and delete the oldest %u? This cannot be undone.": "最新の%u件を保存し、最も古い%u件を削除しますか？この操作は取り消せません。",
+    "Controls": "コントロール",
+    "Pull-down shortcuts": "プルダウン項目",
+    "Tap to show or hide in pull-down controls.": "タップしてプルダウンでの表示を切り替えます。",
+    "Hiding a shortcut keeps its function available in Controls.": "項目を非表示にしてもコントロールから機能を使えます。",
+    "No shortcuts selected.": "表示する項目が未選択です。",
+    "PURE\u0004ESC": "ESC"
+  },
+  "ar": {
+    "History capacity": "سعة السجل",
+    "Capacity: %u": "السعة: %u",
+    "Enter an integer from 100 to 1000.": "أدخل عددًا صحيحًا من 100 إلى 1000.",
+    "Keep the newest %u records and delete the oldest %u? This cannot be undone.": "هل تريد الاحتفاظ بأحدث %u سجلات وحذف أقدم %u سجلات؟ لا يمكن التراجع عن هذا الإجراء.",
+    "Controls": "عناصر التحكم",
+    "Pull-down shortcuts": "اختصارات القائمة",
+    "Tap to show or hide in pull-down controls.": "اضغط لإظهار الاختصار أو إخفائه في القائمة.",
+    "Hiding a shortcut keeps its function available in Controls.": "يبقى استخدام الوظيفة متاحًا في عناصر التحكم عند إخفاء الاختصار.",
+    "No shortcuts selected.": "لم تُحدَّد اختصارات.",
+    "PURE\u0004ESC": "ESC"
+  },
+  "tr": {
+    "History capacity": "Geçmiş kapasitesi",
+    "Capacity: %u": "Kapasite: %u",
+    "Enter an integer from 100 to 1000.": "100 ile 1000 arasında bir tam sayı girin.",
+    "Keep the newest %u records and delete the oldest %u? This cannot be undone.": "En yeni %u kayıt korunsun ve en eski %u kayıt silinsin mi? Bu işlem geri alınamaz.",
+    "Controls": "Kontroller",
+    "Pull-down shortcuts": "Açılır kısayollar",
+    "Tap to show or hide in pull-down controls.": "Açılır panelde göstermek veya gizlemek için dokunun.",
+    "Hiding a shortcut keeps its function available in Controls.": "Kısayol gizlense de işlev Kontroller'de kullanılabilir.",
+    "No shortcuts selected.": "Kısayol seçilmedi.",
+    "PURE\u0004ESC": "ESC"
+  },
+  "fr": {
+    "History capacity": "Capacité historique",
+    "Capacity: %u": "Capacité : %u",
+    "Enter an integer from 100 to 1000.": "Saisissez un entier de 100 à 1000.",
+    "Keep the newest %u records and delete the oldest %u? This cannot be undone.": "Conserver les %u entrées les plus récentes et supprimer les %u plus anciennes ? Cette action est irréversible.",
+    "Controls": "Commandes",
+    "Pull-down shortcuts": "Raccourcis du volet",
+    "Tap to show or hide in pull-down controls.": "Touchez pour afficher ou masquer dans le volet.",
+    "Hiding a shortcut keeps its function available in Controls.": "Même masquée, la fonction reste disponible dans Commandes.",
+    "No shortcuts selected.": "Aucun raccourci sélectionné.",
+    "PURE\u0004ESC": "ESC"
+  },
+  "pl": {
+    "History capacity": "Limit historii",
+    "Capacity: %u": "Limit: %u",
+    "Enter an integer from 100 to 1000.": "Wpisz liczbę całkowitą od 100 do 1000.",
+    "Keep the newest %u records and delete the oldest %u? This cannot be undone.": "Zachować %u najnowszych wpisów i usunąć %u najstarszych? Tej operacji nie można cofnąć.",
+    "Controls": "Elementy sterujące",
+    "Pull-down shortcuts": "Skróty w panelu",
+    "Tap to show or hide in pull-down controls.": "Dotknij, aby pokazać lub ukryć skrót w panelu.",
+    "Hiding a shortcut keeps its function available in Controls.": "Ukryta funkcja nadal jest dostępna w sekcji Elementy sterujące.",
+    "No shortcuts selected.": "Nie wybrano skrótów.",
+    "PURE\u0004ESC": "ESC"
+  },
+  "ru": {
+    "History capacity": "Лимит истории",
+    "Capacity: %u": "Лимит: %u",
+    "Enter an integer from 100 to 1000.": "Введите целое число от 100 до 1000.",
+    "Keep the newest %u records and delete the oldest %u? This cannot be undone.": "Сохранить %u новейших записей и удалить %u самых старых? Это действие нельзя отменить.",
+    "Controls": "Управление",
+    "Pull-down shortcuts": "Быстрые команды",
+    "Tap to show or hide in pull-down controls.": "Нажмите, чтобы показать или скрыть в панели.",
+    "Hiding a shortcut keeps its function available in Controls.": "После скрытия функция остаётся доступной в разделе «Управление».",
+    "No shortcuts selected.": "Команды не выбраны.",
+    "PURE\u0004ESC": "ESC"
+  },
+  "de": {
+    "History capacity": "Verlaufskapazität",
+    "Capacity: %u": "Kapazität: %u",
+    "Enter an integer from 100 to 1000.": "Geben Sie eine ganze Zahl von 100 bis 1000 ein.",
+    "Keep the newest %u records and delete the oldest %u? This cannot be undone.": "Die %u neuesten Einträge behalten und die %u ältesten löschen? Dies kann nicht rückgängig gemacht werden.",
+    "Controls": "Bedienelemente",
+    "Pull-down shortcuts": "Schnellzugriffe",
+    "Tap to show or hide in pull-down controls.": "Tippen, um den Eintrag im Menü ein- oder auszublenden.",
+    "Hiding a shortcut keeps its function available in Controls.": "Ausgeblendete Funktionen bleiben unter Bedienelemente verfügbar.",
+    "No shortcuts selected.": "Keine Schnellzugriffe gewählt.",
+    "PURE\u0004ESC": "ESC"
+  }
+}

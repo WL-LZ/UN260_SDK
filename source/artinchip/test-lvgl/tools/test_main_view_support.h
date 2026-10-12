@@ -78,6 +78,16 @@ void ui_state_main_layout_get(ui_main_layout_t *layout)
 }
 bool ui_state_main_layout_save(const ui_main_layout_t *layout)
 { ++host_layout_saves;if(host_save_fails)return false;host_saved_layout=*layout;return true; }
+static ui_main_batch_action_t host_main_batch_action=UI_MAIN_BATCH_SETTINGS;
+static bool host_main_batch_save_fails;
+ui_main_batch_action_t ui_state_main_batch_action_get(void){return host_main_batch_action;}
+bool ui_state_main_batch_action_set(ui_main_batch_action_t action)
+{
+    if((unsigned)action>UI_MAIN_BATCH_CYCLE)return false;
+    if(host_main_batch_action==action)return true;
+    if(host_main_batch_save_fails)return false;
+    host_main_batch_action=action;return true;
+}
 enum { CB_MODE, CB_SETTING, CB_LIST, CB_PRINT, CB_MENU, CB_START, CB_CLEAR,
        CB_CURRENCY, CB_BOTTOM_MODE, CB_ADD, CB_WORK, CB_FO, CB_BATCH, CB_SPEED };
 #define CAPTURE(name, id) void name(lv_event_t *e) { if(lv_event_get_code(e)==LV_EVENT_CLICKED) ++callbacks[id]; }
@@ -119,12 +129,14 @@ bool ui_state_popup_auto_set_enabled(bool enabled){fault_popup_set_auto_enabled(
 bool app_setting_notice_page_allowed(void){return host_current_page!=UI_PAGE_MAIN&&host_current_page!=UI_PAGE_PURE;}
 static uint8_t host_quick_order[UI_STATE_QUICK_CONTROL_COUNT]={0,1,3,4,2,5,6,7,8,9,10,11,12};
 static bool host_order_save_fails;
+static uint16_t host_quick_visible=UI_STATE_QUICK_VISIBLE_ALL;
+uint16_t ui_state_quick_visible_get(void){return host_quick_visible;}
+bool ui_state_quick_visible_set(uint8_t id,bool visible)
+{if(host_order_save_fails||id>=UI_STATE_QUICK_CONTROL_COUNT)return false;if(visible)host_quick_visible|=1U<<id;else host_quick_visible&=~(1U<<id);return true;}
 void ui_state_quick_order_get(uint8_t order[UI_STATE_QUICK_CONTROL_COUNT])
 {memcpy(order,host_quick_order,sizeof(host_quick_order));}
 bool ui_state_quick_order_save(const uint8_t order[UI_STATE_QUICK_CONTROL_COUNT])
 {if(host_order_save_fails)return false;memcpy(host_quick_order,order,sizeof(host_quick_order));return true;}
-bool ui_state_quick_order_swap(uint8_t a,uint8_t b)
-{(void)a;(void)b;return true;}
 void ui_state_save_pure_count_state(void) {}
 bool ui_state_pure_count_is_enabled(void) { return false; }
 bool ui_export_data_request(void) { return true; }

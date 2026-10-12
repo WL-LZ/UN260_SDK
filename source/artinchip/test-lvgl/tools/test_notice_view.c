@@ -101,7 +101,7 @@ static void test_top_popup_switch(void)
     assert(!ui_notice_is_visible() && !notice.state.has_active);
     /* Switching off during entry immediately stops the animation and all queued work. */
     ui_notice_post(UI_NOTICE_PROGRESS,"running","Applying settings",NULL);
-    advance(80);
+    advance(480);
     assert(notice.animating && lv_anim_get(notice.object,animation_exec));
     ui_notice_post(UI_NOTICE_PROGRESS,"queued","Another task",NULL);
     assert(notice.state.queued_count);
@@ -122,8 +122,8 @@ static void test_top_popup_switch(void)
     ui_notice_dialog_release();
     assert(!ui_notice_is_visible());
     ui_notice_set_suspended(UI_NOTICE_SUSPEND_FAULT,false);
-    assert(ui_notice_is_visible());
-    advance(420);
+    assert(notice.pending && !ui_notice_is_visible());
+    advance(820);
     lv_event_send(notice.object,LV_EVENT_PRESSED,NULL);
     assert(notice.held && notice.timer->paused);
     ui_notice_set_enabled(false);
@@ -137,9 +137,29 @@ static void test_top_popup_switch(void)
     assert(!notice.object && !notice.timer && !ui_notice_is_visible());
     ui_notice_set_enabled(true);
     ui_notice_post(UI_NOTICE_SUCCESS,"fresh","A new result",NULL);
-    assert(ui_notice_is_visible() && !strcmp(notice.state.active.key,"fresh"));
+    assert(notice.pending && !ui_notice_is_visible() && !strcmp(notice.state.active.key,"fresh"));
+    advance(820);
     ui_notice_deinit();
     assert(lv_obj_get_child_cnt(lv_layer_top())==children);
+}
+
+static void test_delayed_notice(void)
+{
+    ui_notice_post(UI_NOTICE_PROGRESS,"delay","Working",NULL);
+    assert(notice.pending && !ui_notice_is_visible() && !notice.animating);
+    advance(399);assert(!ui_notice_is_visible());
+    ui_notice_post(UI_NOTICE_SUCCESS,"delay","Saved",NULL);
+    advance(1);assert(notice.visible && notice.animating && notice.shown.kind==UI_NOTICE_SUCCESS);
+    advance(400);assert(notice.state.active.remaining_ms>1700);
+    ui_notice_navigation_committed();assert(notice.pending && !notice.visible);
+    advance(200);ui_notice_navigation_committed();
+    advance(399);assert(!notice.visible);advance(1);assert(notice.visible);
+    ui_notice_clear("delay");assert(!notice.pending && notice.timer->paused);
+    ui_notice_post(UI_NOTICE_PROGRESS,"cancel","Working",NULL);
+    advance(200);ui_notice_clear("cancel");advance(1000);
+    assert(!notice.visible && notice.timer->paused && !notice.state.has_active);
+    ui_notice_deinit();
+    puts("PASS automatic notice delay: exact 400ms, progress/result coalescing, full lifetime, navigation restart, clear cancellation");
 }
 
 static void test_interrupted_notice(void)
@@ -147,7 +167,7 @@ static void test_interrupted_notice(void)
     const unsigned times[] = {0,20,80,200,360};
     for (unsigned i=0;i<sizeof(times)/sizeof(times[0]);++i) {
         ui_notice_post(UI_NOTICE_PROGRESS,"fast","Receipt settings","Applying settings...");
-        advance(times[i]);lv_obj_update_layout(notice.object);
+        advance(400);advance(times[i]);lv_obj_update_layout(notice.object);
         lv_coord_t y=lv_obj_get_y(notice.object);lv_opa_t alpha=notice.opacity;
         lv_anim_t *motion=lv_anim_get(notice.object,animation_exec);
         assert(motion && notice.animating);
@@ -160,25 +180,25 @@ static void test_interrupted_notice(void)
         assert(notice.state.active.remaining_ms>1600); /* Starts after entry. */
         ui_notice_clear("fast");
     }
-    ui_notice_post(UI_NOTICE_PROGRESS,"active","Working",NULL);advance(80);
+    ui_notice_post(UI_NOTICE_PROGRESS,"active","Working",NULL);advance(480);
     ui_notice_post(UI_NOTICE_INFO,"queued","Queued",NULL);
     lv_anim_t *motion=lv_anim_get(notice.object,animation_exec);lv_opa_t alpha=notice.opacity;
     ui_notice_clear("queued");
     assert(notice.animating && lv_anim_get(notice.object,animation_exec)==motion && notice.opacity==alpha);
-    advance(420);ui_notice_dismiss(NULL);advance(80);lv_obj_update_layout(notice.object);
+    advance(820);ui_notice_dismiss(NULL);advance(80);lv_obj_update_layout(notice.object);
     lv_coord_t y=lv_obj_get_y(notice.object);alpha=notice.opacity;
     ui_notice_post(UI_NOTICE_SUCCESS,"active","Done",NULL);lv_obj_update_layout(notice.object);
     assert(notice.animating && !notice.leaving && notice.opacity==alpha && lv_obj_get_y(notice.object)==y);
-    advance(420);ui_notice_clear(NULL);
+    advance(820);ui_notice_clear(NULL);
     ui_notice_dialog_acquire();ui_notice_dialog_acquire();
     ui_notice_post(UI_NOTICE_PROGRESS,"blocked","Working",NULL);
     ui_notice_post(UI_NOTICE_SUCCESS,"blocked","Saved",NULL);
     ui_notice_dialog_release();assert(!notice.visible);
-    ui_notice_dialog_release();assert(notice.animating && notice.opacity==LV_OPA_TRANSP);
-    advance(80);assert(notice.opacity>0 && notice.opacity<LV_OPA_COVER);
+    ui_notice_dialog_release();assert(notice.pending && !notice.visible);
+    advance(480);assert(notice.opacity>0 && notice.opacity<LV_OPA_COVER);
     ui_notice_set_suspended(UI_NOTICE_SUSPEND_FAULT,true);
     ui_notice_set_suspended(UI_NOTICE_SUSPEND_FAULT,false);
-    assert(notice.animating);advance(420);
+    assert(notice.pending && !notice.visible);advance(820);
     assert(notice.opacity==LV_OPA_COVER && lv_obj_get_y(notice.object)==NOTICE_Y);
     ui_notice_deinit();
     puts("PASS notice motion: 0/20/80/200/360ms ACK, queued removal, exit reversal, nested dialog/fault resume, full visible lifetime");
@@ -195,13 +215,14 @@ int main(void)
     driver.hor_res = 1280; driver.ver_res = 400;
     driver.draw_buf = &draw_buffer; driver.flush_cb = flush;
     assert(lv_disp_drv_register(&driver));
+    test_delayed_notice();
     test_top_popup_switch();
     test_interrupted_notice();
     assert(NOTICE_ENTER_MS == 380 && NOTICE_EXIT_MS == 180);
     backdrop();
     unsigned children = lv_obj_get_child_cnt(lv_layer_top());
     ui_notice_post(UI_NOTICE_SUCCESS, "receipt", "Receipt settings", "Saved");
-    advance(420);
+    advance(820);
     assert(ui_notice_is_visible());
     assert(lv_obj_get_x(notice.object) == 460 && lv_obj_get_y(notice.object) == 12);
     assert(lv_obj_get_child_cnt(lv_layer_top()) == children + 1);
@@ -220,7 +241,7 @@ int main(void)
     assert(!lv_anim_get(notice.object, animation_exec));
 
     ui_notice_post(UI_NOTICE_PROGRESS, "export", "Exporting records", "Keep the USB drive connected.");
-    advance(420);
+    advance(820);
     capture("progress");
     ui_notice_dialog_acquire();
     ui_notice_dialog_acquire();
@@ -238,29 +259,29 @@ int main(void)
     ui_notice_set_suspended(UI_NOTICE_SUSPEND_FAULT, false);
     assert(!ui_notice_is_visible());
     ui_notice_set_suspended(UI_NOTICE_SUSPEND_MODAL, false);
-    assert(ui_notice_is_visible() && notice.animating && notice.timer->paused);
-    advance(420);
+    assert(!ui_notice_is_visible() && notice.pending && !notice.timer->paused);
+    advance(820);
     ui_notice_dismiss(NULL); advance(260);
     ui_notice_post(UI_NOTICE_PROGRESS, "export", "Exporting records", "Keep the USB drive connected.");
     assert(!ui_notice_is_visible());
     ui_notice_post(UI_NOTICE_ERROR, "export", "Export failed", "Check the USB drive, then try again.");
-    advance(420);
+    advance(820);
     assert(ui_notice_is_visible() && notice.shown.kind == UI_NOTICE_ERROR);
     capture("error");
     ui_notice_clear("export");
 
     /* A task may finish while its old card is still sliding away. */
     ui_notice_post(UI_NOTICE_PROGRESS, "race", "Applying", "Waiting for reply");
-    advance(420);
+    advance(820);
     ui_notice_dismiss(NULL); advance(80);
     ui_notice_post(UI_NOTICE_SUCCESS, "race", "Saved", NULL);
-    advance(420);
+    advance(820);
     assert(ui_notice_is_visible() && notice.shown.kind == UI_NOTICE_SUCCESS && !notice.leaving);
     ui_notice_clear("race");
 
     /* Tapping during entry must continue from the current position. */
     ui_notice_post(UI_NOTICE_INFO, "early", "Information", NULL);
-    advance(100);
+    advance(500);
     lv_obj_update_layout(notice.object);
     lv_coord_t entry_y = lv_obj_get_y(notice.object);
     lv_opa_t entry_opacity = notice.opacity;
@@ -270,34 +291,34 @@ int main(void)
     assert(!ui_notice_is_visible());
 
     ui_notice_config_t short_notice = { .kind=UI_NOTICE_INFO, .key="short", .title="Timer pause", .detail="Shown time only", .duration_ms=1500 };
-    ui_notice_show(&short_notice); advance(420); advance(400);
+    ui_notice_show(&short_notice); advance(820); advance(400);
     ui_notice_set_suspended(UI_NOTICE_SUSPEND_STANDBY, true);
     uint32_t remaining = notice.state.active.remaining_ms;
     advance(10000);
     assert(notice.state.active.remaining_ms == remaining);
     ui_notice_set_suspended(UI_NOTICE_SUSPEND_STANDBY, false);
-    assert(notice.animating && notice.opacity == LV_OPA_TRANSP);
-    advance(420);
+    assert(notice.pending && !notice.visible);
+    advance(820);
     advance(remaining - 100);
     assert(ui_notice_is_visible() && !notice.leaving);
     advance(400);
     assert(!ui_notice_is_visible());
 
     ui_notice_post(UI_NOTICE_PROGRESS, "long", "Applying settings", "Waiting for the device");
-    advance(420);
+    advance(820);
     ui_notice_post(UI_NOTICE_WARNING, "check", "No setting result", "The last confirmed value is retained.");
     assert(notice.shown.kind == UI_NOTICE_WARNING);
     capture("warning");
-    ui_notice_dismiss(NULL); advance(660);
+    ui_notice_dismiss(NULL); advance(1060);
     assert(notice.shown.kind == UI_NOTICE_PROGRESS);
     lv_obj_del(notice.object);
     assert(!notice.object && !notice.timer && !notice.state.has_active);
     ui_notice_post(UI_NOTICE_INFO, "new", "Verification cancelled", "Existing results are unchanged.");
-    advance(420); capture("info");
+    advance(820); capture("info");
     ui_notice_deinit();
     assert(lv_obj_get_child_cnt(lv_layer_top()) == children);
     ui_notice_clear("new");
-    ui_notice_post_text(UI_NOTICE_PROGRESS,"locale","Confirm","Saved");advance(420);
+    ui_notice_post_text(UI_NOTICE_PROGRESS,"locale","Confirm","Saved");advance(820);
     uint32_t locale_revision=notice.state.active.revision,locale_remaining=notice.state.active.remaining_ms;
     uint16_t locale_repeats=notice.state.active.repeats;
     lv_obj_t *same_object=notice.object;
@@ -310,14 +331,14 @@ int main(void)
     ui_notice_clear(NULL);
     ui_notice_post(UI_NOTICE_WARNING, "wrap", "Update result unknown",
         "Keep power connected. The update may still be running. Check the machine before starting another test.");
-    advance(420);
+    advance(820);
     assert(notice.detail_height > ui_message_font(&lv_font_instrument_sans_medium_12)->line_height);
     assert(lv_obj_get_x(notice.object) == 460 && lv_obj_get_y(notice.object) == 12);
     assert(notice.copy_y >= 12 && notice.copy_y + notice.title_height + 2 + notice.detail_height <= notice.height - 12);
     capture("long-warning");
     ui_notice_clear("wrap");
     ui_notice_post(UI_NOTICE_PROGRESS, "replace", "Start", "Waiting for controller...");
-    advance(420);
+    advance(820);
     lv_obj_t *shared = notice.object;
     ui_notice_post(UI_NOTICE_SUCCESS, "replace", "Start", "Start mode confirmed");
     assert(notice.object == shared && !notice.animating && notice.opacity == LV_OPA_COVER);
@@ -326,27 +347,27 @@ int main(void)
     ui_notice_clear("replace");
     char huge[UI_NOTICE_DETAIL_CAPACITY];
     memset(huge, 'W', sizeof(huge)-1); huge[sizeof(huge)-1] = 0;
-    ui_notice_post(UI_NOTICE_WARNING,"capacity",huge,huge); advance(420);
+    ui_notice_post(UI_NOTICE_WARNING,"capacity",huge,huge); advance(820);
     assert(notice.title_height <= 2 * notice.title_font->line_height + 2);
     assert(notice.height + NOTICE_Y + NOTICE_SHADOW_EXTENT < 400);
     assert(!strcmp(notice.detail, huge));
     capture("capacity-wrap"); ui_notice_clear("capacity");
     /* Wide backdrop reveals shadow damage/trails when a large card contracts. */
     ui_notice_post(UI_NOTICE_WARNING,"contract","Notice","Long explanation with enough words to require several lines and a taller card. The existing result has not been changed.");
-    advance(420); int taller = notice.height;
+    advance(820); int taller = notice.height;
     ui_notice_post(UI_NOTICE_SUCCESS,"contract","Saved",NULL);
     assert(notice.height <= taller && notice.height == NOTICE_HEIGHT);
     capture("contracted"); ui_notice_clear("contract");
     language = 1;
     ui_notice_post(UI_NOTICE_SUCCESS, "receipt", "打印设置", "已保存");
-    advance(420); capture("success-cn"); ui_notice_clear("receipt");
+    advance(820); capture("success-cn"); ui_notice_clear("receipt");
     language = 2;
     ui_notice_post(UI_NOTICE_SUCCESS, "receipt", "인쇄 설정", "설정이 저장되었습니다.");
-    advance(420); capture("success-kr"); ui_notice_deinit();
+    advance(820); capture("success-kr"); ui_notice_deinit();
     ui_lang_set_resource_preparer(ui_locale_font_prepare);ui_message_font_set_provider(ui_locale_font_compose);
     for(size_t i=1;i<ui_lang_count();++i){
         const ui_locale_t *locale=ui_lang_at(i);assert(ui_lang_prepare_resources(locale->id));ui_lang_set(locale->id);
-        ui_notice_post_text(UI_NOTICE_SUCCESS,"locale-shape","Language changed","Settings saved");advance(420);
+        ui_notice_post_text(UI_NOTICE_SUCCESS,"locale-shape","Language changed","Settings saved");advance(820);
         lv_obj_t *probe=lv_label_create(lv_scr_act());lv_label_set_text(probe,ui_tr("Language changed"));
         assert(!strcmp(notice.title,lv_label_get_text(probe)));lv_obj_del(probe);
         const char *texts[]={notice.title,notice.detail};

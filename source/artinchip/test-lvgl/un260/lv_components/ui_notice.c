@@ -17,6 +17,7 @@
 #define NOTICE_ENTER_MS 380
 #define NOTICE_EXIT_MS 180
 #define NOTICE_SPINNER_MS 40
+#define NOTICE_DELAY_MS 400
 #define NOTICE_TEXT_X 60
 #define NOTICE_TEXT_WIDTH 248
 #define NOTICE_ICON_X 32
@@ -40,6 +41,7 @@ static struct {
     lv_coord_t title_height, detail_height, copy_y, height;
     lv_opa_t opacity, animation_opacity;
     bool initialized;
+    bool pending;
     bool visible;
     bool leaving;
     bool animating;
@@ -48,6 +50,7 @@ static struct {
 } notice;
 
 static void present(bool animate);
+static void present_now(bool animate);
 static void service_start(void);
 
 static lv_opa_t opacity(unsigned alpha)
@@ -286,6 +289,11 @@ static void timer_event(lv_timer_t *timer)
     uint32_t now = lv_tick_get(), elapsed = now - notice.last_tick;
     LV_UNUSED(timer);
     notice.last_tick = now;
+    if(notice.pending){
+        notice.pending=false;service_stop();
+        if(enabled && !notice.suspended && notice.state.has_active)present_now(true);
+        return;
+    }
     if (!enabled || !notice.visible || notice.suspended || notice.held || notice.animating) return;
     if (ui_notice_state_elapse(&notice.state, elapsed)) {
         ui_notice_dismiss(NULL);
@@ -326,6 +334,7 @@ static void view_deleted(void)
     if (notice.object) lv_anim_del(notice.object, animation_exec);
     notice.object = NULL;
     notice.visible = false;
+    notice.pending = false;
     notice.animating = false;
     notice.leaving = false;
     notice.held = false;
@@ -374,7 +383,23 @@ void ui_notice_init(void)
     service_stop();
 }
 
+static void delay_presentation(void)
+{
+    if(!enabled || !notice.timer || notice.suspended || !notice.state.has_active)return;
+    notice.pending=true;
+    lv_timer_set_period(notice.timer,NOTICE_DELAY_MS);
+    lv_timer_reset(notice.timer);lv_timer_resume(notice.timer);
+}
 static void present(bool with_animation)
+{
+    if(!enabled || !notice.object || notice.suspended)return;
+    if(!notice.state.has_active){notice.pending=false;present_now(false);return;}
+    /* Coalesce progress/results while hidden without extending the original
+     * delay. The eventual entry always renders the current active item. */
+    if(!notice.visible){if(!notice.pending)delay_presentation();return;}
+    present_now(with_animation);
+}
+static void present_now(bool with_animation)
 {
     if (!enabled || !notice.object || notice.suspended) return;
     if (!notice.state.has_active) {
@@ -481,7 +506,7 @@ void ui_notice_set_suspended(uint32_t reason, bool suspended)
             lv_anim_del(notice.object, animation_exec);
             lv_obj_add_flag(notice.object, LV_OBJ_FLAG_HIDDEN);
         }
-        notice.visible = notice.animating = notice.leaving = notice.held = false;
+        notice.pending = notice.visible = notice.animating = notice.leaving = notice.held = false;
     } else present(true);
 }
 
@@ -501,10 +526,22 @@ void ui_notice_set_enabled(bool value)
         lv_obj_add_flag(notice.object, LV_OBJ_FLAG_HIDDEN);
     }
     ui_notice_state_init(&notice.state);
-    notice.visible = notice.animating = notice.leaving = notice.held = false;
+    notice.pending = notice.visible = notice.animating = notice.leaving = notice.held = false;
 }
 
 bool ui_notice_get_enabled(void) { return enabled; }
+
+void ui_notice_navigation_committed(void)
+{
+    /* The new page gets a settled first frame before an automatic card starts.
+     * Operation-owned results may cross pages; page-owned callers still clear
+     * their key on suspend. No business callback or fault blocking is delayed. */
+    if(!notice.state.has_active || !enabled || !notice.object)return;
+    consume_visible_time();service_stop();
+    lv_anim_del(notice.object,animation_exec);lv_obj_add_flag(notice.object,LV_OBJ_FLAG_HIDDEN);
+    notice.pending=notice.visible=notice.animating=notice.leaving=notice.held=false;
+    delay_presentation();
+}
 
 void ui_notice_dialog_acquire(void)
 {

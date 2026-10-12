@@ -10,6 +10,7 @@
 #include "un260/currency/currency_state.h"
 #include "un260/lv_system/ui_lang.h"
 #include "un260/lv_system/ui_text.h"
+#include "un260/lv_resources/ui_icons.h"
 #include "un260/lv_system/ui_state_runtime.h"
 #include <stdio.h>
 #include <string.h>
@@ -34,6 +35,7 @@ typedef struct {
     lv_obj_t *reject_label;
     lv_obj_t *start_btn_label;
     lv_obj_t *clear_btn_label;
+    lv_obj_t *exit_btn_icon;
     lv_timer_t *refresh_timer;
     language_t language;
     char displayed_amount[32];
@@ -167,35 +169,41 @@ static void pure_refresh_values(void)
     g_pure_page.values_valid = true;
 }
 
+static void pure_set_language_label(lv_obj_t *label, ui_text_id_t text,
+                                    const lv_font_t *base, unsigned size)
+{
+    if (!label || !lv_obj_is_valid(label)) return;
+    lv_obj_set_style_text_font(label, ui_message_font_sized(base, size), 0);
+    lv_label_set_text(label, ui_text_get(text));
+}
+
 static void pure_refresh_language_texts(void)
 {
-    if (g_pure_page.amount_label && lv_obj_is_valid(g_pure_page.amount_label)) {
-        lv_label_set_text(g_pure_page.amount_label, ui_text_get(UI_TEXT_WIDGET_PURE_AMOUNT));
-    }
-    if (g_pure_page.total_top_label && lv_obj_is_valid(g_pure_page.total_top_label)) {
-        lv_label_set_text(g_pure_page.total_top_label, ui_text_get(UI_TEXT_WIDGET_PURE_TOTAL));
-    }
-    if (g_pure_page.value_label && lv_obj_is_valid(g_pure_page.value_label)) {
-        lv_label_set_text(g_pure_page.value_label, ui_text_get(UI_TEXT_WIDGET_PURE_VALUE));
-    }
-    if (g_pure_page.pcs_label && lv_obj_is_valid(g_pure_page.pcs_label)) {
-        lv_label_set_text(g_pure_page.pcs_label, ui_text_get(UI_TEXT_WIDGET_PURE_PCS));
-    }
-    if (g_pure_page.total_bottom_label && lv_obj_is_valid(g_pure_page.total_bottom_label)) {
-        lv_label_set_text(g_pure_page.total_bottom_label, ui_text_get(UI_TEXT_WIDGET_PURE_TOTAL));
-    }
-    if (g_pure_page.pieces_label && lv_obj_is_valid(g_pure_page.pieces_label)) {
-        lv_label_set_text(g_pure_page.pieces_label, ui_text_get(UI_TEXT_WIDGET_PURE_PIECES));
-    }
-    if (g_pure_page.reject_label && lv_obj_is_valid(g_pure_page.reject_label)) {
-        lv_label_set_text(g_pure_page.reject_label, ui_text_get(UI_TEXT_WIDGET_PURE_REJECT));
-    }
-    if (g_pure_page.start_btn_label && lv_obj_is_valid(g_pure_page.start_btn_label)) {
-        lv_label_set_text(g_pure_page.start_btn_label, ui_text_get(UI_TEXT_WIDGET_PURE_START));
-    }
-    if (g_pure_page.clear_btn_label && lv_obj_is_valid(g_pure_page.clear_btn_label)) {
-        lv_label_set_text(g_pure_page.clear_btn_label, ui_text_get(UI_TEXT_WIDGET_PURE_CLEAR));
-    }
+    pure_set_language_label(g_pure_page.amount_label, UI_TEXT_WIDGET_PURE_AMOUNT,
+                            &MONTSERRAT_EXTRABOLD_35, 36);
+    pure_set_language_label(g_pure_page.total_top_label, UI_TEXT_WIDGET_PURE_TOTAL,
+                            &MONTSERRAT_Medium_15, 16);
+    pure_set_language_label(g_pure_page.value_label, UI_TEXT_WIDGET_PURE_VALUE,
+                            &MONTSERRAT_Medium_15, 16);
+    pure_set_language_label(g_pure_page.pcs_label, UI_TEXT_WIDGET_PURE_PCS,
+                            &MONTSERRAT_EXTRABOLD_35, 36);
+    pure_set_language_label(g_pure_page.total_bottom_label, UI_TEXT_WIDGET_PURE_TOTAL,
+                            &MONTSERRAT_Medium_15, 16);
+    pure_set_language_label(g_pure_page.pieces_label, UI_TEXT_WIDGET_PURE_PIECES,
+                            &MONTSERRAT_Medium_15, 16);
+    pure_set_language_label(g_pure_page.reject_label, UI_TEXT_WIDGET_PURE_REJECT,
+                            &lv_font_montserrat_18, 18);
+    pure_set_language_label(g_pure_page.start_btn_label, UI_TEXT_WIDGET_PURE_START,
+                            &lv_font_rajdhani_27, 28);
+    pure_set_language_label(g_pure_page.clear_btn_label, UI_TEXT_WIDGET_PURE_CLEAR,
+                            &lv_font_rajdhani_27, 28);
+}
+
+static void pure_exit_btn_event_cb(lv_event_t *e)
+{
+    (void)e;
+    if (ui_manager_get_current_page() == UI_PAGE_PURE)
+        (void)ui_page_18_pure_toggle_theme();
 }
 
 static void pure_refresh_timer_cb(lv_timer_t* t)
@@ -221,6 +229,7 @@ void ui_page_18_pure_create(lv_obj_t* parent)
     lv_obj_t* bg = NULL;
     lv_obj_t* btn_start = NULL;
     lv_obj_t* btn_clear = NULL;
+    lv_obj_t* btn_exit = NULL;
     lv_coord_t reject_num_h = 0;
 
     if (parent == NULL) {
@@ -247,19 +256,16 @@ void ui_page_18_pure_create(lv_obj_t* parent)
     g_pure_page.amount_label = lv_label_create(g_pure_page.page);
     lv_label_set_text(g_pure_page.amount_label, ui_text_get(UI_TEXT_WIDGET_PURE_AMOUNT));
     lv_obj_set_pos(g_pure_page.amount_label, 68, 75);
-    lv_obj_set_style_text_font(g_pure_page.amount_label,ui_message_font_sized(&MONTSERRAT_EXTRABOLD_35,36), 0);
     lv_obj_set_style_text_color(g_pure_page.amount_label, lv_color_hex(0x636363), 0);
 
     g_pure_page.total_top_label = lv_label_create(g_pure_page.page);
     lv_label_set_text(g_pure_page.total_top_label, ui_text_get(UI_TEXT_WIDGET_PURE_TOTAL));
     lv_obj_set_pos(g_pure_page.total_top_label, 70, 114);
-    lv_obj_set_style_text_font(g_pure_page.total_top_label,ui_message_font_sized(&MONTSERRAT_Medium_15,16), 0);
     lv_obj_set_style_text_color(g_pure_page.total_top_label, lv_color_hex(0x505050), 0);
 
     g_pure_page.value_label = lv_label_create(g_pure_page.page);
     lv_label_set_text(g_pure_page.value_label, ui_text_get(UI_TEXT_WIDGET_PURE_VALUE));
     lv_obj_set_pos(g_pure_page.value_label, 141, 114);
-    lv_obj_set_style_text_font(g_pure_page.value_label,ui_message_font_sized(&MONTSERRAT_Medium_15,16), 0);
     lv_obj_set_style_text_color(g_pure_page.value_label, lv_color_hex(0x505050), 0);
 
     g_pure_page.amount_value = lv_label_create(g_pure_page.page);
@@ -273,19 +279,16 @@ void ui_page_18_pure_create(lv_obj_t* parent)
     g_pure_page.pcs_label = lv_label_create(g_pure_page.page);
     lv_label_set_text(g_pure_page.pcs_label, ui_text_get(UI_TEXT_WIDGET_PURE_PCS));
     lv_obj_set_pos(g_pure_page.pcs_label, 68, 248);
-    lv_obj_set_style_text_font(g_pure_page.pcs_label,ui_message_font_sized(&MONTSERRAT_EXTRABOLD_35,36), 0);
     lv_obj_set_style_text_color(g_pure_page.pcs_label, lv_color_hex(0x636363), 0);
 
     g_pure_page.total_bottom_label = lv_label_create(g_pure_page.page);
     lv_label_set_text(g_pure_page.total_bottom_label, ui_text_get(UI_TEXT_WIDGET_PURE_TOTAL));
     lv_obj_set_pos(g_pure_page.total_bottom_label, 70, 287);
-    lv_obj_set_style_text_font(g_pure_page.total_bottom_label,ui_message_font_sized(&MONTSERRAT_Medium_15,16), 0);
     lv_obj_set_style_text_color(g_pure_page.total_bottom_label, lv_color_hex(0x505050), 0);
 
     g_pure_page.pieces_label = lv_label_create(g_pure_page.page);
     lv_label_set_text(g_pure_page.pieces_label, ui_text_get(UI_TEXT_WIDGET_PURE_PIECES));
     lv_obj_set_pos(g_pure_page.pieces_label, 141, 287);
-    lv_obj_set_style_text_font(g_pure_page.pieces_label,ui_message_font_sized(&MONTSERRAT_Medium_15,16), 0);
     lv_obj_set_style_text_color(g_pure_page.pieces_label, lv_color_hex(0x505050), 0);
 
     g_pure_page.pcs_value = lv_label_create(g_pure_page.page);
@@ -299,7 +302,6 @@ void ui_page_18_pure_create(lv_obj_t* parent)
     g_pure_page.reject_label = lv_label_create(g_pure_page.page);
     lv_label_set_text(g_pure_page.reject_label, ui_text_get(UI_TEXT_WIDGET_PURE_REJECT));
     lv_obj_set_pos(g_pure_page.reject_label, 70, 361);
-    lv_obj_set_style_text_font(g_pure_page.reject_label, ui_message_font_sized(&lv_font_montserrat_18,18), 0);
     lv_obj_set_style_text_color(g_pure_page.reject_label, lv_color_hex(0xFF7171), 0);
 
     g_pure_page.reject_value = lv_label_create(g_pure_page.page);
@@ -327,7 +329,6 @@ void ui_page_18_pure_create(lv_obj_t* parent)
 
     g_pure_page.start_btn_label = lv_label_create(btn_start);
     lv_label_set_text(g_pure_page.start_btn_label, ui_text_get(UI_TEXT_WIDGET_PURE_START));
-    lv_obj_set_style_text_font(g_pure_page.start_btn_label, ui_message_font_sized(&lv_font_rajdhani_27,28), 0);
     lv_obj_set_style_text_color(g_pure_page.start_btn_label, lv_color_hex(0x818181), 0);
     lv_obj_center(g_pure_page.start_btn_label);
 
@@ -346,9 +347,26 @@ void ui_page_18_pure_create(lv_obj_t* parent)
 
     g_pure_page.clear_btn_label = lv_label_create(btn_clear);
     lv_label_set_text(g_pure_page.clear_btn_label, ui_text_get(UI_TEXT_WIDGET_PURE_CLEAR));
-    lv_obj_set_style_text_font(g_pure_page.clear_btn_label, ui_message_font_sized(&lv_font_rajdhani_27,28), 0);
     lv_obj_set_style_text_color(g_pure_page.clear_btn_label, lv_color_hex(0x818181), 0);
     lv_obj_center(g_pure_page.clear_btn_label);
+
+    btn_exit = lv_btn_create(g_pure_page.page);
+    lv_obj_set_pos(btn_exit, 1222, 8);
+    lv_obj_set_size(btn_exit, 44, 42);
+    lv_obj_clear_flag(btn_exit, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_radius(btn_exit, 8, 0);
+    lv_obj_set_style_bg_color(btn_exit, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_bg_opa(btn_exit, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(btn_exit, 0, 0);
+    lv_obj_set_style_shadow_width(btn_exit, 0, 0);
+    lv_obj_add_event_cb(btn_exit, pure_exit_btn_event_cb, LV_EVENT_CLICKED, NULL);
+    lv_damped_button_register(btn_exit, lv_color_hex(0xFFFFFF),
+                              lv_color_hex(0xDDE3EA));
+    lv_obj_set_style_bg_opa(btn_exit, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_bg_opa(btn_exit, LV_OPA_60, LV_STATE_PRESSED);
+    g_pure_page.exit_btn_icon = ui_icon_create(btn_exit, "L:/usr/local/share/lvgl_data/pin_icons/close.png");
+    lv_obj_set_style_img_opa(g_pure_page.exit_btn_icon, LV_OPA_50, 0);
+    lv_obj_center(g_pure_page.exit_btn_icon);
 
     g_pure_page.language = ui_lang_get();
     pure_refresh_language_texts();

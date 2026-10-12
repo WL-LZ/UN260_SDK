@@ -44,6 +44,10 @@ const char *workspace_record_name(const workspace_model_t *m,uint32_t id,const c
     if(m&&id&&m->user_count<=WORKSPACE_USERS)for(unsigned i=0;i<m->user_count;++i)if(m->users[i].id==id)return m->users[i].name;
     return snapshot?snapshot:"";
 }
+bool workspace_profile_has_default_name(const workspace_profile_t *profile)
+{
+    return profile && profile->id == 1 && !strcmp(profile->name, "Everyday count");
+}
 static void seed(workspace_user_t *u)
 {
     u->quick_enabled=1;u->batch_count=5;

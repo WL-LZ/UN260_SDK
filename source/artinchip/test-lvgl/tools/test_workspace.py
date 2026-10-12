@@ -20,6 +20,8 @@ with tempfile.TemporaryDirectory(prefix='un260-workspace-') as directory:
     assert reports[0].read_text()=='UN260 SUPPORT\nNo personal data\n'
     file=data/'workspace.v1';original=file.read_bytes()
     subprocess.run([str(binary),'remove'],check=True);subprocess.run([str(binary),'reload-removed'],check=True);file.write_bytes(original)
+    subprocess.run([str(binary),'profile-default-name'],check=True)
+    subprocess.run([str(binary),'reload-profile-default-name'],check=True);file.write_bytes(original)
     temporary=data/'workspace.v1.tmp';temporary.symlink_to(usb)
     subprocess.run([str(binary),'save-failure'],check=True);assert file.read_bytes()==original
     temporary.unlink()

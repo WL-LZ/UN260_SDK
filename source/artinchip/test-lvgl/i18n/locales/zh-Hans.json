@@ -1578,7 +1578,7 @@
     "Enter amount": "填写金额",
     "Enter actual cash": "请填写实际现金",
     "Not set": "尚未设置",
-    "Edit presets / Batch": "编辑预设／Batch",
+    "Edit presets / Batch": "编辑预设／批量",
     "Switch to this operator before editing presets.": "请先切换到此人员，再编辑预设。",
     "Switching workspace...": "正在切换工作区…",
     "Cash entry saved.": "账目已保存。",
@@ -1646,6 +1646,7 @@
     "This operator is disabled. Restore them in Manage operators.": "该操作员已停用，请进入操作员管理恢复。",
     "Enable operators in device management.": "请在设备管理中开启操作员功能。",
     "Restore this operator in Operator details.": "请在操作员详情中恢复此人。",
-    "New records use the current operator.": "新记录归属于当前操作员。"
+    "New records use the current operator.": "新记录归属于当前操作员。",
+    "Everyday count": "日常点钞"
   }
 }

@@ -25,6 +25,12 @@ int main(int argc,char **argv)
     char initial[5];operator_initial("alice",initial);assert(!strcmp(initial,"A"));operator_initial("张三",initial);assert(!strcmp(initial,"张"));operator_initial("8",initial);assert(!strcmp(initial,"8"));
     workspace_model_t *m=malloc(sizeof(*m));assert(m);workspace_defaults(m);assert(workspace_model_valid(m));
     assert(!workspace_delete_profile(m,1,1));uint32_t id;
+    assert(workspace_profile_has_default_name(&m->users[0].profiles[0]));
+    assert(workspace_profile_has_default_name(&m->shared.profiles[0]));
+    workspace_profile_t identity = m->users[0].profiles[0];
+    identity.id = 2;assert(!workspace_profile_has_default_name(&identity));
+    identity.id = 1;strcpy(identity.name, "My count");assert(!workspace_profile_has_default_name(&identity));
+    assert(!workspace_profile_has_default_name(NULL));
     assert(workspace_add_user(m,"Alice",&id)&&id==2);assert(m->active_id==1);
     workspace_model_t *remove=malloc(sizeof(*remove));assert(remove);
     workspace_defaults(remove);
@@ -60,6 +66,22 @@ int main(int argc,char **argv)
     strcpy(m->users[1].employee_id,"a-001");assert(!workspace_model_valid(m));strcpy(m->users[1].employee_id,"A-002");assert(workspace_model_valid(m));
     memset(m->users[1].team,'X',sizeof(m->users[1].team));assert(!workspace_model_valid(m));memset(m->users[1].team,0,sizeof(m->users[1].team));
     workspace_store_init();wait_job();
+    if(argc>1&&!strcmp(argv[1],"profile-default-name")){
+        workspace_defaults(m);
+        workspace_profile_t custom=m->users[0].profiles[0];strcpy(custom.name,"Other");
+        assert(workspace_add_profile(m,1,&custom));assert(workspace_delete_profile(m,1,1));
+        strcpy(custom.name,"Everyday count");assert(workspace_add_profile(m,1,&custom));
+        assert(m->users[0].profiles[1].id==3&&!workspace_profile_has_default_name(&m->users[0].profiles[1]));
+        assert(workspace_profile_has_default_name(&m->shared.profiles[0]));
+        assert(workspace_store_save(m));wait_job();assert(workspace_store_last_success());free(m);return 0;
+    }
+    if(argc>1&&!strcmp(argv[1],"reload-profile-default-name")){
+        const workspace_model_t *saved=workspace_store_get();assert(workspace_store_ready());
+        assert(saved->users[0].profiles[1].id==3&&!strcmp(saved->users[0].profiles[1].name,"Everyday count"));
+        assert(!workspace_profile_has_default_name(&saved->users[0].profiles[1]));
+        assert(workspace_profile_has_default_name(&saved->shared.profiles[0]));
+        free(m);puts("PASS seed localization identity and same-name custom profile retained after restart");return 0;
+    }
     if(argc>1&&!strcmp(argv[1],"v2")){
         assert(workspace_store_ready());const workspace_model_t *old=workspace_store_get();assert(old->version==4&&old->user_count==2);
         assert(old->users[0].profiles[0].mode==1&&old->users[0].qr_after_count&&!strcmp(old->users[1].name,"Alice"));assert(!*old->users[0].employee_id&&!*old->users[0].team);

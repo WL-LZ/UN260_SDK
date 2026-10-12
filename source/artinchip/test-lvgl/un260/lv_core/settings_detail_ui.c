@@ -153,6 +153,12 @@ typedef struct {
 } settings_dialog_ctx_t;
 
 static settings_dialog_ctx_t g_settings_dialog = { 0 };
+bool settings_detail_dialog_is_owned_by(const void *context)
+{
+    return context && g_settings_dialog.root && lv_obj_is_valid(g_settings_dialog.root) &&
+        g_settings_dialog.user_data == context;
+}
+
 bool settings_detail_overlay_is_open(void)
 {
     return g_settings_dialog.root != NULL || g_settings_keyboard.root != NULL;
@@ -795,7 +801,7 @@ static void settings_keyboard_create_number_keys(lv_obj_t *parent, settings_deta
     for(unsigned i=0;i<12;i++) {
         bool utility=i==9||i==11;
         lv_obj_t *key=settings_keyboard_create_key(parent,xs[i%3],ys[i/3],107,hs[i/3],
-            i==9?ui_tr_for(LANGUAGE_EN, "Clear"):keys[i],keys[i],lv_color_hex(utility?0xFBFCFD:0xF0F3F5));
+            i==9?ui_tr("Clear"):keys[i],keys[i],lv_color_hex(utility?0xFBFCFD:0xF0F3F5));
         lv_damped_button_set_exact_palette(key,lv_color_hex(utility?0xFBFCFD:0xF0F3F5),lv_color_hex(0xE2E9EE));
         lv_obj_set_style_border_width(key,0,0);
         lv_obj_set_style_shadow_width(key,0,0);
@@ -806,7 +812,7 @@ static void settings_keyboard_create_number_keys(lv_obj_t *parent, settings_deta
     lv_obj_t *card=lv_obj_get_parent(parent);
     if(mode!=SETTINGS_DETAIL_KEYBOARD_UINT)settings_keyboard_create_key(card,34,224,107,48,".",".",lv_color_hex(0xF0F3F5));
     if(mode==SETTINGS_DETAIL_KEYBOARD_NUM)settings_keyboard_create_key(card,149,224,107,48,"-","-",lv_color_hex(0xF0F3F5));
-    settings_keyboard_create_action(card,34,285,360,48,ui_tr_for(LANGUAGE_EN, "Apply"),lv_color_hex(0x1462CC),settings_keyboard_commit_cb);
+    settings_keyboard_create_action(card,34,285,360,48,ui_tr("Apply"),lv_color_hex(0x1462CC),settings_keyboard_commit_cb);
     lv_obj_t *close=settings_detail_create_button(card,792,14,36,36,"",lv_color_hex(0xFBFCFD),settings_keyboard_cancel_cb,NULL);
     lv_obj_set_style_border_width(close,0,0);
     lv_obj_set_style_outline_width(close,0,0);
@@ -844,17 +850,17 @@ static void settings_keyboard_create_text_keys(lv_obj_t* parent)
                                      lv_color_hex(0xF8F9FB));
     }
 
-    settings_keyboard_create_key(parent,267,204,480,44,ui_tr_for(LANGUAGE_EN, "Space")," ",lv_color_hex(0xF8F9FB));
+    settings_keyboard_create_key(parent,267,204,480,44,ui_tr("Space")," ",lv_color_hex(0xF8F9FB));
     g_settings_keyboard.shift_btn = settings_keyboard_create_key(parent, 20, 153, 74, 44,
                                                                 "Aa", "SHIFT",
                                                                 lv_color_hex(0xF8F9FB));
     settings_keyboard_create_key(parent, 673, 153, 122, 44, "",
                                  "BACK", lv_color_hex(0xF8F9FB));
-    settings_keyboard_create_key(parent, 802, 153, 122, 44, ui_tr_for(LANGUAGE_EN, "Clear"), "CLEAR",lv_color_hex(0xF1F4F5));
+    settings_keyboard_create_key(parent, 802, 153, 122, 44, ui_tr("Clear"), "CLEAR",lv_color_hex(0xF1F4F5));
     lv_obj_t *card=lv_obj_get_parent(parent);
-    settings_keyboard_create_action(card, 824, 36, 186, 44, ui_tr_for(LANGUAGE_EN, "Apply"),
+    settings_keyboard_create_action(card, 824, 36, 186, 44, ui_tr("Apply"),
                                     lv_color_hex(0x1462CC), settings_keyboard_commit_cb);
-    settings_keyboard_create_action(card, 682, 36, 130, 44, ui_tr_for(LANGUAGE_EN, "Cancel"),
+    settings_keyboard_create_action(card, 682, 36, 130, 44, ui_tr("Cancel"),
                                     lv_color_hex(0xF1F4F5), settings_keyboard_cancel_cb);
 }
 

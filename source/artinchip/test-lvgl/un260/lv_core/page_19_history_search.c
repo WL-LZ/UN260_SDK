@@ -281,9 +281,9 @@ static void input_event(lv_event_t *event)
     const lv_alnum_keyboard_config_t config = {
         .title = ui_text_get(field_title(field)),
         .placeholder = "",
-        .apply_text = ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_HISTORY_APPLY)),
-        .clear_text = ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_SERIAL_CLEAR)),
-        .cancel_text = ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_SERIAL_ESC)),
+        .apply_text = ui_text_get(UI_TEXT_HISTORY_APPLY),
+        .clear_text = ui_text_get(UI_TEXT_SERIAL_CLEAR),
+        .cancel_text = ui_text_get(UI_TEXT_SERIAL_ESC),
         .max_length = (uint8_t)LV_MIN(size - 1, LV_ALNUM_KEYBOARD_MAX_TEXT),
         .submit = input_submit, .context = s, .symbols = true
     };
@@ -455,8 +455,8 @@ static void editor_numeric_open(lv_event_t *e)
     if(s->keyboard) {lv_alnum_keyboard_destroy(s->keyboard);s->keyboard=NULL;}
     const lv_alnum_keyboard_config_t config={
         .title=ui_text_get(s->editing_field<=FIELD_TO ? UI_TEXT_HISTORY_YEAR : field_title(s->editing_field)),
-        .placeholder="",.apply_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_HISTORY_APPLY)),
-        .clear_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_SERIAL_CLEAR)),.cancel_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_SERIAL_ESC)),
+        .placeholder="",.apply_text=ui_text_get(UI_TEXT_HISTORY_APPLY),
+        .clear_text=ui_text_get(UI_TEXT_SERIAL_CLEAR),.cancel_text=ui_text_get(UI_TEXT_SERIAL_ESC),
         .max_length=s->editing_field<=FIELD_TO ? 4 : 20,.submit=editor_numeric_submit,.context=s
     };
     s->keyboard=lv_alnum_keyboard_create(s->editor,&config);

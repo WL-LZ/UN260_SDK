@@ -1,0 +1,52 @@
+{
+  "en": {
+    "Run one note on this page before capturing.": "Run one note on this page before capturing.",
+    "Capture failed. Run one note again.": "Capture failed. Run one note again.",
+    "Transfer interrupted. Waiting for the end frame.": "Transfer interrupted. Waiting for the end frame."
+  },
+  "zh-Hans": {
+    "Run one note on this page before capturing.": "请先在本页面跑完一张钞票，再采集。",
+    "Capture failed. Run one note again.": "采集失败，请重新跑一张钞票。",
+    "Transfer interrupted. Waiting for the end frame.": "传输中断，正在等待结束帧。"
+  },
+  "ko": {
+    "Run one note on this page before capturing.": "이 화면에서 지폐 한 장을 센 후 수집하세요.",
+    "Capture failed. Run one note again.": "수집 실패. 지폐 한 장을 다시 세세요.",
+    "Transfer interrupted. Waiting for the end frame.": "전송 중단. 종료 프레임을 기다리는 중입니다."
+  },
+  "ja": {
+    "Run one note on this page before capturing.": "この画面で紙幣を1枚計数してから取得してください。",
+    "Capture failed. Run one note again.": "取得失敗。紙幣を1枚再度計数してください。",
+    "Transfer interrupted. Waiting for the end frame.": "転送中断。終了フレームを待っています。"
+  },
+  "ar": {
+    "Run one note on this page before capturing.": "عد ورقة نقدية واحدة في هذه الصفحة قبل الالتقاط.",
+    "Capture failed. Run one note again.": "فشل الالتقاط. عد ورقة نقدية واحدة مجدداً.",
+    "Transfer interrupted. Waiting for the end frame.": "توقف النقل. جارٍ انتظار إطار النهاية."
+  },
+  "tr": {
+    "Run one note on this page before capturing.": "Toplamadan önce bu sayfada bir banknot sayın.",
+    "Capture failed. Run one note again.": "Toplama başarısız. Bir banknotu yeniden sayın.",
+    "Transfer interrupted. Waiting for the end frame.": "Aktarım kesildi. Bitiş çerçevesi bekleniyor."
+  },
+  "fr": {
+    "Run one note on this page before capturing.": "Comptez un billet sur cette page avant la capture.",
+    "Capture failed. Run one note again.": "Échec de capture. Recomptez un billet.",
+    "Transfer interrupted. Waiting for the end frame.": "Transfert interrompu. Attente de la trame de fin."
+  },
+  "pl": {
+    "Run one note on this page before capturing.": "Przed pobraniem przelicz banknot na tej stronie.",
+    "Capture failed. Run one note again.": "Pobieranie nieudane. Przelicz banknot ponownie.",
+    "Transfer interrupted. Waiting for the end frame.": "Transmisja przerwana. Oczekiwanie na ramkę końcową."
+  },
+  "ru": {
+    "Run one note on this page before capturing.": "Перед сбором пересчитайте одну купюру на этой странице.",
+    "Capture failed. Run one note again.": "Сбор не удался. Пересчитайте одну купюру снова.",
+    "Transfer interrupted. Waiting for the end frame.": "Передача прервана. Ожидание конечного кадра."
+  },
+  "de": {
+    "Run one note on this page before capturing.": "Zählen Sie vor der Erfassung hier einen Geldschein.",
+    "Capture failed. Run one note again.": "Erfassung fehlgeschlagen. Geldschein erneut zählen.",
+    "Transfer interrupted. Waiting for the end frame.": "Übertragung unterbrochen. Warte auf Endrahmen."
+  }
+}

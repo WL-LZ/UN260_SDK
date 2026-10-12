@@ -23,7 +23,7 @@
     "Notes remain in the stacker pocket. Cannot change the currency.": "接钞口有钞票，无法切换币种。",
     "Notes remain in the stacker pocket. Cannot change the count mode.": "接钞口有钞票，无法切换工作模式。",
     "Notes remain in the stacker pocket. Cannot change sorting (SOT).": "接钞口有钞票，无法切换分钞方式（SOT）。",
-    "Notes remain in the stacker pocket. Cannot change the batch setting.": "接钞口有钞票，无法切换批量设置（Batch）。",
+    "Notes remain in the stacker pocket. Cannot change the batch setting.": "接钞口有钞票，无法切换批量设置。",
     "Currency change rejected. Previous currency retained.": "币种切换被拒绝，保留原币种。",
     "Count mode change rejected. Previous mode retained.": "工作模式切换被拒绝，保留原模式。",
     "Sorting change rejected. Previous setting retained.": "分钞方式切换被拒绝，保留原设置。",

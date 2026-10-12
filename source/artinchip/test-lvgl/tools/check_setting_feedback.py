@@ -43,4 +43,4 @@ for key in reviewed.values():
 quick=(root/'un260/lv_components/lv_quick_controls.h').read_text().split('typedef enum {',1)[1].split('}',1)[0]
 quick_ids=set(re.findall(r'QUICK_[A-Z_]+',quick))
 assert quick_ids=={'QUICK_LAYOUT','QUICK_GESTURES','QUICK_PURE','QUICK_POPUP','QUICK_TOUCH','QUICK_EXPORT','QUICK_QR','QUICK_STANDBY','QUICK_TOP_POPUP','QUICK_CALCULATOR','QUICK_CASH_JOURNAL','QUICK_HISTORY','QUICK_OPERATORS'}, 'Classify new shortcut as setting or action'
-print('PASS setting feedback contract: 17 Menu mutation boundaries, 6 local policies, 8 protocol settings, 13 shortcut classifications (four navigation actions)')
+print(f'PASS setting feedback contract: {len(reviewed)} Menu mutation boundaries, {len(ids)} local policies, {sum(key.startswith("settings.") for key in reviewed.values())} protocol settings, {len(quick_ids)} shortcut classifications (four navigation actions)')

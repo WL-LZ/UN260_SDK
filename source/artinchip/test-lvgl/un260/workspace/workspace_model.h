@@ -41,6 +41,8 @@ void workspace_defaults(workspace_model_t *model);
 /* Restore per-operator controls without reusing IDs or deleting identity data. */
 bool workspace_restore_preferences(workspace_model_t *model);
 bool workspace_name_valid(const char *name);
+/* Seed ID 1 is reserved by defaults; custom profiles retain their stored names. */
+bool workspace_profile_has_default_name(const workspace_profile_t *profile);
 bool workspace_model_valid(const workspace_model_t *model);
 const workspace_user_t *workspace_active(const workspace_model_t *model);
 /* Resolve a stable record identity without modifying its historical snapshot. */

@@ -438,7 +438,7 @@ lv_alnum_keyboard_t *lv_alnum_keyboard_create(lv_obj_t *parent,
         !button_create(keyboard, panel, config->apply_text, &lv_font_instrument_sans_semibold_20,
                        824, 36, 186, 44, ACTION_COLOR, apply_event)) goto failed;
     if (config->symbols) {
-        if(!button_create(keyboard,panel,ui_tr_for(LANGUAGE_EN, "Space"),&lv_font_instrument_sans_medium_18,267,296,480,44,KEY_COLOR,space_event))goto failed;
+        if(!button_create(keyboard,panel,ui_tr("Space"),&lv_font_instrument_sans_medium_18,267,296,480,44,KEY_COLOR,space_event))goto failed;
         keyboard->symbols = button_create(keyboard, panel, "#+=",
             &lv_font_instrument_sans_medium_18, 20, 245, 74, 44,
             KEY_COLOR, symbols_event);

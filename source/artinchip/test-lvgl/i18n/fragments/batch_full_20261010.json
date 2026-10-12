@@ -1,0 +1,32 @@
+{
+  "en": {
+    "Batch full": "Batch full"
+  },
+  "zh-Hans": {
+    "Batch full": "预置满"
+  },
+  "ko": {
+    "Batch full": "배치 완료"
+  },
+  "ja": {
+    "Batch full": "バッチ完了"
+  },
+  "ar": {
+    "Batch full": "اكتملت الدفعة"
+  },
+  "tr": {
+    "Batch full": "Deste dolu"
+  },
+  "fr": {
+    "Batch full": "Lot complet"
+  },
+  "pl": {
+    "Batch full": "Partia pełna"
+  },
+  "ru": {
+    "Batch full": "Пачка заполнена"
+  },
+  "de": {
+    "Batch full": "Bündel voll"
+  }
+}

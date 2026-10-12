@@ -1,0 +1,32 @@
+{
+  "en": {
+    "Restart the machine later to use the update.": "Restart the machine later to use the update."
+  },
+  "zh-Hans": {
+    "Restart the machine later to use the update.": "请稍后重启机器，使升级生效。"
+  },
+  "ko": {
+    "Restart the machine later to use the update.": "업데이트를 적용하려면 나중에 기기를 재시작하세요."
+  },
+  "ja": {
+    "Restart the machine later to use the update.": "更新を反映するには、後で機器を再起動してください。"
+  },
+  "ar": {
+    "Restart the machine later to use the update.": "أعد تشغيل الجهاز لاحقًا لتفعيل التحديث."
+  },
+  "tr": {
+    "Restart the machine later to use the update.": "Güncellemeyi kullanmak için makineyi daha sonra yeniden başlatın."
+  },
+  "fr": {
+    "Restart the machine later to use the update.": "Redémarrez la machine plus tard pour appliquer la mise à jour."
+  },
+  "pl": {
+    "Restart the machine later to use the update.": "Uruchom ponownie urządzenie później, aby zastosować aktualizację."
+  },
+  "ru": {
+    "Restart the machine later to use the update.": "Перезапустите устройство позже, чтобы применить обновление."
+  },
+  "de": {
+    "Restart the machine later to use the update.": "Starten Sie das Gerät später neu, um das Update zu nutzen."
+  }
+}
