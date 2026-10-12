@@ -12,6 +12,7 @@
 static ui_page_t current_page=UI_PAGE_MAIN;
 static unsigned navigations;
 ui_page_t ui_manager_get_current_page(void){return current_page;}
+bool app_setting_notice_page_allowed(void){return current_page!=UI_PAGE_MAIN && current_page!=UI_PAGE_PURE && current_page!=UI_PAGE_BOOT && current_page!=UI_PAGE_STANDBY;}
 void ui_manager_switch(ui_page_t page){assert(!fault_popup_is_showing());current_page=page;++navigations;}
 
 
@@ -49,7 +50,7 @@ void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title
 {ui_notice_post(kind,key,ui_tr(title),ui_tr(detail));}
 void ui_notice_post_message(ui_notice_kind_t kind,const char *key,const char *title,const ui_message_t *value)
 {char detail[320];ui_message_render(value,detail,sizeof(detail));ui_notice_post(kind,key,ui_tr(title),detail);}
-void ui_notice_clear(const char *key) {assert(!strcmp(key,"machine.fault"));++notice_clears;}
+void ui_notice_clear(const char *key) {if(!strcmp(key,"settings.rejection"))return;assert(!strcmp(key,"machine.fault"));++notice_clears;}
 void lv_settings_action_style(lv_obj_t *obj,lv_settings_action_role_t role)
 {
     lv_obj_set_style_bg_color(obj,lv_color_hex(role==LV_SETTINGS_ACTION_PRIMARY?0x1559B7:0xF4F6F7),0);
@@ -120,6 +121,21 @@ int main(void)
     driver.hor_res=1280;driver.ver_res=400;driver.draw_buf=&draw_buffer;driver.flush_cb=flush;assert(lv_disp_drv_register(&driver));
     lv_obj_set_style_bg_color(lv_scr_act(),lv_color_hex(0xF9FAFB),0);
     unsigned initial_children=lv_obj_get_child_cnt(lv_layer_top());
+    current_page=UI_PAGE_MENU;
+    fault_popup_set_auto_enabled(false);
+    fault_popup_report_setting_rejection(6,MACHINE_FAULT_SETTING_NOTES);
+    assert(!popup.overlay && notice_posts==1 && island_posts==0);
+    assert(!strcmp(last_notice_key,"settings.rejection"));
+    assert(strstr(last_notice_code,"stacker pocket"));
+    fault_popup_set_auto_enabled(true);
+    unsigned setting_banners=notice_posts;
+    fault_popup_report_setting_rejection(4,MACHINE_FAULT_SETTING_NOTES);
+    assert(popup.overlay && notice_posts==setting_banners);
+    hide_fault_popup();
+    current_page=UI_PAGE_FLAP_SETTING;fault_popup_set_auto_enabled(false);
+    fault_popup_report_setting_rejection(0x42,0);
+    assert(!popup.overlay && notice_posts==setting_banners+1);
+    notice_posts=0;current_page=UI_PAGE_MAIN;fault_popup_set_auto_enabled(true);
     fault_popup_report_runtime_fault(2);
     assert(popup.step==0&&popup.model.playing&&popup.model.timer&&!popup.model.timer->paused);
     assert(suspended&UI_NOTICE_SUSPEND_FAULT);verify_layout();capture("upper-closed");

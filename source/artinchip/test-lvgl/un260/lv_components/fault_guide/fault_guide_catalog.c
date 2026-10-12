@@ -86,10 +86,14 @@ void fault_guide_lookup(machine_fault_key_t key, mf_guide_t *g)
             body = notes ? T("Notes remain in the stacker pocket. Cannot change sorting (SOT).") :
                 T("Sorting change rejected. Previous setting retained.");
             break;
-        default:
+        case 0x06:
             title = T("Batch change blocked");
             body = notes ? T("Notes remain in the stacker pocket. Cannot change the batch setting.") :
                 T("Batch change rejected. Previous setting retained.");
+            break;
+        default:
+            title = T("Check machine");
+            body = T("Setting rejected. Previous value retained.");
             break;
         }
         memset(g, 0, sizeof(*g));

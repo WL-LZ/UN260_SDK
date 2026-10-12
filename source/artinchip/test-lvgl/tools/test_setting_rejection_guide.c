@@ -33,8 +33,10 @@ static bool workspace_service_owns_command(uint8_t command){return profile_owned
 static void workspace_service_reject_command(uint8_t command){assert(command==4||command==0x3A);++profile_rejections;profile_owned=false;}
 static bool counting_action_start_pending(void){return start_pending;}
 static bool app_command_runtime_count_start_busy(void){return busy || start_pending;}
+static bool automatic_popup;
+static bool fault_popup_get_auto_enabled(void){return automatic_popup;}
 static void fault_popup_report_setting_rejection(uint8_t command,uint8_t reason)
-{assert((command==3||command==4||command==6||command==0x3A)&&reason==0x80);++guide_posts;assert(!machine_fault_find((machine_fault_key_t){MACHINE_FAULT_SETTING,reason,command},NULL));}
+{assert(((command==3||command==4||command==6||command==0x3A)&&reason==0x80)||(command==0x15&&reason==0));++guide_posts;assert(!machine_fault_find((machine_fault_key_t){MACHINE_FAULT_SETTING,reason,command},NULL));}
 static void fault_popup_resolve_setting_rejection(uint8_t command)
 {machine_fault_clear_code(MACHINE_FAULT_SETTING,command);}
 static void page_01_mode_switch_refre(void){}
@@ -60,6 +62,7 @@ static void fixture(void)
     setting_service_cancel_all();currency_service_cancel_switch();currency_state_reset();machine_fault_clear();
     assert(currency_state_confirm_active_code("GBP"));
     now=1000;guide_posts=sends=batch_failures=profile_rejections=test_notice_count=0;
+    automatic_popup=false;
     profile_owned=start_pending=busy=send_failed=false;sent_command=sent_value=0;page=UI_PAGE_MAIN;
     memset(&setting_rejection,0,sizeof(setting_rejection));deferred_setting_rejection=0;app_setting_notice_init();
     begin_notifications=0;protocol_request_set_start_observer(observed_request_begin);
@@ -134,6 +137,7 @@ static void test_companion_boundaries(void)
     }
     fixture();app_setting_notice_result("settings.sound","Sound",false);assert(!guide_posts&&!test_notice_count);
     page=4;app_setting_notice_result("settings.sound","Sound",false);assert(!guide_posts&&test_notice_count==1);
+    automatic_popup=true;app_setting_notice_result("settings.sound","Sound",false);assert(guide_posts==1&&test_notice_count==1);
 }
 
 static void detail(uint64_t received, bool expected)

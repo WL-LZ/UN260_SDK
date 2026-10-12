@@ -4,10 +4,12 @@
 #include "ui_notice.h"
 #include "smart_island.h"
 #include "un260/app_service/app_fault_recovery.h"
+#include "un260/app_service/app_setting_notice.h"
 #include "un260/machine_state/machine_state.h"
 #include "un260/lv_components/lv_settings.h"
 #include "un260/lv_system/ui_lang.h"
 #include "un260/lv_system/ui_i18n.h"
+#include "un260/lv_core/lv_page_manager.h"
 #include "un260/font/manrope_fonts.h"
 #include "un260/font/ui_message_font.h"
 #include <stdio.h>
@@ -264,11 +266,18 @@ void fault_popup_report_runtime_fault(uint8_t code)
 }
 void fault_popup_report_setting_rejection(uint8_t command, uint8_t reason)
 {
-    /* These are operation notices, not unresolved physical faults. Reuse the
-     * guide renderer while keeping physical blockers and recovery untouched. */
     machine_fault_key_t active;
     if ((popup.overlay && popup.key.source != MACHINE_FAULT_SETTING) ||
         (smart_island_active_fault_notice(&active) && active.source != MACHINE_FAULT_SETTING)) return;
+    if (!auto_enabled && app_setting_notice_page_allowed()) {
+        mf_guide_t guide;
+        setting_notice_key=(machine_fault_key_t){MACHINE_FAULT_SETTING,reason,command};
+        fault_guide_lookup(setting_notice_key,&guide);
+        ui_notice_post_text(UI_NOTICE_WARNING,"settings.rejection",guide.title.key,guide.steps[0].body.key);
+        return;
+    }
+    /* These are operation notices, not unresolved physical faults. Reuse the
+     * guide renderer while keeping physical blockers and recovery untouched. */
     machine_fault_key_t key = {MACHINE_FAULT_SETTING, reason, command};
     if (auto_enabled) present(key);
     post_island_notice(key);
@@ -278,6 +287,8 @@ void fault_popup_report_setting_rejection(uint8_t command, uint8_t reason)
 }
 void fault_popup_resolve_setting_rejection(uint8_t command)
 {
+    if (!command || setting_notice_key.code == command)
+        ui_notice_clear("settings.rejection");
     if (popup.overlay && popup.key.source == MACHINE_FAULT_SETTING &&
         (!command || popup.key.code == command))
         hide_fault_popup();

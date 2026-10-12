@@ -1,13 +1,13 @@
 [
   {
     "file": "un260/app_service/app_counting_runtime.c",
-    "line": 227,
+    "line": 233,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_WARNING,\"counting.report\",UI_N_(\"Counting report\"),text"
   },
   {
     "file": "un260/app_service/app_counting_runtime.c",
-    "line": 261,
+    "line": 267,
     "api": "ui_notice_post_message",
     "args": "UI_NOTICE_WARNING,\"counting.report\",UI_N_(\"Counting report\"),&message"
   },
@@ -25,19 +25,25 @@
   },
   {
     "file": "un260/app_service/app_setting_notice.c",
-    "line": 60,
+    "line": 61,
     "api": "ui_notice_clear",
     "args": "key"
   },
   {
     "file": "un260/app_service/app_setting_notice.c",
     "line": 67,
+    "api": "ui_notice_clear",
+    "args": "key"
+  },
+  {
+    "file": "un260/app_service/app_setting_notice.c",
+    "line": 73,
     "api": "ui_notice_post_text",
     "args": "success ? UI_NOTICE_SUCCESS : UI_NOTICE_ERROR, key, title, detail"
   },
   {
     "file": "un260/app_service/app_setting_notice.c",
-    "line": 72,
+    "line": 78,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_WARNING, key, title, UI_N_(\"No response received. Check device status.\")"
   },
@@ -343,15 +349,27 @@
   },
   {
     "file": "un260/lv_components/lv_fault_popup.c",
-    "line": 85,
+    "line": 87,
     "api": "ui_notice_set_suspended",
     "args": "UI_NOTICE_SUSPEND_FAULT,false"
   },
   {
     "file": "un260/lv_components/lv_fault_popup.c",
-    "line": 161,
+    "line": 163,
     "api": "ui_notice_set_suspended",
     "args": "UI_NOTICE_SUSPEND_FAULT,true"
+  },
+  {
+    "file": "un260/lv_components/lv_fault_popup.c",
+    "line": 276,
+    "api": "ui_notice_post_text",
+    "args": "UI_NOTICE_WARNING,\"settings.rejection\",guide.title.key,guide.steps[0].body.key"
+  },
+  {
+    "file": "un260/lv_components/lv_fault_popup.c",
+    "line": 291,
+    "api": "ui_notice_clear",
+    "args": "\"settings.rejection\""
   },
   {
     "file": "un260/lv_components/lv_modal_dialog.c",
@@ -373,43 +391,43 @@
   },
   {
     "file": "un260/lv_components/lv_quick_controls.c",
-    "line": 230,
+    "line": 233,
     "api": "app_local_setting_apply",
     "args": "APP_LOCAL_LAYOUT,!page_01_main_layout_is_enabled(),0"
   },
   {
     "file": "un260/lv_components/lv_quick_controls.c",
-    "line": 231,
+    "line": 234,
     "api": "app_local_setting_apply",
     "args": "APP_LOCAL_GESTURES,!gesture_service_enabled(),0"
   },
   {
     "file": "un260/lv_components/lv_quick_controls.c",
-    "line": 234,
+    "line": 237,
     "api": "app_local_setting_apply",
     "args": "APP_LOCAL_FAULT_POPUP,!fault_popup_get_auto_enabled(),0"
   },
   {
     "file": "un260/lv_components/lv_quick_controls.c",
-    "line": 235,
+    "line": 238,
     "api": "app_local_setting_apply",
     "args": "APP_LOCAL_TOP_POPUP,!ui_notice_get_enabled(),0"
   },
   {
     "file": "un260/lv_components/lv_quick_controls.c",
-    "line": 235,
+    "line": 238,
     "api": "ui_notice_get_enabled",
     "args": ""
   },
   {
     "file": "un260/lv_components/lv_quick_controls.c",
-    "line": 236,
+    "line": 239,
     "api": "app_local_setting_apply",
     "args": "APP_LOCAL_TOUCH,!touch_feedback_enabled(),0"
   },
   {
     "file": "un260/lv_components/lv_upgrade_popup.c",
-    "line": 1489,
+    "line": 1513,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_INFO, \"usb.inserted\", UI_N_(\"USB connected\"), UI_N_(\"This update is already installed.\")"
   },
@@ -457,7 +475,7 @@
   },
   {
     "file": "un260/lv_core/lv_page_manager.c",
-    "line": 522,
+    "line": 524,
     "api": "ui_notice_navigation_committed",
     "args": ""
   },
@@ -499,7 +517,7 @@
   },
   {
     "file": "un260/lv_core/page_02_list.c",
-    "line": 579,
+    "line": 578,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_WARNING,\"list.serials\", ui_text_msgid(UI_TEXT_LIST_SERIAL_NUMBERS),ui_text_msgid(UI_TEXT_SERIAL_UNAVAILABLE)"
   },
@@ -673,37 +691,37 @@
   },
   {
     "file": "un260/lv_core/page_19_history.c",
-    "line": 150,
+    "line": 160,
     "api": "ui_notice_post_text",
     "args": "kind,\"history.feedback\",UI_N_(\"History\"),text"
   },
   {
     "file": "un260/lv_core/page_19_history.c",
-    "line": 666,
+    "line": 695,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_ERROR,\"history.storage\",UI_N_(\"History storage\"),ui_text_msgid(state==1?UI_TEXT_HISTORY_STORAGE_FAILED:UI_TEXT_HISTORY_SAVE_FAILED)"
   },
   {
     "file": "un260/lv_core/page_19_history.c",
-    "line": 667,
+    "line": 696,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_PROGRESS,\"history.storage\",UI_N_(\"History\"),UI_N_(\"Saving records...\")"
   },
   {
     "file": "un260/lv_core/page_19_history.c",
-    "line": 669,
+    "line": 698,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_SUCCESS,\"history.storage\",UI_N_(\"History saved\"),NULL"
   },
   {
     "file": "un260/lv_core/page_19_history.c",
-    "line": 670,
+    "line": 699,
     "api": "ui_notice_post_message",
     "args": "UI_NOTICE_INFO,\"history.metadata\",UI_N_(\"History\"),&info"
   },
   {
     "file": "un260/lv_core/page_19_history.c",
-    "line": 671,
+    "line": 700,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_WARNING,\"history.metadata\",UI_N_(\"History capacity reached\"),ui_text_msgid(UI_TEXT_HISTORY_CAPACITY_FULL)"
   },
@@ -997,13 +1015,13 @@
   },
   {
     "file": "un260/lv_core/page_dynamic_capture.c",
-    "line": 186,
+    "line": 276,
     "api": "ui_notice_post_text",
     "args": "kind, \"capture.dynamic\", UI_N_(\"Dynamic data capture\"), text"
   },
   {
     "file": "un260/lv_core/page_dynamic_capture.c",
-    "line": 627,
+    "line": 784,
     "api": "ui_notice_clear",
     "args": "\"capture.dynamic\""
   },
@@ -1039,13 +1057,13 @@
   },
   {
     "file": "un260/lv_core/settings_detail_ui.c",
-    "line": 436,
+    "line": 442,
     "api": "ui_notice_dialog_release",
     "args": ""
   },
   {
     "file": "un260/lv_core/settings_detail_ui.c",
-    "line": 525,
+    "line": 531,
     "api": "ui_notice_dialog_acquire",
     "args": ""
   },
@@ -1117,7 +1135,7 @@
   },
   {
     "file": "un260/lv_system/ui_history_export_data.c",
-    "line": 33,
+    "line": 36,
     "api": "ui_notice_post_text",
     "args": "kind,\"export.history\",UI_N_(\"History export\"),text"
   },

@@ -18,6 +18,7 @@ bool app_setting_notice_page_allowed(void)
 }
 static void request_started(uint8_t command)
 {
+    fault_popup_resolve_setting_rejection(command);
     request_origin[command] = app_setting_notice_page_allowed() ? 1 : 2;
 }
 void app_setting_notice_init(void)
@@ -61,6 +62,11 @@ void app_setting_notice_result(const char *key, const char *title, bool success)
         return;
     }
     if (!app_setting_notice_allowed(key)) return;
+    if (!success && fault_popup_get_auto_enabled()) {
+        fault_popup_report_setting_rejection(notice_command(key),0);
+        ui_notice_clear(key);
+        return;
+    }
     const char *detail = success ?
         (notice_command(key) == 0x38 ? UI_N_("Start mode confirmed") : UI_N_("Setting saved.")) :
         UI_N_("Setting rejected. Previous value retained.");

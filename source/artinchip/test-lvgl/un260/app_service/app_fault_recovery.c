@@ -48,10 +48,10 @@ void app_fault_recovery_cancel_setting_presentation(void)
 
 void app_fault_recovery_resolve_setting_rejection(uint8_t command)
 {
+    fault_popup_resolve_setting_rejection(command);
     if (!setting_command(command)) return;
     if (deferred_setting_rejection == command) deferred_setting_rejection = 0;
     if (setting_rejection.command == command) app_fault_recovery_cancel_setting_detail();
-    fault_popup_resolve_setting_rejection(command);
 }
 
 static void setting_request_started(uint8_t command)
