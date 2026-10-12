@@ -22,7 +22,8 @@ def function(source, name):
 root = Path(__file__).resolve().parents[1]
 source = (root / 'un260/lv_components/lv_upgrade_popup.c').read_text()
 names = ('upgrade_popup_reboot_timer_cb', 'upgrade_popup_on_reboot_later_click',
-         'upgrade_popup_on_reboot_click', 'upgrade_popup_result_timer_cb')
+         'upgrade_popup_on_reboot_click', 'upgrade_popup_on_result_confirm_click',
+         'upgrade_popup_result_timer_cb')
 with tempfile.TemporaryDirectory(prefix='un260-upgrade-popup-') as directory:
     temp = Path(directory)
     (temp / 'actual_upgrade_popup_functions.h').write_text(

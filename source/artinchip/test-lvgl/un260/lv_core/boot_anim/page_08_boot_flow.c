@@ -27,7 +27,7 @@ static struct {
     lv_obj_t *ready_bg;
     ready_visual_t ready;
     lv_timer_t *timer;
-    uint32_t shown_at,active_at[5],done_at;
+    uint32_t shown_at,waiting_at,active_at[5],done_at;
     uint32_t language_generation;
     const char *caption_text;
     uint8_t phase[5],step,completed;
@@ -38,7 +38,7 @@ static bool defer_create;
 #ifndef UI_BOOT_HANDOFF_FADE_ENABLE
 #define UI_BOOT_HANDOFF_FADE_ENABLE 1
 #endif
-static struct {lv_obj_t *root,*image;ready_visual_t ready;lv_timer_t *timer;uint32_t tick;uint8_t phase;} bridge;
+static struct {lv_obj_t *root,*image;ready_visual_t ready;lv_timer_t *timer;uint32_t tick;uint8_t phase;bool input_held;} bridge;
 static void set_text(lv_obj_t *o,const char *s){if(o&&strcmp(lv_label_get_text(o),s))lv_label_set_text(o,s);}
 
 static float smooth(float p){if(p<=0)return 0;if(p>=1)return 1;return p*p*(3-2*p);}
@@ -85,7 +85,7 @@ static void ready_render(ready_visual_t *v,uint32_t age,float exit)
     ready_part(v->signature,(lv_opa_t)(255*sig*(1-exit)),366,0);
 }
 static void stop(void){if(view.waiting){lv_obj_del(view.waiting);view.waiting=NULL;}lv_timer_t *t=view.timer;view.timer=NULL;if(t)lv_timer_del(t);}
-static void deleted(lv_event_t *e){if(lv_event_get_target(e)!=view.root)return;stop();if(!bridge.root)lv_img_cache_invalidate_src(background);memset(&view,0,sizeof(view));}
+static void deleted(lv_event_t *e){if(lv_event_get_target(e)!=view.root)return;stop();lv_img_cache_invalidate_src(background);memset(&view,0,sizeof(view));}
 static void refresh_language(void){
     /* Early boot builds this view before persisted locale resources are ready. */
     uint32_t generation=ui_lang_generation();
@@ -110,15 +110,32 @@ static void refresh_language(void){
     view.completed=255; /* Refresh the translated progress sentence, not animations. */
 }
 static bool waiting_create(void){
-    view.waiting=lv_spinner_create(view.root,900,72);
+    view.waiting=lv_arc_create(view.root);
     if(!view.waiting)return false;
+    lv_obj_remove_style(view.waiting,NULL,LV_PART_KNOB);
     lv_obj_set_pos(view.waiting,52,154);lv_obj_set_size(view.waiting,28,28);
     lv_obj_set_style_arc_width(view.waiting,3,LV_PART_MAIN);
     lv_obj_set_style_arc_color(view.waiting,lv_color_hex(0xD9D9DC),LV_PART_MAIN);
     lv_obj_set_style_arc_width(view.waiting,3,LV_PART_INDICATOR);
     lv_obj_set_style_arc_color(view.waiting,lv_color_hex(0x0074F8),LV_PART_INDICATOR);
+    lv_arc_set_bg_angles(view.waiting,0,360);
+    lv_arc_set_rotation(view.waiting,270);
+    lv_arc_set_angles(view.waiting,0,72);
     lv_obj_clear_flag(view.waiting,LV_OBJ_FLAG_CLICKABLE);
+    view.waiting_at=lv_tick_get();
     return true;
+}
+static void waiting_render(uint32_t now){
+    if(!view.waiting)return;
+    /* Use the visible page clock. Native ownership can leave LVGL's global
+     * animation timer unpolled while this prebuilt root remains covered. */
+    uint32_t phase=(now-view.waiting_at)%900U;
+    lv_anim_t angle;lv_anim_init(&angle);
+    lv_anim_set_time(&angle,900);lv_anim_set_values(&angle,0,360);
+    angle.act_time=(int32_t)phase;
+    lv_arc_set_start_angle(view.waiting,(uint16_t)lv_anim_path_ease_in_out(&angle));
+    lv_anim_set_values(&angle,72,432);
+    lv_arc_set_end_angle(view.waiting,(uint16_t)lv_anim_path_linear(&angle));
 }
 static void apply(uint32_t now){
     if(!view.root||view.covered||view.step)return;
@@ -163,7 +180,9 @@ static void apply(uint32_t now){
     if(view.caption){lv_color_t c=lv_color_hex(failed?0xB53622:0x68818F);if(lv_obj_get_style_text_color(view.caption,0).full!=c.full)lv_obj_set_style_text_color(view.caption,c,0);}
     if(!ready&&!failed&&!view.waiting){
         if(!waiting_create()){view.prepare_failed=true;return;}
+        view.waiting_at=now;
     }else if((ready||failed)&&view.waiting){lv_obj_del(view.waiting);view.waiting=NULL;}
+    waiting_render(now);
     if(view.progress){lv_color_t color=lv_color_hex(failed?0xB53622:ready?0x209A78:0x0074F8);if(lv_obj_get_style_bg_color(view.progress,0).full!=color.full)lv_obj_set_style_bg_color(view.progress,color,0);}
     uint32_t done_age=view.done?now-view.done_at:0;
     lv_opa_t heading_opa=(lv_opa_t)(255*(view.done?1-span(done_age,700,540):span(age,0,650)));
@@ -202,8 +221,9 @@ bool ui_page_08_curr_ready_hold_complete(void){
 }
 static void bridge_deleted(lv_event_t *e){
     if(lv_event_get_target(e)!=bridge.root)return;
-    lv_timer_t *t=bridge.timer;memset(&bridge,0,sizeof(bridge));if(t)lv_timer_del(t);
-    lv_img_cache_invalidate_src(background);
+    lv_timer_t *t=bridge.timer;bool held=bridge.input_held;
+    memset(&bridge,0,sizeof(bridge));if(t)lv_timer_del(t);
+    if(held)ui_manager_hold_transition_input(UI_PAGE_BOOT,false);
 }
 static void bridge_tick(lv_timer_t *t){
     (void)t;ui_page_t page=ui_manager_get_current_page();
@@ -236,7 +256,8 @@ void ui_page_08_curr_start_handoff(void){
     lv_img_set_src(bridge.image,ready_background);
     if(!ready_create(bridge.root,&bridge.ready)){lv_obj_del(bridge.root);return;}ready_render(&bridge.ready,2440,0);
     bridge.tick=lv_tick_get();bridge.timer=lv_timer_create(bridge_tick,LV_DISP_DEF_REFR_PERIOD,NULL);
-    if(!bridge.timer)lv_obj_del(bridge.root);
+    if(!bridge.timer){lv_obj_del(bridge.root);return;}
+    bridge.input_held=true;ui_manager_hold_transition_input(UI_PAGE_BOOT,true);
 }
 static bool make_card(unsigned i){
     lv_obj_t *o=lv_obj_create(view.root);view.cards[i]=o;if(!o)return false;
@@ -294,7 +315,7 @@ bool ui_page_08_curr_prepare_step(void){
          * covers this root. Uncover retains the existing entrance clock. */
         refresh_language();
         lv_obj_update_layout(view.root);
-        view.step=0;view.shown_at=lv_tick_get();view.completed=255;
+        view.step=0;view.shown_at=lv_tick_get();view.waiting_at=view.shown_at;view.completed=255;
         if(!view.covered){view.visible=true;apply(view.shown_at);lv_timer_resume(view.timer);}return true;
     }return false;
 }
@@ -313,7 +334,7 @@ void ui_page_08_curr_set_covered(bool covered){
     if(covered){if(view.waiting){lv_obj_del(view.waiting);view.waiting=NULL;}stop();lv_obj_add_flag(view.root,LV_OBJ_FLAG_HIDDEN);return;}
     while(!ui_page_08_curr_prepare_step()&&!view.prepare_failed){}
     if(view.prepare_failed)return;
-    lv_obj_clear_flag(view.root,LV_OBJ_FLAG_HIDDEN);view.shown_at=lv_tick_get();view.visible=true;apply(view.shown_at);
+    lv_obj_clear_flag(view.root,LV_OBJ_FLAG_HIDDEN);view.shown_at=lv_tick_get();view.waiting_at=view.shown_at;view.visible=true;apply(view.shown_at);
     if(view.timer)lv_timer_resume(view.timer);
     else if(!(view.timer=lv_timer_create(tick,LV_DISP_DEF_REFR_PERIOD,NULL)))view.prepare_failed=true;
 }

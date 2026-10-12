@@ -34,6 +34,13 @@ static lv_color_t framebuffer[1280*400],buffer[1280*40];
 void boot_service_snapshot(boot_snapshot_t *s){*s=snapshot;}
 ui_page_t ui_manager_get_current_page(void){return current;}
 void ui_manager_switch(ui_page_t p){current=p;}
+static bool bridge_input_held;
+static unsigned bridge_holds,bridge_releases;
+void ui_manager_hold_transition_input(ui_page_t owner,bool hold){
+ assert(owner==UI_PAGE_BOOT);
+ if(hold){assert(!bridge_input_held);bridge_input_held=true;bridge_holds++;}
+ else {assert(bridge_input_held);bridge_input_held=false;bridge_releases++;}
+}
 lv_timer_t *__real_lv_timer_create(lv_timer_cb_t,uint32_t,void*);
 lv_timer_t *__wrap_lv_timer_create(lv_timer_cb_t cb,uint32_t ms,void *d){if(fail_timer){fail_timer=false;return NULL;}return __real_lv_timer_create(cb,ms,d);}
 lv_obj_t *__real_lv_obj_create(lv_obj_t*);
@@ -77,6 +84,8 @@ int main(void){
  assert(pixels>0 && opens==waiting_opens);dump("handshake-wait");
  assert(view.phase[0]==CHECK&&!snapshot.connected&&snapshot.requested_count==0&&snapshot.completed_count==0);
  assert(view.waiting&&lv_obj_get_width(view.progress)==0);
+ assert(lv_theme_default_is_inited());
+ assert(lv_obj_get_style_bg_opa(view.waiting,LV_PART_KNOB)==LV_OPA_TRANSP);
  assert(!strcmp(lv_label_get_text(view.caption),"Checking your system."));
  assert(lv_obj_get_x(view.caption)>=lv_obj_get_x(view.waiting)+lv_obj_get_width(view.waiting)+16);
  for(unsigned i=1;i<5;i++)assert(view.phase[i]==WAIT);
@@ -120,7 +129,10 @@ int main(void){
  ready_render(&view.ready,2170,0);assert(lv_obj_get_style_text_opa(view.ready.signature,0)==255);
  frame(20);
  assert(lv_obj_get_style_bg_opa(view.track,0)==0);assert(lv_obj_get_style_text_opa(view.section,0)==0);dump("ready-clean");
- ui_page_08_curr_start_handoff();current=UI_PAGE_MAIN;ui_page_08_curr_destroy();frame(1200);
+ ui_page_08_curr_start_handoff();assert(bridge_input_held);
+ unsigned before_repeat=timers();ui_page_08_curr_start_handoff();
+ assert(bridge_input_held&&timers()==before_repeat&&bridge_releases+1==bridge_holds);
+ current=UI_PAGE_MAIN;ui_page_08_curr_destroy();frame(1200);
  assert(bridge.root&&bridge.phase==1&&lv_obj_get_style_img_opa(bridge.image,0)==255);
  frame(180);assert(bridge.phase==2&&lv_obj_get_style_img_opa(bridge.image,0)==255);
  frame(200);
@@ -129,12 +141,13 @@ int main(void){
  assert(lv_obj_get_style_text_opa(bridge.ready.sub,0)==0&&lv_obj_get_style_text_opa(bridge.ready.signature,0)==0);
  frame(40);dump("handoff-text-retired");
  frame(300);assert(bridge.root&&lv_obj_get_style_img_opa(bridge.image,0)>100&&lv_obj_get_style_img_opa(bridge.image,0)<155);
- frame(310);assert(!bridge.root&&timers()==baseline);
+ frame(310);assert(!bridge.root&&timers()==baseline&&!bridge_input_held);
+ assert(bridge_holds==bridge_releases);
  current=UI_PAGE_BOOT;ui_page_08_curr_create(NULL);frame(20);frame(2600);
  ui_page_08_curr_start_handoff();current=UI_PAGE_PURE;ui_page_08_curr_destroy();frame(40);
- assert(bridge.root);current=UI_PAGE_BOOT;frame(40);assert(!bridge.root);
+ assert(bridge.root&&bridge_input_held);current=UI_PAGE_BOOT;frame(40);assert(!bridge.root&&!bridge_input_held);
  ui_page_08_curr_create(NULL);frame(20);frame(2600);fail_timer=true;ui_page_08_curr_start_handoff();
- assert(!bridge.root);ui_page_08_curr_destroy();assert(timers()==baseline);
+ assert(!bridge.root&&!bridge_input_held&&bridge_holds==bridge_releases);ui_page_08_curr_destroy();assert(timers()==baseline);
  current=UI_PAGE_BOOT;memset(&snapshot,0,sizeof(snapshot));snapshot.connected=true;snapshot.requested_count=3;snapshot.completed_count=3;snapshot.items[0]=(boot_item_result_t){true,1};snapshot.items[1]=(boot_item_result_t){true,2};snapshot.items[2]=(boot_item_result_t){true,1};snapshot.stage=BOOT_STAGE_FAIL;
  ui_page_08_curr_create(NULL);frame(20);assert(view.phase[1]==FAIL&&!view.done);boot_progress_set(100);boot_selftest_list_finish();assert(view.phase[1]==FAIL&&!view.done);for(unsigned i=0;i<70;i++)frame(14);dump("fault");ui_page_08_curr_destroy();assert(timers()==baseline);
  memset(&snapshot,0,sizeof(snapshot));ui_page_08_curr_create(NULL);
@@ -164,13 +177,42 @@ int main(void){
  for(unsigned i=0;i<5;i++)assert(lv_obj_get_style_shadow_width(view.cards[i],0)==0);
  frame(20);pixels=0;frame(20);assert(pixels==0);
  unsigned prepared_opens=opens,prepared_timers=timers(),prepared_fonts=font_bindings;
+ /* Native ownership can hold the display without running any LVGL timer.
+  * Hidden preparation time must not jump the spinner into its first cycle. */
+ lv_tick_inc(550);
  ui_page_08_curr_set_covered(false);
  assert(view.timer==prepared_timer&&view.waiting==prepared_waiting&&!view.timer->paused);
  assert(opens==prepared_opens&&timers()==prepared_timers&&font_bindings==prepared_fonts);
  frame(20);assert(!view.covered&&pixels>0&&view.phase[0]==CHECK&&!view.done);
+ assert(lv_arc_get_angle_start(view.waiting)<10);
+ assert(lv_arc_get_angle_end(view.waiting)>=72&&lv_arc_get_angle_end(view.waiting)<90);
  assert(lv_obj_get_width(view.progress)==0&&snapshot.completed_count==0);
  unsigned rendered_opens=opens;for(unsigned i=0;i<30;i++)frame(14);assert(opens==rendered_opens);
  dump("native-handoff");ui_page_08_curr_destroy();assert(timers()==baseline);
+
+ /* Keep the same visible-clock behavior through slow native preparation,
+  * long holds, cover/resume and the 32-bit tick rollover. No spinner animation
+  * is attached to the global LVGL animation timer. */
+ const uint32_t hidden_holds[]={1,550,1600,5000};
+ for(unsigned hold=0;hold<4;hold++){
+  memset(&snapshot,0,sizeof(snapshot));
+  if(hold==3)lv_tick_inc(UINT32_MAX-lv_tick_get()-100U);
+  ui_page_08_curr_defer_next_create();ui_page_08_curr_create(NULL);ui_page_08_curr_set_covered(true);
+  while(!ui_page_08_curr_prepare_step())assert(!ui_page_08_curr_prepare_failed());
+  assert(view.waiting&&lv_anim_get(view.waiting,NULL)==NULL);
+  assert(lv_arc_get_angle_start(view.waiting)==0&&lv_arc_get_angle_end(view.waiting)==72);
+  lv_tick_inc(hidden_holds[hold]);
+  ui_page_08_curr_set_covered(false);frame(20);
+  assert(lv_arc_get_angle_start(view.waiting)<10&&lv_arc_get_angle_end(view.waiting)>72&&lv_arc_get_angle_end(view.waiting)<90);
+  frame(205);assert(lv_arc_get_angle_start(view.waiting)>40&&lv_arc_get_angle_start(view.waiting)<80);
+  assert(lv_arc_get_angle_end(view.waiting)==162);
+  frame(675);assert(lv_arc_get_angle_start(view.waiting)==0&&lv_arc_get_angle_end(view.waiting)==72);
+  ui_page_08_curr_set_covered(true);lv_tick_inc(1400);ui_page_08_curr_set_covered(false);frame(20);
+  assert(view.waiting&&lv_anim_get(view.waiting,NULL)==NULL);
+  assert(lv_arc_get_angle_start(view.waiting)<10&&lv_arc_get_angle_end(view.waiting)>72&&lv_arc_get_angle_end(view.waiting)<90);
+  ui_page_08_curr_destroy();assert(timers()==baseline);
+ }
+ puts("PASS D: self-check arc uses visible page time through native holds, cover/resume and tick rollover; first cycle does not catch up hidden time");
 
  /* Locale can be published between construction steps. Final preparation
   * binds the current translation and actual geometry once while still hidden. */
@@ -246,5 +288,6 @@ int main(void){
  puts("PASS D: real legacy intro consumes decoder/card/timer preparation failures; localized error, diagnostics and cleanup; no repeated preparation");
  puts("PASS D: native covered preparation, decoded backgrounds, prebuilt spinner/timer, no hidden redraw, allocation-free uncover, zero card shadows");
  puts("PASS D: root/background/ready-background/card/timer failures close readiness without retries; owned resources fully destroyed");
+ puts("PASS D: bridge owns transition input through repeated start, normal completion, PURE cancellation and timer failure; balanced release");
  puts("PASS D: real LVGL intro adoption, snapshot replay, three-cycle idle zero redraw, fault preservation, Ready gate, bridge cleanup and timer failure");return 0;
 }

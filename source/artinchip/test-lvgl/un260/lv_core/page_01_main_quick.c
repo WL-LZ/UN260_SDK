@@ -47,6 +47,7 @@ static struct {
     lv_dma_static_surface_t surface;
     lv_timer_t *timer;
     bool active,moving,opening,prepared,dirty,down,candidate,dragging,drain,tap_grab,navigation_blocked;
+    bool preload_failed;
     bool from_open;
     qc_post_action_t after_close;
     lv_point_t start,point;
@@ -114,7 +115,7 @@ static void qc_refresh(void)
     qc_text(quick.page_label,ui_tr(quick.page==UI_PAGE_PURE?UI_N_("Pure"):UI_N_("Main")));
     char code[4],text[48];currency_state_get_effective_code(code);
     const counting_sim_t *data=counting_data_current();
-    snprintf(text,sizeof(text),"%s   |   %d pcs",currency_state_display_code(code),data?data->total_pcs:0);
+    snprintf(text,sizeof(text),"%s   |   %d %s",currency_state_display_code(code),data?data->total_pcs:0,ui_tr("pcs"));
     qc_text(quick.context,text);
 }
 static void qc_edit(bool edit)
@@ -203,7 +204,7 @@ static void qc_build(void)
         quick.root=quick.sheet=NULL;quick.prepared=false;quick.dirty=true;
     }
     if(quick.root)return;
-    quick.language=ui_lang_get();
+    quick.language=ui_lang_get();quick.preload_failed=false;
     quick.root=qc_box(quick.main,0,0,1280,400,0x203343,0);
     /* Keep the outside-click shield, but never dim the exposed Main area.
      * Only the opaque sheet moves; its parent stays transparent throughout. */
@@ -215,16 +216,18 @@ static void qc_build(void)
     lv_obj_t *cap=qc_box(quick.sheet,0,0,SHEET_W,22,0xF0F4F7,0);
     lv_obj_clear_flag(cap,LV_OBJ_FLAG_CLICKABLE);
     qc_icon(quick.sheet,27,22,LVGL_DIR "quick_icons/settings.png");
-    qc_label(quick.sheet,63,17,184,qc_tr(UI_TEXT_QUICK_TITLE),&lv_font_instrument_sans_semibold_25,0x253D4C);
-    lv_obj_t *divider=qc_box(quick.sheet,245,25,1,16,0xCDDBE4,0);
+    lv_obj_t *title=qc_label(quick.sheet,63,17,LV_SIZE_CONTENT,qc_tr(UI_TEXT_QUICK_TITLE),&lv_font_instrument_sans_semibold_25,0x253D4C);
+    lv_obj_update_layout(title);
+    int divider_x=63+lv_obj_get_width(title)+12;
+    lv_obj_t *divider=qc_box(quick.sheet,divider_x,25,1,16,0xCDDBE4,0);
     lv_obj_clear_flag(divider,LV_OBJ_FLAG_CLICKABLE);
-    quick.page_label=qc_label(quick.sheet,264,25,90,"",&lv_font_instrument_sans_medium_13,0x718B9B);
+    quick.page_label=qc_label(quick.sheet,divider_x+19,25,LV_SIZE_CONTENT,"",&lv_font_instrument_sans_medium_13,0x718B9B);
     if(!lv_quick_controls_create(&quick.controls,quick.sheet,25,65,qc_action)){
         lv_obj_del(quick.root);quick.root=quick.sheet=NULL;
         quick.message=quick.page_label=quick.context=NULL;
         quick.arrange=quick.cancel=quick.done=quick.close=NULL;
         memset(&quick.controls,0,sizeof(quick.controls));
-        quick.arranging=false;quick.selected=-1;qc_close_now();return;
+        quick.arranging=false;quick.selected=-1;quick.preload_failed=true;qc_close_now();return;
     }
     quick.arrange=qc_button(1011,118,ui_tr("Arrange"),LVGL_DIR "quick_icons/arrange.png",QC_ARRANGE,false);
     quick.close=qc_button(1143,112,qc_tr(UI_TEXT_QUICK_CLOSE),LVGL_DIR "quick_icons/up.png",QC_CLOSE,true);
@@ -352,7 +355,8 @@ static void qc_timer_cb(lv_timer_t *timer)
         if(!qc_safe() || qc_foreign_layer(&quick.point))qc_close_now();
     } else {
         lv_timer_pause(timer);
-        if(qc_safe() && !page_01_main_layout_is_editing())qc_prepare();
+        if(qc_safe() && !page_01_main_layout_is_editing() &&
+           !(quick.preload_failed && quick.language==ui_lang_get()))qc_prepare();
     }
 }
 void page_01_main_quick_attach(lv_obj_t *host, uint32_t page)
@@ -372,6 +376,23 @@ void page_01_main_quick_attach(lv_obj_t *host, uint32_t page)
 }
 void page_01_main_quick_schedule_preload(void)
 { if(quick.timer) { lv_timer_set_period(quick.timer,180);lv_timer_reset(quick.timer);lv_timer_resume(quick.timer); } }
+bool page_01_main_quick_prepare_preload(void)
+{
+    if(!quick.main || !lv_obj_is_visible(quick.main) ||
+       (uint32_t)ui_manager_get_current_page()!=quick.page ||
+       quick.active || quick.moving)return false;
+    if(quick.timer)lv_timer_pause(quick.timer);
+    if(quick.preload_failed && quick.language==ui_lang_get())return false;
+    return qc_prepare();
+}
+bool page_01_main_quick_prepare_static_step(void)
+{
+    if(!quick.main || !lv_obj_is_visible(quick.main) || quick.active || quick.moving ||
+       (quick.root && quick.language==ui_lang_get()) ||
+       (quick.preload_failed && quick.language==ui_lang_get()))return false;
+    qc_build();
+    return quick.root!=NULL;
+}
 void page_01_main_quick_refresh_data(uint32_t topics)
 {
     if(!(topics&UI_DATA_TOPIC_DEVICE_VERSION))return;

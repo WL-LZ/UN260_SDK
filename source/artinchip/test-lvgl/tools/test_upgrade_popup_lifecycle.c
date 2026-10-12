@@ -10,12 +10,16 @@ typedef void lv_event_t;
 typedef struct { unsigned period; } lv_timer_t;
 enum { LV_STATE_DISABLED, UI_TEXT_WIDGET_UPGRADE_POPUP_FAIL_START_SCRIPT,
        UI_TEXT_WIDGET_UPGRADE_POPUP_FAIL_DESC };
+enum { UPGRADE_POPUP_STATE_IDLE, UPGRADE_POPUP_STATE_PROMPT,
+       UPGRADE_POPUP_STATE_PROGRESS, UPGRADE_POPUP_STATE_SUCCESS,
+       UPGRADE_POPUP_STATE_FAIL, UPGRADE_POPUP_STATE_RESTART };
 #define UPGRADE_POPUP_STATUS_TIMER_MS 100
 #define UPGRADE_POPUP_REBOOT_DELAY_MS 1000
 #define UPGRADE_POPUP_DATA_WAIT_TIMEOUT_MS 30000U
 static struct {
+    int state;
     lv_timer_t *reboot_timer, *result_timer;
-    bool reboot_reserved, reboot_clear_sent, result_success, result_restart_required;
+    bool reboot_reserved, reboot_clear_sent, result_success, result_restart_required, prompt_hiding;
     uint32_t reboot_prepare_started_ms;
     void *success_btn, *success_btn_later;
     char result_text[128];
@@ -51,6 +55,7 @@ static void ui_upgrade_service_reboot(void) { reboots++; }
 static void reset(void) {
     upgrade_session_end(upgrade_session_owner());
     memset(&g_upgrade_popup,0,sizeof(g_upgrade_popup));
+    g_upgrade_popup.state=UPGRADE_POPUP_STATE_RESTART;
     readiness=APP_UI_UPGRADE_READY;create_ok=true;
     now_ms=0;
     sends=reboots=failures=hides=creates=successes=restarts=0;
@@ -100,7 +105,33 @@ static void test_busy_failure_and_cancel(void) {
         assert(reboots==1);
     }
 }
+static void test_success_confirm_only_acknowledges(void) {
+    const app_ui_upgrade_readiness_t states[]={APP_UI_UPGRADE_READY, APP_UI_UPGRADE_WAIT,
+        APP_UI_UPGRADE_BUSY, APP_UI_UPGRADE_FAILED};
+    for(unsigned owner=UPGRADE_SESSION_NONE; owner<=UPGRADE_SESSION_IMAGE; owner++) {
+        for(unsigned i=0;i<sizeof(states)/sizeof(states[0]);i++) {
+            reset();g_upgrade_popup.state=UPGRADE_POPUP_STATE_SUCCESS;readiness=states[i];
+            if(owner!=UPGRADE_SESSION_NONE) assert(upgrade_session_begin(owner));
+            upgrade_popup_on_result_confirm_click(NULL);
+            assert(hides==1&&!sends&&!reboots&&!creates&&!failures);
+            assert(!g_upgrade_popup.reboot_timer&&!g_upgrade_popup.reboot_reserved);
+            assert(upgrade_session_owner()==owner);
+        }
+    }
+    for(int state=UPGRADE_POPUP_STATE_IDLE;state<=UPGRADE_POPUP_STATE_FAIL;state++) {
+        if(state==UPGRADE_POPUP_STATE_SUCCESS) continue;
+        reset();g_upgrade_popup.state=state;upgrade_popup_on_result_confirm_click(NULL);
+        assert(!hides&&!sends&&!reboots&&!creates&&!failures);
+    }
+    reset();g_upgrade_popup.prompt_hiding=true;upgrade_popup_on_result_confirm_click(NULL);
+    assert(!hides&&!sends&&!reboots&&!creates&&!failures);
+    reset();upgrade_popup_on_result_confirm_click(NULL);
+    assert(creates==1&&g_upgrade_popup.reboot_reserved);
+    upgrade_popup_on_reboot_later_click(NULL);
+    assert(hides==1&&!sends&&!reboots&&!g_upgrade_popup.reboot_timer);
+}
 int main(void) {
+    test_success_confirm_only_acknowledges();
     test_wait_durable_clear_delay_and_recheck();test_busy_failure_and_cancel();
     reset();strcpy(g_upgrade_popup.result_text,"Restart pending");
     g_upgrade_popup.result_restart_required=true;upgrade_popup_result_timer_cb(NULL);
@@ -108,5 +139,5 @@ int main(void) {
     g_upgrade_popup.result_restart_required=false;g_upgrade_popup.result_success=true;
     upgrade_popup_result_timer_cb(NULL);assert(successes==1);
     g_upgrade_popup.result_success=false;upgrade_popup_result_timer_cb(NULL);assert(failures==1);
-    puts("PASS popup restart ownership, durable WAIT before clear and reboot, original clear/delay, BUSY/FAILED/cancel/timer failure, distinct restart/final success");
+    puts("PASS success Confirm only acknowledges with zero commands/reboots across readiness/owners; popup restart ownership, durable WAIT before clear and reboot, original clear/delay, BUSY/FAILED/cancel/timer failure, distinct restart/final success");
 }

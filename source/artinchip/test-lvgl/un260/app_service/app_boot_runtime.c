@@ -16,6 +16,7 @@
 #include "un260/lv_core/page_00_boot_anim.h"
 #include "un260/lv_system/app_clock.h"
 #include "un260/lv_core/page_01_main.h"
+#include "un260/lv_core/page_01_main_quick.h"
 #include "un260/protocol/protocol_send.h"
 #include "un260/lv_system/ui_state_runtime.h"
 #include "un260/lv_system/counting_ui_runtime.h"
@@ -184,6 +185,12 @@ static bool app_boot_runtime_finish(counting_session_state_t *counting_session)
     ui_page_08_curr_start_handoff();
 #endif
     ui_manager_switch(ui_state_pure_count_is_enabled() ? UI_PAGE_PURE : UI_PAGE_MAIN);
+#if defined(UI_BOOT_ANIM_THEME) && UI_BOOT_ANIM_THEME == 4
+    /* The bridge is still opaque and its visual clock has not started. Avoid
+     * the ordinary 180 ms preload building/capturing a whole drawer mid-fade.
+     * Snapshot failure is optional: manual opening retains its live fallback. */
+    (void)page_01_main_quick_prepare_preload();
+#endif
     return true;
 }
 

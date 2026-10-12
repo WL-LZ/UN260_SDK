@@ -464,6 +464,19 @@ static void upgrade_popup_btn_set_text(lv_obj_t* btn, const char* text) //设置
     lv_label_set_text(label, text ? text : "");
 }
 
+static void upgrade_popup_set_result_actions(bool restart_required)
+{
+    if (g_upgrade_popup.success_btn_later) {
+        if (restart_required) lv_obj_clear_flag(g_upgrade_popup.success_btn_later, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(g_upgrade_popup.success_btn_later, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (g_upgrade_popup.success_btn) {
+        lv_obj_set_pos(g_upgrade_popup.success_btn, restart_required ? 132 : 66, 56);
+        upgrade_popup_btn_set_text(g_upgrade_popup.success_btn, restart_required ?
+            ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_SUCCESS_BTN_CONFIRM) : ui_tr("Confirm"));
+    }
+}
+
 static lv_obj_t* upgrade_popup_create_card(lv_obj_t* parent, lv_coord_t w, lv_coord_t h)
 {
     lv_obj_t* card = lv_obj_create(parent);
@@ -595,6 +608,16 @@ static void upgrade_popup_on_reboot_click(lv_event_t* e)
         upgrade_session_end(UPGRADE_SESSION_UI);
         g_upgrade_popup.reboot_reserved = false;
         upgrade_popup_show_fail(ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_FAIL_START_SCRIPT));
+    }
+}
+
+static void upgrade_popup_on_result_confirm_click(lv_event_t* e)
+{
+    if (g_upgrade_popup.prompt_hiding) return;
+    if (g_upgrade_popup.state == UPGRADE_POPUP_STATE_SUCCESS) {
+        upgrade_popup_hide();
+    } else if (g_upgrade_popup.state == UPGRADE_POPUP_STATE_RESTART) {
+        upgrade_popup_on_reboot_click(e);
     }
 }
 
@@ -837,7 +860,7 @@ static void upgrade_popup_create_success_card(void)
     lv_obj_set_width(g_upgrade_popup.success_desc, 320);
     lv_obj_set_style_text_align(g_upgrade_popup.success_desc, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_text(g_upgrade_popup.success_desc,
-                      ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_SUCCESS_DESC));
+                      ui_tr("Restart the machine later to use the update."));
     upgrade_popup_apply_text_style(g_upgrade_popup.success_desc,
                                    lv_color_hex(UPGRADE_POPUP_TEXT_DESC_COLOR),
                                    &lv_font_instrument_sans_medium_14);
@@ -855,7 +878,8 @@ static void upgrade_popup_create_success_card(void)
                                  ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_SUCCESS_BTN_CONFIRM),
                                  132, 56, 228, 50,
                                  UPGRADE_POPUP_BTN_SUCCESS,
-                                 upgrade_popup_on_reboot_click);
+                                 upgrade_popup_on_result_confirm_click);
+    upgrade_popup_set_result_actions(false);
 }
 
 static void upgrade_popup_create_fail_card(void)
@@ -1205,16 +1229,13 @@ static void upgrade_popup_refresh_text_internal(void) //刷新升级弹窗当前
         lv_label_set_text(g_upgrade_popup.success_desc,
                           g_upgrade_popup.state == UPGRADE_POPUP_STATE_RESTART ?
                           ui_tr("Keep the USB drive connected and restart to finish the update.") :
-                          ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_SUCCESS_DESC));
+                          ui_tr("Restart the machine later to use the update."));
     }
     if (g_upgrade_popup.success_btn_later) {
         upgrade_popup_btn_set_text(g_upgrade_popup.success_btn_later,
                                    ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_SUCCESS_BTN_LATER));
     }
-    if (g_upgrade_popup.success_btn) {
-        upgrade_popup_btn_set_text(g_upgrade_popup.success_btn,
-                                   ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_SUCCESS_BTN_CONFIRM));
-    }
+    upgrade_popup_set_result_actions(g_upgrade_popup.state == UPGRADE_POPUP_STATE_RESTART);
 
     if (g_upgrade_popup.fail_title) {
         lv_label_set_text(g_upgrade_popup.fail_title, ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_FAIL_TITLE));
@@ -1422,6 +1443,9 @@ static void upgrade_popup_show_success(void)
 {
     lv_label_set_text(g_upgrade_popup.success_icon, LV_SYMBOL_UPLOAD);
     lv_label_set_text(g_upgrade_popup.success_title, ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_SUCCESS_TITLE));
+    lv_label_set_text(g_upgrade_popup.success_desc,
+                      ui_tr("Restart the machine later to use the update."));
+    upgrade_popup_set_result_actions(false);
     if (g_upgrade_popup.status_timer) {
         lv_timer_pause(g_upgrade_popup.status_timer);
     }
@@ -1530,12 +1554,6 @@ void lv_upgrade_popup_show_result(bool success, const char* desc_text)
     upgrade_popup_prepare_result_popup();
 
     if (success) {
-        if (g_upgrade_popup.success_desc) {
-            lv_label_set_text(g_upgrade_popup.success_desc,
-                              (desc_text && desc_text[0] != '\0') ?
-                              desc_text :
-                              ui_text_get(UI_TEXT_WIDGET_UPGRADE_POPUP_SUCCESS_DESC));
-        }
         upgrade_popup_show_success();
         return;
     }
@@ -1558,6 +1576,7 @@ void lv_upgrade_popup_show_restart_required(const char* desc_text)
     lv_label_set_text(g_upgrade_popup.success_desc,
                       desc_text && desc_text[0] ? desc_text :
                       ui_tr("Keep the USB drive connected and restart to finish the update."));
+    upgrade_popup_set_result_actions(true);
     upgrade_popup_set_state(UPGRADE_POPUP_STATE_RESTART);
 }
 

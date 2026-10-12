@@ -57,7 +57,7 @@ static void sim_reset_counting_result(counting_sim_t *value)
     observed_busy = app_command_runtime_count_start_busy();
     assert(observed_busy);
 }
-static void currency_state_begin_count_session(void) {}
+static void currency_state_clear_detected_result(void) {}
 static void page_01_curr_img_refre(void) {}
 static void page_01_main_refresh_start_state(void)
 {

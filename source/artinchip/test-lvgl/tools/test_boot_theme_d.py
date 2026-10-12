@@ -10,4 +10,6 @@ s=s.replace('metadata = write_assets(root, work)', '''metadata = write_assets(ro
             (work / "boot.bgra").write_bytes(ready.convert("RGBA").tobytes("raw", "BGRA"))''')
 s=s.replace('"-DUI_BOOT_ANIM_THEME=3"','"-DUI_BOOT_ANIM_THEME=4"')
 s=s.replace('"-Wl,--wrap=lv_timer_create"', '"-Wl,--wrap=lv_timer_create", "-Wl,--wrap=lv_obj_create"')
+# Use the production theme so arc knob styles are exercised by the renderer.
+s=s.replace('#define LV_USE_THEME_DEFAULT 0', '#define LV_USE_THEME_DEFAULT 1')
 exec(compile(s,str(Path(__file__)), 'exec'))
