@@ -27,13 +27,19 @@ struct lv_recycled_list {
     float anchor, sample_offset, velocity, overscroll;
     int32_t drawn_offset, drawn_overscroll, page_drag;
     drag_axis_t axis;
-    bool pressed, moved, tap_allowed, press_feedback;
+    bool pressed, moved, tap_allowed, press_feedback, axis_navigation;
 };
 
 static void clear_press(lv_recycled_list_t *list)
 {
     if(list->pressed_row)lv_obj_clear_state(list->pressed_row,LV_STATE_PRESSED);
     list->pressed_row=NULL;
+}
+void lv_recycled_list_set_axis_navigation(lv_recycled_list_t *list, bool enabled)
+{
+    if (!list || list->axis_navigation == enabled) return;
+    lv_recycled_list_stop(list);
+    list->axis_navigation = enabled;
 }
 void lv_recycled_list_set_press_feedback(lv_recycled_list_t *list,bool enabled)
 {
@@ -200,9 +206,21 @@ static void drag_pointer(lv_recycled_list_t *list, const lv_point_t *p, uint32_t
         if (LV_ABS(dx) * 4 > LV_ABS(dy) * 5) list->axis = DRAG_HORIZONTAL;
         else if (LV_ABS(dy) * 4 > LV_ABS(dx) * 5) list->axis = DRAG_VERTICAL;
         else return;
+        if (list->axis_navigation) {
+            if (list->axis == DRAG_VERTICAL && list->window.paged) {
+                float before = list->window.offset;
+                ui_list_window_mode(&list->window, false);
+                list->anchor += list->window.offset - before;
+                project(list, true);
+            }
+            list->sample_offset = list->axis == DRAG_HORIZONTAL ? 0 :
+                list->window.offset + list->overscroll;
+        }
     }
     float position;
-    if (list->window.paged) {
+    bool paging = list->window.paged ||
+        (list->axis_navigation && list->axis == DRAG_HORIZONTAL);
+    if (paging) {
         if (list->axis != DRAG_HORIZONTAL || ui_list_window_pages(&list->window) <= 1) return;
         list->page_drag = -dx;
         position = list->page_drag;
@@ -221,7 +239,7 @@ static void drag_pointer(lv_recycled_list_t *list, const lv_point_t *p, uint32_t
         list->sample_offset = position;
         list->sample_tick = now;
     }
-    if (!list->window.paged) project(list, false);
+    if (!paging) project(list, false);
 }
 
 static void event_cb(lv_event_t *e)
@@ -274,7 +292,9 @@ static void event_cb(lv_event_t *e)
         }
         bool tap_allowed = indev && list->tap_allowed;
         list->pressed = false;
-        if (list->window.paged) {
+        bool paging = list->window.paged ||
+            (list->axis_navigation && list->axis == DRAG_HORIZONTAL);
+        if (paging) {
             float distance = fabsf((float)list->page_drag);
             float threshold = fmaxf(36, fminf(64, list->config.width * 0.15f));
             bool flick = distance >= 20 && (uint32_t)(now - list->motion_tick) <= 100 &&
@@ -282,7 +302,10 @@ static void event_cb(lv_event_t *e)
             int step = list->moved && (distance >= threshold || flick) ?
                 (list->page_drag > 0 ? 1 : -1) : 0;
             lv_recycled_list_stop(list);
-            if (step) lv_recycled_list_page_step(list, step);
+            if (step) {
+                lv_recycled_list_set_paged(list, true);
+                lv_recycled_list_page_step(list, step);
+            }
         } else if (list->overscroll != 0) {
             list->velocity = 0;
             resume_motion(list, now);

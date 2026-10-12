@@ -5,9 +5,13 @@
 #include "lvgl/lvgl.h"
 #include "aic_ui/compiled_asset.h"
 #include "test_page_background_asset.h"
+#ifdef LIST_REAL_FONTS
+#include "un260/font/ui_locale_font_bank.h"
+#endif
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/lv_core/page_02_list_search.c"
-/* Include the unchanged production translation unit to inspect its private
+#include "un260/lv_core/page_02_list_serials.c"
+/* Include the production translation unit to inspect its private
  * projection; no test-only accessors or mock page implementation in firmware. */
 #include "un260/lv_core/page_02_list.c"
 #include "test_recycled_list_cases.h"
@@ -80,17 +84,49 @@ static void register_host_assets(void)
 
 void perf_profile_watch_invalidation(const void *o,const char *n) { (void)o;(void)n; }
 void perf_profile_unwatch_invalidation(const void *o) { (void)o; }
-static unsigned history_clicks,print_clicks,home_clicks;
+static unsigned history_clicks,print_clicks,home_clicks,serials_unavailable_notices;
+void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title,const char *detail)
+{
+    assert(kind==UI_NOTICE_WARNING && !strcmp(key,"list.serials"));
+    assert(!strcmp(title,ui_text_msgid(UI_TEXT_LIST_SERIAL_NUMBERS)));
+    assert(!strcmp(detail,ui_text_msgid(UI_TEXT_SERIAL_UNAVAILABLE)));
+    ++serials_unavailable_notices;
+}
 void page_02_history_btn_event_cb(lv_event_t *e) { (void)e; ++history_clicks; }
 void page_01_print_btn_event_cb(lv_event_t *e) { (void)e; ++print_clicks; }
-void page_01_back_btn_event_cb(lv_event_t *e) { (void)e; ++home_clicks; }
+/* Navigation is an external host boundary. The actual production Main
+ * event callback is compiled by the Python harness, not replaced by a stub. */
+static ui_page_t host_navigation_target=UI_PAGE_LIST,host_navigation_current=UI_PAGE_LIST;
+static unsigned host_navigation_switches;
+static bool host_navigation_rejected,host_navigation_apply_hooks;
+void ui_manager_switch(ui_page_t target)
+{
+    host_navigation_target=target;++host_navigation_switches;
+    if(target==UI_PAGE_MAIN)++home_clicks;
+    if(host_navigation_rejected)return;
+    if(host_navigation_apply_hooks)ui_page_02_list_suspend();
+    host_navigation_current=target;
+}
+ui_page_t ui_manager_get_current_page(void){return host_navigation_current;}
 /* Host-only failure injection leaves the real search create/cleanup path intact. */
-static bool fail_search_owner_alloc;
+static bool fail_search_owner_alloc, fail_serials_owner_alloc, fail_serials_viewport;
+static unsigned serials_viewport_failures;
+lv_recycled_list_t *__real_lv_recycled_list_create(lv_obj_t *,const lv_recycled_list_config_t *);
+lv_recycled_list_t *__wrap_lv_recycled_list_create(lv_obj_t *parent,const lv_recycled_list_config_t *config)
+{
+    if(fail_serials_viewport){fail_serials_viewport=false;return NULL;}
+    if(serials_viewport_failures){--serials_viewport_failures;return NULL;}
+    return __real_lv_recycled_list_create(parent,config);
+}
 void *__real_lv_mem_alloc(size_t size);
 void *__wrap_lv_mem_alloc(size_t size)
 {
     if(fail_search_owner_alloc && size==sizeof(page_02_list_search_t)) {
         fail_search_owner_alloc=false;
+        return NULL;
+    }
+    if(fail_serials_owner_alloc && size==sizeof(page_02_list_serials_t)) {
+        fail_serials_owner_alloc=false;
         return NULL;
     }
     return __real_lv_mem_alloc(size);
@@ -335,7 +371,7 @@ static void assert_column_header_layout(list_section_t *s,bool page_visible)
     lv_obj_get_coords(s->title,&title);
     assert(lv_obj_get_y(s->title)==16 && lv_obj_get_height(s->title)==28);
     assert(top.y1-title.y2-1==4);
-    lv_obj_t *badge=lv_obj_get_child(s->panel,0),*icon=only_image(s->panel);
+    lv_obj_t *badge=lv_obj_get_child(s->panel,0),*icon=s->details?s->details:only_image(s->panel);
     lv_area_t badge_area,icon_area;
     lv_obj_get_coords(badge,&badge_area);lv_obj_get_coords(icon,&icon_area);
     assert(badge_area.y2<top.y1 && icon_area.y2<top.y1);
@@ -369,11 +405,24 @@ static void assert_icons(bool serial_empty,bool reject_empty,bool page_visible)
     for(int i=0;i<3;++i) {
         list_section_t *s=&view->section[i];
         assert_column_header_layout(s,page_visible);
-        lv_obj_t *badge=lv_obj_get_child(s->panel,0),*icon=only_image(s->panel);
-        assert_png_icon(icon,i,page_visible);
+        lv_obj_t *badge=lv_obj_get_child(s->panel,0),*icon=s->details?s->details:only_image(s->panel);
+        if(i==PAGE_02_SECTION_B){
+            assert(icon==s->details && lv_obj_check_type(icon,&lv_btn_class));
+            assert(lv_obj_is_visible(icon)==page_visible);
+            assert(lv_obj_get_style_border_width(icon,0)==0);
+            assert_caption_contained(icon);
+        }else assert_png_icon(icon,i,page_visible);
         lv_area_t a,b,c;lv_obj_get_coords(badge,&a);lv_obj_get_coords(icon,&b);lv_obj_get_coords(s->title,&c);
-        assert(lv_obj_get_x(s->title)==52 && lv_obj_get_width(s->title)==s->layout->width-104);
-        assert(lv_obj_get_x(icon)==s->layout->width-42 && lv_obj_get_y(icon)==16);
+        assert(lv_obj_get_x(s->title)==52);
+        if(i==PAGE_02_SECTION_B){
+            assert(lv_obj_get_width(s->title)==lv_obj_get_x(icon)-64);
+            assert(lv_obj_get_x(icon)+lv_obj_get_width(icon)==s->layout->width-12);
+            assert(lv_obj_get_y(icon)==(48-36)/2 && lv_obj_get_height(icon)==36);
+            assert(lv_obj_get_style_bg_color(icon,0).full==lv_color_hex(0xF5F6F7).full);
+        }else{
+            assert(lv_obj_get_width(s->title)==s->layout->width-104);
+            assert(lv_obj_get_x(icon)==s->layout->width-42 && lv_obj_get_y(icon)==16);
+        }
         assert(c.x1-a.x2>=10 && b.x1-c.x2>=10);
         lv_area_t panel;lv_obj_get_coords(s->panel,&panel);
         assert(b.x2<=panel.x2 && b.y1>=panel.y1 && b.y2<=panel.y2);
@@ -459,9 +508,9 @@ static void assert_action_rail(bool page_visible)
         assert(area.y1==rail[0].y1 && area.y2==rail[3].y2);
         for(unsigned j=0;j<lv_obj_get_child_cnt(panel);++j) {
             lv_obj_t *child=lv_obj_get_child(panel,j);
-            /* No Search button remains in B's title/header area. */
-            if(lv_obj_get_y(child)<HEADER_TOP_Y)
-                assert(!lv_obj_check_type(child,&lv_btn_class));
+            /* The new Details entry belongs only to B; Search stays in the rail. */
+            if(lv_obj_get_y(child)<HEADER_TOP_Y && lv_obj_check_type(child,&lv_btn_class))
+                assert(i==PAGE_02_SECTION_B && child==view->section[i].details);
         }
     }
     lv_area_t c;lv_obj_get_coords(view->section[PAGE_02_SECTION_C].panel,&c);
@@ -688,6 +737,7 @@ static void test_page_list_swipes(bool paged)
 }
 
 #include "test_serial_search_cases.h"
+#include "test_list_serials_cases.h"
 
 static void test_search_retry(void)
 {
@@ -737,6 +787,7 @@ static void test_search_background(void)
 
 int main(void)
 {
+    setvbuf(stdout,NULL,_IONBF,0);
     lv_init();register_host_assets();static lv_color_t pixels[1280*40];static lv_disp_draw_buf_t buf;
     lv_disp_draw_buf_init(&buf,pixels,NULL,1280*40);
     lv_disp_drv_t driver;lv_disp_drv_init(&driver);driver.hor_res=1280;driver.ver_res=400;
@@ -750,6 +801,17 @@ int main(void)
     }
     lv_obj_del(probe);
     puts("PASS both full-screen background styles retain the restored shared image");
+    serials_cases_driver();
+#ifdef LIST_REAL_FONTS
+    {
+        ui_lang_set_resource_preparer(ui_locale_font_prepare);
+        ui_message_font_set_provider(ui_locale_font_compose);
+        counting_sim_t *locale_data=counting_data_mutable();
+        ui_page_02_list_create(lv_scr_act());tick(100);assert(view);
+        serials_cases_locale_layout(locale_data);
+        ui_page_02_list_destroy();return 0;
+    }
+#endif
     test_alnum_keyboard_cases();
     test_recycled_list_cases();
     counting_sim_t *data=counting_data_mutable();
@@ -767,6 +829,7 @@ int main(void)
     test_handdrawn_icons();test_button_feedback();test_reject_summary_without_details(data);test_icon_visibility(data);
     test_search_retry();test_search_background();
     test_serial_search_cases(data);
+    test_list_serials_cases(data);
     /* Real controller data with holes, independent tables and true totals. */
     data->denom_number=8;int values[]={100,50,0,20,10,5,1,0};
     int pcs[]={18,12,0,14,11,10,9,0};
@@ -845,7 +908,7 @@ int main(void)
     const int navigation_actions[]={LIST_ACTION_HISTORY,LIST_ACTION_PRINT,LIST_ACTION_MAIN};
     for(unsigned i=0;i<sizeof(navigation_actions)/sizeof(navigation_actions[0]);++i)
         lv_event_send(view->actions[navigation_actions[i]],LV_EVENT_CLICKED,NULL);
-    assert(history_clicks==1 && print_clicks==1 && home_clicks==1);
+    assert(history_clicks==1 && print_clicks==1 && home_clicks==3);
     /* Queued callbacks must not outlive the owner. */
     ui_frame_commit_begin_batch();page_02_list_section_mark_dirty(PAGE_02_SECTION_A);
     ui_page_02_list_destroy();ui_frame_commit_end_batch();ui_frame_commit_flush();tick(300);

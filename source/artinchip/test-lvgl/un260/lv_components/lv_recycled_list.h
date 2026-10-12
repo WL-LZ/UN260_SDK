@@ -41,6 +41,12 @@ const ui_list_window_t *lv_recycled_list_window(const lv_recycled_list_t *list);
  * the valid range or stretched edge changes. reset stops the current motion. */
 void lv_recycled_list_refresh(lv_recycled_list_t *list, uint32_t count, bool reset);
 void lv_recycled_list_set_paged(lv_recycled_list_t *list, bool paged);
+/* Default off. When enabled, each contact locks its dominant direction:
+ * vertical movement enters continuous scroll without snapping, and a valid
+ * horizontal release selects the next/previous containing page. Short or
+ * cancelled horizontal drags preserve the current mode and exact offset.
+ * Enabling/disabling cancels active motion; stop/reset/hide still own cleanup. */
+void lv_recycled_list_set_axis_navigation(lv_recycled_list_t *list, bool enabled);
 void lv_recycled_list_page_step(lv_recycled_list_t *list, int step);
 /* Locate a zero-based data index without changing count or navigation mode.
  * Scroll mode puts it at the top where possible, clamped at the last viewport;

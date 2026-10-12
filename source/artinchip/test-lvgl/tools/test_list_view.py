@@ -78,7 +78,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lvgl-dir", required=True, type=Path)
     parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--asan", action="store_true", help="Also check native host heap/lifetime with AddressSanitizer")
+    parser.add_argument("--locale-fonts", action="store_true",
+                        help="Check the serial detail in every released locale with production font assets")
     args = parser.parse_args()
+    if args.locale_fonts:
+        message_font = ROOT / "un260/font/ui_message_font.c"
+        FONTS[:] = sorted(set(FONTS) | set(re.findall(r"lv_font_((?:instrument_sans_|message_cjk_)\w+)", message_font.read_text())))
     lvgl = args.lvgl_dir.resolve()
     compiler = os.environ.get("CC") or shutil.which("gcc") or shutil.which("cc")
     if not compiler or not (lvgl / "lvgl.h").exists():
@@ -94,7 +100,10 @@ def main():
 #define LV_COLOR_DEPTH 32
 #define LV_USE_BIDI 1
 #define LV_USE_ARABIC_PERSIAN_CHARS 1
-#define LV_MEM_SIZE (4U * 1024U * 1024U)
+#define LV_MEM_SIZE (""" + ("24U" if args.locale_fonts else "4U") + """ * 1024U * 1024U)
+#define LV_USE_FS_STDIO """ + ("1" if args.locale_fonts else "0") + """
+#define LV_FS_STDIO_LETTER 83
+#define LV_FS_STDIO_PATH ""
 #define LV_USE_LOG 0
 #define LV_USE_SNAPSHOT 1
 #define LV_USE_GPU_AIC 0
@@ -114,8 +123,22 @@ def main():
         images = (ROOT / "un260/lv_resources/lv_img_init.c").read_text(encoding="utf-8")
         currency_image = re.search(r"const char\s*\*\s*get_currency_img\(.*?\n\}", images, re.S)
         assert currency_image, "Production currency image mapping missing"
+        events = (ROOT / "un260/lv_core/lv_page_event.c").read_text(encoding="utf-8")
+        main_event = re.search(r"void page_01_back_btn_event_cb\(.*?\n\s*\}", events, re.S)
+        assert main_event, "Production Main navigation callback missing"
+        # Include its complete outer body, beyond the inner CLICKED guard.
+        start = main_event.start()
+        brace = events.index("{", start)
+        depth, end = 1, brace + 1
+        while depth:
+            if events[end] == "{": depth += 1
+            elif events[end] == "}": depth -= 1
+            end += 1
         port_helper.write_text('#include <string.h>\n#include "lvgl/lvgl.h"\n'
-            '#include "un260/lv_resources/lv_img_init.h"\n' + match.group() + '\n' + currency_image.group() + '\n')
+            '#include "un260/lv_resources/lv_img_init.h"\n'
+            '#include "un260/lv_core/lv_page_manager.h"\n'
+            + match.group() + '\n' + currency_image.group() + '\n'
+            + events[start:end] + '\n')
         sources = [ROOT / "tools/test_list_view.c", port_helper, *asset_sources]
         for path in ["un260/lv_components/lv_recycled_list.c", "un260/lv_components/ui_scrollbar.c",
                      "un260/lv_components/ui_list_window.c",
@@ -142,6 +165,9 @@ def main():
             "un260/lv_components/lv_loading_orbit.c",
             "un260/counting/counting_multi_extra.c", "un260/counting/counting_multi.c",
             "un260/currency/currency_metadata.c", "un260/lv_system/app_clock.c")]
+        if args.locale_fonts:
+            sources += [ROOT / "un260/font/ui_message_font.c",
+                        ROOT / "un260/font/ui_locale_font_bank.c"]
         sources = with_i18n(sources, ROOT)
         sources += sorted((lvgl / "src").rglob("*.c"))
         executable = work / "test-list"
@@ -149,11 +175,16 @@ def main():
                    "-D_POSIX_C_SOURCE=200809L",
                    "-DLV_DRV_CONF_H",  # Hardware driver config is not a host raster configuration.
                    '-DLVGL_DIR="L:/usr/local/share/lvgl_data/"',
-                   "-fsanitize=undefined", "-fno-sanitize-recover=all",
+                   "-fsanitize=address,undefined" if args.asan else "-fsanitize=undefined", "-fno-sanitize-recover=all",
                    "-Wl,--wrap=lv_timer_create",  # Test-only one-shot motion timer allocation failure.
-                   "-Wl,--wrap=lv_mem_alloc",  # Test-only one-shot search owner allocation failure.
+                   "-Wl,--wrap=lv_mem_alloc",  # Test-only owner allocation failure.
+                   "-Wl,--wrap=lv_recycled_list_create",  # Viewport creation failure after child controls exist.
                    f"-I{work}", f"-I{ROOT}", f"-I{lvgl}", f"-DLV_CONF_PATH={conf}",
                    *map(str, sources), "-lm", "-pthread", "-o", str(executable)]
+        if args.locale_fonts:
+            command += ["-DLIST_REAL_FONTS", "-D_DEFAULT_SOURCE",
+                        '-DUN260_LOCALE_FONT_DIR="S:' + str(ROOT / "aic_ui/lvgl_data/locale_fonts") + '/"',
+                        "-lz"]
         subprocess.run(command, check=True)
         from PIL import Image
         for name in ('user', 'settings'):

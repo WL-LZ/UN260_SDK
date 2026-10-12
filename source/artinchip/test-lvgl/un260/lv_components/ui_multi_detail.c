@@ -174,7 +174,7 @@ void ui_multi_detail_search(ui_multi_detail_t *v)
         lv_alnum_keyboard_config_t cfg={0};cfg.title=ui_text_get(UI_TEXT_QUERY_SERIAL);cfg.placeholder=ui_text_get(UI_TEXT_MULTI_SEARCH_HINT);
         cfg.choice_title=ui_text_get(UI_TEXT_QUERY_DENOMINATION);cfg.choice_hint=ui_text_get(UI_TEXT_QUERY_DENOM_HINT);
         cfg.choice_empty=ui_text_get(UI_TEXT_MULTI_NO_RECORDS);
-        cfg.apply_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_MULTI_SEARCH_APPLY));cfg.clear_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_MULTI_SEARCH_CLEAR));cfg.cancel_text=ui_tr_for(LANGUAGE_EN, ui_text_msgid(UI_TEXT_MULTI_BACK));
+        cfg.apply_text=ui_text_get(UI_TEXT_MULTI_SEARCH_APPLY);cfg.clear_text=ui_text_get(UI_TEXT_MULTI_SEARCH_CLEAR);cfg.cancel_text=ui_text_get(UI_TEXT_MULTI_BACK);
         cfg.max_length=32;cfg.submit=search_submit;cfg.context=v;cfg.modern=true;
         v->keyboard=lv_alnum_keyboard_create(lv_obj_get_parent(v->root),&cfg);
     }

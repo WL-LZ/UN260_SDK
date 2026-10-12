@@ -905,6 +905,76 @@ static void recycled_cases_tap_eligibility(lv_recycled_list_t *list,
     puts("PASS recycled-list tap eligibility: inertia/edge regrab, threshold latch, cancellation and paging");
 }
 
+static void recycled_cases_axis_navigation(lv_recycled_list_t *list,
+    recycled_cases_context_t *ctx,lv_indev_t *indev,lv_timer_t *motion)
+{
+    const ui_list_window_t *w=lv_recycled_list_window(list);
+    lv_recycled_list_set_axis_navigation(NULL,true);
+    lv_recycled_list_set_paged(list,true);lv_recycled_list_refresh(list,50,true);
+    recycled_cases_swipe(list,indev,0,-100,200,true);
+    assert(w->paged && w->first==0); /* Existing default remains mode-specific. */
+    lv_recycled_list_set_axis_navigation(list,true);
+    recycled_cases_input_xy(list,indev,LV_EVENT_PRESSED,200,150,20);
+    recycled_cases_input_xy(list,indev,LV_EVENT_PRESSING,200,70,200);
+    assert(!w->paged && w->offset==80);
+    recycled_cases_input_xy(list,indev,LV_EVENT_RELEASED,200,70,150);
+    assert(motion->paused);recycled_cases_rows(list,ctx);
+    assert(lv_recycled_list_scroll_to_index(list,10));
+    float original=w->offset;assert(original==360);
+    recycled_cases_swipe(list,indev,-19,0,20,true);
+    assert(!w->paged && w->offset==original && motion->paused);
+    recycled_cases_swipe(list,indev,-70,-70,200,true);
+    assert(!w->paged && w->offset==original); /* Ambiguous diagonals do not move. */
+    recycled_cases_swipe(list,indev,-160,0,200,false);
+    assert(!w->paged && w->offset==original); /* Cancel does not snap the start. */
+    recycled_cases_input_xy(list,indev,LV_EVENT_RELEASED,40,150,0);
+    assert(!w->paged && w->offset==original);
+    recycled_cases_input_xy(list,indev,LV_EVENT_PRESSED,200,150,20);
+    recycled_cases_input_xy(list,indev,LV_EVENT_PRESSING,130,150,100);
+    assert(!w->paged && w->offset==original); /* Commit only on release. */
+    recycled_cases_input_xy(list,indev,LV_EVENT_PRESSING,100,250,100);
+    assert(!w->paged && w->offset==original); /* Horizontal direction stays locked. */
+    recycled_cases_input_xy(list,indev,LV_EVENT_RELEASED,100,250,0);
+    assert(w->paged && w->first==14 && w->offset==504 && motion->paused);
+    recycled_cases_rows(list,ctx);
+    recycled_cases_input_xy(list,indev,LV_EVENT_PRESSED,200,150,20);
+    recycled_cases_input_xy(list,indev,LV_EVENT_PRESSING,200,130,100);
+    assert(!w->paged && w->offset==524);
+    recycled_cases_input_xy(list,indev,LV_EVENT_PRESSING,-100,120,100);
+    assert(!w->paged && w->offset==534); /* Vertical lock ignores later X motion. */
+    recycled_cases_input_xy(list,indev,LV_EVENT_RELEASED,-100,120,150);
+    assert(motion->paused);recycled_cases_rows(list,ctx);
+    lv_recycled_list_set_paged(list,true);lv_recycled_list_page_step(list,1000);
+    assert(w->first==49);
+    recycled_cases_swipe(list,indev,0,20,200,true);
+    assert(!w->paged && w->offset==ui_list_window_limit(w)-20);
+    lv_recycled_list_stop(list);recycled_cases_rows(list,ctx);
+    lv_recycled_list_scroll_to_index(list,3);
+    for(unsigned cycle=0;cycle<4;cycle++){
+        recycled_cases_swipe(list,indev,-100,0,200,true);assert(w->paged);
+        recycled_cases_swipe(list,indev,0,-20,200,true);assert(!w->paged);
+        lv_recycled_list_stop(list);recycled_cases_rows(list,ctx);
+    }
+    assert(lv_recycled_list_scroll_to_index(list,3));
+    recycled_cases_swipe(list,indev,0,-70,20,true);assert(!motion->paused);
+    float inertia=w->offset;
+    recycled_cases_input_xy(list,indev,LV_EVENT_PRESSED,200,150,20);
+    assert(motion->paused && w->offset==inertia);
+    recycled_cases_input_xy(list,indev,LV_EVENT_PRESSING,130,150,200);
+    assert(w->offset==inertia);
+    recycled_cases_input_xy(list,indev,LV_EVENT_PRESS_LOST,130,150,0);
+    assert(!w->paged && w->offset==inertia && motion->paused);
+    recycled_cases_input_xy(list,indev,LV_EVENT_PRESSED,200,150,20);
+    recycled_cases_input_xy(list,indev,LV_EVENT_PRESSING,130,150,200);
+    lv_recycled_list_set_axis_navigation(list,false);
+    recycled_cases_input_xy(list,indev,LV_EVENT_RELEASED,130,150,0);
+    assert(!w->paged && w->offset==inertia && motion->paused);
+    recycled_cases_swipe(list,indev,-100,0,200,true);
+    assert(!w->paged && w->offset==inertia); /* Opt-out restores original behavior. */
+    lv_recycled_list_refresh(list,50,true);
+    puts("PASS opt-in dual-axis list: default unchanged, vertical from PAGE, horizontal from SCROLL, short/diagonal/cancel no snap, per-contact direction lock, alternating axes, inertia interruption and opt-out cancellation");
+}
+
 static void test_recycled_list_cases(void)
 {
     assert(sizeof(lv_coord_t) == 2); /* The firmware risk being tested is coord16. */
@@ -1006,6 +1076,7 @@ static void test_recycled_list_cases(void)
     recycled_cases_scroll_to_index(list, &ctx, &indev, motion);
     recycled_cases_hit_test(list, &ctx, &indev, motion);
     recycled_cases_tap_eligibility(list, &ctx, &indev, motion);
+    recycled_cases_axis_navigation(list, &ctx, &indev, motion);
     recycled_cases_timer_failure(parent, &indev);
     recycled_cases_short_viewport(parent, &indev);
 

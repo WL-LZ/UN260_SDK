@@ -3,6 +3,8 @@
 #include "un260/font/ui_message_font.h"
 #include "page_02_list_data.h"
 #include "page_02_list_search.h"
+#include "page_02_list_serials.h"
+#include "un260/lv_components/ui_notice.h"
 #include "un260/lv_components/ui_multi_detail.h"
 #include "un260/gesture/gesture_service.h"
 #include "lv_page_event.h"
@@ -56,13 +58,14 @@ typedef struct {
 } section_layout_t;
 typedef struct {
     const section_layout_t *layout;
-    lv_obj_t *panel, *title, *headers[3], *range, *mode, *previous, *next, *empty, *empty_text;
+    lv_obj_t *panel, *title, *headers[3], *range, *mode, *previous, *next, *empty, *empty_text, *details;
     lv_recycled_list_t *list;
 } list_section_t;
 typedef struct {
     lv_obj_t *page, *total_title, *pcs, *amount;
     lv_obj_t *actions[LIST_ACTION_COUNT];
     page_02_list_search_t *search;
+    page_02_list_serials_t *serials;
     ui_multi_detail_t *multi;
     bool multi_visible;
     uint16_t located_slot;
@@ -79,6 +82,9 @@ static bool multi_gesture(gesture_action_t action)
 static uint32_t dirty = ALL_SECTIONS, reset_positions = ALL_SECTIONS;
 static void commit(void *context,uint32_t flags);
 static void search_open(lv_event_t *e);
+static void serials_open(lv_event_t *e);
+static void serials_discard(void);
+static void base_view_visibility(void);
 static bool list_monetary_result_supported(void)
 {
     return !currency_state_multi_selected() &&
@@ -350,6 +356,24 @@ static void page_clicked(lv_event_t *e)
     list_section_t *s=lv_event_get_user_data(e);
     lv_recycled_list_page_step(s->list,lv_event_get_target(e)==s->previous ? -1 : 1);
 }
+static void serials_entry_layout(list_section_t *section)
+{
+    if(!section->details)return;
+    const char *caption=ui_text_get(UI_TEXT_MULTI_DETAILS_ACTION);
+    lv_obj_t *label=lv_damped_button_get_label(section->details);
+    lv_damped_button_set_text(section->details,caption);
+    lv_label_set_long_mode(label,LV_LABEL_LONG_CLIP);
+    const lv_font_t *font=ui_message_font(&lv_font_instrument_sans_medium_14);
+    lv_obj_set_style_text_font(label,font,0);
+    int width=LV_MAX(96,lv_txt_get_width(caption,strlen(caption),font,0,LV_TEXT_FLAG_NONE)+24);
+    int x=section->layout->width-12-width;
+    lv_obj_set_pos(section->details,x,(HEADER_TOP_Y-36)/2);lv_obj_set_size(section->details,width,36);
+    lv_obj_set_size(label,width-20,lv_font_get_line_height(font));
+    lv_obj_set_style_text_align(label,LV_TEXT_ALIGN_CENTER,0);lv_obj_center(label);
+    lv_obj_set_width(section->title,x-64);
+    lv_obj_set_height(section->title,LV_MAX(28,
+        lv_font_get_line_height(lv_obj_get_style_text_font(section->title,0))));
+}
 static bool section_create(list_section_t *s,const section_layout_t *layout)
 {
     if (!view || !view->page || !s || !layout) return false;
@@ -364,9 +388,19 @@ static bool section_create(list_section_t *s,const section_layout_t *layout)
     if (!letter) return false;
     text_set(letter,ui_text_get((ui_text_id_t)(UI_TEXT_PAGE01_DETAIL_BTN_A+layout->id)));
     lv_obj_center(letter);
-    if (!section_image_create(s->panel,layout->width-42,16,layout->title_icon)) return false;
+    if (layout->id!=PAGE_02_SECTION_B &&
+        !section_image_create(s->panel,layout->width-42,16,layout->title_icon)) return false;
     s->title=label_create(s->panel,52,16,layout->width-104,28,&lv_font_instrument_sans_semibold_20,INK,LV_TEXT_ALIGN_LEFT);
     if (!s->title) return false;
+    if(layout->id==PAGE_02_SECTION_B){
+        s->details=button_create(s->panel,0,10,96,36,
+            &lv_font_instrument_sans_medium_14,serials_open,NULL);
+        if(!s->details)return false;
+        lv_damped_button_set_exact_palette(s->details,lv_color_hex(0xF5F6F7),lv_color_hex(0xE8ECEF));
+        lv_obj_set_style_border_width(s->details,0,0);
+        lv_obj_set_style_text_color(lv_damped_button_get_label(s->details),lv_color_hex(BODY),0);
+        serials_entry_layout(s);
+    }
     const lv_font_t *header_font=&lv_font_instrument_sans_medium_12;
     lv_coord_t header_height=lv_font_get_line_height(header_font);
     /* Center the text's line box, not the former oversized label rectangle.
@@ -438,6 +472,7 @@ static void translate(void)
     for (int i=0;i<PAGE_02_SECTION_COUNT;++i) {
         list_section_t *s=&view->section[i];
         text_set(s->title,ui_text_get(s->layout->title));
+        serials_entry_layout(s);
         for (int c=0;c<3;++c) text_set(s->headers[c],ui_text_get(s->layout->columns[c]));
         if (s->empty_text) text_set(s->empty_text,ui_text_get(i==PAGE_02_SECTION_A ? UI_TEXT_LIST_NO_COUNTING_DATA : i==PAGE_02_SECTION_B ? UI_TEXT_LIST_NO_SERIAL_NUMBERS : UI_TEXT_LIST_NO_REJECT_DETAILS));
     }
@@ -448,20 +483,26 @@ static void commit(void *context,uint32_t flags)
     if (!visible() || view->search) return;
     const counting_sim_t *data=counting_data_current();
     const bool multi=currency_state_multi_selected();
+    if(multi && view->serials)serials_discard();
     if(multi&&!view->multi){
         view->multi=ui_multi_detail_create(view->page,true,NULL,NULL);
         ui_multi_detail_visible(view->multi,true);
     }
-    for(unsigned i=0;i<PAGE_02_SECTION_COUNT;i++) {
-        if(multi)lv_obj_add_flag(view->section[i].panel,LV_OBJ_FLAG_HIDDEN);
-        else lv_obj_clear_flag(view->section[i].panel,LV_OBJ_FLAG_HIDDEN);
-    }
+    base_view_visibility();
     if(view->multi_visible!=multi){
         view->multi_visible=multi;ui_multi_detail_visible(view->multi,multi);
         if(multi)gesture_service_set_page_policy(UI_PAGE_LIST,NULL,multi_gesture);
         else gesture_service_clear_page_policy(UI_PAGE_LIST);
     }
     if(multi){ui_multi_detail_refresh(view->multi);return;}
+    if(view->serials){
+        if(dirty&(1U<<PAGE_02_SECTION_B)){
+            page_02_list_data_serials(&view->data,data);
+            page_02_list_serials_refresh(view->serials,false,list_monetary_result_supported());
+            dirty&=~(1U<<PAGE_02_SECTION_B);
+        }
+        return;
+    }
     if (view->language!=ui_lang_get()) { translate(); dirty|=ALL_SECTIONS; }
     uint32_t pending=dirty; dirty=0;
     for (int i=0;i<PAGE_02_SECTION_COUNT;++i) {
@@ -483,6 +524,62 @@ static void commit(void *context,uint32_t flags)
         }
         lv_recycled_list_refresh(view->section[i].list,count,(reset_positions&(1U<<i))!=0);
         reset_positions&=~(1U<<i);
+    }
+}
+static void base_view_visibility(void)
+{
+    bool covered=view->serials!=NULL;
+    bool multi=currency_state_multi_selected();
+    for(unsigned i=0;i<PAGE_02_SECTION_COUNT;i++) {
+        if(covered||multi)lv_obj_add_flag(view->section[i].panel,LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_clear_flag(view->section[i].panel,LV_OBJ_FLAG_HIDDEN);
+    }
+    for(unsigned i=0;i<LIST_ACTION_COUNT;i++) {
+        if(covered)lv_obj_add_flag(view->actions[i],LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_clear_flag(view->actions[i],LV_OBJ_FLAG_HIDDEN);
+    }
+}
+static void serials_discard(void)
+{
+    if(!view||!view->serials)return;
+    page_02_list_serials_t *serials=view->serials;
+    view->serials=NULL;
+    page_02_list_serials_destroy(serials);
+    base_view_visibility();
+}
+static void serials_main_selected(void *context)
+{
+    (void)context;
+    if(view)lv_event_send(view->actions[LIST_ACTION_MAIN],LV_EVENT_CLICKED,NULL);
+    if(ui_manager_get_current_page()==UI_PAGE_MAIN)serials_discard();
+}
+static void serials_closed(void *context)
+{
+    (void)context;
+    serials_discard();
+    if(!visible())return;
+    /* The ABC view keeps its own reading position and mode throughout the
+     * subview. Refresh current data without importing the viewer's position. */
+    dirty|=ALL_SECTIONS;commit(NULL,dirty);
+}
+static void serials_open(lv_event_t *event)
+{
+    (void)event;
+    if(!visible()||view->search||view->serials||view->multi_visible)return;
+    ui_frame_commit_cancel(commit,NULL);
+    commit(NULL,dirty);
+    const ui_list_window_t *window=lv_recycled_list_window(view->section[PAGE_02_SECTION_B].list);
+    unsigned first=window?window->first:0;
+    for(unsigned i=0;i<PAGE_02_SECTION_COUNT;i++)
+        lv_recycled_list_stop(view->section[i].list);
+    view->serials=page_02_list_serials_create(view->page,&view->data,first,
+        list_monetary_result_supported(),serials_closed,serials_main_selected,NULL);
+    if(!view->serials)
+        ui_notice_post_text(UI_NOTICE_WARNING,"list.serials",
+            ui_text_msgid(UI_TEXT_LIST_SERIAL_NUMBERS),ui_text_msgid(UI_TEXT_SERIAL_UNAVAILABLE));
+    else {
+        base_view_visibility();
+        lv_obj_invalidate(view->page);
     }
 }
 static void search_discard(void)
@@ -510,7 +607,7 @@ static void search_closed(uint16_t slot,void *context)
 static void search_open(lv_event_t *e)
 {
     (void)e;
-    if (!visible() || view->search) return;
+    if (!visible() || view->search || view->serials) return;
     if(view->multi_visible){ui_multi_detail_search(view->multi);return;}
     ui_frame_commit_cancel(commit,NULL);
     for (unsigned i=0;i<PAGE_02_SECTION_COUNT;++i)
@@ -535,7 +632,13 @@ void page_02_list_section_data_ready(page_02_section_id_t id)
 void page_02_list_report_reset(void)
 {
     search_discard();
-    if (view) view->located_slot=UINT16_MAX;
+    if (view) {
+        view->located_slot=UINT16_MAX;
+        if(view->serials){
+            view->data.serial_count=0;
+            page_02_list_serials_refresh(view->serials,true,list_monetary_result_supported());
+        }
+    }
     dirty=reset_positions=ALL_SECTIONS;
     if (visible() && !ui_frame_commit_defer(commit,NULL,dirty)) commit(NULL,dirty);
 }
@@ -555,6 +658,11 @@ void ui_page_02_list_create(lv_obj_t *parent)
         view->actions[i]=button_create(view->page,1168,PANEL_Y+i*(ACTION_HEIGHT+ACTION_GAP),96,ACTION_HEIGHT,
             &lv_font_instrument_sans_semibold_12,action_layouts[i].clicked,NULL);
         if (!view->actions[i]) goto creation_failed;
+        if(i==LIST_ACTION_HISTORY || i==LIST_ACTION_SEARCH) {
+            lv_obj_set_style_border_width(view->actions[i],0,0);
+            lv_obj_set_style_border_width(view->actions[i],0,LV_STATE_PRESSED);
+            lv_obj_set_style_border_width(view->actions[i],0,LV_STATE_DISABLED);
+        }
         lv_obj_t *label=lv_damped_button_get_label(view->actions[i]);
         if (!label) goto creation_failed;
         lv_obj_set_size(label,90,23); lv_obj_align(label,LV_ALIGN_BOTTOM_MID,0,-6);
@@ -573,6 +681,7 @@ bool ui_page_02_list_resume(void)
     lv_obj_clear_flag(view->page,LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(view->page);
     /* Reentry also covers prewarm before runtime notifications existed. Keep
      * anchors/modes unless a real result reset has requested otherwise. */
+    page_02_list_serials_set_visible(view->serials,true);
     dirty|=ALL_SECTIONS; commit(NULL,dirty);
     if(view->multi_visible&&view->multi){
         ui_multi_detail_visible(view->multi,true);
@@ -586,6 +695,7 @@ void ui_page_02_list_suspend(void)
     if (!view) return;
     ui_frame_commit_cancel(commit,NULL);
     ui_multi_detail_visible(view->multi,false);
+    page_02_list_serials_set_visible(view->serials,false);
     gesture_service_clear_page_policy(UI_PAGE_LIST);
     search_discard();
     for (int i=0;i<PAGE_02_SECTION_COUNT;++i) lv_recycled_list_stop(view->section[i].list);
@@ -595,6 +705,7 @@ void ui_page_02_list_destroy(void)
 {
     if (!view) return;
     ui_page_02_list_suspend();
+    serials_discard();
     ui_multi_detail_destroy(view->multi);view->multi=NULL;
     for (int i=0;i<PAGE_02_SECTION_COUNT;++i)
         perf_profile_unwatch_invalidation(lv_recycled_list_object(view->section[i].list));

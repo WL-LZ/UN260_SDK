@@ -33,7 +33,7 @@ def main():
         ("un260/lv_core/lv_page_event.c", ["page_01_print_btn_event_cb"]),
         ("un260/lv_system/ui_export_data.c", ["ui_export_data_request"]),
         ("un260/lv_core/page_18_pure.c", ["pure_format_amount", "pure_format_pcs", "pure_refresh_values"]),
-        ("un260/lv_core/page_02_list.c", ["text_set", "list_monetary_result_supported", "row_bind", "commit"]),
+        ("un260/lv_core/page_02_list.c", ["text_set", "list_monetary_result_supported", "row_bind", "base_view_visibility", "serials_discard", "commit"]),
         ("un260/lv_components/smart_island/smart_island_view.c",
          ["smart_island_get_currency_code", "smart_island_rebuild_scene_texts"]),
         ("un260/lv_components/smart_island/smart_island_action.c", ["smart_island_show_qr_error_toast", "smart_island_show_qr_popup"]),

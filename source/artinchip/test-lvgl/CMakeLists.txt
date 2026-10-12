@@ -347,6 +347,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_system/ui_main_layout.c
     un260/lv_core/page_01_main_detail.c
     un260/lv_core/page_02_list.c
+    un260/lv_core/page_02_list_serials.c
     un260/lv_core/page_03_menu.c
     un260/lv_core/page_05_set_password.c
     un260/lv_core/page_06_settings.c

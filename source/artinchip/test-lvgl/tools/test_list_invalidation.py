@@ -62,7 +62,8 @@ class ListInvalidationContracts(unittest.TestCase):
 
     def test_new_result_resets_list_anchors_only_at_new_start_or_data_reset(self):
         start = function(RUNTIME, "app_counting_runtime_on_start_success")
-        self.assert_before(start, "currency_state_begin_count_session();", "page_02_list_report_reset();")
+        self.assertIn("page_02_list_report_reset();", start)
+        self.assertNotIn("currency_state_clear_detected_result", start)
         reset = function(PLATFORM, "sim_reset_counting_data")
         for expression in ("sim_data->total_pcs = 0;", "sim_data->total_amount = 0.0f;", "sim_data->err_expected = 0;"):
             self.assert_before(reset, expression, "page_02_list_report_reset();")

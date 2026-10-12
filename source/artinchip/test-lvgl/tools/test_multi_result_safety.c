@@ -56,6 +56,11 @@ const char *ui_text_get(ui_text_id_t id)
     default: return "TEXT";
     }
 }
+const char *ui_tr(const char *key) { return key; }
+const char *ui_text_msgid(ui_text_id_t id) { return ui_text_get(id); }
+void ui_notice_post_text(ui_notice_kind_t kind, const char *key,
+                         const char *title, const char *detail)
+{ ui_notice_post(kind, key, title, detail); }
 void machine_time_get(machine_time_value_t *value)
 { *value = (machine_time_value_t){ 2026, 9, 9, 12, 0, 0 }; }
 static int protocol_send(uint8_t command, const uint8_t *payload, uint16_t len)
@@ -107,7 +112,7 @@ storage_job_status_t ui_history_commit_status(storage_job_id_t id)
 storage_job_status_t ui_history_data_status(void)
 { return history_available ? accepted_status : STORAGE_JOB_FAILED; }
 
-typedef struct lv_obj { char text[80]; struct lv_obj *children[3]; } lv_obj_t;
+typedef struct lv_obj { char text[80]; struct lv_obj *children[3]; unsigned flags; } lv_obj_t;
 typedef int lv_font_t;
 static lv_font_t lv_font_instrument_sans_medium_14, lv_font_instrument_sans_medium_20;
 static lv_font_t lv_font_instrument_sans_semibold_22;
@@ -134,7 +139,8 @@ static struct {
 } g_pure_page;
 
 enum { PAGE_02_SECTION_A, PAGE_02_SECTION_B, PAGE_02_SECTION_C, PAGE_02_SECTION_COUNT };
-enum { ALL_SECTIONS = 7 };
+enum { ALL_SECTIONS = 7, LIST_ACTION_COUNT = 4 };
+typedef struct page_02_list_serials { unsigned refreshes; bool monetary_supported; } page_02_list_serials_t;
 typedef struct { int id; } section_layout_t;
 typedef struct { const section_layout_t *layout; void *list; lv_obj_t *panel; } list_section_t;
 static struct {
@@ -142,6 +148,8 @@ static struct {
     int located_slot;
     void *search;
     void *multi;
+    page_02_list_serials_t *serials;
+    lv_obj_t *actions[LIST_ACTION_COUNT];
     lv_obj_t *page;
     bool multi_visible;
     language_t language;
@@ -149,8 +157,13 @@ static struct {
     list_section_t section[3];
 } list_fixture, *view = &list_fixture;
 enum { LV_OBJ_FLAG_HIDDEN=1, UI_PAGE_LIST=2 };
-static void lv_obj_add_flag(lv_obj_t *o,int f){(void)o;(void)f;}
-static void lv_obj_clear_flag(lv_obj_t *o,int f){(void)o;(void)f;}
+static void lv_obj_add_flag(lv_obj_t *o,int f){assert(o);o->flags|=(unsigned)f;}
+static void lv_obj_clear_flag(lv_obj_t *o,int f){assert(o);o->flags&=~(unsigned)f;}
+static unsigned serial_destroy_calls;
+static void page_02_list_serials_refresh(page_02_list_serials_t *serials,bool reset,bool monetary_supported)
+{assert(serials&&!reset);serials->refreshes++;serials->monetary_supported=monetary_supported;}
+static void page_02_list_serials_destroy(page_02_list_serials_t *serials)
+{assert(serials&&view->serials==NULL);serial_destroy_calls++;}
 static void *ui_multi_detail_create(lv_obj_t *p,bool expanded,void *cb,void *ctx)
 {(void)p;(void)expanded;(void)cb;(void)ctx;return &list_fixture;}
 static void ui_multi_detail_visible(void *v,bool visible){(void)v;(void)visible;}
@@ -161,12 +174,12 @@ static void gesture_service_set_page_policy(int page,void *drag,bool (*cb)(int))
 static void gesture_service_clear_page_policy(int page){(void)page;}
 static uint32_t dirty, reset_positions, last_row_count;
 static bool visible(void) { return true; }
-static language_t ui_lang_get(void) { return LANGUAGE_EN; }
+language_t ui_lang_get(void) { return LANGUAGE_EN; }
 static void translate(void) {}
 static void lv_recycled_list_refresh(void *list, uint32_t count, bool reset)
 { (void)list; (void)reset; last_row_count = count; }
 
-enum { SMART_ISLAND_SCENE_COUNTING, SMART_ISLAND_SCENE_RESULT, SMART_ISLAND_SCENE_IDLE };
+enum { SMART_ISLAND_SCENE_COUNTING, SMART_ISLAND_SCENE_RESULT, SMART_ISLAND_SCENE_IDLE, SMART_ISLAND_SCENE_WARNING };
 static struct {
     struct {
         char compact[128], info_title[128], info_summary[128], info_footer[128], info_extra[128];
@@ -177,6 +190,7 @@ static struct {
     } text;
     struct { int scene; } view;
     struct { int pcs; } counting;
+    struct { char text[128]; } warning;
 } g_si_ctx;
 static const char *smart_island_get_work_mode_text(void) { return "MDC"; }
 static uint8_t machine_state_mode(void) { return MODE_MDC; }
@@ -193,6 +207,8 @@ static bool lv_qr_popup_show(const char *text) { assert(text[0]); qr_shows++; re
 static void assert_texts_safe(void)
 {
     lv_obj_t a = { 0 }, b = { 0 }, c = { 0 }, row = { .children = { &a, &b, &c } };
+    lv_obj_t panels[PAGE_02_SECTION_COUNT] = {0}, actions[LIST_ACTION_COUNT] = {0};
+    page_02_list_serials_t serials = {0};
     const section_layout_t layout_a = { PAGE_02_SECTION_A }, layout_b = { PAGE_02_SECTION_B };
     list_section_t section = { .layout = &layout_a };
     counting_sim_t *sim = counting_data_mutable();
@@ -201,10 +217,30 @@ static void assert_texts_safe(void)
     g_pure_page.amount_value = &a; g_pure_page.pcs_value = &b; g_pure_page.reject_value = &c;
     pure_refresh_values();
     assert(strcmp(a.text, "--") == 0 && strcmp(b.text, "12") == 0);
+    for(unsigned i=0;i<PAGE_02_SECTION_COUNT;i++)view->section[i].panel=&panels[i];
+    for(unsigned i=0;i<LIST_ACTION_COUNT;i++)view->actions[i]=&actions[i];
     view->pcs = &a; view->amount = &b; dirty = 1; reset_positions = 0;
+    unsigned destroys_before=serial_destroy_calls;
+    if(currency_state_multi_selected())view->serials=&serials;
     commit(NULL, 1);
-    if(currency_state_multi_selected())assert(view->multi_visible&&view->multi);
-    else assert(strcmp(a.text, "12") == 0 && strcmp(b.text, "--") == 0 && last_row_count == 1);
+    if(currency_state_multi_selected()){
+        assert(view->multi_visible&&view->multi&&view->serials==NULL);
+        assert(serial_destroy_calls==destroys_before+1);
+        for(unsigned i=0;i<PAGE_02_SECTION_COUNT;i++)assert(panels[i].flags&LV_OBJ_FLAG_HIDDEN);
+        for(unsigned i=0;i<LIST_ACTION_COUNT;i++)assert(!(actions[i].flags&LV_OBJ_FLAG_HIDDEN));
+    }else{
+        assert(strcmp(a.text, "12") == 0 && strcmp(b.text, "--") == 0 && last_row_count == 1);
+        /* A retained MULTI result still denies money in a SINGLE ListSerial view. */
+        view->serials=&serials;dirty=1U<<PAGE_02_SECTION_B;
+        commit(NULL,1);
+        assert(serials.refreshes==1&&!serials.monetary_supported);
+        assert(!(dirty&(1U<<PAGE_02_SECTION_B)));
+        for(unsigned i=0;i<PAGE_02_SECTION_COUNT;i++)assert(panels[i].flags&LV_OBJ_FLAG_HIDDEN);
+        for(unsigned i=0;i<LIST_ACTION_COUNT;i++)assert(actions[i].flags&LV_OBJ_FLAG_HIDDEN);
+        serials_discard();assert(view->serials==NULL&&serial_destroy_calls==destroys_before+1);
+        for(unsigned i=0;i<PAGE_02_SECTION_COUNT;i++)assert(!(panels[i].flags&LV_OBJ_FLAG_HIDDEN));
+        for(unsigned i=0;i<LIST_ACTION_COUNT;i++)assert(!(actions[i].flags&LV_OBJ_FLAG_HIDDEN));
+    }
     row_bind(&row, 0, &section);
     assert(strcmp(a.text, "--") == 0 && strcmp(b.text, "12") == 0 && strcmp(c.text, "--") == 0);
     section.layout = &layout_b;
@@ -222,6 +258,8 @@ static void assert_texts_safe(void)
     assert(strcmp(last_toast, "MULTI_UNSUPPORTED") == 0 && qr_shows == qr_before);
     g_pure_page.amount_value = NULL; g_pure_page.pcs_value = NULL; g_pure_page.reject_value = NULL;
     view->pcs = NULL; view->amount = NULL;
+    for(unsigned i=0;i<PAGE_02_SECTION_COUNT;i++)view->section[i].panel=NULL;
+    for(unsigned i=0;i<LIST_ACTION_COUNT;i++)view->actions[i]=NULL;
 }
 
 static void pending(counting_session_state_t *session, bool end_seen)
