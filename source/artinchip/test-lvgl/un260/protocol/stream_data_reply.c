@@ -40,6 +40,10 @@ wave_data_reply_view_t wave_data_reply_parse(const uint8_t *payload,
 
     if (payload == NULL || payload_len == 0) return view;
 
+    if (payload[0] == 0xFF) {
+        if (payload_len == 1) view.kind = WAVE_DATA_REPLY_END;
+        return view;
+    }
     if (payload[0] == 0x00) {
         if (payload_len == 1) view.kind = WAVE_DATA_REPLY_NO_DATA;
         return view;

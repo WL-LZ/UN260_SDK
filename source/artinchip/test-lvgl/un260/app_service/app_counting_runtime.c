@@ -36,9 +36,9 @@
 #include "un260/lv_core/page_01_main.h"
 #include "un260/lv_core/page_02_list.h"
 #include "un260/lv_core/page_06_settings.h"
+#include "un260/lv_core/page_dynamic_capture.h"
 #include "un260/lv_core/page_09_cis_cala.h"
 #include "un260/lv_core/page_19_history.h"
-#include "un260/lv_core/page_31_get_wave.h"
 #include "un260/lv_drivers/lv_drivers.h"
 #include "un260/machine_state/machine_state.h"
 #include "un260/lv_system/counting_ui_runtime.h"
@@ -126,11 +126,13 @@ static void app_counting_runtime_on_reject_report_changed(void *context);
 
 static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t len)
 {
+    const counting_sim_t *previous_result = counting_data_current();
+    ui_page_dynamic_capture_on_count_start(previous_result->total_pcs > 0 ? (uint32_t)previous_result->total_pcs : 0,
+        previous_result->err_expected, machine_state_add_enabled());
     page_01_main_set_counting_locked(true);
     app_fault_recovery_clear();
     diagnostic_calibration_feed_started();
     const bool previous_multi = counting_data_current()->multi_currency_result;
-    currency_state_begin_count_session();
     if (currency_state_multi_selected()) {
         if(!previous_multi)counting_multi_reset();
         counting_multi_begin(machine_state_add_enabled());
@@ -488,18 +490,6 @@ static void app_counting_runtime_on_detail_complete(void *context)
     }
 }
 
-static void app_counting_runtime_schedule_auto_wave(counting_session_state_t *session)
-{
-    session->auto_wave_pending = false;
-    if (machine_state_work_mode() != 0 ||
-        ui_manager_get_current_page() != UI_PAGE_WAVE_GET) {
-        return;
-    }
-
-    session->auto_wave_pending = true;
-    uart_debug_printf("auto wave scheduled after count\n");
-}
-
 void app_counting_runtime_handle_info(counting_session_state_t *session,
                                       counting_sim_t *sim_data,
                                       const uint8_t *buf,
@@ -529,6 +519,19 @@ void app_counting_runtime_handle_info(counting_session_state_t *session,
     }
     result = counting_info_reply_handle(session, sim_data, multi ? normalized : buf, multi ? 13 : len,
                                         ui_history_total_notes_counted_get());
+    if (result.kind == COUNTING_INFO_REPLY_LIVE || result.kind == COUNTING_INFO_REPLY_FINISHED) {
+        const uint8_t *accepted = multi ? normalized : buf;
+        ui_page_dynamic_capture_on_count_info((uint16_t)(((uint16_t)accepted[8] << 8) | accepted[9]),
+            accepted[10], buf[multi && len == 16 ? 14 : 11]);
+    }
+    /* Use this accepted frame, not a retained previous session total. */
+    if (!multi &&
+        (result.kind == COUNTING_INFO_REPLY_LIVE ||
+         result.kind == COUNTING_INFO_REPLY_FINISHED) &&
+        (buf[8] != 0 || buf[9] != 0) && currency_state_restore_detected_result()) {
+        page_01_curr_img_refre();
+        smart_island_refresh_summary();
+    }
     if (result.kind == COUNTING_INFO_REPLY_LIVE) {
         app_counting_runtime_refresh_compact(sim_data);
         counting_history_append_frame("0x0E", buf, len);
@@ -561,7 +564,6 @@ void app_counting_runtime_handle_info(counting_session_state_t *session,
         if (app_counting_runtime_main_page_active()) {
             ui_refresh_main_page();
         }
-        app_counting_runtime_schedule_auto_wave(session);
         app_auto_qr_on_end(lv_tick_get());
     }
 }
@@ -668,7 +670,6 @@ void app_counting_runtime_handle_detail_complete(counting_session_state_t *sessi
 {
     multi_pass_capture_event_t verification_event;
     multi_pass_capture_kind_t verification_result;
-    bool sent;
 
     if (session == NULL) {
         return;
@@ -680,16 +681,6 @@ void app_counting_runtime_handle_detail_complete(counting_session_state_t *sessi
         page_32_innovation_notify_verification_event(&verification_event);
     }
 
-    if (!session->auto_wave_pending) return;
-    session->auto_wave_pending = false;
-
-    if (machine_state_work_mode() != 0 ||
-        ui_manager_get_current_page() != UI_PAGE_WAVE_GET) {
-        return;
-    }
-
-    sent = ui_page_31_get_wave_request();
-    uart_debug_printf("auto wave after count: sent=%d\n", sent ? 1 : 0);
 }
 
 void app_counting_runtime_poll_history(counting_session_state_t *session,

@@ -24,8 +24,7 @@ static const settings_node_t nodes[]={
  {"motor","maintenance",UI_N_("Motor test"),UI_N_("Individual motor controls"),"EntryMotor",SETTINGS_DETAIL,UI_PAGE_MOTOR_TEST,"hardware"},
  {"sensors","maintenance",UI_N_("Sensors"),UI_N_("Live channel voltages"),"EntrySensor",SETTINGS_DETAIL,UI_PAGE_SENSOR,"hardware"},
  {"flap","maintenance",UI_N_("Flap position"),UI_N_("Upper or lower note path"),"EntryFlap",SETTINGS_DETAIL,UI_PAGE_FLAP_SETTING,"hardware"},
- {"image","maintenance",UI_N_("Image capture"),UI_N_("Inspect sensor images"),"EntryImage",SETTINGS_DETAIL,UI_PAGE_IMAGE_GET,"inspection"},
- {"wave","maintenance",UI_N_("Waveform"),UI_N_("Magnetic and UV signals"),"EntryWave",SETTINGS_DETAIL,UI_PAGE_WAVE_GET,"inspection"},
+ {"capture","maintenance",UI_N_("Dynamic data capture"),UI_N_("Images and sensor signals"),"EntryImage",SETTINGS_DETAIL,UI_PAGE_IMAGE_GET,"inspection"},
  {"aging","maintenance",UI_N_("Aging test"),UI_N_("Continuous hardware test"),"EntryAging",SETTINGS_DETAIL,UI_PAGE_AGING_SETTING,"tests"},
  {"display","maintenance",UI_N_("Color calibration"),UI_N_("Display reference and adjustment"),"EntryDisplay",SETTINGS_DETAIL,UI_PAGE_DISPLAY_TEST,"tests"},
  {"collection","data",UI_N_("Data collection"),UI_N_("All data or error reports"),"EntryCollect",SETTINGS_DETAIL,UI_PAGE_SETTING,"collection"},
@@ -40,7 +39,13 @@ static const settings_node_t nodes[]={
 };
 const settings_node_t *settings_catalog(size_t *count){if(count)*count=sizeof(nodes)/sizeof(nodes[0]);return nodes;}
 const settings_node_t *settings_catalog_find(const settings_node_t *items,size_t count,const char *id)
-{if(!items||!id)return NULL;for(size_t i=0;i<count;i++)if(items[i].id&&!strcmp(items[i].id,id))return items+i;return NULL;}
+{
+ if(!items||!id)return NULL;
+ for(size_t i=0;i<count;i++)if(items[i].id&&!strcmp(items[i].id,id))return items+i;
+ if(!strcmp(id,"image")||!strcmp(id,"wave"))
+  for(size_t i=0;i<count;i++)if(items[i].id&&!strcmp(items[i].id,"capture"))return items+i;
+ return NULL;
+}
 bool settings_catalog_validate(const settings_node_t *items,size_t count)
 {
  if(!items||!count)return false;

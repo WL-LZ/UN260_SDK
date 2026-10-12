@@ -37,7 +37,6 @@ typedef struct {
      * This prevents boot-sync and late frames from creating a phantom count. */
     bool start_confirmed;
     bool end_anim_wait_detail;
-    bool auto_wave_pending;
     counting_pending_result_t last_result;
     int analysis_valid_pcs;
     int expected_issue;

@@ -38,6 +38,8 @@ bool protocol_request_take_result(protocol_request_t *request);
 /* Extend rolling stream inactivity from an accepted result's RX arrival.
  * The request remains pending with the same command and timeout binding. */
 bool protocol_request_touch_result(protocol_request_t *request);
+/* Query expiry after queued-RX protection without consuming request ownership. */
+bool protocol_request_timeout_ready(const protocol_request_t *request);
 bool protocol_request_take_timeout(protocol_request_t *request);
 void protocol_request_finish(protocol_request_t *request);
 

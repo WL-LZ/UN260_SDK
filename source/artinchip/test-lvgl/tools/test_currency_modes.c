@@ -201,7 +201,11 @@ static void test_requests_replies_and_boot(void)
     assert(currency_reply_detected_code(detected,8,decoded));
     assert(currency_state_confirm_detected_code("USD"));
     char code[4]; currency_state_get_effective_code(code); assert(!strcmp(code,"USD"));
-    currency_state_begin_count_session(); currency_state_get_effective_code(code); assert(!strcmp(code,"AUT"));
+    assert(!currency_state_confirm_detected_code("ZZZ"));
+    currency_state_get_effective_code(code); assert(!strcmp(code,"USD"));
+    assert(currency_state_confirm_detected_code("EUR"));
+    currency_state_get_effective_code(code); assert(!strcmp(code,"EUR"));
+    currency_state_clear_detected_result(); currency_state_get_effective_code(code); assert(!strcmp(code,"AUT"));
     /* Work mode is independent; it must never leave AUT/MUL implicitly. */
     assert(setting_service_request_mode(MODE_SDC)); reply_mode(1,0);
     selected("AUT"); assert(machine_state_mode()==MODE_SDC);

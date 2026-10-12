@@ -20,7 +20,11 @@ code = r'''
 static counting_session_state_t g_counting_session;
 static counting_sim_t sim;
 static counting_multi_t model;
-static bool multi,save_ok=true;
+static bool multi,auto_selected,save_ok=true;
+static unsigned detected_clears,currency_refreshes;
+static bool currency_state_auto_selected(void){return auto_selected;}
+static void currency_state_clear_detected_result(void){detected_clears++;}
+static void page_01_curr_img_refre(void){currency_refreshes++;}
 static unsigned resets,clears,warnings;
 static unsigned fault_clears;
 static void app_fault_recovery_stacker_cleared(void){++fault_clears;}
@@ -39,13 +43,20 @@ int main(void){
  sim.total_pcs=28;
  assert(app_command_runtime_handle_stacker_clear(frame,6));
  assert(!resets && sim.total_pcs==28 && fault_clears==1);
- multi=true;
+ auto_selected=true;
+ g_counting_session.start_confirmed=true;assert(app_command_runtime_handle_stacker_clear(frame,6));
+ assert(!detected_clears&&!currency_refreshes&&sim.total_pcs==28);
+ g_counting_session.start_confirmed=false;g_counting_session.phase=COUNTING_SESSION_ACTIVE;
+ assert(app_command_runtime_handle_stacker_clear(frame,6));assert(!detected_clears);
+ g_counting_session.phase=COUNTING_SESSION_FINISHED_WAIT_START;
+ assert(app_command_runtime_handle_stacker_clear(frame,6));assert(detected_clears==1&&currency_refreshes==1&&sim.total_pcs==28);
+ auto_selected=false;multi=true;
  assert(app_command_runtime_handle_stacker_clear(NULL,6));
  assert(app_command_runtime_handle_stacker_clear(frame,5));
  frame[2]=7;assert(app_command_runtime_handle_stacker_clear(frame,6));frame[2]=6;
  frame[3]=0x50;assert(app_command_runtime_handle_stacker_clear(frame,6));frame[3]=0x51;
  frame[4]=0;assert(app_command_runtime_handle_stacker_clear(frame,6));frame[4]=1;
- assert(!resets&&!clears&&sim.total_pcs==28 && fault_clears==1);
+ assert(!resets&&!clears&&sim.total_pcs==28 && fault_clears==4);
  save_ok=false;assert(!app_command_runtime_handle_stacker_clear(frame,6));
  assert(sim.total_pcs==28&&!resets&&!clears);
  save_ok=true;g_counting_session.start_confirmed=true;

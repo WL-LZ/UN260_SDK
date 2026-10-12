@@ -22,11 +22,11 @@ static bool app_fault_recovery_observe_setting_detail(
     uint8_t cmd,const uint8_t *buf,uint16_t len,const counting_session_state_t *session)
 {(void)cmd;(void)buf;(void)len;(void)session;return false;}
 
-static unsigned images, waves;
-static uint8_t routed_wave_mask;
+static unsigned images, waves, wave_ends;
+static uint16_t routed_wave_mask;
 static uint16_t last_sample_bytes, last_wave_bytes;
 static uint8_t last_image_source;
-static void ui_page_28_get_image_on_frame(const uint8_t *payload, uint16_t len)
+static void route_image_payload(const uint8_t *payload, uint16_t len)
 {
     image_data_reply_view_t image = image_data_reply_parse(payload, len);
     assert(image.kind != IMAGE_DATA_REPLY_INVALID);
@@ -36,13 +36,20 @@ static void ui_page_28_get_image_on_frame(const uint8_t *payload, uint16_t len)
         last_image_source = image.image_id;
     }
 }
-static void ui_page_31_get_wave_on_frame(const uint8_t *payload, uint16_t len)
+static void route_wave_payload(const uint8_t *payload, uint16_t len)
 {
     wave_data_reply_view_t wave = wave_data_reply_parse(payload, len);
+    assert(wave.kind != WAVE_DATA_REPLY_INVALID);
+    if (len==1 && payload[0]==0xFF) { wave_ends++; return; }
     assert(wave.kind == WAVE_DATA_REPLY_CHANNEL);
     last_wave_bytes = wave.value_count;
-    routed_wave_mask |= (uint8_t)(1U << (wave.channel - 1U));
+    routed_wave_mask |= (uint16_t)(1U << (wave.channel - 1U));
     waves++;
+}
+static void ui_page_dynamic_capture_on_frame(uint8_t command,const uint8_t *payload,uint16_t len)
+{
+    if(command==0x47) route_image_payload(payload,len);
+    else { assert(command==0x48); route_wave_payload(payload,len); }
 }
 #include "image_runtime_route.inc"
 
@@ -262,20 +269,24 @@ static void actual_rx_cases(void)
     send_bytes(pipes[1],wave,250,61);
     frame=pop_frame(0x48,250);route(&frame);
     assert(last_wave_bytes==244 && waves==1);
-    /* Real UART worker/FIFO/production route must retain all seven channels,
-     * including channels 4..7 after the first three, with embedded FDDF bytes. */
+    /* Real UART worker/FIFO/production route must retain all ten selected types,
+     * including types 8..10 after the first seven, with embedded FDDF bytes. */
     unsigned before_waves = waves;
-    uint8_t burst[7U * sizeof(wave)];
-    for (unsigned channel=1;channel<=7;channel++) {
+    uint8_t burst[10U * sizeof(wave)];
+    for (unsigned channel=1;channel<=10;channel++) {
         wave[4]=(uint8_t)channel;
         memcpy(&wave[40],ack,sizeof(ack));
         memcpy(&burst[(channel-1U)*sizeof(wave)],wave,sizeof(wave));
     }
     send_bytes(pipes[1],burst,sizeof(burst),53);
-    for (unsigned channel=1;channel<=7;channel++) {
+    for (unsigned channel=1;channel<=10;channel++) {
         frame=pop_frame(0x48,250);assert(frame.data[4]==channel);route(&frame);
     }
-    assert(waves==before_waves+7 && routed_wave_mask==0x7fU && last_wave_bytes==244);
+    assert(waves==before_waves+10 && routed_wave_mask==0x3ffU && last_wave_bytes==244);
+    const uint8_t magnetic_end[]={0xFD,0xDF,6,0x48,0xFF,0x83};
+    unsigned before_ends=wave_ends;
+    send_bytes(pipes[1],magnetic_end,sizeof(magnetic_end),2);
+    frame=pop_frame(0x48,6);route(&frame);assert(wave_ends==before_ends+1);
     assert(!protocol_frame_queue_has_pending());
     send_bytes(pipes[1],end_image,6,6);
     frame=pop_frame(0x47,6);route(&frame);
@@ -357,6 +368,6 @@ int main(void)
     framing_limits();
     parser_cases();
     actual_rx_cases();
-    puts("image RX parser/real pipe/queue/runtime route/deadline/idle tests passed");
+    puts("image plus ten-type magnetic RX parser/real pipe/queue/dynamic runtime route/deadline/idle tests passed");
     return 0;
 }

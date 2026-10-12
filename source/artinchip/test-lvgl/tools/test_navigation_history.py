@@ -58,19 +58,40 @@ code+='static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT]={'+','
 # Keep diagnostic arguments evaluated in the stub build for -Werror.
 code=code.replace('#define uart_debug_printf(...) ((void)0)',
                   'static void uart_debug_printf(const char *fmt,...){(void)fmt;}')
+code+=function('ui_manager_canonical_page')
+code+=function('ui_manager_canonicalize_context')
 code+=function('ui_manager_navigation_is_blocked')
 code+=function('ui_manager_hold_navigation')
 code+=function('ui_manager_is_navigation_root')
 code+=function('ui_manager_history_on_commit')
 code+=function('ui_manager_navigation_on_leave')
 code+=r'''
-void ui_manager_switch(ui_page_t p){if(ui_factory_reset_blocks_navigation() || ui_manager_navigation_is_blocked() || g_page_switch_committing || !ui_manager_page_is_registered(p))return;
+void ui_manager_switch(ui_page_t p){if(ui_factory_reset_blocks_navigation() || ui_manager_navigation_is_blocked() || g_page_switch_committing)return;
+p=ui_manager_canonical_page(p);ui_manager_canonicalize_context(&g_page_manager,false);if(!ui_manager_page_is_registered(p))return;
 ui_manager_navigation_on_leave(g_page_manager.current,p);ui_manager_history_on_commit(p);g_page_manager.current=p;}
 '''
 for name in ('ui_manager_push_page','ui_manager_pop_page','ui_manager_clear_stack','ui_manager_suspend_to_home','ui_manager_restore_from_home'):
     code+=function(name)
 code+=r'''
 int main(void){
+    /* Old direct/push/history/Home bookmarks resolve to the single stable owner. */
+    ui_manager_switch(UI_PAGE_WAVE_GET);assert(g_page_manager.current==UI_PAGE_IMAGE_GET);
+    ui_manager_push_page(UI_PAGE_WAVE_GET);assert(g_page_manager.stack_top==-1);
+    ui_manager_push_page(UI_PAGE_DEBUG);
+    assert(g_page_manager.current==UI_PAGE_DEBUG&&g_page_manager.stack_top==0&&g_page_manager.stack[0]==UI_PAGE_IMAGE_GET);
+    assert(ui_manager_pop_page()&&g_page_manager.current==UI_PAGE_IMAGE_GET);
+    ui_manager_switch(UI_PAGE_MAIN);ui_manager_push_page(UI_PAGE_SETTING);ui_manager_push_page(UI_PAGE_WAVE_GET);
+    assert(g_page_manager.current==UI_PAGE_IMAGE_GET&&g_page_manager.stack_top==1);
+    assert(ui_manager_suspend_to_home());g_home_bookmark.current=UI_PAGE_WAVE_GET;
+    assert(ui_manager_restore_from_home()&&g_page_manager.current==UI_PAGE_IMAGE_GET);
+    assert(ui_manager_pop_page()&&g_page_manager.current==UI_PAGE_SETTING);
+    ui_manager_switch(UI_PAGE_DEBUG);g_page_manager.stack[0]=UI_PAGE_WAVE_GET;g_page_manager.stack_top=0;
+    assert(ui_manager_pop_page()&&g_page_manager.current==UI_PAGE_IMAGE_GET);
+    g_page_manager.stack[0]=UI_PAGE_SETTING;g_page_manager.stack[1]=UI_PAGE_IMAGE_GET;
+    g_page_manager.stack[2]=UI_PAGE_WAVE_GET;g_page_manager.stack_top=2;
+    assert(ui_manager_pop_page()&&g_page_manager.current==UI_PAGE_SETTING&&g_page_manager.stack_top==-1);
+    ui_manager_switch(UI_PAGE_MAIN);
+    puts("PASS legacy magnetic direct/push/history/Home routes normalize to single capture owner without duplicate Back entries");
     for(unsigned owner=UI_PAGE_IMAGE_GET;owner<=UI_PAGE_WAVE_GET;owner+=UI_PAGE_WAVE_GET-UI_PAGE_IMAGE_GET){
         ui_manager_switch(UI_PAGE_SETTING);ui_manager_push_page((ui_page_t)owner);
         g_home_bookmark=g_page_manager;g_home_bookmark_valid=true;
@@ -187,7 +208,9 @@ int main(void){
 '''
 for name in ('ui_manager_switch','ui_manager_adopt_precreated_page'):
     body=function(name)
-    assert body.index('ui_manager_navigation_is_blocked()') < body.index('ui_manager_notify_page_switch'), name
+    assert body.index('ui_manager_navigation_is_blocked()') < body.index('if (g_page_switch_committing)') < body.index('ui_manager_canonical_page(page)') < body.index('ui_manager_notify_page_switch'), name
+assert '[UI_PAGE_WAVE_GET] =' not in registry
+assert 'ui_page_dynamic_capture_create, ui_page_dynamic_capture_destroy' in registry
 
 work=Path(tempfile.mkdtemp(prefix='un260-navigation-test-'))
 (work/'test.c').write_text(code)

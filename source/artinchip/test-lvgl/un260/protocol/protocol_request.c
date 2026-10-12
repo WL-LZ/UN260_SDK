@@ -97,12 +97,18 @@ bool protocol_request_touch_result(protocol_request_t *request)
     return true;
 }
 
-bool protocol_request_take_timeout(protocol_request_t *request)
+bool protocol_request_timeout_ready(const protocol_request_t *request)
 {
     if (!protocol_request_is_expired(request)) return false;
     if (request->command_bound && g_pending_reply_probe &&
         g_pending_reply_probe(request->command, request->started_ms,
                               request->started_ms + request->timeout_ms)) return false;
+    return true;
+}
+
+bool protocol_request_take_timeout(protocol_request_t *request)
+{
+    if (!protocol_request_timeout_ready(request)) return false;
     protocol_request_finish(request);
     return true;
 }

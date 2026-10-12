@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RUN is kept on Debug, magnetic diagnostics and the data-collection page; image sources start capture directly."""
+"""RUN is kept on Debug and the data-collection page; dynamic sources start capture directly."""
 from pathlib import Path
 import re
 
@@ -13,7 +13,7 @@ for path in pages.glob('page_*.c'):
         callers[path.name] = calls
     if path.name != 'page_06_settings.c':
         assert not re.search(r'"(?:RUN|Run|run)"', code), f'Duplicate private RUN button: {path.name}'
-assert callers == {'page_10_debug.c': 1, 'page_31_get_wave.c': 1}, callers
+assert callers == {'page_10_debug.c': 1}, callers
 collection = (pages / 'page_06_settings.c').read_text(encoding='utf-8')
 assert 'dc_btn_start' in collection and 'data_collect_start_btn_event_cb' in collection
 assert collection.count('"RUN"') == 1
@@ -23,4 +23,4 @@ assert '"End collection"' in collection
 calibration = (pages / 'page_09_cis_cala.c').read_text(encoding='utf-8')
 assert 'Press RUN' not in calibration and 'press RUN' not in calibration
 assert 'ui_tr("Start"), true, cis_start' in calibration
-print('PASS RUN scope: Debug / Magnetic image / Data collection; image source click starts capture; collection callback preserved, calibration instructions updated')
+print('PASS RUN scope: Debug / Data collection; dynamic source click starts capture; collection callback preserved, calibration instructions updated')

@@ -26,7 +26,10 @@ static bool g_currency_sync_seen[CONTROLLER_MAX_CURRENCIES];
 static uint8_t g_currency_sync_count;
 static bool g_currency_sync_active;
 static bool g_currency_list_ready;
+/* The controller may retain its recognition without repeating 0x50 after
+ * an empty pocket or CLEAR. Result visibility has a shorter lifetime. */
 static char g_detected_code[4];
+static bool g_detected_result_visible;
 typedef enum {
     CURRENCY_SELECTION_MANUAL,
     CURRENCY_SELECTION_AUTO,
@@ -75,6 +78,12 @@ const char *currency_state_display_code(const char code[4])
     return code;
 }
 
+static void currency_state_forget_detected_code(void)
+{
+    memset(g_detected_code, 0, sizeof(g_detected_code));
+    g_detected_result_visible = false;
+}
+
 void currency_state_reset(void)
 {
     memset(&g_currency_state, 0, sizeof(g_currency_state));
@@ -86,7 +95,7 @@ void currency_state_reset(void)
     g_currency_state.active_currency = CURR_CNY_ITEM;
     g_currency_state.active_index = 3;
     g_selection = CURRENCY_SELECTION_MANUAL;
-    memset(g_detected_code, 0, sizeof(g_detected_code));
+    currency_state_forget_detected_code();
     memset(g_currency_sync_codes, 0, sizeof(g_currency_sync_codes));
     memset(g_currency_sync_seen, 0, sizeof(g_currency_sync_seen));
     g_currency_sync_count = 0;
@@ -165,6 +174,12 @@ bool currency_state_finish_list_sync(void)
             g_currency_state.active_currency =
                 currency_state_code_to_item(g_currency_state.codes[2]);
         }
+        uint8_t detected_index;
+        if (g_detected_code[0] != '\0' &&
+            (!currency_state_find_code(g_detected_code, &detected_index) ||
+             detected_index < 2)) {
+            currency_state_forget_detected_code();
+        }
         g_currency_list_ready = true;
     }
 
@@ -215,7 +230,7 @@ bool currency_state_confirm_active_code(const char *code)
         return false;
     }
     currency_state_copy_code(g_currency_state.active_code, code);
-    memset(g_detected_code, 0, sizeof(g_detected_code));
+    currency_state_forget_detected_code();
     if (!currency_state_special_selected() && currency_state_find_code(code, &index)) {
         g_currency_state.active_index = index;
     }
@@ -240,7 +255,7 @@ bool currency_state_confirm_active_selection(uint8_t index, const char code[4])
     g_currency_state.active_index = index;
     currency_state_copy_code(g_currency_state.active_code, code);
     g_selection = CURRENCY_SELECTION_MANUAL;
-    memset(g_detected_code, 0, sizeof(g_detected_code));
+    currency_state_forget_detected_code();
     currency = currency_state_code_to_item(code);
     if (currency < CURR_COUNT) g_currency_state.active_currency = currency;
     return true;
@@ -253,7 +268,7 @@ bool currency_state_confirm_auto_selection(void)
     if (!currency_state_find_code(CURRENCY_AUTO_CODE, &index)) return false;
     g_currency_state.active_index = index;
     g_selection = CURRENCY_SELECTION_AUTO;
-    memset(g_detected_code, 0, sizeof(g_detected_code));
+    currency_state_forget_detected_code();
     return true;
 }
 
@@ -269,7 +284,7 @@ bool currency_state_confirm_multi_selection(void)
     if (!currency_state_find_code(CURRENCY_MULTI_CODE, &index)) return false;
     g_currency_state.active_index = index;
     g_selection = CURRENCY_SELECTION_MULTI;
-    memset(g_detected_code, 0, sizeof(g_detected_code));
+    currency_state_forget_detected_code();
     return true;
 }
 
@@ -286,15 +301,26 @@ bool currency_state_leave_special_selection(void)
     }
     g_selection = CURRENCY_SELECTION_MANUAL;
     g_currency_state.active_index = index;
-    memset(g_detected_code, 0, sizeof(g_detected_code));
+    currency_state_forget_detected_code();
     return true;
 }
 
-void currency_state_begin_count_session(void)
+void currency_state_clear_detected_result(void)
 {
-    if (currency_state_special_selected()) {
-        memset(g_detected_code, 0, sizeof(g_detected_code));
+    g_detected_result_visible = false;
+}
+
+bool currency_state_restore_detected_result(void)
+{
+    uint8_t index;
+
+    if (!currency_state_auto_selected() || g_detected_result_visible ||
+        g_detected_code[0] == '\0' ||
+        !currency_state_find_code(g_detected_code, &index) || index < 2) {
+        return false;
     }
+    g_detected_result_visible = true;
+    return true;
 }
 
 bool currency_state_confirm_detected_code(const char code[4])
@@ -307,6 +333,7 @@ bool currency_state_confirm_detected_code(const char code[4])
         return false;
     }
     currency_state_copy_code(g_detected_code, code);
+    g_detected_result_visible = true;
     return true;
 }
 
@@ -314,7 +341,7 @@ void currency_state_get_effective_code(char code[4])
 {
     if (currency_state_multi_selected()) {
         currency_state_copy_code(code, CURRENCY_MULTI_CODE);
-    } else if (currency_state_auto_selected() && g_detected_code[0] != '\0') {
+    } else if (currency_state_auto_selected() && g_detected_result_visible) {
         currency_state_copy_code(code, g_detected_code);
     } else if (currency_state_auto_selected()) {
         currency_state_copy_code(code, CURRENCY_AUTO_CODE);

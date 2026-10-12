@@ -35,8 +35,7 @@
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/page_01_main.h"
 #include "un260/lv_core/page_10_debug.h"
-#include "un260/lv_core/page_28_get_image.h"
-#include "un260/lv_core/page_31_get_wave.h"
+#include "un260/lv_core/page_dynamic_capture.h"
 #include "un260/lv_components/smart_island.h"
 #include "un260/lv_drivers/lv_drivers.h"
 #include "un260/lv_system/counting_ui_runtime.h"
@@ -72,7 +71,7 @@ static bool app_command_runtime_main_page_active(void)
 
 static const char *diagnostic_operation_blocker(bool allow_calibration_feed)
 {
-    if(ui_page_28_get_image_is_capturing() || ui_page_31_get_wave_is_capturing())
+    if(ui_page_dynamic_capture_is_capturing())
         return UI_N_("The previous capture is still being received. Please wait.");
     if(!work_mode_service_diagnostic_ready())return work_mode_service_status_msgid();
     if(!protocol_send_is_ready())return UI_N_("Controller connection is unavailable.");
@@ -182,7 +181,7 @@ bool app_command_runtime_clear_counting_data(const char *reason)
     app_setting_runtime_cancel_mode_clear();
     stop_counting_sim();
     sim_reset_counting_result(counting_data_mutable());
-    currency_state_begin_count_session();
+    currency_state_clear_detected_result();
     page_01_curr_img_refre();
     const bool clear_requested = counting_action_request_clear();
     /* CLEAR cancels a pending START even when its own send fails. Reflect the
@@ -203,6 +202,12 @@ static bool app_command_runtime_handle_stacker_clear(const uint8_t *buf, uint8_t
     if (!protocol_frame_is_valid(buf, len) || len != 6 ||
         buf[3] != 0x51 || buf[4] != 0x01) return true;
     app_fault_recovery_stacker_cleared();
+    if (currency_state_auto_selected() &&
+        !g_counting_session.start_confirmed &&
+        g_counting_session.phase != COUNTING_SESSION_ACTIVE) {
+        currency_state_clear_detected_result();
+        page_01_curr_img_refre();
+    }
     if (!currency_state_multi_selected()) return true;
     /* The controller must notify before START. Do not block the RX queue
      * behind an out-of-order event, which would also block the end frame. */

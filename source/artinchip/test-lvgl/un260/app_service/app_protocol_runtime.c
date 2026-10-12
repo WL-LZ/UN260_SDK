@@ -12,8 +12,7 @@
 #include "un260/lv_core/page_15_image_upgrade.h"
 #include "motor_test_service.h"
 #include "work_mode_service.h"
-#include "un260/lv_core/page_28_get_image.h"
-#include "un260/lv_core/page_31_get_wave.h"
+#include "un260/lv_core/page_dynamic_capture.h"
 #include "un260/lv_drivers/lv_drivers.h"
 #include "un260/protocol/auxiliary_reply.h"
 #include "un260/protocol/protocol_frame.h"
@@ -100,10 +99,8 @@ static void handle_stream_data_reply(uint8_t cmd,
 {
     stream_data_reply_view_t reply = stream_data_reply_parse(buf, len);
 
-    if (reply.kind == STREAM_DATA_REPLY_IMAGE) {
-        ui_page_28_get_image_on_frame(reply.payload, reply.payload_len);
-    } else if (reply.kind == STREAM_DATA_REPLY_WAVE) {
-        ui_page_31_get_wave_on_frame(reply.payload, reply.payload_len);
+    if (reply.kind == STREAM_DATA_REPLY_IMAGE || reply.kind == STREAM_DATA_REPLY_WAVE) {
+        ui_page_dynamic_capture_on_frame(cmd, reply.payload, reply.payload_len);
     } else {
         uart_debug_printf("0x%02X invalid len=%d\n", cmd, len);
     }

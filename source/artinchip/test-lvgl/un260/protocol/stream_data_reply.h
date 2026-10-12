@@ -19,12 +19,13 @@ typedef struct {
 stream_data_reply_view_t stream_data_reply_parse(const uint8_t *frame,
                                                  uint16_t frame_len);
 
-#define WAVE_DATA_REPLY_CHANNEL_COUNT 7U
+#define WAVE_DATA_REPLY_CHANNEL_COUNT 10U
 
 typedef enum {
     WAVE_DATA_REPLY_INVALID = 0,
     WAVE_DATA_REPLY_NO_DATA,
     WAVE_DATA_REPLY_CHANNEL,
+    WAVE_DATA_REPLY_END,
 } wave_data_reply_kind_t;
 
 typedef struct {
@@ -34,8 +35,9 @@ typedef struct {
     uint16_t value_count;
 } wave_data_reply_view_t;
 
-/* Documented 0x48 payloads: 00 means no capture; 01..07 identify channels.
- * Unknown selectors are unsupported and do not terminate a capture.
+/* 0x48 types: 01/02 MT1/MT2, 03..08 MG1..MG6, 09/0A Upper/Lower UV.
+ * A data payload is type followed by 8-bit samples; FF alone ends the transfer.
+ * Legacy 00 alone means no capture. Empty data and unknown types are invalid.
  * The returned values borrow the payload storage. */
 wave_data_reply_view_t wave_data_reply_parse(const uint8_t *payload,
                                              uint16_t payload_len);

@@ -31,7 +31,11 @@ head = r'''
 static counting_sim_t data;
 static counting_session_state_t g_counting_session;
 static uint32_t g_count_end_generation;
-static bool locked, multi;
+static bool locked, multi, add;
+static unsigned capture_starts,capture_infos;
+static uint32_t capture_baseline;static uint16_t capture_issue_baseline,capture_valid;static uint8_t capture_issue,capture_status;static bool capture_add;
+static void ui_page_dynamic_capture_on_count_start(uint32_t valid,uint16_t issue,bool cumulative){++capture_starts;capture_baseline=valid;capture_issue_baseline=issue;capture_add=cumulative;}
+static void ui_page_dynamic_capture_on_count_info(uint16_t valid,uint8_t issue,uint8_t status){++capture_infos;capture_valid=valid;capture_issue=issue;capture_status=status;}
 static unsigned locks,unlocks;
 /* Observe the UI publication without simulating protocol or lock events. */
 static unsigned reject_notifications;
@@ -44,12 +48,13 @@ void uart_debug_printf(const char *s,...){(void)s;}
 #define counting_data_mutable() (&data)
 #define counting_data_mark_multi_result(p) ((p)->multi_currency_result=true)
 #define currency_state_multi_selected() multi
+#define currency_state_restore_detected_result() false
 #define UI_N_(s) s
 #define UI_PAGE_PURE 1
 #define UI_PAGE_MAIN 2
 #define DATA_COLLECT_MODE_NONE 0
 #define multi_pass_verification_is_active() false
-#define machine_state_add_enabled() false
+#define machine_state_add_enabled() add
 #define data_collection_state_mode() 0
 #define ui_manager_get_current_page() UI_PAGE_MAIN
 #define work_mode_service_diagnostic_active() false
@@ -58,14 +63,14 @@ void uart_debug_printf(const char *s,...){(void)s;}
 #define ui_history_total_notes_counted_get() 0
 #define lv_tick_get() 100
 '''
-noops = '''app_fault_recovery_clear diagnostic_calibration_feed_started currency_state_begin_count_session
+noops = '''app_fault_recovery_clear diagnostic_calibration_feed_started
 page_02_list_report_reset page_01_curr_img_refre fault_popup_clear_runtime fault_popup_clear_preset counting_history_session_start
 app_auto_qr_on_start multi_pass_verification_on_count_start multi_pass_verification_get_view
 page_32_innovation_notify_verification_event data_collection_state_set_status page_06_data_collection_refresh
 ui_manager_switch smart_island_notify_count_start app_counting_runtime_refresh_compact counting_history_append_frame
 page_02_list_section_mark_dirty counting_history_capture_end smart_island_set_count_analysis
 smart_island_update_counting smart_island_notify_count_end app_counting_runtime_try_history_commit
-ui_refresh_main_page app_counting_runtime_schedule_auto_wave app_auto_qr_on_end'''.split()
+ui_refresh_main_page app_auto_qr_on_end smart_island_refresh_summary'''.split()
 head += '\n'.join(f'#define {name}(...) ((void)0)' for name in noops)+'\n'
 test = r'''
 #define session g_counting_session
@@ -80,7 +85,7 @@ int main(void){
  report[11]=1;
  /* A buffered start must lock before history finishes, without requiring
     model publication or a pending on-screen Start request. */
- assert(!delayed_start(0x0A,reply,7)&&locked);locked=false;
+ assert(!delayed_start(0x0A,reply,7)&&locked);locked=false;assert(!capture_starts&&!capture_infos);
  /* Auto and physical Start enter through unsolicited 0A as well: no pending
     UI request is needed. Unknown/failed/truncated starts never acquire. */
  reply[5]=2;counting_control_reply_dispatch(0x0A,&session,reply,7,&hooks);assert(!locked);
@@ -88,20 +93,20 @@ int main(void){
  for(int mode=0;mode<2;++mode)for(int end=2;end<=5;++end){
   multi=mode;memset(&data,0,sizeof(data));memset(&session,0,sizeof(session));
   unsigned old_locks=locks,old_unlocks=unlocks;uint32_t old_end=app_command_runtime_count_end_generation();
-  unsigned old_reject_notifications=reject_notifications;
+  unsigned old_reject_notifications=reject_notifications,old_capture_starts=capture_starts,old_capture_infos=capture_infos;
   counting_control_reply_dispatch(0x0A,&session,reply,7,&hooks);
   assert(locked&&session.start_confirmed&&locks==old_locks+1);
-  assert(reject_notifications==old_reject_notifications+1);
-  report[11]=1;runtime_info(&session,&data,report,13);assert(locked);
+  assert(reject_notifications==old_reject_notifications+1);assert(capture_starts==old_capture_starts+1&&capture_baseline==0&&capture_issue_baseline==0&&!capture_add);
+  report[11]=1;runtime_info(&session,&data,report,13);assert(locked);assert(capture_infos==old_capture_infos+1&&capture_valid==10&&capture_status==1);
   report[11]=6;runtime_info(&session,&data,report,13);assert(locked);
   report[11]=end;runtime_info(&session,&data,report,12);assert(locked);
   reply[4]=2;reply[5]=7;counting_control_reply_dispatch(0x0A,&session,reply,7,&hooks);assert(locked);
   uint8_t fault[]={0xFD,0xDF,6,0x0F,1,0};
   counting_control_reply_dispatch(0x0F,&session,fault,6,&hooks);assert(locked);
   fault[4]=0;counting_control_reply_dispatch(0x0F,&session,fault,6,&hooks);assert(locked);
-  assert(unlocks==old_unlocks&&app_command_runtime_count_end_generation()==old_end);
+  assert(unlocks==old_unlocks&&app_command_runtime_count_end_generation()==old_end);assert(capture_infos==old_capture_infos+1);
   runtime_info(&session,&data,report,13);
-  assert(!locked&&!session.start_confirmed&&unlocks==old_unlocks+1&&app_command_runtime_count_end_generation()==old_end+1);
+  assert(!locked&&!session.start_confirmed&&unlocks==old_unlocks+1&&app_command_runtime_count_end_generation()==old_end+1);assert(capture_infos==old_capture_infos+2&&capture_status==end);
   runtime_info(&session,&data,report,13);assert(unlocks==old_unlocks+1&&app_command_runtime_count_end_generation()==old_end+1);
   reply[4]=reply[5]=1;
  }
@@ -113,6 +118,20 @@ int main(void){
  runtime_info(&session,&data,report,13);assert(app_command_runtime_count_end_generation()==entry+1);
  runtime_info(&session,&data,report,13);assert(app_command_runtime_count_end_generation()==entry+1);
  memset(&session,0,sizeof(session));assert(app_command_runtime_count_end_generation()==entry+1);
+ /* Capture gets the raw accepted per-frame status/counts, not FINISHED's
+    retained previous total. Its ADD baseline is published before mutations. */
+ memset(&session,0,sizeof(session));memset(&data,0,sizeof(data));multi=false;add=true;
+ data.total_pcs=100;data.err_expected=2;
+ counting_control_reply_dispatch(0x0A,&session,reply,7,&hooks);
+ assert(capture_baseline==100&&capture_issue_baseline==2&&capture_add);
+ report[8]=report[9]=report[10]=report[11]=0;runtime_info(&session,&data,report,13);
+ assert(capture_valid==0&&capture_issue==0&&capture_status==0);
+ report[9]=101;report[10]=2;report[11]=1;runtime_info(&session,&data,report,13);
+ assert(capture_valid==101&&capture_issue==2&&capture_status==1);
+ report[9]=report[10]=0;report[11]=2;runtime_info(&session,&data,report,13);
+ assert(capture_valid==0&&capture_issue==0&&capture_status==2&&data.total_pcs==101);
+ unsigned end_infos=capture_infos;runtime_info(&session,&data,report,13);assert(capture_infos==end_infos);
+ puts("PASS exact accepted capture notifications: successful START only, raw LIVE/END status/values, ADD baseline before reset, invalid/unarmed/duplicate END ignored");
  puts("PASS accepted count-end generation: boot/duplicate/unknown ignored, AUTO start/end in one tick and reset retain epoch");
  puts("PASS exact app start/end + control/info/MUL: unsolicited start, failures, invalid/truncated/live reports, fault/reset reports, all four terminal statuses, duplicate end");
 }

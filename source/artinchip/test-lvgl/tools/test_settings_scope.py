@@ -21,7 +21,7 @@ def function(source, name):
             if not depth: return source[match.start():start + token.end()]
     raise AssertionError(name)
 
-scope = function(manager, 'ui_manager_update_diagnostic_scope')
+scope = function(manager, 'ui_manager_canonical_page') + '\n' + function(manager, 'ui_manager_update_diagnostic_scope')
 for name in ('ui_manager_switch', 'ui_manager_adopt_precreated_page'):
     assert 'ui_manager_update_diagnostic_scope(page)' in function(manager, name)
 start = function(runtime, 'app_counting_runtime_on_start_success')
@@ -56,7 +56,7 @@ int main(void){
    page==UI_PAGE_IMAGE_GET||page==UI_PAGE_WAVE_GET||page==UI_PAGE_MOTOR_TEST||page==UI_PAGE_AGING_SETTING;
   current=page;pure_theme=theme;collection_page=false;collection_mode=0;switches=0;
   ui_manager_update_diagnostic_scope(page);assert(scope_active==expected);
-  assert(required_mode==(page==UI_PAGE_IMAGE_GET?WORK_MODE_AUTO:WORK_MODE_MANUAL));
+  assert(required_mode==((page==UI_PAGE_IMAGE_GET||page==UI_PAGE_WAVE_GET)?WORK_MODE_AUTO:WORK_MODE_MANUAL));
   count_started();assert(switches==(expected||page==UI_PAGE_PURE?0:1));
   if(!expected)assert(current==(page==UI_PAGE_PURE||pure_theme?UI_PAGE_PURE:UI_PAGE_MAIN));
  }
@@ -67,7 +67,7 @@ int main(void){
  collection_mode=1;count_started();assert(refreshes==1&&switches==0);
  collection_page=false;collection_mode=0;ui_manager_update_diagnostic_scope(UI_PAGE_SETTING);
  assert(!scope_active);count_started();assert(switches==1);
- puts("PASS navigation IMAGE AUTO/other diagnostic MANUAL requirements, whitelist and collection guards; hardware start retains Main/Pure theme including Standby overlay");
+ puts("PASS dynamic/legacy capture AUTO and other diagnostic MANUAL requirements, whitelist and collection guards; hardware start retains Main/Pure theme including Standby overlay");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='un260-settings-scope-') as temp:

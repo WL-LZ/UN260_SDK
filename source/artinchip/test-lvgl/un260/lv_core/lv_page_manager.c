@@ -25,6 +25,7 @@
 #include "un260/app_service/ui_factory_reset_service.h"
 #include "un260/lv_drivers/uart_io.h"
 #include "un260/lv_system/ui_lang.h"
+#include "un260/lv_components/ui_notice.h"
 
 #define UI_PAGE_STACK_CAPACITY 10
 #define UI_PAGE_INVALID ((ui_page_t)-1)
@@ -51,6 +52,27 @@ static bool g_page_switch_committing;
 static lv_timer_t *g_page_input_unlock_timer;
 static uint64_t g_transition_input_owners;
 static uint64_t g_navigation_owners;
+/* Legacy magnetic routes retain their enum value but share one capture owner. */
+static ui_page_t ui_manager_canonical_page(ui_page_t page)
+{
+    return page == UI_PAGE_WAVE_GET ? UI_PAGE_IMAGE_GET : page;
+}
+
+static void ui_manager_canonicalize_context(ui_page_manager_context_t *context, bool trim_current)
+{
+    context->current = ui_manager_canonical_page(context->current);
+    int depth = 0;
+    for (int i = 0; i <= context->stack_top; i++) {
+        ui_page_t page = ui_manager_canonical_page(context->stack[i]);
+        if (page == UI_PAGE_IMAGE_GET && depth && context->stack[depth - 1] == page) continue;
+        context->stack[depth++] = page;
+    }
+    context->stack_top = depth - 1;
+    while (trim_current && context->current == UI_PAGE_IMAGE_GET && context->stack_top >= 0 &&
+           context->stack[context->stack_top] == context->current)
+        --context->stack_top;
+}
+
 static void ui_manager_reset_navigation_sessions(void);
 static bool ui_manager_is_navigation_root(ui_page_t page);
 
@@ -58,6 +80,8 @@ static bool ui_manager_is_navigation_root(ui_page_t page);
  * intermediate history entry that can resurrect an unrelated page. */
 static void ui_manager_history_on_commit(ui_page_t page)
 {
+    page = ui_manager_canonical_page(page);
+    ui_manager_canonicalize_context(&g_page_manager, false);
     if(!ui_manager_is_navigation_root(page)) return;
     if(!g_temporary_home){
         g_home_bookmark_valid=false;
@@ -70,6 +94,8 @@ static void ui_manager_history_on_commit(ui_page_t page)
 }
 static void ui_manager_navigation_on_leave(ui_page_t from,ui_page_t to)
 {
+    from = ui_manager_canonical_page(from);
+    to = ui_manager_canonical_page(to);
     if(ui_manager_is_navigation_root(from)&&to!=from&&g_home_bookmark_valid&&!g_restoring_home){
         g_home_bookmark_valid=false;
         ui_manager_reset_navigation_sessions();
@@ -205,10 +231,9 @@ static const char *const g_page_names[UI_PAGE_COUNT] = {
     [UI_PAGE_SERIAL_NUMBER_SETTING] = "SERIAL_NUMBER",
     [UI_PAGE_AGING_SETTING] = "AGING",
     [UI_PAGE_CFD_LEVEL_SETTING] = "CFD_LEVEL",
-    [UI_PAGE_IMAGE_GET] = "IMAGE_GET",
+    [UI_PAGE_IMAGE_GET] = "CAPTURE",
     [UI_PAGE_PASSWORD_CHANGE] = "PASSWORD_CHANGE",
     [UI_PAGE_FACTORY_SETTING] = "FACTORY",
-    [UI_PAGE_WAVE_GET] = "WAVE",
     [UI_PAGE_INNOVATION_CENTER] = "INNOVATION",
 };
 
@@ -218,6 +243,7 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .navigation_root = true,
         .create = ui_manager_create_main,
         .destroy = ui_main_destroy,
+        .prepare_static_step = page_01_main_quick_prepare_static_step,
         .resume = page_01_main_resume,
         .suspend = page_01_main_suspend,
         .cache_policy = UI_PAGE_RETAINED,
@@ -284,6 +310,7 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .navigation_root = true,
         .create = ui_page_18_pure_create,
         .destroy = ui_page_18_pure_destroy,
+        .prepare_static_step = page_01_main_quick_prepare_static_step,
         .resume = ui_page_18_pure_resume,
         .suspend = ui_page_18_pure_suspend,
         .cache_policy = UI_PAGE_RETAINED,
@@ -317,10 +344,9 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
     [UI_PAGE_SERIAL_NUMBER_SETTING] = { ui_page_25_set_serial_number_create, ui_page_25_set_serial_number_destroy },
     [UI_PAGE_AGING_SETTING] = { ui_page_26_set_aging_create, ui_page_26_set_aging_destroy },
     [UI_PAGE_CFD_LEVEL_SETTING] = { ui_page_27_set_cfd_level_create, ui_page_27_set_cfd_level_destroy },
-    [UI_PAGE_IMAGE_GET] = { ui_page_28_get_image_create, ui_page_28_get_image_destroy },
+    [UI_PAGE_IMAGE_GET] = { ui_page_dynamic_capture_create, ui_page_dynamic_capture_destroy },
     [UI_PAGE_PASSWORD_CHANGE] = { ui_page_29_set_password_create, ui_page_29_set_password_destroy },
     [UI_PAGE_FACTORY_SETTING] = { ui_page_30_set_factory_create, ui_page_30_set_factory_destroy },
-    [UI_PAGE_WAVE_GET] = { ui_page_31_get_wave_create, ui_page_31_get_wave_destroy },
     [UI_PAGE_INNOVATION_CENTER] = {
         .create = ui_page_32_innovation_create,
         .destroy = ui_page_32_innovation_destroy,
@@ -436,13 +462,14 @@ static void ui_manager_set_input_enabled(bool enabled)
 
 bool ui_manager_navigation_is_blocked(void)
 {
-    ui_page_t current = g_page_manager.current;
+    ui_page_t current = ui_manager_canonical_page(g_page_manager.current);
     return current >= UI_PAGE_BOOT_ANIM && current < UI_PAGE_COUNT && current < 64 &&
         (g_navigation_owners & (UINT64_C(1) << current)) != 0;
 }
 
 void ui_manager_hold_navigation(ui_page_t owner, bool hold)
 {
+    owner = ui_manager_canonical_page(owner);
     if (owner < UI_PAGE_BOOT_ANIM || owner >= UI_PAGE_COUNT || owner >= 64) return;
     uint64_t bit = UINT64_C(1) << owner;
     if (hold) g_navigation_owners |= bit;
@@ -494,6 +521,7 @@ static bool ui_manager_transition_begin(void)
 static void ui_manager_transition_finish(void)
 {
     g_page_switch_committing = false;
+    ui_notice_navigation_committed();
     g_page_input_unlock_timer = lv_timer_create(
         ui_manager_input_unlock_cb, UI_PAGE_INPUT_GUARD_MS, NULL);
     if (g_page_input_unlock_timer == NULL) {
@@ -528,9 +556,10 @@ static void ui_manager_send_protocol(uint8_t cmd_g, uint8_t cmd_s)
 
 static void ui_manager_update_diagnostic_scope(ui_page_t page)
 {
+    page = ui_manager_canonical_page(page);
     bool active=page==UI_PAGE_CIS_CALIB || page==UI_PAGE_DEBUG ||
                 page==UI_PAGE_IMAGE_GET ||
-                page==UI_PAGE_WAVE_GET || page==UI_PAGE_MOTOR_TEST ||
+                page==UI_PAGE_MOTOR_TEST ||
                 page==UI_PAGE_AGING_SETTING ||
                 (page==UI_PAGE_SETTING && page_06_settings_is_collection());
     work_mode_service_set_diagnostic_mode(active,
@@ -558,6 +587,9 @@ void ui_manager_switch(ui_page_t page)
 {
     if (ui_factory_reset_blocks_navigation()) return;
     if (ui_manager_navigation_is_blocked()) return;
+    if (g_page_switch_committing) return;
+    page = ui_manager_canonical_page(page);
+    ui_manager_canonicalize_context(&g_page_manager, false);
     /* Legacy route now opens a modal without disturbing the visible page or
      * its history. The PIN is never a resumable navigation destination. */
     if(page==UI_PAGE_SET_PASSAGE){ui_page_05_set_password_open();return;}
@@ -664,9 +696,12 @@ void ui_manager_push_page(ui_page_t page)
 {
     if (ui_factory_reset_blocks_navigation()) return;
     if (ui_manager_navigation_is_blocked()) return;
+    if (g_page_switch_committing) return;
+    page = ui_manager_canonical_page(page);
+    ui_manager_canonicalize_context(&g_page_manager, true);
     int i;
 
-    if (g_page_switch_committing || page == g_page_manager.current ||
+    if (page == g_page_manager.current ||
         !ui_manager_page_is_registered(page)) return;
 
     if(ui_manager_is_navigation_root(page)) {
@@ -694,6 +729,9 @@ bool ui_manager_adopt_precreated_page(ui_page_t page)
 {
     if (ui_factory_reset_blocks_navigation()) return false;
     if (ui_manager_navigation_is_blocked()) return false;
+    if (g_page_switch_committing) return false;
+    page = ui_manager_canonical_page(page);
+    ui_manager_canonicalize_context(&g_page_manager, true);
     int i;
     ui_page_t from = g_page_manager.current;
     perf_profile_page_switch_sample_t sample = {
@@ -778,6 +816,7 @@ bool ui_manager_pop_page(void)
     ui_page_t previous_page;
 
     if (g_page_switch_committing) return false;
+    ui_manager_canonicalize_context(&g_page_manager, true);
 
     if(ui_manager_is_navigation_root(g_page_manager.current)) {
         ui_manager_history_on_commit(g_page_manager.current);
@@ -814,7 +853,9 @@ bool ui_manager_suspend_to_home(void)
 {
     if (ui_factory_reset_blocks_navigation()) return false;
     if (ui_manager_navigation_is_blocked()) return false;
-    if(g_page_switch_committing||ui_manager_is_navigation_root(g_page_manager.current)||
+    if(g_page_switch_committing)return false;
+    ui_manager_canonicalize_context(&g_page_manager, true);
+    if(ui_manager_is_navigation_root(g_page_manager.current)||
        !ui_manager_page_is_registered(g_page_manager.current))return false;
     ui_page_manager_context_t saved=g_page_manager;
     g_temporary_home=true;
@@ -830,12 +871,15 @@ bool ui_manager_restore_from_home(void)
     if (ui_factory_reset_blocks_navigation()) return false;
     if (ui_manager_navigation_is_blocked()) return false;
     if(g_page_switch_committing||g_page_manager.current!=UI_PAGE_MAIN||
-       !g_home_bookmark_valid||!ui_manager_page_is_registered(g_home_bookmark.current))return false;
+       !g_home_bookmark_valid)return false;
+    ui_page_manager_context_t target=g_home_bookmark;
+    ui_manager_canonicalize_context(&target, true);
+    if(!ui_manager_page_is_registered(target.current))return false;
     ui_page_manager_context_t saved=g_page_manager;
     g_restoring_home=true;
-    memcpy(g_page_manager.stack,g_home_bookmark.stack,sizeof(g_page_manager.stack));
-    g_page_manager.stack_top=g_home_bookmark.stack_top;
-    ui_manager_switch(g_home_bookmark.current);
+    memcpy(g_page_manager.stack,target.stack,sizeof(g_page_manager.stack));
+    g_page_manager.stack_top=target.stack_top;
+    ui_manager_switch(target.current);
     g_restoring_home=false;
     if(g_page_manager.current==UI_PAGE_MAIN){g_page_manager=saved;return false;}
     g_home_bookmark_valid=false;
@@ -844,6 +888,7 @@ bool ui_manager_restore_from_home(void)
 
 bool ui_manager_invalidate_page_cache(ui_page_t page)
 {
+    page = ui_manager_canonical_page(page);
     const ui_page_registration_t *registration;
 
     if (!ui_manager_page_is_registered(page) ||
@@ -969,6 +1014,7 @@ static uint8_t ui_manager_predecode_small_visible_images(lv_obj_t *root)
 
 bool ui_manager_prewarm_page(ui_page_t page)
 {
+    page = ui_manager_canonical_page(page);
     const ui_page_registration_t *registration;
     bool profile_enabled;
     uint64_t started_us = 0;
@@ -1095,6 +1141,7 @@ bool ui_manager_prewarm_page(ui_page_t page)
 
 const char *ui_manager_page_name(ui_page_t page)
 {
+    page = ui_manager_canonical_page(page);
     if (page < UI_PAGE_BOOT_ANIM || page >= UI_PAGE_COUNT ||
         g_page_names[page] == NULL) {
         return "INVALID";
@@ -1104,7 +1151,7 @@ const char *ui_manager_page_name(ui_page_t page)
 
 // 读取当前页
 ui_page_t ui_manager_get_current_page(void) {
-    return g_page_manager.current;
+    return ui_manager_canonical_page(g_page_manager.current);
 }
 
 bool ui_manager_is_transitioning(void)

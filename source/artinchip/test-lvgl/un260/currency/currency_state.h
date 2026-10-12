@@ -44,7 +44,11 @@ bool currency_state_confirm_auto_selection(void);
 bool currency_state_confirm_multi_selection(void);
 bool currency_state_leave_auto_selection(void);
 bool currency_state_leave_special_selection(void);
-void currency_state_begin_count_session(void);
+/* Empty results show AUTO while retaining controller-confirmed recognition.
+ * Only an accepted, nonempty count result may restore it. A confirmed
+ * currency selection/reset discards the recognition completely. */
+void currency_state_clear_detected_result(void);
+bool currency_state_restore_detected_result(void);
 bool currency_state_confirm_detected_code(const char code[4]);
 curr_item_t currency_state_active_currency(void);
 uint8_t currency_state_active_index(void);

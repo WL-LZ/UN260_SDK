@@ -55,7 +55,6 @@ static counting_info_reply_result_t counting_info_handle_live(counting_session_s
 
     if (session->phase != COUNTING_SESSION_ACTIVE) {
         counting_info_commit_previous_result(session, sim_data);
-        session->auto_wave_pending = false;
         session->phase = COUNTING_SESSION_ACTIVE;
         session->expected_issue = 0;
     }

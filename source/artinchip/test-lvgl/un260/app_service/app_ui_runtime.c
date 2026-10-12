@@ -19,8 +19,7 @@
 #include "un260/lv_components/lv_debug_overlay.h"
 #include "un260/lv_core/page_09_cis_cala.h"
 #include "un260/lv_core/page_00_boot_anim.h"
-#include "un260/lv_core/page_28_get_image.h"
-#include "un260/lv_core/page_31_get_wave.h"
+#include "un260/lv_core/page_dynamic_capture.h"
 #include "un260/lv_components/lv_upgrade_popup.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/ui_upgrade_service.h"
@@ -202,8 +201,7 @@ void app_ui_runtime_poll(uint32_t now_ms)
     if (diagnostic_calibration_poll(now_ms)) {
         cis_calib_ui_refresh();
     }
-    ui_page_28_get_image_poll(now_ms);
-    ui_page_31_get_wave_poll(now_ms);
+    ui_page_dynamic_capture_poll(now_ms);
     if (!ui_page_00_boot_anim_is_active()) {
         ui_screenshot_indicator_poll();
     }
