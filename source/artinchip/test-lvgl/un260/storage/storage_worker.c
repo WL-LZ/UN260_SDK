@@ -202,6 +202,13 @@ bool storage_worker_copy_completed(storage_job_id_t id, void *out, size_t size)
     pthread_mutex_unlock(&g_lock);
     return copied;
 }
+bool storage_worker_copy_snapshot_prefix(storage_job_id_t id,void *out,size_t size)
+{
+    bool copied=false;if(!out || !size)return false;
+    pthread_mutex_lock(&g_lock);storage_job_t *job=find_job(id);
+    if(job && job->status!=STORAGE_JOB_UNKNOWN && size<=job->size){memcpy(out,job->payload,size);copied=true;}
+    pthread_mutex_unlock(&g_lock);return copied;
+}
 
 bool storage_worker_has_capacity(void)
 {

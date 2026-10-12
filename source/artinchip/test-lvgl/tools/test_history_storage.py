@@ -43,6 +43,14 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
                         '-DUI_HISTORY_STORE_DIR="' + store_path.as_posix() + '"',
                         str(ROOT / "tools/test_history_storage.c"),
                         str(ROOT / "un260/storage/storage_worker.c"),
+                        str(ROOT / "un260/history/history_record_snapshot.c"),
+                        str(ROOT / "un260/history/history_record_reader.c"),
+                        str(ROOT / "un260/history/history_read_task.c"),
+                        str(ROOT / "un260/history/history_query.c"),
+                        str(ROOT / "un260/counting/counting_serial_text.c"),
+                        str(ROOT / "un260/history/history_record_detail.c"),
+                        str(ROOT / "un260/history/history_export_sn_parser.c"),
+                        str(ROOT / "un260/protocol/protocol_frame.c"),
                         str(ROOT / "un260/counting/counting_history_service.c"),
                         str(ROOT / "un260/counting/counting_cashbook.c"),
                         str(ROOT / "un260/workspace/cashbook.c"),
@@ -58,7 +66,7 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
     compile_binary(multi_binary,store_path=work / "multi-history")
     subprocess.run([str(multi_binary), "multi-history"], check=True)
     multi_index=work / "multi-history/index.cfg"
-    old_multi=multi_index.read_bytes().replace(b"version=4\n",b"version=3\n")
+    old_multi=multi_index.read_bytes().replace(b"version=5\n",b"version=3\n")
     old_multi=b"\n".join(line for line in old_multi.split(b"\n") if not line.startswith(b"capacity="))
     multi_index.write_bytes(old_multi)
     subprocess.run([str(multi_binary), "multi-reload"], check=True)
@@ -92,7 +100,7 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
     compile_binary(legacy_binary, overlay)
     subprocess.run([str(legacy_binary), "fill-capacity"], check=True)
     # Single-currency fields are identical in v2; exercise the actual v2 header.
-    legacy_index = authoritative.read_bytes().replace(b"version=4\n",b"version=2\n")
+    legacy_index = authoritative.read_bytes().replace(b"version=5\n",b"version=2\n")
     legacy_index=b"\n".join(line for line in legacy_index.split(b"\n") if not line.startswith(b"capacity="))
     authoritative.write_bytes(legacy_index)
     legacy_records = record_fields()
@@ -180,7 +188,7 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
         assert authoritative.read_bytes() == healthy_index
         assert dump() == healthy_state
     for corrupt_index in (b"invalid index\n", healthy_index[:-1],
-                          healthy_index.replace(b"version=4\n", b"version=999\n")):
+                          healthy_index.replace(b"version=5\n", b"version=999\n")):
         authoritative.write_bytes(corrupt_index)
         subprocess.run([str(binary), "load-corrupt"], check=True)
         assert authoritative.read_bytes() == corrupt_index

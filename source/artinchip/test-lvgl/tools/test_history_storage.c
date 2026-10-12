@@ -26,6 +26,7 @@ void counting_multi_reset(void) { memset(&mock_multi,0,sizeof(mock_multi)); }
 
 enum { FAIL_NONE, FAIL_OPEN, FAIL_FLUSH, FAIL_FILE_SYNC, FAIL_CLOSE, FAIL_RENAME, FAIL_DIR_SYNC };
 static atomic_int fault;
+static atomic_bool fail_detail_open;
 static int crash_stage;
 static pthread_t ui_thread;
 static pthread_mutex_t gate_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -70,6 +71,7 @@ static int history_test_open(const char *path, int flags, ...)
     mode_t mode = 0;
     int fd;
     bool index = strstr(path, "/index.cfg.tmp") != NULL;
+    if(strstr(path,".abc.tmp") && atomic_load(&fail_detail_open)){errno=EIO;return -1;}
     assert(!pthread_equal(pthread_self(), ui_thread));
     if (flags & O_CREAT) {
         va_list args;
@@ -853,8 +855,27 @@ static void queued_failure(void)
     free(accepted);puts("PASS: pending immutable payload copy/size guard; four-job rejection restores latest accepted; first-job failure rolls back durable; FIFO retry restores all later accepted edits exactly once");
 }
 
+static void test_reject_snapshot_priority(void)
+{
+    counting_sim_t sim={0};
+    uint8_t codes[]={2,7},pcs[]={3,1};
+    sim.err_code=codes;sim.err_pcs=pcs;sim.err_capacity=2;sim.err_num=2;
+    char log[4096];size_t used=0;
+    while(used+48<sizeof(log))used+=(size_t)snprintf(log+used,sizeof(log)-used,
+        "0x0E FD DF 0D 0E 00 00 00 00 00 01 04 01 0A\n");
+    ui_history_record_t rec;
+    assert(ui_history_record_build_from_session(&sim,10,100,"","","",log,&rec));
+    assert(!strncmp(rec.session_log,"0x0C FD DF 07 0C 02 03 0A\n0x0C FD DF 07 0C 07 01 0A\n",50));
+    assert(rec.session_log[strlen(rec.session_log)-1]=='\n');
+    sim.err_num=0;
+    assert(ui_history_record_build_from_session(&sim,10,100,"","","",
+        "0x0E FD DF 0D 0E 00 00 00 00 00 01 04 01 0A\n0x0C FD DF 07 0C 02 03 0A\n",&rec));
+    assert(!strncmp(rec.session_log,"0x0C FD DF 07 0C 02 03 0A\n",25));
+}
+
 int main(int argc, char **argv)
 {
+    test_reject_snapshot_priority();
     ui_thread = pthread_self();
     assert(argc >= 2);
     fail_worker_init = strcmp(argv[1], "init-failure") == 0;

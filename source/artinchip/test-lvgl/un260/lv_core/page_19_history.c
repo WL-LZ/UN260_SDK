@@ -1,3 +1,4 @@
+#include "un260/history/history_read_task.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/font/ui_message_font.h"
 #include "un260/lv_components/ui_notice.h"
@@ -62,6 +63,12 @@ typedef struct {
     history_query_record_t records[UI_HISTORY_MAX_RECORDS];
     history_multi_t multi_copies[UI_HISTORY_MAX_RECORDS];
     history_record_detail_t *details[UI_HISTORY_MAX_RECORDS];
+    history_record_detail_t *full_detail;
+    uint32_t full_id,pending_id;
+    storage_job_id_t read_job;
+    lv_timer_t *read_timer;
+    bool reading_query,query_ready;
+    history_query_t read_query;
     uint32_t result_ids[UI_HISTORY_MAX_RECORDS], unknown_ids[UI_HISTORY_MAX_RECORDS];
     uint32_t selected_ids[UI_HISTORY_MAX_RECORDS], confirmed_ids[UI_HISTORY_MAX_RECORDS];
     size_t record_count, unknown_count, selected_count, confirmed_count;
@@ -84,6 +91,9 @@ static bool scope_requested;
 static bool external_record;
 static void refresh_records(bool reset);
 static void refresh_header(void);
+static void stop_read(void);
+static bool begin_query(void);
+static void read_timer_cb(lv_timer_t *timer);
 static void show_record(uint32_t id);
 static void show_list(void);
 static void show_confirmation(bool clear_total);
@@ -174,6 +184,9 @@ static void date_text(const ui_history_record_t *rec,char *out,size_t size)
 }
 static void release_details(void)
 {
+    stop_read();history->query_ready=false;
+    if(history->full_detail){history_record_detail_release(history->full_detail);free(history->full_detail);history->full_detail=NULL;}
+    history->full_id=0;
     for (unsigned i=0;i<UI_HISTORY_MAX_RECORDS;++i) {
         if (history->details[i]) {
             history_record_detail_release(history->details[i]);
@@ -191,8 +204,8 @@ static bool prepare_detail(unsigned index)
     history_record_detail_t *detail=calloc(1,sizeof(*detail));
     if (!detail) return false;
     const history_detail_input_t input={
-        .denom_text=rec->denom_text,.sn_detail_text=rec->sn_detail_text,
-        .sn_text=rec->sn_text,.session_log=rec->session_log,.error_frame_text=rec->error_frame_text,
+        .denom_text=rec->denom_text,.sn_detail_text=rec->detail_bytes?"":rec->sn_detail_text,
+        .sn_text=rec->detail_bytes?"":rec->sn_text,.session_log=rec->detail_bytes?"":rec->session_log,.error_frame_text=rec->detail_bytes?"":rec->error_frame_text,
         .total_pcs=rec->pcs,
         .denoms_truncated=strlen(rec->denom_text)>=sizeof(rec->denom_text)-1,
         .serials_truncated=strlen(rec->sn_detail_text)>=sizeof(rec->sn_detail_text)-1,
@@ -201,6 +214,10 @@ static bool prepare_detail(unsigned index)
         .reject_log_complete=false
     };
     if (!history_record_detail_build(&input,detail)) {free(detail);return false;}
+    if(rec->detail_bytes){
+        for(unsigned code=0;code<256;code++)if(rec->detail_reject_codes[code/8]&(1U<<(code%8)))
+            detail->rejects[detail->reject_count++]=(history_detail_reject_t){.code=(uint8_t)code};
+    }
     history->details[index]=detail;history->records[index].detail=detail;
     return true;
 }
@@ -286,7 +303,7 @@ static void record_row_bind(lv_obj_t *row,uint32_t index,void *context)
     snprintf(text,sizeof(text),"%lu",(unsigned long)(rec ? rec->pcs : 0));
     if(group)snprintf(text,sizeof(text),"%lu",(unsigned long)group->pcs);
     text_set(lv_obj_get_child(row,3),rec ? text : "");
-    snprintf(text,sizeof(text),"%lu",(unsigned long)(rec ? rec->amount : 0));
+    snprintf(text,sizeof(text),"%llu",(unsigned long long)(rec ? (rec->detail_bytes?rec->detail_amount:rec->amount) : 0));
     if(rec && rec->multi.enabled) {
         if(group)snprintf(text,sizeof(text),"%s %lu",group->code,(unsigned long)group->amount);
         else snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_MULTI_GROUPS_FMT),rec->multi.count);
@@ -338,6 +355,7 @@ static void record_pointer(lv_event_t *event)
 }
 static history_record_detail_t *current_detail(void)
 {
+    if(history->full_detail && history->full_id==history->current_id)return history->full_detail;
     int index=record_index(history->current_id);
     return index>=0 ? history->details[index] : NULL;
 }
@@ -383,7 +401,7 @@ static void detail_row_bind(lv_obj_t *row,uint32_t index,void *context)
             if (s->denom) snprintf(cells[2],sizeof(cells[2]),"%u",s->denom);
             else snprintf(cells[2],sizeof(cells[2]),"--");
         } else {
-            history_detail_reject_t *r=&detail->rejects[index];
+            const history_detail_reject_t *r=history_record_detail_reject_at(detail,index);
             snprintf(cells[0],sizeof(cells[0]),"%lu",(unsigned long)r->no);
             snprintf(cells[1],sizeof(cells[1]),"%lu",(unsigned long)r->pcs);
             snprintf(cells[2],sizeof(cells[2]),"%s",ui_text_counting_reject_reason(r->code));
@@ -553,6 +571,15 @@ static void show_record(uint32_t id)
 {
     int index=record_index(id);
     if (index<0 || !record_find(id)) {toast(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_HISTORY_MISSING));return;}
+    const ui_history_record_t *record=record_find(id);
+    if(record->detail_bytes && (!history->full_detail || history->full_id!=id)){
+        stop_read();history->pending_id=id;history->reading_query=false;
+        history->read_job=history_read_detail_request(record);
+        if(history->read_job)history->read_timer=lv_timer_create(read_timer_cb,30,NULL);
+        if(!history->read_timer){stop_read();toast(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_SERIAL_UNAVAILABLE));}
+        else toast(UI_NOTICE_PROGRESS,UI_N_("Loading records..."));
+        return;
+    }
     if (!prepare_detail((unsigned)index) || !detail_create()) {toast(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_SERIAL_UNAVAILABLE));return;}
     history->tapping=false;lv_recycled_list_stop(history->list);
     history->current_id=id;history->detail_mode=true;
@@ -564,12 +591,15 @@ static void show_record(uint32_t id)
         show(history->sections[i].panel,!multi);
         lv_recycled_list_refresh(history->sections[i].list,(uint32_t)section_count(i),true);
         show(history->sections[i].empty,section_count(i)==0);
+        if(i==2 && !section_count(i))text_set(history->sections[i].empty,
+            tr(current_detail() && current_detail()->rejects_complete?UI_TEXT_HISTORY_REJECT_EMPTY:UI_TEXT_HISTORY_PARTIAL));
     }
     if(multi)multi_render();
     refresh_header();
 }
 static void show_list_panels(void)
 {
+    stop_read();
     history->detail_mode=false;history->current_id=0;
     show(history->multi_panel,false);
     for (unsigned i=0;i<3;++i) {
@@ -612,7 +642,7 @@ static void refresh_header(void)
         if (rec) {
             snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_RECORD_FMT),(unsigned long)rec->record_no,rec->currency,date);
             text_set(history->title,text);
-            snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_TOTAL_FMT),(unsigned long)rec->pcs,rec->currency,(unsigned long)rec->amount);
+            snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_TOTAL_FMT),(unsigned long)rec->pcs,rec->currency,(unsigned long)(rec->detail_bytes?rec->detail_amount:rec->amount));
             text_set(history->subtitle,text);
         } else {
             text_set(history->title,tr(UI_TEXT_HISTORY_MISSING));text_set(history->subtitle,"");
@@ -717,7 +747,7 @@ static void refresh_records(bool reset)
                 const ui_history_record_t *r=&store->records[i];if (!r->valid||(history->operator_filter&&r->operator_id!=history->operator_filter)) continue;
                 history_query_record_t *p=&history->records[history->record_count++];
                 memset(p,0,sizeof(*p));p->valid=true;p->record_no=r->record_no;
-                p->pcs=r->pcs;p->amount=r->amount;memcpy(p->currency,r->currency,sizeof(p->currency));
+                p->pcs=r->pcs;p->amount=r->detail_bytes?r->detail_amount:r->amount;memcpy(p->currency,r->currency,sizeof(p->currency));
                 if(r->multi.enabled) {
                     history_multi_t *copy=&history->multi_copies[history->record_count-1];
                     *copy=r->multi;p->multi=copy;
@@ -732,10 +762,29 @@ static void refresh_records(bool reset)
                 (--history->selected_count-i)*sizeof(uint32_t));
         }
     }
-    if (history_query_compile(&history->input,&history->query)!=HISTORY_QUERY_OK) return;
+    history_query_t compiled;
+    if(history_query_compile(&history->input,&compiled)!=HISTORY_QUERY_OK)return;
+    history_query_t criteria=compiled;criteria.oldest_first=history->query.oldest_first;
+    if(memcmp(&criteria,&history->query,sizeof(criteria))){
+        stop_read();history->query_ready=false;
+        for(size_t i=0;i<history->record_count;i++)history->records[i].match_cached=false;
+    }
+    history->query=compiled;
     bool needs_detail=history->query.serial[0] || history->query.denomination_count ||
         history->query.rejects!=HISTORY_REJECT_ALL;
-    if (needs_detail) for (size_t i=0;i<history->record_count;++i) (void)prepare_detail((unsigned)i);
+    bool has_full=false;
+    for(size_t i=0;i<history->record_count;i++){
+        const ui_history_record_t *rec=record_find(history->records[i].record_no);
+        if(rec && rec->detail_bytes)has_full=true;
+    }
+    if(needs_detail && has_full && !history->query_ready){
+        bool reading=history->read_job || begin_query();
+        if(!reading)toast(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_SERIAL_UNAVAILABLE));
+        history->result=(history_query_result_t){0};history->unknown_count=0;
+        lv_recycled_list_refresh(history->list,0,true);show(history->empty,true);
+        text_set(history->empty,reading?ui_tr("Loading records..."):tr(UI_TEXT_SERIAL_UNAVAILABLE));refresh_header();return;
+    }
+    if(needs_detail && !has_full)for(size_t i=0;i<history->record_count;i++)(void)prepare_detail((unsigned)i);
     history->result=history_query_build(history->records,history->record_count,&history->query,
         history->result_ids,UI_HISTORY_MAX_RECORDS);
     history->unknown_count=0;
@@ -770,10 +819,14 @@ static void refresh_records(bool reset)
             show_list_panels();toast(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_HISTORY_MISSING));
         } else if(record_find(id)->multi.enabled) {
             multi_render();
+        } else if(record_find(id)->detail_bytes && (!history->full_detail || history->full_id!=id)){
+            show_record(id);return;
         } else if (prepare_detail((unsigned)i)) {
             for (unsigned s=0;s<3;++s) {
                 lv_recycled_list_refresh(history->sections[s].list,(uint32_t)section_count(s),false);
                 show(history->sections[s].empty,section_count(s)==0);
+                if(s==2 && !section_count(s))text_set(history->sections[s].empty,
+                    tr(current_detail() && current_detail()->rejects_complete?UI_TEXT_HISTORY_REJECT_EMPTY:UI_TEXT_HISTORY_PARTIAL));
             }
         } else for (unsigned s=0;s<3;++s) {
             lv_recycled_list_refresh(history->sections[s].list,0,true);
@@ -782,6 +835,52 @@ static void refresh_records(bool reset)
     }
     refresh_header();
 }
+static void stop_read(void)
+{
+    if(history->read_timer){lv_timer_del(history->read_timer);history->read_timer=NULL;}
+    if(history->read_job)history_read_cancel(history->read_job);
+    history->read_job=0;
+}
+static bool begin_query(void)
+{
+    ui_history_record_t *records=calloc(history->record_count,sizeof(*records));if(!records)return false;
+    for(size_t i=0;i<history->record_count;i++){
+        const ui_history_record_t *rec=record_find(history->records[i].record_no);
+        if(!rec){free(records);return false;}records[i]=*rec;
+    }
+    history->reading_query=true;history->read_query=history->query;
+    history->read_job=history_read_query_request(records,history->record_count,&history->query);free(records);
+    if(history->read_job)history->read_timer=lv_timer_create(read_timer_cb,30,NULL);
+    if(!history->read_timer){stop_read();return false;}return true;
+}
+static void read_timer_cb(lv_timer_t *timer)
+{
+    if(!history)return;
+    history_read_result_t result={0};
+    if(!history_read_take(history->read_job,&result))return;
+    history->read_job=0;history->read_timer=NULL;lv_timer_del(timer);
+    if(!visible() || history->model_dirty){
+        if(result.detail){history_record_detail_release(result.detail);free(result.detail);}
+        if(visible())refresh_records(false);
+        return;
+    }
+    if(history->reading_query){
+        history_query_t criteria=history->read_query;criteria.oldest_first=history->query.oldest_first;
+        if(result.ok && result.count==history->record_count && !memcmp(&history->query,&criteria,sizeof(criteria))){
+            for(size_t i=0;i<result.count;i++){
+                if(history->records[i].record_no!=result.ids[i]){result.ok=false;break;}
+                history->records[i].match_cached=true;history->records[i].cached_match=result.matches[i];
+            }
+        }else result.ok=false;
+        history->query_ready=result.ok;
+        if(result.ok)refresh_records(false);
+        else toast(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_SERIAL_UNAVAILABLE));
+    }else if(result.ok && result.detail){
+        if(history->full_detail){history_record_detail_release(history->full_detail);free(history->full_detail);}
+        history->full_detail=result.detail;history->full_id=history->pending_id;show_record(history->full_id);
+    }else toast(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_SERIAL_UNAVAILABLE));
+}
+
 static void search_closed(const history_query_input_t *applied,void *context)
 {
     (void)context;
@@ -801,6 +900,7 @@ static void search_closed(const history_query_input_t *applied,void *context)
 static void open_search(void)
 {
     if (history->search || !ui_history_data_is_available()) return;
+    if(!history->reading_query)stop_read();
     lv_recycled_list_stop(history->list);history->tapping=false;
     for (size_t i=0;i<history->record_count;++i) (void)prepare_detail((unsigned)i);
     history->search=page_19_history_search_create(history->root,&history->input,history->records,

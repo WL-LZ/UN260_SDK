@@ -88,17 +88,17 @@ static bool parse_time(const char *text, uint32_t *first, uint32_t *last)
     return true;
 }
 
-static bool parse_number(const char *text, history_query_number_range_t *out)
+static bool parse_number(const char *text, history_query_number_range_t *out, uint64_t maximum)
 {
     memset(out, 0, sizeof(*out));
     if (!*text) return true;
     out->enabled = true;
-    out->max = UINT32_MAX;
+    out->max = maximum;
     bool lower = text[0] == '>' && text[1] == '=';
     bool upper = text[0] == '<' && text[1] == '=';
     if (lower || upper) text += 2;
     uint64_t first;
-    if (!decimal(&text, UINT32_MAX, &first)) return false;
+    if (!decimal(&text, maximum, &first)) return false;
     if (lower || upper) {
         if (*text) return false;
         if (lower) out->min = first;
@@ -107,7 +107,7 @@ static bool parse_number(const char *text, history_query_number_range_t *out)
         out->min = out->max = first;
         if (*text == '.' && text[1] == '.') {
             text += 2;
-            if (!decimal(&text, UINT32_MAX, &out->max)) return false;
+            if (!decimal(&text, maximum, &out->max)) return false;
         }
         if (*text || out->min > out->max) return false;
     }
@@ -169,9 +169,9 @@ history_query_error_t history_query_compile(const history_query_input_t *input,
         query.denominations[i] = input->denominations[i];
     }
     if (!copy_trim(value, sizeof(value), input->pcs, sizeof(input->pcs)) ||
-        !parse_number(value, &query.pcs)) return HISTORY_QUERY_BAD_PCS;
+        !parse_number(value, &query.pcs, UINT32_MAX)) return HISTORY_QUERY_BAD_PCS;
     if (!copy_trim(value, sizeof(value), input->amount, sizeof(input->amount)) ||
-        !parse_number(value, &query.amount)) return HISTORY_QUERY_BAD_AMOUNT;
+        !parse_number(value, &query.amount, UINT64_MAX)) return HISTORY_QUERY_BAD_AMOUNT;
     if ((query.denomination_count || query.amount.enabled) && !query.currency[0])
         return HISTORY_QUERY_CURRENCY_REQUIRED;
     if (!copy_trim(query.serial, sizeof(query.serial), input->serial, sizeof(input->serial)) ||
@@ -251,7 +251,7 @@ static history_query_match_t reject_condition(const history_query_t *query,
     if (query->rejects == HISTORY_REJECT_ALL) return HISTORY_QUERY_MATCH;
     if (!detail) return HISTORY_QUERY_UNKNOWN;
     for (size_t i = 0; i < detail->reject_count; ++i)
-        if (query->rejects == HISTORY_REJECT_SAVED_ANY || detail->rejects[i].code == query->reject_code)
+        if (query->rejects == HISTORY_REJECT_SAVED_ANY || history_record_detail_reject_at(detail,i)->code == query->reject_code)
             return HISTORY_QUERY_MATCH;
     return detail->rejects_complete ? HISTORY_QUERY_NO_MATCH : HISTORY_QUERY_UNKNOWN;
 }
@@ -261,6 +261,7 @@ history_query_match_t history_query_match_record(const history_query_t *query,
 {
     if (!record || !record->valid || !record->record_no) return HISTORY_QUERY_NO_MATCH;
     if (!query) return HISTORY_QUERY_MATCH;
+    if(record->match_cached)return (history_query_match_t)record->cached_match;
     bool is_multi=record->multi && record->multi->enabled;
     if((query->mode==1&&!is_multi)||(query->mode==2&&is_multi))return HISTORY_QUERY_NO_MATCH;
     if(record->multi && record->multi->enabled) {
@@ -348,7 +349,7 @@ history_query_result_t history_query_build(const history_query_record_t *records
         if (match == HISTORY_QUERY_UNKNOWN) { ++result.unknown_count; continue; }
         if (match != HISTORY_QUERY_MATCH) continue;
         char code[4];
-        uint32_t pcs=record->pcs,amount=record->amount;
+        uint32_t pcs=record->pcs;uint64_t amount=record->amount;
         bool multi=record->multi && record->multi->enabled;
         bool code_valid = !multi && currency_code(record->currency, code);
         if(multi && query && query->currency[0]) {

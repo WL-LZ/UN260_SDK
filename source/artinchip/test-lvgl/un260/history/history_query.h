@@ -78,11 +78,15 @@ typedef struct {
 typedef struct {
     uint32_t record_no;
     uint32_t pcs;
-    uint32_t amount;
+    uint64_t amount;
     char currency[4];
     uint16_t year;
     uint8_t month, day, hour, minute, second;
     bool valid;
+    /* Scoped to one compiled query by the history page; invalidate on query
+     * or record revision. Async readers retain only this match, not full SN. */
+    bool match_cached;
+    uint8_t cached_match;
     /* Borrowed immutable detail, or NULL when not yet parsed/unavailable. */
     const history_record_detail_t *detail;
     const history_multi_t *multi;

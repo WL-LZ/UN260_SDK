@@ -35,6 +35,9 @@ bool storage_worker_release(storage_job_id_t id);
 /* Copy a job's immutable accepted payload in any retained state. Never lends
  * a worker pointer; callers own out and must supply the exact payload size. */
 bool storage_worker_copy_snapshot(storage_job_id_t id, void *out, size_t size);
+/* Bounded read-only prefix copy for history jobs with a variable detail tail.
+ * Never exposes payload ownership; the exact-size APIs remain unchanged. */
+bool storage_worker_copy_snapshot_prefix(storage_job_id_t id,void *out,size_t size);
 bool storage_worker_copy_completed(storage_job_id_t id, void *out, size_t size);
 bool storage_worker_has_capacity(void);
 /* Startup/tests only: never wait in an interactive UI callback. */

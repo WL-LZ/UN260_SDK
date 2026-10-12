@@ -112,7 +112,7 @@ static counting_info_reply_result_t counting_info_handle_finished(counting_sessi
     session->last_result.expected_issue = result.final_issue;
     session->analysis_valid_pcs = (int)qty;
 
-    session->history_record.valid = (result.final_pcs > 0);
+    session->history_record.valid = (result.final_pcs > 0 || result.final_issue > 0);
     session->history_record.end_seen = false;
     session->history_record.save_attempts = 0;
     session->history_record.retry_tick = 0;

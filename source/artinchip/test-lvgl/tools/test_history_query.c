@@ -202,6 +202,12 @@ static void compiler_cases(void)
     strcpy(input.amount, "100");
     assert(history_query_compile(&input, &query) == HISTORY_QUERY_CURRENCY_REQUIRED);
     strcpy(input.currency, "usd");
+    strcpy(input.amount, "10000000000");
+    query = compile_ok(&input);
+    assert(query.amount.min == UINT64_C(10000000000));
+    strcpy(input.amount, "18446744073709551616");
+    assert(history_query_compile(&input, &query) == HISTORY_QUERY_BAD_AMOUNT);
+    strcpy(input.amount, "100");
     strcpy(input.serial, "  00Ab  ");
     query = compile_ok(&input);
     assert(!strcmp(query.currency, "USD") && !strcmp(query.serial, "00Ab"));

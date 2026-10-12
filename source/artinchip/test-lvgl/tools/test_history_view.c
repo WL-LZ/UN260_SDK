@@ -1,3 +1,6 @@
+#include <unistd.h>
+#include <sys/stat.h>
+#include <inttypes.h>
 #include "un260/font/ui_locale_font_bank.h"
 #include "un260/font/ui_message_font.h"
 #include "test_notice_sink.h"
@@ -802,6 +805,62 @@ static void history_test_multi(unsigned baseline)
 
 
 #include "test_locale_view_checks.h"
+static bool history_queue_fixture(const void *snapshot,size_t size)
+{(void)snapshot;(void)size;return true;}
+static void test_full_abc_view(void)
+{
+    history_test_fixtures(1);ui_history_record_t *rec=&test_store.records[0];
+    counting_sim_t *sim=calloc(1,sizeof(*sim));assert(sim);
+    sim->sn_capacity=10000;sim->sn_str=calloc(10000,sizeof(*sim->sn_str));assert(sim->sn_str);
+    sim->denom_number=1;sim->denom[0]=(denom_t){100,10000,1000000};
+    for(unsigned i=0;i<10000;i++){
+        sim->sn_str[i]=malloc(13);assert(sim->sn_str[i]);snprintf(sim->sn_str[i],13,"SN%010u",i);sim->denom_mix[i]=100;
+    }
+    history_record_snapshot_t snapshot={0};assert(history_record_snapshot_capture(sim,10000,true,&snapshot));
+    rec->pcs=10000;rec->amount=1000000;rec->detail_amount=1000000;rec->detail_hash=snapshot.hash;rec->detail_bytes=snapshot.size;
+    strcpy(rec->denom_text,"100 x 10000");memset(rec->detail_reject_codes,0,32);
+    char path[256];snprintf(path,sizeof(path),UI_HISTORY_STORE_DIR "/detail-%u-%016" PRIx64 ".abc",rec->record_no,rec->detail_hash);
+    FILE *fp=fopen(path,"wb");assert(fp);assert(fwrite(snapshot.bytes,1,snapshot.size,fp)==snapshot.size);assert(!fclose(fp));
+    history_record_snapshot_release(&snapshot);
+    for(unsigned i=0;i<10000;i++)free(sim->sn_str[i]);free(sim->sn_str);free(sim);
+    ui_page_19_history_create(lv_scr_act());show_record(rec->record_no);assert(history->read_job);
+    assert(storage_worker_wait(history->read_job)==STORAGE_JOB_SUCCEEDED);history_test_tick(100);
+    assert(history->detail_mode && section_count(0)==1 && section_count(1)==10000 && !section_count(2));
+    assert(current_detail()->serials[9999].no==10000 && !strcmp(current_detail()->serials[9999].sn,"SN0000009999"));
+    assert(current_detail()->rejects_complete);history_test_bmp("history-full-abc-10000");
+    show_list();strcpy(history->input.currency,"USD");strcpy(history->input.serial,"SN0000009999");refresh_records(true);
+    assert(history->read_job);assert(storage_worker_wait(history->read_job)==STORAGE_JOB_SUCCEEDED);history_test_tick(100);
+    assert(history->result.matched_count==1 && history->result.written_count==1);
+    /* A late detail must not reopen the view after Back or under Search. */
+    history->input=(history_query_input_t){0};refresh_records(true);
+    if(history->full_detail){history_record_detail_release(history->full_detail);free(history->full_detail);history->full_detail=NULL;}
+    show_record(rec->record_no);assert(history->read_job);show_list();
+    for(unsigned i=0;i<5000 && storage_worker_pending_status()==STORAGE_JOB_PENDING;i++)usleep(1000);
+    history_read_poll_discarded();history_test_tick(100);
+    assert(!history->read_job && !history->read_timer && !history->detail_mode);
+    show_record(rec->record_no);assert(history->read_job);open_search();assert(history->search);
+    for(unsigned i=0;i<5000 && storage_worker_pending_status()==STORAGE_JOB_PENDING;i++)usleep(1000);
+    history_read_poll_discarded();history_test_tick(100);
+    assert(history->search && !history->read_job && !history->detail_mode);
+    search_closed(NULL,NULL);
+    storage_job_id_t occupied[STORAGE_WORKER_CAPACITY];unsigned payload=0;
+    for(unsigned i=0;i<STORAGE_WORKER_CAPACITY;i++){
+        assert(storage_worker_submit(history_queue_fixture,&payload,sizeof(payload),&occupied[i]));
+        assert(storage_worker_wait(occupied[i])==STORAGE_JOB_SUCCEEDED);
+    }
+    strcpy(history->input.serial,"SN0000009999");refresh_records(true);
+    assert(!history->read_job && !history->read_timer);
+    assert(!strcmp(lv_label_get_text(history->empty),tr(UI_TEXT_SERIAL_UNAVAILABLE)));
+    for(unsigned i=0;i<STORAGE_WORKER_CAPACITY;i++)assert(storage_worker_release(occupied[i]));
+    history->input=(history_query_input_t){0};refresh_records(true);
+    /* Late completion must not touch a suspended page or leave a queue slot. */
+    if(history->full_detail){history_record_detail_release(history->full_detail);free(history->full_detail);history->full_detail=NULL;}
+    show_record(rec->record_no);ui_page_19_history_suspend();
+    for(unsigned i=0;i<5000 && storage_worker_pending_status()==STORAGE_JOB_PENDING;i++)usleep(1000);
+    history_read_poll_discarded();assert(!history->read_timer && !history->full_detail);
+    ui_page_19_history_destroy();assert(storage_worker_shutdown());
+    puts("PASS real History: full 10000-row B, A totals, confirmed zero C, last-SN query and hidden async cancellation");
+}
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -902,6 +961,7 @@ int main(void)
         ui_page_19_history_destroy();
     }
     ui_lang_set(LANGUAGE_EN);
+    test_full_abc_view();
     puts("PASS: actual History LVGL empty/full smoke, locale glyphs/buttons and timer ownership");
     return 0;
 }

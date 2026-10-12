@@ -236,5 +236,12 @@ void history_record_detail_release(history_record_detail_t *detail)
 {
     if (!detail) return;
     free(detail->serials);
+    free(detail->reject_extra);
     memset(detail, 0, sizeof(*detail));
+}
+const history_detail_reject_t *history_record_detail_reject_at(const history_record_detail_t *detail,size_t index)
+{
+    if(!detail || index>=detail->reject_count)return NULL;
+    return index<HISTORY_DETAIL_MAX_REJECTS?&detail->rejects[index]:
+        detail->reject_extra?&detail->reject_extra[index-HISTORY_DETAIL_MAX_REJECTS]:NULL;
 }

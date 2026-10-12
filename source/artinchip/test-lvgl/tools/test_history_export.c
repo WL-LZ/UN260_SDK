@@ -10,6 +10,13 @@
 
 #include "un260/lv_system/ui_history_export_data.c"
 
+static bool test_export_and_wait(const uint32_t *ids,size_t count)
+{
+    bool accepted=ui_history_export_data_request_records(ids,count);
+    if(!accepted)return false;
+    assert(storage_worker_wait(g_history_export_job)==STORAGE_JOB_SUCCEEDED);
+    ui_history_export_data_poll();return g_history_export_succeeded;
+}
 static ui_history_store_t test_store;
 static lv_timer_t test_timer;
 static char test_directory[192];
@@ -117,7 +124,7 @@ static void capacity_snapshot_and_rollback(void)
     }
     unlock_and_reset();
     mutate_on_prepare = true;
-    assert(ui_history_export_data_request_records(ids, UI_HISTORY_MAX_RECORDS));
+    assert(test_export_and_wait(ids, UI_HISTORY_MAX_RECORDS));
     assert(pair_calls == UI_HISTORY_MAX_RECORDS && commit_calls == UI_HISTORY_MAX_RECORDS);
     /* IDs are deliberately sparse and requested in reverse slot order. Even
      * a store edit during USB preparation cannot change any exported snapshot. */
@@ -134,7 +141,7 @@ static void capacity_snapshot_and_rollback(void)
     cleanup_outputs();
     unlock_and_reset();
     fail_commit = UI_HISTORY_MAX_RECORDS;
-    assert(!ui_history_export_data_request_records(ids, UI_HISTORY_MAX_RECORDS));
+    assert(!test_export_and_wait(ids, UI_HISTORY_MAX_RECORDS));
     assert(pair_calls == UI_HISTORY_MAX_RECORDS && commit_calls == UI_HISTORY_MAX_RECORDS);
     for (unsigned i = 0; i < UI_HISTORY_MAX_RECORDS; ++i) {
         for (unsigned format = 0; format < 2; ++format) {
@@ -166,19 +173,19 @@ int main(int argc, char **argv)
     test_store.record_count = 1;
     uint32_t ids[] = {91, 92};
 
-    assert(!ui_history_export_data_request_records(NULL, 1));
-    assert(!ui_history_export_data_request_records(ids, 0));
-    assert(!ui_history_export_data_request_records(ids, UI_HISTORY_MAX_RECORDS + 1U));
-    assert(!ui_history_export_data_request_records(ids + 1, 1));
-    assert(!ui_history_export_data_request_records(ids, 2));
+    assert(!test_export_and_wait(NULL, 1));
+    assert(!test_export_and_wait(ids, 0));
+    assert(!test_export_and_wait(ids, UI_HISTORY_MAX_RECORDS + 1U));
+    assert(!test_export_and_wait(ids + 1, 1));
+    assert(!test_export_and_wait(ids, 2));
     uint32_t duplicate_ids[] = {91, 91};
-    assert(!ui_history_export_data_request_records(duplicate_ids, 2));
+    assert(!test_export_and_wait(duplicate_ids, 2));
     assert(prepare_calls == 0 && pair_calls == 0);
 
     mutate_on_prepare = true;
-    assert(ui_history_export_data_request_records(ids, 1));
+    assert(test_export_and_wait(ids, 1));
     assert(prepare_calls == 1 && pair_calls == 1);
-    assert(!ui_history_export_data_request_records(ids, 1));
+    assert(!test_export_and_wait(ids, 1));
     assert(prepare_calls == 1);
     FILE *read_only = fopen(test_paths[0][0], "rb");
     assert(read_only && fputc('X', read_only) == EOF);
@@ -208,7 +215,7 @@ int main(int argc, char **argv)
     cleanup_outputs(); unlock_and_reset();
 
     rec->session_log[0] = rec->error_frame_text[0] = rec->sn_detail_text[0] = '\0';
-    assert(ui_history_export_data_request_records(ids, 1));
+    assert(test_export_and_wait(ids, 1));
     html = read_all(test_paths[0][1]);
     assert(strstr(html, "No saved reject detail"));
     assert(!strstr(html, "data-sn=\"NONE\""));
@@ -217,7 +224,7 @@ int main(int argc, char **argv)
 
     /* Legacy serial-only records do not establish a zero face value. */
     strcpy(rec->sn_text, "LEGACY001");
-    assert(ui_history_export_data_request_records(ids, 1));
+    assert(test_export_and_wait(ids, 1));
     csv = read_all(test_paths[0][0]);
     html = read_all(test_paths[0][1]);
     assert(strstr(csv, "1,\"LEGACY001\",\n"));
@@ -231,7 +238,7 @@ int main(int argc, char **argv)
     rec->multi.currencies[0]=(history_multi_currency_t){.code="USD",.pcs=3,.amount=300,.complete=true,.count=1,.denoms={{100,3}}};
     rec->multi.currencies[1]=(history_multi_currency_t){.code="CNY",.pcs=2,.amount=10};
     memcpy(rec->currency,"MUL",4);rec->pcs=5;rec->amount=0;
-    assert(ui_history_export_data_request_records(ids,1));
+    assert(test_export_and_wait(ids,1));
     csv=read_all(test_paths[0][0]);html=read_all(test_paths[0][1]);
     assert(strstr(csv,"Currency,\"USD\"") && strstr(csv,"Currency,\"CNY\""));
     assert(strstr(csv,"100,3,300") && strstr(csv,"Detail status,Incomplete"));
@@ -240,7 +247,7 @@ int main(int argc, char **argv)
     assert(strstr(html,"Details incomplete; totals preserved"));
     free(csv);free(html);cleanup_outputs();unlock_and_reset();
     ui_lang_set(LANGUAGE_CN);
-    assert(ui_history_export_data_request_records(ids,1));
+    assert(test_export_and_wait(ids,1));
     csv=read_all(test_paths[0][0]);html=read_all(test_paths[0][1]);
     assert(strstr(html,"window.reportLocale=\"zh-Hans\""));
     assert(strstr(html,"data-i18n=\"ADD\""));
@@ -254,7 +261,7 @@ int main(int argc, char **argv)
     test_store.records[1].record_no = 92;
     test_store.record_count = 2;
     fail_commit = 2;
-    assert(!ui_history_export_data_request_records(ids, 2));
+    assert(!test_export_and_wait(ids, 2));
     assert(pair_calls == 2 && commit_calls == 2);
     for (int i = 0; i < pair_calls; ++i) {
         assert(access(test_paths[i][0], F_OK) != 0);
@@ -267,16 +274,18 @@ int main(int argc, char **argv)
     }
     unlock_and_reset();
     prepare_ok = false;
-    assert(!ui_history_export_data_request_records(ids, 1));
+    assert(!test_export_and_wait(ids, 1));
     assert(prepare_calls == 1 && pair_calls == 0);
     unlock_and_reset();
     assert(!ui_history_export_data_request());
     assert(prepare_calls == 0);
     test_store.records[1].selected = true;
     assert(ui_history_export_data_request());
+    assert(storage_worker_wait(g_history_export_job)==STORAGE_JOB_SUCCEEDED);ui_history_export_data_poll();
     assert(pair_calls == 1);
     cleanup_outputs();
     capacity_snapshot_and_rollback();
     puts("PASS: saved totals/metadata, all-log reject parsing, empty detail, stable IDs, snapshots, busy/no USB and paired rollback");
+    assert(storage_worker_shutdown());
     return 0;
 }

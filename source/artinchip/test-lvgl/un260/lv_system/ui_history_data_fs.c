@@ -7,6 +7,8 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <inttypes.h>
+#include "un260/history/history_read_task.h"
 
 #include "un260/lv_system/machine_time.h"
 #include "un260/currency/currency_state.h"
@@ -19,7 +21,7 @@
 #define UI_HISTORY_META_PATH         UI_HISTORY_STORE_DIR "/meta.cfg"
 #define UI_HISTORY_SLOT_PATH_FMT     UI_HISTORY_STORE_DIR "/%02u.rec"
 #define UI_HISTORY_MAGIC             0x48495354u
-#define UI_HISTORY_VERSION           4u
+#define UI_HISTORY_VERSION           5u
 #define UI_HISTORY_LINE_BUFFER_SIZE  8192u
 
 static ui_history_store_t g_history_store;
@@ -49,6 +51,10 @@ static unsigned g_history_job_count;
 static storage_job_id_t g_last_commit;
 static storage_job_id_t g_last_durable_commit;
 static uint32_t g_history_retry_tick;
+/* UI-owned borrowing lasts only through synchronous submit's payload copy. */
+static const history_record_snapshot_t *g_submitting_detail;
+static struct {uint32_t id;uint64_t hash;} g_detail_refs[UI_HISTORY_MAX_RECORDS];
+static unsigned g_detail_ref_count;
 
 _Static_assert(sizeof(ui_history_store_t) <= STORAGE_WORKER_MAX_JOB_BYTES,
                "history snapshot exceeds bounded storage job payload");
@@ -66,7 +72,8 @@ static bool history_job_fits(size_t size)
 {
     size_t queued=0;
     for(unsigned i=0;i<g_history_job_count;i++)queued+=g_history_job_sizes[i];
-    return size<=sizeof(ui_history_store_t) && queued<=sizeof(ui_history_store_t)-size;
+    const size_t limit=sizeof(ui_history_store_t)+HISTORY_SNAPSHOT_MAX_BYTES;
+    return size<=limit && queued<=limit-size;
 }
 static void history_copy_store(ui_history_store_t *dst,const ui_history_store_t *src)
 {
@@ -489,6 +496,16 @@ static void history_write_multi(FILE *fp, const char *prefix, const history_mult
     }
 }
 
+static void history_write_detail_ref(FILE *fp,const char *prefix,const ui_history_record_t *rec)
+{
+    if(!rec->detail_bytes)return;
+    fprintf(fp,"%sdetail=%016" PRIx64 ",%u\n",prefix,rec->detail_hash,rec->detail_bytes);
+    fprintf(fp,"%sdetail_amount=%" PRIu64 "\n",prefix,rec->detail_amount);
+    fprintf(fp,"%sdetail_codes=",prefix);
+    for(unsigned i=0;i<32;i++)fprintf(fp,"%02X",rec->detail_reject_codes[i]);
+    fputc('\n',fp);
+}
+
 static void history_write_kv(FILE *fp, uint16_t slot_no, const ui_history_record_t *rec)
 {
     char buf[128];
@@ -529,6 +546,7 @@ static void history_write_kv(FILE *fp, uint16_t slot_no, const ui_history_record
     history_write_escaped_field(fp, prefix, "start", rec->start_frame_text);
     history_write_escaped_field(fp, prefix, "end", rec->end_frame_text);
     history_write_escaped_field(fp, prefix, "log", rec->session_log);
+    history_write_detail_ref(fp,prefix,rec);
 }
 
 static int history_write_file(const char *path, const ui_history_record_t *rec, uint32_t total_notes,
@@ -588,6 +606,7 @@ static int history_write_file(const char *path, const ui_history_record_t *rec, 
         history_write_escaped_field(fp, prefix, "start", item->start_frame_text);
         history_write_escaped_field(fp, prefix, "end", item->end_frame_text);
         history_write_escaped_field(fp, prefix, "log", item->session_log);
+        history_write_detail_ref(fp,prefix,item);
     }
 
     return history_commit_atomic_file(fp, fd, tmp, path, true);
@@ -646,6 +665,42 @@ static int history_write_meta_file(const ui_history_store_t *store)
     return history_commit_atomic_file(fp, fd, tmp, UI_HISTORY_META_PATH, false);
 }
 
+static void history_update_detail_refs(const ui_history_store_t *store,bool prune)
+{
+    if(prune)for(unsigned i=0;i<g_detail_ref_count;i++){
+        bool referenced=false;
+        for(unsigned j=0;j<store->record_count;j++)if(store->records[j].record_no==g_detail_refs[i].id && store->records[j].detail_hash==g_detail_refs[i].hash){referenced=true;break;}
+        if(!referenced){
+            char path[256];snprintf(path,sizeof(path),UI_HISTORY_STORE_DIR "/detail-%u-%016" PRIx64 ".abc",g_detail_refs[i].id,g_detail_refs[i].hash);
+            (void)unlink(path);
+        }
+    }
+    g_detail_ref_count=0;
+    for(unsigned i=0;i<store->record_count;i++)if(store->records[i].detail_bytes){
+        g_detail_refs[g_detail_ref_count].id=store->records[i].record_no;
+        g_detail_refs[g_detail_ref_count++].hash=store->records[i].detail_hash;
+    }
+}
+
+static bool history_write_full_detail(const ui_history_store_t *store,const unsigned char *bytes,size_t size)
+{
+    uint64_t hash=history_record_snapshot_hash(bytes,size);
+    const ui_history_record_t *record=NULL;
+    for(unsigned i=0;i<store->record_count;i++)
+        if(store->records[i].detail_hash==hash && store->records[i].detail_bytes==size){record=&store->records[i];break;}
+    if(!record || size>HISTORY_SNAPSHOT_MAX_BYTES)return false;
+    history_record_detail_t detail={0};
+    if(!history_record_snapshot_decode(bytes,size,hash,record->pcs,&detail))return false;
+    history_record_detail_release(&detail);
+    char path[256],tmp[272];
+    snprintf(path,sizeof(path),UI_HISTORY_STORE_DIR "/detail-%u-%016" PRIx64 ".abc",record->record_no,hash);
+    snprintf(tmp,sizeof(tmp),"%s.tmp",path);
+    int fd=open(tmp,O_WRONLY|O_CREAT|O_TRUNC,0644);if(fd<0)return false;
+    FILE *fp=fdopen(fd,"wb");if(!fp){close(fd);return false;}
+    if(fwrite(bytes,1,size,fp)!=size){fclose(fp);return false;}
+    return history_commit_atomic_file(fp,fd,tmp,path,true)==0;
+}
+
 static bool history_save_snapshot(const void *snapshot, size_t size)
 {
     const ui_history_store_t *store = snapshot;
@@ -654,11 +709,13 @@ static bool history_save_snapshot(const void *snapshot, size_t size)
     bool slot_present[UI_HISTORY_MAX_RECORDS + 1] = { false };
 
     if (size < offsetof(ui_history_store_t,records) ||
-        store->record_count > UI_HISTORY_MAX_RECORDS || size != history_snapshot_size(store) ||
+        store->record_count > UI_HISTORY_MAX_RECORDS || size < history_snapshot_size(store) ||
         store->capacity < UI_HISTORY_MIN_RECORDS || store->capacity > UI_HISTORY_MAX_RECORDS ||
         store->record_count > store->capacity || history_ensure_dir() != 0) {
         return false;
     }
+    size_t summary=history_snapshot_size(store);
+    if(size>summary && !history_write_full_detail(store,(const unsigned char *)snapshot+summary,size-summary))return false;
 
     if (g_index_needs_directory_sync) {
         if (history_sync_store_dir() != 0) return false;
@@ -672,6 +729,8 @@ static bool history_save_snapshot(const void *snapshot, size_t size)
             return false;
         }
     }
+
+    history_update_detail_refs(store,true);
 
     /* Only dirty mirrors are rewritten. Mirrors are diagnostic exports, not a
      * second authority: an interrupted mirror update cannot invalidate index. */
@@ -713,24 +772,37 @@ static bool history_save_snapshot(const void *snapshot, size_t size)
     return true;
 }
 
+static bool history_copy_job_store(storage_job_id_t id,size_t size,ui_history_store_t *out)
+{
+    size_t prefix=size<sizeof(*out)?size:sizeof(*out);
+    return storage_worker_copy_snapshot_prefix(id,out,prefix) &&
+        out->record_count<=UI_HISTORY_MAX_RECORDS && history_snapshot_size(out)<=prefix;
+}
+
 static bool history_submit_or_restore(void)
 {
     storage_job_id_t id;
+    size_t summary=history_snapshot_size(&g_history_store);
+    size_t detail=g_submitting_detail?g_submitting_detail->size:0;
+    size_t size=summary+detail;
+    void *payload=NULL;
+    if(detail){payload=malloc(size);if(payload){memcpy(payload,&g_history_store,summary);memcpy((unsigned char *)payload+summary,g_submitting_detail->bytes,detail);}}
     if (g_history_loaded && !g_history_failed_view && !g_capacity_job && g_history_job_count < STORAGE_WORKER_CAPACITY &&
-        history_job_fits(history_snapshot_size(&g_history_store)) &&
-        storage_worker_submit(history_save_snapshot, &g_history_store,
-                               history_snapshot_size(&g_history_store), &id)) {
-        g_history_job_sizes[g_history_job_count] = history_snapshot_size(&g_history_store);
+        (!detail || payload) && history_job_fits(size) &&
+        storage_worker_submit(history_save_snapshot, payload?payload:&g_history_store,size, &id)) {
+        free(payload);
+        g_history_job_sizes[g_history_job_count] = size;
         g_history_jobs[g_history_job_count++] = id;
         g_last_commit = id;
         return true;
     }
+    free(payload);
 
     /* Rejected input was never accepted: restore the last accepted UI view.
      * Accepted failures stay owned by the worker and are retried in order. */
     if(!g_history_failed_view && !g_capacity_job && g_history_job_count) {
         unsigned last=g_history_job_count-1;
-        (void)storage_worker_copy_snapshot(g_history_jobs[last],&g_history_store,g_history_job_sizes[last]);
+        if(!history_copy_job_store(g_history_jobs[last],g_history_job_sizes[last],&g_history_store))history_copy_store(&g_history_store,&g_history_durable);
     } else history_copy_store(&g_history_store,&g_history_durable);
     return false;
 }
@@ -763,7 +835,33 @@ static bool history_parse_key_value(ui_history_store_t *store, int record_index,
         return false;
     }
 
-    if (strcmp(key, "multi") == 0) {
+    if (strcmp(key,"detail_amount")==0) {
+        if(!*value)return false;
+        uint64_t amount=0;
+        for(const char *p=value;*p;p++){
+            if(*p<'0'||*p>'9'||amount>(UINT64_MAX-(unsigned)(*p-'0'))/10)return false;
+            amount=amount*10+(unsigned)(*p-'0');
+        }
+        rec->detail_amount=amount;
+    } else if (strcmp(key,"detail_codes")==0) {
+        if(strlen(value)!=64)return false;
+        for(unsigned i=0;i<32;i++){
+            unsigned v;char pair[3]={value[i*2],value[i*2+1],0};
+            if(!strchr("0123456789ABCDEFabcdef",pair[0]) || !strchr("0123456789ABCDEFabcdef",pair[1]) || sscanf(pair,"%2x",&v)!=1)return false;
+            rec->detail_reject_codes[i]=(uint8_t)v;
+        }
+    } else if (strcmp(key,"detail")==0) {
+        if(strlen(value)<18 || value[16]!=',')return false;
+        uint64_t hash=0;uint32_t size;
+        for(unsigned i=0;i<16;i++){
+            unsigned digit;char c=value[i];
+            if(c>='0'&&c<='9')digit=c-'0';else if(c>='a'&&c<='f')digit=c-'a'+10;
+            else if(c>='A'&&c<='F')digit=c-'A'+10;else return false;
+            hash=(hash<<4)|digit;
+        }
+        if(!history_parse_u32(value+17,&size) || !size || size>HISTORY_SNAPSHOT_MAX_BYTES)return false;
+        rec->detail_hash=hash;rec->detail_bytes=size;
+    } else if (strcmp(key, "multi") == 0) {
         if(!history_multi_numbers_valid(value))return false;
         unsigned count,rejects,passes,add,overflow; char extra;
         if (sscanf(value,"%u,%u,%u,%u,%u%c",&count,&rejects,&passes,&add,&overflow,&extra)!=5 ||
@@ -960,7 +1058,7 @@ static bool history_load_from_file(ui_history_store_t *store)
         if (strcmp(line, "version") == 0) {
             uint32_t parsed;
 
-            if (!history_parse_u32(eq, &parsed) || (parsed != 2u && parsed != 3u && parsed != UI_HISTORY_VERSION)) {
+            if (!history_parse_u32(eq, &parsed) || (parsed != 2u && parsed != 3u && parsed != 4u && parsed != UI_HISTORY_VERSION)) {
                 file_valid = false;
                 break;
             }
@@ -1046,7 +1144,7 @@ static bool history_load_from_file(ui_history_store_t *store)
 
     if (!file_valid) {
         history_store_reset(store);
-    }
+    } else history_update_detail_refs(store,false);
 
     return file_valid;
 }
@@ -1122,13 +1220,13 @@ static void history_ensure_loaded(void)
 
 bool ui_history_data_poll(uint32_t now_ms)
 {
+    history_read_poll_discarded();
     bool changed = !g_history_initialized && ui_history_data_init_poll();
     while (g_history_job_count > 0) {
         storage_job_id_t id = g_history_jobs[0];
         storage_job_status_t status = storage_worker_status(id);
         if (status == STORAGE_JOB_SUCCEEDED) {
-            (void)storage_worker_copy_completed(id, &g_history_durable,
-                                                 g_history_job_sizes[0]);
+            if(!history_copy_job_store(id,g_history_job_sizes[0],&g_history_durable))break;
             if (id == g_capacity_job) {
                 history_copy_store(&g_history_store,&g_history_durable);
                 g_capacity_job=0;
@@ -1253,6 +1351,38 @@ void ui_history_total_notes_counted_clear(void)
     ui_history_total_notes_counted_set(0);
 }
 
+static void history_format_session_log(const counting_sim_t *sim, const char *log,
+                                       char *out, size_t size)
+{
+    size_t used=0;
+    out[0]='\0';
+    /* The published reject model also covers live pushes and reused ADD
+     * reports. Store it before optional wire diagnostics in the existing
+     * log format, so a long run cannot crowd C rows out of the record. */
+    unsigned errors=sim->multi_currency_result?0:counting_data_error_detail_count(sim);
+    for(unsigned i=0;i<errors;i++) {
+        char row[48];
+        int n=snprintf(row,sizeof(row),"0x0C FD DF 07 0C %02X %02X 0A\n",
+                       sim->err_code[i],sim->err_pcs[i]);
+        if(n<=0 || (size_t)n>=size-used)break;
+        memcpy(out+used,row,(size_t)n);used+=(size_t)n;out[used]='\0';
+    }
+    /* On old/incomplete snapshots keep saved reject frames first as well.
+     * Append only complete lines; never manufacture a malformed final row. */
+    for(unsigned pass=0;pass<2;pass++) {
+        const char *p=log?log:"";
+        while(*p) {
+            const char *end=strchr(p,'\n');
+            size_t n=end?(size_t)(end-p)+1:strlen(p);
+            bool reject=n>=4 && !strncmp(p,"0x0C",4);
+            if(reject==(pass==0) && !(reject && errors) && n<size-used) {
+                memcpy(out+used,p,n);used+=n;out[used]='\0';
+            }
+            p+=n;
+        }
+    }
+}
+
 static bool history_record_build(const counting_sim_t *sim_data, uint32_t pcs_total,
                                            float amount_total,
                                            const char *error_frame_text,
@@ -1276,6 +1406,7 @@ static bool history_record_build(const counting_sim_t *sim_data, uint32_t pcs_to
     rec.selected = false;
     rec.pcs = pcs_total;
     rec.amount = history_amount_to_u32(amount_total);
+    rec.detail_amount=rec.amount;
     currency_state_get_active_code(curr_code);
     snprintf(rec.currency, sizeof(rec.currency), "%s", curr_code);
     machine_time_get(&now);
@@ -1296,8 +1427,7 @@ static bool history_record_build(const counting_sim_t *sim_data, uint32_t pcs_to
                 start_frame_text ? start_frame_text : "");
     snprintf(rec.end_frame_text, sizeof(rec.end_frame_text), "%s",
                 end_frame_text ? end_frame_text : "");
-    snprintf(rec.session_log, sizeof(rec.session_log), "%s",
-                session_log_text ? session_log_text : "");
+    history_format_session_log(sim_data,session_log_text,rec.session_log,sizeof(rec.session_log));
 
     *out = rec;
     return true;
@@ -1338,6 +1468,23 @@ bool ui_history_record_append_snapshot(const ui_history_record_t *record,
 
     return history_submit_or_restore();
 }
+
+bool ui_history_record_append_full_snapshot(const ui_history_record_t *record,
+    uint32_t total_notes_after,const history_record_snapshot_t *detail)
+{
+    if(!record || !detail || !detail->bytes || !detail->size || detail->size>HISTORY_SNAPSHOT_MAX_BYTES ||
+       detail->hash!=history_record_snapshot_hash(detail->bytes,detail->size))return false;
+    ui_history_record_t copy=*record;copy.detail_hash=detail->hash;copy.detail_bytes=(uint32_t)detail->size;
+    copy.detail_amount=detail->amount_complete?detail->amount:record->detail_amount;
+    memcpy(copy.detail_reject_codes,detail->reject_codes,32);
+    counting_sim_t preview={0};preview.denom_number=detail->denom_count;
+    memcpy(preview.denom,detail->denoms,sizeof(preview.denom));
+    history_format_denom(&preview,copy.denom_text,sizeof(copy.denom_text));
+    g_submitting_detail=detail;
+    bool ok=ui_history_record_append_snapshot(&copy,total_notes_after);
+    g_submitting_detail=NULL;return ok;
+}
+
 
 bool ui_history_record_update_snapshot(const ui_history_record_t *record, uint32_t total_notes_after)
 {

@@ -27,6 +27,9 @@ typedef struct {
 } history_export_output_t;
 
 static bool g_history_export_lock = false;
+static storage_job_id_t g_history_export_job;
+static bool g_history_export_succeeded;
+static language_t g_history_export_language=LANGUAGE_EN;
 static lv_timer_t *g_history_export_unlock_timer = NULL;
 
 static void history_export_notice(ui_notice_kind_t kind,const char *text)
@@ -37,7 +40,7 @@ static void history_export_unlock_timer_cb(lv_timer_t *timer)
     if (timer == g_history_export_unlock_timer) {
         g_history_export_unlock_timer = NULL;
     }
-    g_history_export_lock = false;
+    if(!g_history_export_job)g_history_export_lock = false;
 }
 
 static void history_export_start_lock(void)
@@ -88,22 +91,7 @@ static void history_export_sanitize_token(char *dst, size_t dst_size, const char
 static bool history_export_build_detail(const ui_history_record_t *rec,
                                          history_record_detail_t *detail)
 {
-    const history_detail_input_t input = {
-        .denom_text = rec->denom_text,
-        .sn_detail_text = rec->sn_detail_text,
-        .sn_text = rec->sn_text,
-        .session_log = rec->session_log,
-        .error_frame_text = rec->error_frame_text,
-        .total_pcs = rec->pcs,
-        .denoms_truncated = strlen(rec->denom_text) >= sizeof(rec->denom_text) - 1U,
-        .serials_truncated = strlen(rec->sn_detail_text) >= sizeof(rec->sn_detail_text) - 1U,
-        .legacy_serials_truncated = strlen(rec->sn_text) >= sizeof(rec->sn_text) - 1U,
-        .log_truncated = strlen(rec->session_log) >= sizeof(rec->session_log) - 1U,
-        /* The v2 record schema stores no capture-completeness metadata. */
-        .reject_log_complete = false
-    };
-
-    return history_record_detail_build(&input, detail);
+    return ui_history_record_read_detail(rec,detail);
 }
 
 static bool history_export_flush_and_verify(FILE *fp, const char *file_path)
@@ -158,7 +146,7 @@ static void history_export_build_name_for_record(char *buf, size_t size, const u
 
 static bool history_export_multi_file(const char *path,const ui_history_record_t *r,bool html)
 {
-    language_t report_language=ui_lang_get();
+    language_t report_language=g_history_export_language;
     FILE *fp=fopen(path,"w");if(!fp)return false;
     if(html)fprintf(fp,"<!doctype html><meta charset='utf-8'><title data-i18n=\"MULTI history\">MULTI history</title>"
         "<style>body{font:16px sans-serif;color:#293b44;padding:24px}table{border-collapse:collapse;width:100%%}"
@@ -221,9 +209,15 @@ static bool history_export_write_csv_file(const char *file_path, const ui_histor
             (unsigned)rec->hour, (unsigned)rec->minute, (unsigned)rec->second);
     fprintf(fp, "Currency,\"%s\"\n", currency_csv);
     fprintf(fp, "Total Pcs,%u\n", (unsigned)rec->pcs);
-    fprintf(fp, "Total Amount,%u\n", (unsigned)rec->amount);
+    fprintf(fp, "Total Amount,%" PRIu64 "\n",rec->detail_bytes?rec->detail_amount:(uint64_t)rec->amount);
     fprintf(fp, "Saved Reject Pcs,%" PRIu64 "\n", detail->saved_reject_pcs);
     fprintf(fp, "Detail Status,Historical detail may be incomplete; totals are saved batch totals\n\n");
+    if(rec->detail_bytes){
+        const bool complete[]={detail->denoms_complete,detail->serials_complete,detail->rejects_complete};
+        for(unsigned i=0;i<3;i++)fprintf(fp,"%c,%s\n",'A'+i,
+            ui_tr_for(g_history_export_language,complete[i]?UI_N_("Complete"):UI_N_("Incomplete")));
+        fputc('\n',fp);
+    }
     fprintf(fp, "DENOMINATION SUMMARY\n");
     fprintf(fp, "DENOM,PCS,AMOUNT\n");
     for (i = 0; i < detail->denom_count; i++) {
@@ -251,7 +245,7 @@ static bool history_export_write_csv_file(const char *file_path, const ui_histor
     fprintf(fp, "NO,PCS,REASON\n");
     if (detail->reject_count > 0) {
         for (i = 0; i < detail->reject_count; i++) {
-            const history_detail_reject_t *reject = &detail->rejects[i];
+            const history_detail_reject_t *reject = history_record_detail_reject_at(detail,i);
             if (!history_export_csv_escape(text_csv, sizeof(text_csv),
                                            counting_reject_reason_get(reject->code))) {
                 fclose(fp);
@@ -270,15 +264,14 @@ static bool history_export_write_csv_file(const char *file_path, const ui_histor
 static bool history_export_write_html_file(const char *file_path, const ui_history_record_t *rec,
                                            const history_record_detail_t *detail)
 {
-    language_t report_language=ui_lang_get();
+    language_t report_language=g_history_export_language;
     FILE *fp;
     int i;
     int sn_no = 0;
     uint32_t total_pcs = 0;
-    uint32_t total_amount = 0;
+    uint64_t total_amount = 0;
     const history_detail_denom_t *denoms;
     const history_export_sn_entry_t *sns;
-    const history_detail_reject_t *rejects;
     int denom_count;
     int sn_count;
     int reject_count;
@@ -294,10 +287,9 @@ static bool history_export_write_html_file(const char *file_path, const ui_histo
 
     total_pcs = rec->pcs;
     if(rec->multi.enabled)return history_export_multi_file(file_path,rec,true);
-    total_amount = rec->amount;
+    total_amount = rec->detail_bytes?rec->detail_amount:rec->amount;
     denoms = detail->denoms;
     sns = detail->serials;
-    rejects = detail->rejects;
     denom_count = (int)detail->denom_count;
     sn_count = (int)detail->serial_count;
     reject_count = (int)detail->reject_count;
@@ -418,20 +410,20 @@ static bool history_export_write_html_file(const char *file_path, const ui_histo
         "<section class=\"panel panel-reject\"><div class=\"panel-header\"><h2 data-i18n=\"Rejected\">Rejected</h2><div class=\"panel-note\" data-i18n=\"Status summary\">Status summary</div></div><div id=\"rejectContent\"></div></section>\n"
         "</div></div>\n"
         "<script>(function(){\n"
-        "const reportData={savedRejectPcs:%" PRIu64 ",rejectDetails:[",
-        detail->saved_reject_pcs);
+        "const reportData={aComplete:%s,bComplete:%s,cComplete:%s,savedRejectPcs:%" PRIu64 ",rejectDetails:[",
+        detail->denoms_complete?"true":"false",detail->serials_complete?"true":"false",detail->rejects_complete?"true":"false",detail->saved_reject_pcs);
 
     for (i = 0; i < reject_count; i++) {
         if (!history_export_html_escape(reason_html, sizeof(reason_html),
-                                        counting_reject_reason_get(rejects[i].code)) ||
+                                        counting_reject_reason_get(history_record_detail_reject_at(detail,i)->code)) ||
             !history_export_js_escape(reason_js, sizeof(reason_js), reason_html)) {
             fclose(fp);
             return false;
         }
         fprintf(fp, "%s{no:%u,pcs:%u,reason:\"%s\"}",
                 i > 0 ? "," : "",
-                (unsigned)rejects[i].no,
-                (unsigned)rejects[i].pcs,
+                (unsigned)history_record_detail_reject_at(detail,i)->no,
+                (unsigned)history_record_detail_reject_at(detail,i)->pcs,
                 reason_js);
     }
 
@@ -441,10 +433,16 @@ static bool history_export_write_html_file(const char *file_path, const ui_histo
         "const input=document.getElementById('snSearch');const rows=Array.from(document.querySelectorAll('#snTableBody tr[data-sn]'));const status=document.getElementById('searchStatus');const noMatch=document.getElementById('noMatch');\n"
         "function applySearch(){const q=input.value.trim().toUpperCase();let visible=0;rows.forEach(row=>{const sn=(row.dataset.sn||'').toUpperCase();const matched=!q||sn.includes(q);row.style.display=matched?'':'none';row.classList.toggle('highlight-row',!!q&&matched);if(matched)visible++;});status.dataset.count=visible;status.textContent=window.reportMatches?window.reportMatches(visible):visible+' matches';noMatch.classList.toggle('show',visible===0);} \n"
         "function syncSerialHeight(){const denomPanel=document.querySelector('.panel-denom');const snPanel=document.querySelector('.panel-sn');if(!denomPanel||!snPanel)return;const h=denomPanel.offsetHeight;snPanel.style.height=h+'px';snPanel.style.minHeight=h+'px';}\n"
-        "function renderRejectSection(){const container=document.getElementById('rejectContent');if(!container)return;const saved=reportData.rejectDetails||[];if(!saved.length){container.innerHTML='<div class=\"reject-empty\"><div class=\"reject-card\"><div class=\"tag\" data-i18n=\"Historical detail\">Historical detail</div><h3 data-i18n=\"No saved reject detail\">No saved reject detail</h3><p data-i18n=\"This record does not establish that no notes were rejected.\">This record does not establish that no notes were rejected.</p></div></div>';return;}const rowsHtml=saved.map(item=>'<tr><td>'+item.no+'</td><td class=\"num-font\">'+item.pcs+'</td><td data-i18n>'+item.reason+'</td></tr>').join('');container.innerHTML='<div class=\"reject-detail\"><div class=\"reject-stats\"><div class=\"reject-stat\"><strong data-i18n=\"Saved Reject PCS\">Saved Reject PCS</strong><span>'+reportData.savedRejectPcs+'</span></div><div class=\"reject-stat\"><strong data-i18n=\"Saved Events\">Saved Events</strong><span>'+saved.length+'</span></div></div><p class=\"panel-note\" data-i18n=\"Saved events may be incomplete. Reject reason is not a counterfeit classification.\">Saved events may be incomplete. Reject reason is not a counterfeit classification.</p><div class=\"reject-table-wrap\"><table><thead><tr><th data-i18n=\"No\">No</th><th data-i18n=\"PCS\">PCS</th><th data-i18n=\"Reason\">Reason</th></tr></thead><tbody>'+rowsHtml+'</tbody></table></div></div>';}\n"
+        "function renderRejectSection(){const container=document.getElementById('rejectContent');if(!container)return;const saved=reportData.rejectDetails||[];if(!saved.length&&reportData.cComplete){container.innerHTML='<div class=\"reject-empty\"><h3 data-i18n=\"No Error\">No Error</h3></div>';return;}if(!saved.length){container.innerHTML='<div class=\"reject-empty\"><div class=\"reject-card\"><div class=\"tag\" data-i18n=\"Historical detail\">Historical detail</div><h3 data-i18n=\"No saved reject detail\">No saved reject detail</h3><p data-i18n=\"This record does not establish that no notes were rejected.\">This record does not establish that no notes were rejected.</p></div></div>';return;}const rowsHtml=saved.map(item=>'<tr><td>'+item.no+'</td><td class=\"num-font\">'+item.pcs+'</td><td data-i18n>'+item.reason+'</td></tr>').join('');container.innerHTML='<div class=\"reject-detail\"><div class=\"reject-stats\"><div class=\"reject-stat\"><strong data-i18n=\"Saved Reject PCS\">Saved Reject PCS</strong><span>'+reportData.savedRejectPcs+'</span></div><div class=\"reject-stat\"><strong data-i18n=\"Saved Events\">Saved Events</strong><span>'+saved.length+'</span></div></div><p class=\"panel-note\" data-i18n=\"Saved events may be incomplete. Reject reason is not a counterfeit classification.\">Saved events may be incomplete. Reject reason is not a counterfeit classification.</p><div class=\"reject-table-wrap\"><table><thead><tr><th data-i18n=\"No\">No</th><th data-i18n=\"PCS\">PCS</th><th data-i18n=\"Reason\">Reason</th></tr></thead><tbody>'+rowsHtml+'</tbody></table></div></div>';}\n"
         "if(input){input.addEventListener('input',applySearch);}applySearch();renderRejectSection();window.addEventListener('load',()=>{syncSerialHeight();});window.addEventListener('resize',()=>{syncSerialHeight();});requestAnimationFrame(()=>{syncSerialHeight();});\n"
         "})();</script>\n");
 
+    if(rec->detail_bytes)fprintf(fp,"<p>A: <span data-i18n=\"%s\">%s</span> / B: <span data-i18n=\"%s\">%s</span> / C: <span data-i18n=\"%s\">%s</span></p>\n",
+        detail->denoms_complete?"Complete":"Incomplete",detail->denoms_complete?"Complete":"Incomplete",
+        detail->serials_complete?"Complete":"Incomplete",detail->serials_complete?"Complete":"Incomplete",
+        detail->rejects_complete?"Complete":"Incomplete",detail->rejects_complete?"Complete":"Incomplete");
+    if(rec->detail_bytes && detail->denoms_complete && detail->serials_complete && detail->rejects_complete)
+        fputs("<script>document.querySelector('.badge-amber').setAttribute('data-i18n','Complete');</script>\n",fp);
     ui_report_i18n_write(fp,report_language);
     fputs("</body></html>\n",fp);
     return history_export_flush_and_verify(fp, file_path);
@@ -527,78 +525,51 @@ static void history_export_rollback_outputs(history_export_output_t *outputs,
     }
 }
 
-bool ui_history_export_data_request_records(const uint32_t *record_nos,
-                                            size_t record_count)
+typedef struct {size_t count;language_t language;ui_history_record_t records[];} history_export_job_t;
+static bool history_export_run_job(const void *snapshot,size_t size)
 {
-    const ui_history_store_t *store;
-    ui_history_record_t *snapshots = NULL;
-    history_export_output_t *outputs = NULL;
-    size_t output_count = 0U;
-    size_t i;
-    bool ok = false;
-
-    if (g_history_export_lock) {
-        history_export_notice(UI_NOTICE_INFO,UI_N_("Wait a moment before exporting again."));
-        return false;
-    }
-    if (record_nos == NULL || record_count == 0U) {
-        history_export_notice(UI_NOTICE_WARNING,UI_N_("Select records to export."));
-        return false;
-    }
-
-    store = ui_history_data_get();
-    if (record_count > UI_HISTORY_MAX_RECORDS || store == NULL ||
-        store->record_count > UI_HISTORY_MAX_RECORDS) {
-        goto cleanup;
-    }
-    snapshots = calloc(record_count, sizeof(*snapshots));
-    outputs = calloc(record_count, sizeof(*outputs));
-    if (snapshots == NULL || outputs == NULL) {
-        goto cleanup;
-    }
-
-    /* Resolve the complete selection before USB access. No stale, duplicate or
-     * invalid ID may silently export a different batch or a partial selection. */
-    for (i = 0; i < record_count; i++) {
-        size_t j;
-        const ui_history_record_t *record = NULL;
-        if (record_nos[i] == 0U) goto cleanup;
-        for (j = 0; j < i; j++) {
-            if (record_nos[j] == record_nos[i]) goto cleanup;
+    const history_export_job_t *job=snapshot;
+    g_history_export_succeeded=false;
+    if(size<sizeof(*job) || !job->count || job->count>UI_HISTORY_MAX_RECORDS || size!=sizeof(*job)+job->count*sizeof(job->records[0]))return true;
+    history_export_output_t *outputs=calloc(job->count,sizeof(*outputs));if(!outputs)return true;
+    g_history_export_language=job->language;size_t written=0;
+    for(;written<job->count;written++)if(!history_export_write_selected_record(&job->records[written],&outputs[written]))break;
+    g_history_export_succeeded=written==job->count;
+    if(!g_history_export_succeeded)history_export_rollback_outputs(outputs,written);
+    free(outputs);return true;
+}
+void ui_history_export_data_poll(void)
+{
+    if(!g_history_export_job || storage_worker_status(g_history_export_job)!=STORAGE_JOB_SUCCEEDED)return;
+    storage_worker_release(g_history_export_job);g_history_export_job=0;
+    if(!g_history_export_unlock_timer)g_history_export_lock=false;
+    history_export_notice(g_history_export_succeeded?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,
+        g_history_export_succeeded?UI_N_("Records saved to USB."):UI_N_("Export failed. Check selected records and USB drive."));
+}
+bool ui_history_export_data_request_records(const uint32_t *record_nos,size_t record_count)
+{
+    if(g_history_export_lock || g_history_export_job){history_export_notice(UI_NOTICE_INFO,UI_N_("Wait a moment before exporting again."));return false;}
+    if(!record_nos || !record_count){history_export_notice(UI_NOTICE_WARNING,UI_N_("Select records to export."));return false;}
+    const ui_history_store_t *store=ui_history_data_get();
+    if(record_count>UI_HISTORY_MAX_RECORDS || !store || store->record_count>UI_HISTORY_MAX_RECORDS)goto failed;
+    size_t size=sizeof(history_export_job_t)+record_count*sizeof(store->records[0]);
+    history_export_job_t *job=calloc(1,size);if(!job)goto failed;
+    job->count=record_count;job->language=ui_lang_get();
+    for(size_t i=0;i<record_count;i++){
+        const ui_history_record_t *record=NULL;
+        if(!record_nos[i]){free(job);goto failed;}
+        for(size_t j=0;j<i;j++)if(record_nos[j]==record_nos[i]){free(job);goto failed;}
+        for(size_t j=0;j<store->record_count;j++)if(store->records[j].valid && store->records[j].record_no==record_nos[i]){
+            if(record){free(job);goto failed;}record=&store->records[j];
         }
-        for (j = 0; j < store->record_count; j++) {
-            if (store->records[j].valid &&
-                store->records[j].record_no == record_nos[i]) {
-                if (record != NULL) goto cleanup;
-                record = &store->records[j];
-            }
-        }
-        if (record == NULL) goto cleanup;
-        snapshots[i] = *record;
+        if(!record){free(job);goto failed;}job->records[i]=*record;
     }
-    if (!usb_storage_prepare()) goto cleanup;
-
-    history_export_start_lock();
-    history_export_notice(UI_NOTICE_PROGRESS,UI_N_("Exporting records to USB..."));
-
-    for (i = 0; i < record_count; i++) {
-        if (!history_export_write_selected_record(&snapshots[i],
-                                                  &outputs[output_count])) {
-            goto cleanup;
-        }
-        output_count++;
-    }
-    ok = true;
-
-cleanup:
-    if (!ok) {
-        history_export_rollback_outputs(outputs, output_count);
-        history_export_notice(UI_NOTICE_ERROR,UI_N_("Export failed. Check selected records and USB drive."));
-    }
-    if(ok)history_export_notice(UI_NOTICE_SUCCESS,UI_N_("Records saved to USB."));
-    free(snapshots);
-    free(outputs);
-    return ok;
+    bool accepted=usb_storage_prepare() && storage_worker_init() &&
+        storage_worker_submit(history_export_run_job,job,size,&g_history_export_job);
+    free(job);if(!accepted)goto failed;
+    history_export_start_lock();history_export_notice(UI_NOTICE_PROGRESS,UI_N_("Exporting records to USB..."));return true;
+failed:
+    history_export_notice(UI_NOTICE_ERROR,UI_N_("Export failed. Check selected records and USB drive."));return false;
 }
 
 bool ui_history_export_data_request(void)

@@ -21,11 +21,16 @@ static char g_last_start_frame_text[COUNTING_HISTORY_FRAME_TEXT_SIZE];
 static char g_last_end_frame_text[COUNTING_HISTORY_FRAME_TEXT_SIZE];
 static char g_session_log_text[COUNTING_HISTORY_SESSION_LOG_SIZE];
 static size_t g_session_log_len;
+static bool g_reject_report_complete;
+static bool g_reject_report_started;
+static uint32_t g_wire_amount;
+static bool g_wire_amount_seen;
 typedef struct {
     ui_history_record_t record;
     storage_job_id_t job;
     uint32_t multi_group, generation;
     cashbook_result_t cashbook;
+    history_record_snapshot_t detail;
 } counting_history_snapshot_t;
 static counting_history_snapshot_t g_snapshots[COUNTING_HISTORY_PENDING_CAPACITY];
 static unsigned g_snapshot_count;
@@ -74,6 +79,9 @@ static void counting_history_session_reset(void)
     g_last_end_frame_text[0] = '\0';
     g_session_log_text[0] = '\0';
     g_session_log_len = 0;
+    g_reject_report_complete=false;
+    g_reject_report_started=false;
+    g_wire_amount=0;g_wire_amount_seen=false;
 }
 
 void counting_history_append_frame(const char *tag,
@@ -82,6 +90,16 @@ void counting_history_append_frame(const char *tag,
 {
     char hex[COUNTING_HISTORY_HEX_BUFFER_SIZE];
     int written;
+    if(tag && buf && len==13 && !strcmp(tag,"0x0E")){
+        uint32_t amount=(uint32_t)buf[4]<<24|(uint32_t)buf[5]<<16|(uint32_t)buf[6]<<8|buf[7];
+        if(amount || !g_wire_amount_seen || buf[11]<2){g_wire_amount=amount;g_wire_amount_seen=true;}
+    }
+
+    /* Completion evidence must survive a saturated diagnostic log. */
+    if(tag && buf && len==7 && !strcmp(tag,"0x0C")){
+        if(buf[4]==0 && buf[5]==0){g_reject_report_complete=false;g_reject_report_started=true;}
+        if(buf[4]==0xFF && buf[5]==0xFF && g_reject_report_started){g_reject_report_complete=true;g_reject_report_started=false;}
+    }
 
     if (tag == NULL || buf == NULL || len == 0U ||
         g_session_log_len >= sizeof(g_session_log_text) - 1U) {
@@ -185,7 +203,8 @@ static void counting_history_submit_snapshots(void)
             }
         } else {
             uint32_t id=ui_history_data_get()->next_record_no;
-            if(!ui_history_record_append_snapshot(&s->record,total)) break;
+            if(s->detail.bytes ? !ui_history_record_append_full_snapshot(&s->record,total,&s->detail) :
+                !ui_history_record_append_snapshot(&s->record,total)) break;
             g_submitted_id=id;g_submitted_group=s->multi_group;
         }
         g_submitted_pcs=s->record.pcs;
@@ -295,6 +314,10 @@ counting_history_commit_result_t counting_history_try_commit(
         return COUNTING_HISTORY_COMMIT_FAILED;
     }
     snapshot->generation=g_current_generation;
+    if(g_wire_amount_seen)snapshot->record.detail_amount=g_wire_amount;
+    if(!history_record_snapshot_capture(sim_data,session->history_record.pcs,g_reject_report_complete,&snapshot->detail)){
+        g_uncaptured_pending=true;return COUNTING_HISTORY_COMMIT_FAILED;
+    }
     snapshot->record.operator_id=g_operator_id;
     snprintf(snapshot->record.operator_name,sizeof(snapshot->record.operator_name),"%s",g_operator_name);
     counting_cashbook_capture(&snapshot->cashbook,&snapshot->record,sim_data);
@@ -321,6 +344,7 @@ counting_history_commit_result_t counting_history_poll_commit(
            ui_history_commit_status(g_snapshots[0].job) == STORAGE_JOB_SUCCEEDED &&
            counting_cashbook_commit(&g_snapshots[0].cashbook)) {
         if(g_snapshots[0].generation==g_current_generation)g_current_record=g_snapshots[0].cashbook.source;
+        history_record_snapshot_release(&g_snapshots[0].detail);
         memmove(g_snapshots, g_snapshots + 1,
                 (--g_snapshot_count) * sizeof(g_snapshots[0]));
         saved = true;

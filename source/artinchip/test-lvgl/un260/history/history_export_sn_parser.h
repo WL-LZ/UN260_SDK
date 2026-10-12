@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 #define HISTORY_EXPORT_SN_TEXT_SIZE 64
-#define HISTORY_EXPORT_SN_MAX_ENTRIES 256
+#define HISTORY_EXPORT_SN_MAX_ENTRIES 10000
 
 typedef struct {
     unsigned no;

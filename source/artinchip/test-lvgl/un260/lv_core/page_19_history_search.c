@@ -637,7 +637,7 @@ static bool create_options(page_19_history_search_t *s)
             }
         }
         if (record->detail) for (size_t i = 0; i < record->detail->reject_count; ++i)
-            reject_seen[record->detail->rejects[i].code] = true;
+            reject_seen[history_record_detail_reject_at(record->detail,i)->code] = true;
     }
     if (s->input.currency[0]) {
         size_t i = 1;

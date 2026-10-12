@@ -18,11 +18,14 @@ with tempfile.TemporaryDirectory(prefix="un260-history-export-") as directory:
     dependency_root = os.environ.get("UN260_TEST_DEPENDENCY_ROOT")
     if dependency_root:
         includes += ["-I" + dependency_root]
-    subprocess.run([compiler, "-std=c11", "-D_POSIX_C_SOURCE=200809L", "-O1", "-g", "-Wall", "-Wextra", "-Werror",
+    subprocess.run([compiler, "-pthread", "-std=c11", "-D_POSIX_C_SOURCE=200809L", "-O1", "-g", "-Wall", "-Wextra", "-Werror",
                     *includes,
                     *(str(p) for p in with_i18n([ROOT / "un260/lv_system/ui_report_i18n.c"], ROOT)),
                     str(ROOT / "tools/test_history_export.c"),
                     str(ROOT / "un260/history/history_record_detail.c"),
+                    str(ROOT / "un260/history/history_record_snapshot.c"),
+                    str(ROOT / "un260/history/history_record_reader.c"),
+                    str(ROOT / "un260/storage/storage_worker.c"),
                     str(ROOT / "un260/history/history_export_sn_parser.c"),
                     str(ROOT / "un260/history/history_export_text.c"),
                     str(ROOT / "un260/protocol/protocol_frame.c"),

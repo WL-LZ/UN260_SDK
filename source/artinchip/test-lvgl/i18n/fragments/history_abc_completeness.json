@@ -1,0 +1,42 @@
+{
+  "en": {
+    "Complete": "Complete",
+    "Incomplete": "Incomplete"
+  },
+  "zh-Hans": {
+    "Complete": "完整",
+    "Incomplete": "不完整"
+  },
+  "ko": {
+    "Complete": "완전",
+    "Incomplete": "불완전"
+  },
+  "ja": {
+    "Complete": "完全",
+    "Incomplete": "不完全"
+  },
+  "ar": {
+    "Complete": "مكتمل",
+    "Incomplete": "غير مكتمل"
+  },
+  "tr": {
+    "Complete": "Tam",
+    "Incomplete": "Eksik"
+  },
+  "fr": {
+    "Complete": "Complet",
+    "Incomplete": "Incomplet"
+  },
+  "pl": {
+    "Complete": "Kompletne",
+    "Incomplete": "Niekompletne"
+  },
+  "ru": {
+    "Complete": "Полные данные",
+    "Incomplete": "Неполные данные"
+  },
+  "de": {
+    "Complete": "Vollständig",
+    "Incomplete": "Unvollständig"
+  }
+}

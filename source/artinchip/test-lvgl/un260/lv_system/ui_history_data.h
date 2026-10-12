@@ -8,6 +8,7 @@
 #include "un260/counting/counting_data_types.h"
 #include "un260/storage/storage_worker.h"
 #include "un260/history/history_multi.h"
+#include "un260/history/history_record_snapshot.h"
 
 #define UI_HISTORY_MIN_RECORDS 100
 #define UI_HISTORY_MAX_RECORDS 1000
@@ -38,6 +39,10 @@ typedef struct {
     char start_frame_text[160];
     char end_frame_text[160];
     char session_log[3072];
+    uint64_t detail_hash;
+    uint32_t detail_bytes;
+    uint64_t detail_amount;
+    uint8_t detail_reject_codes[32];
     history_multi_t multi;
 } ui_history_record_t;
 
@@ -80,6 +85,11 @@ bool ui_history_record_build_from_session(const counting_sim_t *sim_data,
     const char *session_log_text, ui_history_record_t *out);
 bool ui_history_record_append_snapshot(const ui_history_record_t *record,
                                        uint32_t total_notes_after);
+bool ui_history_record_append_full_snapshot(const ui_history_record_t *record,
+    uint32_t total_notes_after,const history_record_snapshot_t *detail);
+/* Worker-thread reader shared by history and exports. New records never fall
+ * back to a truncated legacy preview if their referenced full file is bad. */
+bool ui_history_record_read_detail(const ui_history_record_t *record,history_record_detail_t *out);
 /* Metadata only; caller must attach its immutable MULTI groups before enqueue. */
 bool ui_history_record_build_multi_base(const counting_sim_t *sim,uint32_t pcs,
     const char *error,const char *start,const char *end,const char *log,ui_history_record_t *out);

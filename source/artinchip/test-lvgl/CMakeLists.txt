@@ -314,6 +314,9 @@ add_executable(${PROJECT_NAME} main.c
     un260/diagnostic/diagnostic.c
     un260/history/history_export_sn_parser.c
     un260/history/history_record_detail.c
+    un260/history/history_record_snapshot.c
+    un260/history/history_record_reader.c
+    un260/history/history_read_task.c
     un260/history/history_query.c
     un260/counting/counting_serial_text.c
     un260/history/history_export_text.c

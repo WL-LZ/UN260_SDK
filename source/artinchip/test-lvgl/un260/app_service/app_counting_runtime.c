@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_history_export_data.h"
 #include "runtime_guard.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "app_counting_runtime.h"
@@ -687,6 +688,7 @@ void app_counting_runtime_poll_history(counting_session_state_t *session,
                                        const counting_sim_t *sim_data,
                                        uint32_t now_ms)
 {
+    ui_history_export_data_poll();
     counting_history_commit_result_t result;
     uint8_t previous_attempts;
 

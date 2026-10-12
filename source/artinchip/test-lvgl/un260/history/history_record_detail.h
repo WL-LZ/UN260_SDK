@@ -45,6 +45,7 @@ typedef struct {
     history_export_sn_entry_t *serials;
     size_t serial_count;
     history_detail_reject_t rejects[HISTORY_DETAIL_MAX_REJECTS];
+    history_detail_reject_t *reject_extra;
     size_t reject_count;
     uint64_t denomination_pcs;
     uint64_t denomination_amount;
@@ -68,5 +69,6 @@ typedef struct {
 bool history_record_detail_build(const history_detail_input_t *input,
                                  history_record_detail_t *out);
 void history_record_detail_release(history_record_detail_t *detail);
+const history_detail_reject_t *history_record_detail_reject_at(const history_record_detail_t *detail,size_t index);
 
 #endif

@@ -73,3 +73,5 @@
     UI_N_("Version Unknown"),
     UI_N_("match"),
     UI_N_("matches"),
+    UI_N_("Complete"),
+    UI_N_("Incomplete"),

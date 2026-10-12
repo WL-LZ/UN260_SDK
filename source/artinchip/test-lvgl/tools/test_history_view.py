@@ -53,6 +53,10 @@ COMPONENTS = [
     "un260/lv_system/ui_text_widget.c",
     "un260/lv_system/ui_lang.c",
     "un260/history/history_record_detail.c",
+    "un260/history/history_record_snapshot.c",
+    "un260/history/history_record_reader.c",
+    "un260/history/history_read_task.c",
+    "un260/storage/storage_worker.c",
     "un260/history/history_query.c",
     "un260/history/history_export_sn_parser.c",
     "un260/counting/counting_reject_reason.c",
@@ -116,9 +120,10 @@ def main():
                      "un260/lv_components/ui_multi_detail.c", "un260/lv_core/page_02_list_search.c"}),
                    *(ROOT / f"un260/font/lv_font_{f}.c" for f in fonts),
                    *sorted(p for p in (lvgl / "src").rglob("*.c") if p.name != "qrcodegen.c")]
+        (work / "history").mkdir()
         executable = work / "test-history-view"
         sources = with_i18n(sources, ROOT)
-        command = [compiler, '-DUN260_LOCALE_FONT_DIR="S:'+str(ROOT/'aic_ui/lvgl_data/locale_fonts')+'/"', "-D_GNU_SOURCE", '-DUI_STATE_DIR="/tmp/un260-i18n-tests"', "-std=c11", "-O1", "-g", "-Wall", "-Wextra",
+        command = [compiler, '-DUN260_LOCALE_FONT_DIR="S:'+str(ROOT/'aic_ui/lvgl_data/locale_fonts')+'/"', '-DUI_HISTORY_STORE_DIR="'+str(work/"history")+'"', "-D_GNU_SOURCE", '-DUI_STATE_DIR="/tmp/un260-i18n-tests"', "-pthread", "-std=c11", "-O1", "-g", "-Wall", "-Wextra",
                    "-DLV_DRV_CONF_H", '-DLVGL_DIR="L:/usr/local/share/lvgl_data/"',
                    "-fsanitize=address,undefined" if args.asan else "-fsanitize=undefined", "-fno-sanitize-recover=all",
                    f"-I{work}", f"-I{ROOT}", f"-I{lvgl}", f"-DLV_CONF_PATH={conf}",
