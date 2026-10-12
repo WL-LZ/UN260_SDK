@@ -154,11 +154,19 @@ static void batch_view(lv_obj_t *b)
     if(menu.selected_batch){int edit_width=LV_MAX(83,menu_text_width(ui_tr("Edit"))+46);lv_obj_t *edit=white_button(d,20,146,edit_width,36,ui_tr("Edit"),A_EDIT_BATCH);button_icon(edit,MICON("edit",22),INK);lv_obj_t *remove=button(d,28+edit_width,146,137,36,ui_tr("Remove"),A_DELETE_BATCH,false);lv_obj_set_style_bg_opa(remove,LV_OPA_TRANSP,0);lv_obj_set_style_text_color(remove,lv_color_hex(0xB33535),0);icon(remove,MICON("trash",22),9,7,0xB33535);lv_obj_align(lv_obj_get_child(remove,0),LV_ALIGN_LEFT_MID,40,0);if(menu.batch_count<=2)lv_obj_add_state(remove,LV_STATE_DISABLED);}
     bool active=!menu.batch_dirty&&(machine_state_batch_enabled()?menu.selected_batch&&menu.batches[menu.selected_batch]==machine_state_batch_num():!menu.selected_batch);
     lv_obj_t *apply=button(d,20,186,254,44,active?ui_tr("In use"):ui_tr("Use this preset"),A_APPLY_BATCH,true);if(active)button_icon(apply,MICON("check",22),0x64717C);if(active)lv_obj_add_state(apply,LV_STATE_DISABLED);
+    lv_obj_t *main_batch=button(b,0,256,470,40,
+        ui_tr(ui_state_main_batch_action_get()==UI_MAIN_BATCH_CYCLE?UI_N_("Main Batch: Cycle"):UI_N_("Main Batch: Settings")),
+        A_BATCH_BEHAVIOR,true);
+    lv_label_set_long_mode(lv_obj_get_child(main_batch,0),LV_LABEL_LONG_CLIP);
 }
 static bool profile_matches(const workspace_profile_t *p)
 {
     workspace_profile_t c=current_profile();
     return p->speed==c.speed&&p->work==c.work&&p->add==c.add&&p->sort==c.sort&&p->beep==c.beep&&(!p->mode||p->mode==c.mode)&&p->batch_enabled==c.batch_enabled&&(!p->batch_enabled||p->batch==c.batch);
+}
+static const char *profile_display_name(const workspace_profile_t *profile)
+{
+    return workspace_profile_has_default_name(profile) ? ui_tr("Everyday count") : profile->name;
 }
 static void profiles_view(lv_obj_t *b)
 {
@@ -171,12 +179,12 @@ static void profiles_view(lv_obj_t *b)
         lv_obj_t *v=lv_settings_button(list,3,2+i*80,item_width,72,"",false,pick_event,(void *)(uintptr_t)i);palette(v,selected?HEADER_SURFACE:PANEL);lv_obj_set_style_border_width(v,0,0);lv_obj_set_style_radius(v,14,0);
         if(selected)box(v,0,9,3,54,BLUE,2);
         icon(v,p->batch_enabled?MICON("layers",22):p->work&&p->speed==0?MICON("shield",22):MICON("note",22),16,25,MUTED);
-        lv_obj_t *name=label(v,52,13,item_width-95,p->name,&lv_font_instrument_sans_semibold_18,INK);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
+        lv_obj_t *name=label(v,52,13,item_width-95,profile_display_name(p),&lv_font_instrument_sans_semibold_18,INK);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
         char hint[96];snprintf(hint,sizeof(hint),"%s / %s",p->mode==2?ui_tr("Single denomination"):p->mode==3?ui_tr("Piece counting"):ui_tr("Mixed notes"),p->batch_enabled?ui_tr("Batch counting"):p->work?ui_tr("Manual start"):ui_tr("Continuous counting"));
         small(v,52,41,item_width-95,hint);icon(v,MICON("next",22),item_width-38,25,BLUE);
     }
     const workspace_profile_t *p=&u->profiles[menu.selected_profile];lv_obj_t *d=box(b,606,48,422,248,PANEL,20);
-    lv_obj_t *name=label(d,20,18,382,p->name,&lv_font_instrument_sans_semibold_21,INK);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
+    lv_obj_t *name=label(d,20,18,382,profile_display_name(p),&lv_font_instrument_sans_semibold_21,INK);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
     profile_summary(d,p,61);
     int delete_width=LV_MAX(100,menu_text_width(ui_tr("Delete"))+53);
     lv_obj_t *del=button(d,20,194,delete_width,36,ui_tr("Delete"),A_DELETE_PROFILE,false);lv_obj_set_style_bg_opa(del,LV_OPA_TRANSP,0);lv_obj_set_style_text_color(del,lv_color_hex(0xB33535),0);icon(del,MICON("trash",22),8,7,0xB33535);lv_obj_set_width(lv_obj_get_child(del,0),delete_width-45);lv_obj_align(lv_obj_get_child(del,0),LV_ALIGN_LEFT_MID,37,0);if(u->profile_count<=1)lv_obj_add_state(del,LV_STATE_DISABLED);
@@ -201,36 +209,55 @@ static void options_view(lv_obj_t *b)
 
 static void interaction_view(lv_obj_t *b)
 {
-    heading(b,ui_tr("Interaction"));
-    lv_obj_t *left=box(b,0,48,504,248,PANEL,20),*rows=box(left,20,8,464,232,PANEL,0);
+    lv_obj_t *title=label(b,0,2,LV_SIZE_CONTENT,ui_tr("Interaction"),&lv_font_instrument_sans_semibold_26,INK);
+    lv_label_set_long_mode(title,LV_LABEL_LONG_CLIP);lv_obj_set_style_text_align(title,LV_TEXT_ALIGN_LEFT,0);
+    lv_obj_update_layout(title);
+    int controls_x=lv_obj_get_width(title)+24;
+    int controls_width=LV_MAX(160,menu_text_width(ui_tr("Controls"))+48);
+    int visibility_width=LV_MAX(238,menu_text_width(ui_tr("Pull-down shortcuts"))+48);
+    lv_obj_t *tray=box(b,controls_x,0,controls_width+visibility_width+10,48,PANEL,14);
+    lv_obj_t *controls=button(tray,4,4,controls_width,40,ui_tr("Controls"),A_INTERACTION_CONTROLS,false);
+    lv_obj_t *visibility=button(tray,controls_width+6,4,visibility_width,40,ui_tr("Pull-down shortcuts"),A_SHORTCUT_VISIBILITY,false);
+    header_surface(controls);header_surface(visibility);
+    choose(controls,!menu.shortcut_visibility);choose(visibility,menu.shortcut_visibility);
+    lv_obj_set_style_text_color(lv_obj_get_child(controls,0),lv_color_hex(menu.shortcut_visibility?MUTED:BLUE),0);
+    lv_obj_set_style_text_color(lv_obj_get_child(visibility,0),lv_color_hex(menu.shortcut_visibility?BLUE:MUTED),0);
+    if(!menu.shortcut_visibility){
+        if(!lv_quick_controls_create_all(&menu.interaction_controls,b,0,60,1028,quick_tile)){
+            small(b,0,72,1028,ui_tr("Quick action is unavailable right now."));return;
+        }
+        menu.interaction_created=true;
+        lv_quick_controls_refresh(&menu.interaction_controls,lv_quick_controls_current_state());
+        lv_content_pager_set_active(menu.interaction_controls.pager,menu.interaction_page,false);
+        gesture_service_set_pointer_policy(UI_PAGE_MENU,menu_quick_pointer);
+        return;
+    }
+    lv_obj_t *left=box(b,0,60,504,236,PANEL,20),*rows=box(left,20,8,464,120,PANEL,0);
     toggle(rows,0,464,ui_tr("Pull-down controls"),ui_tr("Swipe down from Main"),workspace_service_quick_enabled(),A_QUICK_TOGGLE);
-    toggle(rows,57,464,ui_tr("Side / two-finger gestures"),ui_tr("Navigate by touch"),gesture_service_enabled(),A_GESTURES);
-    toggle(rows,114,464,ui_tr("QR after counting"),ui_tr("Show after a completed count"),user()&&user()->qr_after_count,A_AUTO_QR);
-    toggle(rows,171,464,ui_tr("Top popup"),NULL,ui_notice_get_enabled(),A_TOP_POPUP_TOGGLE);
-    for(unsigned i=1;i<4;i++)box(rows,0,i*57-3,464,1,LINE,0);
-    lv_obj_t *right=box(b,524,48,504,248,PANEL,20);
-    label(right,16,9,290,ui_tr("Shortcut order"),&lv_font_instrument_sans_semibold_17,INK);
-    small(right,16,32,468,ui_tr("Tap two shortcuts to swap positions."));
-    lv_obj_t *shortcuts=box(right,16,57,472,175,PANEL,0);
+    toggle(rows,61,464,ui_tr("QR after counting"),ui_tr("Show after a completed count"),user()&&user()->qr_after_count,A_AUTO_QR);
+    box(rows,0,58,464,1,LINE,0);
+    small(left,20,151,464,ui_tr("Hiding a shortcut keeps its function available in Controls."));
+    lv_obj_t *right=box(b,524,60,504,236,PANEL,20);
+    label(right,16,9,472,ui_tr("Pull-down shortcuts"),&lv_font_instrument_sans_semibold_17,INK);
+    small(right,16,32,472,ui_tr("Tap to show or hide in pull-down controls."));
+    lv_obj_t *shortcuts=box(right,16,64,472,156,PANEL,0);
     lv_obj_add_flag(shortcuts,LV_OBJ_FLAG_SCROLLABLE|LV_OBJ_FLAG_USER_4);lv_obj_set_scroll_dir(shortcuts,LV_DIR_VER);lv_port_indev_set_drag_obj(shortcuts,true);
     menu.task_scroll=shortcuts;
     int item_width=(ui_scrollbar_content_width(shortcuts)-8)/2;
     uint8_t order[QUICK_CONTROL_COUNT];ui_state_quick_order_get(order);
+    uint16_t mask=ui_state_quick_visible_get();
     for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
-        bool selected=menu.quick_pick==i;
-        lv_obj_t *item=button(shortcuts,(i%2)*(item_width+8),(i/2)*36,item_width,32,
-            lv_quick_controls_title(order[i]),A_QUICK_ORDER_BASE+i,false);
+        bool selected=(mask&(1U<<order[i]))!=0;
+        lv_obj_t *item=button(shortcuts,(i%2)*(item_width+8),(i/2)*38,item_width,34,
+            lv_quick_controls_title(order[i]),A_QUICK_ORDER_BASE+order[i],false);
         lv_obj_set_style_radius(item,9,0);
         palette(item,selected?0xE1EEFC:0xFFFFFF);
         lv_obj_t *title=lv_obj_get_child(item,0);
-        lv_obj_set_width(title,item_width-54);lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
-        lv_obj_set_style_text_align(title,LV_TEXT_ALIGN_LEFT,0);
-        lv_obj_align(title,LV_ALIGN_LEFT_MID,42,0);
-        char number[4];snprintf(number,sizeof(number),"%02u",i+1);
-        lv_obj_t *badge=box(item,7,4,26,22,selected?0xC9DFF8:0xEFF3F7,6);
-        lv_obj_t *index=label(badge,5,0,18,number,&lv_font_instrument_sans_medium_12,selected?BLUE:MUTED);
-        lv_obj_set_style_text_align(index,LV_TEXT_ALIGN_LEFT,0);
-        lv_obj_align(index,LV_ALIGN_LEFT_MID,5,0);
+        lv_obj_set_width(title,item_width-48);lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
+        lv_obj_set_style_text_align(title,LV_TEXT_ALIGN_LEFT,0);lv_obj_align(title,LV_ALIGN_LEFT_MID,40,0);
+        lv_obj_t *badge=box(item,9,8,18,18,selected?BLUE:0xFFFFFF,5);
+        border(badge,selected?BLUE:LINE);
+        if(selected)icon(badge,MICON("check",16),1,1,0xFFFFFF);
     }
 }
 static void display_view(lv_obj_t *b)

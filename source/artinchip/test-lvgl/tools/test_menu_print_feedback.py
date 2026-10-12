@@ -4,6 +4,7 @@ import os
 import subprocess
 import tempfile
 from test_multi_result_safety import function
+from test_i18n_support import with_i18n
 
 root = Path(__file__).resolve().parents[1]
 actual = function((root/'un260/lv_core/lv_page_event.c').read_text(),
@@ -29,6 +30,7 @@ bool currency_state_multi_selected(void){return multi;}
 bool counting_data_monetary_result_supported(const void *p){assert(p==&data);return supported;}
 void *counting_data_current(void){return &data;}
 const char *ui_text_get(int id){(void)id;return "Print feedback";}
+const char *ui_text_msgid(int id){return ui_text_get(id);}
 bool page_03_menu_report_setting_error(const char *s){assert(s&&*s);if(visible)inline_errors++;return visible;}
 bool page_03_menu_is_visible(void){return visible;}
 lv_print_toast_config_t lv_print_toast_get_default_config(void){return (lv_print_toast_config_t){0};}
@@ -66,5 +68,5 @@ with tempfile.TemporaryDirectory(prefix='un260-menu-print-') as directory:
     command=[os.environ.get('CC','cc'),'-std=gnu11','-Wall','-Wextra','-Werror',f'-I{root}']
     if os.name!='nt': command += ['-fsanitize=address,undefined','-fno-sanitize-recover=all','-no-pie']
     if os.name=='nt': executable=executable.with_suffix('.exe')
-    subprocess.run([*command,str(source),'-o',str(executable)],check=True)
+    subprocess.run([*command,*(str(p) for p in with_i18n([source],root)),'-o',str(executable)],check=True)
     subprocess.run([str(executable)],check=True)

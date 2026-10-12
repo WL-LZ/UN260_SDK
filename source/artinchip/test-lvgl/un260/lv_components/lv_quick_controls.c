@@ -83,21 +83,23 @@ lv_quick_controls_state_t lv_quick_controls_current_state(void)
         .touch=touch_feedback_enabled(),.top_popup=ui_notice_get_enabled(),
         .versions={device_info_is_valid()?device_info_main_app():NULL,
             device_info_is_valid()?device_info_image_app():NULL,device_info_display_app()}};
-    ui_state_quick_order_get(s.order);return s;
+    ui_state_quick_order_get(s.order);s.visible_mask=ui_state_quick_visible_get();return s;
 }
-bool lv_quick_controls_create(lv_quick_controls_t *v,lv_obj_t *parent,int x,int y,lv_event_cb_t cb)
+static bool controls_create(lv_quick_controls_t *v,lv_obj_t *parent,int x,int y,int width,bool all,lv_event_cb_t cb)
 {
-    memset(v,0,sizeof(*v));v->selected=-1;
-    v->pager=lv_content_pager_create(parent,x,y,1230,220,
-        (QUICK_CONTROL_COUNT+QUICK_CONTROLS_PER_PAGE-1)/QUICK_CONTROLS_PER_PAGE);
+    memset(v,0,sizeof(*v));v->selected=-1;v->width=width;v->show_all=all;
+    v->columns=width>=1200?4:3;v->per_page=v->columns*2;
+    int tile_width=(width-12*(v->columns-1)+v->columns/2)/v->columns;
+    v->pager=lv_content_pager_create(parent,x,y,width,220,
+        (QUICK_CONTROL_COUNT+v->per_page-1)/v->per_page);
     if(!v->pager)return false;
     v->viewport=lv_content_pager_get_viewport(v->pager);
     lv_content_pager_set_circular(v->pager,true);
     lv_obj_add_flag(v->pager,LV_OBJ_FLAG_OVERFLOW_VISIBLE);
-    lv_content_pager_set_indicator_position(v->pager,205,214);
+    lv_content_pager_set_indicator_position(v->pager,all?width/2-31:205,214);
     lv_obj_add_event_cb(v->viewport,cb,LV_EVENT_VALUE_CHANGED,(void *)QUICK_REORDER);
     for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
-        lv_obj_t *tile=box(lv_content_pager_get_page(v->pager,0),0,0,299,96,0xFFFFFF,13);
+        lv_obj_t *tile=box(lv_content_pager_get_page(v->pager,0),0,0,tile_width,96,0xFFFFFF,13);
         v->tiles[i]=tile;
         lv_obj_set_style_border_width(tile,1,0);
         lv_obj_set_style_border_color(tile,lv_color_hex(0xDCE5EC),0);
@@ -105,26 +107,34 @@ bool lv_quick_controls_create(lv_quick_controls_t *v,lv_obj_t *parent,int x,int 
         lv_obj_add_flag(tile,LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(tile,cb,LV_EVENT_CLICKED,(void *)(uintptr_t)i);
         v->icons[i]=icon(tile,icons[i],25,34);
-        copy(tile,ui_tr(titles[i]),72,24,155,&lv_font_instrument_sans_semibold_20,0x253D4C);
-        copy(tile,ui_tr(subtitles[i]),72,54,172,&lv_font_instrument_sans_medium_13,0x6D8494);
+        copy(tile,ui_tr(titles[i]),72,24,tile_width-144,&lv_font_instrument_sans_semibold_20,0x253D4C);
+        copy(tile,ui_tr(subtitles[i]),72,54,tile_width-127,&lv_font_instrument_sans_medium_13,0x6D8494);
         if(is_switch(i)){
-            v->switches[i]=box(tile,232,35,46,26,0xDCE4EB,13);
+            v->switches[i]=box(tile,tile_width-67,35,46,26,0xDCE4EB,13);
             v->knobs[i]=box(v->switches[i],4,4,18,18,0xFFFFFF,9);
         } else {
-            v->arrows[i]=icon(tile,"arrow",265,40);
+            v->arrows[i]=icon(tile,"arrow",tile_width-34,40);
             if(i==QUICK_PURE)
-                v->states[i]=copy(tile,"",211,41,49,&lv_font_instrument_sans_medium_13,0x1674E8);
+                v->states[i]=copy(tile,"",tile_width-88,41,49,&lv_font_instrument_sans_medium_13,0x1674E8);
         }
-        v->handles[i]=icon(tile,"drag",245,36);visible(v->handles[i],false);
+        v->handles[i]=icon(tile,"drag",tile_width-54,36);visible(v->handles[i],false);
     }
-    v->device_button=box(parent,x,267,184,44,0xF0F4F7,8);
+    v->empty=copy(v->viewport,ui_tr("No shortcuts selected."),0,82,width,&lv_font_instrument_sans_semibold_20,0x6D8494);
+    lv_obj_set_style_text_align(v->empty,LV_TEXT_ALIGN_CENTER,0);visible(v->empty,false);
+    v->device_button=box(parent,all?width-184+x:x,all?y-48:267,184,44,0xF0F4F7,8);
     lv_obj_add_flag(v->device_button,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(v->device_button,cb,LV_EVENT_CLICKED,(void *)QUICK_DEVICE_INFO);
     copy(v->device_button,"UN260",0,13,55,&lv_font_instrument_sans_semibold_14,0x56798F);
     box(v->device_button,55,15,1,12,0xD2DFE7,0);
-    copy(v->device_button,ui_tr("Device info"),66,13,84,&lv_font_instrument_sans_medium_13,0x7C919F);
-    icon(v->device_button,"info",144,15);
-    v->version_panel=box(parent,x,99,300,176,0xFFFFFF,14);
+    lv_obj_t *device_title=copy(v->device_button,ui_tr("Device info"),66,13,LV_SIZE_CONTENT,&lv_font_instrument_sans_medium_13,0x7C919F);
+    lv_label_set_long_mode(device_title,LV_LABEL_LONG_CLIP);
+    lv_obj_update_layout(device_title);
+    int device_width=LV_MAX(184,lv_obj_get_width(device_title)+108);
+    lv_obj_set_width(v->device_button,device_width);
+    if(all)lv_obj_set_x(v->device_button,x+width-device_width);
+    else lv_content_pager_set_indicator_position(v->pager,LV_MAX(205,device_width+20),214);
+    icon(v->device_button,"info",device_width-28,15);
+    v->version_panel=box(parent,all?width-300+x:x,all?y+16:99,300,176,0xFFFFFF,14);
     lv_obj_set_style_border_width(v->version_panel,1,0);
     lv_obj_set_style_border_color(v->version_panel,lv_color_hex(0xD4E0E8),0);
     lv_obj_add_flag(v->version_panel,LV_OBJ_FLAG_CLICKABLE);
@@ -141,6 +151,10 @@ bool lv_quick_controls_create(lv_quick_controls_t *v,lv_obj_t *parent,int x,int 
     visible(v->version_panel,false);
     return true;
 }
+bool lv_quick_controls_create(lv_quick_controls_t *v,lv_obj_t *parent,int x,int y,lv_event_cb_t cb)
+{return controls_create(v,parent,x,y,1230,false,cb);}
+bool lv_quick_controls_create_all(lv_quick_controls_t *v,lv_obj_t *parent,int x,int y,int width,lv_event_cb_t cb)
+{return width>=960 && controls_create(v,parent,x,y,width,true,cb);}
 void lv_quick_controls_show_versions(lv_quick_controls_t *v,bool show)
 { if(show)lv_quick_controls_finish(v);visible(v->version_panel,show);if(show)lv_obj_move_foreground(v->version_panel); }
 void lv_quick_controls_set_editing(lv_quick_controls_t *v,bool editing,int selected)
@@ -168,13 +182,28 @@ bool lv_quick_controls_refresh(lv_quick_controls_t *v,lv_quick_controls_state_t 
         if(id>=QUICK_CONTROL_COUNT || (used&(1U<<id)))return false;
         used|=1U<<id;
     }
-    for(unsigned pos=0;pos<QUICK_CONTROL_COUNT;pos++){
-        unsigned id=state.order[pos];
-        if(!v->initialized||v->state.order[pos]!=id){
-            unsigned slot=pos%QUICK_CONTROLS_PER_PAGE;
-            lv_obj_set_parent(v->tiles[id],lv_content_pager_get_page(v->pager,pos/QUICK_CONTROLS_PER_PAGE));
-            lv_obj_set_pos(v->tiles[id],(slot%4)*1242/4,(slot/4)*106);changed=true;
+    uint16_t mask=v->show_all?UI_STATE_QUICK_VISIBLE_ALL:state.visible_mask;
+    bool layout_changed=!v->initialized || mask!=(v->show_all?UI_STATE_QUICK_VISIBLE_ALL:v->state.visible_mask) ||
+        memcmp(state.order,v->state.order,sizeof(state.order));
+    if(layout_changed){
+        uint8_t active=v->initialized && mask==(v->show_all?UI_STATE_QUICK_VISIBLE_ALL:v->state.visible_mask)?
+            lv_quick_controls_page(v):0;
+        lv_quick_controls_reset(v);
+        unsigned count=0;
+        for(unsigned pos=0;pos<QUICK_CONTROL_COUNT;pos++)if(mask&(1U<<state.order[pos]))count++;
+        lv_content_pager_set_count(v->pager,count?(count+v->per_page-1)/v->per_page:1);
+        lv_content_pager_set_active(v->pager,active,false);
+        unsigned shown=0;
+        for(unsigned pos=0;pos<QUICK_CONTROL_COUNT;pos++){
+            unsigned id=state.order[pos];bool show=(mask&(1U<<id))!=0;
+            visible(v->tiles[id],show);
+            if(!show)continue;
+            unsigned slot=shown%v->per_page;
+            lv_obj_set_parent(v->tiles[id],lv_content_pager_get_page(v->pager,shown/v->per_page));
+            lv_obj_set_pos(v->tiles[id],(slot%v->columns)*(v->width+12)/v->columns,(slot/v->columns)*106);
+            shown++;
         }
+        visible(v->empty,!count);changed=true;
     }
     for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
         bool enabled=action_enabled(&state,i);
@@ -225,7 +254,7 @@ static int tile_at(lv_quick_controls_t *v,const lv_point_t *point)
     if(!contains(v->viewport,point))return -1;
     lv_obj_t *page=lv_content_pager_get_page(v->pager,lv_quick_controls_page(v));
     for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++)
-        if(lv_obj_get_parent(v->tiles[i])==page && contains(v->tiles[i],point))return (int)i;
+        if(!lv_obj_has_flag(v->tiles[i],LV_OBJ_FLAG_HIDDEN) && lv_obj_get_parent(v->tiles[i])==page && contains(v->tiles[i],point))return (int)i;
     return -1;
 }
 static void release_pressed(lv_quick_controls_t *v)

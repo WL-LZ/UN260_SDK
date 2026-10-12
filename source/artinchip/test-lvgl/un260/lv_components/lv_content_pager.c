@@ -12,7 +12,7 @@ typedef struct {
     lv_obj_t *indicator;
     lv_obj_t *pages[CONTENT_PAGER_MAX_PAGES];
     lv_obj_t *dots[CONTENT_PAGER_MAX_PAGES];
-    uint8_t count;
+    uint8_t count,capacity;
     uint8_t active;
     lv_coord_t page_width;
     bool circular, dragging, settling;
@@ -199,7 +199,7 @@ lv_obj_t *lv_content_pager_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
     context = lv_mem_alloc(sizeof(*context));
     if (context == NULL) return NULL;
     memset(context, 0, sizeof(*context));
-    context->count = page_count;
+    context->count = context->capacity = page_count;
     context->page_width = width;
 
     context->root = lv_obj_create(parent);
@@ -325,6 +325,29 @@ uint8_t lv_content_pager_get_count(lv_obj_t *pager)
     return context != NULL ? context->count : 0;
 }
 
+bool lv_content_pager_set_count(lv_obj_t *pager,uint8_t count)
+{
+    content_pager_context_t *context=pager_find(pager);
+    if(!context || !count || count>context->capacity)return false;
+    if(count==context->count)return true;
+    lv_content_pager_finish(pager);
+    context->count=count;
+    for(unsigned i=0;i<context->capacity;i++){
+        if(i<count){lv_obj_clear_flag(context->pages[i],LV_OBJ_FLAG_HIDDEN);if(context->dots[i])lv_obj_clear_flag(context->dots[i],LV_OBJ_FLAG_HIDDEN);}
+        else {lv_obj_add_flag(context->pages[i],LV_OBJ_FLAG_HIDDEN);if(context->dots[i])lv_obj_add_flag(context->dots[i],LV_OBJ_FLAG_HIDDEN);}
+    }
+    if(context->indicator){
+        lv_obj_set_width(context->indicator,20+count*14);
+        if(count>1)lv_obj_clear_flag(context->indicator,LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(context->indicator,LV_OBJ_FLAG_HIDDEN);
+    }
+    uint8_t active=context->active<count?context->active:count-1;
+    if(context->circular)pager_center(context,active);
+    else lv_content_pager_set_active(pager,active,false);
+    lv_obj_update_layout(pager);
+    return true;
+}
+
 bool lv_content_pager_set_circular(lv_obj_t *pager, bool enabled)
 {
     content_pager_context_t *context = pager_find(pager);
@@ -352,7 +375,7 @@ bool lv_content_pager_set_circular(lv_obj_t *pager, bool enabled)
 bool lv_content_pager_drag_begin(lv_obj_t *pager)
 {
     content_pager_context_t *context = pager_find(pager);
-    if (context == NULL || !context->circular) return false;
+    if (context == NULL || !context->circular || context->count<2) return false;
     if (abs(context->offset) >= context->page_width)
         pager_center(context, context->neighbor);
     pager_stop(context);
@@ -411,7 +434,7 @@ bool lv_content_pager_is_moving(lv_obj_t *pager)
 bool lv_content_pager_finish(lv_obj_t *pager)
 {
     content_pager_context_t *context = pager_find(pager);
-    if (context == NULL || !context->circular) return false;
+    if (context == NULL || !context->circular || context->count<2) return false;
     bool changed = context->dragging || context->settling || context->offset != 0;
     if (!changed) return false;
     uint8_t target = context->settling ? context->target :

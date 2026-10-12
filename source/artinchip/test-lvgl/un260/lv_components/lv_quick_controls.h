@@ -12,13 +12,17 @@ typedef struct {
     bool layout,gestures,pure,popup,touch,top_popup;
     const char *versions[3];
     uint8_t order[QUICK_CONTROL_COUNT];
+    uint16_t visible_mask;
 } lv_quick_controls_state_t;
 typedef struct {
     lv_obj_t *pager,*viewport,*tiles[QUICK_CONTROL_COUNT];
     lv_obj_t *states[QUICK_CONTROL_COUNT],*versions[3],*icons[QUICK_CONTROL_COUNT];
     lv_obj_t *switches[QUICK_CONTROL_COUNT],*knobs[QUICK_CONTROL_COUNT];
     lv_obj_t *arrows[QUICK_CONTROL_COUNT],*handles[QUICK_CONTROL_COUNT];
-    lv_obj_t *device_button,*version_panel;
+    lv_obj_t *device_button,*version_panel,*empty;
+    unsigned columns,per_page;
+    lv_coord_t width;
+    bool show_all;
     lv_quick_controls_state_t state;bool initialized,editing;
     int selected;
     bool pointer_down,pointer_swiping,pointer_drag,pointer_moved,pointer_vertical,pointer_cancelled;
@@ -28,6 +32,8 @@ typedef struct {
     int pointer_tile,pointer_selected,pointer_displacement,drag_source,drag_target;
 } lv_quick_controls_t;
 bool lv_quick_controls_create(lv_quick_controls_t *,lv_obj_t *parent,int x,int y,lv_event_cb_t);
+/* The full Controls view shares cards/actions but ignores pull-down visibility. */
+bool lv_quick_controls_create_all(lv_quick_controls_t *,lv_obj_t *parent,int x,int y,int width,lv_event_cb_t);
 bool lv_quick_controls_refresh(lv_quick_controls_t *,lv_quick_controls_state_t);
 void lv_quick_controls_set_editing(lv_quick_controls_t *,bool editing,int selected);
 void lv_quick_controls_show_versions(lv_quick_controls_t *,bool show);

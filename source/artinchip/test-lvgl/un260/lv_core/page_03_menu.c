@@ -12,7 +12,6 @@
 #include "settings_detail_ui.h"
 #include "page_05_set_password.h"
 #include "page_19_history.h"
-#include "page_01_main_layout.h"
 #include "un260/app_service/workspace_service.h"
 #include "un260/app_service/app_command_runtime.h"
 #include "un260/app_service/app_standby_runtime.h"
@@ -22,6 +21,7 @@
 #include "un260/storage/workspace_store.h"
 #include "un260/lv_components/lv_settings.h"
 #include "un260/lv_components/lv_quick_controls.h"
+#include "un260/lv_components/lv_content_pager.h"
 #include "un260/lv_components/lv_fault_popup.h"
 #include "un260/lv_components/lv_nav_button.h"
 #include "un260/lv_components/lv_qr_popup.h"
@@ -58,13 +58,15 @@ enum {INK=0x1D2B34,MUTED=0x586B78,LINE=0xDCE4E8,PANEL=0xF4F6F7,
 #define MICON(name,size) LVGL_DIR "menu_icons/" name "_" #size ".png"
 #include "menu_fonts.inc"
 enum {A_BACK=1,A_QUICK,A_SETTINGS,A_HISTORY,A_PRINT_SETUP,A_PRINT,A_QR,A_STANDBY,
-      A_GESTURES,A_LAYOUT,A_QUICK_TOGGLE,A_NEW_PROFILE,A_APPLY_PROFILE,
+      A_QUICK_TOGGLE,A_NEW_PROFILE,A_APPLY_PROFILE,
       A_DELETE_PROFILE,A_SAVE_BATCH,A_ADD_BATCH,A_EDIT_BATCH,A_DELETE_BATCH,A_APPLY_BATCH,
       A_NEW_USER,A_EDIT_NAME,A_USB_SCAN,A_USER_SAVE,A_USER_CANCEL,A_USER_SWITCH,A_USB_CLOSE,A_QUICK_CLOSE,
-      A_AUTO_QR,A_CAPACITY,A_LANGUAGE,A_TIMEOUT,A_BUSINESS_DAY,A_CLOSE_DAY,A_CONFIRM_RUN,A_MERGE_RUN,A_SPLIT_RUN,A_EXCLUDE_RUN,A_DIAGNOSTICS,A_ARCHIVES,A_ARCHIVE_PERIOD,A_EXPORT_RECORDS,A_CURRENT_RECORDS,A_CANCEL_VERIFY,A_EDIT_USER,A_EMPLOYEE_ID,A_TEAM,A_REMOVE_PHOTO,A_DELETE_USER,A_TOP_POPUP_TOGGLE,A_QUICK_ORDER_BASE=900};
+      A_AUTO_QR,A_CAPACITY,A_LANGUAGE,A_TIMEOUT,A_BUSINESS_DAY,A_CLOSE_DAY,A_CONFIRM_RUN,A_MERGE_RUN,A_SPLIT_RUN,A_EXCLUDE_RUN,A_DIAGNOSTICS,A_ARCHIVES,A_ARCHIVE_PERIOD,A_EXPORT_RECORDS,A_CURRENT_RECORDS,A_CANCEL_VERIFY,A_EDIT_USER,A_EMPLOYEE_ID,A_TEAM,A_REMOVE_PHOTO,A_DELETE_USER,A_INTERACTION_CONTROLS,A_SHORTCUT_VISIBILITY,A_BATCH_BEHAVIOR,A_QUICK_ORDER_BASE=900};
 static const char *const tabs[]={UI_N_("Overview"),UI_N_("Count"),UI_N_("Records"),UI_N_("Output"),UI_N_("Preferences"),UI_N_("Help")};
 static const char *const tab_icons[]={MICON("overview",19),MICON("layers",19),MICON("history",19),MICON("output",19),MICON("settings",19),MICON("help",19)};
 static const uint32_t accents[]={BLUE,ORANGE,TEAL,BLUE,PURPLE,TEAL};
+/* Keep section IDs stable while Overview and Records are temporarily hidden. */
+static const uint8_t visible_tabs[]={1,3,4,5};
 static const char *const sublabels[][5]={{NULL},{UI_N_("Batch presets"),UI_N_("Profiles"),UI_N_("Options")},
     {UI_N_("Daily totals"),UI_N_("History"),UI_N_("Day closes")},{UI_N_("Print"),UI_N_("QR export")},
     {UI_N_("Operators"),UI_N_("Interaction"),UI_N_("Display & sound")},{UI_N_("Reject guide"),UI_N_("Care"),UI_N_("Device")}};
@@ -79,8 +81,9 @@ static struct {
     uint8_t batch_apply_target;
     uint32_t selected_group,selected_run,selected_close,record_day,qr_generation;
     unsigned reject_code;
-    lv_quick_controls_t quick_controls;
-    uint8_t quick_pick;
+    lv_quick_controls_t quick_controls,interaction_controls;
+    uint8_t interaction_page;
+    bool interaction_created,shortcut_visibility;
     uint8_t batches[WORKSPACE_BATCHES],batch_count;
     uint8_t batch_active_original,batch_active_edited;
     uint32_t owner,editing_user;
@@ -93,6 +96,8 @@ static struct {
 static void action(lv_event_t *event);
 static void render(void);
 static void records_detail(lv_obj_t *);
+static void quick_tile(lv_event_t *event);
+static bool menu_quick_pointer(lv_indev_t *,lv_event_code_t,const lv_point_t *,uint8_t);
 static uint32_t business_day(void);
 static void photo_sheet(void);
 static void clear_notice(void)
@@ -181,7 +186,7 @@ static void header_content(lv_obj_t *button,const char *title,const char *src,ui
 static void header_surface(lv_obj_t *o)
 {
     focus_style(o);
-    lv_damped_button_set_exact_palette(o,lv_color_hex(HEADER_SURFACE),lv_damped_button_pressed_color(lv_color_hex(HEADER_SURFACE)));
+    lv_damped_button_set_exact_palette(o,lv_color_hex(PANEL),lv_damped_button_pressed_color(lv_color_hex(PANEL)));
     lv_obj_set_style_border_width(o,0,0);lv_obj_set_style_radius(o,13,0);
 }
 static void heading(lv_obj_t *p,const char *s)
@@ -289,7 +294,13 @@ static void render(void)
     menu.task_scroll=NULL;
     if(menu.user_sheet){lv_obj_del(menu.user_sheet);menu.user_sheet=NULL;}
     if(menu.record_sheet){lv_obj_del(menu.record_sheet);menu.record_sheet=NULL;}
-    lv_obj_clean(menu.body);lv_obj_t *b=menu.body;
+    if(menu.interaction_created){
+        menu.interaction_page=lv_quick_controls_page(&menu.interaction_controls);
+        lv_quick_controls_reset(&menu.interaction_controls);
+    }
+    menu.interaction_created=false;
+    gesture_service_clear_pointer_policy(UI_PAGE_MENU);
+    lv_obj_clean(menu.body);memset(&menu.interaction_controls,0,sizeof(menu.interaction_controls));lv_obj_t *b=menu.body;
     if(!menu.tab)overview();else {
         lv_obj_t *side=box(b,0,0,180,296,0xFFFFFF,0);
         for(unsigned i=0;i<subcounts[menu.tab];i++) {
@@ -310,7 +321,7 @@ static void render(void)
         if(menu.tab==4){if(!menu.sub){operators_summary_view(content);}else if(menu.sub==1)interaction_view(content);else display_view(content);}
         if(menu.tab==5)help_view(content);
     }
-    for(unsigned i=0;i<6;i++){choose(menu.nav[i],i==menu.tab);lv_obj_t *l=lv_obj_get_child(menu.nav[i],0);lv_obj_set_style_text_color(l,lv_color_hex(i==menu.tab?BLUE:0x455D6B),0);lv_obj_set_style_text_font(l,ui_message_font(i==menu.tab?&lv_font_instrument_sans_semibold_16:&lv_font_instrument_sans_medium_16),0);header_align_content(menu.nav[i]);}
+    for(unsigned i=0;i<6;i++){if(!menu.nav[i])continue;choose(menu.nav[i],i==menu.tab);lv_obj_t *l=lv_obj_get_child(menu.nav[i],0);lv_obj_set_style_text_color(l,lv_color_hex(i==menu.tab?BLUE:0x455D6B),0);lv_obj_set_style_text_font(l,ui_message_font(i==menu.tab?&lv_font_instrument_sans_semibold_16:&lv_font_instrument_sans_medium_16),0);header_align_content(menu.nav[i]);}
     if(menu.task_scroll){lv_obj_update_layout(menu.task_scroll);lv_obj_scroll_to_y(menu.task_scroll,menu.scroll_y[menu.tab][menu.sub],LV_ANIM_OFF);}
     menu.rendered_tab=menu.tab;menu.rendered_sub=menu.sub;menu.dirty=false;
 }
@@ -384,21 +395,30 @@ static void destroy_quick(void)
     gesture_service_set_navigation_blocked(UI_PAGE_MENU,false);
     if(menu.quick)lv_obj_del(menu.quick);
     menu.quick=menu.quick_context=NULL;
+    if(menu.interaction_created && page_03_menu_is_visible())
+        gesture_service_set_pointer_policy(UI_PAGE_MENU,menu_quick_pointer);
 }
 static bool menu_quick_pointer(lv_indev_t *indev,lv_event_code_t event,const lv_point_t *point,uint8_t count)
 {
     (void)indev;
-    if(!menu.quick || !point)return false;
+    lv_quick_controls_t *controls=menu.quick?&menu.quick_controls:
+        menu.interaction_created && menu.tab==4 && menu.sub==1 && !menu.shortcut_visibility?&menu.interaction_controls:NULL;
+    if(!controls || !point || !page_03_menu_is_visible())return false;
+    if(settings_detail_overlay_is_open() || menu.photo_sheet){
+        bool owned=controls->pointer_down;
+        if(owned)lv_quick_controls_pointer(controls,LV_EVENT_PRESS_LOST,point,0);
+        return owned;
+    }
     lv_obj_t *layers[]={lv_layer_top(),lv_layer_sys()};
     for(unsigned i=0;i<2;i++){
         lv_obj_t *hit=lv_indev_search_obj(layers[i],(lv_point_t *)point);
         if(hit && hit!=layers[i]){
-            bool owned=menu.quick_controls.pointer_down;
-            if(owned)lv_quick_controls_pointer(&menu.quick_controls,LV_EVENT_PRESS_LOST,point,0);
+            bool owned=controls->pointer_down;
+            if(owned)lv_quick_controls_pointer(controls,LV_EVENT_PRESS_LOST,point,0);
             return owned;
         }
     }
-    return lv_quick_controls_pointer(&menu.quick_controls,event,point,count);
+    return lv_quick_controls_pointer(controls,event,point,count);
 }
 static void close_quick(lv_event_t *e)
 {if(lv_event_get_target(e)==menu.quick)destroy_quick();}
@@ -417,10 +437,20 @@ static void refresh_quick(void)
 static void quick_tile(lv_event_t *event)
 {
     unsigned id=(uintptr_t)lv_event_get_user_data(event);
-    if(!menu.quick)return;
+    lv_quick_controls_t *controls=menu.quick?&menu.quick_controls:
+        menu.interaction_created?&menu.interaction_controls:NULL;
+    if(!controls)return;
+    bool leaves_or_operates=id==QUICK_PURE || id==QUICK_EXPORT || id==QUICK_QR || id==QUICK_STANDBY ||
+        (id>=QUICK_CALCULATOR && id<QUICK_CONTROL_COUNT);
+    if((menu.batch_dirty || menu.user_edit) && leaves_or_operates){
+        explain(UI_N_("Save or cancel your changes before leaving this task."));return;
+    }
+    if(workspace_service_applying() || menu.saving){
+        notify(UI_NOTICE_PROGRESS,UI_N_("The workspace is being saved. Please wait a moment."));return;
+    }
     if(id==QUICK_DEVICE_INFO || id==QUICK_DEVICE_CLOSE){
-        bool show=id==QUICK_DEVICE_INFO && lv_obj_has_flag(menu.quick_controls.version_panel,LV_OBJ_FLAG_HIDDEN);
-        lv_quick_controls_show_versions(&menu.quick_controls,show);return;
+        bool show=id==QUICK_DEVICE_INFO && lv_obj_has_flag(controls->version_panel,LV_OBJ_FLAG_HIDDEN);
+        lv_quick_controls_show_versions(controls,show);return;
     }
     if(id==QUICK_TOP_POPUP){
         if(!lv_quick_controls_execute(id) && !ui_notice_get_enabled())top_popup_save_failed();
@@ -457,9 +487,11 @@ static void open_quick(void)
     lv_obj_t *sheet=box(menu.quick,0,0,1280,328,0xF0F4F7,22);lv_obj_add_flag(sheet,LV_OBJ_FLAG_CLICKABLE);
     box(sheet,0,0,1280,22,0xF0F4F7,0);
     lv_obj_t *settings=ui_icon_create(sheet,LVGL_DIR "quick_icons/settings.png");lv_obj_set_pos(settings,27,22);
-    quick_label(sheet,63,17,184,ui_tr("Quick controls"),&lv_font_instrument_sans_semibold_25,0x253D4C);
-    box(sheet,245,25,1,16,0xCDDBE4,0);
-    quick_label(sheet,264,25,90,ui_tr("Menu"),&lv_font_instrument_sans_medium_13,0x718B9B);
+    lv_obj_t *title=quick_label(sheet,63,17,LV_SIZE_CONTENT,ui_tr("Quick controls"),&lv_font_instrument_sans_semibold_25,0x253D4C);
+    lv_obj_update_layout(title);
+    int divider_x=63+lv_obj_get_width(title)+12;
+    box(sheet,divider_x,25,1,16,0xCDDBE4,0);
+    quick_label(sheet,divider_x+19,25,LV_SIZE_CONTENT,ui_tr("Menu"),&lv_font_instrument_sans_medium_13,0x718B9B);
     if(!lv_quick_controls_create(&menu.quick_controls,sheet,25,65,quick_tile)){
         destroy_quick();explain(UI_N_("Quick action is unavailable right now."));return;
     }
@@ -484,8 +516,16 @@ static void open_quick(void)
 static void action(lv_event_t *event)
 {
     unsigned id=(uintptr_t)lv_event_get_user_data(event);const workspace_user_t *u=user();
+    if(id==A_BATCH_BEHAVIOR){
+        ui_main_batch_action_t next=ui_state_main_batch_action_get()==UI_MAIN_BATCH_CYCLE?
+            UI_MAIN_BATCH_SETTINGS:UI_MAIN_BATCH_CYCLE;
+        if(!app_local_setting_apply(APP_LOCAL_MAIN_BATCH_ACTION,next,0) && !ui_notice_get_enabled())
+            settings_detail_dialog_show(ui_tr("Main Batch button"),ui_tr("Could not save. Try again."),
+                ui_tr("OK"),NULL,NULL,NULL,NULL);
+        menu.dirty=true;return;
+    }
     if(id==A_BACK){if(menu.saving){explain(UI_N_("The workspace is being saved. Please wait a moment."));return;}if(menu.batch_dirty||menu.user_edit||workspace_service_applying())settings_detail_dialog_show(ui_tr("Leave Menu?"),ui_tr("Unsaved edits will be discarded. Remaining profile steps will stop."),ui_tr("Leave"),ui_tr("Stay"),confirmed_back,NULL,NULL);else confirmed_back(NULL);return;}
-    bool independent=id==A_GESTURES||id==A_LAYOUT||id==A_TOP_POPUP_TOGGLE||id==A_QUICK_CLOSE||id==A_USB_CLOSE||id==813||(id>=440&&id<450)||(id>=301&&id<=308);
+    bool independent=id==A_QUICK_CLOSE||id==A_USB_CLOSE||id==813||(id>=440&&id<450)||(id>=301&&id<=308);
     if(!independent&&workspace_service_applying()){notify(UI_NOTICE_PROGRESS,UI_N_("Wait for the profile, or use Back to stop remaining steps."));return;}
     if(!independent&&menu.saving){notify(UI_NOTICE_PROGRESS,UI_N_("The workspace is being saved. Please wait a moment."));return;}
     if((menu.batch_dirty||menu.user_edit)&&(id==A_SETTINGS||id==A_QUICK||id==A_HISTORY||id==A_PRINT_SETUP||id==601||id==600||id==A_STANDBY)){
@@ -493,19 +533,15 @@ static void action(lv_event_t *event)
     }
     if(id==A_SETTINGS){ui_page_05_set_password_open();return;}if(id==A_QUICK){open_quick();return;}
     if(id==A_QUICK_CLOSE){destroy_quick();return;}
-    if(id>=A_QUICK_ORDER_BASE&&id<A_QUICK_ORDER_BASE+QUICK_CONTROL_COUNT){
-        uint8_t position=id-A_QUICK_ORDER_BASE;
-        if(menu.quick_pick==255)menu.quick_pick=position;
-        else if(menu.quick_pick==position)menu.quick_pick=255;
-        else {
-            (void)app_local_setting_apply(APP_LOCAL_SHORTCUT_ORDER,menu.quick_pick,position);
-            menu.quick_pick=255;
-        }
-        menu.dirty=true;return;
+    if(id==A_INTERACTION_CONTROLS || id==A_SHORTCUT_VISIBILITY){
+        menu.shortcut_visibility=id==A_SHORTCUT_VISIBILITY;menu.dirty=true;return;
     }
-    if(id==A_TOP_POPUP_TOGGLE){
-        if(!app_local_setting_apply(APP_LOCAL_TOP_POPUP,!ui_notice_get_enabled(),0) && !ui_notice_get_enabled())
-            top_popup_save_failed();
+    if(id>=A_QUICK_ORDER_BASE&&id<A_QUICK_ORDER_BASE+QUICK_CONTROL_COUNT){
+        uint8_t shortcut=id-A_QUICK_ORDER_BASE;
+        bool shown=(ui_state_quick_visible_get()&(1U<<shortcut))!=0;
+        if(!app_local_setting_apply(APP_LOCAL_SHORTCUT_VISIBILITY,shortcut,!shown) && !ui_notice_get_enabled())
+            settings_detail_dialog_show(ui_tr("Pull-down shortcuts"),ui_tr("Could not save. Try again."),
+                ui_tr("OK"),NULL,NULL,NULL,NULL);
         menu.dirty=true;return;
     }
     if(id==A_USB_CLOSE){if(menu.photo_sheet)lv_obj_del(menu.photo_sheet);menu.photo_sheet=NULL;menu.scan_wait=menu.photo_wait=menu.photo_ready=false;return;}
@@ -517,11 +553,6 @@ static void action(lv_event_t *event)
     if(id==A_QR){char payload[3072];if(app_command_runtime_count_start_busy()||!ui_qr_data_build_summary(payload,sizeof(payload))||!lv_qr_popup_show(payload))explain(UI_N_("Finish counting and wait for the complete summary."));else menu.qr_generation=lv_qr_popup_generation();return;}
     if(id==601){ui_manager_push_page(UI_PAGE_STANDBY_SETTING);return;}if(id==600){ui_manager_push_page(UI_PAGE_LIST);return;}
     if(id==A_STANDBY){const char*reason=app_standby_runtime_blocker();if(reason&&!app_standby_runtime_needs_fault_review())explain(reason);else (void)app_standby_runtime_request();return;}
-    if(id==A_GESTURES||id==A_LAYOUT){
-        (void)app_local_setting_apply(id==A_GESTURES?APP_LOCAL_GESTURES:APP_LOCAL_LAYOUT,
-            id==A_GESTURES?!gesture_service_enabled():!page_01_main_layout_is_enabled(),0);
-        menu.dirty=true;if(menu.quick)refresh_quick();return;
-    }
     if(id==307||id==308){menu.tab=id==307?3:5;menu.sub=0;menu.dirty=true;return;}
     if(id==510||id==511){if(id==510&&menu.batch_page)menu.batch_page--;if(id==511&&(menu.batch_page+1)*5<menu.batch_count)menu.batch_page++;menu.dirty=true;return;}
     if(id>=301&&id<=306){
@@ -567,7 +598,7 @@ static void action(lv_event_t *event)
         return;
     }
     if(id==A_NEW_PROFILE){settings_detail_keyboard_show(ui_tr("Name this profile"),"",WORKSPACE_NAME,SETTINGS_DETAIL_KEYBOARD_TEXT,name_submit,(void *)1);return;}
-    if(id==A_DELETE_PROFILE){if(!u||u->profile_count<=1){explain(UI_N_("Keep at least one counting profile."));return;}char s[120];snprintf(s,sizeof(s),ui_tr("Delete %s? Current machine values will not change."),u->profiles[menu.selected_profile].name);settings_detail_dialog_show_ex(SETTINGS_DIALOG_DESTRUCTIVE,ui_tr("Delete profile"),s,ui_tr("Delete"),ui_tr("Cancel"),delete_profile,NULL,NULL);return;}
+    if(id==A_DELETE_PROFILE){if(!u||u->profile_count<=1){explain(UI_N_("Keep at least one counting profile."));return;}char s[120];snprintf(s,sizeof(s),ui_tr("Delete %s? Current machine values will not change."),profile_display_name(&u->profiles[menu.selected_profile]));settings_detail_dialog_show_ex(SETTINGS_DIALOG_DESTRUCTIVE,ui_tr("Delete profile"),s,ui_tr("Delete"),ui_tr("Cancel"),delete_profile,NULL,NULL);return;}
     if(id==A_APPLY_PROFILE){settings_detail_dialog_show(ui_tr("Apply profile?"),ui_tr("Speed, sorting, sound, Batch, ADD and start method will be confirmed one at a time. Currency is unchanged. A count-mode change clears the current Main result after confirmation; saved history remains."),ui_tr("Apply"),ui_tr("Cancel"),apply_profile,NULL,NULL);return;}
     if(id==A_QUICK_TOGGLE||id==A_AUTO_QR){workspace_model_t *m=draft();if(!m)return;workspace_user_t *v=workspace_find(m,m->operators_enabled?m->active_id:0);if(id==A_QUICK_TOGGLE)v->quick_enabled=!v->quick_enabled;else v->qr_after_count=!v->qr_after_count;save(m);return;}
     if(id==A_NEW_USER){if(workspace_store_get()->user_count>=WORKSPACE_USERS){explain(UI_N_("This device supports up to 8 local operators."));return;}menu.editing_user=0;menu.user_edit=true;menu.user_name[0]=menu.employee_id[0]=menu.team[0]=0;memset(&menu.avatar,0,sizeof(menu.avatar));menu.dirty=true;return;}
@@ -602,6 +633,12 @@ static void timer(lv_timer_t *t)
         }
     }
     if(menu.quick)refresh_quick();
+    if(menu.interaction_created){
+        if(menu.interaction_controls.pointer_down || lv_content_pager_is_moving(menu.interaction_controls.pager))return;
+        lv_quick_controls_refresh(&menu.interaction_controls,lv_quick_controls_current_state());
+        if(menu.tab==4 && menu.sub==1 && !menu.shortcut_visibility &&
+            !lv_obj_has_flag(menu.interaction_controls.version_panel,LV_OBJ_FLAG_HIDDEN))return;
+    }
 
     if(menu.photo_ready){menu.photo_ready=false;if(menu.user_edit)photo_sheet();}
     if(menu.dirty&&!settings_detail_overlay_is_open()&&!menu.photo_sheet&&!menu.quick){lv_indev_t *input=lv_indev_get_next(NULL);if(input&&input->proc.state==LV_INDEV_STATE_PRESSED)return;render();}
@@ -609,32 +646,32 @@ static void timer(lv_timer_t *t)
 void ui_page_03_menu_create(lv_obj_t *parent)
 {
     if(menu.root)return;
-    menu.quick_pick=255;
     menu.root=box(parent?parent:lv_scr_act(),0,0,1280,400,0xFFFFFF,0);
-    lv_obj_t *back=lv_settings_back(menu.root,24,14,44,44,action,(void *)A_BACK);
-    header_surface(back);lv_damped_button_set_exact_palette(back,lv_color_hex(PANEL),lv_color_hex(LINE));header_content(back,"",MICON("back",22),INK);
-    lv_obj_t *title=label(menu.root,80,14,142,ui_tr("Menu"),&lv_font_instrument_sans_semibold_25,INK);
+    lv_obj_t *back=lv_nav_back_text_button_create(menu.root,24,15,
+        ui_message_font(&lv_font_instrument_sans_medium_16),action,(void *)A_BACK);
+    if(back)focus_style(back);
+    lv_obj_t *title=label(menu.root,112,14,LV_SIZE_CONTENT,ui_tr("Menu"),&lv_font_instrument_sans_semibold_25,INK);
+    lv_label_set_long_mode(title,LV_LABEL_LONG_CLIP);
     lv_obj_update_layout(title);lv_obj_set_y(title,14+(44-lv_obj_get_height(title))/2);
     int quick_width=LV_MAX(102,menu_text_width(ui_tr("Quick"))+46);
     int quick_x=1204-quick_width;
-    int widths[]={126,103,121,109,147,82},minimum[6],nav_width=18;
-    for(unsigned i=0;i<6;i++){
-        minimum[i]=menu_text_width(ui_tr(tabs[i]))+46;
-        widths[i]=LV_MAX(widths[i],minimum[i]);nav_width+=widths[i];
+    int widths[4],nav_width=14;
+    for(unsigned n=0;n<4;n++){
+        unsigned i=visible_tabs[n];
+        widths[n]=LV_MAX(140,menu_text_width(ui_tr(tabs[i]))+46);
+        nav_width+=widths[n];
     }
-    int available=quick_x-16-222;
-    for(unsigned i=0;i<6&&nav_width>available;i++){
-        int reduction=LV_MIN(widths[i]-minimum[i],nav_width-available);
-        widths[i]-=reduction;nav_width-=reduction;
-    }
-    int nav_left=LV_MIN(287,quick_x-16-nav_width);
-    lv_obj_t *nav=box(menu.root,nav_left,12,nav_width,48,HEADER_SURFACE,14);
+    int nav_left=LV_MAX(112+lv_obj_get_width(title)+24,(1280-nav_width)/2);
+    nav_left=LV_MIN(nav_left,quick_x-16-nav_width);
+    lv_obj_t *nav=box(menu.root,nav_left,12,nav_width,48,PANEL,14);
     int nav_x=4;
-    for(unsigned i=0;i<6;i++){
-        menu.nav[i]=lv_settings_button(nav,nav_x,4,widths[i],40,ui_tr(tabs[i]),false,tab_event,(void *)(uintptr_t)i);nav_x+=widths[i]+2;
+    for(unsigned n=0;n<4;n++){
+        unsigned i=visible_tabs[n];
+        menu.nav[i]=lv_settings_button(nav,nav_x,4,widths[n],40,ui_tr(tabs[i]),false,tab_event,(void *)(uintptr_t)i);nav_x+=widths[n]+2;
         header_surface(menu.nav[i]);
         header_content(menu.nav[i],ui_tr(tabs[i]),tab_icons[i],accents[i]);
     }
+    if(!menu.tab)menu.tab=1;
     lv_obj_t *quick=button(menu.root,quick_x,14,quick_width,44,ui_tr("Quick"),A_QUICK,false);
     header_surface(quick);lv_damped_button_set_exact_palette(quick,lv_color_hex(PANEL),lv_color_hex(LINE));header_content(quick,ui_tr("Quick"),MICON("quick",22),PURPLE);
     lv_obj_t *lock=button(menu.root,1212,14,44,44,"",A_SETTINGS,false);
@@ -671,7 +708,7 @@ void page_03_menu_refresh_batch_mode(void){menu.dirty=true;}
 bool ui_page_03_menu_resume(void)
 {if(!menu.root)return false;if(!menu.batch_dirty&&!menu.saving)reset_batch();lv_obj_clear_flag(menu.root,LV_OBJ_FLAG_HIDDEN);lv_obj_move_foreground(menu.root);lv_timer_resume(menu.timer);menu.dirty=true;render();return true;}
 void ui_page_03_menu_suspend(void)
-{if(!menu.root)return;if(menu.qr_generation&&menu.qr_generation==lv_qr_popup_generation())lv_qr_popup_hide();menu.qr_generation=0;workspace_service_cancel_apply();settings_detail_keyboard_hide();settings_detail_dialog_hide();destroy_quick();if(menu.photo_sheet)lv_obj_del(menu.photo_sheet);if(menu.user_sheet)lv_obj_del(menu.user_sheet);if(menu.record_sheet)lv_obj_del(menu.record_sheet);menu.user_sheet=menu.record_sheet=NULL;menu.photo_sheet=NULL;menu.scan_wait=menu.photo_wait=menu.photo_ready=false;clear_notice();lv_timer_pause(menu.timer);lv_obj_add_flag(menu.root,LV_OBJ_FLAG_HIDDEN);}
+{if(!menu.root)return;if(menu.qr_generation&&menu.qr_generation==lv_qr_popup_generation())lv_qr_popup_hide();menu.qr_generation=0;workspace_service_cancel_apply();settings_detail_keyboard_hide();settings_detail_dialog_hide();destroy_quick();if(menu.photo_sheet)lv_obj_del(menu.photo_sheet);if(menu.user_sheet)lv_obj_del(menu.user_sheet);if(menu.record_sheet)lv_obj_del(menu.record_sheet);menu.user_sheet=menu.record_sheet=NULL;menu.photo_sheet=NULL;menu.scan_wait=menu.photo_wait=menu.photo_ready=false;clear_notice();if(menu.interaction_created)lv_quick_controls_reset(&menu.interaction_controls);gesture_service_clear_pointer_policy(UI_PAGE_MENU);lv_timer_pause(menu.timer);lv_obj_add_flag(menu.root,LV_OBJ_FLAG_HIDDEN);}
 void ui_page_03_menu_destroy(void)
 {ui_page_03_menu_suspend();if(menu.timer)lv_timer_del(menu.timer);if(menu.root)lv_obj_del(menu.root);memset(&menu,0,sizeof(menu));}
 void page_03_menu_open_batch(void)

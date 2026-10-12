@@ -65,6 +65,15 @@ static void ui_state_store_parse_line(ui_persist_state_t* state, const char* lin
         state->version = (unsigned int)strtoul(line + 8, NULL, 0);
     } else if (strncmp(line, "p01_detail_section=", 19) == 0) {
         state->page01.detail_section = atoi(line + 19);
+    } else if (strncmp(line, "p01_main_batch_action=", 22) == 0) {
+        const char *text = line + 22;
+        char *end;
+        errno = 0;
+        unsigned long value = strtoul(text, &end, 10);
+        while (isspace((unsigned char)*end)) ++end;
+        if (isdigit((unsigned char)*text) && !errno && !*end &&
+            value <= UI_MAIN_BATCH_CYCLE)
+            state->page01.main_batch_action = (ui_main_batch_action_t)value;
     } else if (strncmp(line, "p01_layout=", 11) == 0) {
         unsigned v[8]; char tail;
         if (sscanf(line+11,"%u,%u,%u,%u,%u,%u,%u,%u %c",
@@ -84,6 +93,10 @@ static void ui_state_store_parse_line(ui_persist_state_t* state, const char* lin
         if(*quick_order_v2<3&&ui_state_store_parse_quick_order(state,line+19))*quick_order_v2=2;
     } else if (strncmp(line,"p01_quick_order_v3=",19)==0) {
         if(ui_state_store_parse_quick_order(state,line+19))*quick_order_v2=3;
+    } else if (strncmp(line,"p01_quick_visible=",18)==0) {
+        unsigned value;char tail;
+        if(sscanf(line+18,"%u %c",&value,&tail)==1 && value<=UI_STATE_QUICK_VISIBLE_ALL)
+            state->page01.quick_visible=(uint16_t)value;
     } else if (strncmp(line, "p07_view_mode=", 14) == 0) {
         state->page07.view_mode = atoi(line + 14);
     } else if (strncmp(line, "p07_fav_only=", 13) == 0) {
@@ -127,6 +140,8 @@ bool ui_state_store_load(ui_persist_state_t* state)
     if (!state) return false;
     loaded_state = *state;
     loaded_state.top_popup_enabled = true;
+    loaded_state.page01.quick_visible = UI_STATE_QUICK_VISIBLE_ALL;
+    loaded_state.page01.main_batch_action = UI_MAIN_BATCH_SETTINGS;
     ui_main_layout_default(&loaded_state.page01.layout);
     loaded_state.magic = 0;
     loaded_state.version = 0;
@@ -229,6 +244,9 @@ bool ui_state_store_save(const ui_persist_state_t* state)
     fprintf(fp, "magic=%u\n", UI_STATE_STORE_MAGIC);
     fprintf(fp, "version=%u\n", UI_STATE_STORE_VERSION);
     fprintf(fp, "p01_detail_section=%d\n", state->page01.detail_section);
+    fprintf(fp, "p01_main_batch_action=%u\n",
+            state->page01.main_batch_action == UI_MAIN_BATCH_CYCLE ?
+            UI_MAIN_BATCH_CYCLE : UI_MAIN_BATCH_SETTINGS);
     const ui_main_layout_t *layout=&state->page01.layout;
     fprintf(fp,"p01_layout=%u,%u,%u,%u,%u,%u,%u,%u\n",
             layout->left[0],layout->left[1],layout->left[2],layout->left[3],
@@ -247,6 +265,7 @@ bool ui_state_store_save(const ui_persist_state_t* state)
     for(unsigned i=0;i<UI_STATE_QUICK_CONTROL_COUNT;i++)
         fprintf(fp,"%s%u",i?",":"",state->page01.quick_order[i]);
     fputc('\n',fp);
+    fprintf(fp,"p01_quick_visible=%u\n",state->page01.quick_visible & UI_STATE_QUICK_VISIBLE_ALL);
     fprintf(fp, "p07_view_mode=%d\n", state->page07.view_mode);
     fprintf(fp, "p07_fav_only=%d\n", state->page07.fav_only);
     fprintf(fp, "p07_selected_abs_idx=%d\n", state->page07.selected_abs_idx);

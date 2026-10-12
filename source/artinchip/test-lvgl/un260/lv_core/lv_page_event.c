@@ -15,6 +15,7 @@
 #include "un260/lv_components/lv_components.h"
 #include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_system/ui_text.h"
+#include "un260/lv_system/ui_state_runtime.h"
 #include "un260/lv_system/ui_qr_data.h"
 #include "un260/lv_core/page_01_main.h"
 #include "un260/lv_core/page_02_list.h"
@@ -190,6 +191,10 @@ void page_01_fo_btn_event_cb(lv_event_t* e) //切换主界面底部F/O开关
 void page_01_bottom_batch_btn_event_cb(lv_event_t* e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    if (ui_state_main_batch_action_get() == UI_MAIN_BATCH_SETTINGS) {
+        page_03_menu_open_batch();
+        return;
+    }
     (void)workspace_service_batch_next();
 }
 

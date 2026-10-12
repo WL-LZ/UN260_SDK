@@ -70,6 +70,27 @@ int main(int argc,char **argv){
  char input[128];snprintf(input,sizeof(input),"%s",argv[2]);char *part=strtok(input,",");unsigned count=0;while(part&&count<QUICK_COUNT){values[count++]=strtoul(part,NULL,10);part=strtok(NULL,",");}assert(count==QUICK_COUNT);
  for(unsigned i=0;i<QUICK_COUNT;i++)expected[i]=values[i];
  get_order(expected);ui_state_quick_order_get(NULL);
+ if(!strncmp(argv[1],"visible-",8)){
+  uint16_t mask=ui_state_quick_visible_get();
+  if(!strcmp(argv[1],"visible-default")){assert(mask==UI_STATE_QUICK_VISIBLE_ALL);return 0;}
+  if(!strcmp(argv[1],"visible-empty")){assert(mask==0);return 0;}
+  assert(mask==UI_STATE_QUICK_VISIBLE_ALL);
+  char original[4096];size_t size=file_bytes(original);
+  fail_sync=true;assert(!ui_state_quick_visible_set(QUICK_COUNT-1,false));fail_sync=false;
+  assert(ui_state_quick_visible_get()==mask);unchanged(expected,original,size);
+  fail_rename=true;assert(!ui_state_quick_visible_set(0,false));fail_rename=false;
+  assert(ui_state_quick_visible_get()==mask);unchanged(expected,original,size);
+  assert(!ui_state_quick_visible_set(QUICK_COUNT,false));
+  for(unsigned i=0;i<QUICK_COUNT;i++)assert(ui_state_quick_visible_set(i,false));
+  assert(ui_state_quick_visible_get()==0);get_order(expected);disk_order(expected);
+  ui_persist_state_t disk={0};assert(ui_state_store_load(&disk)&&disk.page01.quick_visible==0);
+  fail_sync=true;assert(ui_state_quick_visible_set(0,false));fail_sync=false;
+  uint8_t reordered[QUICK_COUNT];memcpy(reordered,expected,sizeof(reordered));
+  uint8_t tmp=reordered[0];reordered[0]=reordered[QUICK_COUNT-1];reordered[QUICK_COUNT-1]=tmp;
+  assert(ui_state_quick_order_save(reordered));
+  assert(ui_state_store_load(&disk)&&disk.page01.quick_visible==0);
+  return 0;
+ }
  if(!strncmp(argv[1],"top-",4)){
   ui_state_apply_common_runtime();
   if(!strcmp(argv[1],"top-default")){assert(top_popup&&!popup_auto);return 0;}
@@ -96,7 +117,6 @@ int main(int argc,char **argv){
  if(!strcmp(argv[1],"invalid")){
   uint8_t bad[QUICK_COUNT]={0,1,2,3,4,5,6,7,7};assert(!ui_state_quick_order_save(NULL));
   assert(!ui_state_quick_order_save(bad));bad[8]=9;assert(!ui_state_quick_order_save(bad));
-  assert(!ui_state_quick_order_swap(13,0));assert(!ui_state_quick_order_swap(0,255));
   unchanged(expected,original,size);return 0;
  }
  if(!strcmp(argv[1],"open-failure")){
@@ -107,12 +127,6 @@ int main(int argc,char **argv){
   unchanged(expected,original,size);assert(access(UI_STATE_STORE_PATH ".tmp",F_OK)!=0);
   fail_rename=true;assert(!ui_state_quick_order_save(next));fail_rename=false;
   unchanged(expected,original,size);assert(access(UI_STATE_STORE_PATH ".tmp",F_OK)!=0);
- }
- if(!strcmp(argv[1],"swap")){
-  assert(ui_state_quick_order_swap(0,8));uint8_t value=expected[0];expected[0]=expected[8];expected[8]=value;
-  get_order(expected);disk_order(expected);size=file_bytes(original);
-  fail_sync=true;assert(!ui_state_quick_order_swap(1,7));fail_sync=false;
-  unchanged(expected,original,size);return 0;
  }
  assert(ui_state_quick_order_save(next));get_order(next);disk_order(next);
  ui_persist_state_t disk={0};assert(ui_state_store_load(&disk));
@@ -170,6 +184,16 @@ with tempfile.TemporaryDirectory(prefix='un260-quick-order-') as temporary:
         state.write_bytes(original)
 
     run('get', default)
+    run('visible-default',default)
+    state.write_text(fixture)
+    for value in ('-1','8192','x','1 trailing'):
+        state.write_text(fixture+'p01_quick_visible='+value+'\n')
+        run('visible-default',default)
+    state.write_text(fixture+'p01_quick_visible=0\n')
+    run('visible-empty',default)
+    state.write_text(fixture+'p01_quick_order_v3='+default+',9,10,11,12\n')
+    run('visible-save',default)
+    run('visible-empty','12,1,3,4,2,5,6,7,8,9,10,11,0')
     state.write_text(fixture)
     run('get', default)  # Existing v1 file predating the quick-order field.
     for order in (legacy, custom):
@@ -219,7 +243,7 @@ with tempfile.TemporaryDirectory(prefix='un260-quick-order-') as temporary:
     run('top-save', custom + ',8')
     check_written_order(custom + ',8')
     run('top-off', custom + ',8')  # New process applies both independent saved switches.
-    for mode in ('invalid', 'failure', 'save', 'swap', 'open-failure'):
+    for mode in ('invalid', 'failure', 'save', 'open-failure'):
         state.write_text(fixture + 'p01_quick_order=' + custom + '\n')
         if mode == 'open-failure':
             state.with_suffix('.cfg.tmp').mkdir()
@@ -228,8 +252,6 @@ with tempfile.TemporaryDirectory(prefix='un260-quick-order-') as temporary:
             state.with_suffix('.cfg.tmp').rmdir()
         if mode in ('failure', 'save'):
             check_written_order(saved)
-        elif mode == 'swap':
-            check_written_order('8,2,7,0,1,6,3,4,5')
         else:
             run('get', custom + ',8')
     # Repeat a full nine-control save from an existing v2 file, including

@@ -18,8 +18,10 @@ static bool touch(uint8_t a,uint8_t b)
 { (void)b;return touch_feedback_set_enabled(a!=0); }
 static bool top(uint8_t a,uint8_t b)
 { (void)b;return ui_state_top_popup_set_enabled(a!=0); }
-static bool order(uint8_t a,uint8_t b)
-{ return ui_state_quick_order_swap(a,b); }
+static bool visibility(uint8_t a,uint8_t b)
+{ return ui_state_quick_visible_set(a,b!=0); }
+static bool main_batch(uint8_t a,uint8_t b)
+{ (void)b;return ui_state_main_batch_action_set((ui_main_batch_action_t)a); }
 /* One definition binds execution to feedback; adding only a switch handler
  * cannot accidentally omit the completion path. */
 static const struct {commit_fn commit;const char *key,*title;bool persistent;} settings[]={
@@ -28,7 +30,8 @@ static const struct {commit_fn commit;const char *key,*title;bool persistent;} s
     [APP_LOCAL_FAULT_POPUP]={popup,"settings.fault_popup",UI_N_("Popup"),true},
     [APP_LOCAL_TOUCH]={touch,"settings.touch",UI_N_("Touch guide"),true},
     [APP_LOCAL_TOP_POPUP]={top,"settings.top_popup",UI_N_("Top popup"),true},
-    [APP_LOCAL_SHORTCUT_ORDER]={order,"settings.shortcut_order",UI_N_("Shortcut order"),true}
+    [APP_LOCAL_SHORTCUT_VISIBILITY]={visibility,"settings.shortcut_visibility",UI_N_("Pull-down shortcuts"),true},
+    [APP_LOCAL_MAIN_BATCH_ACTION]={main_batch,"settings.main_batch_action",UI_N_("Main Batch button"),true}
 };
 _Static_assert(sizeof(settings)/sizeof(settings[0])==APP_LOCAL_SETTING_COUNT,"Missing local setting policy");
 bool app_local_setting_apply(app_local_setting_t setting,uint8_t a,uint8_t b)

@@ -16,11 +16,15 @@ harness=r'''
 #include <stddef.h>
 #include <stdio.h>
 #include "un260/app_service/setting_service.h"
+#include "un260/machine_state/machine_fault.h"
+#define UI_N_(s) s
 static bool visible,pending,enabled;
-static unsigned animations,refreshes,failures,successes,confirmed;
+static unsigned animations,refreshes,failures,successes,confirmed,preset_reports,preset_popups;
 static uint8_t number;
 static setting_batch_result_t wanted;
 void uart_debug_printf(const char *fmt,...){(void)fmt;}
+void app_fault_recovery_report(machine_fault_key_t key){assert(key.source==MACHINE_FAULT_PRESET&&key.type==0&&key.code==4);preset_reports++;}
+void fault_popup_report_preset_full(void){preset_popups++;}
 void page_03_menu_clear_batch_tip(void){}
 void page_03_menu_refresh_batch_number(void){assert(visible);refreshes++;}
 void page_03_menu_show_batch_saved_tip(void){assert(visible);}
@@ -40,19 +44,26 @@ int main(void){
   visible=lifecycle==1; /* never created, visible, suspended, destroyed */
   for(unsigned type=SETTING_BATCH_REQUEST_NUMBER;type<=SETTING_BATCH_REQUEST_SWITCH;type++){
    pending=true;wanted=(setting_batch_result_t){.type=type,.target={true,50}};
-   unsigned old=confirmed,notices=successes;dispatch(frame,sizeof(frame));assert(confirmed==old+1&&enabled&&number==50&&!pending&&successes==notices+1);
+   unsigned old=confirmed,notices=successes,reports=preset_reports;
+   frame[4]=4;dispatch(frame,5);assert(preset_reports==reports&&pending);
+   dispatch(frame,sizeof(frame));assert(preset_reports==reports+1&&preset_popups==preset_reports&&pending&&confirmed==old&&successes==notices);
+   /* Unsolicited Batch full never consumes the outstanding setting ACK. */
+   frame[4]=1;dispatch(frame,sizeof(frame));assert(confirmed==old+1&&enabled&&number==50&&!pending&&successes==notices+1);
    old=confirmed;notices=successes;dispatch(frame,sizeof(frame));assert(confirmed==old&&successes==notices); /* duplicate ACK */
-   notices=failures;pending=true;frame[4]=2;dispatch(frame,sizeof(frame));assert(confirmed==old&&failures==notices+1);
+   notices=failures;pending=true;frame[4]=2;
+   frame[2]=7;dispatch(frame,sizeof(frame));assert(pending&&failures==notices);
+   frame[2]=6;frame[3]=0x39;dispatch(frame,sizeof(frame));assert(pending&&failures==notices);
+   frame[3]=6;dispatch(frame,sizeof(frame));assert(confirmed==old&&failures==notices+1);
    dispatch(frame,sizeof(frame));assert(failures==notices+1); /* duplicate reject */
    frame[4]=1;
   }
  }
- assert(animations==8&&refreshes==2);puts("PASS actual Batch ACK: both request types, never-created/visible/hidden/destroyed Menu, failure and duplicate reply");
+ assert(animations==8&&refreshes==2);puts("PASS actual Batch ACK: both request types, never-created/visible/hidden/destroyed Menu, Batch full separate from ACK, malformed/truncated report, failure and duplicate reply");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='un260-batch-ack-') as tmp:
     tmp=Path(tmp);source=tmp/'test.c';exe=tmp/('test.exe' if os.name=='nt' else 'test')
-    source.write_text(harness+'\n'+actual+'\nstatic void dispatch(const uint8_t *buf,uint8_t len){switch(6){'+branch+'}}\n'+main)
+    source.write_text(harness+'\n'+actual+'\nstatic void dispatch(const uint8_t *buf,uint8_t len){const uint8_t cmd=6;switch(cmd){'+branch+'}}\n'+main)
     command=[os.environ.get('CC','cc'),'-std=gnu11','-Wall','-Wextra','-Werror',f'-I{root}',str(source),'-o',str(exe)]
     if os.name!='nt':command+=['-fsanitize=address,undefined','-fno-sanitize-recover=all','-no-pie']
     subprocess.run(command,check=True)

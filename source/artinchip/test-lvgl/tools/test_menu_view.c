@@ -1,3 +1,4 @@
+#include "un260/font/ui_locale_font_bank.h"
 #include "test_notice_sink.h"
 #include <assert.h>
 #include "un260/lv_components/lv_content_pager.h"
@@ -78,6 +79,10 @@ static ui_page_t current=UI_PAGE_MENU;
 static bool busy,gestures=true,layout=true;
 static bool popup_auto=true,pure_count,touch_guide=true;
 static bool top_popup_save_fails,local_save_fails;
+static ui_main_batch_action_t main_batch_action=UI_MAIN_BATCH_SETTINGS;
+ui_main_batch_action_t ui_state_main_batch_action_get(void){return main_batch_action;}
+bool ui_state_main_batch_action_set(ui_main_batch_action_t value)
+{if(local_save_fails||value>UI_MAIN_BATCH_CYCLE)return false;main_batch_action=value;return true;}
 bool ui_state_top_popup_set_enabled(bool enabled)
 {if(top_popup_save_fails||local_save_fails)return false;ui_notice_set_enabled(enabled);return true;}
 static uint8_t quick_order[QUICK_CONTROL_COUNT]={0,1,2,3,4,5,6,7,8,9,10,11,12};
@@ -89,12 +94,16 @@ void gesture_service_clear_pointer_policy(uint32_t owner)
 {assert(owner==UI_PAGE_MENU);quick_pointer_policy=NULL;}
 void gesture_service_set_navigation_blocked(uint32_t owner,bool blocked)
 {assert(owner==UI_PAGE_MENU);quick_navigation_blocked=blocked;}
-#ifndef CASH_REAL_FONTS
+#if !defined(CASH_REAL_FONTS) || defined(MENU_REAL_FONTS)
 void ui_cash_journal_filter_operator(uint32_t id){(void)id;}
+#endif
+#ifndef CASH_REAL_FONTS
 const lv_font_t *ui_message_font(const lv_font_t *font){return font;}
 #endif
+static uint16_t quick_visible=UI_STATE_QUICK_VISIBLE_ALL;
+uint16_t ui_state_quick_visible_get(void){return quick_visible;}
+bool ui_state_quick_visible_set(uint8_t id,bool visible){if(local_save_fails||id>=QUICK_CONTROL_COUNT)return false;if(visible)quick_visible|=1U<<id;else quick_visible&=~(1U<<id);return true;}
 void ui_state_quick_order_get(uint8_t order[QUICK_CONTROL_COUNT]){memcpy(order,quick_order,sizeof(quick_order));}
-bool ui_state_quick_order_swap(uint8_t a,uint8_t b){if(local_save_fails)return false;uint8_t value=quick_order[a];quick_order[a]=quick_order[b];quick_order[b]=value;return true;}
 bool fault_popup_get_auto_enabled(void){return popup_auto;}
 void fault_popup_set_auto_enabled(bool value){popup_auto=value;}
 void ui_state_save_popup_auto_state(void){}
@@ -233,26 +242,23 @@ static void click(const char *s)
     lv_area_t a;lv_obj_get_coords(o,&a);fprintf(stderr,"click %s @ %d,%d-%d,%d\n",s,a.x1,a.y1,a.x2,a.y2);assert(a.x1>=0&&a.x2<1280&&a.y1>=0&&a.y2<400);
     point=(lv_point_t){(a.x1+a.x2)/2,(a.y1+a.y2)/2};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);
 }
-static lv_obj_t *find_setting_row(lv_obj_t *p,const char *title)
-{
-    if(lv_obj_check_type(p,&lv_label_class)&&!strcmp(lv_label_get_text(p),title)&&
-       !lv_obj_has_flag(lv_obj_get_parent(p),LV_OBJ_FLAG_CLICKABLE))return lv_obj_get_parent(p);
-    for(unsigned i=0;i<lv_obj_get_child_cnt(p);i++){
-        lv_obj_t *row=find_setting_row(lv_obj_get_child(p,i),title);if(row)return row;
-    }
-    return NULL;
-}
+
 static void check_header(void)
 {
-    lv_obj_t *tray=lv_obj_get_parent(menu.nav[0]);lv_area_t t;
+    assert(!menu.nav[0]&&!menu.nav[2]);
+    lv_obj_t *tray=lv_obj_get_parent(menu.nav[1]);lv_area_t t;
     lv_obj_get_coords(tray,&t);
+    assert(lv_obj_get_child_cnt(tray)==4);
     /* Arabic labels are shaped; identify the adjacent header control by tree. */
     lv_obj_t *quick=lv_obj_get_child(menu.root,lv_obj_get_index(tray)+1);assert(quick);
     lv_area_t q;lv_obj_get_coords(quick,&q);
-    assert(t.x1>=222&&t.x2+16<=q.x1);
+    lv_obj_t *title=lv_obj_get_child(menu.root,1);lv_area_t title_bounds;
+    lv_obj_get_coords(title,&title_bounds);
+    assert(t.x1>=title_bounds.x2+24&&t.x2+16<=q.x1);
     assert(lv_obj_get_style_border_width(tray,0)==0);
-    assert(lv_obj_get_style_bg_color(tray,0).full==lv_color_hex(0xE7EDF0).full);
-    for(unsigned i=0;i<6;i++){
+    assert(lv_obj_get_style_bg_color(tray,0).full==lv_color_hex(PANEL).full);
+    for(unsigned n=0;n<4;n++){
+        unsigned i=visible_tabs[n];
         lv_obj_t *v=menu.nav[i],*l=lv_obj_get_child(v,0),*im=lv_obj_get_child(v,1);
         lv_area_t b,a,c;lv_obj_get_coords(v,&b);lv_obj_get_coords(im,&a);lv_obj_get_coords(l,&c);
         assert(abs((a.x1-b.x1)-(b.x2-c.x2))<=1);
@@ -260,14 +266,46 @@ static void check_header(void)
         assert(abs((a.y1+a.y2)-(b.y1+b.y2))<=1);
         assert(abs((c.y1+c.y2)-(b.y1+b.y2))<=1);
         assert(lv_obj_get_style_border_width(v,0)==0&&lv_obj_get_style_shadow_width(v,0)==0);
-        assert(lv_obj_get_style_bg_color(v,0).full==lv_color_hex(menu.tab==i?0xFFFFFF:0xE7EDF0).full);
+        assert(lv_obj_get_style_bg_color(v,0).full==lv_color_hex(menu.tab==i?0xFFFFFF:PANEL).full);
+        assert(lv_obj_get_height(v)==40);
+        int width=lv_txt_get_width(lv_label_get_text(l),strlen(lv_label_get_text(l)),lv_obj_get_style_text_font(l,0),0,LV_TEXT_FLAG_NONE);
+        assert(width==lv_obj_get_width(l)&&lv_obj_get_height(l)<=lv_obj_get_height(v));
     }
-    lv_area_t first,last;lv_obj_get_coords(menu.nav[0],&first);lv_obj_get_coords(menu.nav[5],&last);
+    lv_area_t first,last;lv_obj_get_coords(menu.nav[1],&first);lv_obj_get_coords(menu.nav[5],&last);
     assert(first.x1-t.x1==t.x2-last.x2&&first.x1-t.x1==4);
+    lv_obj_t *back=lv_obj_get_child(menu.root,0);
+    assert(lv_obj_get_width(back)==76&&lv_obj_get_height(back)==42);
+    assert(lv_obj_get_child_cnt(back)==1);
+    assert(lv_obj_get_style_border_width(back,0)==0);
     for(unsigned i=0;i<lv_obj_get_child_cnt(menu.root);i++){
         lv_obj_t *v=lv_obj_get_child(menu.root,i);
         if(!lv_obj_has_flag(v,LV_OBJ_FLAG_CLICKABLE)||lv_obj_get_y(v)!=14)continue;
         assert(lv_obj_get_height(v)==44&&lv_obj_get_style_border_width(v,0)==0);
+    }
+}
+static void check_interaction_header(lv_obj_t *content)
+{
+    lv_obj_t *title=lv_obj_get_child(content,0),*tray=lv_obj_get_child(content,1);
+    lv_obj_t *controls=lv_obj_get_child(tray,0),*visibility=lv_obj_get_child(tray,1);
+    assert(lv_obj_get_child_cnt(tray)==2&&lv_obj_get_height(tray)==48);
+    assert(lv_obj_get_style_bg_color(tray,0).full==lv_color_hex(PANEL).full);
+    assert(lv_obj_get_style_border_width(tray,0)==0);
+    assert(lv_obj_get_x(title)+lv_obj_get_width(title)+20<=lv_obj_get_x(tray));
+    assert(lv_obj_get_x(controls)==4&&lv_obj_get_y(controls)==4);
+    assert(lv_obj_get_x(visibility)==lv_obj_get_width(controls)+6&&lv_obj_get_y(visibility)==4);
+    assert(lv_obj_get_x(visibility)+lv_obj_get_width(visibility)+4==lv_obj_get_width(tray));
+    for(unsigned i=0;i<2;i++){
+        lv_obj_t *v=lv_obj_get_child(tray,i);
+        bool selected=i==menu.shortcut_visibility;
+        assert(lv_obj_get_height(v)==40&&lv_obj_get_style_border_width(v,0)==0);
+        assert(lv_obj_has_state(v,LV_STATE_CHECKED)==selected);
+        assert(lv_obj_get_style_bg_color(v,0).full==lv_color_hex(selected?0xFFFFFF:PANEL).full);
+        lv_obj_t *caption=lv_obj_get_child(v,0);
+        int natural=lv_txt_get_width(lv_label_get_text(caption),strlen(lv_label_get_text(caption)),lv_obj_get_style_text_font(caption,0),0,LV_TEXT_FLAG_NONE);
+        assert(natural<=lv_obj_get_width(caption)&&lv_obj_get_height(caption)<=40);
+    }
+    if(menu.interaction_created){
+        assert(lv_obj_get_x(tray)+lv_obj_get_width(tray)+12<=lv_obj_get_x(menu.interaction_controls.device_button));
     }
 }
 static void check_numeric_keypad(void)
@@ -281,13 +319,16 @@ static void check_numeric_keypad(void)
     assert(lv_obj_get_y(four)-lv_obj_get_y(one)==73);
     assert(lv_obj_get_style_bg_color(one,0).full==lv_color_hex(0xF0F3F5).full);
     assert(lv_obj_get_style_border_width(one,0)==0&&lv_obj_get_style_radius(one,0)==12);
-    assert(lv_obj_get_style_text_font(lv_obj_get_child(one,0),0)==&lv_font_instrument_sans_medium_26);
+    assert(lv_obj_get_style_text_font(lv_obj_get_child(one,0),0)==ui_message_font(&lv_font_instrument_sans_medium_26));
     assert(lv_obj_get_style_bg_color(clear,0).full==lv_color_hex(0xFBFCFD).full);
     assert(lv_obj_get_style_border_width(clear,0)==0);
 }
 static void raster(const char *name)
 {
-    if(page_03_menu_is_visible()){lv_obj_update_layout(menu.root);check_header();}
+    if(page_03_menu_is_visible()){
+        lv_obj_update_layout(menu.root);check_header();
+        if(menu.tab==4&&menu.sub==1)check_interaction_header(lv_obj_get_child(menu.body,1));
+    }
     lv_obj_update_layout(lv_scr_act());lv_obj_invalidate(lv_scr_act());lv_refr_now(NULL);
     const char *dir=getenv("MENU_OUTPUT");if(!dir)return;char path[512];snprintf(path,sizeof(path),"%s/%s.bgra",dir,name);
     FILE *f=fopen(path,"wb");assert(f);assert(fwrite(framebuffer,1,sizeof(framebuffer),f)==sizeof(framebuffer));fclose(f);
@@ -331,6 +372,8 @@ static void test_auto_qr(void)
 static void test_local_feedback_contract(void)
 {
     bool old_g=gestures,old_l=layout,old_p=popup_auto,old_t=touch_guide;
+    ui_main_batch_action_t old_batch=main_batch_action;
+    uint16_t old_visible=quick_visible;
     uint8_t old_order[QUICK_CONTROL_COUNT];memcpy(old_order,quick_order,sizeof(old_order));
     for(unsigned id=0;id<APP_LOCAL_SETTING_COUNT;id++){
         ui_notice_set_enabled(true);local_save_fails=false;
@@ -351,10 +394,34 @@ static void test_local_feedback_contract(void)
     assert(app_local_setting_apply(APP_LOCAL_TOP_POPUP,1,0));assert(test_notice_count==before+1);
     before=test_notice_count;current=UI_PAGE_MAIN;
     assert(app_local_setting_apply(APP_LOCAL_GESTURES,1,0));assert(test_notice_count==before);
-    current=UI_PAGE_MENU;gestures=old_g;layout=old_l;popup_auto=old_p;touch_guide=old_t;
-    memcpy(quick_order,old_order,sizeof(old_order));ui_notice_dismiss(NULL);
+    current=UI_PAGE_MENU;gestures=old_g;layout=old_l;popup_auto=old_p;touch_guide=old_t;main_batch_action=old_batch;
+    memcpy(quick_order,old_order,sizeof(old_order));quick_visible=old_visible;ui_notice_dismiss(NULL);
     puts("PASS all registered local settings: one success/error; disabled popup, invalid ID and Main origin quiet; no replay");
 }
+static void check_keyboard_labels(lv_obj_t *object)
+{
+    if(!lv_obj_is_visible(object))return;
+    if(lv_obj_check_type(object,&lv_label_class)){
+        const char *text=lv_label_get_text(object);
+        const lv_font_t *font=lv_obj_get_style_text_font(object,0);
+        uint32_t offset=0;
+        while(text[offset]){
+            uint32_t cp=_lv_txt_encoded_next(text,&offset);lv_font_glyph_dsc_t glyph;
+            if(cp<32||(cp>=0x200b&&cp<=0x200f)||(cp>=0x202a&&cp<=0x202e)||(cp>=0x2066&&cp<=0x2069))continue;
+            assert(lv_font_get_glyph_dsc(font,&glyph,cp,0)&&!glyph.is_placeholder);
+        }
+        lv_obj_t *parent=lv_obj_get_parent(object);
+        if(lv_obj_check_type(parent,&lv_btn_class)||
+           (lv_obj_has_flag(parent,LV_OBJ_FLAG_CLICKABLE)&&lv_obj_get_style_radius(parent,0)==12)){
+            lv_point_t size;lv_txt_get_size(&size,text,font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+            if(size.x>lv_obj_get_width(parent)-12||size.y>lv_obj_get_height(parent))
+                fprintf(stderr,"Keyboard action %s: %s %d,%d in %d,%d\\n",ui_lang_current()->tag,text,size.x,size.y,lv_obj_get_width(parent),lv_obj_get_height(parent));
+            assert(size.x<=lv_obj_get_width(parent)-12&&size.y<=lv_obj_get_height(parent));
+        }
+    }
+    for(unsigned i=0;i<lv_obj_get_child_cnt(object);++i)check_keyboard_labels(lv_obj_get_child(object,i));
+}
+#include "test_alnum_keyboard_cases.h"
 int main(void)
 {
     test_local_feedback_contract();
@@ -364,10 +431,30 @@ int main(void)
     workspace_profile_t p=model.users[0].profiles[0];strcpy(p.name,"Bundle preparation");p.batch_enabled=1;p.batch=100;assert(workspace_add_profile(&model,1,&p));
     uint32_t uid;assert(workspace_add_user(&model,"Taylor",&uid));
     history_fixture.record_count=1;history_fixture.records[0]=(ui_history_record_t){.valid=true,.record_no=1,.pcs=85,.amount=425,.currency="CNY",.year=2026,.month=9,.day=23,.hour=10,.minute=42};
-    lv_init();lv_disp_draw_buf_t buf;lv_disp_draw_buf_init(&buf,draw_buffer,NULL,1280*64);lv_disp_drv_t d;lv_disp_drv_init(&d);d.hor_res=1280;d.ver_res=400;d.flush_cb=flush;d.draw_buf=&buf;lv_disp_t *display=lv_disp_drv_register(&d);assert(display);ui_scrollbar_init(display);
+    lv_init();
+#ifdef MENU_REAL_FONTS
+    ui_lang_set_resource_preparer(ui_locale_font_prepare);ui_message_font_set_provider(ui_locale_font_compose);
+#endif
+    lv_disp_draw_buf_t buf;lv_disp_draw_buf_init(&buf,draw_buffer,NULL,1280*64);lv_disp_drv_t d;lv_disp_drv_init(&d);d.hor_res=1280;d.ver_res=400;d.flush_cb=flush;d.draw_buf=&buf;lv_disp_t *display=lv_disp_drv_register(&d);assert(display);ui_scrollbar_init(display);
     lv_indev_drv_t in;lv_indev_drv_init(&in);in.type=LV_INDEV_TYPE_POINTER;in.read_cb=read_pointer;assert(lv_indev_drv_register(&in));
     lv_img_decoder_t *decoder=lv_img_decoder_create();lv_img_decoder_set_info_cb(decoder,asset_info);lv_img_decoder_set_open_cb(decoder,asset_open);lv_img_decoder_set_close_cb(decoder,asset_close);
-    ui_page_03_menu_create(lv_scr_act());tick(200);raster("menu-overview");assert(!test_notice_visible);
+    ui_page_03_menu_create(lv_scr_act());tick(200);
+    assert(menu.tab==1&&!find(menu.root,"Overview")&&!find(menu.root,"Records"));
+    raster("menu-default-count");assert(!test_notice_visible);
+    assert(main_batch_action==UI_MAIN_BATCH_SETTINGS);
+    click("Main Batch: Settings");assert(main_batch_action==UI_MAIN_BATCH_CYCLE);
+    raster("menu-main-batch-cycle");
+    click("Main Batch: Cycle");assert(main_batch_action==UI_MAIN_BATCH_SETTINGS);
+    menu.batch_dirty=true;menu.saving=1;
+    click("Main Batch: Settings");assert(main_batch_action==UI_MAIN_BATCH_CYCLE&&menu.batch_dirty&&menu.saving==1);
+    menu.batch_dirty=false;menu.saving=0;
+    click("Main Batch: Cycle");assert(main_batch_action==UI_MAIN_BATCH_SETTINGS);
+    ui_notice_set_enabled(false);local_save_fails=true;
+    click("Main Batch: Settings");assert(main_batch_action==UI_MAIN_BATCH_SETTINGS&&settings_detail_overlay_is_open());
+    click("OK");local_save_fails=false;ui_notice_set_enabled(true);
+    /* An explicit Main Batch entry chooses Count/Presets on the existing Menu. */
+    menu.tab=5;menu.sub=1;menu.dirty=true;tick(120);
+    page_03_menu_open_batch();tick(120);assert(menu.tab==1&&menu.sub==0&&find(menu.body,"Batch presets"));
     click("Quick");assert(menu.quick);click("Close");assert(!menu.quick);
     unsigned nav_before=nav_count;point=(lv_point_t){1233,37};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);assert(nav_count==nav_before+1);
     nav_before=nav_count;point=(lv_point_t){47,37};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);assert(nav_count==nav_before+1&&current==UI_PAGE_MAIN);current=UI_PAGE_MENU;
@@ -405,7 +492,8 @@ int main(void)
         assert(lv_obj_get_x(card)+lv_obj_get_width(card)<=ui_scrollbar_content_width(menu.task_scroll));
     }
     lv_obj_scroll_to_y(menu.task_scroll,500,LV_ANIM_OFF);tick(120);click("Profile 8");assert(menu.selected_profile==7&&lv_obj_get_scroll_y(menu.task_scroll)>200);raster("menu-profiles-scrolled");
-    click("Records");raster("menu-records");
+    /* Hidden records keep their implementation and stable ID for future reuse. */
+    menu.tab=2;menu.sub=0;menu.dirty=true;tick(120);raster("menu-records-retained-private");
     uint32_t prior_day=business_day();
     record_date_done("20260925",NULL);assert(settings_detail_overlay_is_open());
     assert(business_day()==prior_day);click("Cancel");assert(business_day()==prior_day);
@@ -423,23 +511,40 @@ int main(void)
     click("QR export");raster("menu-qr-export");
     click("Preferences");assert(find(menu.body,"Manage operators"));raster("menu-operators-entry");click("Manage operators");assert(current==UI_PAGE_OPERATORS);current=UI_PAGE_MENU;assert(model.user_count==2);
     click("Interaction");raster("menu-interaction");
-    lv_obj_t *interaction_rows=find_setting_row(menu.body,"Top popup"),*top_toggle=NULL;assert(interaction_rows);
-    for(unsigned i=0;i<lv_obj_get_child_cnt(interaction_rows);i++){
-        lv_obj_t *o=lv_obj_get_child(interaction_rows,i);
-        if(lv_obj_get_x(o)==412 && lv_obj_get_y(o)==177 && lv_obj_has_flag(o,LV_OBJ_FLAG_CLICKABLE))top_toggle=o;
-    }
-    assert(top_toggle);top_popup_save_fails=true;
-    lv_event_send(top_toggle,LV_EVENT_CLICKED,NULL);tick(120);
+    assert(menu.interaction_created && quick_pointer_policy && !quick_navigation_blocked);
+    assert(lv_content_pager_get_count(menu.interaction_controls.pager)==3);
+    lv_area_t controls_bounds;lv_obj_get_coords(menu.interaction_controls.viewport,&controls_bounds);
+    bool swipe_layout=layout,swipe_gestures=gestures;
+    point=(lv_point_t){controls_bounds.x1+800,controls_bounds.y1+50};down=LV_INDEV_STATE_PRESSED;tick(40);
+    point.x-=400;tick(40);down=LV_INDEV_STATE_RELEASED;tick(400);
+    assert(lv_quick_controls_page(&menu.interaction_controls)==1 && layout==swipe_layout && gestures==swipe_gestures);
+    lv_content_pager_set_active(menu.interaction_controls.pager,0,false);
+    menu.batch_dirty=true;unsigned blocked_nav=nav_count;
+    lv_event_send(menu.interaction_controls.tiles[QUICK_HISTORY],LV_EVENT_CLICKED,NULL);assert(nav_count==blocked_nav);
+    menu.batch_dirty=false;ui_notice_dismiss(NULL);
+    lv_content_pager_set_active(menu.interaction_controls.pager,1,false);raster("menu-controls-page-2");
+    lv_obj_t *top_toggle=menu.interaction_controls.tiles[QUICK_TOP_POPUP];
+    top_popup_save_fails=true;lv_event_send(top_toggle,LV_EVENT_CLICKED,NULL);tick(120);
     assert(ui_notice_get_enabled()&&popup_auto);
-    top_popup_save_fails=false;interaction_rows=find_setting_row(menu.body,"Top popup");top_toggle=NULL;
-    for(unsigned i=0;i<lv_obj_get_child_cnt(interaction_rows);i++){
-        lv_obj_t *o=lv_obj_get_child(interaction_rows,i);
-        if(lv_obj_get_x(o)==412 && lv_obj_get_y(o)==177 && lv_obj_has_flag(o,LV_OBJ_FLAG_CLICKABLE))top_toggle=o;
-    }
-    assert(top_toggle);lv_event_send(top_toggle,LV_EVENT_CLICKED,NULL);tick(120);
-    assert(!ui_notice_get_enabled()&&popup_auto);
-    click("Layout edit");raster("menu-shortcut-selected");click("Standby");assert(quick_order[0]==QUICK_STANDBY&&quick_order[7]==QUICK_LAYOUT);
-    click("Quick");assert(menu.quick);assert(!test_notice_visible);raster("menu-quick");
+    top_popup_save_fails=false;top_toggle=menu.interaction_controls.tiles[QUICK_TOP_POPUP];
+    lv_event_send(top_toggle,LV_EVENT_CLICKED,NULL);tick(120);assert(!ui_notice_get_enabled()&&popup_auto);
+    click("Pull-down shortcuts");raster("menu-pull-down-shortcuts");
+    click("Layout edit");assert(!(quick_visible&(1U<<QUICK_LAYOUT)));
+    uint16_t before_mask=quick_visible;local_save_fails=true;click("Gestures");
+    assert(quick_visible==before_mask);settings_detail_dialog_hide();local_save_fails=false;
+    click("Controls");assert(menu.interaction_created);
+    assert(!lv_obj_has_flag(menu.interaction_controls.tiles[QUICK_LAYOUT],LV_OBJ_FLAG_HIDDEN));
+    lv_event_send(menu.interaction_controls.tiles[QUICK_LAYOUT],LV_EVENT_CLICKED,NULL);tick(120);
+    assert(!layout); /* Hidden pull-down entry still executes from full Controls. */
+    quick_visible=UI_STATE_QUICK_VISIBLE_ALL;
+    click("Quick");assert(menu.quick);assert(!test_notice_visible);
+    quick_visible=0;tick(120);assert(lv_content_pager_get_count(menu.quick_controls.pager)==1);
+    assert(lv_obj_is_visible(menu.quick_controls.empty));
+    for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++)assert(lv_obj_has_flag(menu.quick_controls.tiles[i],LV_OBJ_FLAG_HIDDEN));
+    quick_visible=1U<<QUICK_LAYOUT;tick(120);assert(!lv_obj_has_flag(menu.quick_controls.tiles[QUICK_LAYOUT],LV_OBJ_FLAG_HIDDEN));
+    assert(lv_content_pager_get_count(menu.quick_controls.pager)==1);
+    quick_visible=UI_STATE_QUICK_VISIBLE_ALL;tick(120);
+    assert(lv_content_pager_get_count(menu.quick_controls.pager)==2);raster("menu-quick");
     assert(quick_pointer_policy&&quick_navigation_blocked);
     lv_obj_t *quick_sheet=lv_obj_get_child(menu.quick,0);
     assert(lv_obj_get_width(quick_sheet)==1280&&lv_obj_get_height(quick_sheet)==328);
@@ -478,7 +583,7 @@ int main(void)
     gestures=!gestures;tick(120);assert(menu.quick==quick_before&&menu.quick_controls.switches[QUICK_GESTURES]==gesture_state);
     assert(lv_obj_get_x(menu.quick_controls.knobs[QUICK_GESTURES])==(gestures?24:4));
     point=(lv_point_t){40,365};down=LV_INDEV_STATE_PRESSED;tick(40);down=LV_INDEV_STATE_RELEASED;tick(120);assert(!menu.quick);
-    assert(!quick_pointer_policy&&!quick_navigation_blocked);
+    assert(quick_pointer_policy&&!quick_navigation_blocked);
     click("Quick");assert(lv_quick_controls_page(&menu.quick_controls)==0);
     for(unsigned lap=0;lap<2;lap++){
         menu_quick_flip(false);menu_quick_flip(true);
@@ -523,7 +628,7 @@ int main(void)
     lv_obj_del(settings_root);
     assert(!settings_detail_overlay_is_open()&&test_notice_dialog_holds==0);
     lv_modal_dialog_destroy(&first);lv_modal_dialog_destroy(&second);
-    puts("PASS Menu hierarchy: centered borderless ABC-color header, aligned utility buttons, fixed OFF, guarded drafts, empty records, current operator status, no persistent footer, scoped transient feedback, in-place Quick refresh");
+    puts("PASS Menu hierarchy: four visible sections, default Count, localized standard Back, common gray mode trays and white selection, aligned utilities, fixed OFF, guarded drafts, retained private records, in-place Quick refresh");
     /* Full-page visual fixtures: not production sample data. */
     ui_page_03_menu_destroy();workspace_defaults(&model);model.operators_enabled=1;strcpy(model.users[0].name,"Local operator");assert(workspace_add_user(&model,"Alex",&uid));strcpy(model.users[1].employee_id,"A-002");
     p=model.users[0].profiles[0];p.add=1;model.users[0].profiles[0]=p;strcpy(p.name,"Bundle preparation");p.batch_enabled=1;p.batch=100;assert(workspace_add_profile(&model,1,&p));
@@ -540,7 +645,9 @@ int main(void)
     golden.result.source=36;golden.result.pcs=773;golden.result.money[0].pcs=773;golden.result.money[0].amount=7730;assert(cashbook_store_submit(&golden));
     actual_state.add_enabled=true;actual_state.speed=0;actual_state.buzzer_enabled=true;gestures=true;backlight=75;
     count_fixture.total_pcs=773;count_fixture.total_amount=7730;
-    current=UI_PAGE_MENU;ui_page_03_menu_create(lv_scr_act());tick(120);assert(business_day()==20260924);assert(find(menu.body,"Review 3 pending counts"));raster("studio-overview");
+    current=UI_PAGE_MENU;ui_page_03_menu_create(lv_scr_act());tick(120);
+    assert(menu.tab==1&&!menu.nav[0]&&!menu.nav[2]);raster("studio-default-count");
+    menu.tab=0;menu.sub=0;menu.dirty=true;tick(120);assert(business_day()==20260924);assert(find(menu.body,"Review 3 pending counts"));raster("studio-overview-retained-private");
     lv_obj_add_state(menu.nav[1],LV_STATE_FOCUS_KEY);raster("studio-focus");lv_obj_clear_state(menu.nav[1],LV_STATE_FOCUS_KEY);
     const char *shots[][5]={{NULL},{"batch","profiles","options"},{"records","recounts","history","verify","day-closes"},{"print","qr"},{"operators","interaction","display"},{"reject","care","device"}};
     for(unsigned tab=1;tab<6;tab++)for(unsigned sub=0;sub<subcounts[tab];sub++){
@@ -549,7 +656,7 @@ int main(void)
         assert(lv_obj_get_y(menu.body)==76&&lv_obj_get_height(menu.body)==296);
     }
     menu.tab=5;menu.sub=0;menu.reject_all=true;
-    menu.tab=4;menu.sub=1;menu.dirty=true;tick(100);
+    menu.tab=4;menu.sub=1;menu.shortcut_visibility=true;menu.dirty=true;tick(100);
     assert(menu.task_scroll);
     for(unsigned i=0;i<QUICK_CONTROL_COUNT;++i){
         lv_obj_t *item=lv_obj_get_child(menu.task_scroll,i);
@@ -576,9 +683,114 @@ int main(void)
     lv_obj_t *list=lv_obj_get_parent(person); /* the last matching label is the card */
     assert(lv_obj_get_height(person)==68&&lv_obj_get_width(person)==284);assert(lv_obj_get_x(person)+lv_obj_get_width(person)<=lv_obj_get_width(list)-UI_SCROLLBAR_GUTTER);lv_obj_scroll_to_y(list,152,LV_ANIM_OFF);tick(100);raster("operators-summary-scrolled");
     puts("PASS Studio: shared settings and dedicated Operators navigation");
+#ifdef MENU_REAL_FONTS
+    ui_page_03_menu_destroy();
+    for(size_t language=0;language<ui_lang_count();++language){
+        const ui_locale_t *locale=ui_lang_at(language);assert(ui_lang_prepare_resources(locale->id));ui_lang_set(locale->id);
+        ui_page_03_menu_create(lv_scr_act());
+        menu.tab=1;menu.sub=1;menu.dirty=true;tick(100);
+        const workspace_user_t *profiles_user=user();
+        assert(workspace_profile_has_default_name(&profiles_user->profiles[0]));
+        assert(!strcmp(profiles_user->profiles[0].name,"Everyday count"));
+        lv_obj_t *name_probe=lv_label_create(lv_scr_act());
+        lv_label_set_text(name_probe,ui_tr("Everyday count"));
+        assert(find(menu.body,lv_label_get_text(name_probe)));lv_obj_del(name_probe);
+        char locale_shot[80];snprintf(locale_shot,sizeof(locale_shot),"profiles-%s",locale->tag);raster(locale_shot);
+        menu.sub=2;menu.dirty=true;tick(100);
+        snprintf(locale_shot,sizeof(locale_shot),"options-%s",locale->tag);raster(locale_shot);
+        menu.tab=4;menu.sub=1;menu.shortcut_visibility=false;menu.dirty=true;tick(100);
+        lv_obj_t *interaction_content=lv_obj_get_child(menu.body,1);
+        check_interaction_header(interaction_content);
+        for(unsigned page=0;page<3;page++){
+            lv_content_pager_set_active(menu.interaction_controls.pager,page,false);
+            char name[80];snprintf(name,sizeof(name),"controls-%s-page-%u",locale->tag,page+1);raster(name);
+        }
+        for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
+            lv_obj_t *title=lv_obj_get_child(menu.interaction_controls.tiles[i],1);
+            const char *text=lv_label_get_text(title);const lv_font_t *font=lv_obj_get_style_text_font(title,0);
+            int width=lv_txt_get_width(text,strlen(text),font,0,LV_TEXT_FLAG_NONE);
+            if(width>lv_obj_get_width(title))fprintf(stderr,"Control title clipped %s: %s %d/%d\n",locale->tag,text,width,lv_obj_get_width(title));
+            assert(width<=155);
+        }
+        menu.shortcut_visibility=true;menu.dirty=true;tick(100);
+        /* The local Batch preference uses one complete line in every locale. */
+        menu.tab=1;menu.sub=0;menu.dirty=true;tick(120);
+        for(unsigned mode=0;mode<2;mode++){
+            main_batch_action=mode;menu.dirty=true;tick(120);
+            lv_obj_t *batch_content=lv_obj_get_child(menu.body,1);
+            lv_obj_t *toggle=lv_obj_get_child(batch_content,-1),*caption=lv_obj_get_child(toggle,0);
+            assert(lv_obj_get_y(toggle)==256&&lv_obj_get_height(toggle)==40&&lv_obj_get_width(toggle)==470);
+            assert(lv_obj_get_style_bg_color(toggle,0).full==lv_color_hex(BLUE).full);
+            int natural=lv_txt_get_width(lv_label_get_text(caption),strlen(lv_label_get_text(caption)),lv_obj_get_style_text_font(caption,0),0,LV_TEXT_FLAG_NONE);
+            assert(natural<=lv_obj_get_width(caption)&&lv_obj_get_height(caption)<=40);
+            char batch_name[80];snprintf(batch_name,sizeof(batch_name),"batch-%s-mode-%u",locale->tag,mode);raster(batch_name);
+        }
+        main_batch_action=UI_MAIN_BATCH_SETTINGS;
+        menu.tab=4;menu.sub=1;menu.shortcut_visibility=true;menu.dirty=true;tick(100);
+        char name[80];snprintf(name,sizeof(name),"shortcuts-%s",locale->tag);raster(name);
+        check_interaction_header(lv_obj_get_child(menu.body,1));
+        lv_obj_t *left=lv_obj_get_child(lv_obj_get_child(menu.body,1),2),*rows=lv_obj_get_child(left,0);
+        for(unsigned i=0;i<2;i++){
+            lv_obj_t *caption=lv_obj_get_child(rows,i*4);
+            int natural=lv_txt_get_width(lv_label_get_text(caption),strlen(lv_label_get_text(caption)),lv_obj_get_style_text_font(caption,0),0,LV_TEXT_FLAG_NONE);
+            if(natural>lv_obj_get_width(caption))fprintf(stderr,"Toggle title clipped %s: %s %d/%d\n",locale->tag,lv_label_get_text(caption),natural,lv_obj_get_width(caption));
+            assert(natural<=lv_obj_get_width(caption));
+        }
+        for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
+            lv_obj_t *item=lv_obj_get_child(menu.task_scroll,i),*title=lv_obj_get_child(item,0);
+            const char *text=lv_label_get_text(title);int width=lv_txt_get_width(text,strlen(text),lv_obj_get_style_text_font(title,0),0,LV_TEXT_FLAG_NONE);
+            if(width>lv_obj_get_width(title))fprintf(stderr,"Shortcut title clipped %s: %s %d/%d\n",locale->tag,text,width,lv_obj_get_width(title));
+            assert(width<=lv_obj_get_width(title));
+
+        }
+        settings_detail_keyboard_show(ui_tr("Enter capacity"),"10",3,
+            SETTINGS_DETAIL_KEYBOARD_UINT,batch_submit,NULL);
+        lv_obj_update_layout(lv_scr_act());check_keyboard_labels(lv_obj_get_child(lv_scr_act(),-1));
+        snprintf(name,sizeof(name),"numeric-keyboard-%s",locale->tag);raster(name);
+        settings_detail_keyboard_hide();
+        settings_detail_keyboard_show(ui_tr("Header line 1"),"UNION",32,
+            SETTINGS_DETAIL_KEYBOARD_TEXT,output_input,NULL);
+        lv_obj_update_layout(lv_scr_act());check_keyboard_labels(lv_obj_get_child(lv_scr_act(),-1));
+        snprintf(name,sizeof(name),"text-keyboard-%s",locale->tag);raster(name);
+        settings_detail_keyboard_hide();
+        alnum_test_context_t keyboard_state={.owner=alnum_test_owner()};
+        lv_alnum_keyboard_config_t keyboard_config=alnum_test_config(&keyboard_state);
+        keyboard_config.title=ui_text_get(UI_TEXT_QUERY_SERIAL);
+        keyboard_config.placeholder=ui_text_get(UI_TEXT_SERIAL_INPUT_HINT);
+        keyboard_config.apply_text=ui_tr("Search");
+        keyboard_config.clear_text=ui_tr("Clear");
+        keyboard_config.cancel_text=ui_tr("Back");keyboard_config.symbols=true;
+        lv_alnum_keyboard_t *keyboard=lv_alnum_keyboard_create(keyboard_state.owner,&keyboard_config);assert(keyboard);
+        lv_alnum_keyboard_show(keyboard);lv_obj_update_layout(keyboard_state.owner);check_keyboard_labels(keyboard_state.owner);
+        snprintf(name,sizeof(name),"search-keyboard-%s",locale->tag);raster(name);
+        lv_obj_del(keyboard_state.owner);
+        ui_page_03_menu_destroy();
+    }
+    ui_lang_set(LANGUAGE_EN);ui_page_03_menu_create(lv_scr_act());menu.tab=4;menu.sub=1;menu.dirty=true;tick(100);
+    quick_visible=0;open_quick();raster("quick-no-shortcuts");destroy_quick();
+    uint8_t hidden_order[QUICK_CONTROL_COUNT];memcpy(hidden_order,quick_order,sizeof(hidden_order));
+    quick_visible=UI_STATE_QUICK_VISIBLE_ALL & ~(1U<<QUICK_LAYOUT) & ~(1U<<QUICK_TOUCH);
+    uint8_t value=quick_order[1];quick_order[1]=quick_order[7];quick_order[7]=value;
+    open_quick();raster("quick-filtered-order");
+    assert(lv_obj_has_flag(menu.quick_controls.tiles[QUICK_LAYOUT],LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_has_flag(menu.quick_controls.tiles[QUICK_TOUCH],LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_get_x(menu.quick_controls.tiles[QUICK_STANDBY])==0 && lv_obj_get_y(menu.quick_controls.tiles[QUICK_STANDBY])==0);
+    assert(!memcmp(menu.quick_controls.state.order,quick_order,sizeof(quick_order)));
+    destroy_quick();memcpy(quick_order,hidden_order,sizeof(hidden_order));quick_visible=UI_STATE_QUICK_VISIBLE_ALL;
+    menu.shortcut_visibility=true;menu.dirty=true;tick(100);
+    test_alnum_keyboard_cases();
+    puts("PASS Controls and pull-down visibility in ten languages: actual locale fonts, complete titles, three pages, independent empty selection");
+#endif
     settings_detail_keyboard_show("Lifecycle check","10",3,SETTINGS_DETAIL_KEYBOARD_UINT,batch_submit,NULL);
     assert(settings_detail_overlay_is_open());ui_page_03_menu_destroy();assert(!menu.root&&!settings_detail_overlay_is_open());
-    tick(200);test_auto_qr();puts("PASS native Menu: six tabs, real ledger decisions/close/QR, batch drafts/keypad, minimum-one delete, registration, outside-close, resume/destroy; 1280x400");return 0;
+    /* Main can request Presets before Menu has any LVGL objects. */
+    current=UI_PAGE_MAIN;main_batch_action=UI_MAIN_BATCH_SETTINGS;
+    unsigned cold_navigation=nav_count;page_03_menu_open_batch();
+    assert(!menu.root&&nav_count==cold_navigation+1&&menu.tab==1&&menu.sub==0);
+    current=UI_PAGE_MENU;ui_page_03_menu_create(lv_scr_act());tick(120);
+    assert(find(menu.body,"Batch presets")&&find(menu.body,"Main Batch: Settings"));
+    raster("menu-cold-main-batch-entry");ui_page_03_menu_destroy();
+    tick(200);test_auto_qr();puts("PASS native Menu: four visible tabs, retained private ledger decisions/close/QR, batch action/drafts/keypad, minimum-one delete, registration, outside-close, resume/destroy; 1280x400");return 0;
 }
 
 const char *work_mode_service_status_msgid(void){return work_mode_service_status_text();}

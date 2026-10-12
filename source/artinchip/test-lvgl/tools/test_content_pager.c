@@ -371,6 +371,23 @@ static void test_capsule_repeat(void)
     puts("PASS capsule repeat/reverse: same target retains width and deadline, reverse retains width, explicit now and deletion remain immediate");
 }
 
+static void test_visible_page_count(void)
+{
+    fixture_t f=fixture(10,20,300,180,3,true);
+    assert(lv_content_pager_set_active(f.root,2,false));
+    assert(lv_content_pager_drag_begin(f.root));advance(200);update(&f,-100);
+    unsigned made=object_creation_calls;
+    assert(lv_content_pager_set_count(f.root,1));
+    assert(!lv_content_pager_is_moving(f.root) && lv_content_pager_get_active(f.root)==0);
+    assert(!lv_content_pager_drag_begin(f.root));
+    assert(lv_obj_has_flag(f.pages[1],LV_OBJ_FLAG_HIDDEN)&&lv_obj_has_flag(f.pages[2],LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_has_flag(lv_obj_get_child(f.root,1),LV_OBJ_FLAG_HIDDEN));
+    assert(!lv_content_pager_set_count(f.root,0) && !lv_content_pager_set_count(f.root,4));
+    assert(lv_content_pager_set_count(f.root,3));centered(&f,0);
+    assert(!lv_obj_has_flag(f.pages[1],LV_OBJ_FLAG_HIDDEN));
+    assert(object_creation_calls==made);swipe(&f,-120,1);lv_obj_del(f.root);
+    puts("PASS page visibility: shrink during drag, clamp active, one-page no swipe, restore page identity/dots without allocation");
+}
 int main(void)
 {
     setvbuf(stdout,NULL,_IONBF,0);lv_init();
@@ -384,7 +401,7 @@ int main(void)
     assert(!lv_content_pager_set_circular(NULL,true) && !lv_content_pager_drag_begin(NULL));
     assert(!lv_content_pager_drag_update(NULL,10) && !lv_content_pager_drag_end(NULL,false));
     assert(!lv_content_pager_is_moving(NULL) && !lv_content_pager_finish(NULL));
-    test_capsule_repeat();test_retarget_during_settle();test_cycles();test_release_and_resistance();test_interrupt_finish_and_reset();test_default_native_pager();test_delete_and_context_reuse();
+    test_visible_page_count();test_capsule_repeat();test_retarget_during_settle();test_cycles();test_release_and_resistance();test_interrupt_finish_and_reset();test_default_native_pager();test_delete_and_context_reuse();
     lv_indev_delete(input);lv_deinit();
     puts("PASS content pager public API on real LVGL; board input latency and display performance require board validation");
 }

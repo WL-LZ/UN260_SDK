@@ -41,9 +41,11 @@ static void ui_state_set_defaults(void)
     s_ui_state.magic = UI_STATE_STORE_MAGIC;
     s_ui_state.version = UI_STATE_STORE_VERSION;
     s_ui_state.page01.detail_section = PAGE_01_DETAIL_SECTION_A;
+    s_ui_state.page01.main_batch_action = UI_MAIN_BATCH_SETTINGS;
     ui_main_layout_default(&s_ui_state.page01.layout);
     static const uint8_t default_order[UI_STATE_QUICK_CONTROL_COUNT]={0,1,3,4,2,5,6,7,8,9,10,11,12};
     memcpy(s_ui_state.page01.quick_order,default_order,sizeof(default_order));
+    s_ui_state.page01.quick_visible = UI_STATE_QUICK_VISIBLE_ALL;
     s_ui_state.page07.view_mode = UI_STATE_CURR_VIEW_CARD;
     s_ui_state.page06.reserved06_enable = 1;
     s_ui_state.top_popup_enabled = true;
@@ -57,6 +59,8 @@ static void ui_state_ensure_loaded(void)
     s_ui_state.page01.detail_section =
         ui_state_normalize_detail_section(s_ui_state.page01.detail_section);
     ui_state_normalize_page07(&s_ui_state.page07);
+    if (s_ui_state.page01.main_batch_action != UI_MAIN_BATCH_CYCLE)
+        s_ui_state.page01.main_batch_action = UI_MAIN_BATCH_SETTINGS;
     s_ui_state_loaded = true;
 }
 
@@ -112,6 +116,25 @@ bool ui_state_top_popup_set_enabled(bool enabled)
     ui_notice_set_enabled(enabled);
     return true;
 }
+uint16_t ui_state_quick_visible_get(void)
+{
+    ui_state_ensure_loaded();
+    return s_ui_state.page01.quick_visible;
+}
+bool ui_state_quick_visible_set(uint8_t action,bool visible)
+{
+    if(action>=UI_STATE_QUICK_CONTROL_COUNT)return false;
+    ui_state_ensure_loaded();
+    uint16_t mask=s_ui_state.page01.quick_visible;
+    uint16_t next_mask=visible ? mask | (1U<<action) : mask & ~(1U<<action);
+    if(next_mask==mask)return true;
+    ui_state_pull_common_runtime();
+    ui_persist_state_t next=s_ui_state;
+    next.page01.quick_visible=next_mask;
+    if(!ui_state_store_save(&next))return false;
+    s_ui_state=next;
+    return true;
+}
 void ui_state_quick_order_get(uint8_t order[UI_STATE_QUICK_CONTROL_COUNT])
 {
     ui_state_ensure_loaded();
@@ -132,13 +155,6 @@ bool ui_state_quick_order_save(const uint8_t order[UI_STATE_QUICK_CONTROL_COUNT]
     if(!ui_state_store_save(&next))return false;
     s_ui_state=next;
     return true;
-}
-bool ui_state_quick_order_swap(uint8_t first,uint8_t second)
-{
-    if(first>=UI_STATE_QUICK_CONTROL_COUNT||second>=UI_STATE_QUICK_CONTROL_COUNT)return false;
-    uint8_t order[UI_STATE_QUICK_CONTROL_COUNT];ui_state_quick_order_get(order);
-    uint8_t value=order[first];order[first]=order[second];order[second]=value;
-    return ui_state_quick_order_save(order);
 }
 
 void ui_state_save_pure_count_state(void)
@@ -167,6 +183,25 @@ void ui_state_save_page01_detail_section(void)
 {
     ui_state_ensure_loaded();
     ui_state_save_all();
+}
+
+ui_main_batch_action_t ui_state_main_batch_action_get(void)
+{
+    ui_state_ensure_loaded();
+    return s_ui_state.page01.main_batch_action;
+}
+
+bool ui_state_main_batch_action_set(ui_main_batch_action_t action)
+{
+    if ((unsigned)action > UI_MAIN_BATCH_CYCLE) return false;
+    ui_state_ensure_loaded();
+    if (s_ui_state.page01.main_batch_action == action) return true;
+    ui_state_pull_common_runtime();
+    ui_persist_state_t next = s_ui_state;
+    next.page01.main_batch_action = action;
+    if (!ui_state_store_save(&next)) return false;
+    s_ui_state = next;
+    return true;
 }
 
 void ui_state_main_layout_get(ui_main_layout_t *layout)

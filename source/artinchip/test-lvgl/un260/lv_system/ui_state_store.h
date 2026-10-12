@@ -10,6 +10,7 @@
 #define UI_STATE_STORE_MAGIC   0x55495354U
 #define UI_STATE_STORE_VERSION 1U
 #define UI_STATE_QUICK_CONTROL_COUNT 13U
+#define UI_STATE_QUICK_VISIBLE_ALL ((1U << UI_STATE_QUICK_CONTROL_COUNT) - 1U)
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,10 +29,17 @@ typedef struct {
     int reserved06_enable;
 } ui_state_common_page_t;
 
+typedef enum {
+    UI_MAIN_BATCH_SETTINGS = 0,
+    UI_MAIN_BATCH_CYCLE = 1
+} ui_main_batch_action_t;
+
 typedef struct {
     int detail_section;
+    ui_main_batch_action_t main_batch_action;
     ui_main_layout_t layout;
     uint8_t quick_order[UI_STATE_QUICK_CONTROL_COUNT];
+    uint16_t quick_visible;
 } ui_state_page01_t;
 
 typedef struct {
