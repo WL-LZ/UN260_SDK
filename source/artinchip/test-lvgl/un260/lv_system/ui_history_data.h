@@ -9,13 +9,14 @@
 #include "un260/storage/storage_worker.h"
 #include "un260/history/history_multi.h"
 
-#define UI_HISTORY_MAX_RECORDS 100
+#define UI_HISTORY_MIN_RECORDS 100
+#define UI_HISTORY_MAX_RECORDS 1000
 
 typedef struct {
     bool valid;
     bool selected;
     /* Reusable physical slot (1..capacity), not a visible row number. */
-    uint8_t slot_no;
+    uint16_t slot_no;
     /* Stable identity: deletion and ring replacement never renumber survivors. */
     uint32_t record_no;
     /* Captured at the real START, never looked up from the current operator. */
@@ -43,8 +44,9 @@ typedef struct {
 typedef struct {
     uint32_t total_notes_counted;
     uint32_t next_record_no;
-    uint8_t next_slot_no;
-    uint8_t record_count;
+    uint16_t next_slot_no;
+    uint16_t record_count;
+    uint16_t capacity;
     ui_history_record_t records[UI_HISTORY_MAX_RECORDS];
 } ui_history_store_t;
 
@@ -68,6 +70,10 @@ storage_job_status_t ui_history_data_status(void);
  * writes are disabled until a successful load on the next application start. */
 bool ui_history_data_is_available(void);
 bool ui_history_data_can_accept(void);
+uint16_t ui_history_capacity_get(void);
+/* Requires a drained history lane. Keeps the newest stable IDs; capacity and
+ * removal publish together only after durable save. Pending resize blocks edits. */
+bool ui_history_capacity_set(uint16_t capacity);
 bool ui_history_record_build_from_session(const counting_sim_t *sim_data,
     uint32_t pcs_total, float amount_total, const char *error_frame_text,
     const char *start_frame_text, const char *end_frame_text,
@@ -89,8 +95,8 @@ bool ui_history_record_append_from_session(const counting_sim_t *sim_data, uint3
                                            const char *error_frame_text,
                                            const char *start_frame_text, const char *end_frame_text,
                                            const char *session_log_text);
-bool ui_history_record_toggle_selected(uint8_t index);
-bool ui_history_record_set_selected(uint8_t index, bool selected);
+bool ui_history_record_toggle_selected(uint16_t index);
+bool ui_history_record_set_selected(uint16_t index, bool selected);
 int ui_history_record_selected_first_index_get(void);
 int ui_history_record_selected_count_get(void);
 void ui_history_record_clear_selected(void);
@@ -99,6 +105,6 @@ bool ui_history_record_delete_selected(void);
 /* Delete exactly these stable IDs in one accepted snapshot. Every ID must be
  * unique, nonzero and present; invalid input is rejected without any change. */
 bool ui_history_record_delete_records(const uint32_t *record_nos, size_t count);
-bool ui_history_record_get(uint8_t index, ui_history_record_t *out);
+bool ui_history_record_get(uint16_t index, ui_history_record_t *out);
 bool ui_history_record_get_by_no(uint32_t record_no, ui_history_record_t *out);
 #endif

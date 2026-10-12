@@ -42,6 +42,14 @@ bool ui_history_data_poll(uint32_t now_ms) { (void)now_ms; ++test_polls; return 
 const ui_history_store_t *ui_history_data_get(void) { return &test_store; }
 bool ui_history_data_is_available(void) { return test_available; }
 bool ui_history_data_can_accept(void) { return test_available && test_accept; }
+uint16_t ui_history_capacity_get(void){return test_store.capacity;}
+bool ui_history_capacity_set(uint16_t capacity)
+{
+    if(!ui_history_data_can_accept() || capacity<100 || capacity>1000)return false;
+    test_store.capacity=capacity;
+    if(test_store.record_count>capacity)test_store.record_count=capacity;
+    ++test_commit_id;return true;
+}
 storage_job_status_t ui_history_data_status(void) { return test_status; }
 storage_job_id_t ui_history_last_commit_id(void) { return test_commit_id; }
 storage_job_status_t ui_history_commit_status(storage_job_id_t id)
@@ -53,24 +61,24 @@ void ui_history_total_notes_counted_set(uint32_t value)
     test_store.total_notes_counted = value; ++test_commit_id;
 }
 void ui_history_total_notes_counted_clear(void) { ui_history_total_notes_counted_set(0); }
-bool ui_history_record_get(uint8_t index, ui_history_record_t *out)
+bool ui_history_record_get(uint16_t index, ui_history_record_t *out)
 {
     if (!out || index >= test_store.record_count || !test_store.records[index].valid) return false;
     *out = test_store.records[index]; return true;
 }
 bool ui_history_record_get_by_no(uint32_t no, ui_history_record_t *out)
 {
-    for (uint8_t i = 0; i < test_store.record_count; ++i)
+    for (uint16_t i = 0; i < test_store.record_count; ++i)
         if (test_store.records[i].record_no == no) return ui_history_record_get(i, out);
     return false;
 }
-bool ui_history_record_set_selected(uint8_t index, bool selected)
+bool ui_history_record_set_selected(uint16_t index, bool selected)
 {
     ++test_selection_mutations;
     if (index >= test_store.record_count || !test_store.records[index].valid) return false;
     test_store.records[index].selected = selected; return true;
 }
-bool ui_history_record_toggle_selected(uint8_t index)
+bool ui_history_record_toggle_selected(uint16_t index)
 {
     if (index >= test_store.record_count) return false;
     return ui_history_record_set_selected(index, !test_store.records[index].selected);
@@ -116,7 +124,7 @@ bool ui_history_record_delete_records(const uint32_t *ids, size_t count)
         else test_store.records[kept++] = test_store.records[i];
     }
     memset(test_store.records + kept, 0, (UI_HISTORY_MAX_RECORDS - kept) * sizeof(test_store.records[0]));
-    test_store.record_count = (uint8_t)kept;
+    test_store.record_count = (uint16_t)kept;
     ++test_deletes; ++test_commit_id;
     return true;
 }
@@ -257,14 +265,15 @@ static void history_test_fixtures(unsigned count)
 {
     assert(count <= UI_HISTORY_MAX_RECORDS);
     memset(&test_store, 0, sizeof(test_store));
-    test_store.record_count = (uint8_t)count;
+    test_store.record_count = (uint16_t)count;
+    test_store.capacity=UI_HISTORY_MAX_RECORDS;
     test_store.next_record_no = 1001;
     test_store.next_slot_no = 1;
     test_store.total_notes_counted = 100000;
     for (unsigned i = 0; i < count; ++i) {
         ui_history_record_t *record = &test_store.records[i];
         *record = (ui_history_record_t){ .valid = true, .record_no = 1000 - i,
-            .slot_no = (uint8_t)(i + 1), .pcs = 20 + i, .amount = 1000 + i * 100,
+            .slot_no = (uint16_t)(i + 1), .pcs = 20 + i, .amount = 1000 + i * 100,
             .year = 2026, .month = 9, .day = (uint8_t)(9 - i % 3),
             .hour = (uint8_t)(12 + i % 8), .minute = (uint8_t)((i * 3) % 60), .second = (uint8_t)(i % 60) };
         strcpy(record->currency, i % 2 ? "EUR" : "USD");
@@ -392,8 +401,8 @@ void history_test_control_feedback(lv_obj_t *o,uint32_t normal,uint32_t pressed,
         assert(lv_obj_get_style_bg_color(o,0).full==lv_color_hex(normal).full);
     }
     lv_damped_button_set_enabled(o,false);
-    assert(lv_obj_get_style_bg_color(o,0).full==lv_color_hex(LV_SETTINGS_DISABLED_SURFACE).full);
-    assert(lv_obj_get_style_text_color(text,0).full==lv_color_hex(LV_SETTINGS_DISABLED_TEXT).full);
+    assert(lv_obj_get_style_bg_color(o,0).full==lv_color_hex(history && o==history->actions[3]?0xF0F2F5:LV_SETTINGS_DISABLED_SURFACE).full);
+    assert(lv_obj_get_style_text_color(text,0).full==lv_color_hex(history && o==history->actions[3]?0xADB7BD:LV_SETTINGS_DISABLED_TEXT).full);
     lv_damped_button_set_enabled(o,true);
     assert(lv_obj_get_style_bg_color(o,0).full==lv_color_hex(normal).full);
 }
@@ -626,34 +635,60 @@ static void history_test_contiguous_rows(unsigned baseline_timers)
     puts("PASS: contiguous result ordinals after middle/tail/all deletion; record IDs/detail/export stay stable; empty list recovers on arrival");
 }
 
+static void history_test_capacity_setting(unsigned baseline_timers)
+{
+    history_test_fixtures(500);ui_page_19_history_create(lv_scr_act());history_test_tick(100);
+    assert(!lv_obj_get_style_border_width(history->actions[0],0));
+    assert(!lv_obj_get_style_border_width(history->sort,0));
+    assert(lv_obj_get_style_text_align(lv_damped_button_get_label(history->sort),0)==LV_TEXT_ALIGN_CENTER);
+    history_test_bmp("history-capacity-entry");
+    capacity_submit("99",NULL);assert(!history->dialog && test_store.capacity==1000);
+    capacity_submit("1001",NULL);assert(!history->dialog && test_store.capacity==1000);
+    capacity_submit("12x",NULL);assert(!history->dialog && test_store.capacity==1000);
+    capacity_submit("100",NULL);assert(history->dialog && history->confirm_capacity && test_store.record_count==500);
+    history_test_bmp("history-capacity-delete-confirm");
+    ++test_store.record_count;confirmation_apply(NULL);
+    assert(history->dialog && history->capacity_confirm_count==501 && test_store.capacity==1000);
+    confirmation_cancel(NULL);--test_store.record_count;
+    assert(!history->dialog && test_store.record_count==500);
+    capacity_submit("100",NULL);confirmation_apply(NULL);
+    assert(test_store.capacity==100 && test_store.record_count==100 && test_store.records[0].record_no==1000 && test_store.records[99].record_no==901);
+    capacity_submit("337",NULL);assert(!history->dialog && test_store.capacity==337 && test_store.record_count==100);
+    capacity_event(NULL);assert(history->capacity_keyboard && settings_detail_overlay_is_open());
+    history_test_bmp("history-capacity-input-keyboard");
+    ui_page_19_history_suspend();assert(!history->capacity_keyboard && !settings_detail_overlay_is_open());
+    ui_page_19_history_destroy();history_test_tick(300);assert(history_test_timers()==baseline_timers);
+    puts("PASS: capacity input bounds, newest retention confirmation/cancel, custom 337, keyboard suspend/destroy cleanup, blue centered sort and borderless Search");
+}
+
 static void history_test_capacity_and_missing_detail(unsigned baseline_timers)
 {
-    assert(UI_HISTORY_MAX_RECORDS==100);
+    assert(UI_HISTORY_MAX_RECORDS==1000);
     history_test_fixtures(UI_HISTORY_MAX_RECORDS);
     ui_page_19_history_create(lv_scr_act());history_test_tick(100);
-    assert(displayed_count()==100);
+    assert(displayed_count()==1000);
     assert(!strcmp(test_notice_detail,ui_text_get(UI_TEXT_HISTORY_CAPACITY_FULL)));
-    history_test_bmp("history-100-full");
-    history_test_row_number(0,100);history_test_row_number(99,1);
-    assert(history_test_click_record(99)==901 && history->detail_mode);
+    history_test_bmp("history-1000-full");
+    history_test_row_number(0,1000);history_test_row_number(999,1);
+    assert(history_test_click_record(999)==1 && history->detail_mode);
     assert(current_detail() && section_count(1)==2);
     assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);
-    assert(lv_recycled_list_window(history->list)->first==95);
-    history_test_bmp("history-100-tail");
+    assert(lv_recycled_list_window(history->list)->first==995);
+    history_test_bmp("history-1000-tail");
     history_query_input_t filter={0};strcpy(filter.currency,"USD");
     history_test_apply(&filter);
-    assert(displayed_count()==50 && !history->detail_mode);
-    history_test_row_number(0,50);history_test_row_number(49,1);
+    assert(displayed_count()==500 && !history->detail_mode);
+    history_test_row_number(0,500);history_test_row_number(499,1);
     history_test_click(history->sort);
-    assert(displayed_id(0)==902 && displayed_id(49)==1000);
-    history_test_row_number(0,1);history_test_row_number(49,50);
+    assert(displayed_id(0)==2 && displayed_id(499)==1000);
+    history_test_row_number(0,1);history_test_row_number(499,500);
     history_test_click(history->sort);
     uint32_t expired=history_test_click_record(10);
     assert(history->detail_mode && history->current_id==expired);
     float offset=lv_recycled_list_window(history->list)->offset;
     assert(ui_history_record_delete_records(&expired,1));ui_page_19_history_refresh();
     assert(!history->detail_mode && history->current_id==0);
-    assert(!strcmp(history->input.currency,"USD") && displayed_count()==49);
+    assert(!strcmp(history->input.currency,"USD") && displayed_count()==499);
     assert(lv_recycled_list_window(history->list)->offset==offset);
     assert(lv_obj_is_visible(history->list_panel));
     assert(!strcmp(test_notice_detail,ui_text_get(UI_TEXT_HISTORY_MISSING)));
@@ -661,7 +696,7 @@ static void history_test_capacity_and_missing_detail(unsigned baseline_timers)
     history_test_bmp("history-missing-detail-return");
     ui_page_19_history_destroy();history_test_tick(300);
     assert(history_test_timers()==baseline_timers);
-    puts("PASS: 100-record tail/detail/search, filtered ascending/descending ordinals, disappeared detail returns without clearing filter/scroll");
+    puts("PASS: 1000-record tail/detail/search, filtered ascending/descending ordinals, disappeared detail returns without clearing filter/scroll");
 }
 
 static void history_test_inertia_tap(unsigned baseline_timers)
@@ -802,7 +837,7 @@ int main(void)
         assert(lv_obj_get_y(history->actions[i])==16);
         assert(lv_obj_get_height(history->actions[i])==42);
         if(!lv_obj_has_state(history->actions[i],LV_STATE_DISABLED))
-            assert(lv_obj_get_style_text_color(label,0).full==lv_color_hex(i==0?0xFFFFFF:LV_SETTINGS_ACTION_TEXT).full);
+            assert(lv_obj_get_style_text_color(label,0).full==lv_color_hex(i==0?0xFFFFFF:i==3?0x20313B:LV_SETTINGS_ACTION_TEXT).full);
     }
     assert(lv_obj_is_visible(history->empty));
     history_test_bmp("history-empty");
@@ -811,13 +846,14 @@ int main(void)
     history_test_fixtures(20);
     ui_page_19_history_create(lv_scr_act()); history_test_tick(100);
     history_test_control_feedback(history->actions[0],LV_SETTINGS_PRIMARY,LV_SETTINGS_PRIMARY_PRESSED,0xFFFFFF);
-    history_test_control_feedback(history->actions[3],LV_SETTINGS_CONTROL_SURFACE,LV_SETTINGS_CONTROL_PRESSED,LV_SETTINGS_ACTION_TEXT);
+    history_test_control_feedback(history->actions[3],0xE9EEF4,lv_damped_button_pressed_color(lv_color_hex(0xE9EEF4)).full&0xFFFFFF,0x20313B);
     history_test_bmp("history-full");
     history_test_list_and_detail();
     history_test_selection_and_delete();
     history_test_unknown_and_lifecycle(baseline_timers);
     assert(history_test_timers() == baseline_timers);
     history_test_contiguous_rows(baseline_timers);
+    history_test_capacity_setting(baseline_timers);
     history_test_capacity_and_missing_detail(baseline_timers);
     history_test_inertia_tap(baseline_timers);
     history_test_search_module();
@@ -842,6 +878,24 @@ int main(void)
         const ui_locale_t *locale=ui_lang_at(i);ui_lang_set(locale->id);history_test_fixtures(3);
         ui_page_19_history_open_all();ui_page_19_history_create(lv_scr_act());history_test_tick(150);
         check_single_line(lv_scr_act());char name[80];snprintf(name,sizeof(name),"history-%s",locale->tag);history_test_bmp(name);
+        assert(lv_obj_get_width(history->actions[3])==76 && lv_obj_get_height(history->actions[3])==42);
+        assert(lv_obj_get_child_cnt(history->actions[3])==1);
+        lv_obj_t *expected_back=lv_label_create(lv_scr_act());
+        lv_label_set_text(expected_back,ui_tr("Back"));
+        assert(!strcmp(lv_label_get_text(lv_damped_button_get_label(history->actions[3])),lv_label_get_text(expected_back)));
+        lv_obj_del(expected_back);
+        lv_obj_t *capacity_label=lv_damped_button_get_label(history->capacity);
+        lv_point_t measured;lv_txt_get_size(&measured,lv_label_get_text(capacity_label),
+            lv_obj_get_style_text_font(capacity_label,0),0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+        assert(measured.x<=lv_obj_get_width(history->capacity)-24);
+        history->capacity_draft=100;test_store.record_count=500;show_capacity_confirmation();history_test_render();
+        lv_obj_t *card=lv_obj_get_child(history->dialog,0),*title=lv_obj_get_child(card,0),*body=lv_obj_get_child(card,1);
+        lv_txt_get_size(&measured,lv_label_get_text(title),lv_obj_get_style_text_font(title,0),0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+        assert(measured.x<=lv_obj_get_width(title));
+        lv_txt_get_size(&measured,lv_label_get_text(body),lv_obj_get_style_text_font(body,0),0,0,lv_obj_get_width(body),LV_TEXT_FLAG_NONE);
+        assert(measured.y<=lv_obj_get_height(body));
+        printf("PASS history capacity locale %s: button/title fit, confirmation height %d/%d\n",locale->tag,measured.y,lv_obj_get_height(body));
+        snprintf(name,sizeof(name),"history-capacity-confirm-%s",locale->tag);history_test_bmp(name);close_dialog();test_store.record_count=3;
         ui_page_19_history_destroy();
         ui_page_19_history_open_record(test_store.records[0].record_no);ui_page_19_history_create(lv_scr_act());history_test_tick(150);
         check_single_line(lv_scr_act());snprintf(name,sizeof(name),"history-detail-%s",locale->tag);history_test_bmp(name);

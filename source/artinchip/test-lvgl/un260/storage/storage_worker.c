@@ -177,6 +177,17 @@ bool storage_worker_release(storage_job_id_t id)
     return released;
 }
 
+bool storage_worker_copy_snapshot(storage_job_id_t id, void *out, size_t size)
+{
+    storage_job_t *job;bool copied=false;
+    if(out==NULL)return false;
+    pthread_mutex_lock(&g_lock);job=find_job(id);
+    if(job!=NULL && job->status!=STORAGE_JOB_UNKNOWN && job->size==size) {
+        memcpy(out,job->payload,size);copied=true;
+    }
+    pthread_mutex_unlock(&g_lock);return copied;
+}
+
 bool storage_worker_copy_completed(storage_job_id_t id, void *out, size_t size)
 {
     storage_job_t *job;

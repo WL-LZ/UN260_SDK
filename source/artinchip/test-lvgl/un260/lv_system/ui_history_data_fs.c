@@ -19,7 +19,7 @@
 #define UI_HISTORY_META_PATH         UI_HISTORY_STORE_DIR "/meta.cfg"
 #define UI_HISTORY_SLOT_PATH_FMT     UI_HISTORY_STORE_DIR "/%02u.rec"
 #define UI_HISTORY_MAGIC             0x48495354u
-#define UI_HISTORY_VERSION           3u
+#define UI_HISTORY_VERSION           4u
 #define UI_HISTORY_LINE_BUFFER_SIZE  8192u
 
 static ui_history_store_t g_history_store;
@@ -31,19 +31,20 @@ static storage_job_id_t g_history_load_job;
  * the mutex handoff; only the UI poll publishes and frees this private result. */
 static ui_history_store_t *g_history_load_result;
 static bool g_history_load_valid;
-static ui_history_store_t g_history_accepted;
 static ui_history_store_t g_history_durable;
 static bool g_history_failed_view;
 /* Worker-only mirror cache; the self-contained v2 index remains authoritative. */
-static ui_history_record_t g_mirror_records[UI_HISTORY_MAX_RECORDS];
+static uint64_t g_mirror_fingerprints[UI_HISTORY_MAX_RECORDS];
 static bool g_mirror_valid[UI_HISTORY_MAX_RECORDS];
 static bool g_index_needs_directory_sync;
 static bool g_history_parent_synced;
 static bool g_meta_valid;
 static uint32_t g_meta_total;
 static uint32_t g_meta_next_record;
-static uint8_t g_meta_next_slot;
+static uint16_t g_meta_next_slot;
 static storage_job_id_t g_history_jobs[STORAGE_WORKER_CAPACITY];
+static size_t g_history_job_sizes[STORAGE_WORKER_CAPACITY];
+static storage_job_id_t g_capacity_job;
 static unsigned g_history_job_count;
 static storage_job_id_t g_last_commit;
 static storage_job_id_t g_last_durable_commit;
@@ -51,16 +52,42 @@ static uint32_t g_history_retry_tick;
 
 _Static_assert(sizeof(ui_history_store_t) <= STORAGE_WORKER_MAX_JOB_BYTES,
                "history snapshot exceeds bounded storage job payload");
-/* v2 indexes record00..record99; physical slots are 1..100. Increasing this
- * further requires reviewing the two-digit index parser and uint8_t fields. */
-_Static_assert(UI_HISTORY_MAX_RECORDS > 0 && UI_HISTORY_MAX_RECORDS <= 100,
-               "history capacity exceeds v2 index range");
+_Static_assert(UI_HISTORY_MAX_RECORDS > 0 && UI_HISTORY_MAX_RECORDS <= UINT16_MAX,
+               "history capacity exceeds slot/index range");
+
+static size_t history_snapshot_size(const ui_history_store_t *store)
+{
+    return offsetof(ui_history_store_t,records)+store->record_count*sizeof(store->records[0]);
+}
+/* Keep total queued history payload at one maximum store. A full 1000-record
+ * history therefore owns at most one 12 MB job; smaller histories retain the
+ * original four-job throughput and counting's immutable spool/backpressure. */
+static bool history_job_fits(size_t size)
+{
+    size_t queued=0;
+    for(unsigned i=0;i<g_history_job_count;i++)queued+=g_history_job_sizes[i];
+    return size<=sizeof(ui_history_store_t) && queued<=sizeof(ui_history_store_t)-size;
+}
+static void history_copy_store(ui_history_store_t *dst,const ui_history_store_t *src)
+{
+    /* Only populated records own memory/work. Empty startup never touches the
+     * full 1000-record reserve on the UI thread. Inactive tail is never read. */
+    memcpy(dst,src,history_snapshot_size(src));
+}
+static uint64_t history_fingerprint(const ui_history_record_t *record)
+{
+    const unsigned char *p=(const unsigned char *)record;
+    uint64_t hash=UINT64_C(14695981039346656037);
+    for(size_t i=0;i<sizeof(*record);i++) hash=(hash^p[i])*UINT64_C(1099511628211);
+    return hash;
+}
 
 static void history_ensure_loaded(void);
 
 static void history_store_reset(ui_history_store_t *store)
 {
-    memset(store, 0, sizeof(*store));
+    memset(store, 0, offsetof(ui_history_store_t,records));
+    store->capacity = UI_HISTORY_MAX_RECORDS;
     store->next_record_no = 1;
     store->next_slot_no = 1;
 }
@@ -406,8 +433,8 @@ static void history_insert_front(const ui_history_record_t *rec)
         }
     }
 
-    if (g_history_store.record_count >= UI_HISTORY_MAX_RECORDS) {
-        g_history_store.record_count = UI_HISTORY_MAX_RECORDS - 1;
+    if (g_history_store.record_count >= g_history_store.capacity) {
+        g_history_store.record_count = g_history_store.capacity - 1;
     }
 
     for (i = (int)g_history_store.record_count; i > 0; i--) {
@@ -417,15 +444,15 @@ static void history_insert_front(const ui_history_record_t *rec)
     g_history_store.record_count++;
 }
 
-static uint8_t history_next_available_slot(void)
+static uint16_t history_next_available_slot(void)
 {
     bool occupied[UI_HISTORY_MAX_RECORDS + 1] = { false };
-    uint8_t candidate = g_history_store.next_slot_no;
+    uint16_t candidate = g_history_store.next_slot_no;
     int i;
 
     /* Records remain newest-first even when the machine clock is adjusted.
      * A full store replaces its oldest record, never an arbitrary cursor slot. */
-    if (g_history_store.record_count >= UI_HISTORY_MAX_RECORDS) {
+    if (g_history_store.record_count >= g_history_store.capacity) {
         return g_history_store.records[g_history_store.record_count - 1].slot_no;
     }
     for (i = 0; i < g_history_store.record_count; i++) {
@@ -434,7 +461,7 @@ static uint8_t history_next_available_slot(void)
     if (candidate == 0 || candidate > UI_HISTORY_MAX_RECORDS) candidate = 1;
     for (i = 0; i < UI_HISTORY_MAX_RECORDS; i++) {
         if (!occupied[candidate]) return candidate;
-        candidate = (uint8_t)(candidate % UI_HISTORY_MAX_RECORDS + 1);
+        candidate = (uint16_t)(candidate % UI_HISTORY_MAX_RECORDS + 1);
     }
     return 0;
 }
@@ -462,7 +489,7 @@ static void history_write_multi(FILE *fp, const char *prefix, const history_mult
     }
 }
 
-static void history_write_kv(FILE *fp, uint8_t slot_no, const ui_history_record_t *rec)
+static void history_write_kv(FILE *fp, uint16_t slot_no, const ui_history_record_t *rec)
 {
     char buf[128];
     char prefix[32];
@@ -505,7 +532,7 @@ static void history_write_kv(FILE *fp, uint8_t slot_no, const ui_history_record_
 }
 
 static int history_write_file(const char *path, const ui_history_record_t *rec, uint32_t total_notes,
-                              uint32_t next_record_no, uint8_t next_slot_no, uint8_t record_count)
+                              uint32_t next_record_no, uint16_t next_slot_no, uint16_t record_count, uint16_t capacity)
 {
     FILE *fp;
     int fd;
@@ -534,6 +561,7 @@ static int history_write_file(const char *path, const ui_history_record_t *rec, 
     fprintf(fp, "next_record_no=%u\n", (unsigned)next_record_no);
     fprintf(fp, "next_slot_no=%u\n", (unsigned)next_slot_no);
     fprintf(fp, "record_count=%u\n", (unsigned)record_count);
+    fprintf(fp, "capacity=%u\n", (unsigned)capacity);
 
     for (i = 0; i < record_count; i++) {
         char prefix[32];
@@ -625,7 +653,10 @@ static bool history_save_snapshot(const void *snapshot, size_t size)
     int result;
     bool slot_present[UI_HISTORY_MAX_RECORDS + 1] = { false };
 
-    if (size != sizeof(*store) || history_ensure_dir() != 0) {
+    if (size < offsetof(ui_history_store_t,records) ||
+        store->record_count > UI_HISTORY_MAX_RECORDS || size != history_snapshot_size(store) ||
+        store->capacity < UI_HISTORY_MIN_RECORDS || store->capacity > UI_HISTORY_MAX_RECORDS ||
+        store->record_count > store->capacity || history_ensure_dir() != 0) {
         return false;
     }
 
@@ -635,7 +666,7 @@ static bool history_save_snapshot(const void *snapshot, size_t size)
     } else {
         result = history_write_file(UI_HISTORY_INDEX_PATH, store->records,
                                     store->total_notes_counted, store->next_record_no,
-                                    store->next_slot_no, store->record_count);
+                                    store->next_slot_no, store->record_count, store->capacity);
         if (result != 0) {
             g_index_needs_directory_sync = result == -2;
             return false;
@@ -646,14 +677,15 @@ static bool history_save_snapshot(const void *snapshot, size_t size)
      * second authority: an interrupted mirror update cannot invalidate index. */
     for (i = 0; i < store->record_count; i++) {
         const ui_history_record_t *record = &store->records[i];
-        uint8_t slot_no = record->slot_no;
+        uint16_t slot_no = record->slot_no;
+        uint64_t fingerprint = history_fingerprint(record);
 
         if (slot_no > 0 && slot_no <= UI_HISTORY_MAX_RECORDS) {
             slot_present[slot_no] = true;
             if ((!g_mirror_valid[slot_no - 1] ||
-                 memcmp(&g_mirror_records[slot_no - 1], record, sizeof(*record)) != 0) &&
+                 g_mirror_fingerprints[slot_no - 1] != fingerprint) &&
                 history_write_slot_file(record) == 0) {
-                g_mirror_records[slot_no - 1] = *record;
+                g_mirror_fingerprints[slot_no - 1] = fingerprint;
                 g_mirror_valid[slot_no - 1] = true;
             }
         }
@@ -684,18 +716,22 @@ static bool history_save_snapshot(const void *snapshot, size_t size)
 static bool history_submit_or_restore(void)
 {
     storage_job_id_t id;
-    if (g_history_loaded && !g_history_failed_view && g_history_job_count < STORAGE_WORKER_CAPACITY &&
+    if (g_history_loaded && !g_history_failed_view && !g_capacity_job && g_history_job_count < STORAGE_WORKER_CAPACITY &&
+        history_job_fits(history_snapshot_size(&g_history_store)) &&
         storage_worker_submit(history_save_snapshot, &g_history_store,
-                               sizeof(g_history_store), &id)) {
+                               history_snapshot_size(&g_history_store), &id)) {
+        g_history_job_sizes[g_history_job_count] = history_snapshot_size(&g_history_store);
         g_history_jobs[g_history_job_count++] = id;
         g_last_commit = id;
-        g_history_accepted = g_history_store;
         return true;
     }
 
     /* Rejected input was never accepted: restore the last accepted UI view.
      * Accepted failures stay owned by the worker and are retried in order. */
-    g_history_store = g_history_failed_view ? g_history_durable : g_history_accepted;
+    if(!g_history_failed_view && !g_capacity_job && g_history_job_count) {
+        unsigned last=g_history_job_count-1;
+        (void)storage_worker_copy_snapshot(g_history_jobs[last],&g_history_store,g_history_job_sizes[last]);
+    } else history_copy_store(&g_history_store,&g_history_durable);
     return false;
 }
 
@@ -758,7 +794,7 @@ static bool history_parse_key_value(ui_history_store_t *store, int record_index,
         if (!history_parse_u32(value, &parsed) || parsed == 0 || parsed > UI_HISTORY_MAX_RECORDS) {
             return false;
         }
-        rec->slot_no = (uint8_t)parsed;
+        rec->slot_no = (uint16_t)parsed;
     } else if (strcmp(key, "record_no") == 0) {
         if (!history_parse_u32(value, &parsed) || parsed == 0) {
             return false;
@@ -885,6 +921,9 @@ static bool history_load_from_file(ui_history_store_t *store)
     bool next_record_seen = false;
     bool next_slot_seen = false;
     bool record_count_seen = false;
+    bool capacity_seen = false;
+    uint32_t version=0;
+    bool record_initialized[UI_HISTORY_MAX_RECORDS]={false};
 
     history_store_reset(store);
 
@@ -921,11 +960,12 @@ static bool history_load_from_file(ui_history_store_t *store)
         if (strcmp(line, "version") == 0) {
             uint32_t parsed;
 
-            if (!history_parse_u32(eq, &parsed) || (parsed != 2u && parsed != UI_HISTORY_VERSION)) {
+            if (!history_parse_u32(eq, &parsed) || (parsed != 2u && parsed != 3u && parsed != UI_HISTORY_VERSION)) {
                 file_valid = false;
                 break;
             }
             version_seen = true;
+            version=parsed;
             continue;
         }
         if (strcmp(line, "total_notes_counted") == 0) {
@@ -953,9 +993,14 @@ static bool history_load_from_file(ui_history_store_t *store)
                 file_valid = false;
                 break;
             }
-            store->next_slot_no = (uint8_t)parsed;
+            store->next_slot_no = (uint16_t)parsed;
             next_slot_seen = true;
             continue;
+        }
+        if (strcmp(line,"capacity")==0) {
+            uint32_t parsed;
+            if(!history_parse_u32(eq,&parsed) || parsed<UI_HISTORY_MIN_RECORDS || parsed>UI_HISTORY_MAX_RECORDS) {file_valid=false;break;}
+            store->capacity=(uint16_t)parsed;capacity_seen=true;continue;
         }
         if (strcmp(line, "record_count") == 0) {
             uint32_t parsed;
@@ -964,7 +1009,7 @@ static bool history_load_from_file(ui_history_store_t *store)
                 file_valid = false;
                 break;
             }
-            store->record_count = (uint8_t)parsed;
+            store->record_count = (uint16_t)parsed;
             record_count_seen = true;
             continue;
         }
@@ -973,8 +1018,9 @@ static bool history_load_from_file(ui_history_store_t *store)
             int record_index = -1;
             char key[64];
             unsigned idx;
-            if (sscanf(line, "record%02u_%63[^=]", &idx, key) == 2 && idx < UI_HISTORY_MAX_RECORDS) {
+            if (sscanf(line, "record%u_%63[^=]", &idx, key) == 2 && idx < UI_HISTORY_MAX_RECORDS) {
                 record_index = (int)idx;
+                if(!record_initialized[idx]) {history_record_defaults(&store->records[idx]);record_initialized[idx]=true;}
                 if (!history_parse_key_value(store, record_index, key, eq)) {
                     file_valid = false;
                     break;
@@ -991,8 +1037,10 @@ static bool history_load_from_file(ui_history_store_t *store)
         file_valid = false;
     }
 
-    if (!magic_seen || !version_seen || !total_seen || !next_record_seen ||
-        !next_slot_seen || !record_count_seen || !history_loaded_records_valid(store)) {
+    for(unsigned i=0;i<store->record_count;i++)if(!record_initialized[i])file_valid=false;
+    if (!file_valid || !magic_seen || !version_seen || !total_seen || !next_record_seen ||
+        !next_slot_seen || !record_count_seen || (version>=4u && !capacity_seen) ||
+        store->record_count>store->capacity || !history_loaded_records_valid(store)) {
         file_valid = false;
     }
 
@@ -1025,8 +1073,7 @@ void ui_history_data_init_async(void)
     if (storage_worker_init() && storage_worker_submit(history_load_job,
             &load_request, sizeof(load_request), &g_history_load_job)) return;
     history_store_reset(&g_history_store);
-    g_history_accepted = g_history_store;
-    g_history_durable = g_history_store;
+    history_copy_store(&g_history_durable,&g_history_store);
     g_history_initialized = true;
 }
 
@@ -1038,15 +1085,14 @@ bool ui_history_data_init_poll(void)
         return false;
 
     if (g_history_load_result != NULL) {
-        g_history_store = *g_history_load_result;
+        history_copy_store(&g_history_store,g_history_load_result);
         free(g_history_load_result);
         g_history_load_result = NULL;
     } else {
         history_store_reset(&g_history_store);
     }
     g_history_loaded = g_history_load_valid;
-    g_history_accepted = g_history_store;
-    g_history_durable = g_history_store;
+    history_copy_store(&g_history_durable,&g_history_store);
     (void)storage_worker_release(g_history_load_job);
     g_history_load_job = 0;
     g_history_initialized = true;
@@ -1082,18 +1128,24 @@ bool ui_history_data_poll(uint32_t now_ms)
         storage_job_status_t status = storage_worker_status(id);
         if (status == STORAGE_JOB_SUCCEEDED) {
             (void)storage_worker_copy_completed(id, &g_history_durable,
-                                                 sizeof(g_history_durable));
+                                                 g_history_job_sizes[0]);
+            if (id == g_capacity_job) {
+                history_copy_store(&g_history_store,&g_history_durable);
+                g_capacity_job=0;
+            }
             g_last_durable_commit = id;
             (void)storage_worker_release(id);
             memmove(g_history_jobs, g_history_jobs + 1,
                     (--g_history_job_count) * sizeof(g_history_jobs[0]));
+            memmove(g_history_job_sizes,g_history_job_sizes+1,
+                    g_history_job_count*sizeof(g_history_job_sizes[0]));
             changed = true;
             continue;
         }
         if (status == STORAGE_JOB_FAILED) {
             if (!g_history_failed_view) {
                 g_history_failed_view = true;
-                g_history_store = g_history_durable;
+                history_copy_store(&g_history_store,&g_history_durable);
                 changed = true;
             }
             if ((uint32_t)(now_ms - g_history_retry_tick) >= 1000U) {
@@ -1105,7 +1157,7 @@ bool ui_history_data_poll(uint32_t now_ms)
     }
     if (g_history_failed_view && g_history_job_count == 0) {
         g_history_failed_view = false;
-        g_history_store = g_history_accepted;
+        history_copy_store(&g_history_store,&g_history_durable);
         changed = true;
     }
     return changed;
@@ -1136,8 +1188,37 @@ storage_job_status_t ui_history_data_status(void)
 
 bool ui_history_data_can_accept(void)
 {
-    return g_history_loaded && !g_history_failed_view &&
-           g_history_job_count < STORAGE_WORKER_CAPACITY && storage_worker_has_capacity();
+    return g_history_loaded && !g_history_failed_view && !g_capacity_job &&
+           g_history_job_count < STORAGE_WORKER_CAPACITY && storage_worker_has_capacity() &&
+           history_job_fits(offsetof(ui_history_store_t,records)+
+               (g_history_store.record_count<g_history_store.capacity ? g_history_store.record_count+1U : g_history_store.record_count)*sizeof(g_history_store.records[0]));
+}
+
+uint16_t ui_history_capacity_get(void)
+{
+    history_ensure_loaded();return g_history_store.capacity;
+}
+bool ui_history_capacity_set(uint16_t capacity)
+{
+    storage_job_id_t id;
+    history_ensure_loaded();
+    if(capacity<UI_HISTORY_MIN_RECORDS || capacity>UI_HISTORY_MAX_RECORDS ||
+       !ui_history_data_can_accept() || g_history_job_count) return false;
+    if(capacity==g_history_store.capacity) return true;
+    uint16_t count=g_history_store.record_count<capacity ? g_history_store.record_count : capacity;
+    size_t size=offsetof(ui_history_store_t,records)+count*sizeof(g_history_store.records[0]);
+    /* This view is UI-thread owned; workers only receive independent immutable
+     * payloads. submit copies synchronously and never borrows this pointer.
+     * Restore the temporary header before returning, including OOM rejection. */
+    uint16_t old_capacity=g_history_store.capacity;
+    uint16_t old_count=g_history_store.record_count;
+    g_history_store.capacity=capacity;g_history_store.record_count=count;
+    bool accepted=storage_worker_submit(history_save_snapshot,&g_history_store,size,&id);
+    g_history_store.capacity=old_capacity;g_history_store.record_count=old_count;
+    if(!accepted)return false;
+    g_history_job_sizes[0]=size;g_history_jobs[0]=id;g_history_job_count=1;
+    g_last_commit=id;g_capacity_job=id;
+    return true;
 }
 
 bool ui_history_data_is_available(void)
@@ -1237,7 +1318,7 @@ bool ui_history_record_append_snapshot(const ui_history_record_t *record,
                                        uint32_t total_notes_after)
 {
     ui_history_record_t rec;
-    uint8_t slot_no;
+    uint16_t slot_no;
     history_ensure_loaded();
     if (record == NULL || !record->valid || !ui_history_data_can_accept() ||
         g_history_store.next_record_no == UINT32_MAX) return false;
@@ -1250,7 +1331,7 @@ bool ui_history_record_append_snapshot(const ui_history_record_t *record,
 
     g_history_store.total_notes_counted = total_notes_after;
     g_history_store.next_record_no++;
-    g_history_store.next_slot_no = (uint8_t)(slot_no % UI_HISTORY_MAX_RECORDS + 1);
+    g_history_store.next_slot_no = (uint16_t)(slot_no % UI_HISTORY_MAX_RECORDS + 1);
     if (g_history_store.record_count > UI_HISTORY_MAX_RECORDS) {
         g_history_store.record_count = UI_HISTORY_MAX_RECORDS;
     }
@@ -1265,7 +1346,7 @@ bool ui_history_record_update_snapshot(const ui_history_record_t *record, uint32
     for (unsigned i=0;i<g_history_store.record_count;i++) {
         ui_history_record_t *dst=&g_history_store.records[i];
         if(dst->record_no!=record->record_no) continue;
-        uint8_t slot=dst->slot_no;bool selected=dst->selected;
+        uint16_t slot=dst->slot_no;bool selected=dst->selected;
         *dst=*record;dst->slot_no=slot;dst->selected=selected;
         g_history_store.total_notes_counted=total_notes_after;
         return history_submit_or_restore();
@@ -1285,7 +1366,7 @@ bool ui_history_record_append_from_session(const counting_sim_t *sim_data, uint3
         ui_history_record_append_snapshot(&rec, total_notes_after);
 }
 
-bool ui_history_record_toggle_selected(uint8_t index)
+bool ui_history_record_toggle_selected(uint16_t index)
 {
     history_ensure_loaded();
     if (!g_history_loaded || index >= g_history_store.record_count) {
@@ -1295,7 +1376,7 @@ bool ui_history_record_toggle_selected(uint8_t index)
     return history_submit_or_restore();
 }
 
-bool ui_history_record_set_selected(uint8_t index, bool selected)
+bool ui_history_record_set_selected(uint16_t index, bool selected)
 {
     history_ensure_loaded();
     if (!g_history_loaded || index >= g_history_store.record_count) {
@@ -1380,8 +1461,8 @@ static bool history_delete_marked(const bool remove[UI_HISTORY_MAX_RECORDS])
     }
 
     memset(&g_history_store.records[kept_count], 0,
-           (UI_HISTORY_MAX_RECORDS - kept_count) * sizeof(g_history_store.records[0]));
-    g_history_store.record_count = (uint8_t)kept_count;
+           (g_history_store.record_count - kept_count) * sizeof(g_history_store.records[0]));
+    g_history_store.record_count = (uint16_t)kept_count;
     g_history_store.next_slot_no = history_next_available_slot();
     /* Keep surviving slot identities and the monotonic record number, even
      * after deleting every record. Reusing a deleted ID targets the wrong item
@@ -1417,7 +1498,7 @@ bool ui_history_record_delete_records(const uint32_t *record_nos, size_t count)
     return history_delete_marked(remove);
 }
 
-bool ui_history_record_get(uint8_t index, ui_history_record_t *out)
+bool ui_history_record_get(uint16_t index, ui_history_record_t *out)
 {
     history_ensure_loaded();
     if (out == NULL || index >= g_history_store.record_count) {

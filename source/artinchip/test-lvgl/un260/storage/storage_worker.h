@@ -9,9 +9,9 @@
  * never borrowed UI pointers. Failed jobs retain their payload and block later
  * jobs until retry. Both job count and per-job allocation are bounded. */
 #define STORAGE_WORKER_CAPACITY 4U
-/* 100 history records including bounded MULTI groups. Allocation is exact-size,
+/* 1000 history records including bounded MULTI groups. Allocation is exact-size,
  * not this maximum; queue capacity remains unchanged. */
-#define STORAGE_WORKER_MAX_JOB_BYTES (1536U * 1024U)
+#define STORAGE_WORKER_MAX_JOB_BYTES (16U * 1024U * 1024U)
 typedef uint64_t storage_job_id_t;
 typedef enum {
     STORAGE_JOB_UNKNOWN = 0,
@@ -32,6 +32,9 @@ storage_job_status_t storage_worker_status(storage_job_id_t id);
 storage_job_status_t storage_worker_pending_status(void);
 bool storage_worker_retry(storage_job_id_t id);
 bool storage_worker_release(storage_job_id_t id);
+/* Copy a job's immutable accepted payload in any retained state. Never lends
+ * a worker pointer; callers own out and must supply the exact payload size. */
+bool storage_worker_copy_snapshot(storage_job_id_t id, void *out, size_t size);
 bool storage_worker_copy_completed(storage_job_id_t id, void *out, size_t size);
 bool storage_worker_has_capacity(void);
 /* Startup/tests only: never wait in an interactive UI callback. */

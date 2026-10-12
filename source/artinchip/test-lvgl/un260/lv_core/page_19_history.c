@@ -6,6 +6,8 @@
 #include "un260/storage/workspace_store.h"
 #include "un260/lv_components/lv_popup_style.h"
 #include "page_19_history_search.h"
+#define SETTINGS_THEME_DISABLE_COLOR_REMAP
+#include "settings_detail_ui.h"
 #include "lv_page_manager.h"
 #include "lv_port_indev.h"
 #include "un260/history/history_query.h"
@@ -48,7 +50,9 @@ typedef struct {
     unsigned notice_state;
     uint32_t operator_filter;
     lv_obj_t *reset_total, *actions[4], *list_panel, *empty, *range, *sort, *unknown;
-    lv_obj_t *dialog, *metadata;
+    lv_obj_t *dialog, *metadata, *capacity;
+    uint16_t capacity_draft, capacity_confirm_count;
+    bool capacity_keyboard, confirm_capacity;
     lv_recycled_list_t *list;
     history_section_t sections[3];
     page_19_history_search_t *search;
@@ -86,6 +90,8 @@ static void show_confirmation(bool clear_total);
 static void close_dialog(void);
 static void action_event(lv_event_t *event);
 static void multi_render(void);
+static void capacity_event(lv_event_t *event);
+static void show_capacity_confirmation(void);
 
 static const char *tr(ui_text_id_t id) { return ui_text_get(id); }
 static void text_set(lv_obj_t *label, const char *text)
@@ -650,11 +656,11 @@ static void refresh_header(void)
             snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_SELECTED_FMT),(unsigned)history->selected_count);
             text_set(history->subtitle,text);
         } else {
-            snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_STORAGE_FMT),(unsigned)history->record_count,UI_HISTORY_MAX_RECORDS);
+            snprintf(text,sizeof(text),tr(UI_TEXT_HISTORY_STORAGE_FMT),(unsigned)history->record_count,(unsigned)ui_history_capacity_get());
             text_set(history->subtitle,text);
             unsigned state=!available?1:status==STORAGE_JOB_FAILED?2:
                 status==STORAGE_JOB_PENDING?3:history->unknown_count?4:
-                history->record_count>=UI_HISTORY_MAX_RECORDS?5:0;
+                history->record_count>=ui_history_capacity_get()?5:0;
             if(!ui_manager_is_prewarming_page(UI_PAGE_HISTORY)&&state!=history->notice_state){
                 unsigned previous=history->notice_state;history->notice_state=state;
                 if(state==1||state==2)ui_notice_post_text(UI_NOTICE_ERROR,"history.storage",UI_N_("History storage"),ui_text_msgid(state==1?UI_TEXT_HISTORY_STORAGE_FAILED:UI_TEXT_HISTORY_SAVE_FAILED));
@@ -688,12 +694,20 @@ static void refresh_header(void)
         lv_settings_damped_action_style(history->actions[i],primary?LV_SETTINGS_ACTION_PRIMARY:
             destructive?LV_SETTINGS_ACTION_DESTRUCTIVE:LV_SETTINGS_ACTION_SECONDARY);
     }
+    /* Search stays a filled action with its usual press feedback. */
+    lv_obj_set_style_border_width(history->actions[0],0,0);
+    lv_obj_set_style_border_width(history->actions[0],0,LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(history->actions[0],0,LV_STATE_DISABLED);
+    show(history->capacity,!history->detail_mode && !history->selecting);
+    char capacity_text[64];snprintf(capacity_text,sizeof(capacity_text),ui_tr("Capacity: %u"),(unsigned)ui_history_capacity_get());
+    lv_damped_button_set_text(history->capacity,capacity_text);
+    lv_damped_button_set_enabled(history->capacity,available && status==STORAGE_JOB_SUCCEEDED && ui_history_data_can_accept());
     lv_damped_button_set_enabled(history->reset_total,available && ui_history_data_can_accept());
     lv_damped_button_set_text(history->sort,tr(history->input.oldest_first ? UI_TEXT_HISTORY_SORT_OLDEST : UI_TEXT_HISTORY_SORT_NEWEST));
 }
 static void refresh_records(bool reset)
 {
-    if (!history || history->search || history->dialog) return;
+    if (!history || history->search || history->dialog || history->capacity_keyboard) return;
     ++history->revision;history->tapping=false;
     const ui_history_store_t *store=ui_history_data_get();
     if (history->model_dirty) {
@@ -808,7 +822,14 @@ static void confirmation_apply(lv_event_t *event)
     if (!history || !history->dialog) return;
     bool accepted=false;
     if (ui_history_data_can_accept()) {
-        if (history->confirm_clear) {
+        if (history->confirm_capacity) {
+            if(ui_history_data_get()->record_count!=history->capacity_confirm_count) {
+                if(ui_history_data_get()->record_count>history->capacity_draft) {
+                    close_dialog();show_capacity_confirmation();return;
+                }
+            }
+            accepted=ui_history_capacity_set(history->capacity_draft);
+        } else if (history->confirm_clear) {
             storage_job_id_t previous=ui_history_last_commit_id();
             uint32_t total=ui_history_total_notes_counted_get();
             ui_history_total_notes_counted_clear();
@@ -826,6 +847,7 @@ static void confirmation_apply(lv_event_t *event)
 static void show_confirmation(bool clear_total)
 {
     if (!history || history->dialog) return;
+    history->confirm_capacity=false;
     if (!clear_total && !history->selected_count) return;
     history->confirmed_count=history->selected_count;
     memcpy(history->confirmed_ids,history->selected_ids,history->confirmed_count*sizeof(uint32_t));
@@ -856,6 +878,65 @@ static void show_confirmation(bool clear_total)
     lv_damped_button_set_enabled(confirm,ui_history_data_can_accept());
     lv_recycled_list_stop(history->list);history->tapping=false;
     return;
+failed:
+    close_dialog();toast(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_SERIAL_UNAVAILABLE));
+}
+static void capacity_keyboard_closed(void *context)
+{
+    (void)context;if(history)history->capacity_keyboard=false;
+}
+static void capacity_submit(const char *value,void *context)
+{
+    (void)context;
+    if(!visible())return;
+    history->capacity_keyboard=false;
+    unsigned capacity=0;
+    if(!value || !*value)goto invalid;
+    for(const unsigned char *p=(const unsigned char *)value;*p;p++) {
+        if(*p<'0'||*p>'9')goto invalid;
+        capacity=capacity*10+(*p-'0');if(capacity>UI_HISTORY_MAX_RECORDS)goto invalid;
+    }
+    if(capacity<UI_HISTORY_MIN_RECORDS)goto invalid;
+    history->capacity_draft=(uint16_t)capacity;
+    if(capacity==ui_history_capacity_get())return;
+    if(ui_history_data_get()->record_count>capacity)show_capacity_confirmation();
+    else if(!ui_history_capacity_set((uint16_t)capacity))toast(UI_NOTICE_ERROR,ui_text_msgid(UI_TEXT_HISTORY_SAVE_FAILED));
+    refresh_header();return;
+invalid:
+    toast(UI_NOTICE_WARNING,UI_N_("Enter an integer from 100 to 1000."));
+}
+static void capacity_event(lv_event_t *event)
+{
+    (void)event;
+    if(!visible() || history->search || history->dialog || history->capacity_keyboard ||
+       ui_history_data_status()!=STORAGE_JOB_SUCCEEDED || !ui_history_data_can_accept())return;
+    char value[8];snprintf(value,sizeof(value),"%u",(unsigned)ui_history_capacity_get());
+    lv_recycled_list_stop(history->list);history->tapping=false;
+    history->capacity_keyboard=settings_detail_keyboard_show_ex(ui_tr("History capacity"),value,4,
+        SETTINGS_DETAIL_KEYBOARD_UINT,capacity_submit,NULL,capacity_keyboard_closed,NULL);
+}
+static void show_capacity_confirmation(void)
+{
+    if(!history || history->dialog)return;
+    lv_obj_t *overlay=surface(history->root,0,0,1280,400,0,0x17212A);
+    if(!overlay)return;
+    history->dialog=overlay;history->confirm_capacity=true;history->confirm_clear=false;
+    history->capacity_confirm_count=ui_history_data_get()->record_count;
+    lv_obj_set_style_bg_opa(overlay,LV_OPA_40,0);lv_obj_add_flag(overlay,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *card=surface(overlay,330,60,620,280,22,0xFFFFFF);
+    if(!card)goto failed;
+    lv_popup_style(overlay,card);lv_obj_add_event_cb(overlay,confirmation_cancel,LV_EVENT_CLICKED,NULL);
+    lv_obj_t *title=label(card,32,28,556,38,&lv_font_instrument_sans_semibold_24,HISTORY_INK,LV_TEXT_ALIGN_LEFT);
+    lv_obj_t *body=label(card,32,88,556,102,&lv_font_instrument_sans_medium_16,HISTORY_BODY,LV_TEXT_ALIGN_LEFT);
+    if(!title||!body)goto failed;
+    text_set(title,ui_tr("History capacity"));lv_label_set_long_mode(body,LV_LABEL_LONG_WRAP);
+    char text[256];snprintf(text,sizeof(text),ui_tr("Keep the newest %u records and delete the oldest %u? This cannot be undone."),
+        (unsigned)history->capacity_draft,(unsigned)(history->capacity_confirm_count-history->capacity_draft));text_set(body,text);
+    lv_obj_t *cancel=lv_nav_button_create(card,226,208,140,46,confirmation_cancel,NULL);
+    lv_obj_t *confirm=button(card,378,208,210,46,tr(UI_TEXT_HISTORY_APPLY),confirmation_apply,NULL);
+    if(!cancel||!confirm)goto failed;
+    lv_damped_button_set_text(cancel,tr(UI_TEXT_HISTORY_CANCEL));lv_settings_damped_action_style(confirm,LV_SETTINGS_ACTION_DESTRUCTIVE);
+    lv_damped_button_set_enabled(confirm,ui_history_data_can_accept());return;
 failed:
     close_dialog();toast(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_SERIAL_UNAVAILABLE));
 }
@@ -948,16 +1029,17 @@ void ui_page_19_history_create(lv_obj_t *parent)
     history->summary=label(history->metadata,16,9,360,28,&lv_font_instrument_sans_semibold_16,LV_SETTINGS_PRIMARY,LV_TEXT_ALIGN_LEFT);
     history->lifetime_title=label(history->metadata,792,11,204,20,&lv_font_instrument_sans_medium_12,HISTORY_MUTED,LV_TEXT_ALIGN_RIGHT);
     history->lifetime=label(history->metadata,1008,8,106,28,&lv_font_instrument_sans_semibold_18,HISTORY_INK,LV_TEXT_ALIGN_RIGHT);
+    history->capacity=button(history->metadata,386,3,190,32,"",capacity_event,NULL);
     history->reset_total=button(history->metadata,1130,3,108,32,tr(UI_TEXT_HISTORY_CLEAR_TOTAL),reset_event,NULL);
     if (!history->title || !history->subtitle || !history->summary ||
-        !history->lifetime_title || !history->lifetime || !history->reset_total) goto failed;
+        !history->lifetime_title || !history->lifetime || !history->reset_total || !history->capacity) goto failed;
     lv_obj_set_style_text_font(lv_damped_button_get_label(history->reset_total),ui_message_font(&lv_font_instrument_sans_semibold_12),0);
     for (unsigned i=0;i<4;++i) {
-        const int x[]={736,868,992,1152},w[]={120,112,128,108};
-        history->actions[i]= i==3 ? lv_nav_button_create(history->root,x[i],16,w[i],42,action_event,(void *)(uintptr_t)i) :
+        const int x[]={736,868,992,1184},w[]={120,112,128,76};
+        history->actions[i]= i==3 ? lv_nav_back_text_button_create(history->root,x[i],16,&lv_font_instrument_sans_medium_16,action_event,(void *)(uintptr_t)i) :
             button(history->root,x[i],16,w[i],42,"",action_event,(void *)(uintptr_t)i);
         if (!history->actions[i]) goto failed;
-        lv_settings_damped_action_style(history->actions[i],LV_SETTINGS_ACTION_SECONDARY);
+        if(i!=3)lv_settings_damped_action_style(history->actions[i],LV_SETTINGS_ACTION_SECONDARY);
         lv_obj_set_style_radius(history->actions[i],12,0);
         lv_obj_set_style_text_font(lv_damped_button_get_label(history->actions[i]),ui_message_font(&lv_font_instrument_sans_medium_16),0);
     }
@@ -975,6 +1057,10 @@ void ui_page_19_history_create(lv_obj_t *parent)
     }
     history->sort=button(history->list_panel,1080,3,152,30,"",sort_event,NULL);
     if (!history->sort || !surface(history->list_panel,12,35,1220,1,0,HISTORY_LINE)) goto failed;
+    lv_settings_damped_action_style(history->sort,LV_SETTINGS_ACTION_PRIMARY);
+    lv_obj_set_style_border_width(history->sort,0,0);
+    lv_obj_t *sort_label=lv_damped_button_get_label(history->sort);
+    lv_obj_set_style_text_align(sort_label,LV_TEXT_ALIGN_CENTER,0);lv_obj_center(sort_label);
     history->range=label(history->list_panel,22,256,300,14,&lv_font_instrument_sans_medium_10,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
     if (!history->range) goto failed;
     const lv_recycled_list_config_t config={12,36,1236,HISTORY_ROWS,HISTORY_ROW_HEIGHT,
@@ -1030,6 +1116,7 @@ void ui_page_19_history_suspend(void)
         page_19_history_search_t *search=history->search;history->search=NULL;
         page_19_history_search_destroy(search);
     }
+    if(history->capacity_keyboard){settings_detail_keyboard_hide();history->capacity_keyboard=false;}
     close_dialog();lv_recycled_list_stop(history->list);history->tapping=false;
     for (unsigned i=0;i<3;++i) lv_recycled_list_stop(history->sections[i].list);
     show(history->root,false);

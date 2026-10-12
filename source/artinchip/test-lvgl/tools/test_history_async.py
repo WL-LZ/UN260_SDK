@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix="un260-history-async-") as directory:
             assert (index.read_bytes() if index.exists() else None) == before
 
     run("missing")
-    for count in (0, 1, 100):
+    for count in (0, 1, 100, 1000):
         run("async", count)
         run("sync", count)
     run("queued", 100)
@@ -66,5 +66,6 @@ with tempfile.TemporaryDirectory(prefix="un260-history-async-") as directory:
     for corrupt in ("bad index\n", index_text(100)[:-1], index_text(100).replace("version=2", "version=999")):
         run("bad", content=corrupt)
     run("early-record", 100, writes=True)
-    print("PASS: async startup (0/1/100/missing), worker/queue/OOM/read/corrupt failures, pending getters/mutators, "
+    run("early-record", 1000, writes=True)
+    print("PASS: async startup (0/1/100/1000/missing), worker/queue/OOM/read/corrupt failures, pending getters/mutators, "
           "slow load and FIFO, publish boundary, idempotent init, early count rebased on loaded lifetime")

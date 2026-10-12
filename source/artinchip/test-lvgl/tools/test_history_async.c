@@ -156,7 +156,7 @@ static void assert_pending(void)
     assert(!ui_history_record_delete_records(&id, 1));
     assert(ui_history_last_commit_id() == 0);
     assert(store->record_count == 0 && store->total_notes_counted == 0);
-    assert(g_history_accepted.record_count == 0 && g_history_durable.record_count == 0);
+    assert(g_history_store.record_count == 0 && g_history_durable.record_count == 0);
 }
 
 static void assert_terminal(bool available, unsigned records, unsigned total)
@@ -277,7 +277,7 @@ int main(int argc, char **argv)
             assert(ui_history_data_poll(2001));
             assert(counting_history_poll_commit(&session, &sim, 2002) == COUNTING_HISTORY_COMMIT_SAVED);
             assert(ui_history_total_notes_counted_get() == total + 2);
-            assert(ui_history_data_get()->record_count == (expected < 100 ? expected + 1 : 100));
+            assert(ui_history_data_get()->record_count == (expected < UI_HISTORY_MAX_RECORDS ? expected + 1 : UI_HISTORY_MAX_RECORDS));
             assert(ui_history_data_get()->records[0].pcs == 2);
             assert(ui_history_data_get()->records[0].record_no == expected + 1);
         }

@@ -11,6 +11,8 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <time.h>
+#include <sys/resource.h>
 #include "un260/storage/storage_worker.h"
 #include "un260/counting/counting_multi.h"
 #include "un260/storage/workspace_store.h"
@@ -298,7 +300,7 @@ static void exercise(void)
     wait_saved(ui_history_last_commit_id(), now);
 
     for (i = FAIL_OPEN; i <= FAIL_DIR_SYNC; i++) {
-        uint8_t old_count = ui_history_data_get()->record_count;
+        uint16_t old_count = ui_history_data_get()->record_count;
         atomic_store(&fault, (int)i);
         id = append(1);
         assert(storage_worker_wait(id) == STORAGE_JOB_FAILED);
@@ -319,7 +321,7 @@ static void exercise(void)
     assert(ui_history_record_set_selected(0, true));
     wait_saved(ui_history_last_commit_id(), now);
     {
-        uint8_t old_count = ui_history_data_get()->record_count;
+        uint16_t old_count = ui_history_data_get()->record_count;
         atomic_store(&fault, FAIL_RENAME);
         assert(ui_history_record_delete_selected());
         id = ui_history_last_commit_id();
@@ -479,7 +481,7 @@ static void delete_all_saved(uint32_t now)
 static void test_retention(void)
 {
     uint32_t ids[UI_HISTORY_MAX_RECORDS];
-    uint8_t slots[UI_HISTORY_MAX_RECORDS];
+    uint16_t slots[UI_HISTORY_MAX_RECORDS];
     ui_history_record_t record;
     const ui_history_store_t *store = ui_history_data_get();
     uint32_t next_id = store->next_record_no;
@@ -572,8 +574,10 @@ static void test_delete_records(void)
     for (unsigned i = 0; i < 7; ++i) ids[i] = store->records[i * 2].record_no;
 
     hold_worker(true);
-    for (unsigned i = 0; i < STORAGE_WORKER_CAPACITY; ++i)
-        assert(ui_history_record_toggle_selected((uint8_t)(13 + i)));
+    unsigned fitting=(unsigned)(sizeof(ui_history_store_t)/history_snapshot_size(store));
+    if(fitting>STORAGE_WORKER_CAPACITY)fitting=STORAGE_WORKER_CAPACITY;
+    for (unsigned i = 0; i < fitting; ++i)
+        assert(ui_history_record_toggle_selected((uint16_t)(13 + i)));
     *before = *store;
     previous_job = ui_history_last_commit_id();
     assert(!ui_history_record_delete_records(ids, 7));
@@ -738,6 +742,117 @@ static void test_unavailable_history(void)
     puts("PASS: unreadable history remains protected; unrelated storage lane stays usable");
 }
 
+static void capacity_transaction(void)
+{
+    ui_history_data_init();
+    assert(ui_history_capacity_get()==UI_HISTORY_MAX_RECORDS);
+    assert(!ui_history_capacity_set(99) && !ui_history_capacity_set(1001));
+    fail_snapshot_alloc=true;assert(!ui_history_capacity_set(337));fail_snapshot_alloc=false;
+    assert(ui_history_capacity_get()==1000 && g_history_store.capacity==1000 && g_history_store.record_count==0);
+    for(unsigned i=0;i<510;i++)wait_saved(append(1),0);
+    uint32_t newest=ui_history_data_get()->records[0].record_no;
+    uint32_t oldest_kept=ui_history_data_get()->records[99].record_no;
+    uint32_t removed=ui_history_data_get()->records[100].record_no;
+    assert(ui_history_record_set_selected(0,true));wait_saved(ui_history_last_commit_id(),0);
+    hold_worker(true);
+    assert(ui_history_capacity_set(500));
+    storage_job_id_t id=ui_history_last_commit_id();
+    assert(ui_history_capacity_get()==1000 && ui_history_data_get()->record_count==510);
+    assert(!ui_history_data_can_accept() && !ui_history_capacity_set(100));
+    size_t before_size=history_snapshot_size(ui_history_data_get());
+    ui_history_store_t *before=malloc(before_size);assert(before);memcpy(before,ui_history_data_get(),before_size);
+    assert(!ui_history_record_toggle_selected(0));assert(memcmp(before,ui_history_data_get(),before_size)==0);
+    assert(!ui_history_record_set_selected(1,true));assert(memcmp(before,ui_history_data_get(),before_size)==0);
+    ui_history_record_clear_selected();assert(memcmp(before,ui_history_data_get(),before_size)==0);
+    ui_history_record_set_all_selected(true);assert(memcmp(before,ui_history_data_get(),before_size)==0);
+    ui_history_total_notes_counted_set(1234);assert(memcmp(before,ui_history_data_get(),before_size)==0);
+    ui_history_total_notes_counted_clear();assert(memcmp(before,ui_history_data_get(),before_size)==0);
+    assert(!ui_history_record_delete_selected() && !ui_history_record_delete_records(&newest,1));
+    assert(!ui_history_record_append_snapshot(&before->records[0],0));
+    assert(!ui_history_record_update_snapshot(&before->records[0],0));
+    assert(memcmp(before,ui_history_data_get(),before_size)==0);
+    atomic_store(&fault,FAIL_RENAME);hold_worker(false);assert(storage_worker_wait(id)==STORAGE_JOB_FAILED);
+    (void)ui_history_data_poll(0);assert(memcmp(before,ui_history_data_get(),before_size)==0);
+    atomic_store(&fault,FAIL_NONE);assert(storage_worker_retry(id));wait_saved(id,0);free(before);
+    assert(ui_history_capacity_get()==500 && ui_history_data_get()->record_count==500);
+    for(int f=FAIL_OPEN;f<=FAIL_DIR_SYNC;f++) {
+        atomic_store(&fault,f);assert(ui_history_capacity_set(100));id=ui_history_last_commit_id();
+        assert(storage_worker_wait(id)==STORAGE_JOB_FAILED);(void)ui_history_data_poll(0);
+        assert(ui_history_capacity_get()==500 && ui_history_data_get()->record_count==500);
+        assert(ui_history_data_get()->records[0].record_no==newest);
+        atomic_store(&fault,FAIL_NONE);(void)ui_history_data_poll(f*1000);wait_saved(id,f*1000);
+        assert(ui_history_capacity_get()==100 && ui_history_data_get()->record_count==100);
+        ui_history_record_t record;assert(!ui_history_record_get_by_no(removed,&record));
+        assert(ui_history_data_get()->records[99].record_no==oldest_kept);
+        assert(ui_history_capacity_set(500));wait_saved(ui_history_last_commit_id(),f*1000);
+        for(unsigned i=100;i<500;i++)wait_saved(append(1),f*1000);
+        newest=ui_history_data_get()->records[0].record_no;
+        oldest_kept=ui_history_data_get()->records[99].record_no;
+        removed=ui_history_data_get()->records[100].record_no;
+    }
+    assert(ui_history_capacity_set(100));wait_saved(ui_history_last_commit_id(),7000);
+    uint32_t first=ui_history_data_get()->records[0].record_no;
+    wait_saved(append(1),7000);assert(ui_history_data_get()->record_count==100);
+    assert(ui_history_data_get()->records[1].record_no==first);
+    assert(ui_history_capacity_set(337));wait_saved(ui_history_last_commit_id(),7000);
+    assert(ui_history_capacity_get()==337 && ui_history_data_get()->record_count==100);
+    puts("PASS: capacity 1000/500/100/337; durable publication; blocked pending edits; open/flush/fsync/close/rename/dir-sync rollback; newest-ID retention");
+}
+static void capacity_reload(void)
+{
+    ui_history_data_init();assert(ui_history_capacity_get()==337);
+    assert(ui_history_data_get()->record_count==100);
+    assert(ui_history_record_get(99,&(ui_history_record_t){0}));
+    puts("PASS: fresh-process custom capacity reload");
+}
+
+static void save_benchmark(void)
+{
+    ui_history_data_init();assert(ui_history_data_get()->record_count==1000);
+    for(unsigned i=0;i<3;i++) {
+        struct timespec start,end;clock_gettime(CLOCK_MONOTONIC,&start);
+        ui_history_total_notes_counted_set(ui_history_total_notes_counted_get()+1);
+        wait_saved(ui_history_last_commit_id(),0);clock_gettime(CLOCK_MONOTONIC,&end);
+        printf("History 1000-record full save: %.3f ms\n",(end.tv_sec-start.tv_sec)*1000.0+(end.tv_nsec-start.tv_nsec)/1000000.0);
+    }
+    struct rusage usage;assert(getrusage(RUSAGE_SELF,&usage)==0);
+    printf("History test process peak RSS: %ld KiB; record=%zu; queued budget=%zu bytes\n",usage.ru_maxrss,sizeof(ui_history_record_t),sizeof(ui_history_store_t));
+}
+static void queue_budget(void)
+{
+    ui_history_data_init();assert(ui_history_data_get()->record_count==1000);
+    hold_worker(true);assert(ui_history_record_toggle_selected(0));
+    storage_job_id_t id=ui_history_last_commit_id();
+    assert(g_history_job_count==1 && g_history_job_sizes[0]==sizeof(ui_history_store_t));
+    assert(!ui_history_data_can_accept() && !ui_history_record_toggle_selected(1));
+    assert(g_history_job_count==1 && ui_history_last_commit_id()==id);
+    hold_worker(false);wait_saved(id,0);assert(ui_history_data_can_accept());
+    puts("PASS: full 1000-record store has at most one 12 MB immutable job; rejected edit restores accepted state; lane resumes after durable completion");
+}
+
+static void queued_failure(void)
+{
+    ui_history_data_init();assert(ui_history_data_get()->record_count==0);
+    hold_worker(true);atomic_store(&fault,FAIL_RENAME);
+    append(1);append(2);assert(ui_history_record_set_selected(0,true));
+    storage_job_id_t last=append(3);
+    size_t size=history_snapshot_size(ui_history_data_get());
+    ui_history_store_t *accepted=malloc(size);assert(accepted);
+    assert(storage_worker_copy_snapshot(last,accepted,size));
+    assert(!storage_worker_copy_snapshot(last,accepted,size-1));
+    assert(!storage_worker_copy_snapshot(UINT64_MAX,accepted,size));
+    assert(accepted->record_count==3 && accepted->total_notes_counted==6 && accepted->records[1].selected);
+    assert(!ui_history_record_toggle_selected(0));
+    assert(memcmp(accepted,ui_history_data_get(),size)==0);
+    hold_worker(false);assert(storage_worker_wait(g_history_jobs[0])==STORAGE_JOB_FAILED);
+    (void)ui_history_data_poll(0);assert(ui_history_data_get()->record_count==0);
+    assert(!ui_history_data_can_accept());
+    atomic_store(&fault,FAIL_NONE);(void)ui_history_data_poll(1000);wait_saved(last,1000);
+    assert(memcmp(accepted,ui_history_data_get(),size)==0);
+    assert(ui_history_data_get()->next_record_no==4 && ui_history_data_can_accept());
+    free(accepted);puts("PASS: pending immutable payload copy/size guard; four-job rejection restores latest accepted; first-job failure rolls back durable; FIFO retry restores all later accepted edits exactly once");
+}
+
 int main(int argc, char **argv)
 {
     ui_thread = pthread_self();
@@ -774,6 +889,11 @@ int main(int argc, char **argv)
     else if (strcmp(argv[1], "total-arithmetic") == 0) test_total_arithmetic();
     else if (strcmp(argv[1], "retention") == 0) test_retention();
     else if (strcmp(argv[1], "delete-records") == 0) test_delete_records();
+    else if (strcmp(argv[1], "queued-failure") == 0) queued_failure();
+    else if (strcmp(argv[1], "benchmark") == 0) save_benchmark();
+    else if (strcmp(argv[1], "queue-budget") == 0) queue_budget();
+    else if (strcmp(argv[1], "capacity-transaction") == 0) capacity_transaction();
+    else if (strcmp(argv[1], "capacity-reload") == 0) capacity_reload();
     else if (strcmp(argv[1], "fill-capacity") == 0) fill_capacity();
     else if (strcmp(argv[1], "maximum-text") == 0) test_maximum_text(true);
     else if (strcmp(argv[1], "reload-maximum-text") == 0) test_maximum_text(false);

@@ -51,13 +51,21 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
                         "-Wl,--wrap=malloc", "-o", str(output)], check=True)
 
     compile_binary(binary)
+    queued_binary=work / "history-queued-failure-test"
+    compile_binary(queued_binary,store_path=work / "queued-history")
+    subprocess.run([str(queued_binary),"queued-failure"],check=True)
     multi_binary=work / "multi-history-test"
     compile_binary(multi_binary,store_path=work / "multi-history")
     subprocess.run([str(multi_binary), "multi-history"], check=True)
+    multi_index=work / "multi-history/index.cfg"
+    old_multi=multi_index.read_bytes().replace(b"version=4\n",b"version=3\n")
+    old_multi=b"\n".join(line for line in old_multi.split(b"\n") if not line.startswith(b"capacity="))
+    multi_index.write_bytes(old_multi)
     subprocess.run([str(multi_binary), "multi-reload"], check=True)
+    assert multi_index.read_bytes()==old_multi, "Reading a valid v3 MULTI store must not rewrite it"
     record_size, store_size, capacity = map(int, subprocess.check_output(
         [str(binary), "sizes"], text=True).split())
-    assert capacity == 100
+    assert capacity == 1000
     print(f"History sizes: record={record_size}, store={store_size}, capacity={capacity}", flush=True)
 
     def dump():
@@ -74,16 +82,18 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
     legacy_directory = overlay / "un260/lv_system"
     legacy_directory.mkdir(parents=True)
     production_header = (ROOT / "un260/lv_system/ui_history_data.h").read_text()
-    assert production_header.count("#define UI_HISTORY_MAX_RECORDS 100") == 1
+    assert production_header.count("#define UI_HISTORY_MAX_RECORDS 1000") == 1
     (legacy_directory / "ui_history_data.h").write_text(production_header.replace(
-        "#define UI_HISTORY_MAX_RECORDS 100", "#define UI_HISTORY_MAX_RECORDS 20"))
+        "#define UI_HISTORY_MAX_RECORDS 1000", "#define UI_HISTORY_MAX_RECORDS 20").replace(
+        "#define UI_HISTORY_MIN_RECORDS 100", "#define UI_HISTORY_MIN_RECORDS 20"))
     shutil.copyfile(ROOT / "un260/lv_system/ui_history_data_fs.c",
                     legacy_directory / "ui_history_data_fs.c")
     legacy_binary = work / "history-legacy20-test"
     compile_binary(legacy_binary, overlay)
     subprocess.run([str(legacy_binary), "fill-capacity"], check=True)
     # Single-currency fields are identical in v2; exercise the actual v2 header.
-    legacy_index = authoritative.read_bytes().replace(b"version=3\n",b"version=2\n")
+    legacy_index = authoritative.read_bytes().replace(b"version=4\n",b"version=2\n")
+    legacy_index=b"\n".join(line for line in legacy_index.split(b"\n") if not line.startswith(b"capacity="))
     authoritative.write_bytes(legacy_index)
     legacy_records = record_fields()
     assert dump() == (20, 20, 21)
@@ -96,8 +106,8 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
             prefix = f"record{i:02d}_"
             if key.startswith(prefix):
                 assert expanded[f"record{capacity - 20 + i:02d}_" + key[len(prefix):]] == value
-    assert (state / "100.rec").is_file()
-    assert "slot100_slot_no=100\n" in (state / "100.rec").read_text()
+    assert (state / "1000.rec").is_file()
+    assert "slot1000_slot_no=1000\n" in (state / "1000.rec").read_text()
     oldest_id = expanded[f"record{capacity - 1:02d}_record_no"]
     oldest_slot = expanded[f"record{capacity - 1:02d}_slot_no"]
     subprocess.run([str(binary), "append-one"], check=True)
@@ -108,8 +118,11 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
     expanded_index = authoritative.read_bytes()
     subprocess.run([str(legacy_binary), "load-corrupt"], check=True)
     assert authoritative.read_bytes() == expanded_index, "Downgrade must protect a larger index"
-    print("PASS: 20-to-100 v2 upgrade preserves every record/ID/slot, slot100 reload, 101st oldest-only replacement, protected downgrade", flush=True)
+    print("PASS: 20-to-1000 upgrade preserves every record/ID/slot, slot1000 reload, 1001st oldest-only replacement, protected downgrade", flush=True)
     shutil.rmtree(state)  # Isolated TemporaryDirectory fixture, never device state.
+    subprocess.run([str(binary), "capacity-transaction"], check=True)
+    subprocess.run([str(binary), "capacity-reload"], check=True)
+    shutil.rmtree(state)
     subprocess.run([str(binary), "exercise"], check=True)
     baseline = dump()
     assert baseline[:2] == (21, 23), baseline
@@ -167,7 +180,7 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
         assert authoritative.read_bytes() == healthy_index
         assert dump() == healthy_state
     for corrupt_index in (b"invalid index\n", healthy_index[:-1],
-                          healthy_index.replace(b"version=3\n", b"version=999\n")):
+                          healthy_index.replace(b"version=4\n", b"version=999\n")):
         authoritative.write_bytes(corrupt_index)
         subprocess.run([str(binary), "load-corrupt"], check=True)
         assert authoritative.read_bytes() == corrupt_index
@@ -183,6 +196,8 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
     maximum_index = authoritative.read_bytes()
     subprocess.run([str(binary), "reload-maximum-text"], check=True)
     assert authoritative.read_bytes() == maximum_index
+    subprocess.run([str(binary), "queue-budget"], check=True)
+    subprocess.run([str(binary), "benchmark"], check=True)
     assert max(map(len, maximum_index.splitlines())) < 8191
     mirrors = sum(path.stat().st_size for path in state.glob("*.rec"))
     metadata = (state / "meta.cfg").stat().st_size
