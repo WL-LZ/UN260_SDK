@@ -1,4 +1,5 @@
 #include <unistd.h>
+#include <zlib.h>
 #include <sys/stat.h>
 #include <inttypes.h>
 #include "un260/font/ui_locale_font_bank.h"
@@ -253,16 +254,16 @@ void history_test_bmp(const char *name)
     history_test_render();
     const char *directory = getenv("HISTORY_RASTER_OUTPUT");
     if (!directory) return;
-    char path[1024]; snprintf(path, sizeof(path), "%s/%s.bmp", directory, name);
-    FILE *file = fopen(path, "wb"); assert(file);
+    char path[1024]; snprintf(path, sizeof(path), "%s/%s.bmp.gz", directory, name);
+    gzFile file = gzopen(path, "wb1"); assert(file);
     uint32_t bytes = 54 + 1280 * 400 * 4, offset = 54, dib = 40, width = 1280;
     int32_t height = -400; uint16_t planes = 1, bits = 32; uint8_t header[54] = {0};
     header[0] = 'B'; header[1] = 'M'; memcpy(header + 2, &bytes, 4); memcpy(header + 10, &offset, 4);
     memcpy(header + 14, &dib, 4); memcpy(header + 18, &width, 4); memcpy(header + 22, &height, 4);
     memcpy(header + 26, &planes, 2); memcpy(header + 28, &bits, 2);
-    assert(fwrite(header, 1, sizeof(header), file) == sizeof(header));
-    assert(fwrite(test_framebuffer, 1, sizeof(test_framebuffer), file) == sizeof(test_framebuffer));
-    assert(fclose(file) == 0);
+    assert(gzwrite(file,header,sizeof(header))==sizeof(header));
+    assert(gzwrite(file,test_framebuffer,sizeof(test_framebuffer))==sizeof(test_framebuffer));
+    assert(gzclose(file)==Z_OK);
 }
 static void history_test_fixtures(unsigned count)
 {
@@ -863,7 +864,16 @@ static void test_full_abc_view(void)
     ui_page_19_history_destroy();assert(storage_worker_shutdown());
     puts("PASS real History: full 10000-row B, A totals, confirmed zero C, last-SN query and hidden async cancellation");
 }
-static void test_reading_bookmarks(void)
+#include "un260/lv_core/page_training.c"
+#include "un260/lv_core/page_receipts.c"
+static history_export_status_t receipt_export_fixture;
+static receipt_print_status_t receipt_print_fixture;
+uint32_t counting_history_current_record(void){return 1000;}
+const history_export_status_t *ui_history_export_data_status(void){return &receipt_export_fixture;}
+const receipt_print_status_t *receipt_print_status(void){return &receipt_print_fixture;}
+const char *receipt_print_blocker(uint32_t id){return id==1000?NULL:UI_N_("Historical records: export HTML, then print on a computer.");}
+bool receipt_print_request(uint32_t id){return id==1000;}
+static void test_reading_and_task_pages(void)
 {
     unsigned timers=history_test_timers();
     ui_lang_set(LANGUAGE_EN);history_test_fixtures(23);
@@ -890,6 +900,46 @@ static void test_reading_bookmarks(void)
     assert(history->detail_mode&&history->current_id==1000);
     ui_page_19_history_destroy();
     puts("PASS reading bookmarks: final partial page, cache eviction, insertion anchor, detail and locale rebuild");
+    for(size_t language=0;language<ui_lang_count();++language){
+        ui_lang_set(ui_lang_at(language)->id);history_test_fixtures(8);
+        ui_receipts_create(lv_scr_act());history_test_tick(100);check_single_line(receipts.root);
+        assert(!lv_obj_has_state(receipts.print,LV_STATE_DISABLED));
+        history_test_bmp("receipts-before-selection");
+        history_test_click(receipts.rows[1]);
+        if(receipts.selected!=999){fprintf(stderr,"receipt selected=%u ids=%u,%u count=%u pressed=%p row=%p\n",receipts.selected,receipts.row_ids[0],receipts.row_ids[1],receipts.count,(void*)lv_indev_get_obj_act(),(void*)receipts.rows[1]);history_test_bmp("receipts-selection-failure");}
+        assert(receipts.selected==999);
+        assert(lv_obj_has_state(receipts.print,LV_STATE_DISABLED));
+        unsigned exports=test_exports;history_test_click(receipts.export);
+        assert(test_exports==exports+1&&test_exported_count==1&&test_exported_ids[0]==999);
+        receipt_export_fixture=(history_export_status_t){.first_record=999,.record_count=1,.state=HISTORY_EXPORT_WRITING};
+        receipts_refresh();assert(lv_obj_has_state(receipts.export,LV_STATE_DISABLED));
+        receipt_export_fixture.state=HISTORY_EXPORT_SAVED;receipts_refresh();
+        char name[100];snprintf(name,sizeof(name),"receipts-%s",ui_lang_at(language)->tag);history_test_bmp(name);
+        ui_receipts_suspend();assert(ui_receipts_resume());assert(receipts.selected==999);
+        ui_receipts_destroy();saved_selection=0;saved_page=0;
+        for(unsigned lesson=0;lesson<LESSON_COUNT;lesson++){
+            ui_training_create(lv_scr_act());training_select_lesson(lesson);history_test_tick(100);
+            check_single_line(training.root);
+            lv_point_t size;lv_txt_get_size(&size,lv_label_get_text(training.title),lv_obj_get_style_text_font(training.title,0),0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+            assert(size.x<=lv_obj_get_width(training.title));
+            history_test_tick(1900);uint32_t elapsed=training.elapsed;
+            ui_training_suspend();history_test_tick(400);assert(training.elapsed==elapsed);
+            assert(ui_training_resume());history_test_tick(100);assert(training.elapsed>elapsed);
+            history_test_click(training.pause);elapsed=training.elapsed;history_test_tick(400);assert(training.elapsed==elapsed);
+            history_test_click(training.pause);history_test_tick(5200);assert(training.elapsed==4800&&!training.playing);
+            snprintf(name,sizeof(name),"training-%s-%u",ui_lang_at(language)->tag,lesson);history_test_bmp(name);
+            history_test_click(training.pause);assert(training.elapsed<4800&&training.playing);
+            if(language==1&&lesson==0){
+                training_select_lesson(0);
+                for(unsigned frame=0;frame<=12;frame++){
+                    snprintf(name,sizeof(name),"training-animation-%02u",frame);history_test_bmp(name);
+                    history_test_tick(400);
+                }
+            }
+            ui_training_destroy();assert(history_test_timers()==timers);
+        }
+    }
+    ui_lang_set(LANGUAGE_EN);puts("PASS receipts and six training pages: locales, selection, export, animation pause/resume/replay and timer cleanup");
 }
 
 int main(void)
@@ -993,7 +1043,7 @@ int main(void)
     }
     ui_lang_set(LANGUAGE_EN);
     test_full_abc_view();
-    test_reading_bookmarks();
+    test_reading_and_task_pages();
     puts("PASS: actual History LVGL empty/full smoke, locale glyphs/buttons and timer ownership");
     return 0;
 }

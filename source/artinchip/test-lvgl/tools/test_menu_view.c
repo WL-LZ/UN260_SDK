@@ -784,7 +784,12 @@ int main(void)
     menu.tab=0;menu.sub=0;menu.dirty=true;tick(120);assert(business_day()==20260924);assert(find(menu.body,"Review 3 pending counts"));raster("studio-overview-retained-private");
     lv_obj_add_state(menu.nav[1],LV_STATE_FOCUS_KEY);raster("studio-focus");lv_obj_clear_state(menu.nav[1],LV_STATE_FOCUS_KEY);
     const char *shots[][5]={{NULL},{"batch","profiles","options"},{"records","recounts","history","verify","day-closes"},{"print","qr"},{"operators","interaction","display"},{"reject","care","device"}};
+    menu.tab=3;menu.sub=0;menu.dirty=true;tick(100);
+    unsigned entry_nav=nav_count;click("Receipts");assert(current==UI_PAGE_RECEIPTS&&nav_count==entry_nav+1&&menu.sub==0);
+    menu.tab=5;menu.sub=0;menu.dirty=true;tick(100);click("Getting started");
+    assert(current==UI_PAGE_TRAINING&&nav_count==entry_nav+2&&menu.sub==0);current=UI_PAGE_MENU;
     for(unsigned tab=1;tab<6;tab++)for(unsigned sub=0;sub<subcounts[tab];sub++){
+        if((tab==3&&sub==2)||(tab==5&&sub==3))continue; /* Separate-page links, tested above. */
         menu.tab=tab;menu.sub=sub;menu.selected_group=menu.selected_close=0;menu.record_pending=menu.verify_pick=false;menu.dirty=true;tick(100);
         char filename[80];snprintf(filename,sizeof(filename),"studio-%s",shots[tab][sub]);raster(filename);
         assert(lv_obj_get_y(menu.body)==76&&lv_obj_get_height(menu.body)==296);

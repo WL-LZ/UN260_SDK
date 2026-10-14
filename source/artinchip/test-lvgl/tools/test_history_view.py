@@ -5,6 +5,7 @@ The store and external actions are in-memory stubs. No device, real history,
 USB mount or firmware write is used. This is not a board touch/GE validation.
 """
 from test_i18n_support import with_i18n, lvgl_source
+import contextlib, concurrent.futures, hashlib, gzip, io
 import argparse
 import os
 from pathlib import Path
@@ -15,6 +16,8 @@ import tempfile
 
 from test_list_view import compiled_asset_sources
 
+def write_if_changed(path,text):
+    if not path.exists() or path.read_text()!=text:path.write_text(text)
 ROOT = Path(__file__).resolve().parents[1]
 COMPONENTS = [
     "un260/font/ui_message_font.c", "un260/font/ui_locale_font_bank.c",
@@ -77,15 +80,16 @@ def main():
     if not compiler or not (lvgl / "lvgl.h").is_file():
         raise SystemExit("Requires host GCC and full LVGL 8 source")
     assets = compiled_asset_sources()
-    inspected = [ROOT / "un260/lv_core/page_19_history.c", *(ROOT / p for p in COMPONENTS)]
+    inspected = [ROOT / "un260/lv_core/page_training.c", ROOT / "un260/lv_core/page_receipts.c", ROOT / "un260/lv_core/page_19_history.c", *(ROOT / p for p in COMPONENTS)]
     fonts = sorted(set(re.findall(r"lv_font_(instrument_sans_[a-z]+_\d+)",
                                  "\n".join(p.read_text(encoding="utf-8") for p in inspected))))
-    with tempfile.TemporaryDirectory(prefix="un260-history-view-") as directory:
+    cache=Path(tempfile.gettempdir())/'un260-history-host-cache';cache.mkdir(exist_ok=True)
+    with contextlib.nullcontext(str(cache)) as directory:
         work = Path(directory)
-        (work / "lvgl").mkdir()
-        (work / "lvgl/lvgl.h").write_text(f'#include "{(lvgl / "lvgl.h").as_posix()}"\n')
+        (work / "lvgl").mkdir(exist_ok=True)
+        write_if_changed(work / "lvgl/lvgl.h",f'#include "{(lvgl / "lvgl.h").as_posix()}"\n')
         conf = work / "lv_conf.h"
-        conf.write_text("""#ifndef LV_CONF_H
+        write_if_changed(conf,"""#ifndef LV_CONF_H
 #define LV_CONF_H
 #define LV_COLOR_DEPTH 32
 #define LV_MEM_SIZE (24U * 1024U * 1024U)
@@ -114,14 +118,14 @@ def main():
         if not helper:
             raise AssertionError("Production drag ownership registration is missing")
         port_source = work / "port_drag.c"
-        port_source.write_text('#include "lvgl/lvgl.h"\n' + helper.group() + "\n")
+        write_if_changed(port_source,'#include "lvgl/lvgl.h"\n' + helper.group() + "\n")
         sources = [ROOT / "tools/test_history_view.c", ROOT / "tools/test_history_search_view.c",
                    port_source, *assets,
                    *(ROOT / p for p in COMPONENTS if p not in {"un260/lv_core/page_19_history_search.c",
                      "un260/lv_components/ui_multi_detail.c", "un260/lv_core/page_02_list_search.c"}),
                    *(ROOT / f"un260/font/lv_font_{f}.c" for f in fonts),
                    *sorted(p for p in (lvgl / "src").rglob("*.c") if p.name != "qrcodegen.c")]
-        (work / "history").mkdir()
+        (work / "history").mkdir(exist_ok=True)
         executable = work / "test-history-view"
         sources = with_i18n(sources, ROOT)
         command = [compiler, '-DUN260_LOCALE_FONT_DIR="S:'+str(ROOT/'aic_ui/lvgl_data/locale_fonts')+'/"', '-DUI_HISTORY_STORE_DIR="'+str(work/"history")+'"', "-D_GNU_SOURCE", '-DUI_STATE_DIR="/tmp/un260-i18n-tests"', "-pthread", "-std=c11", "-O1", "-g", "-Wall", "-Wextra",
@@ -129,7 +133,17 @@ def main():
                    "-fsanitize=address,undefined" if args.asan else "-fsanitize=undefined", "-fno-sanitize-recover=all",
                    f"-I{work}", f"-I{ROOT}", f"-I{lvgl}", f"-DLV_CONF_PATH={conf}",
                    *map(str, sources), "-lm", "-lz", "-o", str(executable)]
-        subprocess.run(command, check=True)
+        # Compile changed units only; generated headers and flags are dependencies.
+        flags=command[:command.index(str(sources[0]))]
+        def compile_one(source):
+            key=hashlib.sha256((str(source)+repr(flags)).encode()).hexdigest()
+            obj=work/(key+'.o');dep=work/(key+'.d');deps=[source]
+            if dep.exists():deps += [Path(v) for v in dep.read_text().replace('\\\n',' ').split(':',1)[1].split()]
+            if not obj.exists() or not dep.exists() or any(not v.exists() or v.stat().st_mtime_ns>obj.stat().st_mtime_ns for v in deps):
+                subprocess.run(flags+['-MMD','-MF',str(dep),'-c',str(source),'-o',str(obj)],check=True)
+            return obj
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:objects=list(pool.map(compile_one,sources))
+        subprocess.run([compiler,'-fsanitize=address,undefined' if args.asan else '-fsanitize=undefined',*map(str,objects),'-pthread','-lm','-lz','-o',str(executable)],check=True)
         from PIL import Image
         for name in ('user', 'settings'):
             with Image.open(ROOT / 'aic_ui/lvgl_data/backgrounds' / (name+'.png')) as image:
@@ -143,7 +157,14 @@ def main():
         if args.output_dir:
             args.output_dir.mkdir(parents=True, exist_ok=True)
             environment["HISTORY_RASTER_OUTPUT"] = str(args.output_dir.resolve())
-        subprocess.run([str(executable)], env=environment, check=True, timeout=240)
+        try:
+            subprocess.run([str(executable)], env=environment, check=True, timeout=240)
+        finally:
+            if args.output_dir:
+                for path in args.output_dir.glob('*.bmp.gz'):
+                    im=Image.open(io.BytesIO(gzip.decompress(path.read_bytes()))).convert('RGB')
+                    target=path.with_suffix('').with_suffix('.png');im.save(target)
+                    assert Image.open(target).tobytes()==im.tobytes();path.unlink()
 
 
 if __name__ == "__main__":

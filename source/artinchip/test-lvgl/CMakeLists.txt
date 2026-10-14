@@ -296,6 +296,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/app_service/app_ui_runtime.c
     un260/app_service/receipt_print_service.c
     un260/lv_core/page_receipts.c
+    un260/lv_core/page_training.c
     un260/app_service/app_touch_sound.c
     un260/app_service/buzzer_service.c
     un260/gesture/touch_sound.c

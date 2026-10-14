@@ -445,37 +445,25 @@
   },
   {
     "file": "un260/lv_core/lv_page_event.c",
-    "line": 30,
+    "line": 31,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_WARNING,\"export.qr\",UI_N_(\"QR export\"),ui_text_msgid(text_id)"
   },
   {
     "file": "un260/lv_core/lv_page_event.c",
-    "line": 228,
+    "line": 225,
     "api": "ui_notice_post_text",
-    "args": "UI_NOTICE_WARNING,\"print.request\",UI_N_(\"Printing\"),ui_text_msgid(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED)"
+    "args": "UI_NOTICE_WARNING,\"print.request\",UI_N_(\"Printing\"),reason"
   },
   {
     "file": "un260/lv_core/lv_page_event.c",
-    "line": 234,
+    "line": 227,
     "api": "ui_notice_post_text",
-    "args": "UI_NOTICE_WARNING,\"print.request\",UI_N_(\"Printing\"),ui_text_msgid(UI_TEXT_WIDGET_PRINT_TOAST_COUNT_FIRST)"
-  },
-  {
-    "file": "un260/lv_core/lv_page_event.c",
-    "line": 255,
-    "api": "ui_notice_post_text",
-    "args": "UI_NOTICE_ERROR,\"print.request\",UI_N_(\"Print request not sent\"),UI_N_(\"Check controller connection.\")"
-  },
-  {
-    "file": "un260/lv_core/lv_page_event.c",
-    "line": 258,
-    "api": "ui_notice_post_text",
-    "args": "UI_NOTICE_INFO,\"print.request\",UI_N_(\"Print request sent\"),NULL"
+    "args": "sent?UI_NOTICE_INFO:UI_NOTICE_ERROR,\"print.request\", sent?UI_N_(\"Print request sent\"):UI_N_(\"Print request not sent\"), sent?UI_N_(\"Print sent; paper output unverified\"):UI_N_(\"Check controller connection.\")"
   },
   {
     "file": "un260/lv_core/lv_page_manager.c",
-    "line": 524,
+    "line": 532,
     "api": "ui_notice_navigation_committed",
     "args": ""
   },
@@ -517,7 +505,7 @@
   },
   {
     "file": "un260/lv_core/page_02_list.c",
-    "line": 578,
+    "line": 579,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_WARNING,\"list.serials\", ui_text_msgid(UI_TEXT_LIST_SERIAL_NUMBERS),ui_text_msgid(UI_TEXT_SERIAL_UNAVAILABLE)"
   },
@@ -547,85 +535,85 @@
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 365,
+    "line": 369,
     "api": "app_ui_runtime_notice_started",
     "args": "APP_UI_NOTICE_PROFILE_APPLY,UI_N_(\"Applying profile...\")"
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 389,
+    "line": 393,
     "api": "app_ui_runtime_notice_started",
     "args": "APP_UI_NOTICE_BATCH_SAVE,UI_N_(\"Saving...\")"
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 393,
+    "line": 397,
     "api": "app_ui_runtime_notice_started",
     "args": "APP_UI_NOTICE_WORKSPACE_STORE,UI_N_(\"Preparing photo...\")"
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 480,
+    "line": 484,
     "api": "ui_notice_get_enabled",
     "args": ""
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 546,
+    "line": 550,
     "api": "app_local_setting_apply",
     "args": "APP_LOCAL_MAIN_BATCH_ACTION,next,0"
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 546,
+    "line": 550,
     "api": "ui_notice_get_enabled",
     "args": ""
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 566,
+    "line": 570,
     "api": "app_local_setting_apply",
     "args": "APP_LOCAL_SHORTCUT_VISIBILITY,shortcut,!shown"
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 566,
+    "line": 570,
     "api": "ui_notice_get_enabled",
     "args": ""
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 586,
+    "line": 590,
     "api": "app_local_setting_apply",
     "args": "APP_LOCAL_TOUCH_SOUND,!user_cfg_touch_sound_enabled(),0"
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 604,
+    "line": 608,
     "api": "ui_notice_post_message",
     "args": "UI_NOTICE_WARNING,\"menu.operation\",UI_N_(\"Menu\"),workspace_store_message_info()"
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 606,
+    "line": 610,
     "api": "app_ui_runtime_notice_started",
     "args": "APP_UI_NOTICE_BATCH_SAVE,UI_N_(\"Saving...\")"
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 616,
+    "line": 620,
     "api": "app_ui_runtime_notice_started",
     "args": "APP_UI_NOTICE_BATCH_SAVE,UI_N_(\"Saving...\")"
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 636,
+    "line": 640,
     "api": "app_ui_runtime_notice_started",
     "args": "APP_UI_NOTICE_WORKSPACE_STORE,UI_N_(\"Looking for USB photos...\")"
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 644,
+    "line": 648,
     "api": "app_ui_runtime_notice_started",
     "args": "APP_UI_NOTICE_OPERATOR_SWITCH,UI_N_(\"Switching workspace...\")"
   },
@@ -691,37 +679,37 @@
   },
   {
     "file": "un260/lv_core/page_19_history.c",
-    "line": 161,
+    "line": 199,
     "api": "ui_notice_post_text",
     "args": "kind,\"history.feedback\",UI_N_(\"History\"),text"
   },
   {
     "file": "un260/lv_core/page_19_history.c",
-    "line": 698,
+    "line": 741,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_ERROR,\"history.storage\",UI_N_(\"History storage\"),ui_text_msgid(state==1?UI_TEXT_HISTORY_STORAGE_FAILED:UI_TEXT_HISTORY_SAVE_FAILED)"
   },
   {
     "file": "un260/lv_core/page_19_history.c",
-    "line": 699,
+    "line": 742,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_PROGRESS,\"history.storage\",UI_N_(\"History\"),UI_N_(\"Saving records...\")"
   },
   {
     "file": "un260/lv_core/page_19_history.c",
-    "line": 701,
+    "line": 744,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_SUCCESS,\"history.storage\",UI_N_(\"History saved\"),NULL"
   },
   {
     "file": "un260/lv_core/page_19_history.c",
-    "line": 702,
+    "line": 745,
     "api": "ui_notice_post_message",
     "args": "UI_NOTICE_INFO,\"history.metadata\",UI_N_(\"History\"),&info"
   },
   {
     "file": "un260/lv_core/page_19_history.c",
-    "line": 703,
+    "line": 746,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_WARNING,\"history.metadata\",UI_N_(\"History capacity reached\"),ui_text_msgid(UI_TEXT_HISTORY_CAPACITY_FULL)"
   },
@@ -955,49 +943,49 @@
   },
   {
     "file": "un260/lv_core/page_34_standby.c",
-    "line": 194,
+    "line": 193,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_PROGRESS,\"settings.standby\",UI_N_(\"Standby settings\"),UI_N_(\"Saving...\")"
   },
   {
     "file": "un260/lv_core/page_34_standby.c",
-    "line": 194,
+    "line": 193,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_ERROR,\"settings.standby\",UI_N_(\"Standby settings not saved\"),UI_N_(\"Try again.\")"
   },
   {
     "file": "un260/lv_core/page_34_standby.c",
-    "line": 209,
+    "line": 208,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_WARNING,\"settings.standby\",UI_N_(\"Invalid duration\"),UI_N_(\"Enter 1-1440 minutes, or select Never.\")"
   },
   {
     "file": "un260/lv_core/page_34_standby.c",
-    "line": 210,
+    "line": 209,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_WARNING,\"settings.standby\",UI_N_(\"Invalid colour\"),UI_N_(\"Enter six hexadecimal digits, e.g. EAF0F3.\")"
   },
   {
     "file": "un260/lv_core/page_34_standby.c",
-    "line": 211,
+    "line": 210,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_WARNING,\"settings.standby\",UI_N_(\"Please wait\"),UI_N_(\"A file operation is in progress.\")"
   },
   {
     "file": "un260/lv_core/page_34_standby.c",
-    "line": 214,
+    "line": 213,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_WARNING,\"settings.standby\",UI_N_(\"Standby\"),reason"
   },
   {
     "file": "un260/lv_core/page_34_standby.c",
-    "line": 224,
+    "line": 223,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_INFO,\"settings.standby\",UI_N_(\"Automatic colour\"),UI_N_(\"Turn off Automatic black / white to edit this colour.\")"
   },
   {
     "file": "un260/lv_core/page_34_standby.c",
-    "line": 291,
+    "line": 290,
     "api": "ui_notice_post_message",
     "args": "ok?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,\"settings.standby\",UI_N_(\"Standby settings\"),standby_store_message_info()"
   },
@@ -1057,9 +1045,21 @@
   },
   {
     "file": "un260/lv_core/page_protocol_log.c",
-    "line": 60,
+    "line": 62,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_ERROR,\"debug.export\",UI_N_(\"Protocol logs\"),UI_N_(\"Log operation failed or recording limit reached. Local logs are retained.\")"
+  },
+  {
+    "file": "un260/lv_core/page_receipts.c",
+    "line": 112,
+    "api": "ui_notice_post_text",
+    "args": "UI_NOTICE_WARNING,\"print.request\",UI_N_(\"Receipts\"),reason?reason:UI_N_(\"Select a saved record\")"
+  },
+  {
+    "file": "un260/lv_core/page_receipts.c",
+    "line": 113,
+    "api": "ui_notice_post_text",
+    "args": "ok?UI_NOTICE_INFO:UI_NOTICE_ERROR,\"print.request\",UI_N_(\"Receipts\"),ok?UI_N_(\"Print sent; paper output unverified\"):UI_N_(\"Print request not sent\")"
   },
   {
     "file": "un260/lv_core/settings_detail_ui.c",
@@ -1147,7 +1147,7 @@
   },
   {
     "file": "un260/lv_system/ui_history_export_data.c",
-    "line": 36,
+    "line": 40,
     "api": "ui_notice_post_text",
     "args": "kind,\"export.history\",UI_N_(\"History export\"),text"
   },
