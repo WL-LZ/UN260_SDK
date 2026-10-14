@@ -48,6 +48,7 @@ def main():
     sources = [args.harness.resolve() if args.harness else ROOT / "tools/test_main_view.c",
                *[source.resolve() for source in args.extra_source], *compiled_asset_sources()]
     actual = [
+        "un260/gesture/touch_sound.c", "un260/app_service/app_touch_sound.c",
         "un260/font/scaled_font.c", "un260/font/ui_message_font.c",
         "un260/font/ui_locale_font_bank.c",
         "un260/device_info/device_info.c",
@@ -64,6 +65,9 @@ def main():
         "un260/lv_components/lv_damped_button.c", "un260/lv_components/lv_loading_orbit.c",
         "un260/lv_components/lv_capsule_pagination.c", "un260/lv_components/smart_island.c",
         "un260/lv_components/smart_island/smart_island_view.c",
+        "un260/lv_components/smart_island/smart_island_activity.c",
+        "un260/lv_core/page_collection.c", "un260/app_service/app_collection.c",
+        "un260/data_collection/data_collection.c", "un260/protocol/protocol_request.c",
         "un260/lv_components/smart_island/smart_island_action.c",
         "un260/lv_components/smart_island/smart_island_warning.c",
         "un260/lv_components/smart_island/smart_island_result.c",
@@ -197,6 +201,8 @@ void host_external_assets_release(void) {
                           function(images, "get_currency_img") + '\n' +
                           function(list_page, "text_set") + '\n' +
                           function(list_page, "number_set").replace('static void number_set', 'void host_list_number_set', 1) + '\n')
+        with helper.open("a") as h:
+            h.write(function((ROOT/"un260/lv_core/settings_detail_ui.c").read_text(), "settings_theme_color_hex") + "\n")
         sources.append(helper)
         # Use the production tutorial and its actual gesture catalog, while
         # keeping the persistence/hardware service stubbed in this UI harness.

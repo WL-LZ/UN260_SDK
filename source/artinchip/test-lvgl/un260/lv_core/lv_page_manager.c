@@ -560,8 +560,7 @@ static void ui_manager_update_diagnostic_scope(ui_page_t page)
     bool active=page==UI_PAGE_CIS_CALIB || page==UI_PAGE_DEBUG ||
                 page==UI_PAGE_IMAGE_GET ||
                 page==UI_PAGE_MOTOR_TEST ||
-                page==UI_PAGE_AGING_SETTING ||
-                (page==UI_PAGE_SETTING && page_06_settings_is_collection());
+                page==UI_PAGE_AGING_SETTING;
     work_mode_service_set_diagnostic_mode(active,
         page == UI_PAGE_IMAGE_GET ? WORK_MODE_AUTO : WORK_MODE_MANUAL);
 }

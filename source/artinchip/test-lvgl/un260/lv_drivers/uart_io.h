@@ -24,4 +24,6 @@ void uart_log_hex(int fd,
                   size_t data_len,
                   size_t preview_limit);
 
+typedef void (*uart_trace_t)(int fd, bool tx, const void *data, size_t length);
+void uart_trace_set(uart_trace_t trace);
 #endif

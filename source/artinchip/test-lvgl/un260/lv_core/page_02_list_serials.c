@@ -349,7 +349,7 @@ static void serials_main_layout(page_02_list_serials_t *v)
     lv_damped_button_set_text(v->main_button,ui_text_get(UI_TEXT_LIST_MAIN));
     lv_point_t size;lv_txt_get_size(&size,lv_label_get_text(label),font,0,0,
         LV_COORD_MAX,LV_TEXT_FLAG_NONE);
-    int width=LV_MAX(76,size.x+16),x=1180-8-width;
+    int width=LV_MAX(76,size.x+16),x=1080-8-width;
     lv_obj_set_pos(v->main_button,x,12);lv_obj_set_size(v->main_button,width,42);
     lv_obj_set_size(label,width-16,lv_font_get_line_height(font));
     lv_obj_center(label);
@@ -447,7 +447,7 @@ page_02_list_serials_t *page_02_list_serials_create(lv_obj_t *parent,
         &lv_font_instrument_sans_bold_14,0xFFFFFF,LV_TEXT_ALIGN_CENTER);
     v->title=serials_label(v->panel,"",52,12,1088,
         &lv_font_instrument_sans_semibold_20,SERIALS_INK,LV_TEXT_ALIGN_LEFT);
-    v->back=lv_nav_back_text_button_create(v->root,1180,12,
+    v->back=lv_nav_back_text_button_create(v->root,1080,12,
         &lv_font_instrument_sans_medium_16,serials_close,v);
     v->main_button=lv_nav_back_text_button_create(v->root,1096,12,
         &lv_font_instrument_sans_medium_16,NULL,NULL);

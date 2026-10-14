@@ -680,7 +680,7 @@ void ui_page_03_menu_create(lv_obj_t *parent)
     lv_label_set_long_mode(title,LV_LABEL_LONG_CLIP);
     lv_obj_update_layout(title);lv_obj_set_y(title,14+(44-lv_obj_get_height(title))/2);
     int quick_width=LV_MAX(102,menu_text_width(ui_tr("Quick"))+46);
-    int quick_x=1204-quick_width;
+    int quick_x=1104-quick_width;
     int widths[4],nav_width=14;
     for(unsigned n=0;n<4;n++){
         unsigned i=visible_tabs[n];
@@ -700,7 +700,7 @@ void ui_page_03_menu_create(lv_obj_t *parent)
     if(!menu.tab)menu.tab=1;
     lv_obj_t *quick=button(menu.root,quick_x,14,quick_width,44,ui_tr("Quick"),A_QUICK,false);
     header_surface(quick);lv_damped_button_set_exact_palette(quick,lv_color_hex(PANEL),lv_color_hex(LINE));header_content(quick,ui_tr("Quick"),MICON("quick",22),PURPLE);
-    lv_obj_t *lock=button(menu.root,1212,14,44,44,"",A_SETTINGS,false);
+    lv_obj_t *lock=button(menu.root,1112,14,44,44,"",A_SETTINGS,false);
     header_surface(lock);lv_damped_button_set_exact_palette(lock,lv_color_hex(PANEL),lv_color_hex(LINE));header_content(lock,"",MICON("lock",22),INK);
     menu.body=box(menu.root,24,76,1232,296,0xFFFFFF,0);lv_obj_set_style_bg_opa(menu.body,LV_OPA_TRANSP,0);
     reset_batch();menu.timer=lv_timer_create(timer,80,NULL);render();

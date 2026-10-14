@@ -1121,11 +1121,11 @@ void ui_page_19_history_create(lv_obj_t *parent)
     history->root=surface(parent ? parent : lv_scr_act(),0,0,1280,400,0,HISTORY_BG);
     ui_page_background_apply(history->root, UI_BACKGROUND_USER);
     if (!history->root) goto failed;
-    lv_obj_t *header=surface(history->root,22,12,710,54,0,0xFFFFFF);
+    lv_obj_t *header=surface(history->root,22,12,610,54,0,0xFFFFFF);
     if (!header) goto failed;
     lv_obj_set_style_bg_opa(header,LV_OPA_TRANSP,0);
-    history->title=label(header,0,0,700,30,&lv_font_instrument_sans_semibold_24,HISTORY_INK,LV_TEXT_ALIGN_LEFT);
-    history->subtitle=label(header,0,32,700,22,&lv_font_instrument_sans_medium_12,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
+    history->title=label(header,0,0,600,30,&lv_font_instrument_sans_semibold_24,HISTORY_INK,LV_TEXT_ALIGN_LEFT);
+    history->subtitle=label(header,0,32,600,22,&lv_font_instrument_sans_medium_12,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
     history->metadata=surface(history->root,16,72,1248,38,10,0xFFFFFF);
     if(!history->metadata)goto failed;
     history->summary=label(history->metadata,16,9,360,28,&lv_font_instrument_sans_semibold_16,LV_SETTINGS_PRIMARY,LV_TEXT_ALIGN_LEFT);
@@ -1137,7 +1137,7 @@ void ui_page_19_history_create(lv_obj_t *parent)
         !history->lifetime_title || !history->lifetime || !history->reset_total || !history->capacity) goto failed;
     lv_obj_set_style_text_font(lv_damped_button_get_label(history->reset_total),ui_message_font(&lv_font_instrument_sans_semibold_12),0);
     for (unsigned i=0;i<4;++i) {
-        const int x[]={736,868,992,1184},w[]={120,112,128,76};
+        const int x[]={636,768,892,1084},w[]={120,112,128,76};
         history->actions[i]= i==3 ? lv_nav_back_text_button_create(history->root,x[i],16,&lv_font_instrument_sans_medium_16,action_event,(void *)(uintptr_t)i) :
             button(history->root,x[i],16,w[i],42,"",action_event,(void *)(uintptr_t)i);
         if (!history->actions[i]) goto failed;
@@ -1145,7 +1145,7 @@ void ui_page_19_history_create(lv_obj_t *parent)
         lv_obj_set_style_radius(history->actions[i],12,0);
         lv_obj_set_style_text_font(lv_damped_button_get_label(history->actions[i]),ui_message_font(&lv_font_instrument_sans_medium_16),0);
     }
-    if(!surface(history->root,1136,24,1,26,0,LV_SETTINGS_ACTION_DIVIDER))goto failed;
+    if(!surface(history->root,1068,24,1,26,0,LV_SETTINGS_ACTION_DIVIDER))goto failed;
     history->list_panel=surface(history->root,16,118,1248,270,16,0xFFFFFF);
     if (!history->list_panel) goto failed;
     const ui_text_id_t heads[]={UI_TEXT_PAGE01_DETAIL_COL_NO,UI_TEXT_HISTORY_DATE,UI_TEXT_HISTORY_CURRENCY,

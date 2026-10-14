@@ -17,6 +17,7 @@ void ui_page_06_settings_refresh_data(uint32_t topics);
 bool page_06_settings_switch_menu(page_06_settings_menu_t menu);
 bool page_06_settings_back_sub_page(void);
 bool page_06_settings_is_collection(void);
+void page_06_settings_open_collection(void);
 void page_06_data_collection_refresh(void);
 void page_06_data_collection_on_reply(data_collection_reply_result_t result);
 /* Add/remove/reorder stable-ID definitions in settings_catalog.c.

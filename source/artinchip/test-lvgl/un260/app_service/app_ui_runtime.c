@@ -1,3 +1,6 @@
+#include "un260/lv_core/page_protocol_log.h"
+#include "app_collection.h"
+#include "un260/lv_core/page_collection.h"
 #include "app_ui_runtime.h"
 #include "app_touch_sound.h"
 #include "app_setting_notice.h"
@@ -194,6 +197,8 @@ void app_ui_runtime_poll(uint32_t now_ms)
         page == UI_PAGE_BOOT_ANIM || page == UI_PAGE_UI_UPGRADE || lv_upgrade_popup_is_showing());
 
     app_setting_runtime_poll(now_ms);
+    page_collection_poll();
+    page_protocol_log_poll();
     cash_store_status_t cash_before=cash_journal_store_status();
     if(cash_journal_store_poll()&&cash_before!=CASH_STORE_LOADING){cash_store_status_t cash_after=cash_journal_store_status();if(cash_after==CASH_STORE_READY)ui_notice_post_text(UI_NOTICE_SUCCESS,"cash.save",UI_N_("Cash journal"),UI_N_("Cash entry saved."));else if(cash_after==CASH_STORE_FAILED||cash_after==CASH_STORE_CORRUPT)ui_notice_post_text(UI_NOTICE_ERROR,"cash.save",UI_N_("Cash journal"),UI_N_("Cash entry not confirmed. Retry the same save."));}
     cash_journal_export_poll();

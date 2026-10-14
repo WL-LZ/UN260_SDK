@@ -1,4 +1,5 @@
 #include "app_serial_runtime.h"
+#include "un260/storage/protocol_log.h"
 #include "buzzer_service.h"
 #include "app_command_runtime.h"
 #include "runtime_guard.h"
@@ -127,6 +128,7 @@ bool app_serial_runtime_start(void)
     uart_tx_reset(fd4);
     printf("UART配置完成\n");
     uart_debug_set_fd(fd6);
+    protocol_log_init();protocol_log_ports(fd4,fd5);uart_trace_set(protocol_log_record);
 
     protocol_frame_queue_clear();
     protocol_tx_gate_reset();
@@ -166,6 +168,7 @@ void app_serial_runtime_stop(void)
     protocol_rx_service_set_observer(NULL);
     protocol_request_set_pending_reply_probe(NULL);
     protocol_frame_queue_clear();
+    uart_trace_set(NULL);protocol_log_shutdown();protocol_log_ports(-1,-1);
     app_serial_runtime_close_devices();
 }
 

@@ -1,3 +1,5 @@
+#include "un260/app_service/app_touch_sound.h"
+#include "un260/gesture/touch_sound.h"
 #include <assert.h>
 #include "un260/lv_components/ui_scrollbar.h"
 #include <stdio.h>
@@ -79,11 +81,12 @@ static void flush(lv_disp_drv_t *driver,const lv_area_t *area,lv_color_t *pixels
     lv_disp_flush_ready(driver);
 }
 static void tick(unsigned ms)
-{ for(unsigned i=0;i<ms;i+=20) { lv_tick_inc(20);ui_frame_commit_flush();lv_timer_handler(); } }
+{ for(unsigned i=0;i<ms;i+=20) { lv_tick_inc(20);ui_frame_commit_flush();lv_timer_handler();app_touch_sound_poll(); } }
 static void render(void)
 { lv_obj_update_layout(lv_scr_act());lv_obj_invalidate(lv_scr_act());lv_refr_now(NULL); }
 static void write_bmp(const char *name)
 {
+    const char *filter=getenv("MAIN_RASTER_FILTER");if(filter&&!strstr(name,filter))return;
     const char *directory=getenv("MAIN_RASTER_OUTPUT");if(!directory)return;
     render();char path[1024];snprintf(path,sizeof(path),"%s/%s.bmp",directory,name);
     FILE *file=fopen(path,"wb");assert(file);
@@ -97,6 +100,13 @@ static void write_bmp(const char *name)
 }
 static unsigned timers(void)
 { unsigned n=0;for(lv_timer_t *t=lv_timer_get_next(NULL);t;t=lv_timer_get_next(t))++n;return n; }
+static unsigned touch_sounds;
+void buzzer_service_click(void){++touch_sounds;}
+void buzzer_service_cancel(void){}
+bool user_cfg_touch_sound_enabled(void){return true;}
+bool user_cfg_touch_sound_load(void){return true;}
+void lv_port_indev_set_contact_observer(void (*cb)(bool)){assert(cb==touch_sound_contact);}
+void lv_port_indev_set_feedback_observer(void (*cb)(lv_indev_t*,lv_event_code_t)){assert(cb==touch_sound_feedback);}
 static lv_point_t pointer_position;
 static lv_indev_state_t pointer_state;
 static bool pointer_frame_pending;
@@ -111,6 +121,7 @@ static bool g_contact_captured;
 #undef evdev_pressed_obj
 static void pointer_feedback(lv_indev_drv_t *driver,uint8_t event)
 {
+    touch_sound_feedback(lv_indev_get_act(),(lv_event_code_t)event);
     (void)driver;
     if (event==LV_EVENT_PRESSED) host_pressed_object=lv_indev_get_obj_act();
     else if(event==LV_EVENT_RELEASED || event==LV_EVENT_PRESS_LOST) host_pressed_object=NULL;
@@ -122,6 +133,7 @@ static void pointer_read(lv_indev_drv_t *driver,lv_indev_data_t *data)
     bool down=pointer_state==LV_INDEV_STATE_PRESSED;
     if (pointer_frame_pending) {
         pointer_frame_pending=false;
+        if(down&&!raw_down)touch_sound_contact(true);
         lv_indev_t *indev=lv_indev_get_next(NULL);
         lv_event_code_t event=down?(raw_down?LV_EVENT_PRESSING:LV_EVENT_PRESSED):LV_EVENT_RELEASED;
 #ifdef HOST_REAL_GESTURE
@@ -132,6 +144,7 @@ static void pointer_read(lv_indev_drv_t *driver,lv_indev_data_t *data)
         if (owned && !g_contact_captured) lv_port_indev_capture_pointer(indev);
         if (g_contact_captured) data->state=LV_INDEV_STATE_RELEASED;
         if (!down) g_contact_captured=false;
+        if(!down&&raw_down)touch_sound_contact(false);
         raw_down=down;
     }
     if (g_contact_captured) data->state=LV_INDEV_STATE_RELEASED;
@@ -176,7 +189,7 @@ static void test_main(void)
 {
     fixture(false);assert(currency_state_confirm_active_code("USD"));
     prewarming=true;ui_main_create(lv_scr_act());assert(protocol_calls==0);
-    prewarming=false;assert(page_01_main_resume());assert(protocol_calls==1);
+    prewarming=false;assert(page_01_main_resume());assert(protocol_calls==0);
     render();assert(asset_opens>0 && page_01_main_is_created());assert_labels(main_page);
     lv_obj_t *bordered_cards[]={s_summary_card,s_detail_card};
     for(unsigned i=0;i<2;++i) {
@@ -206,15 +219,19 @@ static void test_main(void)
         for(unsigned j=0;j<lv_obj_get_child_cnt(b);++j)
             assert(lv_obj_get_style_translate_y(lv_obj_get_child(b,j),0)==0);
         lv_obj_clear_state(b,LV_STATE_PRESSED);lv_event_send(b,LV_EVENT_PRESS_LOST,NULL);tick(300);
-        click_object(b);assert(callbacks[i]==1);
+        unsigned sound_before=touch_sounds;click_object(b);assert(callbacks[i]==1);
+        printf("Main sound %s: %u\n",buttons[i],touch_sounds-sound_before);fflush(stdout);assert(touch_sounds==sound_before+1);
     }
-    click_object(s_bottom_a_btn_mode);assert(callbacks[CB_BOTTOM_MODE]==1);
-    click_object(s_bottom_a_btn_add);assert(callbacks[CB_ADD]==1);
-    click_object(s_bottom_a_btn_work);assert(callbacks[CB_WORK]==1);
-    click_object(s_bottom_a_btn_fo);assert(callbacks[CB_FO]==1);
-    click_object(s_bottom_c_btn_batch);assert(callbacks[CB_BATCH]==1);
-    click_object(s_bottom_c_btn_speed);assert(callbacks[CB_SPEED]==1);
+    {unsigned before=touch_sounds;click_object(s_bottom_a_btn_mode);assert(callbacks[CB_BOTTOM_MODE]==1);printf("Footer sound mode: %u\n",touch_sounds-before);fflush(stdout);assert(touch_sounds==before+1);}
+    {unsigned before=touch_sounds;click_object(s_bottom_a_btn_add);assert(callbacks[CB_ADD]==1);printf("Footer sound add: %u\n",touch_sounds-before);fflush(stdout);assert(touch_sounds==before+1);}
+    {unsigned before=touch_sounds;click_object(s_bottom_a_btn_work);assert(callbacks[CB_WORK]==1);printf("Footer sound work: %u\n",touch_sounds-before);fflush(stdout);assert(touch_sounds==before+1);}
+    {unsigned before=touch_sounds;click_object(s_bottom_a_btn_fo);assert(callbacks[CB_FO]==1);printf("Footer sound fo: %u\n",touch_sounds-before);fflush(stdout);assert(touch_sounds==before+1);}
+    {unsigned before=touch_sounds;click_object(s_bottom_c_btn_batch);assert(callbacks[CB_BATCH]==1);printf("Footer sound batch: %u\n",touch_sounds-before);fflush(stdout);assert(touch_sounds==before+1);}
+    {unsigned before=touch_sounds;click_object(s_bottom_c_btn_speed);assert(callbacks[CB_SPEED]==1);printf("Footer sound speed: %u\n",touch_sounds-before);fflush(stdout);assert(touch_sounds==before+1);}
     click_object(lv_obj_get_parent(s_curr_img));assert(callbacks[CB_CURRENCY]==1);
+    const char *right_buttons[]={"menu_btn","start_btn","esc_btn"};
+    for(unsigned i=0;i<3;++i){lv_obj_t *b=page_01_main_find_obj(right_buttons[i]);
+        assert(lv_obj_get_x(b)==1168&&lv_obj_get_y(b)==12+111*(int)i&&lv_obj_get_height(b)==98);}
     unsigned opened=pushes;
     tap(850,90);assert(pushes==opened); /* Column header. */
     tap(606,180);assert(pushes==opened); /* Card left padding. */
@@ -235,7 +252,7 @@ static void test_main(void)
     }
     tap(1120,32);assert(s_detail_section==PAGE_01_DETAIL_SECTION_C && pushes==opened);
     tap(850,42);assert(s_detail_section==PAGE_01_DETAIL_SECTION_B && pushes==opened);
-    tap(1220,32);assert(callbacks[CB_MENU]==2); /* Upper Menu area is not swallowed by PULL DOWN. */
+    tap(1220,64);assert(callbacks[CB_MENU]==2); /* Upper Menu area is not swallowed by PULL DOWN. */
     pointer(1120,32,true);pointer(1120,44,true);pointer(1120,44,false);tick(200);assert(pushes==opened);
     click_object(s_detail_btn_b);assert(s_detail_section==PAGE_01_DETAIL_SECTION_B && pushes==opened);
     assert(lv_obj_is_visible(detail_view->section[1].empty));
@@ -545,7 +562,7 @@ static void test_multi_expanded(void)
     /* Search now reserves the left rail for Serial / Denomination. */
     tap(624,164);tap(1042,107);tick(80);
     lv_obj_t *row=lv_obj_get_child(ui_multi_detail_scroll(compact),0);
-    assert(!strcmp(lv_label_get_text(lv_obj_get_child(row,0)),"4"));
+    assert(!strcmp(lv_label_get_text(lv_obj_get_child(lv_obj_get_child(row,0),0)),"4"));
     write_bmp("restored-main-search-filtered");
     tap(1114,308);tick(80);
     assert(counting_multi_extra_busy());
@@ -557,7 +574,7 @@ static void test_multi_expanded(void)
     memset(f+4,255,20);assert(counting_multi_extra_reply(13,f,25,lv_tick_get()));
     tick(100);write_bmp("main-serial-refresh-loading");
     tick(900);
-    assert(!strcmp(lv_label_get_text(lv_obj_get_child(row,0)),"1"));
+    assert(!strcmp(lv_label_get_text(lv_obj_get_child(lv_obj_get_child(row,0),0)),"1"));
     ui_multi_detail_back(compact);tick(80);
     unsigned total_ink=0,pcs_ink=0,amount_ink=0;
     for(int y=32;y<78;y++)for(int x=814;x<880;x++)
@@ -599,6 +616,13 @@ static void test_no_note_motion(void)
     assert(g_si_ctx.warning.level==SMART_ISLAND_WARNING_LEVEL_WARNING);
     assert(!strcmp(g_si_ctx.warning.text,ui_tr("No banknotes detected")));
     assert(!g_si_ctx.lifecycle.count_session_active && g_si_ctx.warning.fault.valid);
+    /* User replay: 0A/01/02 followed by two 51/01 pocket updates.
+       Their fault-list refresh must not cancel the transient warning. */
+    tick(132);smart_island_faults_changed();
+    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING);
+    tick(196);smart_island_faults_changed();
+    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING);
+    assert(!g_si_ctx.warning.fault.tracks_fault_record);
     tick(100);write_bmp("no-note-motor-warning");
     page_01_main_suspend();tick(100);assert(page_01_main_resume());
     assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING);
@@ -612,7 +636,13 @@ static void test_no_note_motion(void)
     smart_island_notify_count_reset();
     smart_island_notify_warning("Ordinary warning");
     assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING);
-    tick(10000);ui_main_destroy();
+    tick(10000);
+    host_fault_pending=true;
+    smart_island_notify_fault("Path fault",(machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,1});
+    assert(g_si_ctx.warning.fault.tracks_fault_record);
+    host_fault_pending=false;smart_island_faults_changed();
+    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE);
+    ui_main_destroy();
 }
 static void test_lifecycle(void)
 {
@@ -699,6 +729,31 @@ static void test_main_locales(void){
  }
  ui_lang_set(LANGUAGE_EN);
 }
+#include "un260/lv_core/page_collection.h"
+#include "un260/data_collection/data_collection.h"
+#include "un260/lv_components/smart_island/smart_island_activity.h"
+static void capture_reply(unsigned code)
+{
+    uint8_t bytes[]={0xFD,0xDF,6,0xC0,code,0x0A};
+    data_collection_reply_handle(bytes,sizeof(bytes),lv_tick_get());
+}
+static void test_capture_island(void)
+{
+    ui_main_destroy();fixture(true);ui_main_create(lv_scr_act());page_01_main_resume();
+    smart_island_notify_count_reset();tick(500);
+    assert(data_collection_request_begin(DATA_COLLECT_MODE_FALSE,"enable",lv_tick_get()));capture_reply(3);
+    data_collection_count_start();smart_island_notify_count_start();capture_reply(4);tick(500);page_collection_poll();render();
+    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_COUNTING&&!smart_island_activity_slot_available());
+    write_bmp("island-capture-normal-counting");
+    data_collection_count_end(12);smart_island_notify_count_end(NULL);tick(3500);page_collection_poll();render();
+    assert(smart_island_activity_slot_available());write_bmp("island-capture-working");
+    capture_reply(7);tick(250);page_collection_poll();render();write_bmp("island-capture-success");
+    assert(data_collection_state_mode()==DATA_COLLECT_MODE_FALSE);
+    assert(data_collection_request_begin(DATA_COLLECT_MODE_NONE,"disable",lv_tick_get()));capture_reply(0xFF);page_collection_poll();
+    ui_main_destroy();
+    puts("PASS actual Main capture: unchanged COUNTING scene, deferred collecting/success overlay, retained mode and confirmed close");
+}
+
 int main(void)
 {
     setvbuf(stdout,NULL,_IONBF,0);
@@ -715,7 +770,7 @@ int main(void)
     static lv_indev_drv_t driver;lv_indev_drv_init(&driver);driver.type=LV_INDEV_TYPE_POINTER;driver.read_cb=pointer_read;
     driver.feedback_cb=pointer_feedback;
     lv_indev_t *indev=lv_indev_drv_register(&driver);assert(indev);
-    g_pointer_indev=indev;
+    g_pointer_indev=indev;app_touch_sound_init();
     assert(page_01_main_layout_is_enabled()==(UI_MAIN_LAYOUT_EDIT_DEFAULT_ENABLED!=0));
     test_list_initial_font();test_main();test_no_note_motion();test_lifecycle();test_multi_expanded();
     test_main_layout();
@@ -745,9 +800,11 @@ int main(void)
         assert(frame.root == NULL && timers() == test_timer_count);
     }
 #endif
-    test_main_locales();
+    test_main_locales();test_capture_island();
     counting_data_clear_serials(counting_data_mutable());counting_data_clear_errors(counting_data_mutable());
     lv_indev_delete(indev);lv_img_decoder_delete(decoder);lv_deinit();host_external_assets_release();
     puts("PASS actual Main/detail/Smart Island raster and pointer dispatch, all modes, pending START, retained lifecycle; DMA/controller/Innovation navigation remain board tests");
     return 0;
 }
+
+bool user_cfg_touch_sound_save(bool enabled){(void)enabled;return true;}

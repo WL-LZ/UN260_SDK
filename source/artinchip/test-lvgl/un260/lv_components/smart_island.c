@@ -1,3 +1,4 @@
+#include "smart_island/smart_island_activity.h"
 #include "smart_island.h"
 #include <string.h>
 
@@ -28,6 +29,7 @@ void smart_island_destroy(void)
         g_si_ctx.warning.text[0] = '\0';
         g_si_ctx.view.scene = SMART_ISLAND_SCENE_IDLE;
     }
+    smart_island_activity_destroy();
     smart_island_view_destroy_objects();
     g_si_ctx.view.page_slide_dir = 0;
     g_si_ctx.view.anim_running = false;
@@ -100,6 +102,7 @@ void smart_island_set_visual(smart_island_visual_t visual, bool anim_en)
     }
 
     g_si_ctx.view.visual = visual;
+    smart_island_activity_sync();
     if (g_si_ctx.lifecycle.suspended) {
         g_si_ctx.lifecycle.dirty = true;
         return;
@@ -112,6 +115,7 @@ void smart_island_set_suspended(bool suspended)
     if (g_si_ctx.lifecycle.suspended == suspended) return;
 
     g_si_ctx.lifecycle.suspended = suspended;
+    smart_island_activity_sync();
     if (suspended) {
         /*
          * Suspended only means that LVGL objects must not be touched while the
@@ -151,6 +155,7 @@ void smart_island_set_scene(smart_island_scene_t scene)
     if ((unsigned int)scene > (unsigned int)SMART_ISLAND_SCENE_WARNING) return;
 
     g_si_ctx.view.scene = scene;
+    smart_island_activity_sync();
     smart_island_result_stop_timer();
 
     if (g_si_ctx.lifecycle.suspended) {

@@ -107,6 +107,11 @@ CAPTURE(page_01_bottom_batch_btn_event_cb, CB_BATCH)
 CAPTURE(page_01_bottom_speed_btn_event_cb, CB_SPEED)
 #undef CAPTURE
 
+#include "un260/lv_core/settings_detail_ui.h"
+void ui_manager_clear_stack(void){}
+void page_06_settings_open_collection(void){}
+bool settings_detail_dialog_show_ex(settings_detail_dialog_kind_t kind,const char *a,const char *b,const char *c,const char *d,settings_detail_dialog_cb_t e,settings_detail_dialog_cb_t f,void *g){(void)kind;(void)a;(void)b;(void)c;(void)d;(void)e;(void)f;(void)g;return false;}
+bool settings_detail_dialog_show(const char *a,const char *b,const char *c,const char *d,settings_detail_dialog_cb_t e,settings_detail_dialog_cb_t f,void *g){return settings_detail_dialog_show_ex(SETTINGS_DIALOG_INFO,a,b,c,d,e,f,g);}
 void ui_manager_push_page(ui_page_t page) { ++pushes; destination=page; }
 void ui_manager_switch(ui_page_t page) { destination=page; }
 ui_page_t ui_manager_get_current_page(void) { return host_current_page; }

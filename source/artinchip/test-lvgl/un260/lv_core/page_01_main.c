@@ -7,6 +7,7 @@
 #include "page_01_main_quick.h"
 #include "un260/gesture/gesture_service.h"
 #include "un260/lv_core/page_01_main_detail.h"
+#include "page_collection.h"
 #include "un260/lv_components/lv_loading_orbit.h"
 #include "un260/app_service/app_command_runtime.h"
 #include "un260/currency/currency_metadata.h"
@@ -51,7 +52,6 @@ static lv_obj_t *s_start_orbit;
 static bool s_multi_layout;
 static lv_obj_t* s_time_label = NULL;
 static lv_timer_t* s_time_timer = NULL;
-static bool s_main_init_protocol_sent = false;
 static lv_obj_t* s_bottom_area_a = NULL;
 static lv_obj_t* s_bottom_area_b = NULL;
 static lv_obj_t* s_bottom_area_c = NULL;
@@ -400,20 +400,6 @@ static void main_time_timer_cb(lv_timer_t* t)
     main_time_refresh();
     smart_island_refresh_time();
     page_01_main_refresh_start_state();
-}
-
-static void page_01_main_send_init_protocol(void) //主界面首次进入时发送初始化协议
-{
-    uint8_t sub = 0x02;
-
-    if (s_main_init_protocol_sent) return;
-    if (!protocol_send_is_ready()) return;
-
-    protocol_send(0xC0, &sub, 1); //FD DF 06 C0 02：通知下位机进入采集误报数据模式
-
-    /* 预留：后续新增主界面首次进入协议时，继续在这里统一发送。 */
-
-    s_main_init_protocol_sent = true;
 }
 
 static void page_01_bottom_text_anim_opa_cb(void* var, int32_t v) //底部按钮文本透明度动画
@@ -1045,6 +1031,7 @@ static void page_01_main_build_content(void)
     lv_obj_set_style_border_opa(s_detail_card, LV_OPA_COVER, 0);
     page_01_main_detail_create(main_page, 620, 76, 518, 244);
     page_01_detail_section_btn_create_all();
+    page_collection_main_badge_create(main_page);
 
     s_multi_card = page_01_multi_create(main_page);
 }
@@ -1207,7 +1194,6 @@ void ui_main_create(lv_obj_t *parent)
 
     ui_state_apply_common_runtime();
     if (!ui_manager_is_prewarming_page(UI_PAGE_MAIN))
-        page_01_main_send_init_protocol();
     smart_island_create(main_page);
     smart_island_register_action_cb(page_01_smart_island_action_cb);
     smart_island_refresh_time();
@@ -1353,7 +1339,6 @@ bool page_01_main_resume(void)
     smart_island_create(main_page);
     smart_island_set_suspended(false);
     page_01_main_quick_attach(main_page,UI_PAGE_MAIN);
-    page_01_main_send_init_protocol();
     main_time_timer_cb(NULL);
     if (s_time_timer) lv_timer_resume(s_time_timer);
     page_01_main_layout_refresh();

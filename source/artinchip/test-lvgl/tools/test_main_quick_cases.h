@@ -161,7 +161,9 @@ static void quick_test_recovery(void)
     const int xs[]={180,440,900};
     bool full_edge=true;
     for(unsigned i=0;i<sizeof(xs)/sizeof(xs[0]);++i) {
+        unsigned sound_before=touch_sounds;
         pointer(xs[i],8,true);pointer(xs[i],130,true);pointer(xs[i],130,false);tick(220);
+        assert(touch_sounds==sound_before);
         bool opened=quick.active;
         printf("QUICK top-edge x=%d: %s\n",xs[i],opened?"PASS":"FAIL");
         full_edge&=opened;
@@ -325,9 +327,9 @@ static void test_main_quick(void)
     host_gestures=false;quick_open_test();quick_close_test();host_gestures=true;
     /* Native top actions still receive a normal short tap. */
     ui_main_layout_t original;ui_main_layout_default(&original);page_01_apply_customer_layout(&original);
-    unsigned menu=callbacks[CB_MENU];tap(1220,30);assert(callbacks[CB_MENU]==menu+1);
-    layout_hold(1220,30);pointer(1220,30,false);layout_action(1);
-    tap(1220,30);assert(callbacks[CB_MENU]==++menu+1);
+    unsigned menu=callbacks[CB_MENU];tap(1220,64);assert(callbacks[CB_MENU]==menu+1);
+    layout_hold(1220,64);pointer(1220,64,false);layout_action(1);
+    tap(1220,64);assert(callbacks[CB_MENU]==++menu+1);
     pointer(1220,20,true);pointer(1220,100,true);quick_assert_clear_backdrop();assert(quick.y==-248);
     pointer(1220,60,true);quick_assert_clear_backdrop();assert(quick.y==-288);
     pointer(1220,20,true);quick_assert_clear_backdrop();assert(quick.y==-328);

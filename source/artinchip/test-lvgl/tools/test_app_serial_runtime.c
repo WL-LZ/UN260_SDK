@@ -10,6 +10,7 @@
 #include "un260/protocol/protocol_frame_queue.h"
 #include "un260/protocol/protocol_send.h"
 #include "un260/protocol/protocol_request.h"
+#include "un260/storage/protocol_log.h"
 #include "un260/app_service/buzzer_service.h"
 
 static uint64_t fake_ms = 1000;
@@ -19,6 +20,11 @@ void protocol_rx_service_set_observer(protocol_rx_observer_t cb){observer=cb;}
 bool buzzer_service_start(void){return true;}
 void buzzer_service_stop(void){}
 void buzzer_service_on_reply(uint8_t status){(void)status;}
+bool protocol_log_init(void){return true;}
+void protocol_log_shutdown(void){}
+void protocol_log_ports(int controller,int bridge){(void)controller;(void)bridge;}
+void protocol_log_record(int fd,bool tx,const void *p,size_t n){(void)fd;(void)tx;(void)p;(void)n;}
+void uart_trace_set(uart_trace_t trace){(void)trace;}
 static unsigned opened, configured, closed, rx_starts, bridge_starts, rx_stops, bridge_stops;
 static int fail_config_fd = -1, debug_fd = -1;
 static bool rx_ok = true, bridge_ok = true;

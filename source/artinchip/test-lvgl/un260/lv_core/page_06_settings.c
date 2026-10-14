@@ -1,3 +1,4 @@
+#include "page_collection.h"
 #include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_i18n.h"
 /* Settings navigation owns layout; device actions remain in their existing services. */
@@ -32,13 +33,6 @@ static const settings_node_t *catalog,*scope;
 static size_t catalog_count;
 static lv_coord_t scroll_positions[SETTINGS_NODE_MAX];
 static lv_obj_t *value_labels[SETTINGS_NODE_MAX],*version_value_labels[6];
-static bool data_collection_dirty=true,data_collection_snapshot_valid;
-static data_collect_mode_t data_collection_last_mode;
-static int data_collection_last_pcs;
-static char data_collection_last_status[128];
-static lv_obj_t *dc_btn_all,*dc_btn_false,*dc_btn_start,*dc_btn_disable,*dc_btn_retry;
-static lv_obj_t *dc_label_all,*dc_label_false,*dc_check_all,*dc_check_false;
-static lv_obj_t *dc_mode_value_label,*dc_pcs_label,*dc_status_label,*dc_gate_label;
 static void render(void);
 static void refresh_values(void);
 static bool scope_is(const char *id){return scope&&!strcmp(scope->id,id);}
@@ -61,10 +55,7 @@ static lv_obj_t *create_label(lv_obj_t *p,const char *t,const lv_font_t *f,lv_co
 static void capture_scroll(void){if(grid&&scope)scroll_positions[scope-catalog]=lv_obj_get_scroll_y(grid);}
 static void reset_detail_refs(void){
  memset(version_value_labels,0,sizeof(version_value_labels));memset(value_labels,0,sizeof(value_labels));
- dc_btn_all=dc_btn_false=dc_btn_start=dc_btn_disable=dc_btn_retry=NULL;
- dc_label_all=dc_label_false=dc_check_all=dc_check_false=NULL;
- dc_mode_value_label=dc_pcs_label=dc_status_label=dc_gate_label=NULL;
- data_collection_dirty=true;data_collection_snapshot_valid=false;
+
 }
 static void back_event_cb(lv_event_t *e){
  (void)e;
@@ -173,251 +164,8 @@ void ui_page_06_settings_refresh_data(uint32_t topics){
  for(int i=0;i<6;i++)if(version_value_labels[i]&&strcmp(lv_label_get_text(version_value_labels[i]),values[i]))
   lv_label_set_text(version_value_labels[i],values[i]);
 }
-static const char* get_data_collect_mode_name(data_collect_mode_t mode)
-{
-    switch (mode) {
-    case DATA_COLLECT_MODE_ALL:
-        return ui_tr("All notes");
-    case DATA_COLLECT_MODE_FALSE:
-        return ui_tr("Rejected notes");
-    default:
-        return ui_tr("Not selected");
-    }
-}
-
-static void update_data_collect_btn_style(lv_obj_t* btn, lv_obj_t* label, lv_obj_t* check, bool selected)
-{
-    if (!btn || !label || !check) {
-        return;
-    }
-
-    lv_obj_set_style_bg_color(btn, lv_color_hex(selected ? 0xEDF4FF : 0xF1F4F5), 0);
-    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(btn, selected ? lv_color_hex(0x8CACDA) : color_line(), 0);
-    lv_obj_set_style_border_width(btn, 1, 0);
-    lv_obj_set_style_radius(btn, 12, 0);
-    lv_obj_set_style_shadow_width(btn, 0, 0);
-    lv_obj_set_style_text_color(label, selected ? color_primary() : color_text(), 0);
-    if(selected)lv_obj_clear_flag(check,LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_add_flag(check,LV_OBJ_FLAG_HIDDEN);
-}
-
-void page_06_data_collection_refresh(void)
-{
-    data_collect_mode_t mode;
-    bool request_pending;
-    int pcs;
-    const char *status;
-    bool mode_changed;
-    bool pcs_changed;
-    bool status_changed;
-
-    if (!scope_is("collection") || !dc_btn_all || !settings_page_is_visible()) {
-        data_collection_dirty = true;
-        return;
-    }
-
-    mode = data_collection_state_mode();
-    request_pending = data_collection_request_pending();
-    pcs = data_collection_state_pcs();
-    status = data_collection_state_status();
-    if (status == NULL) status = "";
-    mode_changed = data_collection_dirty || !data_collection_snapshot_valid ||
-                   mode != data_collection_last_mode;
-    pcs_changed = data_collection_dirty || !data_collection_snapshot_valid ||
-                  pcs != data_collection_last_pcs;
-    status_changed = data_collection_dirty || !data_collection_snapshot_valid ||
-                     strcmp(status, data_collection_last_status) != 0;
-
-    bool ready=work_mode_service_diagnostic_ready();
-    bool busy=app_command_runtime_count_start_busy();
-    lv_obj_t *actions[]={dc_btn_all,dc_btn_false,dc_btn_start,dc_btn_disable};
-    for(unsigned i=0;i<4;i++){
-        bool enabled=!request_pending&&!busy&&(i!=2||ready)&&
-                     (i<2||mode!=DATA_COLLECT_MODE_NONE);
-        if(enabled)settings_detail_action_wait(actions[i], NULL);
-        else settings_detail_action_wait(actions[i], request_pending ? UI_N_("Wait for the current collection request to finish.") : busy ? UI_N_("Stop counting before changing collection.") : !ready ? work_mode_service_status_msgid() : UI_N_("Select All notes or Rejected notes first."));
-    }
-    work_mode_snapshot_t gate;
-    work_mode_service_get_snapshot(&gate);
-    if(dc_btn_retry){
-        if(gate.phase==WORK_MODE_FAILED)lv_obj_clear_flag(dc_btn_retry,LV_OBJ_FLAG_HIDDEN);
-        else lv_obj_add_flag(dc_btn_retry,LV_OBJ_FLAG_HIDDEN);
-    }
-    if(dc_gate_label&&strcmp(lv_label_get_text(dc_gate_label),work_mode_service_status_text()))
-        lv_label_set_text(dc_gate_label,work_mode_service_status_text());
-
-    if (mode_changed) {
-        update_data_collect_btn_style(dc_btn_all, dc_label_all, dc_check_all,
-                                      mode == DATA_COLLECT_MODE_ALL);
-        update_data_collect_btn_style(dc_btn_false, dc_label_false, dc_check_false,
-                                      mode == DATA_COLLECT_MODE_FALSE);
-        if (dc_mode_value_label) {
-            lv_label_set_text(dc_mode_value_label, get_data_collect_mode_name(mode));
-        }
-    }
-
-    if (pcs_changed && dc_pcs_label) {
-        lv_label_set_text_fmt(dc_pcs_label, "%d", pcs);
-    }
-
-    if (status_changed && dc_status_label) {
-        lv_label_set_text(dc_status_label, status);
-    }
-
-    data_collection_last_mode = mode;
-    data_collection_last_pcs = pcs;
-    snprintf(data_collection_last_status, sizeof(data_collection_last_status),
-             "%s", status);
-    data_collection_snapshot_valid = true;
-    data_collection_dirty = false;
-}
-
-void page_06_data_collection_on_reply(data_collection_reply_result_t result)
-{
-    (void)result;
-    page_06_data_collection_refresh();
-}
-
-static void data_collect_mode_btn_event_cb(lv_event_t* e)
-{
-    uint8_t sub = (uint8_t)(uintptr_t)lv_event_get_user_data(e);
-    data_collect_mode_t mode;
-    const char* status = NULL;
-    if(data_collection_request_pending()||app_command_runtime_count_start_busy())return;
-
-    if (sub == 0x01) {
-        mode = DATA_COLLECT_MODE_ALL;
-        status = UI_N_("Requesting all-note collection");
-    } else if (sub == 0x02) {
-        mode = DATA_COLLECT_MODE_FALSE;
-        status = UI_N_("Requesting rejected-note collection");
-    } else {
-        return;
-    }
-
-    if (!data_collection_request_begin(mode, status,
-                                       app_clock_uptime_ms())) {
-        return;
-    }
-    if (!settings_detail_send_command(0xC0, &sub, 1)) {
-        data_collection_request_cancel();
-        data_collection_state_set_status(UI_N_("Command not sent. Check the controller connection."));
-        page_06_data_collection_refresh();
-        return;
-    }
-    page_06_data_collection_refresh();
-}
-
-static void data_collect_start_btn_event_cb(lv_event_t* e)
-{
-    (void)e;
-    if(!work_mode_service_diagnostic_ready()||data_collection_request_pending()||app_command_runtime_count_start_busy())return;
-
-    if (data_collection_state_mode() == DATA_COLLECT_MODE_NONE) {
-        data_collection_state_set_status(UI_N_("Please select a collection mode first"));
-        page_06_data_collection_refresh();
-        return;
-    }
-
-    if (app_command_runtime_request_diagnostic_run()) {
-        data_collection_state_reset_pcs();
-        data_collection_state_set_status(UI_N_("Counting command sent. Waiting for controller reply..."));
-        page_06_data_collection_refresh();
-    } else {
-        data_collection_state_set_status(UI_N_("Start was not accepted. Check the controller."));
-        page_06_data_collection_refresh();
-    }
-}
-
-static void data_collect_disable_btn_event_cb(lv_event_t* e)
-{
-    uint8_t sub = 0xFF;
-    (void)e;
-    if(app_command_runtime_count_start_busy()||data_collection_state_mode()==DATA_COLLECT_MODE_NONE)return;
-
-    if (!data_collection_request_begin(DATA_COLLECT_MODE_NONE,
-                                       UI_N_("Exiting collection mode..."),
-                                       app_clock_uptime_ms())) {
-        return;
-    }
-    if (!settings_detail_send_command(0xC0, &sub, 1)) {
-        data_collection_request_cancel();
-        data_collection_state_set_status(UI_N_("Command not sent. Check the controller connection."));
-        page_06_data_collection_refresh();
-        return;
-    }
-    page_06_data_collection_refresh();
-}
-
-static lv_obj_t* create_dc_mode_button(lv_obj_t* parent, lv_coord_t x, lv_coord_t y,
-                                       const char* text, uint8_t sub,
-                                       lv_obj_t** out_label, lv_obj_t** out_check)
-{
-    lv_obj_t* btn = lv_obj_create(parent);
-    style_plain(btn);
-    lv_obj_set_pos(btn, x, y);
-    lv_obj_set_size(btn, 380, 62);
-    lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
-    lv_settings_action_guard_init(btn);
-    lv_obj_add_event_cb(btn, data_collect_mode_btn_event_cb, LV_EVENT_CLICKED, (void*)(uintptr_t)sub);
-
-    lv_obj_set_style_bg_color(btn,lv_color_hex(0xE2E9EE),LV_STATE_PRESSED);
-    lv_obj_t* label = create_label(btn, text, &lv_font_instrument_sans_medium_18, color_text());
-    lv_obj_set_pos(label, 18, 21);
-
-    lv_obj_t* check = lv_settings_icon(btn,"Check-active",0,0);
-    lv_obj_align(check, LV_ALIGN_RIGHT_MID, -16, 0);
-
-    if (out_label) {
-        *out_label = label;
-    }
-    if (out_check) {
-        *out_check = check;
-    }
-
-    return btn;
-}
-
-static void data_collection_retry(lv_event_t *event)
-{
-    (void)event;
-    work_mode_service_retry();
-    page_06_data_collection_refresh();
-}
-
-static void create_data_collection_page_content(lv_settings_frame_t *frame)
-{
-    lv_obj_t *parent=frame->body;
-    lv_obj_set_style_bg_opa(parent,0,0);lv_obj_set_style_border_width(parent,0,0);
-    lv_obj_t *modes=lv_settings_panel(parent,0,0,424,242);
-    lv_settings_label(modes,ui_tr("Collect"),22,19,&lv_font_instrument_sans_semibold_18,0x1D2B34);
-    dc_btn_all = create_dc_mode_button(modes, 22, 52, ui_tr("All notes"),
-                                       0x01, &dc_label_all, &dc_check_all);
-    dc_btn_false = create_dc_mode_button(modes, 22, 126, ui_tr("Rejected notes"),
-                                         0x02, &dc_label_false, &dc_check_false);
-    lv_settings_label(modes,ui_tr("Choose a mode before starting."),22,207,&lv_font_instrument_sans_medium_14,0x586B78);
-    lv_obj_t *card=lv_settings_panel(parent,440,0,792,242);
-    lv_settings_label(card,ui_tr("Collection session"),24,19,&lv_font_instrument_sans_semibold_18,0x1D2B34);
-    lv_settings_box(card,24,52,744,1,0xE3E9ED);
-    lv_settings_label(card,ui_tr("Confirmed mode"),24,73,&lv_font_instrument_sans_medium_14,0x586B78);
-    dc_mode_value_label=lv_settings_label(card,ui_tr("Not selected"),24,98,&lv_font_instrument_sans_semibold_24,0x1D2B34);
-    lv_settings_label(card,ui_tr("Notes collected"),548,73,&lv_font_instrument_sans_medium_14,0x586B78);
-    dc_pcs_label=lv_settings_label(card,"0",548,98,&lv_font_instrument_sans_semibold_40,0x1D2B34);
-    lv_settings_box(card,24,160,744,1,0xE3E9ED);
-    dc_status_label=lv_settings_label(card,ui_tr("Select a collection mode"),24,184,&lv_font_instrument_sans_medium_16,0x586B78);
-    lv_obj_set_width(dc_status_label,744);
-    lv_label_set_long_mode(dc_status_label, LV_LABEL_LONG_WRAP);
-    dc_btn_disable=lv_settings_button(frame->footer,898,0,164,44,ui_tr("End collection"),false,data_collect_disable_btn_event_cb,NULL);
-    dc_btn_start=lv_settings_button(frame->footer,1076,0,156,44,ui_tr("RUN"),true,data_collect_start_btn_event_cb,NULL);
-    dc_btn_retry=lv_settings_button(frame->footer,756,0,128,44,ui_tr("Retry"),false,data_collection_retry,NULL);
-    lv_obj_add_flag(dc_btn_retry,LV_OBJ_FLAG_HIDDEN);
-    dc_gate_label=frame->message;
-    lv_obj_set_width(dc_gate_label,736);
-    lv_label_set_text(dc_gate_label,work_mode_service_status_text());
-    page_06_data_collection_refresh();
-}
-
+void page_06_data_collection_refresh(void){page_collection_refresh();}
+void page_06_data_collection_on_reply(data_collection_reply_result_t result){(void)result;page_collection_refresh();}
 
 static void refresh_directory_count(void){
  if(!grid||!count_label)return;
@@ -440,7 +188,7 @@ static void settings_poll(lv_timer_t *timer){
 static void render(void){
  if(!settings_page||!scope)return;
  if(ui_manager_get_current_page()==UI_PAGE_SETTING)
-  work_mode_service_set_diagnostic(scope_is("collection"));
+  work_mode_service_set_diagnostic(false);
  grid=sidebar=count_label=NULL;reset_detail_refs();
  if(view)lv_obj_del(view);
  if(scope->kind==SETTINGS_DETAIL){
@@ -451,7 +199,7 @@ static void render(void){
    lv_label_set_text(f.message,ui_tr("Controller versions are reported by the machine. UI version is local."));
   }
   else if(scope_is("collection")){
-   create_data_collection_page_content(&f);
+   page_collection_create(&f);
   }
   return;
  }
@@ -521,4 +269,10 @@ bool page_06_settings_switch_menu(page_06_settings_menu_t menu){
 bool page_06_settings_back_sub_page(void){
  if(!settings_page||!scope||!scope->parent)return false;
  capture_scroll();scope=find(scope->parent);render();return true;
+}
+
+void page_06_settings_open_collection(void){
+ if(!catalog)catalog=settings_catalog(&catalog_count);
+ const settings_node_t *target=find("collection");if(!target)return;
+ capture_scroll();scope=target;if(settings_page)render();
 }

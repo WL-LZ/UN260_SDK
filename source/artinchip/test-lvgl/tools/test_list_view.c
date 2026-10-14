@@ -206,8 +206,8 @@ static void assert_home_icon(bool is_visible)
     assert(lv_obj_get_child_cnt(icon)==0);
     assert(lv_obj_get_width(icon)==27 && lv_obj_get_height(icon)==27);
     assert(lv_obj_get_x(icon)==35 && lv_obj_get_y(icon)==17);
-    assert(lv_obj_get_x(home)==1168 && lv_obj_get_y(home)==300);
-    assert(lv_obj_get_width(home)==96 && lv_obj_get_height(home)==88);
+    assert(lv_obj_get_x(home)==1168 && lv_obj_get_y(home)==310);
+    assert(lv_obj_get_width(home)==96 && lv_obj_get_height(home)==78);
     assert_icon(icon,0x496574,21,is_visible);
 }
 static void test_home_glyph(void)
@@ -480,7 +480,7 @@ static void assert_action_rail(bool page_visible)
                                UI_TEXT_LIST_PRINT,UI_TEXT_LIST_MAIN};
     const int order[]={LIST_ACTION_HISTORY,LIST_ACTION_SEARCH,
                        LIST_ACTION_PRINT,LIST_ACTION_MAIN};
-    const int positions[]={12,108,204,300};
+    const int positions[]={52,138,224,310};
     assert(LIST_ACTION_COUNT==4);
     assert(lv_obj_get_child_cnt(view->page)==PAGE_02_SECTION_COUNT+LIST_ACTION_COUNT);
     lv_area_t rail[4];
@@ -490,7 +490,7 @@ static void assert_action_rail(bool page_visible)
         assert(button && lv_obj_check_type(button,&lv_btn_class));
         assert(lv_obj_get_parent(button)==view->page && lv_obj_is_visible(button)==page_visible);
         assert(lv_obj_get_x(button)==1168 && lv_obj_get_y(button)==positions[i]);
-        assert(lv_obj_get_width(button)==96 && lv_obj_get_height(button)==88);
+        assert(lv_obj_get_width(button)==96 && lv_obj_get_height(button)==78);
         assert_background(button,0xFFFFFF,page_visible);
         assert(!strcmp(lv_label_get_text(caption),ui_text_get(text[i])));
         assert(lv_obj_get_style_text_color(caption,0).full==lv_color_hex(0x4C606E).full);
@@ -506,7 +506,7 @@ static void assert_action_rail(bool page_visible)
     for(unsigned i=0;i<PAGE_02_SECTION_COUNT;++i) {
         lv_obj_t *panel=view->section[i].panel;
         lv_area_t area;lv_obj_get_coords(panel,&area);
-        assert(area.y1==rail[0].y1 && area.y2==rail[3].y2);
+        assert(area.y1==12 && rail[0].y1==52 && area.y2==rail[3].y2);
         for(unsigned j=0;j<lv_obj_get_child_cnt(panel);++j) {
             lv_obj_t *child=lv_obj_get_child(panel,j);
             /* The new Details entry belongs only to B; Search stays in the rail. */

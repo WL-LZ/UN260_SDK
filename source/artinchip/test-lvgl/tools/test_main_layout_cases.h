@@ -121,8 +121,9 @@ static void test_main_layout(void)
     assert(host_layout_saves==saves+2 && host_saved_layout.mirrored);
     write_bmp("layout-custom-saved");
     assert(memcmp(clicks,callbacks,sizeof(clicks))==0 && pushes==ps);
-    /* Transparent pull-down hotzone must forward the MOVED top action. */
+    /* Restored action occupies the original top slot, including y=28. */
     tap(1200,28);assert(callbacks[CB_START]==++clicks[CB_START]);
+    tap(1200,64);assert(callbacks[CB_START]==++clicks[CB_START]);
     tap(50,45);assert(callbacks[CB_PRINT]==++clicks[CB_PRINT]);
     click_object(s_detail_btn_b);assert(s_detail_section==PAGE_01_DETAIL_SECTION_B);
     /* Rebuild and resume retain the chosen layout. */

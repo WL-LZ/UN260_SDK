@@ -127,6 +127,7 @@ static void app_counting_runtime_on_reject_report_changed(void *context);
 
 static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t len)
 {
+    data_collection_count_start();
     const counting_sim_t *previous_result = counting_data_current();
     ui_page_dynamic_capture_on_count_start(previous_result->total_pcs > 0 ? (uint32_t)previous_result->total_pcs : 0,
         previous_result->err_expected, machine_state_add_enabled());
@@ -560,6 +561,7 @@ void app_counting_runtime_handle_info(counting_session_state_t *session,
          * serial/reject details may continue to settle in the background. */
         smart_island_update_counting(current_pcs, result.final_amount);
         smart_island_notify_count_end(NULL);
+        data_collection_count_end((uint16_t)(current_pcs > 0 ? current_pcs : 0));
         session->end_anim_wait_detail = false;
         app_counting_runtime_try_history_commit(session, sim_data,
                                                 lv_tick_get());

@@ -1,3 +1,4 @@
+#include "page_protocol_log.h"
 #include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
@@ -250,35 +251,7 @@ static void btn_clear_log_event_cb(lv_event_t* e) {
     }
 }
 
-static void debug_log_show_toast(const char *text,ui_notice_kind_t kind)
-{ui_notice_post_text(kind,"debug.export",UI_N_("Debug log"),text);}
-
-static void btn_download_log_event_cb(lv_event_t* e)
-{
-    const char* lines[MAX_LOG_LABELS];
-    ui_export_text_result_t result;
-    size_t line_count = 0;
-
-    LV_UNUSED(e);
-    for (int i = 0; i < g_debug_page.log_count; i++) {
-        if (g_debug_page.log_labels[i] != NULL &&
-            lv_obj_is_valid(g_debug_page.log_labels[i])) {
-            lines[line_count++] = lv_label_get_text(g_debug_page.log_labels[i]);
-        }
-    }
-
-    result = ui_export_text_lines("comm_log", lines, line_count);
-    if (result == UI_EXPORT_TEXT_OK) {
-        debug_log_show_toast(ui_text_msgid(UI_TEXT_DEBUG_DOWNLOAD_SUCCESS), UI_NOTICE_SUCCESS);
-    } else if (result == UI_EXPORT_TEXT_EMPTY) {
-        debug_log_show_toast(ui_text_msgid(UI_TEXT_DEBUG_NO_LOG), UI_NOTICE_WARNING);
-    } else if (result == UI_EXPORT_TEXT_USB_NOT_READY) {
-        debug_log_show_toast(ui_text_msgid(UI_TEXT_WIDGET_SCREENSHOT_INSERT_USB), UI_NOTICE_WARNING);
-    } else {
-        debug_log_show_toast(ui_text_msgid(UI_TEXT_DEBUG_DOWNLOAD_FAILED), UI_NOTICE_ERROR);
-    }
-}
-
+static void btn_download_log_event_cb(lv_event_t *e){(void)e;page_protocol_log_open();}
 
 static void screenshot_switch_event_cb(lv_event_t* e)
 {
@@ -431,10 +404,10 @@ void ui_page_10_debug_create(void)
     settings_detail_add_run(page_debug);
     lv_obj_set_style_bg_opa(debug_frame.body,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(debug_frame.body,0,0);
-    lv_obj_t *tabs=lv_settings_box(page_debug,230,15,390,46,LV_SETTINGS_CONTROL_SURFACE);
+    lv_obj_t *tabs=lv_settings_box(page_debug,230,15,326,46,LV_SETTINGS_CONTROL_SURFACE);
     lv_obj_set_style_radius(tabs,12,0);
-    debug_tabs[0]=lv_settings_button(tabs,3,3,226,40,ui_tr("Communication"),false,debug_tab,(void *)0);
-    debug_tabs[1]=lv_settings_button(tabs,229,3,158,40,ui_tr("Tools"),false,debug_tab,(void *)1);
+    debug_tabs[0]=lv_settings_button(tabs,3,3,190,40,ui_tr("Communication"),false,debug_tab,(void *)0);
+    debug_tabs[1]=lv_settings_button(tabs,193,3,130,40,ui_tr("Tools"),false,debug_tab,(void *)1);
     lv_obj_set_style_bg_color(debug_tabs[0],lv_color_white(),0);
     lv_obj_set_style_bg_color(debug_tabs[1],lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),0);
 

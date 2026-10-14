@@ -31,7 +31,8 @@
 #define PANEL_Y 12
 #define PANEL_HEIGHT 376
 #define ACTION_GAP 8
-#define ACTION_HEIGHT ((PANEL_HEIGHT - (LIST_ACTION_COUNT - 1) * ACTION_GAP) / LIST_ACTION_COUNT)
+#define ACTION_TOP 52
+#define ACTION_HEIGHT ((PANEL_HEIGHT - (ACTION_TOP-PANEL_Y) - (LIST_ACTION_COUNT - 1) * ACTION_GAP) / LIST_ACTION_COUNT)
 #define BODY_Y 76
 #define HEADER_TOP_Y 48
 #define HEADER_BOTTOM_Y (BODY_Y - 1)
@@ -655,7 +656,7 @@ void ui_page_02_list_create(lv_obj_t *parent)
     for (int i=0;i<PAGE_02_SECTION_COUNT;++i)
         if (!section_create(&view->section[i],&layouts[i])) goto creation_failed;
     for (int i=0;i<LIST_ACTION_COUNT;++i) {
-        view->actions[i]=button_create(view->page,1168,PANEL_Y+i*(ACTION_HEIGHT+ACTION_GAP),96,ACTION_HEIGHT,
+        view->actions[i]=button_create(view->page,1168,ACTION_TOP+i*(ACTION_HEIGHT+ACTION_GAP),96,ACTION_HEIGHT,
             &lv_font_instrument_sans_semibold_12,action_layouts[i].clicked,NULL);
         if (!view->actions[i]) goto creation_failed;
         if(i==LIST_ACTION_HISTORY || i==LIST_ACTION_SEARCH) {
