@@ -38,7 +38,7 @@ static void fault_phase(smart_island_fault_phase_t phase)
 void smart_island_faults_changed(void)
 {
     if (g_si_ctx.warning.fault.valid &&
-        g_si_ctx.warning.fault.source != MACHINE_FAULT_SETTING &&
+        g_si_ctx.warning.fault.tracks_fault_record &&
         !machine_fault_find(warning_key(),NULL))
         smart_island_restore_idle();
 }
@@ -71,6 +71,7 @@ bool smart_island_fault_hit_test(const lv_point_t *point)
 void smart_island_warning_fault_clear(void)
 {
     g_si_ctx.warning.fault.valid = false;
+    g_si_ctx.warning.fault.tracks_fault_record = false;
     g_si_ctx.warning.fault.source = FAULT_SRC_START_COUNT;
     g_si_ctx.warning.fault.fault_type = 0;
     g_si_ctx.warning.fault.code = 0;
@@ -328,7 +329,7 @@ static void smart_island_warning_marquee_start(void)
 
 static void notify_warning(const char *warn_text,
                            smart_island_warning_level_t level,
-                           const machine_fault_key_t *key)
+                           const machine_fault_key_t *key, bool tracks_fault_record)
 {
     char next_warning_text[sizeof(g_si_ctx.warning.text)];
 
@@ -373,6 +374,7 @@ static void notify_warning(const char *warn_text,
     smart_island_warning_fault_clear();
     if (key) {
         g_si_ctx.warning.fault.valid = true;
+        g_si_ctx.warning.fault.tracks_fault_record = tracks_fault_record;
         g_si_ctx.warning.fault.source = key->source;
         g_si_ctx.warning.fault.fault_type = key->type;
         g_si_ctx.warning.fault.code = key->code;
@@ -424,19 +426,19 @@ void smart_island_notify_warning(const char *warn_text)
 
 void smart_island_notify_warning_level(const char *text, smart_island_warning_level_t level)
 {
-    notify_warning(text,level,NULL);
+    notify_warning(text,level,NULL,false);
 }
 void smart_island_notify_fault(const char *text, machine_fault_key_t key)
 {
-    notify_warning(text,SMART_ISLAND_WARNING_LEVEL_ERROR,&key);
+    notify_warning(text,SMART_ISLAND_WARNING_LEVEL_ERROR,&key,key.source != MACHINE_FAULT_SETTING);
 }
 void smart_island_notify_no_note(machine_fault_key_t key)
 {
-    /* Only restore the no-note warning visual. Motor replies still own the
-     * touch lock and idle reset; this notice never starts a count session. */
-    notify_warning(ui_tr("No banknotes detected"),SMART_ISLAND_WARNING_LEVEL_WARNING,&key);
+    /* No-note is an operation notice, not a stored physical fault. Pocket
+     * updates cannot dismiss it; its existing animation owns completion. */
+    notify_warning(ui_tr("No banknotes detected"),SMART_ISLAND_WARNING_LEVEL_WARNING,&key,false);
 }
 void smart_island_notify_preset_full(machine_fault_key_t key)
 {
-    notify_warning(UI_N_("Batch full"),SMART_ISLAND_WARNING_LEVEL_PRESET,&key);
+    notify_warning(UI_N_("Batch full"),SMART_ISLAND_WARNING_LEVEL_PRESET,&key,true);
 }

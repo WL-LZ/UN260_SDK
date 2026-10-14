@@ -56,9 +56,10 @@
 static counting_detail_state_t g_counting_detail_state;
 static counting_session_state_t g_counting_session;
 static uint32_t g_count_end_generation;
-/* START/no-note runs the three motors, but never owns a counted result.
- * Only the subsequent motor-test terminal reply releases this application gate. */
+/* Empty-feeder motion owns the input lock, never a counting session.
+ * New controllers finish with 0x0E; older controllers use 0x37. */
 static bool g_no_note_motor_active;
+static bool g_no_note_denom_pending;
 /* One indivisible transition frame retained ahead of the RX queue when its
  * predecessor's history cannot yet be preserved. Never dequeue past it. */
 static protocol_frame_t g_deferred_frame;
@@ -231,21 +232,52 @@ static bool app_command_runtime_handle_stacker_clear(const uint8_t *buf, uint8_t
 
 static bool app_command_runtime_handle_no_note_motion(uint8_t cmd,const uint8_t *buf,uint8_t len)
 {
-    if (!protocol_frame_is_valid(buf,len)) return false;
+    if (!protocol_frame_is_valid(buf,len) || buf[3] != cmd) return false;
     if (cmd == 0x0A && len == 7 && !work_mode_service_diagnostic_active()) {
-        if (buf[4] == 1 && buf[5] == 2) {
+        if (buf[4] == 1 && buf[5] == 2 &&
+            !g_counting_session.start_confirmed &&
+            g_counting_session.phase != COUNTING_SESSION_ACTIVE) {
             g_no_note_motor_active = true;
+            g_no_note_denom_pending = true;
             page_01_main_set_counting_locked(true);
+            /* Let the normal failure hook display the no-note warning. */
         } else if (buf[4] == 1 && buf[5] == 1) {
-            g_no_note_motor_active = false;
+            /* After NO NOTE this acknowledges empty motor motion. Consume it
+             * before history/report/start hooks can create a counted result. */
+            if (g_no_note_motor_active) return true;
+            g_no_note_denom_pending = false;
         } else if (!g_no_note_motor_active && !g_counting_session.start_confirmed &&
                    g_counting_session.phase != COUNTING_SESSION_ACTIVE) {
             page_01_main_set_counting_locked(false);
         }
     }
+    if (g_no_note_motor_active && cmd == 0x0E && (len == 13 || len == 16)) {
+        uint8_t status = buf[len == 16 ? 14 : 11];
+        if (len == 13 && status >= 2 && status <= 5) {
+            g_no_note_motor_active = false;
+            page_01_main_set_counting_locked(false);
+            smart_island_notify_count_reset();
+        }
+        return true;
+    }
+    /* The controller sends a zero denomination snapshot after empty motion.
+     * Drain through END without replacing the previous result or scheduling
+     * reject/serial queries. A subsequent genuine START owns a new stream. */
+    if (g_no_note_denom_pending && cmd == 0x0B && len == 16) {
+        /* Explicit queries keep their existing wire ownership. */
+        if (g_counting_detail_state.query_pending || counting_multi_query_busy()) {
+            g_no_note_denom_pending = false;
+            return false;
+        }
+        bool end = true;
+        for (unsigned i = 4; i < 15; ++i) end = end && buf[i] == 0xFF;
+        if (end) g_no_note_denom_pending = false;
+        return true;
+    }
     if (g_no_note_motor_active && cmd == 0x37 && len == 7 && buf[4] == 2 &&
         (buf[5] == 1 || buf[5] == 2)) {
         g_no_note_motor_active = false;
+        g_no_note_denom_pending = false;
         page_01_main_set_counting_locked(false);
         smart_island_notify_count_reset();
         if (buf[5] == 2) fault_popup_report_boot_result(2,2);
@@ -274,6 +306,7 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
             app_fault_recovery_handle_clear_result(buf[4]);
         return true;
     }
+    if (app_command_runtime_handle_no_note_motion(cmd,buf,len)) return true;
     /* Preflight BEFORE taking request results or invoking any dispatcher. A
      * retried frame therefore cannot duplicate protocol/UI side effects. */
     if (cmd == 0x0A && len >= 7 && buf[4] == 0x01 && buf[5] == 0x01 &&
@@ -301,7 +334,6 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
         return true;
     }
     counting_action_handle_reply(cmd, buf, len);
-    if (app_command_runtime_handle_no_note_motion(cmd,buf,len)) return true;
 
     /* New 0x49/8 currency detection shares a command with 0x49/24 serials. */
     if (cmd == 0x49 && len == 8) {

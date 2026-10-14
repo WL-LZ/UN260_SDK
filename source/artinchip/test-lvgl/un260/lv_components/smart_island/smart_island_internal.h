@@ -95,6 +95,7 @@ typedef struct {
 
 typedef struct {
     bool valid;
+    bool tracks_fault_record;
     fault_source_t source;
     uint8_t fault_type;
     uint8_t code;
