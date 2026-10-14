@@ -3,10 +3,10 @@
     "Batch full": "Batch full"
   },
   "zh-Hans": {
-    "Batch full": "预置满"
+    "Batch full": "达到预置张数"
   },
   "ko": {
-    "Batch full": "배치 완료"
+    "Batch full": "설정 매수 도달"
   },
   "ja": {
     "Batch full": "バッチ完了"

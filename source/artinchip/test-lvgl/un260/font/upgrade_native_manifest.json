@@ -229,7 +229,7 @@
         "KEEP BACKUPS AND CHECK THE ERROR": "백업을 보관하고 오류를 확인하세요",
         "KEEP NOTES SEPARATE AND RECOUNT": "지폐를 따로 보관하고 다시 계수하세요",
         "KEEP USB AND POWER CONNECTED": "USB 연결과 전원을 유지하세요",
-        "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE": "RAM 로그 / UI 업데이트 로그. USB 복사본이 없을 수 있습니다",
+        "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE": "RAM 로그 / 화면 업데이트 로그. USB 복사본이 없을 수 있습니다",
         "STOP FEEDING BANKNOTES": "지폐 투입을 중지하세요",
         "UN260 PROTECTION MODE": "UN260 보호 모드",
         "UN260 SYSTEM UPDATE": "UN260 시스템 업데이트",
@@ -289,7 +289,7 @@
         "UPDATING YOUR DEVICE": "CİHAZINIZI GÜNCELLEME"
       },
       "fr": {
-        "BACKUP   STORAGE   APPLICATION   VERIFY": "VÉRIFIER L'APPLICATION DE STOCKAGE DE SAUVEGARDE",
+        "BACKUP   STORAGE   APPLICATION   VERIFY": "SAUVEGARDE   STOCKAGE   APPLICATION   VÉRIFICATION",
         "CHECKING THE SAME USB PACKAGE": "VÉRIFICATION DU MÊME FORFAIT USB",
         "CONTACT SERVICE  DO NOT RESUME COUNTING": "CONTACTEZ LE SERVICE. NE REPRENEZ PAS LE COMPTAGE",
         "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "LE RÉSULTAT DU COMPTAGE ET L’ÉTAT DU CONTRÔLEUR DOIVENT ÊTRE VÉRIFIÉS",
@@ -306,7 +306,7 @@
         "UPDATING YOUR DEVICE": "MISE À JOUR DE VOTRE APPAREIL"
       },
       "pl": {
-        "BACKUP   STORAGE   APPLICATION   VERIFY": "WERYFIKUJ APLIKACJĘ PRZECHOWYWANIA KOPII ZAPASOWYCH",
+        "BACKUP   STORAGE   APPLICATION   VERIFY": "KOPIA   PAMIĘĆ   APLIKACJA   WERYFIKACJA",
         "CHECKING THE SAME USB PACKAGE": "SPRAWDZANIE TEGO SAMEGO PAKIETU USB",
         "CONTACT SERVICE  DO NOT RESUME COUNTING": "SKONTAKTUJ SIĘ Z SERWISEM. NIE WZNAWIAJ LICZENIA",
         "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "WYMAGANE SPRAWDZENIE WYNIKU LICZENIA I STANU KONTROLERA",
@@ -323,7 +323,7 @@
         "UPDATING YOUR DEVICE": "AKTUALIZACJA URZĄDZENIA"
       },
       "ru": {
-        "BACKUP   STORAGE   APPLICATION   VERIFY": "ПРОВЕРКА ПРИЛОЖЕНИЯ РЕЗЕРВНОГО ХРАНЕНИЯ",
+        "BACKUP   STORAGE   APPLICATION   VERIFY": "КОПИЯ   ХРАНИЛИЩЕ   ПРИЛОЖЕНИЕ   ПРОВЕРКА",
         "CHECKING THE SAME USB PACKAGE": "ПРОВЕРКА ТО ЖЕ USB-ПАКЕТА",
         "CONTACT SERVICE  DO NOT RESUME COUNTING": "ОБРАТИТЕСЬ В СЕРВИС. НЕ ВОЗОБНОВЛЯЙТЕ СЧЁТ",
         "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "ТРЕБУЕТСЯ ПРОВЕРКА РЕЗУЛЬТАТА СЧЁТА И СОСТОЯНИЯ КОНТРОЛЛЕРА",
@@ -340,7 +340,7 @@
         "UPDATING YOUR DEVICE": "ОБНОВЛЕНИЕ ВАШЕГО УСТРОЙСТВА"
       },
       "de": {
-        "BACKUP   STORAGE   APPLICATION   VERIFY": "BACKUP-SPEICHER-ANWENDUNG ÜBERPRÜFEN",
+        "BACKUP   STORAGE   APPLICATION   VERIFY": "SICHERUNG   SPEICHER   ANWENDUNG   PRÜFUNG",
         "CHECKING THE SAME USB PACKAGE": "ÜBERPRÜFEN DESSELBEN USB-PAKETS",
         "CONTACT SERVICE  DO NOT RESUME COUNTING": "SERVICE KONTAKTIEREN. ZÄHLEN NICHT FORTSETZEN",
         "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "ZÄHLERGEBNIS UND CONTROLLER-ZUSTAND MÜSSEN GEPRÜFT WERDEN",
@@ -365,8 +365,8 @@
     }
   },
   "generator_sha256": "b8c78e0034d061a39c968a461f28b296caf4a5d0ffcfa7170600a987b3f86d92",
-  "output_sha256": "e18b275e265c2bd550fddbbd38e2f562965877ac97d023901fcb0ef5a1bdfdc7",
-  "compressed_bytes": 205368,
+  "output_sha256": "6ee1389cd83c84d66de708c0c5f524cd0b8b5d54215d56575be574f12c96cf40",
+  "compressed_bytes": 204876,
   "labels": [
     {
       "tag": "en",
@@ -713,11 +713,11 @@
     {
       "tag": "ko",
       "key": "RAM LOG UI UPDATE LOG  USB COPY MAY BE UNAVAILABLE",
-      "text": "RAM 로그 / UI 업데이트 로그. USB 복사본이 없을 수 있습니다",
-      "width": 444,
+      "text": "RAM 로그 / 화면 업데이트 로그. USB 복사본이 없을 수 있습니다",
+      "width": 458,
       "height": 19,
       "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
-      "pixels_sha256": "4e2765cdadd38ae25e84b0e52bc6f84882a64a2c345554480fd4985abbce8d5e"
+      "pixels_sha256": "ef00ded63eb9d61f22e20289d7d58c7655a9e161c51d1d221d966596866e011f"
     },
     {
       "tag": "ko",
@@ -1181,11 +1181,11 @@
     {
       "tag": "fr",
       "key": "BACKUP   STORAGE   APPLICATION   VERIFY",
-      "text": "VÉRIFIER L'APPLICATION DE STOCKAGE DE SAUVEGARDE",
-      "width": 488,
+      "text": "SAUVEGARDE   STOCKAGE   APPLICATION   VÉRIFICATION",
+      "width": 489,
       "height": 17,
       "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
-      "pixels_sha256": "57c8e638dafa8ab1683ecec05171d58926a94f285cd50138e9ea7962bf60cbf7"
+      "pixels_sha256": "8a3f0bf271834ee72f2ca0ff637a6e78ec997784dee4c5a03f18e319bb2ad46c"
     },
     {
       "tag": "fr",
@@ -1316,11 +1316,11 @@
     {
       "tag": "pl",
       "key": "BACKUP   STORAGE   APPLICATION   VERIFY",
-      "text": "WERYFIKUJ APLIKACJĘ PRZECHOWYWANIA KOPII ZAPASOWYCH",
-      "width": 531,
-      "height": 17,
+      "text": "KOPIA   PAMIĘĆ   APLIKACJA   WERYFIKACJA",
+      "width": 365,
+      "height": 20,
       "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
-      "pixels_sha256": "70e15f2635a884d1fe89890c1b832537e19f3ffd4798380744dc242f362ae555"
+      "pixels_sha256": "e1b5cc26f4ce2c1f0f1849050fc99e8f32cb6565a1590ece5fcbee438158b138"
     },
     {
       "tag": "pl",
@@ -1451,11 +1451,11 @@
     {
       "tag": "ru",
       "key": "BACKUP   STORAGE   APPLICATION   VERIFY",
-      "text": "ПРОВЕРКА ПРИЛОЖЕНИЯ РЕЗЕРВНОГО ХРАНЕНИЯ",
+      "text": "КОПИЯ   ХРАНИЛИЩЕ   ПРИЛОЖЕНИЕ   ПРОВЕРКА",
       "width": 448,
-      "height": 14,
+      "height": 17,
       "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
-      "pixels_sha256": "8445d6269f674d79ed9323cbbb3482d061bf139bf9cee0bbd4650ad697253a66"
+      "pixels_sha256": "bf24588e4ee897b696041e03c57f220c751a1754dc18a1791e8302669deea873"
     },
     {
       "tag": "ru",
@@ -1586,11 +1586,11 @@
     {
       "tag": "de",
       "key": "BACKUP   STORAGE   APPLICATION   VERIFY",
-      "text": "BACKUP-SPEICHER-ANWENDUNG ÜBERPRÜFEN",
-      "width": 401,
+      "text": "SICHERUNG   SPEICHER   ANWENDUNG   PRÜFUNG",
+      "width": 435,
       "height": 18,
       "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
-      "pixels_sha256": "538d0c4a01453a9025a168a505ef13c0b36b3bb080b01bbaff9a95c278488032"
+      "pixels_sha256": "c1ca78f2db07f8ef1ba78fd99623a571144b07f0ece3cfb212a92b4b2ccfb7d3"
     },
     {
       "tag": "de",

@@ -7,12 +7,12 @@
   "zh-Hans": {
     "Main Batch button": "主页预置功能",
     "Main Batch: Settings": "主页预置：设置",
-    "Main Batch: Cycle": "主页预置：轮询"
+    "Main Batch: Cycle": "主页预置：轮换"
   },
   "ko": {
-    "Main Batch button": "메인 배치 기능",
-    "Main Batch: Settings": "메인 배치: 설정",
-    "Main Batch: Cycle": "메인 배치: 순환"
+    "Main Batch button": "메인 매수 설정 기능",
+    "Main Batch: Settings": "메인 설정 매수: 설정",
+    "Main Batch: Cycle": "메인 설정 매수: 순환"
   },
   "ja": {
     "Main Batch button": "メインバッチボタン",
@@ -30,23 +30,23 @@
     "Main Batch: Cycle": "Ana deste: Döngü"
   },
   "fr": {
-    "Main Batch button": "Bouton lot principal",
-    "Main Batch: Settings": "Lot principal : Réglages",
-    "Main Batch: Cycle": "Lot principal : Cycle"
+    "Main Batch button": "Bouton Lot de la page principale",
+    "Main Batch: Settings": "Lot principal : réglages",
+    "Main Batch: Cycle": "Lot principal : cycle"
   },
   "pl": {
-    "Main Batch button": "Przycisk partii głównej",
-    "Main Batch: Settings": "Główna partia: Ustawienia",
-    "Main Batch: Cycle": "Główna partia: Cykl"
+    "Main Batch button": "Przycisk odliczania na stronie głównej",
+    "Main Batch: Settings": "Odliczanie na głównej: ustawienia",
+    "Main Batch: Cycle": "Odliczanie na głównej: cykl"
   },
   "ru": {
-    "Main Batch button": "Кнопка Batch на главной",
-    "Main Batch: Settings": "Batch на главной: Настройки",
-    "Main Batch: Cycle": "Batch на главной: Перебор"
+    "Main Batch button": "Кнопка фасовки на главной",
+    "Main Batch: Settings": "Фасовка на главной: настройки",
+    "Main Batch: Cycle": "Фасовка на главной: цикл"
   },
   "de": {
-    "Main Batch button": "Haupt-Batch-Taste",
-    "Main Batch: Settings": "Haupt-Batch: Einstellungen",
-    "Main Batch: Cycle": "Haupt-Batch: Zyklus"
+    "Main Batch button": "Bündeltaste auf der Hauptseite",
+    "Main Batch: Settings": "Bündel auf Hauptseite: Einstellungen",
+    "Main Batch: Cycle": "Bündel auf Hauptseite: Zyklus"
   }
 }

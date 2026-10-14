@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Review English leftovers in all registered release dictionaries.
 
-Checks unchanged English and Latin words in CJK/Arabic translations; explicitly
+Checks unchanged English, reviewed key-specific ordinary English words, and\nLatin words in CJK/Arabic translations; explicitly
 reviewed same-spelling words, protocol labels, paths and filenames remain data.
 This is a regression audit, not a semantic translation or on-device layout proof.
 """
@@ -15,24 +15,26 @@ SCRIPT = {'zh-Hans': r'[\u3400-\u9fff]', 'ko': r'[\uac00-\ud7af]',
           'ja': r'[\u3040-\u30ff\u3400-\u9fff]', 'ar': r'[\u0600-\u06ff]'}
 TECHNICAL_WORDS = {
     'UN260', 'USB', 'SD', 'UART', 'LVGL', 'CPU', 'RAM', 'FPS', 'FPGA', 'PNG', 'CSV',
-    'MDC', 'SDC', 'CNT', 'MUL', 'AUT', 'RJ', 'ST', 'CIS', 'UV', 'IR', 'MG', 'MT',
-    'UI', 'SN', 'PCS', 'RGB', 'CMY', 'TX', 'RX', 'MB', 'KB', 'ms', 'px', 'Linux', 'LINUX', 'inode',
-    'ADD', 'BATCH', 'SORT', 'MULTI', 'PIN', 'QR', 'ID', 'DDR', 'NAND', 'RISC-V',
-    'OCR', 'IMG', 'QT', 'SAFE', 'FO', 'SOT', 'OVD', 'UPK', 'UVUP', 'UVDOWN',
+    'RGB', 'CMY', 'TX', 'RX', 'MB', 'KB', 'ms', 'px', 'Linux', 'LINUX', 'inode',
+    'DDR', 'NAND', 'RISC-V',
+    'UPK',
     'CNY', 'USD', 'EUR', 'GBP', 'KRW', 'EGP', 'ISK', 'PHP', 'SOS', 'TRY',
     'AED', 'SAR', 'OMR', 'QAR', 'MAD', 'DZD', 'INR', 'PKR', 'IQD', 'FD', 'DF',
-    'Aa', 'OFF', 'HEX', 'YYYY', 'YYYYMM', 'YYYYMMDD', 'HH', 'HHMM', 'HHMMSS',
+    'HEX', 'YYYY', 'YYYYMM', 'YYYYMMDD', 'HH', 'HHMM', 'HHMMSS',
 }
 
 def normal(text):
     return text.casefold().strip()
 
-def technical(source, exceptions):
-    if source in exceptions['invariant_sources']:
-        return True
-    if re.fullmatch(r'IMG F(?:[1-9]|1[0-5])|\d+ FPS', source):
-        return True
-    return bool(re.fullmatch(r'(CPU|FPS|LOOP|LVGL|MAIN|MEM|RX|TX):[^\n]*', source))
+def technical(key, exceptions):
+    # Exempt reviewed field identities by exact key, never all uses of a word.
+    return exceptions.get('invariant_keys', {}).get(key)
+
+
+def permitted_words(key, tag, exceptions):
+    record = exceptions.get('allowed_words_by_key', {}).get(tag, {}).get(key, {})
+    return TECHNICAL_WORDS | set(record.get('words', []))
+
 
 def words(text):
     text = g.FORMAT.sub('', text)
@@ -73,10 +75,17 @@ def audit(registry, catalogues, exceptions):
                 if not text:
                     findings.append({'key': key, 'form': form, 'source': source, 'translation': text, 'reason': 'missing'})
                     continue
-                if technical(source, exceptions):
-                    preserved.append({'key': key, 'source': source, 'reason': 'protocol, diagnostic format or keyboard identity'})
+                known_english = {normal(word) for word in exceptions.get('untranslated_words_by_key', {}).get(tag, {}).get(key, [])}
+                foreign = sorted({word for word in words(text) if normal(word) in known_english})
+                if foreign:
+                    findings.append({'key': key, 'form': form, 'source': source, 'translation': text, 'reason': 'untranslated operation word', 'words': foreign})
                     continue
-                if normal(source) in accepted and normal(text) == normal(source):
+                identity = technical(key, exceptions)
+                if identity:
+                    preserved.append({'key': key, 'source': source, 'reason': identity})
+                    continue
+                native_key = exceptions.get('same_spelling_keys', {}).get(tag, {}).get(key)
+                if (normal(source) in accepted or native_key) and normal(text) == normal(source):
                     preserved.append({'key': key, 'source': source, 'reason': 'reviewed same-spelling word in this language'})
                     continue
                 latin = words(text)
@@ -87,7 +96,7 @@ def audit(registry, catalogues, exceptions):
                 elif tag not in SCRIPT and untranslated_clauses(source, text, tag, exceptions):
                     findings.append({'key': key, 'form': form, 'source': source, 'translation': text, 'reason': 'unchanged English clause', 'clauses': untranslated_clauses(source, text, tag, exceptions)})
                 elif tag in SCRIPT:
-                    unknown = sorted(w for w in set(latin) - TECHNICAL_WORDS if not re.fullmatch(r'(PS|F|MG|OCR)\d+[LR]?', w))
+                    unknown = sorted(w for w in set(latin) - permitted_words(key, tag, exceptions))
                     if unknown:
                         findings.append({'key': key, 'form': form, 'source': source, 'translation': text, 'reason': 'Latin words in translation', 'words': unknown})
         report['locales'][tag] = {'checked': len(catalogues['en']), 'findings': findings, 'preserved': preserved}

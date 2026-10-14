@@ -75,3 +75,7 @@
     UI_N_("matches"),
     UI_N_("Complete"),
     UI_N_("Incomplete"),
+    UI_N_("No reject handling is needed. This is not an authenticity verdict."),
+    UI_N_("Mixed denominations"),
+    UI_N_("Single denomination"),
+    UI_N_("Piece counting"),

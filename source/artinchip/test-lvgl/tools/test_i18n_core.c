@@ -92,7 +92,7 @@ int main(void)
     ui_lang_set(LANGUAGE_AR);
     const int counts[]={0,1,2,3,11,100};
     for(unsigned i=0;i<sizeof(counts)/sizeof(counts[0]);++i)
-        assert(!strcmp(ui_trn("%u notes",counts[i]),"عدد الأوراق: %u"));
+        assert(!strcmp(ui_trn("%u notes",counts[i]),"أوراق: %u"));
     assert(!ui_lang_save(LANGUAGE_AR)&&writes==0);
     assert(!ui_lang_save(LANGUAGE_JA)&&writes==0);
     ui_lang_set(LANGUAGE_CN);

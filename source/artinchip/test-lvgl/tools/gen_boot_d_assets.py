@@ -28,7 +28,7 @@ out=root/'aic_ui/lvgl_data/boot_theme_d';out.mkdir(parents=True,exist_ok=True)
 # Dedicated boot surface; user-page palette changes must not alter early boot.
 runpy.run_path(str(root/'tools/gen_page_backgrounds.py'))
 bg=Image.open(root/'aic_ui/lvgl_data/backgrounds/boot.png').convert('RGBA')
-# Bake static brand/footer once, at the same pixels for native and LVGL.
+# Bake the static brand once, at the same pixels for native and LVGL.
 # Reuse the approved round-capped artwork, reduced offline with a coverage filter.
 # Both renderers consume these same baked pixels; no runtime scaling or drawing.
 resample=getattr(Image,'Resampling',Image).LANCZOS
@@ -38,7 +38,6 @@ brand_emblem=Image.open(root/'tools/icon_sources/brand/scarf-hd.png').convert('R
 bg.alpha_composite(brand_emblem,(39,22))
 brand=glyphs('lv_font_instrument_sans_semibold_20.c','UN260',(52,71,89),68,32)
 bg.alpha_composite(brand,(91,29))
-footer=glyphs('lv_font_instrument_sans_semibold_12.c','CURRENCY PROCESSING SYSTEM',(146,152,168),220,20);bg.alpha_composite(footer,(52,363))
 def save(im,path):
     data=io.BytesIO();im.save(data,format='PNG');data=data.getvalue()
     if not path.exists() or path.read_bytes()!=data:path.write_bytes(data)

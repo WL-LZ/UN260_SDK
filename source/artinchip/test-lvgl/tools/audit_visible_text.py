@@ -28,14 +28,12 @@ KEY_SINKS = {'ui_notice_post_text': {2, 3}, 'ui_notice_post_message': {2},
              'settings_detail_action_wait': {1}, 'settings_detail_action_block': {1}, 'app_ui_runtime_notice_started': {1}}
 SINKS.update(KEY_SINKS)
 MARKERS = {'ui_tr', 'ui_trc', 'ui_trn', 'ui_tr_for', 'UI_N_', '_', '_p'}
-# Display values with stable external identity; never translate currency/protocol
-# identifiers or change customer data. Other short English words still fail.
+# Stable interface and currency identities are data. Business modes and sensor
+# captions must use the language system even when their source is an abbreviation.
 INVARIANTS = {
     'UN260', 'USB', 'SD', 'UART', 'LVGL', 'CPU', 'RAM', 'FPS', 'FPGA', 'PNG', 'CSV',
     'CNY', 'USD', 'EUR', 'GBP', 'KRW', 'EGP', 'ISK', 'PHP', 'SOS', 'TRY',
     'AED', 'SAR', 'OMR', 'QAR', 'MAD', 'DZD', 'INR', 'PKR', 'IQD',
-    'MDC', 'SDC', 'CNT', 'MUL', 'AUT', 'PS1', 'PS2', 'PS3', 'PS4',
-    'PS5L', 'PS5R', 'SAFE', 'RJ', 'ST', 'CIS', 'UV', 'IR', 'MG', 'MT',
 }
 
 def string_value(token):

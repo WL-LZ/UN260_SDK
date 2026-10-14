@@ -30,5 +30,19 @@ class VisibleTextAudit(unittest.TestCase):
                          'settings_detail_action_block(button,"Unmarked");', 'x.c')
         self.assertEqual([i['text'] for i in raw], ['Unmarked'])
 
+    def test_business_mode_abbreviations_are_display_copy(self):
+        raw, _ = analyze('lv_label_set_text(x,"MDC");'
+                         'lv_label_set_text(x,"SDC");'
+                         'lv_label_set_text(x,"CNT");'
+                         'lv_label_set_text(x,"MUL");'
+                         'lv_label_set_text(x,"AUT");'
+                         'lv_label_set_text(x,"USD");', 'x.c')
+        self.assertEqual([i['text'] for i in raw], ['MDC', 'SDC', 'CNT', 'MUL', 'AUT'])
+
+    def test_engineering_identity_still_requires_translation_marker(self):
+        raw, _ = analyze('lv_label_set_text(x,"UV");'
+                         'lv_label_set_text(x,ui_tr("UV"));', 'page_27_set_cfd.c')
+        self.assertEqual([i['text'] for i in raw], ['UV'])
+
 if __name__ == '__main__':
     unittest.main()

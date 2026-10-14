@@ -1,29 +1,6 @@
 {
-  "schema": 1,
-  "policy": "Protocol abbreviations, diagnostic field formats, keyboard identities and locale-native same-spelling words are intentional. Customer names are not dictionary values. New exceptions require review, not a blanket nonempty-text waiver.",
-  "invariant_sources": [
-    "Aa",
-    "CNT",
-    "MDC",
-    "SDC",
-    "IR",
-    "IR-MT",
-    "IR-OVD",
-    "MG",
-    "MT",
-    "UV",
-    "UI",
-    "SN",
-    "NO",
-    "ESC",
-    "RGB / CMY",
-    "CFD:%s",
-    "BAT:%u",
-    "CUR",
-    "FAV",
-    "F./O:ON",
-    "%d + %dR\n%lld\nSN %d"
-  ],
+  "schema": 2,
+  "policy": "Native business terms are preferred. Mode, addition, batch, sorting, serial/ordinal labels and detection grades are never global acronym exceptions. Exact-key field identities, genuine interface/currency/unit names and reviewed locale-native abbreviations are recorded separately. Customer names and raw protocol/data identifiers are not dictionary copy.",
   "same_spelling": {
     "tr": [
       "Euro",
@@ -177,5 +154,1230 @@
     "de": [
       "team (optional)"
     ]
+  },
+  "invariant_keys": {
+    "Aa": "Physical alphabet-case toggle identity, letters remain Latin.",
+    "RGB / CMY": "Engineering color-primary channel identities.",
+    "PURE\u0004ESC": "Retired Pure text-caption context: production Pure exit uses image icon; retained only for catalogue compatibility.",
+    "UI_TEXT_SETTINGS_CFD_LEVEL_UV": "Legacy engineering channel identity for ultraviolet; page_27 actual channel IDs are paired with translated descriptions. This exemption does not cover banknote reject reasons or detection-grade captions.",
+    "UI_TEXT_SETTINGS_CFD_LEVEL_MG": "Legacy engineering channel identity for magnetic; page_27 actual channel IDs are paired with translated descriptions. This exemption does not cover banknote reject reasons or detection-grade captions.",
+    "UI_TEXT_SETTINGS_CFD_LEVEL_MT": "Legacy engineering channel identity for magnetic thread; page_27 actual channel IDs are paired with translated descriptions. This exemption does not cover banknote reject reasons or detection-grade captions.",
+    "UI_TEXT_SETTINGS_CFD_LEVEL_IR": "Legacy engineering channel identity for infrared; page_27 actual channel IDs are paired with translated descriptions. This exemption does not cover banknote reject reasons or detection-grade captions.",
+    "CPU: %.0f%%": "Debug-overlay metric field identity and format; exact key only.",
+    "CPU: --%": "Debug-overlay metric field identity and format; exact key only.",
+    "CPU: N/A": "Debug-overlay metric field identity and format; exact key only.",
+    "FPS: %d": "Debug-overlay metric field identity and format; exact key only.",
+    "FPS: 0": "Debug-overlay metric field identity and format; exact key only.",
+    "LOOP: %.2f/%.2fms": "Debug-overlay metric field identity and format; exact key only.",
+    "LOOP: --/--ms": "Debug-overlay metric field identity and format; exact key only.",
+    "LVGL: %.2f/%.2fms": "Debug-overlay metric field identity and format; exact key only.",
+    "LVGL: --/--ms": "Debug-overlay metric field identity and format; exact key only.",
+    "MAIN: %.2f/%.2fms": "Debug-overlay metric field identity and format; exact key only.",
+    "MAIN: --/--ms": "Debug-overlay metric field identity and format; exact key only.",
+    "MEM: %.1fMB": "Debug-overlay metric field identity and format; exact key only.",
+    "MEM: --": "Debug-overlay metric field identity and format; exact key only.",
+    "MEM: N/A": "Debug-overlay metric field identity and format; exact key only.",
+    "RX: %u": "Debug-overlay metric field identity and format; exact key only.",
+    "RX: 0": "Debug-overlay metric field identity and format; exact key only.",
+    "TX: %u": "Debug-overlay metric field identity and format; exact key only.",
+    "TX: 0": "Debug-overlay metric field identity and format; exact key only.",
+    "24 FPS": "Screen-recording frame-rate unit: fixed numeric value and standard FPS metric abbreviation.",
+    "60 FPS": "Screen-recording frame-rate unit: fixed numeric value and standard FPS metric abbreviation.",
+    "8 FPS": "Screen-recording frame-rate unit: fixed numeric value and standard FPS metric abbreviation.",
+    "UI_TEXT_WIDGET_SCREEN_RECORDING_FPS_24": "Screen-recording frame-rate unit: fixed numeric value and standard FPS metric abbreviation.",
+    "UI_TEXT_WIDGET_SCREEN_RECORDING_FPS_60": "Screen-recording frame-rate unit: fixed numeric value and standard FPS metric abbreviation.",
+    "UI_TEXT_WIDGET_SCREEN_RECORDING_FPS_8": "Screen-recording frame-rate unit: fixed numeric value and standard FPS metric abbreviation."
+  },
+  "same_spelling_keys": {
+    "tr": {
+      "NO. %02d": "Native Turkish abbreviation No. for ordinal number, not negative No.",
+      "No.": "Native Turkish number abbreviation.",
+      "UI_TEXT_PAGE01_DETAIL_COL_NO": "Native Turkish number abbreviation in ordinal column."
+    },
+    "fr": {
+      "MULTI": "Native French short option Multi in currency selector."
+    },
+    "de": {
+      "MULTI": "German common commercial compound prefix Multi, here the multiple-currency selector; not a global exception for unrelated English copy."
+    },
+    "pl": {
+      "Mar": {
+        "reason": "Native Polish neutral calendar abbreviation mar, shared by day+month and standalone/month+day UI. Not the English verb mar.",
+        "source": "https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-dates-full/main/pl/ca-gregorian.json",
+        "evidence": "CLDR both Gregorian format.abbreviated.3 and stand-alone.abbreviated.3 = mar; fullformat marca and standalone marzec are different grammatical forms."
+      }
+    }
+  },
+  "allowed_words_by_key": {
+    "zh-Hans": {
+      "CIS Calibration": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "CIS and white balance": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "CIS calibration": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "CIS, white balance and touchscreen": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Calibration Fail (Lower CIS)": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Calibration Fail (Upper CIS)": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "No banknote run is required for CIS calibration.": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Place the CIS bar": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Place the CIS bar manually in the upper note path.": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Top feeder · QT": {
+        "words": [
+          "QT"
+        ],
+        "reason": "Physical top-feeder sensor identifier paired with native location."
+      },
+      "UI_TEXT_SETTINGS_CIS_CALIBRATION": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "UI_TEXT_SETTINGS_CIS_FAIL_LOWER": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "UI_TEXT_SETTINGS_CIS_FAIL_UPPER": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Upper and lower passages · SAFE": {
+        "words": [
+          "SAFE"
+        ],
+        "reason": "Physical passage/safety-sensor identifier paired with native location."
+      },
+      "Aa  Typographic": {
+        "words": [
+          "Aa"
+        ],
+        "reason": "Latin letter specimen for typography icon, followed by native title."
+      },
+      "Lower front · Stacker exit PS6": {
+        "words": [
+          "PS6"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Rear lower passage · PS5": {
+        "words": [
+          "PS5"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Rear lower passage · PS5L": {
+        "words": [
+          "PS5L"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Rear lower passage · PS5R": {
+        "words": [
+          "PS5R"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Upper passage · PS1": {
+        "words": [
+          "PS1"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Upper passage · PS1 / PS2 / PS3 / PS4": {
+        "words": [
+          "PS1",
+          "PS2",
+          "PS3",
+          "PS4"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Upper passage · PS2": {
+        "words": [
+          "PS2"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "MG12 waveform": {
+        "words": [
+          "MG12"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "MG3 waveform": {
+        "words": [
+          "MG3"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "MG4 waveform": {
+        "words": [
+          "MG4"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "MG56 waveform": {
+        "words": [
+          "MG56"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "UI_TEXT_SETTINGS_WAVE_GET_MG12": {
+        "words": [
+          "MG12"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "UI_TEXT_SETTINGS_WAVE_GET_MG3": {
+        "words": [
+          "MG3"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "UI_TEXT_SETTINGS_WAVE_GET_MG4": {
+        "words": [
+          "MG4"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "UI_TEXT_SETTINGS_WAVE_GET_MG56": {
+        "words": [
+          "MG56"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      }
+    },
+    "ko": {
+      "Add employee ID": {
+        "words": [
+          "ID"
+        ],
+        "reason": "ASCII operator/account identifier, paired with native description; actual user data remains unchanged."
+      },
+      "CIS Calibration": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "CIS and white balance": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "CIS calibration": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "CIS, white balance and touchscreen": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "COUNTING QR": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Calibration Fail (Lower CIS)": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Calibration Fail (Upper CIS)": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Close the QR code before standby.": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Historical names and stable IDs are retained.": {
+        "words": [
+          "ID"
+        ],
+        "reason": "ASCII operator/account identifier, paired with native description; actual user data remains unchanged."
+      },
+      "Manual export works even when automatic QR is off.": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "No banknote run is required for CIS calibration.": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Place the CIS bar": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Place the CIS bar manually in the upper note path.": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Preview QR export": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Profiles / QR / Quick controls": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR CODE": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR Export": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR Ready": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR after counting": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR after counting: off": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR after counting: on": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR code": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR could not be displayed. Export the period to USB instead.": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR data is too large": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR export": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Show saved totals QR": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Top feeder · QT": {
+        "words": [
+          "QT"
+        ],
+        "reason": "Physical top-feeder sensor identifier paired with native location."
+      },
+      "UI_TEXT_PAGE01_QR_CODE": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "UI_TEXT_SETTINGS_CIS_CALIBRATION": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "UI_TEXT_SETTINGS_CIS_FAIL_LOWER": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "UI_TEXT_SETTINGS_CIS_FAIL_UPPER": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "UI_TEXT_WIDGET_QR_POPUP_DATA_TOO_LARGE": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "UI_TEXT_WIDGET_QR_POPUP_TITLE": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "UI_TEXT_WIDGET_SMART_ISLAND_ACTION_QR": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "UI_TEXT_WIDGET_SMART_ISLAND_QR_READY": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Upper and lower passages · SAFE": {
+        "words": [
+          "SAFE"
+        ],
+        "reason": "Physical passage/safety-sensor identifier paired with native location."
+      },
+      "Use unique names/IDs. IDs: letters, digits, - or _.": {
+        "words": [
+          "ID"
+        ],
+        "reason": "ASCII operator/account identifier, paired with native description; actual user data remains unchanged."
+      },
+      "Aa  Typographic": {
+        "words": [
+          "Aa"
+        ],
+        "reason": "Latin letter specimen for typography icon, followed by native title."
+      },
+      "Lower front · Stacker exit PS6": {
+        "words": [
+          "PS6"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "MG12 waveform": {
+        "words": [
+          "MG12"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "MG3 waveform": {
+        "words": [
+          "MG3"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "MG4 waveform": {
+        "words": [
+          "MG4"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "MG56 waveform": {
+        "words": [
+          "MG56"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "PS1 sensor fault": {
+        "words": [
+          "PS1"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "PS2 sensor fault": {
+        "words": [
+          "PS2"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "PS5L sensor fault": {
+        "words": [
+          "PS5L"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "PS5R sensor fault": {
+        "words": [
+          "PS5R"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Rear lower passage · PS5": {
+        "words": [
+          "PS5"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Rear lower passage · PS5L": {
+        "words": [
+          "PS5L"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Rear lower passage · PS5R": {
+        "words": [
+          "PS5R"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "UI_TEXT_SETTINGS_WAVE_GET_MG12": {
+        "words": [
+          "MG12"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "UI_TEXT_SETTINGS_WAVE_GET_MG3": {
+        "words": [
+          "MG3"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "UI_TEXT_SETTINGS_WAVE_GET_MG4": {
+        "words": [
+          "MG4"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "UI_TEXT_SETTINGS_WAVE_GET_MG56": {
+        "words": [
+          "MG56"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "Upper passage · PS1": {
+        "words": [
+          "PS1"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Upper passage · PS1 / PS2 / PS3 / PS4": {
+        "words": [
+          "PS1",
+          "PS2",
+          "PS3",
+          "PS4"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Upper passage · PS2": {
+        "words": [
+          "PS2"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      }
+    },
+    "ja": {
+      "CIS Calibration": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "CIS and white balance": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "CIS calibration": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "CIS, white balance and touchscreen": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "COUNTING QR": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Calibration Fail (Lower CIS)": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Calibration Fail (Upper CIS)": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Close the QR code before standby.": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Historical names and stable IDs are retained.": {
+        "words": [
+          "ID"
+        ],
+        "reason": "ASCII operator/account identifier, paired with native description; actual user data remains unchanged."
+      },
+      "Manual export works even when automatic QR is off.": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "No banknote run is required for CIS calibration.": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Place the CIS bar": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Place the CIS bar manually in the upper note path.": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Preview QR export": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Profiles / QR / Quick controls": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR CODE": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR Export": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR Ready": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR after counting": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR after counting: off": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR after counting: on": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR code": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR could not be displayed. Export the period to USB instead.": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR data is too large": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR export": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Show saved totals QR": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Top feeder · QT": {
+        "words": [
+          "QT"
+        ],
+        "reason": "Physical top-feeder sensor identifier paired with native location."
+      },
+      "UI_TEXT_PAGE01_QR_CODE": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "UI_TEXT_SETTINGS_CIS_CALIBRATION": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "UI_TEXT_SETTINGS_CIS_FAIL_LOWER": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "UI_TEXT_SETTINGS_CIS_FAIL_UPPER": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "UI_TEXT_WIDGET_QR_POPUP_DATA_TOO_LARGE": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "UI_TEXT_WIDGET_QR_POPUP_TITLE": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "UI_TEXT_WIDGET_SMART_ISLAND_ACTION_QR": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "UI_TEXT_WIDGET_SMART_ISLAND_QR_READY": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Upper and lower passages · SAFE": {
+        "words": [
+          "SAFE"
+        ],
+        "reason": "Physical passage/safety-sensor identifier paired with native location."
+      },
+      "Use unique names/IDs. IDs: letters, digits, - or _.": {
+        "words": [
+          "ID"
+        ],
+        "reason": "ASCII operator/account identifier, paired with native description; actual user data remains unchanged."
+      },
+      "Aa  Typographic": {
+        "words": [
+          "Aa"
+        ],
+        "reason": "Latin letter specimen for typography icon, followed by native title."
+      },
+      "Rear lower passage · PS5": {
+        "words": [
+          "PS5"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Rear lower passage · PS5L": {
+        "words": [
+          "PS5L"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Rear lower passage · PS5R": {
+        "words": [
+          "PS5R"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Upper passage · PS1": {
+        "words": [
+          "PS1"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Upper passage · PS1 / PS2 / PS3 / PS4": {
+        "words": [
+          "PS1",
+          "PS2",
+          "PS3",
+          "PS4"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Upper passage · PS2": {
+        "words": [
+          "PS2"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Lower front · Stacker exit PS6": {
+        "words": [
+          "PS6"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "MG12 waveform": {
+        "words": [
+          "MG12"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "MG3 waveform": {
+        "words": [
+          "MG3"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "MG4 waveform": {
+        "words": [
+          "MG4"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "MG56 waveform": {
+        "words": [
+          "MG56"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "PS1 sensor fault": {
+        "words": [
+          "PS1"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "PS2 sensor fault": {
+        "words": [
+          "PS2"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "PS5L sensor fault": {
+        "words": [
+          "PS5L"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "PS5R sensor fault": {
+        "words": [
+          "PS5R"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "UI_TEXT_SETTINGS_WAVE_GET_MG12": {
+        "words": [
+          "MG12"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "UI_TEXT_SETTINGS_WAVE_GET_MG3": {
+        "words": [
+          "MG3"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "UI_TEXT_SETTINGS_WAVE_GET_MG4": {
+        "words": [
+          "MG4"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "UI_TEXT_SETTINGS_WAVE_GET_MG56": {
+        "words": [
+          "MG56"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      }
+    },
+    "ar": {
+      "COUNTING QR": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Close the QR code before standby.": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Manual export works even when automatic QR is off.": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Place the CIS bar": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Place the CIS bar manually in the upper note path.": {
+        "words": [
+          "CIS"
+        ],
+        "reason": "Contact image sensor identifier in calibration/service instructions, paired with native operation; never a political organization."
+      },
+      "Preview QR export": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Profiles / QR / Quick controls": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR CODE": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR Export": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR Ready": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR after counting": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR after counting: off": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR after counting: on": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR code": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR could not be displayed. Export the period to USB instead.": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR data is too large": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "QR export": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Show saved totals QR": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Top feeder · QT": {
+        "words": [
+          "QT"
+        ],
+        "reason": "Physical top-feeder sensor identifier paired with native location."
+      },
+      "UI_TEXT_PAGE01_QR_CODE": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "UI_TEXT_WIDGET_QR_POPUP_DATA_TOO_LARGE": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "UI_TEXT_WIDGET_QR_POPUP_TITLE": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "UI_TEXT_WIDGET_SMART_ISLAND_ACTION_QR": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "UI_TEXT_WIDGET_SMART_ISLAND_QR_READY": {
+        "words": [
+          "QR"
+        ],
+        "reason": "Standard QR code format identity with native operation or noun."
+      },
+      "Upper and lower passages · SAFE": {
+        "words": [
+          "SAFE"
+        ],
+        "reason": "Physical passage/safety-sensor identifier paired with native location."
+      },
+      "Aa  Typographic": {
+        "words": [
+          "Aa"
+        ],
+        "reason": "Latin letter specimen for typography icon, followed by native title."
+      },
+      "Lower front · Stacker exit PS6": {
+        "words": [
+          "PS6"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "MG12 waveform": {
+        "words": [
+          "MG12"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "MG3 waveform": {
+        "words": [
+          "MG3"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "MG4 waveform": {
+        "words": [
+          "MG4"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "MG56 waveform": {
+        "words": [
+          "MG56"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "PS1 sensor fault": {
+        "words": [
+          "PS1"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "PS2 sensor fault": {
+        "words": [
+          "PS2"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "PS5L sensor fault": {
+        "words": [
+          "PS5L"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "PS5R sensor fault": {
+        "words": [
+          "PS5R"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Rear lower passage · PS5": {
+        "words": [
+          "PS5"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Rear lower passage · PS5L": {
+        "words": [
+          "PS5L"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Rear lower passage · PS5R": {
+        "words": [
+          "PS5R"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "UI_TEXT_SETTINGS_WAVE_GET_MG12": {
+        "words": [
+          "MG12"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "UI_TEXT_SETTINGS_WAVE_GET_MG3": {
+        "words": [
+          "MG3"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "UI_TEXT_SETTINGS_WAVE_GET_MG4": {
+        "words": [
+          "MG4"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "UI_TEXT_SETTINGS_WAVE_GET_MG56": {
+        "words": [
+          "MG56"
+        ],
+        "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "Upper passage · PS1": {
+        "words": [
+          "PS1"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Upper passage · PS1 / PS2 / PS3 / PS4": {
+        "words": [
+          "PS1",
+          "PS2",
+          "PS3",
+          "PS4"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "Upper passage · PS2": {
+        "words": [
+          "PS2"
+        ],
+        "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      }
+    }
+  },
+  "untranslated_words_by_key": {
+    "fr": {
+      "  /  Swipe for more": [
+        "Swipe"
+      ],
+      "  /  Swipe to return": [
+        "Swipe"
+      ]
+    }
   }
 }

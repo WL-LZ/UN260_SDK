@@ -1,5 +1,15 @@
 {
   "ja": {
-    "Everyday count": "日常計数"
+    "Everyday count": "日常計数",
+    "Detection level\u0004Low": "低",
+    "Detection level\u0004Medium": "中",
+    "Detection level\u0004High": "高",
+    "Wait for the aging test to finish before standby.": "エージング試験の終了後に待機してください。",
+    "MULTI": "多通貨",
+    "Signature series": "シグネチャーシリーズ",
+    "Currency filter\u0004All": "すべて",
+    "Touch sound": "タッチ音",
+    "Machine alerts": "機械の通知",
+    "Screen taps": "画面のタップ"
   }
 }

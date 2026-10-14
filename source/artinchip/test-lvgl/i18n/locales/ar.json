@@ -1,5 +1,15 @@
 {
   "ar": {
-    "Everyday count": "العد اليومي"
+    "Everyday count": "العد اليومي",
+    "Wait for the aging test to finish before standby.": "انتظر اكتمال اختبار التحمل قبل وضع الاستعداد.",
+    "Detection level\u0004Low": "منخفض",
+    "Detection level\u0004Medium": "متوسط",
+    "Detection level\u0004High": "مرتفع",
+    "MULTI": "متعدد",
+    "Signature series": "السلسلة المميزة",
+    "Currency filter\u0004All": "الكل",
+    "Touch sound": "صوت اللمس",
+    "Machine alerts": "تنبيهات الجهاز",
+    "Screen taps": "لمس الشاشة"
   }
 }
