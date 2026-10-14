@@ -266,6 +266,7 @@ void history_test_bmp(const char *name)
 }
 static void history_test_fixtures(unsigned count)
 {
+    memset(&reading,0,sizeof(reading));
     assert(count <= UI_HISTORY_MAX_RECORDS);
     memset(&test_store, 0, sizeof(test_store));
     test_store.record_count = (uint16_t)count;
@@ -546,6 +547,7 @@ static void history_test_unknown_and_lifecycle(unsigned baseline_timers)
         history_test_click_record(0);
         assert(history->detail_mode);
         ui_page_19_history_suspend(); assert(ui_page_19_history_resume());
+        assert(history->detail_mode);show_list();
         history_test_click(history->actions[0]); assert(history->search);
         ui_page_19_history_suspend(); assert(!history->search);
         for(unsigned slot=0;slot<UI_HISTORY_MAX_RECORDS;++slot) {
@@ -861,6 +863,35 @@ static void test_full_abc_view(void)
     ui_page_19_history_destroy();assert(storage_worker_shutdown());
     puts("PASS real History: full 10000-row B, A totals, confirmed zero C, last-SN query and hidden async cancellation");
 }
+static void test_reading_bookmarks(void)
+{
+    unsigned timers=history_test_timers();
+    ui_lang_set(LANGUAGE_EN);history_test_fixtures(23);
+    ui_page_19_history_open_all();ui_page_19_history_create(lv_scr_act());history_test_tick(100);
+    lv_recycled_list_set_paged(history->list,true);lv_recycled_list_page_step(history->list,4);
+    assert(lv_recycled_list_window(history->list)->first==20);
+    ui_page_19_history_suspend();assert(ui_page_19_history_resume());history_test_tick(100);
+    assert(lv_recycled_list_window(history->list)->first==20);
+    lv_recycled_list_set_paged(history->list,false);lv_recycled_list_scroll_to_index(history->list,11);
+    uint32_t anchor=displayed_id(lv_recycled_list_window(history->list)->first);
+    ui_page_19_history_suspend();ui_page_19_history_destroy();
+    /* A new record moves the old reading anchor down one row. */
+    memmove(test_store.records+1,test_store.records,23*sizeof(test_store.records[0]));
+    test_store.records[0]=test_store.records[1];test_store.records[0].record_no=1001;++test_store.record_count;
+    ui_page_19_history_create(lv_scr_act());history_test_tick(100);
+    assert(displayed_id(lv_recycled_list_window(history->list)->first)==anchor);
+    show_record(1000);history_test_tick(100);
+    lv_recycled_list_scroll_to_index(history->sections[2].list,12);
+    lv_recycled_list_position_t pos=lv_recycled_list_position(history->sections[2].list);
+    ui_page_19_history_suspend();assert(ui_page_19_history_resume());history_test_tick(100);
+    assert(history->detail_mode&&history->current_id==1000);
+    assert(lv_recycled_list_position(history->sections[2].list).offset==pos.offset);
+    ui_page_19_history_suspend();ui_lang_set(LANGUAGE_CN);assert(ui_page_19_history_resume());history_test_tick(100);
+    assert(history->detail_mode&&history->current_id==1000);
+    ui_page_19_history_destroy();
+    puts("PASS reading bookmarks: final partial page, cache eviction, insertion anchor, detail and locale rebuild");
+}
+
 int main(void)
 {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -962,6 +993,7 @@ int main(void)
     }
     ui_lang_set(LANGUAGE_EN);
     test_full_abc_view();
+    test_reading_bookmarks();
     puts("PASS: actual History LVGL empty/full smoke, locale glyphs/buttons and timer ownership");
     return 0;
 }

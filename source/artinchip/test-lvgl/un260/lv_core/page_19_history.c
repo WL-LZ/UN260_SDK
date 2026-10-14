@@ -84,7 +84,19 @@ typedef struct {
     lv_coord_t multi_overview_scroll;
     scaled_font_t multi_symbol_font;
     uint8_t multi_symbol_pixels[1024];
+    bool restore_list,restore_detail;
 } history_ctx_t;
+
+/* Reading state survives cached-view eviction and locale recreation. It owns
+ * values only; pending dialogs, delete selection and worker handles never do. */
+static struct {
+    bool valid,detail,unknown;
+    uint32_t operator_id,record,anchor;
+    history_query_input_t input;
+    lv_recycled_list_position_t list,sections[3];
+    int multi_selected;
+    lv_coord_t multi_scroll,multi_body_scroll;
+} reading;
 
 static history_ctx_t *history;
 static uint32_t requested_record, requested_operator;
@@ -103,6 +115,38 @@ static void action_event(lv_event_t *event);
 static void multi_render(void);
 static void capacity_event(lv_event_t *event);
 static void show_capacity_confirmation(void);
+static uint32_t displayed_id(uint32_t index);
+
+static void remember_reading(void)
+{
+    if(!history||external_record||history->restore_list||lv_obj_has_flag(history->root,LV_OBJ_FLAG_HIDDEN))return;
+    reading.valid=true;reading.detail=history->detail_mode;reading.record=history->current_id;
+    reading.operator_id=history->operator_filter;reading.input=history->input;
+    reading.unknown=history->reviewing_unknown;
+    reading.list=lv_recycled_list_position(history->list);
+    const ui_list_window_t *window=lv_recycled_list_window(history->list);
+    reading.anchor=window?displayed_id(window->first):0;
+    for(unsigned i=0;i<3;i++)reading.sections[i]=lv_recycled_list_position(history->sections[i].list);
+    reading.multi_selected=history->multi_selected;reading.multi_scroll=history->multi_overview_scroll;
+    reading.multi_body_scroll=0;
+    if(history->detail_mode&&history->multi_panel){
+        lv_obj_t *body=lv_obj_get_child(history->multi_panel,3);
+        if(body){reading.multi_body_scroll=lv_obj_get_scroll_y(body);
+            if(history->multi_selected<0)reading.multi_scroll=reading.multi_body_scroll;}
+    }
+}
+static void restore_list_position(void)
+{
+    if(!history->restore_list)return;
+    history->restore_list=false;
+    lv_recycled_list_position_t position=reading.list;
+    size_t count=history->reviewing_unknown?history->unknown_count:history->result.written_count;
+    if(reading.anchor)for(size_t i=0;i<count;i++)if(displayed_id(i)==reading.anchor){
+        unsigned old_first=(unsigned)(position.offset/HISTORY_ROW_HEIGHT);
+        position.offset=i*HISTORY_ROW_HEIGHT+(position.offset-old_first*HISTORY_ROW_HEIGHT);break;
+    }
+    lv_recycled_list_restore_position(history->list,position);
+}
 
 static const char *tr(ui_text_id_t id) { return ui_text_get(id); }
 static void text_set(lv_obj_t *label, const char *text)
@@ -597,6 +641,16 @@ static void show_record(uint32_t id)
             tr(current_detail() && current_detail()->rejects_complete?UI_TEXT_HISTORY_REJECT_EMPTY:UI_TEXT_HISTORY_PARTIAL));
     }
     if(multi)multi_render();
+    if(history->restore_detail){
+        history->restore_detail=false;
+        for(unsigned i=0;i<3;i++)lv_recycled_list_restore_position(history->sections[i].list,reading.sections[i]);
+        if(multi){
+            history->multi_selected=reading.multi_selected;multi_render();
+            history->multi_overview_scroll=reading.multi_scroll;
+            lv_obj_t *body=lv_obj_get_child(history->multi_panel,3);
+            if(body){lv_obj_update_layout(body);lv_obj_scroll_to_y(body,reading.multi_body_scroll,LV_ANIM_OFF);}
+        }
+    }
     refresh_header();
 }
 static void show_list_panels(void)
@@ -810,6 +864,7 @@ static void refresh_records(bool reset)
             (--history->selected_count-i)*sizeof(uint32_t));
     }
     lv_recycled_list_refresh(history->list,(uint32_t)displayed_count(),reset);
+    restore_list_position();
     show(history->empty,displayed_count()==0);
     text_set(history->empty,tr(!ui_history_data_is_available() ? UI_TEXT_HISTORY_STORAGE_FAILED :
         history->record_count ? UI_TEXT_HISTORY_NO_MATCH : UI_TEXT_HISTORY_EMPTY));
@@ -819,6 +874,8 @@ static void refresh_records(bool reset)
             /* An external deletion or retention rollover invalidates the ID,
              * not the user's filter/reading position. Do not recurse here. */
             show_list_panels();toast(UI_NOTICE_WARNING,ui_text_msgid(UI_TEXT_HISTORY_MISSING));
+        } else if(history->restore_detail){
+            show_record(id);return;
         } else if(record_find(id)->multi.enabled) {
             multi_render();
         } else if(record_find(id)->detail_bytes && (!history->full_detail || history->full_id!=id)){
@@ -1061,7 +1118,7 @@ static void action_event(lv_event_t *event)
         else if (history->detail_mode && history->multi_panel && history->multi_selected>=0 &&
             record_find(history->current_id) && record_find(history->current_id)->multi.enabled) {
             history->multi_selected=-1;multi_render();refresh_header();
-        } else if (history->detail_mode && external_record) {external_record=false;ui_manager_pop_page();}
+        } else if (history->detail_mode && external_record) {ui_manager_pop_page();}
         else if (history->detail_mode) show_list();
         else if (history->selecting) {history->selecting=false;history->selected_count=0;refresh_records(false);}
         else ui_manager_pop_page();
@@ -1100,7 +1157,26 @@ static void action_event(lv_event_t *event)
 }
 void ui_page_19_history_open_all(void){requested_operator=0;scope_requested=true;requested_record=0;ui_manager_push_page(UI_PAGE_HISTORY);}
 void ui_page_19_history_open_operator(uint32_t id){requested_operator=id;scope_requested=true;requested_record=0;ui_manager_push_page(UI_PAGE_HISTORY);}
-static void apply_requested_scope(void){if(!history)return;history->operator_filter=scope_requested?requested_operator:0;requested_operator=0;scope_requested=false;history->model_dirty=true;history->selected_count=0;history->selecting=false;}
+static void apply_requested_scope(void)
+{
+    if(!history)return;
+    bool external=requested_record!=0;
+    if(!external&&scope_requested&&reading.valid&&requested_operator!=reading.operator_id)
+        memset(&reading,0,sizeof(reading));
+    uint32_t operator_id=scope_requested?requested_operator:reading.operator_id;
+    external_record=external;
+    memset(&history->input,0,sizeof(history->input));
+    history->operator_filter=operator_id;history->detail_mode=false;history->current_id=0;
+    history->reviewing_unknown=false;history->restore_list=history->restore_detail=false;
+    if(reading.valid&&!external){
+        history->input=reading.input;history->operator_filter=reading.operator_id;
+        history->detail_mode=reading.detail;history->current_id=reading.record;
+        history->reviewing_unknown=reading.unknown;history->restore_list=true;
+        history->restore_detail=reading.detail;
+    }
+    requested_operator=0;scope_requested=false;history->model_dirty=true;
+    history->selected_count=0;history->selecting=false;
+}
 void ui_page_19_history_open_record(uint32_t record_no)
 {
     requested_operator=0;scope_requested=true;requested_record=record_no;
@@ -1109,7 +1185,6 @@ void ui_page_19_history_open_record(uint32_t record_no)
 static void open_requested_record(void)
 {
     if(requested_record){uint32_t id=requested_record;requested_record=0;external_record=true;show_record(id);}
-    else external_record=false;
 }
 void ui_page_19_history_create(lv_obj_t *parent)
 {
@@ -1192,7 +1267,6 @@ void ui_page_19_history_refresh(void)
 }
 bool ui_page_19_history_resume(void)
 {
-    if(history)apply_requested_scope();
     if (!history || !history->root) return false;
     if (history->language!=ui_lang_get()) {
         lv_obj_t *parent=lv_obj_get_parent(history->root);
@@ -1202,18 +1276,16 @@ bool ui_page_19_history_resume(void)
          * reset that detail immediately when language resources changed. */
         return history && history->root;
     }
-    /* A new visit starts at the history list; internal detail/back keeps filters. */
-    history->detail_mode=false;history->current_id=0;history->selecting=false;
+    apply_requested_scope();
     show(history->multi_panel,false);
-    history->selected_count=0;history->reviewing_unknown=false;
-    memset(&history->input,0,sizeof(history->input));history->model_dirty=true;
-    show(history->root,true);show(history->list_panel,true);
+    show(history->root,true);show(history->list_panel,!history->detail_mode);
     for (unsigned i=0;i<3;++i) show(history->sections[i].panel,false);
-    lv_obj_move_foreground(history->root);refresh_records(true);open_requested_record();return true;
+    lv_obj_move_foreground(history->root);refresh_records(!history->restore_list);open_requested_record();return true;
 }
 void ui_page_19_history_suspend(void)
 {
     if (!history) return;
+    remember_reading();
     if (history->search) {
         page_19_history_search_t *search=history->search;history->search=NULL;
         page_19_history_search_destroy(search);

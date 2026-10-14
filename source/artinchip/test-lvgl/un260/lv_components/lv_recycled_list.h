@@ -4,6 +4,11 @@
 #include "ui_list_window.h"
 
 typedef struct lv_recycled_list lv_recycled_list_t;
+typedef struct { float offset; bool paged; } lv_recycled_list_position_t;
+/* Value-only bookmark. Restoring clamps to current data, cancels old motion,
+ * and never retains rows or UI pointers. Identity mapping belongs to the owner. */
+lv_recycled_list_position_t lv_recycled_list_position(const lv_recycled_list_t *list);
+void lv_recycled_list_restore_position(lv_recycled_list_t *list,lv_recycled_list_position_t position);
 typedef lv_obj_t *(*lv_recycled_list_create_row_fn)(lv_obj_t *parent,
                                                    lv_coord_t width, void *context);
 typedef void (*lv_recycled_list_bind_row_fn)(lv_obj_t *row, uint32_t index,

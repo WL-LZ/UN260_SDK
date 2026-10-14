@@ -450,6 +450,31 @@ bool lv_recycled_list_scroll_to_index(lv_recycled_list_t *list, uint32_t index)
     return true;
 }
 
+lv_recycled_list_position_t lv_recycled_list_position(const lv_recycled_list_t *list)
+{
+    return list?(lv_recycled_list_position_t){list->window.offset,list->window.paged}:
+        (lv_recycled_list_position_t){0};
+}
+void lv_recycled_list_restore_position(lv_recycled_list_t *list,lv_recycled_list_position_t position)
+{
+    if(!list)return;
+    lv_recycled_list_stop(list);
+    ui_list_window_mode(&list->window,position.paged);
+    /* The bounded comparison rejects NaN as well as negative offsets. */
+    float offset=position.offset>=0?position.offset:0;
+    if(position.paged){
+        uint32_t pages=ui_list_window_pages(&list->window);
+        if(!pages)pages=1;
+        float page=offset/(list->window.rows*list->window.row_height);
+        uint32_t target=page>=pages?pages-1:(uint32_t)page;
+        ui_list_window_page(&list->window,(int)target-(int)(list->window.first/list->window.rows));
+    }else{
+        float limit=ui_list_window_limit(&list->window);if(offset>limit)offset=limit;
+        ui_list_window_move(&list->window,offset);
+    }
+    project(list,true);
+}
+
 bool lv_recycled_list_index_at_point(lv_recycled_list_t *list,
                                      const lv_point_t *point, uint32_t *out_index)
 {
