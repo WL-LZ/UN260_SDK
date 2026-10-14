@@ -139,7 +139,7 @@ static void test_main_modes(void)
         assert(v->count==15);apply();assert(v->count==10);
         assert(!strcmp(lv_label_get_text(v->search_text),"50"));
         for(unsigned i=0;i<10;++i)assert(v->indices[i]==i+5);
-        lv_obj_t *row=lv_obj_get_child(lv_recycled_list_object(v->list),0);
+        lv_obj_t *row=lv_obj_get_child(lv_obj_get_child(lv_recycled_list_object(v->serial_list),0),0);
         assert(!strcmp(lv_label_get_text(lv_obj_get_child(row,0)),"105"));
         assert(!strcmp(lv_label_get_text(lv_obj_get_child(row,1)),"SN0006"));
         history_test_bmp(expanded?"multi-list-denomination-results":"main-denomination-results");

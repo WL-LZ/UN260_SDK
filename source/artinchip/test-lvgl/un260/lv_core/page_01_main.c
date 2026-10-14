@@ -278,11 +278,12 @@ static void page_01_main_detect_snapshot_changes(void)
 }
 
 
+static const char *page_01_mode_text_get(uint8_t mode);
+
 void page_01_mode_switch_refre(void)
 {
     if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_MODE)) return;
-    const char *mode = machine_state_mode() == MODE_CNT ? "CNT" :
-        machine_state_mode() == MODE_SDC ? "SDC" : "MDC";
+    const char *mode = page_01_mode_text_get(machine_state_mode());
     update_label_by_name(page_01_main_obj, page_01_main_len, "mode_label", "%s", mode);
     page_01_bottom_a_refresh_mode(false);
 }
@@ -471,7 +472,7 @@ static void page_01_bottom_label_anim_run(lv_obj_t *label, const char *text,
     lv_anim_start(&animation);
 }
 
-static const char* page_01_bottom_mode_text_get(uint8_t mode) //获取底部A区模式文本
+static const char* page_01_mode_text_get(uint8_t mode) //获取底部A区模式文本
 {
     switch (mode) {
     case MODE_MDC: return ui_text_get(UI_TEXT_PAGE01_BOTTOM_MODE_MDC);
@@ -854,14 +855,14 @@ static void page_01_bottom_bg_destroy_all(void) //销毁主界面底部三个背
 void page_01_bottom_a_refresh_mode(bool anim_en) //刷新主界面底部A区模式文本
 {
     if (page_01_main_defer_bottom_refresh(PAGE_01_MAIN_DIRTY_MODE, &anim_en)) return;
-    page_01_bottom_label_anim_run(s_bottom_a_label_mode, page_01_bottom_mode_text_get(machine_state_mode()),
+    page_01_bottom_label_anim_run(s_bottom_a_label_mode, page_01_mode_text_get(machine_state_mode()),
         anim_en ? PAGE_01_BOTTOM_TEXT_ANIM_SLIDE : PAGE_01_BOTTOM_TEXT_ANIM_NONE);
 }
 
 void page_01_bottom_a_refresh_mode_preview(uint8_t mode) //预刷新主界面底部A区模式文本
 {
     if (!page_01_main_is_visible()) return;
-    page_01_bottom_label_anim_run(s_bottom_a_label_mode, page_01_bottom_mode_text_get(mode),
+    page_01_bottom_label_anim_run(s_bottom_a_label_mode, page_01_mode_text_get(mode),
         PAGE_01_BOTTOM_TEXT_ANIM_SLIDE);
 }
 
@@ -912,12 +913,14 @@ void page_01_bottom_c_refresh_speed(bool anim_en) //刷新主界面底部C区速
 
 void page_01_bottom_c_refresh_cfd(void) //刷新主界面底部C区CFD文本
 {
-    char text_buf[24];
+    char text_buf[96];
 
     if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_CFD)) return;
 
-    lv_snprintf(text_buf, sizeof(text_buf), ui_text_get(UI_TEXT_PAGE01_BOTTOM_CFD_FMT),
-        machine_state_cfd_mode() == 1 ? "M" : machine_state_cfd_mode() == 2 ? "H" : "L");
+    const uint8_t mode = machine_state_cfd_mode();
+    const char *level = mode == 1 ? ui_trc("Detection level", "Medium") :
+        mode == 2 ? ui_trc("Detection level", "High") : ui_trc("Detection level", "Low");
+    lv_snprintf(text_buf, sizeof(text_buf), ui_text_get(UI_TEXT_PAGE01_BOTTOM_CFD_FMT), level);
     page_01_bottom_label_anim_run(s_bottom_c_label_cfd, text_buf, PAGE_01_BOTTOM_TEXT_ANIM_NONE);
 }
 
@@ -991,7 +994,7 @@ static void main_currency_target(lv_obj_t *parent)
     lv_obj_t *icon = main_icon(target, "curr_USD_img",
         LVGL_DIR"main_icons/currencies_32.png", 4, 15);
     main_label(target, NULL, ui_tr("Currency"), 80, 0, 120, &lv_font_instrument_sans_semibold_16, 0x526E80);
-    lv_obj_t *code = main_label(target, NULL, ui_tr("AUTO"), 80, 27, 112,
+    lv_obj_t *code = main_label(target, NULL, currency_state_display_code(CURRENCY_AUTO_CODE), 80, 27, 112,
         &lv_font_instrument_sans_semibold_24, 0x17212A);
     main_icon(target, NULL, LVGL_DIR"main_icons/caret_down_16.png", 206, 33);
     s_curr_img = icon; s_currency_code = code;
@@ -1001,7 +1004,7 @@ static void page_01_main_build_content(void)
 {
     main_icon(main_page, "page_01_back.png", UI_USER_BACKGROUND_SRC, 0, 0);
     main_action("mode_btn", "page_01_mode_icon.png", LVGL_DIR"main_icons/cube_28.png",
-        "mode_label", "MDC", 16, 12, 80, 74, page_01_mode_btn_event_cb, false);
+        "mode_label", page_01_mode_text_get(machine_state_mode()), 16, 12, 80, 74, page_01_mode_btn_event_cb, false);
     main_action("setting_btn", "page_01_set_icon.png", LVGL_DIR"main_icons/gear_28.png",
         "setting_label", ui_tr("SETTING"), 16, 94, 80, 74, page_01_set_btn_event_cb, false);
     main_action("list_btn", "page_01_list_icon.png", LVGL_DIR"main_icons/list_28.png",
@@ -1392,13 +1395,14 @@ void page_01_update_language_texts(void) //刷新主界面多语言文本
                                    PAGE_01_MAIN_DIRTY_ALL)) return;
 
     page_01_detail_section_btn_text_refresh();
-    page_01_bottom_a_refresh_mode(false);
+    page_01_mode_switch_refre();
     page_01_bottom_a_refresh_add(false);
     page_01_bottom_a_refresh_work(false);
     page_01_bottom_a_refresh_fo(false);
     page_01_bottom_c_refresh_batch(false);
     page_01_bottom_c_refresh_speed(false);
     page_01_bottom_c_refresh_cfd();
+    s_curr_rendered_valid = false;
     ui_refresh_main_page();
     smart_island_refresh_language_texts();
 }

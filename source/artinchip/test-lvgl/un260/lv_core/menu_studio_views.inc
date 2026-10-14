@@ -18,7 +18,8 @@ static lv_obj_t *link_button(lv_obj_t *p,int x,int y,int w,const char *s,int id)
     lv_obj_t *v=button(p,x,y,w,40,s,id,false);palette(v,lv_obj_get_style_bg_color(p,0).full&0xFFFFFF);
     lv_obj_set_style_bg_opa(v,LV_OPA_TRANSP,0);
     lv_obj_t *l=lv_obj_get_child(v,0);lv_obj_set_style_text_font(l,ui_message_font(&lv_font_instrument_sans_medium_16),0);
-    lv_obj_set_style_text_color(l,lv_color_hex(BLUE),0);lv_obj_align(l,LV_ALIGN_LEFT_MID,3,0);
+    lv_obj_set_style_text_color(l,lv_color_hex(BLUE),0);lv_label_set_long_mode(l,LV_LABEL_LONG_CLIP);
+    lv_obj_set_width(l,w-30);lv_obj_align(l,LV_ALIGN_LEFT_MID,3,0);
     icon(v,MICON("next",18),w-21,11,BLUE);return v;
 }
 static lv_obj_t *white_button(lv_obj_t *p,int x,int y,int w,int h,const char *s,int id)
@@ -188,10 +189,17 @@ static void profiles_view(lv_obj_t *b)
     profile_summary(d,p,61);
     int delete_width=LV_MAX(100,menu_text_width(ui_tr("Delete"))+53);
     lv_obj_t *del=button(d,20,194,delete_width,36,ui_tr("Delete"),A_DELETE_PROFILE,false);lv_obj_set_style_bg_opa(del,LV_OPA_TRANSP,0);lv_obj_set_style_text_color(del,lv_color_hex(0xB33535),0);icon(del,MICON("trash",22),8,7,0xB33535);lv_obj_set_width(lv_obj_get_child(del,0),delete_width-45);lv_obj_align(lv_obj_get_child(del,0),LV_ALIGN_LEFT_MID,37,0);if(u->profile_count<=1)lv_obj_add_state(del,LV_STATE_DISABLED);
-    bool active=profile_matches(p);lv_obj_t *apply=button(d,258,186,144,44,active?ui_tr("In use"):ui_tr("Apply profile"),A_APPLY_PROFILE,true);if(active)lv_obj_add_state(apply,LV_STATE_DISABLED);
+    bool active=profile_matches(p);lv_obj_t *apply=button(d,258,186,144,44,active?ui_tr("In use"):ui_tr("Apply profile"),A_APPLY_PROFILE,true);
+    menu_button_fit_right(apply,402,144,24);lv_obj_center(lv_obj_get_child(apply,0));
+    if(active)lv_obj_add_state(apply,LV_STATE_DISABLED);
 }
 static void option_label(lv_obj_t *p,unsigned row,const char *s)
-{text(p,18,23+row*59,180,s);if(row)box(p,18,4+row*59,468,1,LINE,0);}
+{
+    lv_obj_t *title=text(p,18,23+row*59,180,s);
+    lv_label_set_long_mode(title,LV_LABEL_LONG_CLIP);
+    lv_obj_set_width(title,LV_MAX(180,menu_label_width(title,NULL)));
+    if(row)box(p,18,4+row*59,468,1,LINE,0);
+}
 static void options_view(lv_obj_t *b)
 {
     heading(b,ui_tr("Counting options"));char value[64],code[4];currency_state_get_selected_code(code);snprintf(value,sizeof(value),ui_tr("%s · current configuration"),currency_state_display_code(code));context(b,value,225);
@@ -202,8 +210,14 @@ static void options_view(lv_obj_t *b)
     option_label(left,2,ui_tr("Start"));segments(left,210,130,276,42,work,2,machine_state_work_mode(),410);
     box(left,18,181,468,1,LINE,0);lv_obj_t *acc=box(left,18,191,468,46,PANEL,0);toggle(acc,0,468,ui_tr("ADD accumulation"),NULL,machine_state_add_enabled(),420+!machine_state_add_enabled());
     option_label(right,0,ui_tr("Sorting"));segments(right,210,12,276,42,sort,4,machine_state_fo_mode(),430);
-    option_label(right,1,ui_tr("Reject pocket"));snprintf(value,sizeof(value),ui_trn("%u notes", (machine_state_reject_pocket_max())),machine_state_reject_pocket_max());field_button(right,346,72,140,value,A_CAPACITY);
-    option_label(right,2,ui_tr("Current batch"));snprintf(value,sizeof(value),machine_state_batch_enabled()?ui_trn("%u notes", (machine_state_batch_num())):ui_tr("Off"),machine_state_batch_num());link_button(right,366,131,120,value,301);
+    option_label(right,1,ui_tr("Reject pocket"));snprintf(value,sizeof(value),ui_trn("%u notes", (machine_state_reject_pocket_max())),machine_state_reject_pocket_max());
+    lv_obj_t *capacity=field_button(right,346,72,140,value,A_CAPACITY);
+    int capacity_width=menu_button_fit_right(capacity,486,140,52);
+    lv_obj_align(lv_obj_get_child(capacity,0),LV_ALIGN_LEFT_MID,13,0);lv_obj_set_x(lv_obj_get_child(capacity,1),capacity_width-31);
+    option_label(right,2,ui_tr("Current batch"));snprintf(value,sizeof(value),machine_state_batch_enabled()?ui_trn("%u notes", (machine_state_batch_num())):ui_tr("Off"),machine_state_batch_num());
+    lv_obj_t *batch=link_button(right,366,131,120,value,301);
+    int batch_width=menu_button_fit_right(batch,486,120,30);
+    lv_obj_align(lv_obj_get_child(batch,0),LV_ALIGN_LEFT_MID,3,0);lv_obj_set_x(lv_obj_get_child(batch,1),batch_width-21);
     box(right,18,181,468,1,LINE,0);small(right,18,195,409,ui_tr("Mode changes clear the current result after confirmation. Saved records stay unchanged."));icon(right,MICON("shield",22),464,199,TEAL);
 }
 
@@ -270,14 +284,16 @@ static void display_view(lv_obj_t *b)
     icon(left,MICON("volume",22),20,20,BLUE);
     label(left,52,18,400,ui_tr("Sound"),&lv_font_instrument_sans_semibold_21,INK);
     box(left,20,64,464,1,LINE,0);
-    lv_obj_t *sound=box(left,20,79,464,55,0xFFFFFF,12);
-    lv_obj_t *sound_row=box(sound,14,4,436,47,0xFFFFFF,0);
-    toggle(sound_row,0,436,ui_tr("Machine sound"),NULL,machine_state_buzzer_enabled(),440+!machine_state_buzzer_enabled());
-    box(left,20,151,464,1,LINE,0);
-    text(left,20,177,265,ui_tr("Standby delay"));
-    char duration[32];unsigned minutes=standby_config()->minutes;
-    snprintf(duration,sizeof(duration),minutes?ui_tr("%u min"):ui_tr("Never"),minutes);
-    field_button(left,325,165,159,duration,A_TIMEOUT);
+    lv_obj_t *machine=box(left,20,77,464,68,0xFFFFFF,12);
+    lv_obj_add_flag(machine,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(machine,action,LV_EVENT_CLICKED,(void *)(uintptr_t)(440+!machine_state_buzzer_enabled()));
+    lv_obj_t *machine_row=box(machine,14,4,436,60,0xFFFFFF,0);
+    toggle(machine_row,0,436,ui_tr("Machine sound"),ui_tr("Machine alerts"),machine_state_buzzer_enabled(),440+!machine_state_buzzer_enabled());
+    lv_obj_t *touch=box(left,20,157,464,68,0xFFFFFF,12);
+    lv_obj_add_flag(touch,LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(touch,action,LV_EVENT_CLICKED,(void *)(uintptr_t)A_TOUCH_SOUND);
+    lv_obj_t *touch_row=box(touch,14,4,436,60,0xFFFFFF,0);
+    toggle(touch_row,0,436,ui_tr("Touch sound"),ui_tr("Screen taps"),user_cfg_touch_sound_enabled(),A_TOUCH_SOUND);
     lv_obj_t *right=box(b,524,48,504,248,PANEL,20);
     /* Full-screen display outline, without a desktop stand. */
     lv_obj_t *screen=box(right,20,22,25,18,PURPLE,4);
@@ -287,9 +303,12 @@ static void display_view(lv_obj_t *b)
     box(right,20,64,464,1,LINE,0);
     text(right,20,90,285,ui_tr("Interface language"));
     label(right,373,89,110,ui_lang_current()->name,&lv_font_instrument_sans_semibold_18,INK);
-    box(right,20,144,464,1,LINE,0);
-    icon(right,MICON("power",22),20,171,PURPLE);
-    white_button(right,58,162,426,48,ui_tr("Enter standby"),A_STANDBY);
+    box(right,20,123,464,1,LINE,0);
+    text(right,20,144,300,ui_tr("Standby delay"));
+    char duration[32];unsigned minutes=standby_config()->minutes;
+    snprintf(duration,sizeof(duration),minutes?ui_tr("%u min"):ui_tr("Never"),minutes);
+    field_button(right,325,132,159,duration,A_TIMEOUT);
+    white_button(right,20,187,464,40,ui_tr("Enter standby"),A_STANDBY);
 }
 
 static void operators_summary_view(lv_obj_t *b)

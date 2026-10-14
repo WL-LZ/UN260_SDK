@@ -217,7 +217,7 @@ void page07_curr_overview_build(page07_curr_context_t *ctx,
     lv_obj_t *filters = surface(root, 610, 14, 284, 46, 0xE5EBF0, 12);
     for (int i = 0; i < 2; ++i) {
         bool active = (bool)i == ctx->model.favorite_only;
-        lv_obj_t *button = action(filters, i ? ui_tr("Favorites") : ui_tr("All currencies"),
+        lv_obj_t *button = action(filters, i ? ui_tr("Favorites") : ui_trc("Currency filter", "All"),
             3 + i * 139, 3, 139, actions->filter, i);
         lv_obj_set_height(button, 40);
         lv_damped_button_set_palette(button, lv_color_hex(active ? 0xFFFFFF : 0xE5EBF0),

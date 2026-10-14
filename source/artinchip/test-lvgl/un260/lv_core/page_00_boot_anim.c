@@ -608,11 +608,14 @@ void ui_page_00_boot_anim_create(lv_obj_t *parent)
         g_boot_intro.message[index] = boot_intro_create_label(
             g_boot_intro.root, ui_tr(g_boot_intro_message_text[index]),
             &lv_font_instrument_sans_medium_14, 340, 236, 600);
-        lv_obj_set_style_text_letter_space(g_boot_intro.message[index], 4, 0);
+        lv_obj_set_style_text_letter_space(g_boot_intro.message[index],
+            ui_lang_current()->direction == UI_LANG_RTL ? 0 : 4, 0);
     }
 
+    char brand_meta[128];
+    lv_snprintf(brand_meta, sizeof(brand_meta), "UN / 260   %s", ui_tr("Signature series"));
     g_boot_intro.meta_left = boot_intro_create_label(
-        g_boot_intro.root, "UN / 260   SIGNATURE SERIES",
+        g_boot_intro.root, brand_meta,
         &lv_font_instrument_sans_medium_10, 26, 20, 260);
     lv_obj_set_style_text_align(g_boot_intro.meta_left, LV_TEXT_ALIGN_LEFT, 0);
     g_boot_intro.meta_right = boot_intro_create_label(

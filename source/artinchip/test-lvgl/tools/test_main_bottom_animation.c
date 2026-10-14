@@ -99,6 +99,13 @@ static const char *ui_text_get(int id) {
     assert(id >= 0 && (unsigned)id < sizeof(texts) / sizeof(texts[0]));
     return texts[id];
 }
+static const char *ui_trc(const char *context, const char *text) {
+    assert(strcmp(context, "Detection level") == 0);
+    if (!strcmp(text, "Low")) return "L";
+    if (!strcmp(text, "Medium")) return "M";
+    assert(!strcmp(text, "High")); return "H";
+}
+static const char *page_01_mode_text_get(uint8_t mode);
 static void update_label_by_name(int objects, int len, const char *name, const char *format, ...) {
     (void)objects; (void)len; assert(strcmp(name, "mode_label") == 0); assert(strcmp(format, "%s") == 0);
 }

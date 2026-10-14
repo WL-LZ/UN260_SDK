@@ -11,6 +11,7 @@
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/lv_core/page_02_list_search.c"
 #include "un260/lv_core/page_02_list_serials.c"
+#include "un260/lv_components/ui_multi_detail.c"
 /* Include the production translation unit to inspect its private
  * projection; no test-only accessors or mock page implementation in firmware. */
 #include "un260/lv_core/page_02_list.c"
@@ -785,6 +786,8 @@ static void test_search_background(void)
     assert(!view->search);
 }
 
+#include "test_multi_serial_view_cases.h"
+
 int main(void)
 {
     setvbuf(stdout,NULL,_IONBF,0);
@@ -809,6 +812,11 @@ int main(void)
         counting_sim_t *locale_data=counting_data_mutable();
         ui_page_02_list_create(lv_scr_act());tick(100);assert(view);
         serials_cases_locale_layout(locale_data);
+        for(size_t i=0;i<ui_lang_count();i++){
+            const ui_locale_t *locale=ui_lang_at(i);if(!ui_lang_is_available(locale))continue;
+            assert(ui_lang_prepare_resources(locale->id));ui_lang_set(locale->id);
+            test_multi_serial_view_cases();printf("PASS MULTI real fonts: %s\n",locale->tag);
+        }
         ui_page_02_list_destroy();return 0;
     }
 #endif
@@ -830,6 +838,7 @@ int main(void)
     test_search_retry();test_search_background();
     test_serial_search_cases(data);
     test_list_serials_cases(data);
+    test_multi_serial_view_cases();
     /* Real controller data with holes, independent tables and true totals. */
     data->denom_number=8;int values[]={100,50,0,20,10,5,1,0};
     int pcs[]={18,12,0,14,11,10,9,0};

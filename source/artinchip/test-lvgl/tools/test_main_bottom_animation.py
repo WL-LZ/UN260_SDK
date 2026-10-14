@@ -15,7 +15,7 @@ if not compiler:
 
 def function(source, name):
     match = re.search(r"^(?:static\s+)?(?:void|bool|const\s+char\s*\*)\s*" +
-                      re.escape(name) + r"\(", source, re.M)
+                      re.escape(name) + r"\([^;{}]*\)[ \t]*(?://[^\n]*)?\s*\{", source, re.M)
     if not match:
         raise AssertionError("Missing production function: " + name)
     brace = source.index("{", match.start())
@@ -45,7 +45,7 @@ functions = ["page_01_main_commit", "page_01_main_mark_dirty", "page_01_main_def
              "page_01_bottom_text_anim_opa_cb", "page_01_bottom_text_anim_x_cb",
              "page_01_bottom_label_anim_stop",
              "page_01_bottom_animations_stop", "page_01_bottom_label_anim_run",
-             "page_01_bottom_mode_text_get", "page_01_bottom_add_text_get",
+             "page_01_mode_text_get", "page_01_bottom_add_text_get",
              "page_01_bottom_work_text_get", "page_01_bottom_fo_text_get",
              "page_01_bottom_speed_text_get",
              "page_01_bottom_a_refresh_mode", "page_01_bottom_a_refresh_add",

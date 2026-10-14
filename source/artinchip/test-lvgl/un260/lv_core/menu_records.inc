@@ -190,7 +190,7 @@ static void records_view(lv_obj_t *b)
         lv_obj_t *name=label(v,12,9,340,line,&lv_font_instrument_sans_semibold_17,INK);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
         snprintf(line,sizeof(line),"B%03u · %02u:%02u",g->id,r->result.hour,r->result.minute);
         if(attempts>1){size_t used=strlen(line);snprintf(line+used,sizeof(line)-used,ui_trn(" · %u runs", (attempts)),attempts);}small(v,12,33,340,line);
-        l=label(v,414,7,152,r->result.currencies==1?r->result.money[0].code:"MULTI",&lv_font_instrument_sans_medium_13,MUTED);lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_RIGHT,0);
+        l=label(v,414,7,152,r->result.currencies==1?r->result.money[0].code:currency_state_display_code(CURRENCY_MULTI_CODE),&lv_font_instrument_sans_medium_13,MUTED);lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_RIGHT,0);
         if(r->result.currencies==1)money_text(line,r->result.money[0].amount);else snprintf(line,sizeof(line),ui_trn("%u notes", (r->result.pcs)),r->result.pcs);
         l=label(v,414,22,152,line,&lv_font_instrument_sans_semibold_20,INK);lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_RIGHT,0);
         l=label(v,576,22,130,g->excluded?ui_tr("Excluded"):g->review?ui_tr("Review"):g->confirmed?ui_tr("Confirmed"):ui_tr("To confirm"),&lv_font_instrument_sans_menumedium_14,g->excluded||(g->confirmed&&!g->review)?MUTED:ORANGE);lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_RIGHT,0);

@@ -146,6 +146,23 @@ static lv_obj_t *button(lv_obj_t *p,int x,int y,int w,int h,const char *s,int id
     lv_obj_set_style_text_color(v,lv_color_hex(0x64717C),LV_STATE_DISABLED);
     return v;
 }
+/* Measure the label after LVGL has shaped its text, using its actual font. */
+static int menu_label_width(lv_obj_t *label,const lv_font_t *font)
+{
+    lv_point_t size;
+    lv_txt_get_size(&size,lv_label_get_text(label),font?font:lv_obj_get_style_text_font(label,0),
+        lv_obj_get_style_text_letter_space(label,0),0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+    return size.x;
+}
+static int menu_button_fit_right(lv_obj_t *button,int right,int minimum,int padding)
+{
+    lv_obj_t *label=lv_obj_get_child(button,0);
+    lv_label_set_long_mode(label,LV_LABEL_LONG_CLIP);
+    int width=LV_MAX(minimum,menu_label_width(label,NULL)+padding);
+    lv_obj_set_width(button,width);lv_obj_set_x(button,right-width);
+    lv_obj_set_width(label,width-padding);
+    return width;
+}
 static void choose(lv_obj_t *b,bool selected)
 {
     if(selected)lv_obj_add_state(b,LV_STATE_CHECKED);else lv_obj_clear_state(b,LV_STATE_CHECKED);
@@ -262,9 +279,9 @@ static void toggle(lv_obj_t *p,int y,int w,const char *title,const char *hint,bo
 
 static void profile_summary(lv_obj_t *p,const workspace_profile_t *v,int y)
 {
-    const char *speed[]={ui_tr("Low"),ui_tr("Standard"),ui_tr("High")},*sort[]={ui_tr("Off"),ui_tr("Face"),ui_tr("Orientation"),ui_tr("Face + orientation")};
-    char batch[20];snprintf(batch,sizeof(batch),v->batch_enabled?ui_trn("%u notes", (v->batch)):ui_tr("Off"),v->batch);
-    const char *titles[]={ui_tr("Speed"),ui_tr("Start"),ui_tr("Counting"),ui_tr("Sorting"),"ADD",ui_tr("Batch")};
+    const char *speed[]={ui_tr("Low"),ui_tr("Standard"),ui_tr("High")},*sort[]={ui_tr("Off"),ui_tr("Face"),ui_tr("Orientation"),ui_tr("Both")};
+    char batch[64];snprintf(batch,sizeof(batch),v->batch_enabled?ui_trn("%u notes", (v->batch)):ui_tr("Off"),v->batch);
+    const char *titles[]={ui_tr("Speed"),ui_tr("Start"),ui_tr("Counting"),ui_tr("Sorting"),ui_tr("ADD"),ui_tr("Batch")};
     const char *values[]={speed[v->speed],v->work?ui_tr("Manual"):ui_tr("Auto"),v->mode==1?ui_tr("Mixed"):v->mode==2?ui_tr("Single"):v->mode==3?ui_tr("Count"):ui_tr("Keep current"),sort[v->sort],v->add?ui_tr("On"):ui_tr("Off"),batch};
     for(unsigned i=0;i<6;i++){
         int x=20+(i%3)*132,top=y+(i/3)*51;
@@ -426,9 +443,9 @@ static void refresh_quick(void)
 {
     if(!menu.quick)return;
     lv_quick_controls_refresh(&menu.quick_controls,lv_quick_controls_current_state());
-    char code[4],value[48];currency_state_get_effective_code(code);
+    char code[4],value[128];currency_state_get_effective_code(code);
     const counting_sim_t *data=counting_data_current();
-    char quantity[32];unsigned notes=data?data->total_pcs:0;
+    char quantity[64];unsigned notes=data?data->total_pcs:0;
     snprintf(quantity,sizeof(quantity),ui_trn("%u notes",notes),notes);
     snprintf(value,sizeof(value),"%s   |   %s",currency_state_display_code(code),quantity);
     if(strcmp(lv_label_get_text(menu.quick_context),value))

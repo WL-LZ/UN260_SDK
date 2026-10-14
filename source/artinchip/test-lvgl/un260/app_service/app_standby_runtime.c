@@ -19,7 +19,7 @@ static const char *standby_operation_blocker(void)
  if(ui_factory_reset_blocks_navigation())return UI_N_("Complete the factory reset and restart before standby.");
  if(touch_calibration_busy())return UI_N_("Finish or cancel the touchscreen calibration before standby.");
  if(app_command_runtime_count_start_busy())return UI_N_("Finish counting before standby.");
- if(machine_state_aging_running())return UI_N_("Stop the aging test before standby.");
+ if(machine_state_aging_running())return UI_N_("Wait for the aging test to finish before standby.");
  /* Acknowledged records remain available for inspection until a controller
   * report resolves them. They are not a pending UI operation (e.g. No notes).
   * Keep the visible guide and unread reports guarded without discarding any

@@ -1,8 +1,10 @@
+#include "un260/currency/currency_state.h"
 #include "un260/font/ui_message_font.h"
 #include "ui_multi_detail.h"
 #include "lv_recycled_list.h"
 #include "lv_alnum_keyboard.h"
 #include "lv_damped_button.h"
+#include "lv_nav_button.h"
 #include "ui_detail_reveal.h"
 #include "un260/counting/counting_multi_extra.h"
 #include "un260/counting/counting_serial_query.h"
@@ -26,7 +28,9 @@ struct ui_multi_detail {
     lv_obj_t *head_line,*foot_line,*currency_line;
     scaled_font_t symbol_font;
     uint8_t symbol_pixels[1024];
-    lv_recycled_list_t *list;
+    lv_recycled_list_t *list,*serial_list;
+    lv_obj_t *serial_headers[3][3],*serial_rules[3],*previous,*next,*range,*details;
+    unsigned serial_columns,serial_rows;
     lv_alnum_keyboard_t *keyboard;
     ui_detail_reveal_t reveal;
     lv_timer_t *timer;
@@ -71,19 +75,22 @@ static const char *currency_name(const char *code)
     if(!strcmp(code,"EUR"))return ui_text_get(UI_TEXT_MULTI_EUR_NAME);
     return ui_text_get(UI_TEXT_MULTI_CURRENCY);
 }
-static void center_currency_glyphs(ui_multi_detail_t *v)
+static int glyph_center(lv_obj_t *label)
 {
-    const lv_font_t *font=lv_obj_get_style_text_font(v->currency,0);
-    const char *code=lv_label_get_text(v->currency);
+    const lv_font_t *font=lv_obj_get_style_text_font(label,0);
+    const char *code=lv_label_get_text(label);
     int top=font->line_height,bottom=0;
-    for(const char *p=code;*p;p++){
+    uint32_t offset=0;
+    while(code[offset]){
+        uint32_t cp=_lv_txt_encoded_next(code,&offset);
+        uint32_t next=_lv_txt_encoded_next(code+offset,NULL);
         lv_font_glyph_dsc_t glyph;
-        if(!lv_font_get_glyph_dsc(font,&glyph,(uint8_t)*p,(uint8_t)p[1])||!glyph.box_h)continue;
+        if(!lv_font_get_glyph_dsc(font,&glyph,cp,next)||!glyph.box_h)continue;
         int y=font->line_height-font->base_line-glyph.box_h-glyph.ofs_y;
         if(y<top)top=y;
         if(y+glyph.box_h>bottom)bottom=y+glyph.box_h;
     }
-    lv_obj_set_y(v->currency,(v->expanded?30:40)-(top+bottom)/2);
+    return bottom>top?(top+bottom)/2:font->line_height/2;
 }
 static void columns(ui_multi_detail_t *v,int *middle,int *last)
 {
@@ -97,6 +104,140 @@ static lv_obj_t *button(ui_multi_detail_t *v,int x,int y,int w,int h,const char 
     lv_damped_button_register(o,lv_color_hex(color),lv_color_hex(0xDFE8EE));
     lv_obj_add_event_cb(o,cb,LV_EVENT_CLICKED,v);
     lv_obj_t *l=label(o,0,0,w,s,&lv_font_instrument_sans_medium_14,0x496475);if(l){lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_CENTER,0);lv_obj_center(l);}return o;
+}
+/* Serial presentation is shared by the compact Main and expanded List.
+ * Cache indices remain source-owned; only this bounded viewport is paged. */
+static bool serial_view(const ui_multi_detail_t *v){return v->selected>=0&&v->tab==1;}
+static unsigned serial_width(const ui_multi_detail_t *v)
+{return (v->width-68-(v->serial_columns-1)*12)/v->serial_columns;}
+static unsigned serial_x(const ui_multi_detail_t *v,unsigned field)
+{return field==0?10:field==1?58:serial_width(v)-88;}
+static unsigned serial_cell_width(const ui_multi_detail_t *v,unsigned field)
+{return field==0?42:field==1?serial_width(v)-154:76;}
+static unsigned serial_rank(const ui_multi_detail_t *v,unsigned group,unsigned column)
+{
+    unsigned start=group/v->serial_rows*v->serial_rows*v->serial_columns;
+    if(start>=v->count||column>=v->serial_columns)return v->count;
+    unsigned remaining=LV_MIN(v->count-start,v->serial_rows*v->serial_columns);
+    unsigned depth=(remaining+v->serial_columns-1)/v->serial_columns;
+    unsigned row=group%v->serial_rows;
+    return row<depth?start+column*depth+row:v->count;
+}
+static void serial_fit(lv_obj_t *o,const char *value,unsigned field)
+{
+    const lv_font_t *fonts[]={&lv_font_instrument_sans_medium_20,
+        &lv_font_instrument_sans_medium_18,&lv_font_instrument_sans_medium_16,
+        &lv_font_instrument_sans_medium_14};
+    const lv_font_t *font=ui_message_font(fonts[3]);
+    for(unsigned i=field==0?3:0;i<4;i++){
+        font=ui_message_font(fonts[i]);lv_point_t size;
+        lv_txt_get_size(&size,value,font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+        if(size.x<=lv_obj_get_style_width(o,0))break;
+    }
+    lv_obj_set_style_text_font(o,font,0);text(o,value);
+    lv_obj_set_height(o,font->line_height);lv_obj_set_y(o,(30-font->line_height)/2);
+}
+static lv_obj_t *serial_row_create(lv_obj_t *parent,lv_coord_t width,void *ctx)
+{
+    (void)ctx;lv_obj_t *row=box(parent,0,0,width,30,0xFFFFFF,0);if(!row)return NULL;
+    for(unsigned col=0;col<3;col++){
+        lv_obj_t *cells=box(row,0,0,1,30,0xFFFFFF,5);if(!cells)goto failed;
+        for(unsigned field=0;field<3;field++){
+            lv_obj_t *o=label(cells,0,0,1,"",&lv_font_instrument_sans_medium_20,field?0x4C606E:0x7A8D9B);
+            if(!o)goto failed;
+            lv_obj_set_style_base_dir(o,LV_BASE_DIR_LTR,0);
+            lv_obj_set_style_text_align(o,field==2?LV_TEXT_ALIGN_RIGHT:LV_TEXT_ALIGN_LEFT,0);
+        }
+    }
+    return row;
+failed:lv_obj_del(row);return NULL;
+}
+static void serial_row_bind(lv_obj_t *row,uint32_t group,void *ctx)
+{
+    ui_multi_detail_t *v=ctx;const multi_serial_cache_t *cache=counting_multi_serials(v->selected);
+    for(unsigned col=0;col<3;col++){
+        lv_obj_t *cells=lv_obj_get_child(row,col);unsigned rank=serial_rank(v,group,col);
+        hide(cells,!cache||rank>=v->count);if(!cache||rank>=v->count)continue;
+        const multi_serial_t *record=&cache->rows[v->indices[rank]];
+        lv_obj_set_pos(cells,col*(serial_width(v)+12),0);lv_obj_set_width(cells,serial_width(v));
+        lv_obj_set_style_bg_color(cells,lv_color_hex(group%2?0xF4F6F7:0xFFFFFF),0);
+        for(unsigned field=0;field<3;field++){
+            lv_obj_t *o=lv_obj_get_child(cells,field);char value[32];
+            lv_obj_set_x(o,serial_x(v,field));lv_obj_set_width(o,serial_cell_width(v,field));
+            if(field==0)snprintf(value,sizeof(value),"%u",record->number);
+            else if(field==2){if(record->value)snprintf(value,sizeof(value),"%lu",(unsigned long)record->value);else snprintf(value,sizeof(value),"--");}
+            serial_fit(o,field==1?record->text:value,field);
+        }
+    }
+}
+static void serial_range_changed(const ui_list_window_t *window,void *ctx)
+{
+    ui_multi_detail_t *v=ctx;char caption[96];
+    snprintf(caption,sizeof(caption),ui_text_get(UI_TEXT_LIST_PAGE_FMT),
+        (unsigned)ui_list_window_page_number(window),(unsigned)ui_list_window_pages(window));
+    text(v->range,caption);
+    lv_damped_button_set_enabled(v->previous,window->count&&window->first>0);
+    lv_damped_button_set_enabled(v->next,ui_list_window_page_number(window)<ui_list_window_pages(window));
+}
+static void serial_page(lv_event_t *e)
+{
+    ui_multi_detail_t *v=lv_event_get_user_data(e);
+    if(v->visible&&serial_view(v))lv_recycled_list_page_step(v->serial_list,lv_event_get_target(e)==v->previous?-1:1);
+}
+static void serial_open(lv_event_t *e)
+{
+    ui_multi_detail_t *v=lv_event_get_user_data(e);
+    if(v->visible&&serial_view(v)&&v->open)v->open(v->selected,1,v->context);
+}
+static void serial_arrow(lv_event_t *e)
+{
+    lv_obj_t *o=lv_event_get_target(e);bool next=(uintptr_t)lv_event_get_user_data(e);
+    lv_area_t a;lv_obj_get_coords(o,&a);int x=(a.x1+a.x2)/2,y=(a.y1+a.y2)/2;
+    lv_draw_line_dsc_t d;lv_draw_line_dsc_init(&d);d.width=2;d.round_start=d.round_end=1;
+    d.color=lv_color_hex(lv_obj_has_state(o,LV_STATE_DISABLED)?0xAAB5BE:0x657F90);
+    lv_point_t p={x+(next?-3:3),y-6},q={x+(next?3:-3),y},z={p.x,y+6};
+    lv_draw_line(lv_event_get_draw_ctx(e),&d,&p,&q);lv_draw_line(lv_event_get_draw_ctx(e),&d,&q,&z);
+}
+static lv_obj_t *serial_button(ui_multi_detail_t *v,int x,int width,const char *caption,lv_event_cb_t cb)
+{
+    const lv_damped_button_style_t style={0xF5F6F7,0xE8ECEF,0xF6F7F8,0x4C606E,0xAAB5BE,10};
+    lv_obj_t *o=lv_damped_button_create(v->root,&style,caption,&lv_font_instrument_sans_medium_14);
+    if(!o)return NULL;
+    lv_damped_button_set_exact_palette(o,lv_color_hex(style.normal_color),lv_color_hex(style.pressed_color));
+    lv_obj_set_pos(o,x,v->height-36);lv_obj_set_size(o,width,32);
+    if(!lv_obj_add_event_cb(o,cb,LV_EVENT_CLICKED,v)){lv_obj_del(o);return NULL;}return o;
+}
+static void serial_layout(ui_multi_detail_t *v,bool active)
+{
+    const multi_serial_cache_t *cache=active?counting_multi_serials(v->selected):NULL;
+    unsigned old=v->serial_columns;v->serial_columns=v->expanded?3:2;
+    /* Keep protocol/model text whole if an unusually wide serial cannot fit
+     * the ordinary 20/18/16/14 font ladder. Geometry changes reset paging. */
+    unsigned widest=0;
+    if(cache)for(unsigned i=0;i<v->count;i++){
+        lv_point_t size;lv_txt_get_size(&size,cache->rows[v->indices[i]].text,
+            ui_message_font(&lv_font_instrument_sans_medium_14),0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+        if(size.x>(int)widest)widest=size.x;
+    }
+    while(v->serial_columns>1&&widest>serial_cell_width(v,1))--v->serial_columns;
+    for(unsigned col=0;col<3;col++){
+        bool shown=active&&col<v->serial_columns;
+        lv_obj_t *rule=v->serial_rules[col];hide(rule,!shown);
+        lv_obj_set_x(rule,22+col*(serial_width(v)+12));lv_obj_set_width(rule,serial_width(v));
+        for(unsigned field=0;field<3;field++){
+            lv_obj_t *o=v->serial_headers[col][field];hide(o,!shown);
+            lv_obj_set_x(o,22+col*(serial_width(v)+12)+serial_x(v,field));
+            lv_obj_set_width(o,serial_cell_width(v,field));
+        }
+    }
+    for(unsigned i=0;i<3;i++)hide(v->headers[i],active);
+    hide(lv_recycled_list_object(v->list),active);hide(lv_recycled_list_object(v->serial_list),!active);
+    hide(v->previous,!active);hide(v->next,!active);hide(v->range,!active);
+    hide(v->details,!active||v->expanded||!v->open);
+    lv_obj_set_width(v->foot,active?180:v->width-450);
+    lv_obj_set_x(v->foot,active?270:22);
+    if(active)lv_recycled_list_refresh(v->serial_list,(v->count+v->serial_columns-1)/v->serial_columns,old!=v->serial_columns);
+    else lv_recycled_list_stop(v->serial_list);
 }
 static void flag(lv_obj_t *o,const char *code)
 {
@@ -139,7 +280,7 @@ static void search_submit(const char *s,void *ctx)
     char *query=v->query;
     snprintf(query,sizeof(v->query),"%s",s);
     for(char *p=query;*p;p++)*p=(char)toupper((unsigned char)*p);
-    v->dirty=true;lv_recycled_list_refresh(v->list,0,true);ui_multi_detail_refresh(v);
+    v->dirty=true;lv_recycled_list_refresh(v->list,0,true);lv_recycled_list_refresh(v->serial_list,0,true);ui_multi_detail_refresh(v);
 }
 /* Available choices come only from this currency's directory / serial cache.
  * Descending unique values; no denomination catalogue or currency inference. */
@@ -203,12 +344,14 @@ static void refresh_cb(lv_event_t *e)
 static void tap(lv_event_t *e)
 {
     ui_multi_detail_t *v=lv_event_get_user_data(e);
-    if(lv_event_get_code(e)!=LV_EVENT_RELEASED||!lv_recycled_list_tap_allowed(v->list))return;
+    if(lv_event_get_code(e)!=LV_EVENT_RELEASED||!lv_recycled_list_tap_allowed(serial_view(v)?v->serial_list:v->list))return;
     lv_indev_t *indev=lv_event_get_indev(e);if(!indev)return;
-    if(v->selected>=0&&!v->expanded){if(v->open)v->open(v->selected,v->tab,v->context);return;}
+    if(v->selected>=0&&!v->expanded){if(v->open){v->open(v->selected,v->tab,v->context);}return;}
     if(v->selected!=-1)return;lv_point_t point;uint32_t index;lv_indev_get_point(indev,&point);
-    if(lv_recycled_list_index_at_point(v->list,&point,&index)&&index<counting_multi_current()->count)
+    if(lv_recycled_list_index_at_point(v->list,&point,&index)&&index<counting_multi_current()->count) {
+
         ui_multi_detail_select(v,index,0);
+    }
 }
 static lv_obj_t *create_row(lv_obj_t *parent,lv_coord_t width,void *ctx)
 {
@@ -236,18 +379,22 @@ static void bind_row(lv_obj_t *row,uint32_t index,void *ctx)
         const char *code=overview?m->currencies[index].code:m->currencies[v->selected].code;
         const char *s=currency_metadata_symbol(code);text(symbol,s?s:"");
         int sx=overview?x3:12;lv_obj_set_x(symbol,sx);
-        lv_point_t size;lv_txt_get_size(&size,s?s:"",&v->symbol_font.font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+        lv_point_t size;lv_txt_get_size(&size,lv_label_get_text(symbol),lv_obj_get_style_text_font(symbol,0),0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+        lv_obj_set_width(symbol,size.x);
         if(overview)x3+=size.x+10;else x1+=size.x+10;
     }
     lv_obj_set_x(a,x1);lv_obj_set_width(a,x2-x1-16);lv_obj_set_x(b,x2);lv_obj_set_width(b,x3-x2-20);lv_obj_set_x(c,x3);lv_obj_set_width(c,overview?140:v->width-68-x3);
-    lv_obj_set_style_text_font(a,ui_message_font(v->tab&&!overview&&!rejects_view?&lv_font_instrument_sans_medium_14:&lv_font_instrument_sans_semibold_20),0);
+    lv_obj_set_style_text_font(a,ui_message_font(&lv_font_instrument_sans_semibold_20),0);
     hide(f,!overview);
     if(overview&&index<m->count){const multi_currency_t *cur=&m->currencies[index];flag(f,cur->code);text(a,cur->code);number(b,cur->pcs);number(c,cur->amount);}
     else if(rejects_view){const multi_reject_cache_t *r=counting_multi_rejects();if(index>=r->count)return;char code[16];snprintf(code,sizeof(code),"0x%02X",r->rows[index].code);text(a,code);text(b,ui_text_counting_reject_reason(r->rows[index].code));number(c,r->rows[index].pcs);}
-    else if(v->tab){const multi_serial_cache_t *s=counting_multi_serials(v->selected);if(!s||index>=v->count)return;const multi_serial_t *r=&s->rows[v->indices[index]];number(a,r->number);text(b,r->text);if(r->value)number(c,r->value);else text(c,"--");}
     else{const multi_currency_t *cur=&m->currencies[v->selected];if(index>=cur->denom_count)return;
         number(a,cur->denom[index].value);
         number(b,cur->denom[index].pcs);number(c,(uint64_t)cur->denom[index].value*cur->denom[index].pcs);}
+    if(overview||(!rejects_view&&!v->tab)){
+        /* Mixed font baselines differ by locale: align the visible glyphs. */
+        lv_obj_set_y(symbol,8+glyph_center(overview?c:a)-glyph_center(symbol));
+    }
 }
 static void poll(lv_timer_t *timer){ui_multi_detail_refresh(timer->user_data);}
 static void deleted(lv_event_t *e)
@@ -271,7 +418,7 @@ ui_multi_detail_t *ui_multi_detail_create(lv_obj_t *parent,bool expanded,ui_mult
     int head_y=expanded?0:10;
     v->flag=lv_img_create(v->root);if(!v->flag)goto failed;lv_obj_set_pos(v->flag,22,head_y+18);
     v->currency_name=label(v->root,82,head_y+6,108,"",&lv_font_instrument_sans_medium_10,0x7A8D9B);
-    v->currency=label(v->root,82,head_y+23,100,"MULTI",&lv_font_instrument_sans_semibold_24,0x17212A);
+    v->currency=label(v->root,82,head_y+23,100,currency_state_display_code(CURRENCY_MULTI_CODE),&lv_font_instrument_sans_semibold_24,0x17212A);
     v->currency_target=box(v->root,12,12,165,48,0,0);
     if(!v->currency_target)goto failed;
     lv_obj_set_style_bg_opa(v->currency_target,0,0);
@@ -300,10 +447,10 @@ ui_multi_detail_t *ui_multi_detail_create(lv_obj_t *parent,bool expanded,ui_mult
     v->unit=label(v->root,metrics+70,head_y+10,140,"",&lv_font_instrument_sans_medium_10,0x7A8D9B);
     v->amount=label(v->root,metrics+70,head_y+25,140,"",&lv_font_instrument_sans_semibold_28,0x17212A);
     v->amount_symbol=label(v->root,metrics+140,head_y+32,50,"",&v->symbol_font.font,0x7A8D9B);
-    v->back=button(v,v->width-114,head_y+10,92,44,ui_text_get(UI_TEXT_MULTI_BACK),0xE9EDF0,back_cb);
+    v->back=lv_nav_back_text_button_create(v->root,v->width-98,head_y+10,
+        &lv_font_instrument_sans_medium_16,back_cb,v);
     if(!v->back)goto failed;
-    lv_obj_t *back_text=lv_obj_get_child(v->back,0);lv_obj_set_align(back_text,LV_ALIGN_TOP_LEFT);lv_obj_set_pos(back_text,34,13);lv_obj_set_width(back_text,52);
-    if(!icon(v->back,12,13,LVGL_DIR"ui_icons/back_18.png"))goto failed;
+    lv_damped_button_set_exact_palette(v->back,lv_color_hex(0xF5F6F7),lv_color_hex(0xE8ECEF));
     v->reject=button(v,v->width-148,head_y+10,126,44,"",0xFFFFFF,reject_cb);
     if(!v->reject)goto failed;
     lv_obj_t *reject_text=lv_obj_get_child(v->reject,0);lv_obj_set_align(reject_text,LV_ALIGN_TOP_LEFT);
@@ -321,6 +468,31 @@ ui_multi_detail_t *ui_multi_detail_create(lv_obj_t *parent,bool expanded,ui_mult
     v->list=lv_recycled_list_create(v->content,&cfg);if(!v->list)goto failed;
     lv_port_indev_set_drag_obj(lv_recycled_list_object(v->list),true);
     lv_obj_add_event_cb(lv_recycled_list_object(v->list),tap,LV_EVENT_RELEASED,v);
+    v->serial_columns=expanded?3:2;v->serial_rows=expanded?8:5;
+    v->previous=serial_button(v,22,32,"",serial_page);
+    v->next=serial_button(v,222,32,"",serial_page);
+    v->range=label(v->root,60,v->height-28,156,"",&lv_font_instrument_sans_medium_14,0x7A8D9B);
+    v->details=serial_button(v,462,150,ui_text_get(UI_TEXT_MULTI_DETAILS_ACTION),serial_open);
+    if(!v->previous||!v->next||!v->range||!v->details)goto failed;
+    lv_obj_set_style_text_align(v->range,LV_TEXT_ALIGN_CENTER,0);
+    if(!lv_obj_add_event_cb(v->previous,serial_arrow,LV_EVENT_DRAW_MAIN,(void *)0)||
+       !lv_obj_add_event_cb(v->next,serial_arrow,LV_EVENT_DRAW_MAIN,(void *)1))goto failed;
+    static const ui_text_id_t headings[]={UI_TEXT_PAGE01_DETAIL_COL_NO,UI_TEXT_LIST_COL_SERIAL_NUMBER,UI_TEXT_PAGE01_DETAIL_COL_DENOM};
+    for(unsigned col=0;col<3;col++){
+        v->serial_rules[col]=box(v->root,22,body_y-1,1,1,0xE7ECEF,0);
+        if(!v->serial_rules[col])goto failed;
+        for(unsigned field=0;field<3;field++){
+            lv_obj_t *o=label(v->root,0,body_y-21,1,ui_text_get(headings[field]),&lv_font_instrument_sans_medium_12,0x7A8D9B);
+            if(!o)goto failed;
+            v->serial_headers[col][field]=o;
+            lv_obj_set_style_text_align(o,field==2?LV_TEXT_ALIGN_RIGHT:LV_TEXT_ALIGN_LEFT,0);
+        }
+    }
+    cfg.rows=v->serial_rows;cfg.row_height=30;cfg.create_row=serial_row_create;cfg.bind_row=serial_row_bind;cfg.changed=serial_range_changed;
+    v->serial_list=lv_recycled_list_create(v->content,&cfg);if(!v->serial_list)goto failed;
+    lv_recycled_list_set_paged(v->serial_list,true);
+    lv_port_indev_set_drag_obj(lv_recycled_list_object(v->serial_list),true);
+    lv_obj_add_event_cb(lv_recycled_list_object(v->serial_list),tap,LV_EVENT_RELEASED,v);
     v->empty=label(v->content,30,rows*21-15,v->width-104,"",&lv_font_instrument_sans_medium_16,0x718795);if(!v->empty)goto failed;
     lv_obj_set_style_text_align(v->empty,LV_TEXT_ALIGN_CENTER,0);
     if(!ui_detail_reveal_init(&v->reveal,v->content))goto failed;
@@ -344,13 +516,13 @@ ui_multi_detail_t *ui_multi_detail_create(lv_obj_t *parent,bool expanded,ui_mult
 failed:lv_obj_del(v->root);return NULL;
 }
 lv_obj_t *ui_multi_detail_object(ui_multi_detail_t *v){return v?v->root:NULL;}
-lv_obj_t *ui_multi_detail_scroll(ui_multi_detail_t *v){return v?lv_recycled_list_object(v->list):NULL;}
+lv_obj_t *ui_multi_detail_scroll(ui_multi_detail_t *v){return v?lv_recycled_list_object(serial_view(v)?v->serial_list:v->list):NULL;}
 lv_obj_t *ui_multi_detail_currency_target(ui_multi_detail_t *v){return v?v->currency_target:NULL;}
 void ui_multi_detail_visible(ui_multi_detail_t *v,bool visible)
 {
     if(!v||v->visible==visible)return;v->visible=visible;hide(v->root,!visible);
     if(visible){lv_timer_resume(v->timer);v->dirty=true;ui_multi_detail_refresh(v);}
-    else{lv_timer_pause(v->timer);lv_recycled_list_stop(v->list);ui_detail_reveal_cancel(&v->reveal);if(v->keyboard)lv_alnum_keyboard_hide(v->keyboard);}
+    else{lv_timer_pause(v->timer);lv_recycled_list_stop(v->list);lv_recycled_list_stop(v->serial_list);ui_detail_reveal_cancel(&v->reveal);if(v->keyboard)lv_alnum_keyboard_hide(v->keyboard);}
 }
 void ui_multi_detail_select(ui_multi_detail_t *v,int index,int tab)
 {
@@ -361,7 +533,7 @@ void ui_multi_detail_select(ui_multi_detail_t *v,int index,int tab)
     v->selected=index;v->tab=tab==1;v->dirty=true;
     multi_detail_status_t status=current_status(v);
     v->pending=index!=-1&&!available(status)&&status!=MULTI_DETAIL_LOADING;
-    lv_recycled_list_refresh(v->list,0,true);ui_detail_reveal_begin(&v->reveal,false);ui_multi_detail_refresh(v);
+    lv_recycled_list_refresh(v->list,0,true);lv_recycled_list_refresh(v->serial_list,0,true);ui_detail_reveal_begin(&v->reveal,false);ui_multi_detail_refresh(v);
 }
 bool ui_multi_detail_back(ui_multi_detail_t *v)
 {
@@ -394,11 +566,11 @@ void ui_multi_detail_refresh(ui_multi_detail_t *v)
     v->dirty=false;v->revision=m->revision;v->extra=extra;
     bool overview=v->selected==-1,rejects_view=v->selected==-2;
     const multi_currency_t *c=v->selected>=0?&m->currencies[v->selected]:NULL;
-    flag(v->flag,c?c->code:"MULTI");text(v->currency,c?c->code:"MULTI");
-    center_currency_glyphs(v);
+    flag(v->flag,c?c->code:"MULTI");text(v->currency,c?c->code:currency_state_display_code(CURRENCY_MULTI_CODE));
+    lv_obj_set_y(v->currency,(v->expanded?30:40)-glyph_center(v->currency));
     text(v->currency_name,c?currency_name(c->code):ui_text_get(UI_TEXT_MULTI_CURRENCY_MODE));
     text(v->title,ui_text_get(rejects_view?UI_TEXT_LIST_REJECT_ANALYSIS:overview?UI_TEXT_MULTI_RESULTS:UI_TEXT_MULTI_DETAILS));
-    char scope[32];snprintf(scope,sizeof(scope),"MULTI / %s",c?c->code:"");
+    char scope[96];snprintf(scope,sizeof(scope),"%s / %s",currency_state_display_code(CURRENCY_MULTI_CODE),c?c->code:"");
     text(v->subtitle,c?scope:ui_text_get(rejects_view?UI_TEXT_MULTI_GLOBAL_REJECT:UI_TEXT_MULTI_SEPARATE));
     /* Position getters still contain the previous layout inside this batch. */
     const int title_x=rejects_view?22:v->expanded?208:194;
@@ -413,11 +585,14 @@ void ui_multi_detail_refresh(ui_multi_detail_t *v)
     hide(v->amount,overview);hide(v->unit,overview);hide(v->amount_symbol,!c);
     if(c){
         const char *symbol=currency_metadata_symbol(c->code);text(v->amount_symbol,symbol?symbol:"");
-        lv_point_t size;const lv_font_t *font=&lv_font_instrument_sans_semibold_28;
+        lv_point_t size;const lv_font_t *font=ui_message_font(&lv_font_instrument_sans_semibold_28);
         lv_txt_get_size(&size,lv_label_get_text(v->amount),font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
-        if(size.x>104){font=&lv_font_instrument_sans_semibold_20;lv_txt_get_size(&size,lv_label_get_text(v->amount),font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);}
-        lv_obj_set_style_text_font(v->amount,ui_message_font(font),0);
+        if(size.x>104){font=ui_message_font(&lv_font_instrument_sans_semibold_20);lv_txt_get_size(&size,lv_label_get_text(v->amount),font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);}
+        lv_obj_set_style_text_font(v->amount,font,0);
         lv_obj_set_x(v->amount_symbol,lv_obj_get_x(v->amount)+size.x+8);
+        lv_txt_get_size(&size,lv_label_get_text(v->amount_symbol),&v->symbol_font.font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+        lv_obj_set_width(v->amount_symbol,size.x);
+        lv_obj_set_y(v->amount_symbol,(v->expanded?25:35)+glyph_center(v->amount)-glyph_center(v->amount_symbol));
     }
     char unit[64];snprintf(unit,sizeof(unit),"%s - %s",ui_text_get(UI_TEXT_PAGE01_DETAIL_COL_AMOUNT),c?c->code:"");text(v->unit,c?unit:ui_text_get(UI_TEXT_PAGE01_DETAIL_COL_REJECT));
     hide(v->back,overview);hide(v->refresh,overview);hide(v->reject,!overview);hide(v->segments,!c);hide(v->search,!c||!v->tab||v->expanded);
@@ -445,7 +620,8 @@ void ui_multi_detail_refresh(ui_multi_detail_t *v)
         else if(c&&v->tab){const multi_serial_cache_t *s=counting_multi_serials(v->selected);for(unsigned i=0;i<s->count;i++)if(matched(v,&s->rows[i]))v->indices[v->count++]=i;}
         else if(c)v->count=c->denom_count;
     }
-    lv_recycled_list_refresh(v->list,v->count,false);hide(v->empty,v->count!=0);
+    serial_layout(v,c&&v->tab);
+    lv_recycled_list_refresh(v->list,c&&v->tab?0:v->count,false);hide(v->empty,v->count!=0);
     text(v->empty,ui_text_get(overview?UI_TEXT_MULTI_READY:waiting?UI_TEXT_MULTI_RECEIVING:available(status)?UI_TEXT_MULTI_NO_RECORDS:status==MULTI_DETAIL_TIMEOUT?UI_TEXT_MULTI_WAIT_END:UI_TEXT_MULTI_INVALID));
     text(v->foot,ui_text_get(rejects_view?UI_TEXT_MULTI_GLOBAL_REJECT:overview?UI_TEXT_MULTI_SEPARATE:v->tab?UI_TEXT_MULTI_UNKNOWN_DENOM:UI_TEXT_MULTI_CACHED));
     if(c&&v->tab){

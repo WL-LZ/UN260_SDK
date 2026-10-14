@@ -64,6 +64,7 @@ with tempfile.TemporaryDirectory(prefix='un260-settings-parameters-') as temp:
         list(pool.map(build, zip(sources, objects)))
     exe = work / 'view'
     subprocess.run([*common, *map(str, objects), '-lm', '-lz', '-o', str(exe)], check=True)
-    subprocess.run([str(exe)], env={**os.environ, 'OUT': str(out), 'UN260_BACKGROUND_DIR': str(out)}, check=True)
+    result=subprocess.run([str(exe)], env={**os.environ, 'OUT': str(out), 'UN260_BACKGROUND_DIR': str(out)})
 for file in out.glob('*.bgra'):
     Image.frombytes('RGBA', (1280, 400), file.read_bytes(), 'raw', 'BGRA').convert('RGB').save(file.with_suffix('.png'))
+result.check_returncode()

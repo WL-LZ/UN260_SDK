@@ -1,3 +1,4 @@
+#include "un260/currency/currency_state.h"
 #include "un260/history/history_read_task.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/font/ui_message_font.h"
@@ -295,7 +296,7 @@ static void record_row_bind(lv_obj_t *row,uint32_t index,void *context)
     snprintf(text,sizeof(text),"%lu",(unsigned long)number);
     text_set(lv_obj_get_child(row,0),rec ? text : "");
     date_text(rec,text,sizeof(text));text_set(lv_obj_get_child(row,1),rec ? text : "");
-    text_set(lv_obj_get_child(row,2),rec ? (rec->multi.enabled ? "MULTI" : rec->currency) : "");
+    text_set(lv_obj_get_child(row,2),rec ? (rec->multi.enabled ? currency_state_display_code(CURRENCY_MULTI_CODE) : rec->currency) : "");
     const history_multi_currency_t *group=NULL;
     if(rec && rec->multi.enabled && history->query.currency[0])
         for(unsigned i=0;i<rec->multi.count;i++)

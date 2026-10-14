@@ -369,7 +369,7 @@ static void smart_island_get_currency_code(char *buf, size_t size)
     if (curr_code[0] != '\0') {
         lv_snprintf(buf, size, "%s", currency_state_display_code(curr_code));
     } else {
-        lv_snprintf(buf, size, "%s", "CUR");
+        lv_snprintf(buf, size, "%s", ui_tr("Currency"));
     }
 }
 
@@ -581,11 +581,19 @@ static void smart_island_multi_live_apply(void)
     const char *values[4]={current?current->code:"---",pcs,amount,symbol?symbol:""};
     const lv_font_t *fonts[]={&lv_font_instrument_sans_semibold_18,
         &lv_font_instrument_sans_semibold_16,&lv_font_instrument_sans_semibold_14};
+    /* Measure the same localized font and Arabic-shaped text that LVGL draws. */
+    for(unsigned i=0;i<4;i++){
+        lv_obj_t *label=g_si_ctx.objects.counting_multi[i];
+        if(strcmp(lv_label_get_text(label),values[i]))lv_label_set_text(label,values[i]);
+    }
     lv_point_t sizes[4];int total=0;unsigned fit=0;
     for(fit=0;fit<3;fit++){
         total=0;
         for(unsigned i=0;i<4;i++){
-            lv_txt_get_size(&sizes[i],values[i],i==3?&multi_symbol_font.font:fonts[fit],0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+            lv_obj_t *label=g_si_ctx.objects.counting_multi[i];
+            const lv_font_t *font=ui_message_font(i==3?&multi_symbol_font.font:fonts[fit]);
+            lv_txt_get_size(&sizes[i],lv_label_get_text(label),font,
+                lv_obj_get_style_text_letter_space(label,0),0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
             total+=sizes[i].x;
         }
         total+=24+(sizes[3].x?5:0);
@@ -601,7 +609,6 @@ static void smart_island_multi_live_apply(void)
     int x=left+(SMART_ISLAND_COUNT_W-14-left-total)/2;
     for(unsigned i=0;i<4;i++){
         lv_obj_t *label=g_si_ctx.objects.counting_multi[i];
-        if(strcmp(lv_label_get_text(label),values[i]))lv_label_set_text(label,values[i]);
         lv_obj_set_style_text_font(label,ui_message_font(i==3?&multi_symbol_font.font:fonts[fit]),0);
         lv_obj_set_size(label,sizes[i].x,sizes[i].y);
         lv_obj_set_pos(label,x,(SMART_ISLAND_COUNT_H-sizes[i].y)/2);
@@ -814,7 +821,7 @@ static void smart_island_apply_texts(void)
 
 static void smart_island_rebuild_scene_texts(void)
 {
-    char curr[8] = {0};
+    char curr[64] = {0};
     char detail_line[96] = {0};
     const char *work_text = smart_island_get_work_mode_text();
     bool monetary_supported = !currency_state_multi_selected() &&

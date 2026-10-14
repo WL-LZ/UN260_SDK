@@ -160,7 +160,7 @@ def main():
             sources.append(ROOT / path)
         sources += [ROOT / f"un260/font/lv_font_{f}.c" for f in FONTS]
         sources += [ROOT / path for path in (
-            "un260/lv_components/lv_settings.c", "un260/lv_components/ui_multi_detail.c",
+            "un260/lv_components/lv_settings.c",
             "un260/lv_components/ui_detail_reveal.c", "un260/font/scaled_font.c",
             "un260/lv_components/lv_loading_orbit.c",
             "un260/counting/counting_multi_extra.c", "un260/counting/counting_multi.c",

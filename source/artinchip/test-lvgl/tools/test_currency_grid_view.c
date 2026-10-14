@@ -4,6 +4,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include "lvgl/lvgl.h"
+#include "un260/font/ui_locale_font_bank.h"
+#include "un260/font/ui_message_font.h"
+#include "un260/lv_system/ui_i18n.h"
+#include "un260/lv_system/ui_lang.h"
 #include "un260/lv_core/page_07_curr/page_07_curr_internal.h"
 #include "un260/lv_core/page_07_curr/page_07_curr_layout.h"
 #include "un260/lv_core/page_07_curr/page_07_curr_star.h"
@@ -52,8 +56,74 @@ static lv_res_t image_info(lv_img_decoder_t*d,const void*src,lv_img_header_t*h){
 static lv_res_t image_open(lv_img_decoder_t*d,lv_img_decoder_dsc_t*s){if(image_info(d,s->src,&s->header)!=LV_RES_OK)return LV_RES_INV;const grid_asset_t*a=asset(s->src);if(!strcmp(a->name,"flags.png")){if(fail_atlas)return LV_RES_INV;atlas_opens++;}image_opens++;FILE*f=fopen(a->path,"rb");assert(f);unsigned char*p=malloc(a->w*a->h*4);assert(p);assert(fread(p,4,a->w*a->h,f)==a->w*a->h);fclose(f);s->img_data=p;return LV_RES_OK;}
 static void image_close(lv_img_decoder_t*d,lv_img_decoder_dsc_t*s){(void)d;free((void*)s->img_data);}
 static void snapshot(const char*n){lv_obj_update_layout(lv_scr_act());lv_obj_invalidate(lv_scr_act());lv_refr_now(NULL);char path[512];snprintf(path,sizeof(path),"%s/%s.bgra",getenv("OUT"),n);FILE*f=fopen(path,"wb");assert(f);assert(fwrite(frame,4,1280*400,f)==1280*400);fclose(f);}
+/* Rebuild the real overview with each locale's production face and catalog. */
+static void locale_selector_test(void){
+ unsigned overflows=0;
+ g_page07_curr.model.view_mode=PAGE07_CURR_VIEW_GRID;
+ g_page07_curr.model.favorite_only=false;
+ g_page07_curr.model.visible_count=34;
+ g_page07_curr.model.selected_abs_idx=1;
+ for(int i=0;i<34;i++)g_page07_curr.model.visible_indices[i]=i;
+ for(size_t language=0;language<ui_lang_count();++language){
+  const ui_locale_t *locale=ui_lang_at(language);
+  assert(ui_lang_prepare_resources(locale->id));ui_lang_set(locale->id);
+  curr_build_grid_layer();curr_set_mode_visible();lv_obj_update_layout(lv_scr_act());
+  for(unsigned selector=0;selector<2;++selector){
+   const char *key=selector?"MULTI":"AUTO";
+   lv_obj_t *label=g_page07_curr.grid_items[selector].name;
+   const lv_font_t *font=lv_obj_get_style_text_font(label,0);
+   assert(font==ui_message_font(&lv_font_instrument_sans_medium_18));
+   assert(lv_obj_get_width(label)==70);
+   lv_obj_t *probe=lv_label_create(lv_scr_act());lv_label_set_text(probe,key);
+   assert(!strcmp(lv_label_get_text(label),lv_label_get_text(probe)));lv_obj_del(probe);
+   const char *value=lv_label_get_text(label);lv_point_t ink;
+   lv_txt_get_size(&ink,value,font,lv_obj_get_style_text_letter_space(label,0),0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+   fprintf(stderr,"Currency selector %s %s: %s %d/70 px\n",locale->tag,key,value,ink.x);
+   if(ink.x>70||ink.y>font->line_height||lv_obj_get_height(label)>font->line_height)++overflows;
+   uint32_t offset=0;
+   while(value[offset]){
+    uint32_t cp=_lv_txt_encoded_next(value,&offset);lv_font_glyph_dsc_t glyph;
+    if(cp<32||(cp>=0x200b&&cp<=0x200f)||(cp>=0x202a&&cp<=0x202e)||(cp>=0x2066&&cp<=0x2069))continue;
+    bool exists=lv_font_get_glyph_dsc(font,&glyph,cp,0);
+    if(!exists||glyph.is_placeholder)fprintf(stderr,"Currency selector missing glyph %s U+%04X\n",locale->tag,cp);
+    assert(exists&&!glyph.is_placeholder);
+   }
+  }
+  lv_obj_t *buttons[]={g_page07_curr.objects.overview.filter[0],g_page07_curr.objects.overview.filter[1],g_page07_curr.objects.overview.card_button,g_page07_curr.objects.overview.back_button};
+  const char *action_keys[]={"All","Favorites","Card view","Back"};
+  for(unsigned action_index=0;action_index<4;++action_index){
+   lv_obj_t *button=buttons[action_index],*label=lv_obj_get_child(button,0);
+   const lv_font_t *font=lv_obj_get_style_text_font(label,0);
+   assert(font==ui_message_font(&lv_font_instrument_sans_medium_18));
+   const char *expected=action_index?ui_tr(action_keys[action_index]):ui_trc("Currency filter","All");
+   lv_obj_t *probe=lv_label_create(lv_scr_act());lv_label_set_text(probe,expected);
+   assert(!strcmp(lv_label_get_text(label),lv_label_get_text(probe)));lv_obj_del(probe);
+   const char *value=lv_label_get_text(label);lv_point_t ink;
+   lv_txt_get_size(&ink,value,font,lv_obj_get_style_text_letter_space(label,0),0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+   lv_area_t parent,bounds;lv_obj_get_coords(button,&parent);lv_obj_get_coords(label,&bounds);
+   bool fits=ink.x<=lv_obj_get_width(button)&&ink.y<=font->line_height&&lv_obj_get_height(label)<=font->line_height&&bounds.x1>=parent.x1&&bounds.x2<=parent.x2&&bounds.y1>=parent.y1&&bounds.y2<=parent.y2;
+   fprintf(stderr,"Currency action %s %s: %s %d/%d px, label [%d,%d,%d,%d], button [%d,%d,%d,%d] %s\n",locale->tag,action_keys[action_index],value,ink.x,lv_obj_get_width(button),bounds.x1,bounds.y1,bounds.x2,bounds.y2,parent.x1,parent.y1,parent.x2,parent.y2,fits?"PASS":"FAIL");
+   if(!fits)++overflows;
+   uint32_t offset=0;
+   while(value[offset]){
+    uint32_t cp=_lv_txt_encoded_next(value,&offset);lv_font_glyph_dsc_t glyph;
+    if(cp<32||(cp>=0x200b&&cp<=0x200f)||(cp>=0x202a&&cp<=0x202e)||(cp>=0x2066&&cp<=0x2069))continue;
+    bool exists=lv_font_get_glyph_dsc(font,&glyph,cp,0);
+    if(!exists||glyph.is_placeholder)fprintf(stderr,"Currency action missing glyph %s %s U+%04X\n",locale->tag,action_keys[action_index],cp);
+    assert(exists&&!glyph.is_placeholder);
+   }
+  }
+  char name[80];snprintf(name,sizeof(name),"currency-selectors-%s",locale->tag);snapshot(name);
+  page07_curr_overview_set_active(&g_page07_curr,false);
+  assert(!g_page07_curr.objects.overview.atlas_pin);
+  lv_obj_del(g_page07_curr.objects.grid_layer);
+  assert(!g_page07_curr.objects.overview.atlas_pin);
+ }
+ ui_lang_set(LANGUAGE_EN);assert(overflows==0);
+ puts("PASS actual Currency VIEW AUTO/MULTI and four actions in ten locales: production catalog, locale fonts, full glyphs, 70px/18pt selectors and action natural width/parent bounds");
+}
 int main(void){
- lv_init();lv_disp_draw_buf_t db;lv_disp_draw_buf_init(&db,buffer,NULL,1280*40);lv_disp_drv_t dd;lv_disp_drv_init(&dd);dd.hor_res=1280;dd.ver_res=400;dd.draw_buf=&db;dd.flush_cb=flush;lv_disp_t*disp=lv_disp_drv_register(&dd);ui_scrollbar_init(disp);
+ lv_init();ui_lang_set_resource_preparer(ui_locale_font_prepare);ui_message_font_set_provider(ui_locale_font_compose);lv_disp_draw_buf_t db;lv_disp_draw_buf_init(&db,buffer,NULL,1280*40);lv_disp_drv_t dd;lv_disp_drv_init(&dd);dd.hor_res=1280;dd.ver_res=400;dd.draw_buf=&db;dd.flush_cb=flush;lv_disp_t*disp=lv_disp_drv_register(&dd);ui_scrollbar_init(disp);
  lv_img_cache_set_size(48); /* Match the production decoder cache. */
  lv_img_decoder_t*decoder=lv_img_decoder_create();lv_img_decoder_set_info_cb(decoder,image_info);lv_img_decoder_set_open_cb(decoder,image_open);lv_img_decoder_set_close_cb(decoder,image_close);
  lv_indev_drv_t driver;lv_indev_drv_init(&driver);driver.type=LV_INDEV_TYPE_POINTER;driver.read_cb=input;driver.feedback_cb=evdev_feedback;lv_indev_drv_register(&driver);
@@ -147,6 +217,7 @@ int main(void){
  assert(g_page07_curr.objects.overview.atlas_pin->invalidate_pending);
  lv_obj_del(g_page07_curr.objects.grid_layer);
  assert(!g_page07_curr.objects.overview.atlas_pin);
+ locale_selector_test();
  lv_obj_del(g_page07_curr.objects.root);lv_img_cache_invalidate_src(NULL);
  puts("PASS production Currency VIEW: 24 full cells including AUTO/MULTI, 96x54 flags at zoom=256, one atlas decode across 3 builds and 48 reverse scrolls, zero new decoder opens during scroll, native drag cancellation, selection/filter/card/back, lifetime/pin release and decode-failure recovery. Host renderer, not board FPS.");return 0;
 }

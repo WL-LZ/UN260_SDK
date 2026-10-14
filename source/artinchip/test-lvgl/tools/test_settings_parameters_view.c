@@ -423,6 +423,31 @@ static void locale_pin_keypad_test(void)
     lv_pin_keypad_destroy(&keypad);ui_lang_set(LANGUAGE_EN);
     puts("PASS reused PIN in ten locales: Show/Hide/Cancel/Confirm/Clear, actual glyphs, single-line action bounds, hidden draft clearing");
 }
+static lv_obj_t *locale_rendered_label(const char *key){
+ lv_obj_t *probe=lv_label_create(lv_scr_act());lv_label_set_text(probe,ui_tr(key));
+ lv_obj_t *label=find_label(lv_scr_act(),lv_label_get_text(probe));
+ if(label==probe)label=NULL;
+ lv_obj_del(probe);return label;
+}
+static void locale_print_description_bounds(void){
+ const struct{const char *key;int width;} descriptions[]={
+  {"Tap to edit with keyboard",330},
+  {"Blank lines / tap value for keyboard",330},
+  {"Choose the printed records",330},
+  {"Receipt preview / Example data",372},
+ };
+ for(unsigned i=0;i<sizeof(descriptions)/sizeof(descriptions[0]);++i){
+  lv_obj_t *label=locale_rendered_label(descriptions[i].key);
+  if(!label&&i==3)label=locale_rendered_label("Example / blank spacing scaled");
+  assert(label);const lv_font_t *font=lv_obj_get_style_text_font(label,0);lv_point_t ink;
+  lv_txt_get_size(&ink,lv_label_get_text(label),font,lv_obj_get_style_text_letter_space(label,0),0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+  if(ink.x>descriptions[i].width){
+   fprintf(stderr,"Print description too wide %s: %s (%d > %d)\n",ui_lang_current()->tag,lv_label_get_text(label),ink.x,descriptions[i].width);
+   ++locale_view_overflows;
+  }
+  assert(ink.y<=font->line_height&&lv_obj_get_height(label)<=font->line_height);
+ }
+}
 static void locale_parameters_test(void)
 {
     const struct { const char *name; void (*create)(lv_obj_t *); void (*destroy)(void); } pages[] = {
@@ -444,6 +469,7 @@ static void locale_parameters_test(void)
                 ui_page_27_set_cfd_level_on_info(reply,sizeof(reply));advance(920);
             }
             lv_obj_update_layout(lv_scr_act());check_single_line(lv_scr_act());
+            if(!strcmp(pages[page].name,"print"))locale_print_description_bounds();
             char name[80];snprintf(name,sizeof(name),"locale-%s-%s",locale->tag,pages[page].name);snapshot(name);
             pages[page].destroy();
         }
