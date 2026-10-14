@@ -61,7 +61,7 @@ enum {A_BACK=1,A_QUICK,A_SETTINGS,A_HISTORY,A_PRINT_SETUP,A_PRINT,A_QR,A_STANDBY
       A_QUICK_TOGGLE,A_NEW_PROFILE,A_APPLY_PROFILE,
       A_DELETE_PROFILE,A_SAVE_BATCH,A_ADD_BATCH,A_EDIT_BATCH,A_DELETE_BATCH,A_APPLY_BATCH,
       A_NEW_USER,A_EDIT_NAME,A_USB_SCAN,A_USER_SAVE,A_USER_CANCEL,A_USER_SWITCH,A_USB_CLOSE,A_QUICK_CLOSE,
-      A_AUTO_QR,A_CAPACITY,A_LANGUAGE,A_TIMEOUT,A_BUSINESS_DAY,A_CLOSE_DAY,A_CONFIRM_RUN,A_MERGE_RUN,A_SPLIT_RUN,A_EXCLUDE_RUN,A_DIAGNOSTICS,A_ARCHIVES,A_ARCHIVE_PERIOD,A_EXPORT_RECORDS,A_CURRENT_RECORDS,A_CANCEL_VERIFY,A_EDIT_USER,A_EMPLOYEE_ID,A_TEAM,A_REMOVE_PHOTO,A_DELETE_USER,A_INTERACTION_CONTROLS,A_SHORTCUT_VISIBILITY,A_BATCH_BEHAVIOR,A_QUICK_ORDER_BASE=900};
+      A_AUTO_QR,A_CAPACITY,A_LANGUAGE,A_TIMEOUT,A_BUSINESS_DAY,A_CLOSE_DAY,A_CONFIRM_RUN,A_MERGE_RUN,A_SPLIT_RUN,A_EXCLUDE_RUN,A_DIAGNOSTICS,A_ARCHIVES,A_ARCHIVE_PERIOD,A_EXPORT_RECORDS,A_CURRENT_RECORDS,A_CANCEL_VERIFY,A_EDIT_USER,A_EMPLOYEE_ID,A_TEAM,A_REMOVE_PHOTO,A_DELETE_USER,A_INTERACTION_CONTROLS,A_SHORTCUT_VISIBILITY,A_BATCH_BEHAVIOR,A_TOUCH_SOUND,A_QUICK_ORDER_BASE=900};
 static const char *const tabs[]={UI_N_("Overview"),UI_N_("Count"),UI_N_("Records"),UI_N_("Output"),UI_N_("Preferences"),UI_N_("Help")};
 static const char *const tab_icons[]={MICON("overview",19),MICON("layers",19),MICON("history",19),MICON("output",19),MICON("settings",19),MICON("help",19)};
 static const uint32_t accents[]={BLUE,ORANGE,TEAL,BLUE,PURPLE,TEAL};
@@ -267,13 +267,21 @@ static void avatar(lv_obj_t *p,int x,int y,const workspace_avatar_t *a,const cha
 }
 static void toggle(lv_obj_t *p,int y,int w,const char *title,const char *hint,bool on,int id)
 {
-    text(p,0,y+8,w-144,title);if(hint)small(p,0,y+32,w-135,hint);
-    lv_obj_t *state=small(p,w-106,y+12,42,on?ui_tr("On"):ui_tr("Off"));
+    lv_obj_t *state=small(p,0,y+12,42,on?ui_tr("On"):ui_tr("Off"));
+    int state_width=LV_MAX(42,menu_label_width(state,NULL));
+    int state_x=w-64-state_width;
+    lv_obj_set_width(state,state_width);lv_obj_set_x(state,state_x);
+    lv_label_set_long_mode(state,LV_LABEL_LONG_CLIP);
+    lv_obj_t *caption=text(p,0,y,LV_MIN(w-144,state_x-12),title);
+    lv_obj_t *description=hint?small(p,0,y,LV_MIN(w-135,state_x-12),hint):NULL;
     lv_obj_set_style_text_color(state,lv_color_hex(on?BLUE:MUTED),0);
     lv_obj_t *v=lv_settings_toggle(p,w-52,y+(hint?15:6),on,action,(void *)(uintptr_t)id);
     lv_obj_set_width(v,52);lv_anim_del(v,NULL);
     lv_obj_set_style_bg_color(v,lv_color_hex(on?BLUE:0xB8C7D0),0);
     lv_obj_t *knob=lv_obj_get_child(v,0);lv_anim_del(knob,NULL);lv_obj_set_x(knob,on?25:3);
+    lv_settings_align_row(caption,description,v,y,hint?60:44,4);
+    lv_obj_update_layout(v);
+    lv_obj_align_to(state,v,LV_ALIGN_OUT_LEFT_MID,-12,0);
 }
 #include "menu_composition.inc"
 
@@ -576,6 +584,7 @@ static void action(lv_event_t *event)
         menu.tab=id<=303?1:id==306?2:4;
         menu.sub=id==302?1:id==303?2:id==304?1:0;menu.selected_group=0;menu.dirty=true;return;
     }
+    if(id==A_TOUCH_SOUND){app_local_setting_apply(APP_LOCAL_TOUCH_SOUND,!user_cfg_touch_sound_enabled(),0);menu.dirty=true;return;}
     if(id==813)id=440+!machine_state_buzzer_enabled();
     if(id>=400&&id<450){if(id<440&&(workspace_service_applying()||app_command_runtime_count_start_busy())){notify(UI_NOTICE_WARNING,UI_N_("Finish the current operation before changing settings."));return;}unsigned kind=(id-400)/10,v=(id-400)%10;bool ok=false;
         switch(kind){

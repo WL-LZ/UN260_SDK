@@ -1,4 +1,5 @@
 #include "app_ui_runtime.h"
+#include "app_touch_sound.h"
 #include "app_setting_notice.h"
 #include "app_fault_recovery.h"
 #include "app_boot_runtime.h"
@@ -136,6 +137,7 @@ static void app_ui_runtime_poll_operation_notices(void)
 
 void app_ui_runtime_init(void)
 {
+    app_touch_sound_init();
     ui_notice_init();
     app_setting_notice_init();
     app_fault_recovery_init();
@@ -173,6 +175,7 @@ static void app_ui_runtime_poll_upgrade(uint32_t now_ms)
 
 void app_ui_runtime_poll(uint32_t now_ms)
 {
+    app_touch_sound_poll();
     /* The service owns its writer even if an upgrade view is destroyed. */
     if ((uint32_t)(now_ms - g_upgrade_poll_tick) >= APP_UI_UPGRADE_POLL_INTERVAL_MS) {
         g_upgrade_poll_tick = now_ms;

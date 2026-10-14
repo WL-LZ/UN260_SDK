@@ -338,6 +338,7 @@ static void record_pointer(lv_event_t *event)
                 displayed_id(index)==history->pressed_id;
             history->tapping=false;
             if (!tap) return;
+            lv_event_send(lv_event_get_target(event),LV_EVENT_READY,input);
             if (!history->selecting) {show_record(history->pressed_id);return;}
             bool selected=id_selected(history->pressed_id);
             if (selected) {

@@ -1,4 +1,5 @@
 #include "app_local_setting.h"
+#include "un260/lv_system/user_cfg.h"
 #include "app_setting_notice.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_system/ui_state_runtime.h"
@@ -22,9 +23,12 @@ static bool visibility(uint8_t a,uint8_t b)
 { return ui_state_quick_visible_set(a,b!=0); }
 static bool main_batch(uint8_t a,uint8_t b)
 { (void)b;return ui_state_main_batch_action_set((ui_main_batch_action_t)a); }
+static bool touch_sound(uint8_t a,uint8_t b)
+{ (void)b;return user_cfg_touch_sound_save(a!=0); }
 /* One definition binds execution to feedback; adding only a switch handler
  * cannot accidentally omit the completion path. */
 static const struct {commit_fn commit;const char *key,*title;bool persistent;} settings[]={
+    [APP_LOCAL_TOUCH_SOUND]={touch_sound,"settings.touch_sound",UI_N_("Touch sound"),true},
     [APP_LOCAL_LAYOUT]={layout,"settings.layout",UI_N_("Layout edit"),false},
     [APP_LOCAL_GESTURES]={gestures,"settings.gestures",UI_N_("Side / two-finger gestures"),true},
     [APP_LOCAL_FAULT_POPUP]={popup,"settings.fault_popup",UI_N_("Popup"),true},

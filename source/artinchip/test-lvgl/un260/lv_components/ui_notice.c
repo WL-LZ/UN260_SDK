@@ -355,7 +355,9 @@ static void event(lv_event_t *e)
     case LV_EVENT_RELEASED:
     case LV_EVENT_PRESS_LOST:
         notice.held = false; service_start(); break;
-    case LV_EVENT_CLICKED: ui_notice_dismiss(NULL); break;
+    case LV_EVENT_CLICKED:
+        lv_event_send(lv_event_get_target(e),LV_EVENT_READY,lv_indev_get_act());
+        ui_notice_dismiss(NULL); break;
     case LV_EVENT_DELETE: view_deleted(); break;
     default: break;
     }

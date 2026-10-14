@@ -294,6 +294,9 @@ add_executable(${PROJECT_NAME} main.c
     un260/counting/counting_control_reply.c
     un260/counting/counting_action_service.c
     un260/counting/counting_data_store.c
+    un260/app_service/app_touch_sound.c
+    un260/app_service/buzzer_service.c
+    un260/gesture/touch_sound.c
     un260/counting/counting_serial_query.c
     un260/counting/counting_denom_query_service.c
     un260/counting/counting_denom_reply.c
@@ -335,6 +338,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/protocol/protocol_frame_queue.c
     un260/protocol/protocol_rx_service.c
     un260/protocol/protocol_request.c
+    un260/protocol/protocol_tx_gate.c
     un260/app_service/app_setting_reply_basic.c
     un260/app_service/app_local_setting.c
     un260/app_service/app_setting_notice.c

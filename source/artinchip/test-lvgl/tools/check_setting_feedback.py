@@ -23,6 +23,7 @@ reviewed={
  'standby_store_save':'app_standby_runtime + standby page completion',
  'top_popup_save_failed':'disabled-notice failure dialog',
  'ui_export_data_request':'export owner',
+ 'user_cfg_qr_option_save':'QR selection: confirmed persisted value + failure dialog',
  'workspace_service_save_batches':'APP_UI_NOTICE_BATCH_SAVE',
  'workspace_store_save':'APP_UI_NOTICE_WORKSPACE_STORE'
 }

@@ -102,6 +102,7 @@ static bool evdev_press_cancelled, g_contact_captured;
 static lv_obj_t *evdev_pressed_obj, *active_object;
 static lv_point_t evdev_press_point;
 static bool evdev_visual_cancelled;
+static void (*g_feedback_observer)(lv_indev_t *, lv_event_code_t);
 static lv_obj_t handle, surface, live_root;
 static lv_indev_t pointer, *active_indev, *g_pointer_indev;
 static uint32_t tick;

@@ -217,7 +217,10 @@ static void tap_event(lv_event_t *event)
                     point.x >= bounds.x1 && point.x <= bounds.x2 &&
                     point.y >= bounds.y1 && point.y <= bounds.y2;
         view->tap.pressed = false;
-        if (open) ui_manager_push_page(UI_PAGE_LIST);
+        if (open) {
+            lv_event_send(owner, LV_EVENT_READY, indev);
+            ui_manager_push_page(UI_PAGE_LIST);
+        }
     }
 }
 

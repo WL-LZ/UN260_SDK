@@ -47,6 +47,10 @@ lv_obj_t *lv_settings_button(lv_obj_t *, int x, int y, int w, int h,
                              const char *, bool primary, lv_event_cb_t, void *);
 /* Controlled switch: paint confirmed state; activating never changes it implicitly. */
 lv_obj_t *lv_settings_toggle(lv_obj_t *, int x, int y, bool on, lv_event_cb_t, void *);
+/* Align a title/optional description block and its control by measured height.
+ * All objects share a parent; owners call again after replacing text. */
+void lv_settings_align_row(lv_obj_t *title,lv_obj_t *description,lv_obj_t *control,
+                           int top,int height,int gap);
 void lv_settings_toggle_set(lv_obj_t *, bool on, bool animate);
 /* Settings-only Back palette. Navigation marker and gesture semantics retained. */
 lv_obj_t *lv_settings_back(lv_obj_t *, int x, int y, int w, int h,

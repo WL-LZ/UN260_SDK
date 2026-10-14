@@ -280,7 +280,7 @@ static void entry_pointer(lv_event_t *event)
     lv_point_t point;lv_indev_get_point(input,&point);uint32_t index;
     if(code==LV_EVENT_PRESSED){entry_tapping=lv_recycled_list_index_at_point(entry_list,&point,&index)&&index<entry_count;entry_pressed=entry_tapping?entry_indices[index]+1:0;entry_revision=cash_journal_store_revision();entry_press=point;return;}
     if(LV_ABS(point.x-entry_press.x)>=6||LV_ABS(point.y-entry_press.y)>=6)entry_tapping=false;
-    if(code==LV_EVENT_RELEASED){bool tap=entry_tapping&&lv_recycled_list_tap_allowed(entry_list)&&entry_revision==cash_journal_store_revision()&&lv_recycled_list_index_at_point(entry_list,&point,&index)&&index<entry_count&&(uint32_t)entry_indices[index]+1==entry_pressed;entry_tapping=false;if(tap){book.detail=entry_pressed;queue(&journal);}}
+    if(code==LV_EVENT_RELEASED){bool tap=entry_tapping&&lv_recycled_list_tap_allowed(entry_list)&&entry_revision==cash_journal_store_revision()&&lv_recycled_list_index_at_point(entry_list,&point,&index)&&index<entry_count&&(uint32_t)entry_indices[index]+1==entry_pressed;entry_tapping=false;if(tap){lv_event_send(lv_event_get_target(event),LV_EVENT_READY,input);book.detail=entry_pressed;queue(&journal);}}
 }
 static void draw_book(cash_view_t *v)
 {

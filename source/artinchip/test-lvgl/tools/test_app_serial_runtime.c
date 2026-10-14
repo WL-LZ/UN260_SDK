@@ -10,7 +10,15 @@
 #include "un260/protocol/protocol_frame_queue.h"
 #include "un260/protocol/protocol_send.h"
 #include "un260/protocol/protocol_request.h"
+#include "un260/app_service/buzzer_service.h"
 
+static uint64_t fake_ms = 1000;
+uint64_t app_clock_monotonic_ms(void){return fake_ms;}
+static protocol_rx_observer_t observer;
+void protocol_rx_service_set_observer(protocol_rx_observer_t cb){observer=cb;}
+bool buzzer_service_start(void){return true;}
+void buzzer_service_stop(void){}
+void buzzer_service_on_reply(uint8_t status){(void)status;}
 static unsigned opened, configured, closed, rx_starts, bridge_starts, rx_stops, bridge_stops;
 static int fail_config_fd = -1, debug_fd = -1;
 static bool rx_ok = true, bridge_ok = true;
@@ -83,8 +91,17 @@ int main(void)
         assert(opened == 3 && configured == 3 && rx_starts == 1 && bridge_starts == 1);
         assert(!app_serial_runtime_start() && opened == 3);
         const uint8_t sub = 1;
+        /* Startup resets the lane, each business request gates optional ON,
+           and only the matching RX reply releases it after settling. */
+        assert(protocol_send_if_idle(0x4A, &sub, 1) == 6);
         assert(protocol_send(0x01, &sub, 1) == 6);
+        fake_ms += 50;
+        assert(protocol_send_if_idle(0x4A, &sub, 1) == 0);
+        uint8_t reply[]={0xFD,0xDF,6,0x01,1,0x0A};assert(observer);observer(reply,6);
+        assert(protocol_send_if_idle(0x4A, &sub, 1) == 0);
+        fake_ms += 10;assert(protocol_send_if_idle(0x4A, &sub, 1) == 6);
         app_serial_runtime_stop();
+        assert(!observer);
         assert(closed == 3 && rx_stops == 1 && bridge_stops == 1 && debug_fd == -1 && !pending_probe);
         app_serial_runtime_stop();
         assert(closed == 3);

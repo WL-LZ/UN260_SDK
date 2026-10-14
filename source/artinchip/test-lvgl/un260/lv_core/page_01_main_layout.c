@@ -152,6 +152,7 @@ static void timer_cb(lv_timer_t *timer)
 
 static void release_action(int action)
 {
+    if(action>=0 && action<=2) lv_event_send(editor.overlay,LV_EVENT_READY,editor.indev);
     if (action==0) {
         ui_main_layout_default(&editor.draft);editor.apply(&editor.draft);
         clear_drag();marks_refresh();

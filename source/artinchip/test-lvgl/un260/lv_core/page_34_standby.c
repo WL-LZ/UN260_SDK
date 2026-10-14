@@ -139,7 +139,10 @@ static void move_finish(void){
 static void drag_cb(lv_event_t*e){
  int item=(int)(intptr_t)lv_event_get_user_data(e);lv_event_code_t code=lv_event_get_code(e);
  if(code==LV_EVENT_PRESSED){move_begin(item);editor_apply();return;}
- if(code==LV_EVENT_RELEASED){move_finish();return;}
+ if(code==LV_EVENT_RELEASED){
+  move_finish();
+  return;
+ }
  if(code==LV_EVENT_PRESS_LOST){moving.active=false;return;}
  if(code!=LV_EVENT_PRESSING)return;
  lv_indev_t*i=lv_indev_get_act();if(!i)return;lv_point_t v;lv_indev_get_vect(i,&v);uint16_t*xy=position(layout(),item);xy[0]=LV_MAX(0,xy[0]+v.x);xy[1]=LV_MAX(40,xy[1]+v.y);editor_apply();

@@ -173,6 +173,16 @@ lv_obj_t *lv_settings_toggle(lv_obj_t *parent,int x,int y,bool on,lv_event_cb_t 
     if(cb)lv_obj_add_event_cb(o,cb,LV_EVENT_CLICKED,data);
     return o;
 }
+void lv_settings_align_row(lv_obj_t *title,lv_obj_t *description,lv_obj_t *control,int top,int height,int gap)
+{
+    if(!title||!control)return;
+    lv_obj_update_layout(lv_obj_get_parent(title));
+    int title_h=lv_obj_get_height(title),sub_h=description?lv_obj_get_height(description):0;
+    int text_h=title_h+(description?gap+sub_h:0);
+    lv_obj_set_y(title,top+(height-text_h)/2);
+    if(description)lv_obj_set_y(description,top+(height-text_h)/2+title_h+gap);
+    lv_obj_set_y(control,top+(height-lv_obj_get_height(control))/2);
+}
 lv_obj_t *lv_settings_segment_base(lv_obj_t *p,int x,int y,int w,int h)
 {
     lv_obj_t *o=lv_settings_box(p,x,y,w,h,LV_SETTINGS_CONTROL_SURFACE);

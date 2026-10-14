@@ -127,6 +127,9 @@ bool app_protocol_runtime_handle_reply(uint8_t cmd,
     if (frame_len > PROTOCOL_FRAME_MAX_SIZE) return false;
     uint8_t len = (uint8_t)frame_len;
     switch (cmd) {
+    case 0x4A:
+        /* Timing-sensitive acknowledgement was observed on the RX thread. */
+        return true;
     case 0x02:
     case 0x14:
         handle_machine_state_reply(cmd, buf, len);

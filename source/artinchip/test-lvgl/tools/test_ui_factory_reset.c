@@ -92,7 +92,7 @@ static void preferences_seed(void)
     brightness_saved = false;
     const char *files[] = {"ui_state.cfg", "password.cfg", "password_visibility.cfg", "screenshot.cfg",
         "screen_recording.cfg", "performance_monitor.cfg", "performance_profile.cfg", "gestures.cfg",
-        "touch_feedback.cfg", "language.cfg", "brightness.cfg", "standby.cfg", "work_mode.cfg", "touch_calibration.cfg"};
+        "touch_feedback.cfg", "touch_sound.cfg", "language.cfg", "brightness.cfg", "standby.cfg", "work_mode.cfg", "touch_calibration.cfg"};
     for (unsigned i = 0; i < sizeof(files) / sizeof(files[0]); ++i) {
         file_write(files[i], "old preference\n");
         char temporary[80]; snprintf(temporary, sizeof(temporary), "%s.tmp", files[i]);
@@ -103,7 +103,7 @@ static void preferences_absent(void)
 {
     const char *files[] = {"ui_state.cfg", "password.cfg", "password_visibility.cfg", "screenshot.cfg",
         "screen_recording.cfg", "performance_monitor.cfg", "performance_profile.cfg", "gestures.cfg",
-        "touch_feedback.cfg", "language.cfg", "brightness.cfg", "standby.cfg", "work_mode.cfg", "touch_calibration.cfg"};
+        "touch_feedback.cfg", "touch_sound.cfg", "language.cfg", "brightness.cfg", "standby.cfg", "work_mode.cfg", "touch_calibration.cfg"};
     for (unsigned i = 0; i < sizeof(files) / sizeof(files[0]); ++i) {
         if (brightness_saved && !strcmp(files[i], "brightness.cfg")) { assert(exists(files[i])); continue; }
         assert(!exists(files[i]));

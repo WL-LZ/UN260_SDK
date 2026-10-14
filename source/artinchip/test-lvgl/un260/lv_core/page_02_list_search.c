@@ -288,7 +288,10 @@ static void search_pointer(lv_event_t *e)
         if (code==LV_EVENT_RELEASED) {
             bool locate=s->tapping && s->pressed_revision==s->revision;
             s->tapping=false;
-            if (locate) s->close(s->pressed_slot,s->context);
+            if (locate) {
+                lv_event_send(lv_event_get_target(e),LV_EVENT_READY,input);
+                s->close(s->pressed_slot,s->context);
+            }
         }
     }
 }

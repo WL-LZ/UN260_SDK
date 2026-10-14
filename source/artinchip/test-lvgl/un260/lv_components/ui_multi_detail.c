@@ -346,10 +346,10 @@ static void tap(lv_event_t *e)
     ui_multi_detail_t *v=lv_event_get_user_data(e);
     if(lv_event_get_code(e)!=LV_EVENT_RELEASED||!lv_recycled_list_tap_allowed(serial_view(v)?v->serial_list:v->list))return;
     lv_indev_t *indev=lv_event_get_indev(e);if(!indev)return;
-    if(v->selected>=0&&!v->expanded){if(v->open){v->open(v->selected,v->tab,v->context);}return;}
+    if(v->selected>=0&&!v->expanded){if(v->open){lv_event_send(lv_event_get_target(e),LV_EVENT_READY,indev);v->open(v->selected,v->tab,v->context);}return;}
     if(v->selected!=-1)return;lv_point_t point;uint32_t index;lv_indev_get_point(indev,&point);
     if(lv_recycled_list_index_at_point(v->list,&point,&index)&&index<counting_multi_current()->count) {
-
+        lv_event_send(lv_event_get_target(e),LV_EVENT_READY,indev);
         ui_multi_detail_select(v,index,0);
     }
 }

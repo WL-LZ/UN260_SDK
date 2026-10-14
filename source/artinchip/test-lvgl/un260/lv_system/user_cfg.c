@@ -393,3 +393,15 @@ bool user_cfg_language_load(void)
     ui_lang_restore(tag);
     return loaded;
 }
+
+static bool g_touch_sound_enabled = true;
+bool user_cfg_touch_sound_load(void)
+{
+    return user_cfg_bool_load(UI_STATE_DIR "/touch_sound.cfg", true, &g_touch_sound_enabled);
+}
+bool user_cfg_touch_sound_save(bool enabled)
+{
+    return user_cfg_bool_save(UI_STATE_DIR "/touch_sound.cfg", UI_STATE_DIR "/touch_sound.cfg.tmp",
+                              enabled, &g_touch_sound_enabled);
+}
+bool user_cfg_touch_sound_enabled(void) { return g_touch_sound_enabled; }

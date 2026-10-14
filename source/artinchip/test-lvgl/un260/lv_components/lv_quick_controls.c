@@ -347,6 +347,7 @@ bool lv_quick_controls_pointer(lv_quick_controls_t *v,lv_event_code_t event,cons
         } else lv_quick_controls_set_editing(v,true,v->pointer_selected);
     } else if(!v->pointer_moved && tile_at(v,point)==v->pointer_tile && v->pointer_tile>=0){
         /* Host actions may delete this view, so nothing accesses it afterward. */
+        lv_event_send(v->tiles[v->pointer_tile],LV_EVENT_READY,NULL);
         lv_event_send(v->tiles[v->pointer_tile],LV_EVENT_CLICKED,NULL);
     }
     return true;

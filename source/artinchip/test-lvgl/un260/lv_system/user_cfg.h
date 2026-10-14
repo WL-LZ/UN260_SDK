@@ -99,6 +99,9 @@ bool user_cfg_gesture_enabled(void);
 bool user_cfg_touch_feedback_load(void);
 bool user_cfg_touch_feedback_save(bool enabled);
 bool user_cfg_touch_feedback_enabled(void);
+bool user_cfg_touch_sound_load(void);
+bool user_cfg_touch_sound_save(bool enabled);
+bool user_cfg_touch_sound_enabled(void);
 
  enum {
     MODE_NONE,

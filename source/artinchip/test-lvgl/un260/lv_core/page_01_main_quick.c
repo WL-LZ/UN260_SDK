@@ -480,14 +480,15 @@ bool page_01_main_quick_pointer(lv_indev_t *indev,lv_event_code_t event,const lv
         qc_position(y);
         if(released) {
             bool cross=abs(dy)>=90 || (abs(dy)>=45 && lv_tick_elaps(quick.tick)<=350);
-            quick.candidate=false;qc_settle(quick.from_open?!cross:cross);
+            quick.candidate=false;
+            qc_settle(quick.from_open?!cross:cross);
         }
         return true;
     }
     if(released) {
         bool tap=quick.tap_grab && abs(dx)<10 && abs(dy)<10;
         quick.candidate=false;quick.tap_grab=false;
-        if(tap) { qc_request_versions();qc_build();if(quick.root){lv_obj_move_foreground(quick.root);qc_settle(true);}return true; }
+        if(tap) { qc_request_versions();qc_build();if(quick.root){lv_event_send(quick.root,LV_EVENT_READY,indev);lv_obj_move_foreground(quick.root);qc_settle(true);}return true; }
     }
     return quick.tap_grab;
 }

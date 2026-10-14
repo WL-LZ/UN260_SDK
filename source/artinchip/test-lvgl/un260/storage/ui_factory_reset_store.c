@@ -21,7 +21,7 @@ static const char journal_value[] = "UN260_UI_FACTORY_RESET_V1\n";
 static const char *const preferences[] = {
     "ui_state.cfg", "password.cfg", "password_visibility.cfg",
     "screenshot.cfg", "screen_recording.cfg", "performance_monitor.cfg",
-    "performance_profile.cfg", "gestures.cfg", "touch_feedback.cfg",
+    "performance_profile.cfg", "gestures.cfg", "touch_feedback.cfg", "touch_sound.cfg",
     "language.cfg", "brightness.cfg", "standby.cfg", "work_mode.cfg",
     "touch_calibration.cfg"
 };

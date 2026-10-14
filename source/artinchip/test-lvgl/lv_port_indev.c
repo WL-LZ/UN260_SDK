@@ -49,6 +49,14 @@ static bool evdev_press_cancelled;
 static lv_obj_t *evdev_pressed_obj;
 static lv_point_t evdev_press_point;
 static bool evdev_visual_cancelled;
+static void (*g_contact_observer)(bool down);
+void lv_port_indev_set_contact_observer(void (*observer)(bool down))
+{ g_contact_observer = observer; }
+static lv_port_feedback_observer_t g_feedback_observer;
+void lv_port_indev_set_feedback_observer(lv_port_feedback_observer_t observer)
+{
+    g_feedback_observer = observer;
+}
 static lv_port_pointer_observer_t g_pointer_observer;
 static void *g_pointer_observer_data;
 static uint8_t g_touch_count;
@@ -198,6 +206,8 @@ static void evdev_feedback(lv_indev_drv_t *drv, uint8_t event_code)
 
     if(indev == NULL || lv_indev_get_type(indev) != LV_INDEV_TYPE_POINTER)
         return;
+
+    if(g_feedback_observer) g_feedback_observer(indev, (lv_event_code_t)event_code);
 
     if(event_code == LV_EVENT_PRESSED) {
         evdev_pressed_obj = lv_indev_get_obj_act();
@@ -568,6 +578,7 @@ void evdev_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
         lv_event_code_t event = down ? (g_raw_down ? LV_EVENT_PRESSING : LV_EVENT_PRESSED)
                                     : LV_EVENT_RELEASED;
         bool capture = false;
+        if(down && !g_raw_down && g_contact_observer) g_contact_observer(true);
         /* The service samples the pre-clipped hardware coordinates. Every
          * contact/centroid uses the same confirmed transform above. */
         capture = touch_calibration_input_feed(raw_x, raw_y, mapped_y, g_touch_count,
@@ -578,6 +589,7 @@ void evdev_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
         if(capture && !g_contact_captured) {
             lv_port_indev_capture_pointer(g_pointer_indev);
         }
+        if(!down && g_raw_down && g_contact_observer) g_contact_observer(false);
         g_raw_down = down;
         if(!down) g_contact_captured = false;
     }

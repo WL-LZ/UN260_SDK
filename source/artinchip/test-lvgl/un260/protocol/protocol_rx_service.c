@@ -14,6 +14,9 @@
 
 static pthread_mutex_t g_state_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t g_thread;
+static protocol_rx_observer_t g_observer;
+void protocol_rx_service_set_observer(protocol_rx_observer_t observer)
+{ g_observer = observer; }
 static bool g_started;
 static bool g_running;
 static int g_uart_fd = -1;
@@ -157,6 +160,7 @@ static void *protocol_rx_service_thread(void *arg)
                 char prefix[32];
                 uint64_t received_ms = protocol_rx_service_publish_pending(&frame);
 
+                if(g_observer) g_observer(frame.data, frame.len);
                 runtime_guard_rx(frame.data, frame.len);
                 bool enqueued = protocol_rx_service_enqueue(&frame, received_ms);
                 protocol_rx_service_clear_pending();

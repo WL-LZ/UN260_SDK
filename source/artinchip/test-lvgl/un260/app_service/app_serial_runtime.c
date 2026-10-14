@@ -1,4 +1,5 @@
 #include "app_serial_runtime.h"
+#include "buzzer_service.h"
 #include "app_command_runtime.h"
 #include "runtime_guard.h"
 
@@ -10,6 +11,7 @@
 #include "un260/protocol/protocol_frame_queue.h"
 #include "un260/protocol/protocol_rx_service.h"
 #include "un260/protocol/protocol_send.h"
+#include "un260/protocol/protocol_tx_gate.h"
 #include "un260/protocol/protocol_request.h"
 
 #define APP_UART_CONTROLLER_DEVICE "/dev/ttyS4"
@@ -23,6 +25,12 @@ static int fd4 = -1;
 static int fd5 = -1;
 static int fd6 = -1;
 
+static void app_serial_runtime_observe_reply(const uint8_t *frame, uint16_t len)
+{
+    protocol_tx_gate_on_reply(frame[3]);
+    if(len == 6 && frame[3] == 0x4A && frame[4] <= 2)
+        buzzer_service_on_reply(frame[4]);
+}
 static bool g_rx_started;
 static bool g_bridge_started;
 
@@ -42,10 +50,16 @@ bool protocol_send_is_ready(void)
     return fd4 >= 0 && uart_tx_is_healthy(fd4) && !runtime_guard_has_fault();
 }
 
-int protocol_send(uint8_t cmd_g, const uint8_t *cmd_s, uint16_t cmd_s_len)
+static int protocol_write_frame(const uint8_t *buf, uint16_t frame_len)
+{
+    char log_prefix[40];
+    snprintf(log_prefix, sizeof(log_prefix), "Send CMD 0x%02X: ", buf[3]);
+    uart_log_hex(fd6, log_prefix, buf, frame_len, frame_len);
+    return uart_send(fd4, (const char *)buf, frame_len);
+}
+static int protocol_send_frame(uint8_t cmd_g, const uint8_t *cmd_s, uint16_t cmd_s_len, bool optional)
 {
     uint8_t buf[PROTOCOL_FRAME_MAX_SIZE];
-    char log_prefix[40];
     int frame_len;
 
     if (!protocol_send_is_ready()) {
@@ -59,10 +73,15 @@ int protocol_send(uint8_t cmd_g, const uint8_t *cmd_s, uint16_t cmd_s_len)
         return -1;
     }
 
-    snprintf(log_prefix, sizeof(log_prefix), "Send CMD 0x%02X: ", cmd_g);
-    uart_log_hex(fd6, log_prefix, buf, (size_t)frame_len, (size_t)frame_len);
-
-    return uart_send(fd4, (const char *)buf, frame_len);
+    return protocol_tx_gate_send(buf, (uint16_t)frame_len, optional, protocol_write_frame);
+}
+int protocol_send(uint8_t cmd_g, const uint8_t *cmd_s, uint16_t cmd_s_len)
+{
+    return protocol_send_frame(cmd_g,cmd_s,cmd_s_len,false);
+}
+int protocol_send_if_idle(uint8_t cmd_g, const uint8_t *cmd_s, uint16_t cmd_s_len)
+{
+    return protocol_send_frame(cmd_g,cmd_s,cmd_s_len,true);
 }
 
 static void app_serial_runtime_close_devices(void)
@@ -110,7 +129,9 @@ bool app_serial_runtime_start(void)
     uart_debug_set_fd(fd6);
 
     protocol_frame_queue_clear();
+    protocol_tx_gate_reset();
     protocol_request_set_pending_reply_probe(app_serial_runtime_reply_pending);
+    protocol_rx_service_set_observer(app_serial_runtime_observe_reply);
     if (!protocol_rx_service_start(fd4, fd6)) {
         printf("UART4接收服务启动失败\n");
         app_serial_runtime_stop();
@@ -124,6 +145,8 @@ bool app_serial_runtime_start(void)
         return false;
     }
     g_bridge_started = true;
+    /* Sound is optional; unavailable feedback must not prevent machine I/O. */
+    if(!buzzer_service_start()) uart_printf(fd6, "Touch sound worker unavailable\n");
 
     uart_printf(fd6, "UART6 ready\n");
     return true;
@@ -131,6 +154,7 @@ bool app_serial_runtime_start(void)
 
 void app_serial_runtime_stop(void)
 {
+    buzzer_service_stop();
     if (g_bridge_started) {
         uart_bridge_service_stop();
         g_bridge_started = false;
@@ -139,6 +163,7 @@ void app_serial_runtime_stop(void)
         protocol_rx_service_stop();
         g_rx_started = false;
     }
+    protocol_rx_service_set_observer(NULL);
     protocol_request_set_pending_reply_probe(NULL);
     protocol_frame_queue_clear();
     app_serial_runtime_close_devices();

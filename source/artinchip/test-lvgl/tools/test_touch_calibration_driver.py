@@ -47,6 +47,7 @@ typedef struct {lv_point_t point;int state,key;bool continue_reading;} lv_indev_
 typedef bool (*lv_port_pointer_observer_t)(lv_indev_t*,int,const lv_point_t*,uint8_t,void*);
 static int evdev_fd,evdev_root_x,evdev_root_y,evdev_key_val,evdev_button;
 static bool evdev_press_cancelled,g_raw_down,g_contact_captured;
+static void (*g_contact_observer)(bool);
 static void *evdev_pressed_obj,*g_pointer_observer_data;
 static uint8_t g_touch_count;
 static touch_frame_t g_mt_frame;

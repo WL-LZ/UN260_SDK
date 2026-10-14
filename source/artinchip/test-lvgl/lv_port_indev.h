@@ -14,6 +14,10 @@ extern "C" {
 #include "lvgl/lvgl.h"
 
 void lv_port_indev_init(void);
+/* UI-thread event observer; does not replace raw gesture capture. */
+typedef void (*lv_port_feedback_observer_t)(lv_indev_t *, lv_event_code_t);
+void lv_port_indev_set_contact_observer(void (*observer)(bool down));
+void lv_port_indev_set_feedback_observer(lv_port_feedback_observer_t observer);
 /* Own a pointer sequence beyond this object's hit box until release/cancel.
  * Registers both the driver drag exemption and LVGL press lock. This does not
  * override raw edge/multifinger gesture capture, which may still cancel it. */

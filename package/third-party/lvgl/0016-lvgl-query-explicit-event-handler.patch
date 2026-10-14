@@ -1,0 +1,34 @@
+--- a/src/core/lv_event.c
++++ b/src/core/lv_event.c
+@@ -421,6 +421,16 @@
+     if(id >= obj->spec_attr->event_dsc_cnt) return NULL;
+ 
+     return &obj->spec_attr->event_dsc[id];
++}
++
++bool lv_obj_has_event_cb(const lv_obj_t * obj, lv_event_code_t filter)
++{
++    if(!obj) return false;
++    for(uint32_t i = 0; ; ++i) {
++        const lv_event_dsc_t * dsc = lv_obj_get_event_dsc(obj, i);
++        if(!dsc) return false;
++        if(dsc->cb && (dsc->filter & ~LV_EVENT_PREPROCESS) == filter) return true;
++    }
+ }
+ 
+ static lv_res_t event_send_core(lv_event_t * e)
+--- a/src/core/lv_event.h
++++ b/src/core/lv_event.h
+@@ -245,6 +245,12 @@
+  */
+ bool lv_obj_remove_event_cb(struct _lv_obj_t * obj, lv_event_cb_t event_cb);
+ 
++/** Query an explicitly registered event filter without exposing descriptors.
++ * LV_EVENT_ALL matches only an explicit ALL registration, not every filter.
++ */
++bool lv_obj_has_event_cb(const struct _lv_obj_t * obj, lv_event_code_t filter);
++
++
+ /**
+  * Remove an event handler function with a specific user_data from an object.
+  * @param obj               pointer to an object

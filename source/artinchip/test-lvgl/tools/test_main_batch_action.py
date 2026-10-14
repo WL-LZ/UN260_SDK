@@ -32,6 +32,7 @@ STATE_TEST = r'''
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+bool user_cfg_touch_sound_save(bool enabled){(void)enabled;return true;}
 static bool fail_sync,fail_rename,top_popup=true,popup_auto=true,pure_count=true;
 static unsigned notices;
 static ui_notice_kind_t notice_kind;
