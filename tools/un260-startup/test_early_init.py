@@ -25,6 +25,7 @@ fixture = r'''
 #include <time.h>
 #include <unistd.h>
 #include "un260/boot/boot_bundle.h"
+#include "tools/un260-startup/boot_trial.h"
 static jmp_buf finish;
 static const char *scenario;
 static int roots,moves,root_moves,chroots,forks,execs,kills,opens,closes,marker_reads;
@@ -203,7 +204,7 @@ int fake_access(const char *p,int flags){
  assert(flags==F_OK);
  if(!strncmp(p,"/newroot/",9))return !strcmp(scenario,"missing-mountpoints")?-1:0;
  assert(phase==4);
- if(strstr(p,"transaction"))return is_case("transaction")?0:-1;
+ if(strstr(p,"transaction"))return (is_case("transaction")||is_case("trial")||is_case("trial-mismatch")||(is_case("trial-old-rescue")||is_case("trial-old-primary")))?0:-1;
  if(strstr(p,"pointercal"))return is_case("calibration")?-1:0;
  if(strstr(p,"boot-light.disabled"))return is_case("disabled")?0:-1;
  if(strstr(p,"early-display.disabled"))return is_case("early-disabled")?0:-1;
@@ -237,6 +238,22 @@ void fake_exit(int code){assert(code==127);longjmp(finish,3);}
 int fake_execv(const char *p,char *const args[]){
  assert(phase==4&&!strcmp(p,"/linuxrc")&&!strcmp(args[0],p));
  assert((getenv("UN260_BOOT_UNIFIED_ACTIVE")!=NULL)==(pinned==1));execs++;longjmp(finish,1);return -1;
+}
+int boot_trial_visual_read(const char *j,const char *boot,boot_trial_visual_t *v) {
+ assert(!strcmp(j,"/var/lib/un260-updater/transaction")&&!strcmp(boot,"/proc/sys/kernel/random/boot_id"));
+ memset(v,0,sizeof(*v));
+ if(is_case("transaction"))return -1;
+ if(is_case("trial")||is_case("trial-mismatch")||(is_case("trial-old-rescue")||is_case("trial-old-primary"))){v->pending=true;return 1;}
+ return 0;
+}
+bool boot_trial_visual_matches(const boot_trial_visual_t *v,const boot_bundle_t *b) {
+ (void)v;(void)b;return !is_case("trial-mismatch");
+}
+int boot_trial_visual_lock(void){return is_case("lock-busy")?-1:20;}
+bool boot_trial_visual_recovery_ready(const char *s,const char *h){
+ (void)h;
+ if(strstr(s,"/un260-startup/"))return !is_case("trial-old-primary");
+ assert(strstr(s,"/rescue/"));return !is_case("trial-old-rescue");
 }
 bool boot_bundle_open(const char *a,const char *v,bool previous_only,boot_bundle_t *b){
  assert(phase==4&&!strcmp(a,BOOT_BUNDLE_ACTIVE_PATH)&&!strcmp(v,BOOT_BUNDLE_VERSIONS_PATH));opens++;
@@ -284,10 +301,10 @@ int main(int argc,char **argv){
  int result=init_main(count,args);
  bool off=is_case("disabled")||is_case("early-disabled")||is_case("calibration")||is_case("transaction");
  bool check=!strncmp(scenario,"cli-check",9),owner=!strncmp(scenario,"cli-owner-",10);
- int expected=!strcmp(scenario,"cli-invalid-option")?2:off||is_case("bundle-missing")||is_case("visual-timeout")||!strcmp(scenario,"cli-check-missing")?1:0;
+ int expected=!strcmp(scenario,"cli-invalid-option")?2:off||is_case("trial-mismatch")||(is_case("trial-old-rescue")||is_case("trial-old-primary"))||is_case("lock-busy")||is_case("bundle-missing")||is_case("visual-timeout")||!strcmp(scenario,"cli-check-missing")?1:0;
  assert(result==expected&&platform_opens==0&&platform_written==0&&platform_renamed==0&&roots==0&&moves==0&&chroots==0);
  assert(request_opens==0); /* CLI ignores pending requests after verified-current recovery. */
- if(off||owner||check||!strcmp(scenario,"cli-invalid-option"))assert(forks==0&&pinned==0);
+ if(off||owner||check||is_case("trial-mismatch")||(is_case("trial-old-rescue")||is_case("trial-old-primary"))||is_case("lock-busy")||!strcmp(scenario,"cli-invalid-option"))assert(forks==0&&pinned==0);
  else if(!is_case("bundle-missing"))assert(forks==((is_case("active-timeout")||is_case("active-dead")||is_case("visual-timeout"))?2:1)&&pinned==(expected?0:1));
  if(owner)assert(opens==0);
  puts("PASS isolated root launcher flow");return 0;
@@ -319,6 +336,8 @@ int main(int argc,char **argv){
     !strcmp(scenario,"calibration")||!strcmp(scenario,"transaction"))assert(forks==0&&opens==0&&kills==0);
  if(!strcmp(scenario,"active-timeout")||!strcmp(scenario,"active-dead")||!strcmp(scenario,"visual-timeout")||
     !strcmp(scenario,"visual-dead")||!strcmp(scenario,"fork-fail"))assert(forks==2&&opens==2);
+ if(!strcmp(scenario,"trial"))assert(forks==1&&pinned==1);
+ if(!strcmp(scenario,"trial-mismatch")||(!strcmp(scenario,"trial-old-rescue")||!strcmp(scenario,"trial-old-primary")))assert(forks==0&&pinned==0);
  if(!strcmp(scenario,"selected-previous"))assert(forks==1&&opens==1);
  if(!strcmp(scenario,"visual-dead")||!strcmp(scenario,"active-dead"))assert(marker_reads<2);
  if(!strncmp(scenario,"active-pin-",11))assert(forks==2&&opens==2&&pinned==1&&kills>0);
@@ -335,7 +354,7 @@ int main(int argc,char **argv){
 '''
 cases = ['normal','not-pid1','root-retry','root-fail','rootflags','move-fail',
          'missing-root','missing-mountpoints','disabled','early-disabled',
-         'cmdline-off','calibration','transaction','bundle-missing','fork-fail',
+         'cmdline-off','calibration','transaction','trial','trial-mismatch','trial-old-rescue','trial-old-primary','bundle-missing','fork-fail',
          'active-timeout','active-dead','visual-timeout','visual-dead',
          'wrong-marker','marker-junk','marker-negative','marker-overflow','marker-empty',
          'selected-previous','child-exec-fail','frame-off','frame-on',
@@ -350,7 +369,7 @@ cases = ['normal','not-pid1','root-retry','root-fail','rootflags','move-fail',
 for prefix in ('request-','request-receipt-'):
     cases += [prefix+issue for issue in ('not-regular','foreign-owner','group-write','setuid','setgid','truncated','extra-byte','stat-error')]
 cli_cases=['cli-normal','cli-check','cli-check-missing','cli-invalid-option',
-           'cli-disabled','cli-early-disabled','cli-calibration','cli-transaction','cli-bundle-missing',
+           'cli-disabled','cli-early-disabled','cli-calibration','cli-transaction','cli-trial','cli-trial-mismatch','cli-trial-old-rescue','cli-trial-old-primary','cli-lock-busy','cli-bundle-missing',
            'cli-owner-valid','cli-active-timeout','cli-active-dead','cli-visual-timeout',
            'cli-stale-dead','cli-stale-comm','cli-stale-junk',
            'cli-stale-negative','cli-stale-overflow','cli-stale-one','cli-request-pending']
@@ -410,7 +429,7 @@ with tempfile.TemporaryDirectory(prefix='un260-request-readonly-') as directory:
     tmp=Path(directory);source=tmp/'request.c';source.write_text(request_fixture);exe=tmp/'request-check'
     subprocess.run(['cc','-O1','-Wall','-Wextra','-Werror','-fsanitize=undefined',
                     '-fno-sanitize-recover=all','-I'+str(root),'-I'+str(root/'source/artinchip/test-lvgl'),
-                    str(source),str(root/'source/artinchip/test-lvgl/un260/boot/boot_bundle.c'),'-o',str(exe)],check=True)
+                    str(source),str(root/'source/artinchip/test-lvgl/un260/boot/boot_bundle.c'),str(root/'tools/un260-startup/boot_trial.c'),'-o',str(exe)],check=True)
     request=b'a'*64+b'\n'+b'b'*64+b'\n'
     receipt=hashlib.sha256(request).hexdigest().encode()+b'\n'
     real_cases=[('absent',False),('completed',False),('missing-receipt',True),

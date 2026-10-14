@@ -15,6 +15,8 @@
 #include <time.h>
 #include <unistd.h>
 #include "un260/boot/boot_bundle.h"
+#include "boot_trial.h"
+static boot_trial_visual_t trial_visual;
 extern char **environ;
 static unsigned long long milliseconds(void)
 {
@@ -123,6 +125,18 @@ static bool write_ram_record(const char *destination,const char *record,size_t l
     if(close(fd)||rename(path,destination)){unlink(path);return false;}
     return true;
 }
+static bool trial_visual_ready(void)
+{
+    if(boot_trial_visual_read("/var/lib/un260-updater/transaction",
+        "/proc/sys/kernel/random/boot_id",&trial_visual)<0)return false;
+    if(trial_visual.pending&&(!boot_trial_visual_recovery_ready(
+        "/usr/local/lib/un260-startup/runtime.sh","/etc/un260/startup-runtime.sha256")||
+        !boot_trial_visual_recovery_ready("/usr/local/lib/un260-updater/rescue/startup.sh",
+        "/usr/local/lib/un260-updater/rescue/startup.sha256"))) {
+        milestone("trial_visual_requires_rescue_base");return false;
+    }
+    return true;
+}
 static bool pin_live_bundle(const boot_bundle_t *bundle)
 {
     char record[256];
@@ -135,6 +149,9 @@ static pid_t start_visual(bool previous_only,bool *selected_previous)
     boot_bundle_t bundle;
     if(!boot_bundle_open(BOOT_BUNDLE_ACTIVE_PATH,BOOT_BUNDLE_VERSIONS_PATH,previous_only,&bundle))return -1;
     *selected_previous=bundle.previous;
+    if(!boot_trial_visual_matches(&trial_visual,&bundle)) {
+        boot_bundle_close(&bundle);milestone("trial_visual_bundle_mismatch");return -1;
+    }
     dprintf(STDERR_FILENO,"EARLY_INIT bundle=%s source=%s\n",bundle.id,bundle.previous?"previous":"active");
     milestone("player_launch");
     pid_t child=fork();
@@ -213,7 +230,7 @@ int main(void)
     bool off=!strcmp(disable,"0")||access("/etc/un260/boot-light.disabled",F_OK)==0||
              access("/etc/un260/early-display.disabled",F_OK)==0||
              access("/etc/pointercal",F_OK)!=0||
-             access("/var/lib/un260-updater/transaction",F_OK)==0||
+             !trial_visual_ready()||
              unified_request_pending();
     if(!off) {
         bool previous=false;
@@ -231,7 +248,7 @@ int main(void)
 #else
 /* Late service/restart fallback uses the same version verification and spawn
  * contract as PID 1, never a second compiled copy of customer artwork. */
-int main(int argc,char **argv)
+static int launch_main(int argc,char **argv)
 {
     if(argc==2&&!strcmp(argv[1],"--check")) {
         boot_bundle_t bundle;
@@ -242,7 +259,7 @@ int main(int argc,char **argv)
     if(access("/etc/un260/boot-light.disabled",F_OK)==0||
        access("/etc/un260/early-display.disabled",F_OK)==0||
        access("/etc/pointercal",F_OK)!=0||
-       access("/var/lib/un260-updater/transaction",F_OK)==0)return 1;
+       !trial_visual_ready())return 1;
     /* Do not kill or restart a valid owner, including the maintenance visual. */
     char text[32]={0};int ready=open(BOOT_BUNDLE_READY_PATH,O_RDONLY|O_NOFOLLOW|O_CLOEXEC);
     if(ready>=0) {
@@ -265,5 +282,13 @@ int main(int argc,char **argv)
     pid_t child=start_visual(false,&previous);
     if(child<0&&!previous)child=start_visual(true,&previous);
     return child>0?0:1;
+}
+int main(int argc,char **argv)
+{
+    /* --check is also used inside an already-locked upgrade transaction. */
+    if(argc!=1)return launch_main(argc,argv);
+    int lock=boot_trial_visual_lock();if(lock<0)return 1;
+    int result=launch_main(argc,argv);
+    close(lock);return result;
 }
 #endif

@@ -157,6 +157,7 @@ target_link_libraries(un260_boot_player z)
 install(TARGETS un260_boot_player RUNTIME DESTINATION bin)
 add_executable(un260_boot_launch
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../tools/un260-startup/early_init.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../tools/un260-startup/boot_trial.c
     un260/boot/boot_bundle.c)
 target_compile_definitions(un260_boot_launch PRIVATE UN260_BOOT_LAUNCH_ONLY=1)
 target_compile_options(un260_boot_launch PRIVATE -ffunction-sections -fdata-sections)

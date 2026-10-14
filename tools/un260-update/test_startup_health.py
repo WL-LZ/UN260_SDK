@@ -128,6 +128,79 @@ class HealthTests(unittest.TestCase):
                 'stop_runtime_worker(){ :; }; DEFER_PIDFILE=' + shlex.quote(str(self.base / 'defer.pid')) + '; '
                 'boot_light_owner(){ return 1; }; UPDATE_DISPATCH=' + shlex.quote(str(self.dispatch)) + '; ')
 
+
+
+    def test_trial_visual_precedes_validation_but_never_confirms_or_launches_on_failure(self):
+        journal=self.base/'transaction';journal.mkdir()
+        launcher=self.base/'boot-launch';calls=self.base/'calls'
+        launcher.write_text('#!/bin/sh\necho visual >> '+shlex.quote(str(calls))+'\nexit 0\n')
+        launcher.chmod(0o755)
+        self.dispatch.write_text('#!/bin/sh\necho "$1" >> '+shlex.quote(str(calls))+'\nexit 1\n')
+        source=self.functions.read_text().replace('/usr/local/bin/un260_boot_launch',str(launcher))
+        source=source.replace('/var/lib/un260-updater/transaction',str(journal))
+        self.functions.write_text(source)
+        setup=('UPDATE_DISPATCH='+shlex.quote(str(self.dispatch))+'; '
+               'modern_platform(){ return 0; }; prepare_app_launch(){ return 0; }; '
+               'cpu_performance_enter(){ :; }; early_display_ready(){ return 0; }; '
+               'boot_light_owner(){ return 1; }; ')
+        for visual_status in (0,1):
+            launcher.write_text('#!/bin/sh\necho visual >> '+shlex.quote(str(calls))+
+                                '\nexit '+str(visual_status)+'\n')
+            calls.unlink(missing_ok=True)
+            result=self.call(setup+'start_ready_impl')
+            self.assertNotEqual(result.returncode,0,result.stderr)
+            self.assertEqual(calls.read_text().splitlines(),['visual','--can-launch'])
+            self.assertTrue(journal.is_dir())
+            self.assertFalse(self.health.exists())
+            self.assertFalse(self.pidfile.exists())
+            self.assertFalse((self.base/'confirmed').exists())
+        # Ordinary boots, disabled early display and an existing owner do no extra launch.
+        for override in ('early_display_ready(){ return 1; }; ',
+                         'boot_light_owner(){ return 0; }; ',
+                         'rmdir '+shlex.quote(str(journal))+'; '):
+            calls.unlink()
+            self.call(setup+override+'start_ready_impl')
+            self.assertEqual(calls.read_text().splitlines(),['--can-launch'])
+
+    def test_trial_rollback_releases_visual_before_mutating_and_relaunching(self):
+        order=self.base/'rollback-order'
+        setup=('order='+shlex.quote(str(order))+'; trial_pending(){ return 0; }; PID=""; '
+               'dispatch(){ echo "$1" >> "$order"; }; UPDATE_DISPATCH=dispatch; '
+               'start_ready(){ echo launched >> "$order"; }; '
+               'wait_ui_health(){ echo healthy >> "$order"; }; ')
+        result=self.call(setup+'stop_boot_visual_for_rollback(){ echo released >> "$order"; }; try_trial_rollback')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(order.read_text().splitlines(),['released','--rollback-trial','launched','healthy'])
+        order.unlink()
+        result=self.call(setup+'stop_boot_visual_for_rollback(){ return 1; }; try_trial_rollback')
+        self.assertEqual(result.returncode,2,result.stderr)
+        self.assertFalse(order.exists())
+
+
+    def test_rollback_retires_ram_pin_only_after_display_owner_releases(self):
+        pin=self.base/'boot-pin';pin.write_text('new-trial-bundle\n');pin.chmod(0o600)
+        setup='BOOT_LIVE_RECORD='+shlex.quote(str(pin))+'; '
+        result=self.call(setup+'boot_light_owner(){ return 1; }; stop_boot_visual_for_rollback')
+        self.assertEqual(result.returncode,0,result.stderr);self.assertFalse(pin.exists())
+        pin.write_text('new-trial-bundle\n')
+        # Model the existing renderer's exit after TERM without touching a host process.
+        result=self.call(setup+'owner=1; boot_light_owner(){ light_pid=123; [ "$owner" = 1 ]; }; '
+                         'kill(){ [ -f "$BOOT_LIVE_RECORD" ] || exit 8; owner=0; }; '
+                         'stop_boot_visual_for_rollback')
+        self.assertEqual(result.returncode,0,result.stderr);self.assertFalse(pin.exists())
+        for state in ('stuck','replacement'):
+            pin.write_text('new-trial-bundle\n')
+            command=('owner=123; boot_light_owner(){ light_pid=$owner; return 0; }; '
+                     'select_poll_method(){ POLL_LIMIT=1; }; poll_pause(){ :; }; ')
+            command+=('kill(){ :; }; ' if state=='stuck' else 'kill(){ owner=456; }; ')
+            result=self.call(setup+command+'stop_boot_visual_for_rollback')
+            self.assertNotEqual(result.returncode,0,result.stderr)
+            self.assertEqual(pin.read_text(),'new-trial-bundle\n')
+        saved=self.base/'other-pin';pin.rename(saved);pin.symlink_to(saved)
+        result=self.call(setup+'boot_light_owner(){ return 1; }; stop_boot_visual_for_rollback')
+        self.assertNotEqual(result.returncode,0,result.stderr);self.assertTrue(pin.is_symlink())
+        self.assertEqual(saved.read_text(),'new-trial-bundle\n')
+
     def test_real_guard_child_resolved_and_stable(self):
         p = self.start()
         child = int(self.health.read_text())

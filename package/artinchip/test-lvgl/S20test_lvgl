@@ -6,6 +6,7 @@
 # UN260_STORAGE_POLICY_V3: backup-bound enrollment and older journal recovery.
 # UN260_BOOT_BUNDLE_1: verified root player and single-owner UI handoff.
 # UN260_STARTUP_RECOVERY_V1: first-paint trial health and independent USB rescue.
+# UN260_TRIAL_VISUAL_CLEANUP_V1
 
 
 DAEMON="/usr/local/bin/test_lvgl"
@@ -32,6 +33,7 @@ RECOVERY_TOKENFILE=/run/test_lvgl.recovery.token
 RESCUE_DISPLAY_PIDFILE=/run/test_lvgl.rescue-display.pid
 RESCUE_DISPLAY=/usr/local/lib/un260-updater/rescue/display
 UI_HEALTH=/tmp/un260-ui.health
+BOOT_LIVE_RECORD=/dev/.un260-boot-bundle
 RECOVERY_HEARTBEAT=/tmp/un260-recovery.heartbeat
 RECOVERY_STATUS=/tmp/ui_update.status
 UPDATE_LOCK=/tmp/un260-updater.lock
@@ -496,9 +498,34 @@ trial_pending() {
       return 2
 }
 
+stop_boot_visual_for_rollback() {
+      if boot_light_owner; then
+          rollback_visual_pid=$light_pid
+          kill -TERM "$rollback_visual_pid" 2>/dev/null || true
+          select_poll_method
+          rollback_visual_wait=0
+          while boot_light_owner && [ "$light_pid" = "$rollback_visual_pid" ]; do
+              [ "$rollback_visual_wait" -lt "$POLL_LIMIT" ] || return 1
+              poll_pause
+              rollback_visual_wait=$((rollback_visual_wait + 1))
+          done
+      fi
+      # A replacement owner must retain its own pin and display lease.
+      boot_light_owner && return 1
+      # The app is already stopped. The RAM pin can outlive a completed visual
+      # handoff; retire it before rollback removes the unconfirmed boot bundle.
+      if [ -e "$BOOT_LIVE_RECORD" ] || [ -L "$BOOT_LIVE_RECORD" ]; then
+          safe_runtime_file "$BOOT_LIVE_RECORD" || return 1
+          rm -f "$BOOT_LIVE_RECORD" || return 1
+      fi
+      light_pid=""
+      unset UN260_BOOT_LIGHT_ACTIVE
+}
+
 try_trial_rollback() {
       trial_pending || return $?
       [ -z "${PID:-}" ] || stop_owned_app "$PID" || return 2
+      stop_boot_visual_for_rollback || return 2
       "$UPDATE_DISPATCH" --rollback-trial >> "$STARTUP_LOG" 2>&1 || return 2
       boot_trace trial_rolled_back
       start_ready || return 2
@@ -705,6 +732,16 @@ start_ready_impl() {
       if modern_platform; then
           prepare_app_launch || return 1
           cpu_performance_enter
+          # Older factory kernels defer any transaction visual. The updated
+          # root launcher admits only a bound, committed cold-boot trial, under
+          # the updater lock. This never publishes UI health or confirms it.
+          if early_display_ready && ! boot_light_owner &&
+             [ -d /var/lib/un260-updater/transaction ] &&
+             [ -x /usr/local/bin/un260_boot_launch ]; then
+              boot_trace trial_visual_begin
+              /usr/local/bin/un260_boot_launch >> "$STARTUP_LOG" 2>&1 || true
+              boot_trace trial_visual_complete
+          fi
           boot_trace app_launch_check_begin
           # app-check prepares storage and completes journal recovery under
           # its lock before checking the candidate; no second recovery run.

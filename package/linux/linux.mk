@@ -538,6 +538,8 @@ ifneq ($(wildcard $(TARGET_BOARD_DIR)/early-init.enabled),)
 $(LINUX_DIR)/.stamp_built: \
 	$(TOPDIR)/tools/un260-startup/build_early_init.py \
 	$(TOPDIR)/tools/un260-startup/early_init.c \
+	$(TOPDIR)/tools/un260-startup/boot_trial.c \
+	$(TOPDIR)/tools/un260-startup/boot_trial.h \
 	$(TOPDIR)/source/artinchip/test-lvgl/un260/boot/boot_bundle.c \
 	$(TOPDIR)/source/artinchip/test-lvgl/un260/boot/boot_bundle.h
 endif

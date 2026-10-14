@@ -159,9 +159,13 @@ df() {{ printf 'Filesystem 1K-blocks Used Available Use%% Mounted\\nfixture 2000
 
     def test_old_production_updater_rejects_new_guard_before_copy(self):
         self.prepare_archive()
-        backup = SDK / 'work/boot_bundle_20261009/update_backup/updater-before.tar'
-        with tarfile.open(backup) as archive:
-            source = archive.extractfile('target/d211/d213_devkitf/rootfs_overlay/usr/bin/ui_update.sh').read()
+        backup = os.environ.get('UN260_BOOT_UPDATER_BACKUP')
+        if backup:
+            with tarfile.open(backup) as archive:
+                source = archive.extractfile('target/d211/d213_devkitf/rootfs_overlay/usr/bin/ui_update.sh').read()
+        else:
+            source = (SDK / 'tools/un260-update/fixtures/legacy-updater-before-boot-bundle.sh').read_bytes()
+            self.assertEqual(digest(source), '4fb0c53d1cc92d1027482d539d17792665a02980b905b07435fdafe4b348ef22')
         old_script = self.base / 'old-updater.sh'; old_script.write_bytes(source)
         # Load the original script before redirecting every owned path.
         self.run_shell('BUNDLE_PATH=$UPDATE_DIR/UN260_UPDATE.upk; GUARDED=1; usb_barrier() { :; }; install_bundle', 1, source=old_script)

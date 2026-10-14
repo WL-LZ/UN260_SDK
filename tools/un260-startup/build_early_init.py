@@ -19,7 +19,7 @@ binary = out / 'un260-early-init'
 temp = out / 'un260-early-init.new'
 subprocess.run([a.cc, '-O2', '-g0', '-static', '-s', '-Wall', '-Wextra', '-Werror',
                '-I' + str(app), str(repo / 'tools/un260-startup/early_init.c'),
-               str(app / 'un260/boot/boot_bundle.c'), '-o', str(temp)], check=True)
+               str(app / 'un260/boot/boot_bundle.c'), str(repo / 'tools/un260-startup/boot_trial.c'), '-o', str(temp)], check=True)
 data = temp.read_bytes()
 assert len(data) < 1024 * 1024, 'stable initramfs launcher exceeds 1 MiB budget'
 if not binary.exists() or binary.read_bytes() != data:

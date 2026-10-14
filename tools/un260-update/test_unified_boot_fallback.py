@@ -26,10 +26,14 @@ NATIVE_FIXTURE = r'''
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
+#include <signal.h>
 #include <unistd.h>
+static const char *ready_path;
+static void stop_display(int sig) { (void)sig; if(ready_path) unlink(ready_path); _exit(0); }
 int main(int argc, char **argv) {
     int display = strstr(argv[0], "un260_upgrade_display") != NULL;
     if (display) {
+        ready_path=getenv("TEST_READY");signal(SIGTERM,stop_display);
         if (prctl(PR_SET_NAME, "un260-boot", 0, 0, 0)) return 2;
         FILE *f = fopen(getenv("TEST_READY"), "w");
         if (!f) return 3;
@@ -67,7 +71,7 @@ class UnifiedBootFallbackTests(unittest.TestCase):
         self.p = Path(self.temp.name)
         self.root = self.p / 'root'
         for rel in ['usr/bin', 'usr/local/bin', 'etc/un260/app-storage',
-                    'var/run', 'var/lib/un260-updater', 'dev', 'tmp', 'sys']:
+                    'run', 'var/run', 'var/lib/un260-updater', 'dev', 'tmp', 'sys']:
             (self.root / rel).mkdir(parents=True, exist_ok=True)
         self.request = self.root / 'etc/un260/unified-request'
         self.request.write_text('a' * 64 + '\n' + 'b' * 64 + '\n')
@@ -97,7 +101,7 @@ class UnifiedBootFallbackTests(unittest.TestCase):
         self.query.chmod(0o755)
         # Keep real boot function bodies, redirect their absolute destinations,
         # and call start_ready rather than the asynchronous mdev dispatcher.
-        boot = BOOT.read_text().split('case "$1" in\n    prepare-devices)', 1)
+        boot = BOOT.read_text().rsplit('case "$1" in\n    --rescue-only)', 1)
         self.assertEqual(len(boot), 2)
         self.boot = self.p / 'boot-functions.sh'
         self.boot.write_text(self.redirect_paths(boot[0]))
@@ -110,7 +114,7 @@ class UnifiedBootFallbackTests(unittest.TestCase):
                         TEST_READY=str(self.ready), TEST_LAUNCH=str(self.launch))
 
     def redirect_paths(self, source):
-        return re.sub(r'(?<![A-Za-z0-9_])/(?:usr|etc|var|tmp|dev|sys)(?=/|[\s"\'])',
+        return re.sub(r'(?<![A-Za-z0-9_])/(?:usr|etc|var|run|tmp|dev|sys)(?=/|[\s"\'])',
                       lambda m: str(self.root) + m.group(0), source)
 
     def write_executable(self, path, text):
@@ -147,19 +151,19 @@ esac
        mutation or ':', continued))
 
     def stop_owned_processes(self):
-        paths = [self.ready, self.root / 'var/run/test_lvgl.pid']
+        paths = [self.ready, self.root / 'run/test_lvgl.pid']
         for path in paths:
             if not path.exists():
                 continue
             pid = int(path.read_text().strip())
             try:
                 # Never signal a process whose fixture identity is unproven.
-                actual = Path('/proc/%d/exe' % pid).resolve()
+                actual = Path('/proc/%d/exe' % pid).resolve(strict=True)
                 self.assertIn(actual, [self.app, self.display])
                 os.kill(pid, signal.SIGTERM)
-            except ProcessLookupError:
+            except (ProcessLookupError, FileNotFoundError):
                 pass
-            path.unlink()
+            path.unlink(missing_ok=True)
         time.sleep(.02)
 
     def tearDown(self):
@@ -182,8 +186,11 @@ esac
         after = self.launch.read_text().count('pid=') if self.launch.exists() else 0
         self.assertEqual(result.returncode == 0, launched, result.stdout + result.stderr + log)
         self.assertEqual(after - before, int(launched), result.stdout + log)
-        if self.ready.exists():
-            # The failure display remains the owner for existing UI handoff.
+        if launched:
+            # Verified continuation releases maintenance before selecting boot art.
+            self.assertFalse(self.ready.exists())
+        elif self.ready.exists():
+            # An unresolved recovery retains its maintenance display.
             os.kill(int(self.ready.read_text()), 0)
         return result, log
 
@@ -192,7 +199,7 @@ esac
         for attempt in range(2):
             result, _ = self.run_boot()
             self.assertIn('Unified upgrade incomplete; returning to installed UI', result.stdout)
-            self.assertIn('arg=-qws owner=1', self.launch.read_text())
+            self.assertIn('arg=-qws owner=\n', self.launch.read_text())
             self.assertEqual(self.events.read_text().count('update:--continue-unified'), attempt + 1)
             self.assertEqual(self.app.read_bytes(), original)
             self.stop_owned_processes()
