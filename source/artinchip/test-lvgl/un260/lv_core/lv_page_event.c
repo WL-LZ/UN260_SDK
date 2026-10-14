@@ -1,3 +1,4 @@
+#include "un260/app_service/receipt_print_service.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
 #include "lvgl/lvgl.h"
@@ -217,45 +218,15 @@ void page_01_set_btn_event_cb(lv_event_t* e){
         }
  }
 
-void page_01_print_btn_event_cb(lv_event_t* e)
+void page_01_print_btn_event_cb(lv_event_t *e)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-
-    if (currency_state_multi_selected() ||
-        !counting_data_monetary_result_supported(counting_data_current())) {
-        ui_notice_post_text(UI_NOTICE_WARNING,"print.request",UI_N_("Printing"),ui_text_msgid(UI_TEXT_WIDGET_MULTI_RESULT_UNSUPPORTED));
-        return;
-    }
-
-    // 只有金额和张数都为 0 时，才提示先点钞
-    if (counting_data_current()->total_amount <= 0.0f && counting_data_current()->total_pcs <= 0) {
-        ui_notice_post_text(UI_NOTICE_WARNING,"print.request",UI_N_("Printing"),ui_text_msgid(UI_TEXT_WIDGET_PRINT_TOAST_COUNT_FIRST));
-        return;
-    }
-
-    machine_time_value_t now;
-    uint8_t payload[9];
-    char curr_code[4];
-
-    machine_time_get(&now);
-    currency_state_get_active_code(curr_code);
-    payload[0] = (uint8_t)curr_code[0];
-    payload[1] = (uint8_t)curr_code[1];
-    payload[2] = (uint8_t)curr_code[2];
-    payload[3] = (uint8_t)(now.year >= 2000 ? (now.year - 2000) : now.year);
-    payload[4] = now.month;
-    payload[5] = now.day;
-    payload[6] = now.hour;
-    payload[7] = now.minute;
-    payload[8] = now.second;
-
-    if (protocol_send(0x3C, payload, 9) < 0) {
-        ui_notice_post_text(UI_NOTICE_ERROR,"print.request",UI_N_("Print request not sent"),UI_N_("Check controller connection."));
-        return;
-    }
-    ui_notice_post_text(UI_NOTICE_INFO,"print.request",UI_N_("Print request sent"),NULL);
+    if(lv_event_get_code(e)!=LV_EVENT_CLICKED)return;
+    const char *reason=receipt_print_blocker(0);
+    if(reason){ui_notice_post_text(UI_NOTICE_WARNING,"print.request",UI_N_("Printing"),reason);return;}
+    bool sent=receipt_print_request(0);
+    ui_notice_post_text(sent?UI_NOTICE_INFO:UI_NOTICE_ERROR,"print.request",
+        sent?UI_N_("Print request sent"):UI_N_("Print request not sent"),
+        sent?UI_N_("Print sent; paper output unverified"):UI_N_("Check controller connection."));
 }
 
 void page_01_qr_btn_event_cb(lv_event_t* e)

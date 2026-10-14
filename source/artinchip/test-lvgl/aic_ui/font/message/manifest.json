@@ -2,7 +2,7 @@
   "family": "UN260 Message CJK Subset",
   "upstream": "Noto Sans CJK SC Regular",
   "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
-  "subset_sha256": "65993c64e5441d8f48c73be1893daf128fde888bb4c481b7408620cc6c2aa1c8",
+  "subset_sha256": "0e033a9e0158fe4bfc9cacdf8dca97937c90163a389fec3837019d9f5728c058",
   "sizes": [
     12,
     14,

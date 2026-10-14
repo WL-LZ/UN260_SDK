@@ -14,8 +14,15 @@ static bool test_export_and_wait(const uint32_t *ids,size_t count)
 {
     bool accepted=ui_history_export_data_request_records(ids,count);
     if(!accepted)return false;
+    assert(ui_history_export_data_status()->state==HISTORY_EXPORT_WRITING);
+    assert(ui_history_export_data_status()->first_record==ids[0]);
+    assert(ui_history_export_data_status()->record_count==count);
     assert(storage_worker_wait(g_history_export_job)==STORAGE_JOB_SUCCEEDED);
-    ui_history_export_data_poll();return g_history_export_succeeded;
+    ui_history_export_data_poll();
+    const history_export_status_t *status=ui_history_export_data_status();
+    assert(status->state==(g_history_export_succeeded?HISTORY_EXPORT_SAVED:HISTORY_EXPORT_FAILED));
+    assert((status->first_html_path[0]!=0)==g_history_export_succeeded);
+    return g_history_export_succeeded;
 }
 static ui_history_store_t test_store;
 static lv_timer_t test_timer;
@@ -276,6 +283,7 @@ int main(int argc, char **argv)
     prepare_ok = false;
     assert(!test_export_and_wait(ids, 1));
     assert(prepare_calls == 1 && pair_calls == 0);
+    assert(ui_history_export_data_status()->state==HISTORY_EXPORT_FAILED);
     unlock_and_reset();
     assert(!ui_history_export_data_request());
     assert(prepare_calls == 0);

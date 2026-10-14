@@ -68,9 +68,9 @@ static const uint32_t accents[]={BLUE,ORANGE,TEAL,BLUE,PURPLE,TEAL};
 /* Keep section IDs stable while Overview and Records are temporarily hidden. */
 static const uint8_t visible_tabs[]={1,3,4,5};
 static const char *const sublabels[][5]={{NULL},{UI_N_("Batch presets"),UI_N_("Profiles"),UI_N_("Options")},
-    {UI_N_("Daily totals"),UI_N_("History"),UI_N_("Day closes")},{UI_N_("Print"),UI_N_("QR export")},
+    {UI_N_("Daily totals"),UI_N_("History"),UI_N_("Day closes")},{UI_N_("Print"),UI_N_("QR export"),UI_N_("Receipts")},
     {UI_N_("Operators"),UI_N_("Interaction"),UI_N_("Display & sound")},{UI_N_("Reject guide"),UI_N_("Care"),UI_N_("Device")}};
-static const unsigned subcounts[]={0,3,3,2,3,3};
+static const unsigned subcounts[]={0,3,3,3,3,3};
 static struct {
     lv_obj_t *root,*body,*quick,*quick_context,*photo_sheet,*user_sheet,*record_sheet,*nav[6],*task_scroll;
     lv_timer_t *timer;
@@ -246,7 +246,9 @@ static void sub_event(lv_event_t *e)
     if(workspace_service_applying()){notify(UI_NOTICE_WARNING,UI_N_("Wait for the profile to finish applying."));return;}
     if(menu.saving||menu.batch_dirty||menu.user_edit){explain(UI_N_("Save or cancel your changes first."));return;}
     clear_notice();menu.show_archives=false;
-    menu.sub=(uintptr_t)lv_event_get_user_data(e);menu.selected_group=menu.selected_close=0;menu.record_pending=menu.verify_pick=false;menu.dirty=true;
+    unsigned sub=(uintptr_t)lv_event_get_user_data(e);
+    if(menu.tab==3&&sub==2){ui_manager_push_page(UI_PAGE_RECEIPTS);return;}
+    menu.sub=sub;menu.selected_group=menu.selected_close=0;menu.record_pending=menu.verify_pick=false;menu.dirty=true;
 }
 static void pick_event(lv_event_t *e)
 {
@@ -308,7 +310,7 @@ static workspace_profile_t current_profile(void)
 static const char *const side_icons[][5]={
     {NULL},{"layers","profiles","options"},
     {"history","search","receipt"},
-    {"print","qr"},{"user","hand","screen"},
+    {"print","qr","receipt"},{"user","hand","screen"},
     {"reject","brush","screen"}
 };
 static void render(void)

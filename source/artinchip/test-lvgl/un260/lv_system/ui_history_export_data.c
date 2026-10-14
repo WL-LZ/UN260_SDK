@@ -29,6 +29,10 @@ typedef struct {
 static bool g_history_export_lock = false;
 static storage_job_id_t g_history_export_job;
 static bool g_history_export_succeeded;
+static history_export_status_t g_history_export_status;
+static char g_history_export_first_html[UI_HISTORY_EXPORT_PATH_SIZE];
+const history_export_status_t *ui_history_export_data_status(void)
+{return &g_history_export_status;}
 static language_t g_history_export_language=LANGUAGE_EN;
 static lv_timer_t *g_history_export_unlock_timer = NULL;
 
@@ -314,6 +318,7 @@ static bool history_export_write_html_file(const char *file_path, const ui_histo
         "<title data-i18n=\"UN260 Smart Count Report\">UN260 Smart Count Report</title>\n"
         "<style>\n"
         ":root{--bg-page:#e2e8f0;--bg-container:#f8fafc;--bg-card:#ffffff;--text-main:#0f172a;--text-sub:#475569;--text-muted:#94a3b8;--border-light:#edf2f7;--indigo:#4f46e5;--indigo-bg:#e0e7ff;--emerald:#059669;--emerald-bg:#d1fae5;--amber:#d97706;--amber-bg:#ffedd5;--slate:#64748b;--slate-bg:#f1f5f9;--rose:#e11d48;--rose-bg:#ffe4e6;--shadow-card:0 10px 30px rgba(15,23,42,.06);--shadow-container:0 24px 60px rgba(15,23,42,.12);}*{box-sizing:border-box;margin:0;padding:0;}body{background:linear-gradient(180deg,#dbe4ef 0%%,#eef4f8 100%%);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:24px 0;color:var(--text-main);} .dashboard-container{width:1280px;min-height:400px;background:rgba(248,250,252,.95);border-radius:28px;box-shadow:var(--shadow-container);overflow:hidden;border:1px solid rgba(255,255,255,.8);} .header-section{background:rgba(255,255,255,.92);padding:18px 28px 16px;border-bottom:1px solid var(--border-light);} .header-top{display:grid;grid-template-columns:230px 1fr 230px;align-items:start;gap:24px;} .header-left h1{font-size:20px;font-weight:750;letter-spacing:.2px;} .header-left .meta{font-size:12px;color:var(--text-sub);margin-top:6px;} .hero-summary{display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:-2px;} .total-inline{display:flex;align-items:baseline;justify-content:center;gap:16px;width:100%%;} .value-inline{font-size:44px;line-height:1;font-weight:800;color:var(--text-main);letter-spacing:-1px;} .label-inline{font-size:13px;line-height:1;font-weight:500;color:var(--text-sub);} .hero-summary .sub{margin-top:10px;font-size:13px;color:var(--text-sub);display:flex;flex-direction:column;gap:2px;align-items:center;} .hero-summary .sub strong{color:var(--text-main);} .settings-bar{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;justify-content:center;} .badge{padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:7px;} .badge::before{content:'';width:7px;height:7px;border-radius:50%%;} .badge-indigo{background:var(--indigo-bg);color:var(--indigo);} .badge-indigo::before{background:var(--indigo);} .badge-emerald{background:var(--emerald-bg);color:var(--emerald);} .badge-emerald::before{background:#10b981;} .badge-amber{background:var(--amber-bg);color:var(--amber);} .badge-amber::before{background:#fb923c;} .badge-slate{background:var(--slate-bg);color:var(--slate);} .badge-slate::before{background:var(--slate);opacity:.6;} .content-section{padding:18px 28px 20px;display:grid;grid-template-columns:1.1fr 1.45fr .9fr;gap:18px;align-items:start;} .panel{background:var(--bg-card);border-radius:18px;border:1px solid rgba(15,23,42,.04);box-shadow:var(--shadow-card);overflow:hidden;display:flex;flex-direction:column;} .panel-header{padding:16px 18px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-light);} .panel-header h2{font-size:15px;font-weight:700;} .panel-note{font-size:12px;color:var(--text-muted);} .table-wrap{padding:0 10px 8px;} table{width:100%%;border-collapse:collapse;text-align:left;} th{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;padding:11px 10px;border-bottom:1px solid var(--border-light);background:#fff;position:sticky;top:0;z-index:1;} td{padding:11px 10px;font-size:13px;color:var(--text-sub);border-bottom:1px solid var(--border-light);} tr:last-child td{border-bottom:none;} .num-font{font-variant-numeric:tabular-nums;color:var(--text-main);} .text-right{text-align:right;} .panel-denom .graph-area{padding:8px 18px 16px;border-top:1px solid var(--border-light);background:linear-gradient(180deg,#ffffff 0%%,#fafcff 100%%);} .graph-title{font-size:12px;font-weight:700;color:var(--text-sub);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;} .graph-title span{font-size:11px;color:var(--text-muted);font-weight:600;} .bar-row{display:grid;grid-template-columns:48px 1fr 82px;gap:10px;align-items:center;margin:10px 0;} .bar-label{font-size:12px;font-weight:700;color:var(--text-main);} .bar-track{height:10px;background:#eef2ff;border-radius:999px;overflow:hidden;position:relative;} .bar-fill{height:100%%;border-radius:999px;background:linear-gradient(90deg,#6366f1 0%%,#8b5cf6 100%%);} .bar-fill-green{background:linear-gradient(90deg,#22c55e 0%%,#16a34a 100%%);} .bar-values{font-size:12px;font-weight:700;color:var(--text-main);display:grid;grid-template-columns:48px 52px;gap:10px;text-align:left;} .bar-values .percent-value{color:var(--text-muted);font-weight:600;position:relative;left:-10px;} .search-box{display:flex;align-items:center;gap:10px;} .search-box input{width:180px;padding:10px 12px;border-radius:12px;border:1px solid var(--border-light);background:#f8fafc;color:var(--text-main);font-size:12px;outline:none;transition:.2s ease;} .search-box input:focus{border-color:#c7d2fe;box-shadow:0 0 0 4px rgba(99,102,241,.08);background:#fff;} .search-status{padding:0 18px 10px;color:var(--text-muted);font-size:12px;} .sn-table-wrap{flex:1;overflow:auto;padding:0 10px 0;} .sn-table-wrap table{table-layout:fixed;} .sn-cell{white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.35;} .highlight-row td{background:#eef2ff;} .no-match{display:none;padding:18px;text-align:center;color:var(--text-muted);font-size:13px;} .no-match.show{display:block;} .reject-empty{padding:16px 18px 14px;display:flex;flex-direction:column;gap:12px;} .reject-card{border-radius:16px;padding:16px;background:linear-gradient(135deg,#ecfdf5 0%%,#f8fafc 100%%);border:1px solid #d1fae5;} .reject-card .tag{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:999px;background:#d1fae5;color:var(--emerald);font-size:12px;font-weight:800;} .reject-card h3{font-size:18px;font-weight:800;margin-top:14px;color:#065f46;} .reject-card p{margin-top:6px;font-size:13px;line-height:1.5;color:#4b5563;} .empty-points{display:grid;grid-template-columns:1fr;gap:10px;} .empty-item{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:12px;background:#fff;border:1px solid var(--border-light);font-size:12px;} .empty-item strong{font-size:12px;color:var(--text-main);} .reject-detail{padding:14px 18px 16px;display:flex;flex-direction:column;gap:12px;} .reject-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;} .reject-stat{padding:12px 14px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;} .reject-stat strong{display:block;font-size:12px;color:#9a3412;margin-bottom:6px;} .reject-stat span{font-size:22px;font-weight:800;color:#7c2d12;} .reject-table-wrap{border:1px solid var(--border-light);border-radius:14px;overflow:hidden;background:#fff;} .reject-table-wrap table{table-layout:fixed;} .reject-table-wrap table th,.reject-table-wrap table td{position:static;} .reject-table-wrap td:last-child{white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.35;} @media (max-width:1320px){body{padding:16px}.dashboard-container{width:100%%}}\n"
+        "@media print{body{display:block;padding:0;background:white}.dashboard-container{width:100%%;max-width:none;box-shadow:none;overflow:visible}.header-top{grid-template-columns:1fr}.content-section{display:block;height:auto}.panel,.sn-table-wrap{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}.panel{margin-bottom:14px}.search-box,.search-status{display:none}thead{display:table-header-group}tr{break-inside:avoid}}\n"
         "</style>\n"
         "</head>\n"
         "<body>\n"
@@ -530,11 +535,13 @@ static bool history_export_run_job(const void *snapshot,size_t size)
 {
     const history_export_job_t *job=snapshot;
     g_history_export_succeeded=false;
+    g_history_export_first_html[0]=0;
     if(size<sizeof(*job) || !job->count || job->count>UI_HISTORY_MAX_RECORDS || size!=sizeof(*job)+job->count*sizeof(job->records[0]))return true;
     history_export_output_t *outputs=calloc(job->count,sizeof(*outputs));if(!outputs)return true;
     g_history_export_language=job->language;size_t written=0;
     for(;written<job->count;written++)if(!history_export_write_selected_record(&job->records[written],&outputs[written]))break;
     g_history_export_succeeded=written==job->count;
+    if(g_history_export_succeeded)snprintf(g_history_export_first_html,sizeof(g_history_export_first_html),"%s",outputs[0].html_path);
     if(!g_history_export_succeeded)history_export_rollback_outputs(outputs,written);
     free(outputs);return true;
 }
@@ -542,6 +549,9 @@ void ui_history_export_data_poll(void)
 {
     if(!g_history_export_job || storage_worker_status(g_history_export_job)!=STORAGE_JOB_SUCCEEDED)return;
     storage_worker_release(g_history_export_job);g_history_export_job=0;
+    g_history_export_status.state=g_history_export_succeeded?HISTORY_EXPORT_SAVED:HISTORY_EXPORT_FAILED;
+    snprintf(g_history_export_status.first_html_path,sizeof(g_history_export_status.first_html_path),"%s",g_history_export_first_html);
+    ++g_history_export_status.revision;
     if(!g_history_export_unlock_timer)g_history_export_lock=false;
     history_export_notice(g_history_export_succeeded?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,
         g_history_export_succeeded?UI_N_("Records saved to USB."):UI_N_("Export failed. Check selected records and USB drive."));
@@ -567,8 +577,15 @@ bool ui_history_export_data_request_records(const uint32_t *record_nos,size_t re
     bool accepted=usb_storage_prepare() && storage_worker_init() &&
         storage_worker_submit(history_export_run_job,job,size,&g_history_export_job);
     free(job);if(!accepted)goto failed;
+    g_history_export_status.first_record=record_nos[0];g_history_export_status.record_count=record_count;
+    g_history_export_status.first_html_path[0]=0;g_history_export_status.state=HISTORY_EXPORT_WRITING;
+    ++g_history_export_status.revision;
     history_export_start_lock();history_export_notice(UI_NOTICE_PROGRESS,UI_N_("Exporting records to USB..."));return true;
 failed:
+    g_history_export_status.first_record=record_nos[0];
+    g_history_export_status.record_count=record_count;
+    g_history_export_status.first_html_path[0]=0;
+    g_history_export_status.state=HISTORY_EXPORT_FAILED;++g_history_export_status.revision;
     history_export_notice(UI_NOTICE_ERROR,UI_N_("Export failed. Check selected records and USB drive."));return false;
 }
 
