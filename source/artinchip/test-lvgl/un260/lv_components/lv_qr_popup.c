@@ -9,7 +9,7 @@
 
 #define QR_POPUP_CARD_W          890
 #define QR_POPUP_CARD_H          320
-#define QR_POPUP_CODE_MAX_SIZE   220
+#define QR_POPUP_CODE_MAX_SIZE   260
 #define QR_POPUP_PADDING_MODULE  4
 
 static lv_obj_t* g_qr_popup_root = NULL;

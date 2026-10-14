@@ -68,11 +68,14 @@ typedef enum {
 typedef struct {
     char password[USER_PASSWORD_MAX_LEN + 1];
     bool screenshot, recording, performance_monitor, performance_profile, gesture;
+    bool qr_options[3];
     char locale[UI_LOCALE_TAG_CAPACITY];
 } user_cfg_startup_snapshot_t;
 void user_cfg_startup_read(user_cfg_startup_snapshot_t *snapshot);
 void user_cfg_startup_apply(const user_cfg_startup_snapshot_t *snapshot);
 
+bool user_cfg_qr_option(unsigned index);
+bool user_cfg_qr_option_save(unsigned index,bool enabled);
 bool user_cfg_password_load(void);
 bool user_cfg_password_save(const char* password);
 const char *user_cfg_password_get(void);
@@ -96,12 +99,12 @@ bool user_cfg_language_load(void);
 bool user_cfg_gesture_load(void);
 bool user_cfg_gesture_save(bool enabled);
 bool user_cfg_gesture_enabled(void);
-bool user_cfg_touch_feedback_load(void);
-bool user_cfg_touch_feedback_save(bool enabled);
-bool user_cfg_touch_feedback_enabled(void);
 bool user_cfg_touch_sound_load(void);
 bool user_cfg_touch_sound_save(bool enabled);
 bool user_cfg_touch_sound_enabled(void);
+bool user_cfg_touch_feedback_load(void);
+bool user_cfg_touch_feedback_save(bool enabled);
+bool user_cfg_touch_feedback_enabled(void);
 
  enum {
     MODE_NONE,

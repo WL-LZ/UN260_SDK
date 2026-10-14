@@ -24,6 +24,8 @@
 #define GESTURE_CFG_PATH UI_STATE_DIR "/gestures.cfg"
 #define GESTURE_CFG_TMP_PATH UI_STATE_DIR "/gestures.cfg.tmp"
 
+static bool qr_options[3];
+static const char *qr_paths[]={UI_STATE_DIR "/qr_serials.cfg",UI_STATE_DIR "/qr_details.cfg",UI_STATE_DIR "/qr_errors.cfg"};
 static bool g_screenshot_enabled = true;
 static bool g_screen_recording_enabled = false;
 static bool g_performance_monitor_enabled = false;
@@ -161,6 +163,7 @@ void user_cfg_startup_read(user_cfg_startup_snapshot_t *snapshot)
     (void)user_cfg_bool_load(PERFORMANCE_MONITOR_CFG_PATH, false, &snapshot->performance_monitor);
     (void)user_cfg_bool_load(PERFORMANCE_PROFILE_CFG_PATH, false, &snapshot->performance_profile);
     (void)user_cfg_bool_load(GESTURE_CFG_PATH, false, &snapshot->gesture);
+    for(unsigned i=0;i<3;i++)(void)user_cfg_bool_load(qr_paths[i],false,&snapshot->qr_options[i]);
     (void)ui_locale_store_read(snapshot->locale);
 }
 
@@ -174,6 +177,7 @@ void user_cfg_startup_apply(const user_cfg_startup_snapshot_t *snapshot)
     g_performance_monitor_enabled = snapshot->performance_monitor;
     g_performance_profile_enabled = snapshot->performance_profile;
     g_gesture_enabled = snapshot->gesture;
+    memcpy(qr_options,snapshot->qr_options,sizeof(qr_options));
     ui_lang_restore(snapshot->locale);
 }
 
@@ -405,3 +409,6 @@ bool user_cfg_touch_sound_save(bool enabled)
                               enabled, &g_touch_sound_enabled);
 }
 bool user_cfg_touch_sound_enabled(void) { return g_touch_sound_enabled; }
+
+bool user_cfg_qr_option(unsigned i){return i<3&&qr_options[i];}
+bool user_cfg_qr_option_save(unsigned i,bool enabled){if(i>=3)return false;char temp[128];snprintf(temp,sizeof(temp),"%s.tmp",qr_paths[i]);return user_cfg_bool_save(qr_paths[i],temp,enabled,&qr_options[i]);}

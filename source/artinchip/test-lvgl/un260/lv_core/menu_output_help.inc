@@ -19,6 +19,7 @@ static void output_input(const char *value,void *context)
 static bool output_layout;
 static bool output_action(unsigned id)
 {
+    if(id>=830&&id<=832){unsigned i=id-830;if(!user_cfg_qr_option_save(i,!user_cfg_qr_option(i)))explain(UI_N_("Settings could not be saved."));menu.dirty=true;return true;}
     if(id>=820&&id<=827){
         unsigned row=(id-820)/4,value=(id-820)%4;
         if(value==3)id=row?806:805;
@@ -47,15 +48,15 @@ static void output_view(lv_obj_t *b)
     bool monetary=result&&!result->multi_currency_result&&counting_data_monetary_result_supported(result);
     if(menu.sub){
         lv_obj_t *card=box(b,0,48,684,248,PANEL,20);
-        snprintf(line,sizeof(line),ui_tr("%s · counting summary"),currency_state_display_code(code));
-        label(card,20,20,616,line,&lv_font_instrument_sans_semibold_21,INK);icon(card,MICON("qr",22),642,20,BLUE);
-        if(monetary)money_text(line,(uint64_t)result->total_amount);else snprintf(line,sizeof(line),"%s",ui_tr("Separate currencies"));
-        if(monetary)hero_amount(card,20,55,644,(uint64_t)result->total_amount,false);else label(card,20,55,644,line,&lv_font_instrument_sans_semibold_29,INK);
-        snprintf(line,sizeof(line),ui_trn("%d notes · denomination summary", (result?result->total_pcs:0)),result?result->total_pcs:0);small(card,20,119,644,line);
-        lv_obj_t *controls=box(card,20,184,644,44,PANEL,0);toggle(controls,0,644,ui_tr("Show after counting"),NULL,user()&&user()->qr_after_count,A_AUTO_QR);
+        const char *options[]={UI_N_("Show serial numbers"),UI_N_("Show denomination details"),UI_N_("Show error details"),UI_N_("Show after counting")};
+        for(unsigned i=0;i<4;i++){
+            lv_obj_t *row=box(card,20,8+i*60,644,48,PANEL,0);
+            toggle(row,0,644,ui_tr(options[i]),NULL,i<3?user_cfg_qr_option(i):(user()&&user()->qr_after_count),i<3?830+i:A_AUTO_QR);
+            if(i<3)box(card,20,65+i*60,644,1,0xE3E9ED,0);
+        }
         lv_obj_t *graphic=box(b,716,52,312,76,PANEL,18);icon(graphic,MICON("qr",38),137,19,BLUE);
         label(b,716,142,312,ui_tr("Take your result with you"),&lv_font_instrument_sans_semibold_21,INK);
-        lv_obj_t *hint=small(b,716,182,312,ui_tr("Manual export works even when automatic QR is off."));lv_obj_set_style_text_line_space(hint,5,0);
+        lv_obj_t *hint=small(b,716,182,312,ui_tr("Summary is always included. Extra content follows your selections."));lv_obj_set_style_text_line_space(hint,5,0);
         lv_obj_t *show=button(b,716,248,312,44,ui_tr("Preview QR export"),A_QR,true);
         char payload[3072];if(!available||!ui_qr_data_build_summary(payload,sizeof(payload)))lv_obj_add_state(show,LV_STATE_DISABLED);
         return;
