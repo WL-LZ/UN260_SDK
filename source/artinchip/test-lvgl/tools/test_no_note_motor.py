@@ -19,13 +19,14 @@ fixture = r'''
 #include <stdio.h>
 #include <string.h>
 #include "un260/counting/counting_control_reply.h"
+#include "un260/counting/counting_action_service.h"
 #include "un260/counting/counting_info_reply.h"
 #include "un260/counting/counting_detail_state.h"
 #include "un260/protocol/protocol_frame.h"
 static counting_session_state_t g_counting_session;
 static counting_detail_state_t g_counting_detail_state;
 static counting_sim_t data;
-static bool g_no_note_motor_active, g_no_note_denom_pending, pending, diagnostic, locked, multi_query;
+static bool g_no_note_motor_active, g_no_note_denom_pending, diagnostic, locked, multi_query;
 static uint32_t g_count_end_generation;
 static bool multi, warning_visible;
 static struct { bool counting; } multi_model;
@@ -41,7 +42,11 @@ typedef struct { int domain, type, code; } machine_fault_key_t;
 #define counting_data_mark_multi_result(...) ((void)0)
 
 static unsigned resets, faults, warnings, starts, ends, prepares, reports, denoms, stacker;
-static bool counting_action_start_pending(void){return pending;}
+uint64_t app_clock_monotonic_ms(void){return 100;}
+bool counting_history_can_start(void){return true;}
+int protocol_send(uint8_t cmd,const uint8_t *payload,uint16_t len){
+ assert(cmd==0x0A&&len==1&&payload[0]==1);return 6;
+}
 static bool work_mode_service_diagnostic_active(void){return diagnostic;}
 static bool counting_multi_query_busy(void){return multi_query;}
 static void page_01_main_set_counting_locked(bool v){locked=v;}
@@ -67,7 +72,6 @@ static void app_counting_runtime_handle_info(counting_session_state_t *s,countin
 #define counting_history_prepare_reset(...) true
 #define counting_report_begin(...) (++reports)
 #define counting_report_discard_stale(...) false
-#define counting_action_handle_reply(...) (pending=false)
 #define app_fault_recovery_observe_setting_detail(...) false
 #define app_protocol_runtime_handle_reply(...) false
 #define app_setting_runtime_handle_reply(...) false
@@ -82,9 +86,10 @@ static void app_counting_runtime_handle_info(counting_session_state_t *s,countin
 cases = r'''
 static void dispatch(uint8_t *f){assert(app_command_runtime_dispatch(f[3],f,f[2]));}
 static void reset(void){
+ counting_action_cancel_all();
  memset(&g_counting_session,0,sizeof(g_counting_session));
  memset(&g_counting_detail_state,0,sizeof(g_counting_detail_state));
- g_no_note_motor_active=g_no_note_denom_pending=pending=diagnostic=locked=multi_query=multi=warning_visible=false;
+ g_no_note_motor_active=g_no_note_denom_pending=diagnostic=locked=multi_query=multi=warning_visible=false;
  resets=faults=warnings=starts=ends=prepares=reports=denoms=stacker=g_count_end_generation=0;
  data.total_pcs=23;data.total_amount=2300;data.denom_number=1;data.denom[0].pcs=23;
 }
@@ -95,7 +100,8 @@ int main(void){
  uint8_t live[]={0xFD,0xDF,13,0x0E,0,0,0,0,0,0,0,0,0x48};
  uint8_t motor[]={0xFD,0xDF,7,0x37,2,1,0xEB};
  uint8_t denom[]={0xFD,0xDF,16,0x0B,0,0,0,0,0,0,0,0,0,0,0,5};
- reset();pending=true;dispatch(no_note);assert(warnings==1&&locked&&!pending);
+ reset();assert(counting_action_request_start());dispatch(no_note);
+ assert(warnings==1&&locked&&!counting_action_start_pending());
  dispatch(clear);dispatch(clear);assert(stacker==2&&locked);
  dispatch(start);dispatch(start);assert(locked&&app_command_runtime_count_start_busy());
  assert(!starts&&!prepares&&!reports&&!g_counting_session.start_confirmed);
@@ -106,6 +112,24 @@ int main(void){
  memset(denom+4,255,11);dispatch(denom);
  assert(!denoms&&!g_no_note_denom_pending&&!starts&&!ends);
  assert(data.total_pcs==23&&data.total_amount==2300&&data.denom[0].pcs==23);
+ /* NO NOTE followed by an explicit START refusal aborts empty motion.
+  * Confirm only acknowledges the fault: no motor-end frame is guaranteed. */
+ for(unsigned type=1;type<=2;++type){
+  reset();assert(counting_action_request_start());dispatch(no_note);
+  uint8_t fault[]={0xFD,0xDF,7,0x0A,type,type==1?3:1,0};
+  dispatch(fault);
+  assert(!locked&&!app_command_runtime_count_start_busy()&&resets==1);
+  assert(!starts&&!prepares&&!reports&&!g_counting_session.start_confirmed);
+  dispatch(fault);dispatch(clear);assert(!locked&&resets==1);
+  /* Late empty snapshots cannot replace the previous result. */
+  live[11]=2;dispatch(live);dispatch(denom);
+  assert(!denoms&&data.total_pcs==23&&data.total_amount==2300);
+ }
+ /* Replay the supplied upper-channel failure, then the next hardware run. */
+ reset();assert(counting_action_request_start());dispatch(no_note);
+ uint8_t upper[]={0xFD,0xDF,7,0x0A,2,1,0x0B};dispatch(upper);
+ assert(!locked&&!app_command_runtime_count_start_busy());
+ dispatch(clear);dispatch(clear);
  /* Next genuine run must still start, count, and finish once. */
  dispatch(start);assert(starts==1&&prepares==1&&reports==1&&locked);
  live[9]=3;live[11]=1;dispatch(live);assert(data.total_pcs==3&&locked);
@@ -130,7 +154,13 @@ int main(void){
  mul[14]=1;dispatch(mul);mul[14]=2;dispatch(mul);assert(locked);
  /* Diagnostics and real running sessions keep their existing handlers. */
  reset();diagnostic=true;dispatch(no_note);dispatch(start);assert(starts==1&&!g_no_note_motor_active);
- reset();dispatch(start);dispatch(no_note);assert(!g_no_note_motor_active&&locked);
+ reset();dispatch(start);dispatch(no_note);dispatch(upper);
+ assert(!g_no_note_motor_active&&locked&&g_counting_session.start_confirmed);
+ /* Unknown or truncated failures do not prove empty motion was aborted. */
+ reset();dispatch(no_note);upper[4]=3;dispatch(upper);
+ assert(locked&&g_no_note_motor_active&&!resets);upper[4]=2;
+ assert(!app_command_runtime_handle_no_note_motion(0x0A,upper,6));
+ assert(locked&&g_no_note_motor_active);
  /* Truncated / invalid headers cannot arm empty motion. */
  reset();assert(!app_command_runtime_handle_no_note_motion(0x0A,no_note,6));
  no_note[0]=0;assert(!app_command_runtime_handle_no_note_motion(0x0A,no_note,7));no_note[0]=0xFD;
@@ -140,13 +170,36 @@ int main(void){
  dispatch(denom);assert(denoms==1&&!g_no_note_denom_pending);
  reset();dispatch(no_note);dispatch(live);multi_query=true;dispatch(denom);assert(denoms==1);
  reset();dispatch(no_note);dispatch(live);dispatch(start);assert(starts==1&&!g_no_note_denom_pending);
- puts("PASS full dispatcher: supplied empty-motion sequence, prior result preservation, no count hooks, legacy end/fault, malformed/duplicate replies, query ownership, diagnostics and next real count");
+ /* All defined mechanical START failures, both currency layouts, direct
+  * refusal or after NO NOTE. The real action/request owners must settle. */
+ for(unsigned layout=0;layout<2;++layout)
+ for(unsigned empty=0;empty<2;++empty)
+ for(unsigned code=1;code<=13;++code){
+  reset();multi=layout;assert(counting_action_request_start());locked=true;
+  if(empty)dispatch(no_note);
+  uint8_t fault[]={0xFD,0xDF,7,0x0A,2,code,0};dispatch(fault);
+  assert(!locked&&!counting_action_start_pending()&&!app_command_runtime_count_start_busy());
+  assert(resets==empty&&!starts&&!prepares&&!reports&&!ends);
+  assert(data.total_pcs==23&&data.total_amount==2300);
+  dispatch(fault);assert(resets==empty&&!locked);
+  /* A genuine subsequent START must own the run, including after a fault. */
+  assert(counting_action_request_start());dispatch(start);
+  assert(locked&&starts==1&&g_counting_session.start_confirmed&&!g_no_note_motor_active);
+  live[9]=3;live[11]=1;dispatch(live);
+  assert(locked&&g_counting_session.phase==COUNTING_SESSION_ACTIVE);
+  /* A late START refusal cannot release a real running session's lock. */
+  dispatch(fault);assert(locked&&app_command_runtime_count_start_busy());
+  live[11]=2;dispatch(live);dispatch(live);
+  assert(!locked&&!app_command_runtime_count_start_busy()&&ends==1&&g_count_end_generation==1);
+ }
+ puts("PASS full dispatcher + real START request owner: 52 fault/layout/order cases, active-session protection, supplied empty-motion sequence, prior result preservation, legacy end/fault, malformed/duplicate replies, query ownership, diagnostics and next real count");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='un260-no-note-motor-') as directory:
     work = Path(directory); harness = work/'test.c'; harness.write_text(fixture+actual+cases)
     exe=work/'test'
-    sources=['un260/protocol/protocol_frame.c','un260/counting/counting_control_reply.c','un260/counting/counting_info_reply.c']
+    sources=['un260/protocol/protocol_frame.c','un260/counting/counting_control_reply.c','un260/counting/counting_info_reply.c',
+             'un260/counting/counting_action_service.c','un260/protocol/protocol_request.c']
     subprocess.run(['cc','-std=c11','-g','-Wall','-Wextra','-Werror',
         '-fsanitize=address,undefined','-fno-sanitize-recover=all','-no-pie',
         '-I'+str(ROOT),str(harness),*[str(ROOT/p) for p in sources],'-o',str(exe)],check=True)

@@ -246,8 +246,16 @@ static bool app_command_runtime_handle_no_note_motion(uint8_t cmd,const uint8_t 
              * before history/report/start hooks can create a counted result. */
             if (g_no_note_motor_active) return true;
             g_no_note_denom_pending = false;
-        } else if (!g_no_note_motor_active && !g_counting_session.start_confirmed &&
+        } else if ((!g_no_note_motor_active || buf[4] == 1 || buf[4] == 2) &&
+                   !g_counting_session.start_confirmed &&
                    g_counting_session.phase != COUNTING_SESSION_ACTIVE) {
+            /* A subsequent START refusal aborts the empty-motion attempt;
+             * no motor-end report is guaranteed after a channel fault.
+             * Keep draining any empty denomination tail until the next START. */
+            if (g_no_note_motor_active) {
+                g_no_note_motor_active = false;
+                smart_island_notify_count_reset();
+            }
             page_01_main_set_counting_locked(false);
         }
     }
