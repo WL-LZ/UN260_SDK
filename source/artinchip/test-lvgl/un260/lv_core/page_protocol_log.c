@@ -18,7 +18,6 @@ static int locale=-1;
 static void notice(void){ui_notice_post_text(UI_NOTICE_WARNING,"debug.export",UI_N_("Protocol logs"),UI_N_("Log operation unavailable. Wait for storage and try again."));}
 void page_protocol_log_close(void){if(root)lv_obj_del(root);root=NULL;settings_detail_dialog_hide();}
 static void back(lv_event_t *e){(void)e;page_protocol_log_close();}
-static void open_click(lv_event_t *e){(void)e;page_protocol_log_open();}
 static void switch_click(lv_event_t *e){(void)e;protocol_log_snapshot_t s;protocol_log_snapshot(&s);if(!(s.active?protocol_log_stop():protocol_log_start()))notice();}
 static void export_click(lv_event_t *e){unsigned i=(uintptr_t)lv_event_get_user_data(e);protocol_log_snapshot_t s;protocol_log_snapshot(&s);if(!protocol_log_export(i<5?ids[i]:s.current))notice();}
 static void remove_confirmed(void *context){(void)context;if(!protocol_log_delete(delete_id))notice();}
@@ -62,11 +61,11 @@ void page_protocol_log_poll(void)
  if(s.state==PLOG_ERROR&&previous!=PLOG_ERROR)ui_notice_post_text(UI_NOTICE_ERROR,"debug.export",UI_N_("Protocol logs"),UI_N_("Log operation failed or recording limit reached. Local logs are retained."));
  previous=s.state;
  if(!indicator&&(s.active||s.busy)){
-   indicator=lv_settings_box(lv_layer_top(),1164,3,36,36,0xEDF3F8);lv_obj_set_style_radius(indicator,10,0);lv_obj_set_style_border_width(indicator,1,0);lv_obj_set_style_border_color(indicator,lv_color_hex(0xAFC4D6),0);
-   lv_obj_add_flag(indicator,LV_OBJ_FLAG_CLICKABLE);lv_obj_add_event_cb(indicator,open_click,LV_EVENT_CLICKED,NULL);
-   lv_obj_t *paper=lv_settings_box(indicator,10,7,17,23,0xFFFFFF);lv_obj_set_style_radius(paper,3,0);lv_obj_set_style_border_width(paper,2,0);lv_obj_set_style_border_color(paper,lv_color_hex(0x49799F),0);
-   for(unsigned i=0;i<3;i++)lv_settings_box(paper,3,4+i*5,7,2,0x49799F);
-   lv_obj_t *dot=lv_settings_box(indicator,4,23,8,8,0xD06D45);lv_obj_set_style_radius(dot,LV_RADIUS_CIRCLE,0);
+   /* Status only, in the outer screen gutter. The Debug page owns the entry;
+    * recording must never reserve toolbar space or intercept a page's taps. */
+   indicator=lv_settings_box(lv_layer_top(),1270,2,8,8,0xD06D45);
+   lv_obj_set_style_radius(indicator,LV_RADIUS_CIRCLE,0);
+   lv_obj_clear_flag(indicator,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
  }
  if(indicator){if(s.active||s.busy){lv_obj_clear_flag(indicator,LV_OBJ_FLAG_HIDDEN);lv_obj_move_foreground(indicator);}else lv_obj_add_flag(indicator,LV_OBJ_FLAG_HIDDEN);}
  if(root&&ui_manager_get_current_page()!=owner){page_protocol_log_close();return;}

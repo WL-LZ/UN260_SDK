@@ -404,10 +404,10 @@ void ui_page_10_debug_create(void)
     settings_detail_add_run(page_debug);
     lv_obj_set_style_bg_opa(debug_frame.body,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(debug_frame.body,0,0);
-    lv_obj_t *tabs=lv_settings_box(page_debug,230,15,326,46,LV_SETTINGS_CONTROL_SURFACE);
+    lv_obj_t *tabs=lv_settings_box(page_debug,230,15,390,46,LV_SETTINGS_CONTROL_SURFACE);
     lv_obj_set_style_radius(tabs,12,0);
-    debug_tabs[0]=lv_settings_button(tabs,3,3,190,40,ui_tr("Communication"),false,debug_tab,(void *)0);
-    debug_tabs[1]=lv_settings_button(tabs,193,3,130,40,ui_tr("Tools"),false,debug_tab,(void *)1);
+    debug_tabs[0]=lv_settings_button(tabs,3,3,226,40,ui_tr("Communication"),false,debug_tab,(void *)0);
+    debug_tabs[1]=lv_settings_button(tabs,229,3,158,40,ui_tr("Tools"),false,debug_tab,(void *)1);
     lv_obj_set_style_bg_color(debug_tabs[0],lv_color_white(),0);
     lv_obj_set_style_bg_color(debug_tabs[1],lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),0);
 

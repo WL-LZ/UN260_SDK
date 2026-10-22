@@ -4,6 +4,10 @@
 /* Settings navigation owns layout; device actions remain in their existing services. */
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "page_06_settings.h"
+#include "panel_pages.h"
+#include "un260/lv_system/ui_display_mode.h"
+static bool panel_detail,panel_rebuild_pending;
+
 #include "settings_catalog.h"
 #include "un260/app_service/touch_calibration_service.h"
 #include "settings_detail_ui.h"
@@ -59,7 +63,7 @@ static void reset_detail_refs(void){
 }
 static void back_event_cb(lv_event_t *e){
  (void)e;
- if(scope&&scope->parent){capture_scroll();scope=find(scope->parent);render();return;}
+ if(page_06_settings_back_sub_page())return;
  ui_manager_clear_stack();ui_manager_switch(UI_PAGE_MAIN);
 }
 static void home_event_cb(lv_event_t *e){
@@ -154,6 +158,7 @@ static void create_version_page_content(lv_obj_t *parent){
  ui_page_06_settings_refresh_data(UI_DATA_TOPIC_DEVICE_VERSION);
 }
 void ui_page_06_settings_refresh_data(uint32_t topics){
+ if(panel_pages_created(UI_PAGE_SETTING)){panel_pages_refresh(UI_PAGE_SETTING,false);return;}
  if(!settings_page_is_visible())return;
  refresh_values();
  if(!(topics&UI_DATA_TOPIC_DEVICE_VERSION))return;
@@ -188,7 +193,7 @@ static void settings_poll(lv_timer_t *timer){
 static void render(void){
  if(!settings_page||!scope)return;
  if(ui_manager_get_current_page()==UI_PAGE_SETTING)
-  work_mode_service_set_diagnostic(false);
+  work_mode_service_set_diagnostic(scope_is("collection"));
  grid=sidebar=count_label=NULL;reset_detail_refs();
  if(view)lv_obj_del(view);
  if(scope->kind==SETTINGS_DETAIL){
@@ -228,6 +233,13 @@ static void render(void){
  refresh_directory_count();
 }
 void ui_page_06_settings_create(lv_obj_t *parent){
+ if(panel_rebuild_pending&&ui_display_mode_is_panel()){ui_page_06_settings_destroy();memset(scroll_positions,0,sizeof(scroll_positions));scope=default_scope();}
+ if(ui_display_mode_is_panel()&&!panel_detail){
+  if(panel_pages_create(UI_PAGE_SETTING,parent)){
+   if(ui_manager_get_current_page()==UI_PAGE_SETTING)work_mode_service_set_diagnostic(false);
+   return;
+  }
+ }
  if(settings_page)return;
  if(!catalog)catalog=settings_catalog(&catalog_count);
  if(!settings_catalog_validate(catalog,catalog_count)||catalog_count>SETTINGS_NODE_MAX)return;
@@ -237,6 +249,8 @@ void ui_page_06_settings_create(lv_obj_t *parent){
  settings_timer=lv_timer_create(settings_poll,250,NULL);
 }
 bool ui_page_06_settings_resume(void){
+ if(panel_rebuild_pending&&ui_display_mode_is_panel()){ui_page_06_settings_destroy();memset(scroll_positions,0,sizeof(scroll_positions));scope=default_scope();ui_page_06_settings_create(lv_scr_act());return panel_pages_created(UI_PAGE_SETTING)||settings_page!=NULL;}
+ if(panel_pages_created(UI_PAGE_SETTING))return panel_pages_resume(UI_PAGE_SETTING);
  if(!settings_page||!lv_obj_is_valid(settings_page))return false;
  lv_obj_clear_flag(settings_page,LV_OBJ_FLAG_HIDDEN);lv_obj_move_foreground(settings_page);
  page_06_data_collection_refresh();ui_page_06_settings_refresh_data(UI_DATA_TOPIC_DEVICE_VERSION);
@@ -245,34 +259,71 @@ bool ui_page_06_settings_resume(void){
  return true;
 }
 void ui_page_06_settings_suspend(void){
+ if(panel_pages_created(UI_PAGE_SETTING)){panel_pages_suspend(UI_PAGE_SETTING);return;}
  capture_scroll();settings_detail_dialog_hide();settings_detail_keyboard_hide();
  if(settings_timer)lv_timer_pause(settings_timer);
  if(settings_page)lv_obj_add_flag(settings_page,LV_OBJ_FLAG_HIDDEN);
 }
 void ui_page_06_settings_reset_navigation(void){
+ if(panel_detail&&ui_display_mode_is_panel()){panel_rebuild_pending=true;return;}
+ if(panel_pages_created(UI_PAGE_SETTING)){panel_pages_settings_category(0);return;}
  memset(scroll_positions,0,sizeof(scroll_positions));scope=default_scope();
  if(settings_page)render();
 }
 void ui_page_06_settings_destroy(void){
+ panel_rebuild_pending=false;
+ if(panel_pages_created(UI_PAGE_SETTING)){panel_pages_destroy(UI_PAGE_SETTING);panel_detail=false;return;}
+ panel_detail=false;
  settings_detail_dialog_hide();settings_detail_keyboard_hide();capture_scroll();
  if(settings_page)lv_obj_del(settings_page);
  if(settings_timer)lv_timer_del(settings_timer);
  settings_timer=NULL;
  settings_page=sidebar=view=grid=count_label=NULL;reset_detail_refs();
 }
-bool page_06_settings_is_collection(void){return scope_is("collection");}
+bool page_06_settings_is_collection(void){
+ if(ui_display_mode_is_panel()&&(panel_rebuild_pending||(!panel_detail&&!settings_page)))return false;
+ return panel_pages_created(UI_PAGE_SETTING)?false:scope_is("collection");
+}
 bool page_06_settings_switch_menu(page_06_settings_menu_t menu){
+ if(panel_pages_created(UI_PAGE_SETTING)){static const unsigned map[]={0,2,1,4,3};return menu>=0&&menu<PAGE_06_SETTINGS_MENU_COUNT&&panel_pages_settings_category(map[menu]);}
  static const char *ids[]={"device","maintenance","counting","about","data"};
  if(!settings_page||menu<0||menu>=PAGE_06_SETTINGS_MENU_COUNT)return false;
  capture_scroll();scope=find(ids[menu]);if(!scope)return false;render();return true;
 }
+static bool settings_return_to_panel(const settings_node_t *root)
+{
+ if(!panel_detail||!ui_display_mode_is_panel()||!root)return false;
+ unsigned category=0;
+ if(!strcmp(root->id,"counting"))category=1;
+ else if(!strcmp(root->id,"maintenance"))category=2;
+ else if(!strcmp(root->id,"data"))category=3;
+ else if(!strcmp(root->id,"about"))category=4;
+ ui_page_06_settings_destroy();scope=root;ui_page_06_settings_create(lv_scr_act());
+ if(panel_pages_created(UI_PAGE_SETTING))panel_pages_settings_category(category);
+ return panel_pages_created(UI_PAGE_SETTING)||settings_page!=NULL;
+}
 bool page_06_settings_back_sub_page(void){
- if(!settings_page||!scope||!scope->parent)return false;
- capture_scroll();scope=find(scope->parent);render();return true;
+ if(panel_pages_created(UI_PAGE_SETTING))return false;
+ if(!settings_page||!scope)return false;
+ const settings_node_t *parent=scope->parent?find(scope->parent):NULL;
+ if(panel_detail&&ui_display_mode_is_panel()&&(!parent||parent->kind==SETTINGS_CATEGORY))
+  return settings_return_to_panel(parent?parent:scope);
+ if(!parent)return false;
+ capture_scroll();scope=parent;render();return true;
 }
 
 void page_06_settings_open_collection(void){
+ if(panel_pages_created(UI_PAGE_SETTING)){page_06_settings_open_detail("collection");return;}
  if(!catalog)catalog=settings_catalog(&catalog_count);
  const settings_node_t *target=find("collection");if(!target)return;
  capture_scroll();scope=target;if(settings_page)render();
+}
+
+void page_06_settings_open_detail(const char *id)
+{
+ if(!catalog)catalog=settings_catalog(&catalog_count);
+ const settings_node_t *target=find(id);if(!target)return;
+ if(ui_manager_get_current_page()!=UI_PAGE_SETTING)return;
+ panel_pages_destroy(UI_PAGE_SETTING);panel_detail=true;panel_rebuild_pending=false;scope=target;
+ if(!settings_page)ui_page_06_settings_create(lv_scr_act());else render();
 }

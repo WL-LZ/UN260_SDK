@@ -3,9 +3,11 @@
 
 #include <stdint.h>
 
+/* Exact protocol name; do not pass it through a translation lookup. */
 const char *counting_reject_reason_get(uint8_t code);
 typedef struct { const char *title, *meaning, *causes, *action; } counting_reject_guide_t;
-/* Protocol-defined meaning; causes are possibilities, never a diagnosis. */
+/* Title is language-invariant; guidance fields are translation keys.
+ * Causes are possibilities, never a diagnosis. */
 const counting_reject_guide_t *counting_reject_guide_get(uint8_t code);
 
 #endif

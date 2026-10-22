@@ -15,11 +15,11 @@ static void json_string(FILE *file,const char *text)
     }
     fputc('"',file);
 }
-static void entry(FILE *file,language_t locale,const char *key,bool *comma)
+static void entry(FILE *file,const char *key,const char *value,bool *comma)
 {
     if(*comma)fputc(',',file);
     *comma=true;
-    json_string(file,key);fputc(':',file);json_string(file,ui_tr_for(locale,key));
+    json_string(file,key);fputc(':',file);json_string(file,value);
 }
 void ui_report_i18n_write(FILE *file,language_t locale)
 {
@@ -29,8 +29,13 @@ void ui_report_i18n_write(FILE *file,language_t locale)
     const char *tag=info?info->tag:"en";
     fputs("<script>(function(){'use strict';const text=",file);
     fputc('{',file);bool comma=false;
-    for(size_t i=0;i<sizeof(report_keys)/sizeof(report_keys[0]);++i)entry(file,locale,report_keys[i],&comma);
-    for(unsigned i=0;i<0x32;++i)entry(file,locale,counting_reject_reason_get((uint8_t)i),&comma);
+    for(size_t i=0;i<sizeof(report_keys)/sizeof(report_keys[0]);++i)entry(file,report_keys[i],ui_tr_for(locale,report_keys[i]),&comma);
+    for(unsigned i=0;i<0x32;++i){
+        const char *name=counting_reject_reason_get((uint8_t)i);
+        entry(file,name,name,&comma);
+    }
+    const char *unknown=counting_reject_reason_get(UINT8_MAX);
+    entry(file,unknown,unknown,&comma);
     fputs("};window.reportLocale=",file);json_string(file,tag);
     fputs(";document.documentElement.lang=window.reportLocale;document.documentElement.dir=",file);
     json_string(file,info&&info->direction==UI_LANG_RTL?"rtl":"ltr");

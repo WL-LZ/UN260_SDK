@@ -10,6 +10,10 @@ typedef enum {
     PAGE_02_SECTION_COUNT
 } page_02_section_id_t;
 
+/* Shared with the established MULTI detail route. */
+enum { PAGE_02_MULTI_OVERVIEW = -1, PAGE_02_MULTI_REJECTS = -2 };
+enum { PAGE_02_MULTI_TAB_VALUE = 0, PAGE_02_MULTI_TAB_SERIAL = 1 };
+
 void ui_page_02_list_create(lv_obj_t* parent);
 void ui_page_02_list_destroy(void);
 bool ui_page_02_list_resume(void);

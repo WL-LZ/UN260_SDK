@@ -533,18 +533,6 @@ void ui_notice_set_enabled(bool value)
 
 bool ui_notice_get_enabled(void) { return enabled; }
 
-void ui_notice_navigation_committed(void)
-{
-    /* The new page gets a settled first frame before an automatic card starts.
-     * Operation-owned results may cross pages; page-owned callers still clear
-     * their key on suspend. No business callback or fault blocking is delayed. */
-    if(!notice.state.has_active || !enabled || !notice.object)return;
-    consume_visible_time();service_stop();
-    lv_anim_del(notice.object,animation_exec);lv_obj_add_flag(notice.object,LV_OBJ_FLAG_HIDDEN);
-    notice.pending=notice.visible=notice.animating=notice.leaving=notice.held=false;
-    delay_presentation();
-}
-
 void ui_notice_dialog_acquire(void)
 {
     if (dialog_hold_count++ == 0)

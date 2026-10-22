@@ -303,7 +303,7 @@ int main(void)
     advance(1500);verify_layout();capture("batch-full-en");hide_fault_popup();
     ui_lang_set(LANGUAGE_CN);
     present((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4});
-    assert(!strcmp(lv_label_get_text(popup.title),"预置满"));
+    assert(!strcmp(lv_label_get_text(popup.title),ui_tr("Batch full")));
     assert(!strcmp(lv_label_get_text(popup.step_title),"取出接钞口钞票"));
     advance(1500);verify_layout();capture("batch-full-zh");hide_fault_popup();
 #ifdef UN260_FAULT_TEST_LOCALE_BANK

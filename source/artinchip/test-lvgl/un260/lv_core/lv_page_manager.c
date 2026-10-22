@@ -22,12 +22,9 @@
 #include "page_36_display_test.h"
 #include "page_37_touch_calibration.h"
 #include "page_cash_tools.h"
-#include "page_receipts.h"
-#include "page_training.h"
 #include "un260/app_service/ui_factory_reset_service.h"
 #include "un260/lv_drivers/uart_io.h"
 #include "un260/lv_system/ui_lang.h"
-#include "un260/lv_components/ui_notice.h"
 
 #define UI_PAGE_STACK_CAPACITY 10
 #define UI_PAGE_INVALID ((ui_page_t)-1)
@@ -225,8 +222,6 @@ static const char *const g_page_names[UI_PAGE_COUNT] = {
     [UI_PAGE_TOUCH_CALIBRATION] = "TOUCH_CALIBRATION",
     [UI_PAGE_CALCULATOR] = "CALCULATOR",
     [UI_PAGE_OPERATORS] = "OPERATORS",
-    [UI_PAGE_RECEIPTS] = "RECEIPTS",
-    [UI_PAGE_TRAINING] = "TRAINING",
     [UI_PAGE_CASH_JOURNAL] = "CASH_JOURNAL",
     [UI_PAGE_LANGUAGE_SETTING] = "LANGUAGE",
     [UI_PAGE_DOUBLE_NOTE_SETTING] = "DOUBLE_NOTE",
@@ -276,6 +271,7 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .static_image_count = UI_ARRAY_SIZE(g_page_menu_static_images),
         .data_topics = UI_DATA_TOPIC_CURRENCY_CATALOG | UI_DATA_TOPIC_MACHINE_SETTINGS,
         .refresh_data = ui_page_03_menu_refresh_data,
+        .reset_navigation = ui_page_03_menu_reset_navigation,
     },
     [UI_PAGE_SETTING] = {
         .create = ui_page_06_settings_create,
@@ -340,10 +336,6 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
     [UI_PAGE_TOUCH_CALIBRATION] = { ui_page_37_touch_calibration_create, ui_page_37_touch_calibration_destroy },
     [UI_PAGE_CALCULATOR] = { ui_calculator_create, ui_calculator_destroy },
     [UI_PAGE_OPERATORS] = { ui_operators_create, ui_operators_destroy },
-    [UI_PAGE_RECEIPTS] = {.create=ui_receipts_create,.destroy=ui_receipts_destroy,
-        .resume=ui_receipts_resume,.suspend=ui_receipts_suspend,.cache_policy=UI_PAGE_RETAINED},
-    [UI_PAGE_TRAINING] = {.create=ui_training_create,.destroy=ui_training_destroy,
-        .resume=ui_training_resume,.suspend=ui_training_suspend,.cache_policy=UI_PAGE_RETAINED},
     [UI_PAGE_CASH_JOURNAL] = { ui_cash_journal_create, ui_cash_journal_destroy },
     [UI_PAGE_LANGUAGE_SETTING] = { ui_page_21_set_language_create, ui_page_21_set_language_destroy },
     [UI_PAGE_DOUBLE_NOTE_SETTING] = { ui_page_22_set_double_note_create, ui_page_22_set_double_note_destroy },
@@ -529,7 +521,6 @@ static bool ui_manager_transition_begin(void)
 static void ui_manager_transition_finish(void)
 {
     g_page_switch_committing = false;
-    ui_notice_navigation_committed();
     g_page_input_unlock_timer = lv_timer_create(
         ui_manager_input_unlock_cb, UI_PAGE_INPUT_GUARD_MS, NULL);
     if (g_page_input_unlock_timer == NULL) {
@@ -568,7 +559,8 @@ static void ui_manager_update_diagnostic_scope(ui_page_t page)
     bool active=page==UI_PAGE_CIS_CALIB || page==UI_PAGE_DEBUG ||
                 page==UI_PAGE_IMAGE_GET ||
                 page==UI_PAGE_MOTOR_TEST ||
-                page==UI_PAGE_AGING_SETTING;
+                page==UI_PAGE_AGING_SETTING ||
+                (page==UI_PAGE_SETTING && page_06_settings_is_collection());
     work_mode_service_set_diagnostic_mode(active,
         page == UI_PAGE_IMAGE_GET ? WORK_MODE_AUTO : WORK_MODE_MANUAL);
 }

@@ -1,4 +1,5 @@
 #include "ui_text.h"
+#include "un260/counting/counting_reject_reason.h"
 
 const char *const g_ui_text_keys[UI_TEXT_MAX] = {
 #include "i18n/generated/ui_text_keys.inc"
@@ -6,61 +7,5 @@ const char *const g_ui_text_keys[UI_TEXT_MAX] = {
 
 const char* ui_text_counting_reject_reason(uint8_t code)
 {
-    static const ui_text_id_t reason_ids[0x32] = {
-        [0x00] = UI_TEXT_COUNTING_REJECT_NO_ERROR,
-        [0x01] = UI_TEXT_COUNTING_REJECT_IMG_F1,
-        [0x02] = UI_TEXT_COUNTING_REJECT_IMG_F2,
-        [0x03] = UI_TEXT_COUNTING_REJECT_IMG_F3,
-        [0x04] = UI_TEXT_COUNTING_REJECT_IMG_F4,
-        [0x05] = UI_TEXT_COUNTING_REJECT_IMG_F5,
-        [0x06] = UI_TEXT_COUNTING_REJECT_IMG_F6,
-        [0x07] = UI_TEXT_COUNTING_REJECT_IMG_F7,
-        [0x08] = UI_TEXT_COUNTING_REJECT_IMG_F8,
-        [0x09] = UI_TEXT_COUNTING_REJECT_IMG_F9,
-        [0x0A] = UI_TEXT_COUNTING_REJECT_IMG_F10,
-        [0x0B] = UI_TEXT_COUNTING_REJECT_IMG_F11,
-        [0x0C] = UI_TEXT_COUNTING_REJECT_IMG_F12,
-        [0x0D] = UI_TEXT_COUNTING_REJECT_IMG_F13,
-        [0x0E] = UI_TEXT_COUNTING_REJECT_IMG_F14,
-        [0x0F] = UI_TEXT_COUNTING_REJECT_IMG_F15,
-        [0x10] = UI_TEXT_COUNTING_REJECT_ST_FULL,
-        [0x11] = UI_TEXT_COUNTING_REJECT_MG_QTY,
-        [0x12] = UI_TEXT_COUNTING_REJECT_MG_POS,
-        [0x13] = UI_TEXT_COUNTING_REJECT_MT_QTY,
-        [0x14] = UI_TEXT_COUNTING_REJECT_MT_CODE,
-        [0x15] = UI_TEXT_COUNTING_REJECT_UV,
-        [0x16] = UI_TEXT_COUNTING_REJECT_DOUBLE_1,
-        [0x17] = UI_TEXT_COUNTING_REJECT_DOUBLE_2,
-        [0x18] = UI_TEXT_COUNTING_REJECT_LONG,
-        [0x19] = UI_TEXT_COUNTING_REJECT_SHORT,
-        [0x1A] = UI_TEXT_COUNTING_REJECT_GAP,
-        [0x1B] = UI_TEXT_COUNTING_REJECT_TIMEOUT,
-        [0x1C] = UI_TEXT_COUNTING_REJECT_SIZE_UNKNOWN,
-        [0x1D] = UI_TEXT_COUNTING_REJECT_ORIENTATION_UNKNOWN,
-        [0x1E] = UI_TEXT_COUNTING_REJECT_VERSION_UNKNOWN,
-        [0x1F] = UI_TEXT_COUNTING_REJECT_FACE_ERROR,
-        [0x20] = UI_TEXT_COUNTING_REJECT_ORIENTATION_ERROR,
-        [0x21] = UI_TEXT_COUNTING_REJECT_ANGLE,
-        [0x22] = UI_TEXT_COUNTING_REJECT_IR_OVD,
-        [0x23] = UI_TEXT_COUNTING_REJECT_IR_MT,
-        [0x24] = UI_TEXT_COUNTING_REJECT_HOLE,
-        [0x25] = UI_TEXT_COUNTING_REJECT_DOG_EAR,
-        [0x26] = UI_TEXT_COUNTING_REJECT_DIRT,
-        [0x27] = UI_TEXT_COUNTING_REJECT_TAPE,
-        [0x28] = UI_TEXT_COUNTING_REJECT_TEARS,
-        [0x29] = UI_TEXT_COUNTING_REJECT_CRUMPLES,
-        [0x2A] = UI_TEXT_COUNTING_REJECT_DE_INK,
-        [0x2B] = UI_TEXT_COUNTING_REJECT_SOILING,
-        [0x2C] = UI_TEXT_COUNTING_REJECT_LIMPNESS,
-        [0x2D] = UI_TEXT_COUNTING_REJECT_IMG_FACE_ORIENTATION,
-        [0x2E] = UI_TEXT_COUNTING_REJECT_OCR_1,
-        [0x2F] = UI_TEXT_COUNTING_REJECT_OCR_2,
-        [0x30] = UI_TEXT_COUNTING_REJECT_OCR_3,
-        [0x31] = UI_TEXT_COUNTING_REJECT_DOUBLE_RESERVED,
-    };
-
-    if (code >= sizeof(reason_ids) / sizeof(reason_ids[0])) {
-        return ui_text_get(UI_TEXT_COUNTING_REJECT_UNKNOWN);
-    }
-    return ui_text_get(reason_ids[code]);
+    return counting_reject_reason_get(code);
 }

@@ -4,6 +4,27 @@
 #include "lvgl/lvgl.h"
 #include "un260/app_service/setting_service.h"
 
+typedef enum {
+    PAGE_01_ACTION_MODE = 0,
+    PAGE_01_ACTION_LIST,
+    PAGE_01_ACTION_MENU,
+    PAGE_01_ACTION_SETTINGS,
+    PAGE_01_ACTION_START,
+    PAGE_01_ACTION_CLEAR,
+    PAGE_01_ACTION_ADD,
+    PAGE_01_ACTION_WORK,
+    PAGE_01_ACTION_SORT,
+    PAGE_01_ACTION_BATCH,
+    PAGE_01_ACTION_SPEED,
+    PAGE_01_ACTION_PRINT,
+    PAGE_01_ACTION_CURRENCY,
+} page_01_action_t;
+
+/* Shared intent entry points for both Main presentations. Protocol requests
+ * and their accepted-reply semantics remain owned by the existing services. */
+void page_01_mode_cycle(void);
+void page_01_action_run(page_01_action_t action);
+
 void page_01_print_btn_event_cb(lv_event_t* e);
 void page_01_qr_btn_event_cb(lv_event_t* e);
 

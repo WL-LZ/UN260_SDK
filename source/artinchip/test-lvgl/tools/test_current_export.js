@@ -63,9 +63,9 @@ for(const item of [...manifest,...historyManifest]) {
         assert(!rendered.includes('<table>'));
     } else if(item.scenario===1) {
         const data=[...scripts[0][1].matchAll(/\{no:(\d+),pcs:(\d+),reason:"([^"]*)"\}/g)].map(m=>[+m[1],+m[2],m[3]]);
-        assert.deepEqual(data,history?[[4,2,'Double 1'],[9,1,'Version Unknow'],[20,3,'OCR1 Err']]:[[1,2,'Double 1'],[2,1,'Version Unknown'],[3,3,'OCR1 Err']]);
-        assert(rendered.indexOf('Double 1')<rendered.indexOf(history?'Version Unknow':'Version Unknown'));
-        assert(rendered.indexOf(history?'Version Unknow':'Version Unknown')<rendered.indexOf('OCR1 Err'));
+        assert.deepEqual(data,history?[[4,2,'Double Suspect 1'],[9,1,'IMG Version Unknow'],[20,3,'OCR1 Error']]:[[1,2,'Double Suspect 1'],[2,1,'IMG Version Unknow'],[3,3,'OCR1 Error']]);
+        assert(rendered.indexOf('Double Suspect 1')<rendered.indexOf('IMG Version Unknow'));
+        assert(rendered.indexOf('IMG Version Unknow')<rendered.indexOf('OCR1 Error'));
     } else {
         assert(!rendered.includes('No rejected notes'),'missing detail must not imply zero rejects');
         assert.equal((rendered.match(/<tr>/g)||[]).length,1,'only header, no fabricated detail rows');
@@ -90,5 +90,5 @@ for(const item of [...manifest,...historyManifest]) {
 const csv=fs.readFileSync(require('node:path').join(require('node:path').dirname(process.argv[2]),'stable.csv'),'utf8');
 assert.match(csv,/DENOM,PCS,AMOUNT\n5,85,425/);
 assert.match(csv,/NO,SN,DENOM\n1,Z90,5\n2,AB2,5\n3,JK3,5/);
-assert.match(csv,/NO,PCS,REASON\n1,2,Double 1\n2,1,Version Unknown\n3,3,OCR1 Err/);
+assert.match(csv,/NO,PCS,REASON\n1,2,Double Suspect 1\n2,1,IMG Version Unknow\n3,3,OCR1 Error/);
 console.log('current report emitted JavaScript: PASS (50 current/history reports; native ordinal headers/mode badges, frozen locale/RTL, real rejects, serial/order/schema invariants)');

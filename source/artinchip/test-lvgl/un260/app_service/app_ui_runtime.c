@@ -1,5 +1,4 @@
 #include "un260/lv_core/page_protocol_log.h"
-#include "app_collection.h"
 #include "un260/lv_core/page_collection.h"
 #include "app_ui_runtime.h"
 #include "app_touch_sound.h"

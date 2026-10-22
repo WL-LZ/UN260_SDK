@@ -11,6 +11,9 @@ const char *app_command_runtime_calibration_blocker(void);
 bool app_command_runtime_request_diagnostic_run(void);
 /* Pending command or a controller-confirmed counting session. */
 bool app_command_runtime_count_start_busy(void);
+/* Accepted controller start only; pending RUN and no-note motor activity do
+ * not imply that notes are being counted. Read on the UI consumer thread. */
+bool app_command_runtime_counting_confirmed(void);
 /* UI-consumer-owned accepted run completion counter, retained across resets.
  * An entry snapshot and inequality detect even a start/end in one dispatch tick.
  * Boot, duplicate, unknown or otherwise ignored end frames do not advance it. */

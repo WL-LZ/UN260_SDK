@@ -61,7 +61,10 @@ void app_setting_notice_result(const char *key, const char *title, bool success)
         ui_notice_clear(key);
         return;
     }
-    if (!app_setting_notice_allowed(key)) return;
+    if (!app_setting_notice_allowed(key)) {
+        ui_notice_clear(key);
+        return;
+    }
     if (!success && fault_popup_get_auto_enabled()) {
         fault_popup_report_setting_rejection(notice_command(key),0);
         ui_notice_clear(key);
@@ -74,6 +77,10 @@ void app_setting_notice_result(const char *key, const char *title, bool success)
 }
 void app_setting_notice_timeout(const char *key, const char *title)
 {
-    if (profile_command(key) || !app_setting_notice_allowed(key)) return;
+    if (profile_command(key)) return;
+    if (!app_setting_notice_allowed(key)) {
+        ui_notice_clear(key);
+        return;
+    }
     ui_notice_post_text(UI_NOTICE_WARNING, key, title, UI_N_("No response received. Check device status."));
 }

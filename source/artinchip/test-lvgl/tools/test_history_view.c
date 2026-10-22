@@ -33,7 +33,8 @@ static storage_job_status_t test_status = STORAGE_JOB_SUCCEEDED;
 static storage_job_id_t test_commit_id = 1;
 static unsigned test_pops, test_deletes, test_exports, test_polls, test_selection_mutations;
 void ui_manager_push_page(ui_page_t page){assert(page==UI_PAGE_HISTORY);}
-bool ui_manager_is_prewarming_page(ui_page_t page){(void)page;return false;}
+static bool test_history_prewarming;
+bool ui_manager_is_prewarming_page(ui_page_t page){return page==UI_PAGE_HISTORY && test_history_prewarming;}
 static uint32_t test_deleted_ids[UI_HISTORY_MAX_RECORDS];
 static size_t test_deleted_count;
 static uint32_t test_exported_ids[UI_HISTORY_MAX_RECORDS];
@@ -246,6 +247,35 @@ lv_obj_t *history_test_button(lv_obj_t *parent, const char *text)
     }
     return NULL;
 }
+static lv_obj_t *history_test_confirmation_controls(void)
+{
+    assert(history && history->dialog);
+    lv_obj_t *card=lv_obj_get_child(history->dialog,0);
+    lv_obj_t *cancel=lv_obj_get_child(card,-2),*confirm=lv_obj_get_child(card,-1);
+    assert(lv_obj_check_type(cancel,&lv_btn_class)&&lv_obj_check_type(confirm,&lv_btn_class));
+    assert(lv_obj_get_x(cancel)==226&&lv_obj_get_y(cancel)==208);
+    assert(lv_obj_get_width(cancel)==140&&lv_obj_get_height(cancel)==46);
+    assert(lv_obj_get_x(confirm)==378&&lv_obj_get_y(confirm)==208);
+    assert(lv_obj_get_width(confirm)==210&&lv_obj_get_height(confirm)==46);
+    assert(lv_obj_get_child_cnt(cancel)==1);
+    char text[96];
+    if(history->confirm_clear)snprintf(text,sizeof(text),"%s",ui_text_get(UI_TEXT_HISTORY_APPLY));
+    else snprintf(text,sizeof(text),ui_tr("Delete %u"),history->confirm_capacity?
+        (unsigned)(history->capacity_confirm_count-history->capacity_draft):(unsigned)history->confirmed_count);
+    lv_obj_t *expected=lv_label_create(lv_scr_act());lv_label_set_text(expected,text);
+    assert(!strcmp(lv_label_get_text(lv_damped_button_get_label(confirm)),lv_label_get_text(expected)));
+    lv_label_set_text(expected,ui_text_get(UI_TEXT_HISTORY_CANCEL));
+    assert(!strcmp(lv_label_get_text(lv_damped_button_get_label(cancel)),lv_label_get_text(expected)));
+    lv_obj_del(expected);
+    for(unsigned i=0;i<2;++i){
+        lv_obj_t *button=i?confirm:cancel,*label=lv_damped_button_get_label(button);
+        const lv_font_t *font=lv_obj_get_style_text_font(label,0);lv_point_t measured;
+        lv_txt_get_size(&measured,lv_label_get_text(label),font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+        assert(measured.x<=lv_obj_get_width(button)-24 && measured.y<=font->line_height);
+    }
+    assert(lv_obj_get_style_bg_color(confirm,0).full==lv_color_hex(LV_SETTINGS_DESTRUCTIVE).full);
+    return confirm;
+}
 unsigned history_test_timers(void)
 { unsigned count = 0; for (lv_timer_t *t = lv_timer_get_next(NULL); t; t = lv_timer_get_next(t)) ++count; return count; }
 void history_test_bmp(const char *name)
@@ -441,6 +471,7 @@ static void history_test_selection_and_delete(void)
     history_test_click(history->actions[1]);
     assert(test_exported_count == 2 && test_exported_ids[0] == 1000 && test_exported_ids[1] == 998);
     history_test_click(history->actions[2]); assert(history->dialog && history->confirmed_count == 2);
+    history_test_render();history_test_confirmation_controls();
     history_test_bmp("history-delete-confirm");
     unsigned deletes = test_deletes, pops = test_pops;
     assert(lv_nav_button_request_back() == LV_NAV_BACK_HANDLED);
@@ -452,7 +483,7 @@ static void history_test_selection_and_delete(void)
     test_store.records[0] = incoming;
     ui_page_19_history_refresh();
     assert(history->dialog && history->confirmed_ids[0] == 1000 && history->confirmed_ids[1] == 998);
-    history_test_click(history_test_button(history->dialog, ui_text_get(UI_TEXT_HISTORY_APPLY)));
+    history_test_click(history_test_confirmation_controls());
     assert(!history->dialog && !history->selecting && test_deletes == deletes + 1);
     assert(test_deleted_count == 2);
     assert((test_deleted_ids[0] == 1000 && test_deleted_ids[1] == 998) ||
@@ -471,20 +502,20 @@ static void history_test_selection_and_delete(void)
     --test_store.record_count;
     ui_page_19_history_refresh();
     deletes = test_deletes;
-    history_test_click(history_test_button(history->dialog, ui_text_get(UI_TEXT_HISTORY_APPLY)));
+    history_test_click(history_test_confirmation_controls());
     assert(test_deletes == deletes && !history->dialog);
     assert(!strcmp(test_notice_detail, ui_text_get(UI_TEXT_HISTORY_SAVE_FAILED)));
     assert(lv_nav_button_request_back() == LV_NAV_BACK_HANDLED);
     assert(!history->selecting && !history->selected_count);
     unsigned count = test_store.record_count;
     history_test_click(history->reset_total); assert(history->dialog);
-    history_test_click(history_test_button(history->dialog, ui_text_get(UI_TEXT_HISTORY_APPLY)));
+    history_test_click(history_test_confirmation_controls());
     assert(!history->dialog && test_store.record_count == count && test_store.total_notes_counted == 0);
     test_store.total_notes_counted = 77;
     history_test_click(history->reset_total); assert(history->dialog);
     test_clear_accept = false;
     storage_job_id_t before_commit = test_commit_id;
-    history_test_click(history_test_button(history->dialog, ui_text_get(UI_TEXT_HISTORY_APPLY)));
+    history_test_click(history_test_confirmation_controls());
     assert(!history->dialog && test_store.record_count == count && test_store.total_notes_counted == 77);
     assert(test_commit_id == before_commit && !strcmp(test_notice_detail, ui_text_get(UI_TEXT_HISTORY_SAVE_FAILED)));
     test_clear_accept = true;
@@ -591,7 +622,7 @@ static void history_test_row_number(uint32_t index,unsigned number)
 static void history_test_delete_confirm(void)
 {
     history_test_click(history->actions[2]);assert(history->dialog);
-    history_test_click(history_test_button(history->dialog,ui_text_get(UI_TEXT_HISTORY_APPLY)));
+    history_test_click(history_test_confirmation_controls());
     assert(!history->dialog && !history->selecting);
 }
 
@@ -652,6 +683,7 @@ static void history_test_capacity_setting(unsigned baseline_timers)
     capacity_submit("1001",NULL);assert(!history->dialog && test_store.capacity==1000);
     capacity_submit("12x",NULL);assert(!history->dialog && test_store.capacity==1000);
     capacity_submit("100",NULL);assert(history->dialog && history->confirm_capacity && test_store.record_count==500);
+    history_test_render();history_test_confirmation_controls();
     history_test_bmp("history-capacity-delete-confirm");
     ++test_store.record_count;confirmation_apply(NULL);
     assert(history->dialog && history->capacity_confirm_count==501 && test_store.capacity==1000);
@@ -810,6 +842,45 @@ static void history_test_multi(unsigned baseline)
 #include "test_locale_view_checks.h"
 static bool history_queue_fixture(const void *snapshot,size_t size)
 {(void)snapshot;(void)size;return true;}
+static void assert_storage_notice(ui_notice_kind_t kind)
+{
+    assert(test_notice_visible && test_notice_kind==kind && !strcmp(test_notice_key,"history.storage"));
+}
+static void test_storage_notice_lifecycle(void)
+{
+    history_test_fixtures(3);ui_notice_dismiss(NULL);ui_page_19_history_open_all();
+    ui_page_19_history_create(lv_scr_act());
+    test_status=STORAGE_JOB_PENDING;ui_page_19_history_refresh();assert_storage_notice(UI_NOTICE_PROGRESS);
+    show_record(test_store.records[0].record_no);assert(history->detail_mode);
+    test_status=STORAGE_JOB_SUCCEEDED;ui_page_19_history_refresh();assert_storage_notice(UI_NOTICE_SUCCESS);
+    assert(history->detail_mode);show_list();
+    test_status=STORAGE_JOB_PENDING;ui_page_19_history_refresh();assert_storage_notice(UI_NOTICE_PROGRESS);
+    history->selecting=true;refresh_records(false);
+    test_status=STORAGE_JOB_SUCCEEDED;ui_page_19_history_refresh();assert_storage_notice(UI_NOTICE_SUCCESS);
+    assert(history->selecting);history->selecting=false;refresh_records(false);
+    test_status=STORAGE_JOB_PENDING;ui_page_19_history_refresh();assert_storage_notice(UI_NOTICE_PROGRESS);
+    open_search();assert(history->search);
+    test_status=STORAGE_JOB_SUCCEEDED;ui_page_19_history_refresh();assert_storage_notice(UI_NOTICE_SUCCESS);
+    assert(history->search);search_closed(NULL,NULL);
+    test_status=STORAGE_JOB_PENDING;ui_page_19_history_refresh();assert_storage_notice(UI_NOTICE_PROGRESS);
+    show_confirmation(true);assert(history->dialog);
+    test_status=STORAGE_JOB_FAILED;ui_page_19_history_refresh();assert_storage_notice(UI_NOTICE_ERROR);
+    assert(history->dialog);close_dialog();test_status=STORAGE_JOB_SUCCEEDED;ui_page_19_history_refresh();
+    test_status=STORAGE_JOB_PENDING;ui_page_19_history_refresh();assert_storage_notice(UI_NOTICE_PROGRESS);
+    storage_job_id_t commit=test_commit_id;
+    ui_page_19_history_suspend();assert(!test_notice_visible && test_status==STORAGE_JOB_PENDING && test_commit_id==commit);
+    assert(ui_page_19_history_resume());assert_storage_notice(UI_NOTICE_PROGRESS);
+    ui_page_19_history_suspend();assert(!test_notice_visible);
+    test_status=STORAGE_JOB_SUCCEEDED;ui_page_19_history_refresh();
+    unsigned before_notices=test_notice_count;
+    assert(ui_page_19_history_resume());assert(!test_notice_visible && test_notice_count==before_notices);
+    test_status=STORAGE_JOB_PENDING;ui_page_19_history_refresh();assert_storage_notice(UI_NOTICE_PROGRESS);
+    ui_notice_post_text(UI_NOTICE_PROGRESS,"upgrade.controller","Updating controller",NULL);
+    ui_page_19_history_destroy();assert(test_notice_visible && !strcmp(test_notice_key,"upgrade.controller"));
+    assert(test_status==STORAGE_JOB_PENDING && test_commit_id==commit);
+    ui_notice_clear("upgrade.controller");test_status=STORAGE_JOB_SUCCEEDED;
+    puts("PASS History storage notice: detail/select/search/dialog terminal results, hidden completion, resume, destroy and unrelated-operation isolation");
+}
 static void test_full_abc_view(void)
 {
     history_test_fixtures(1);ui_history_record_t *rec=&test_store.records[0];
@@ -826,9 +897,12 @@ static void test_full_abc_view(void)
     FILE *fp=fopen(path,"wb");assert(fp);assert(fwrite(snapshot.bytes,1,snapshot.size,fp)==snapshot.size);assert(!fclose(fp));
     history_record_snapshot_release(&snapshot);
     for(unsigned i=0;i<10000;i++)free(sim->sn_str[i]);free(sim->sn_str);free(sim);
+    ui_notice_dismiss(NULL);
     ui_page_19_history_create(lv_scr_act());show_record(rec->record_no);assert(history->read_job);
+    assert(test_notice_visible && test_notice_kind==UI_NOTICE_PROGRESS && !strcmp(test_notice_key,"history.read"));
     assert(storage_worker_wait(history->read_job)==STORAGE_JOB_SUCCEEDED);history_test_tick(100);
     assert(history->detail_mode && section_count(0)==1 && section_count(1)==10000 && !section_count(2));
+    assert(!test_notice_visible); /* The completed read no longer owns a progress card. */
     assert(current_detail()->serials[9999].no==10000 && !strcmp(current_detail()->serials[9999].sn,"SN0000009999"));
     assert(current_detail()->rejects_complete);history_test_bmp("history-full-abc-10000");
     show_list();strcpy(history->input.currency,"USD");strcpy(history->input.serial,"SN0000009999");refresh_records(true);
@@ -838,10 +912,12 @@ static void test_full_abc_view(void)
     history->input=(history_query_input_t){0};refresh_records(true);
     if(history->full_detail){history_record_detail_release(history->full_detail);free(history->full_detail);history->full_detail=NULL;}
     show_record(rec->record_no);assert(history->read_job);show_list();
+    assert(!test_notice_visible);
     for(unsigned i=0;i<5000 && storage_worker_pending_status()==STORAGE_JOB_PENDING;i++)usleep(1000);
     history_read_poll_discarded();history_test_tick(100);
     assert(!history->read_job && !history->read_timer && !history->detail_mode);
     show_record(rec->record_no);assert(history->read_job);open_search();assert(history->search);
+    assert(!test_notice_visible);
     for(unsigned i=0;i<5000 && storage_worker_pending_status()==STORAGE_JOB_PENDING;i++)usleep(1000);
     history_read_poll_discarded();history_test_tick(100);
     assert(history->search && !history->read_job && !history->detail_mode);
@@ -851,6 +927,10 @@ static void test_full_abc_view(void)
         assert(storage_worker_submit(history_queue_fixture,&payload,sizeof(payload),&occupied[i]));
         assert(storage_worker_wait(occupied[i])==STORAGE_JOB_SUCCEEDED);
     }
+    show_record(rec->record_no);
+    assert(!history->read_job && !history->read_timer);
+    assert(test_notice_visible && test_notice_kind==UI_NOTICE_WARNING && !strcmp(test_notice_key,"history.feedback"));
+    assert(!strcmp(test_notice_detail,ui_text_get(UI_TEXT_SERIAL_UNAVAILABLE)));
     strcpy(history->input.serial,"SN0000009999");refresh_records(true);
     assert(!history->read_job && !history->read_timer);
     assert(!strcmp(lv_label_get_text(history->empty),tr(UI_TEXT_SERIAL_UNAVAILABLE)));
@@ -858,26 +938,92 @@ static void test_full_abc_view(void)
     history->input=(history_query_input_t){0};refresh_records(true);
     /* Late completion must not touch a suspended page or leave a queue slot. */
     if(history->full_detail){history_record_detail_release(history->full_detail);free(history->full_detail);history->full_detail=NULL;}
-    show_record(rec->record_no);ui_page_19_history_suspend();
+    show_record(rec->record_no);assert(history->read_job && test_notice_visible);
+    ui_page_19_history_suspend();assert(!test_notice_visible);
     for(unsigned i=0;i<5000 && storage_worker_pending_status()==STORAGE_JOB_PENDING;i++)usleep(1000);
     history_read_poll_discarded();assert(!history->read_timer && !history->full_detail);
-    ui_page_19_history_destroy();assert(storage_worker_shutdown());
+    assert(ui_page_19_history_resume());assert(!history->read_job && !test_notice_visible);
+    show_record(rec->record_no);assert(history->read_job && test_notice_visible);
+    assert(storage_worker_wait(history->read_job)==STORAGE_JOB_SUCCEEDED);history_test_tick(100);
+    assert(history->detail_mode && !test_notice_visible);
+    /* A retained detail must start a fresh read, then close its own progress. */
+    ui_page_19_history_suspend();assert(ui_page_19_history_resume());
+    assert(history->read_job && test_notice_visible);
+    assert(storage_worker_wait(history->read_job)==STORAGE_JOB_SUCCEEDED);history_test_tick(100);
+    assert(history->detail_mode && !test_notice_visible);
+    /* An unreadable detail replaces progress with the existing translated error. */
+    show_list();release_details();rec->detail_hash^=1;
+    show_record(rec->record_no);assert(history->read_job && test_notice_visible);
+    assert(storage_worker_wait(history->read_job)==STORAGE_JOB_SUCCEEDED);history_test_tick(100);
+    assert(!history->read_job && !history->read_timer && !history->detail_mode);
+    assert(test_notice_visible && test_notice_kind==UI_NOTICE_WARNING && !strcmp(test_notice_key,"history.feedback"));
+    assert(!strcmp(test_notice_detail,ui_text_get(UI_TEXT_SERIAL_UNAVAILABLE)));rec->detail_hash^=1;
+    /* Cancelling this read cannot dismiss an unrelated operation's card. */
+    show_record(rec->record_no);assert(history->read_job);
+    ui_notice_post_text(UI_NOTICE_PROGRESS,"upgrade.controller","Updating controller",NULL);
+    ui_page_19_history_suspend();
+    assert(test_notice_visible && !strcmp(test_notice_key,"upgrade.controller"));
+    for(unsigned i=0;i<5000 && storage_worker_pending_status()==STORAGE_JOB_PENDING;i++)usleep(1000);
+    history_read_poll_discarded();history_test_tick(100);
+    assert(test_notice_visible && !strcmp(test_notice_key,"upgrade.controller"));
+    ui_notice_clear("upgrade.controller");assert(ui_page_19_history_resume());
+    show_record(rec->record_no);assert(history->read_job);
+    /* A completed result invalidated by model publication still ends its card. */
+    history->model_dirty=true;
+    assert(storage_worker_wait(history->read_job)==STORAGE_JOB_SUCCEEDED);history_test_tick(100);
+    assert(!history->read_job && !test_notice_visible);
+    show_record(rec->record_no);assert(history->read_job);
+    assert(storage_worker_wait(history->read_job)==STORAGE_JOB_SUCCEEDED);history_test_tick(100);
+    assert(history->detail_mode && !test_notice_visible);
+    ui_page_19_history_destroy();
+    /* Cache prewarm may restore a detail bookmark, but must not read or notify. */
+    unsigned before_notices=test_notice_count;
+    test_history_prewarming=true;ui_page_19_history_create(lv_scr_act());
+    assert(history->restore_detail && !history->read_job && !history->read_timer);
+    assert(test_notice_count==before_notices && !test_notice_visible);
+    test_history_prewarming=false;ui_page_19_history_suspend();
+    assert(ui_page_19_history_resume());assert(history->read_job && test_notice_visible);
+    assert(storage_worker_wait(history->read_job)==STORAGE_JOB_SUCCEEDED);history_test_tick(100);
+    assert(history->detail_mode && !test_notice_visible);
+    /* A saved filter also defers its worker while prewarming, even when full. */
+    show_list();strcpy(history->input.serial,"SN0000009999");refresh_records(true);
+    assert(history->read_job);
+    assert(storage_worker_wait(history->read_job)==STORAGE_JOB_SUCCEEDED);history_test_tick(100);
+    assert(history->result.matched_count==1);ui_page_19_history_destroy();
+    for(unsigned i=0;i<STORAGE_WORKER_CAPACITY;i++){
+        assert(storage_worker_submit(history_queue_fixture,&payload,sizeof(payload),&occupied[i]));
+        assert(storage_worker_wait(occupied[i])==STORAGE_JOB_SUCCEEDED);
+    }
+    before_notices=test_notice_count;test_history_prewarming=true;
+    ui_page_19_history_create(lv_scr_act());
+    assert(history->restore_list && !strcmp(history->input.serial,"SN0000009999"));
+    assert(!history->read_job && !history->read_timer);
+    assert(test_notice_count==before_notices && !test_notice_visible);
+    test_history_prewarming=false;ui_page_19_history_suspend();
+    for(unsigned i=0;i<STORAGE_WORKER_CAPACITY;i++)assert(storage_worker_release(occupied[i]));
+    assert(ui_page_19_history_resume());assert(history->read_job);
+    assert(storage_worker_wait(history->read_job)==STORAGE_JOB_SUCCEEDED);history_test_tick(100);
+    assert(history->result.matched_count==1 && history->query_ready && !test_notice_visible);
+    history->input=(history_query_input_t){0};refresh_records(true);
+    show_record(rec->record_no);assert(history->read_job);
+    ui_page_19_history_destroy();assert(!test_notice_visible);
+    for(unsigned i=0;i<5000 && storage_worker_pending_status()==STORAGE_JOB_PENDING;i++)usleep(1000);
+    history_read_poll_discarded();assert(storage_worker_shutdown());
     puts("PASS real History: full 10000-row B, A totals, confirmed zero C, last-SN query and hidden async cancellation");
+    puts("PASS History read notice: success, unavailable/failed read, Back/Search, suspend/resume, stale result, prewarm, destroy and other-key isolation");
 }
-#include "un260/lv_core/page_training.c"
-#include "un260/lv_core/page_receipts.c"
-static history_export_status_t receipt_export_fixture;
-static receipt_print_status_t receipt_print_fixture;
-uint32_t counting_history_current_record(void){return 1000;}
-const history_export_status_t *ui_history_export_data_status(void){return &receipt_export_fixture;}
-const receipt_print_status_t *receipt_print_status(void){return &receipt_print_fixture;}
-const char *receipt_print_blocker(uint32_t id){return id==1000?NULL:UI_N_("Historical records: export HTML, then print on a computer.");}
-bool receipt_print_request(uint32_t id){return id==1000;}
-static void test_reading_and_task_pages(void)
+static void test_reading_bookmarks(void)
 {
     unsigned timers=history_test_timers();
     ui_lang_set(LANGUAGE_EN);history_test_fixtures(23);
     ui_page_19_history_open_all();ui_page_19_history_create(lv_scr_act());history_test_tick(100);
+    const int original_x[]={736,868,992,1184},original_w[]={120,112,128,76};
+    for(unsigned i=0;i<4;i++){
+        assert(lv_obj_get_x(history->actions[i])==original_x[i]);
+        assert(lv_obj_get_y(history->actions[i])==16);
+        assert(lv_obj_get_width(history->actions[i])==original_w[i]);
+        assert(lv_obj_get_height(history->actions[i])==42);
+    }
     lv_recycled_list_set_paged(history->list,true);lv_recycled_list_page_step(history->list,4);
     assert(lv_recycled_list_window(history->list)->first==20);
     ui_page_19_history_suspend();assert(ui_page_19_history_resume());history_test_tick(100);
@@ -900,46 +1046,89 @@ static void test_reading_and_task_pages(void)
     assert(history->detail_mode&&history->current_id==1000);
     ui_page_19_history_destroy();
     puts("PASS reading bookmarks: final partial page, cache eviction, insertion anchor, detail and locale rebuild");
-    for(size_t language=0;language<ui_lang_count();++language){
-        ui_lang_set(ui_lang_at(language)->id);history_test_fixtures(8);
-        ui_receipts_create(lv_scr_act());history_test_tick(100);check_single_line(receipts.root);
-        assert(!lv_obj_has_state(receipts.print,LV_STATE_DISABLED));
-        history_test_bmp("receipts-before-selection");
-        history_test_click(receipts.rows[1]);
-        if(receipts.selected!=999){fprintf(stderr,"receipt selected=%u ids=%u,%u count=%u pressed=%p row=%p\n",receipts.selected,receipts.row_ids[0],receipts.row_ids[1],receipts.count,(void*)lv_indev_get_obj_act(),(void*)receipts.rows[1]);history_test_bmp("receipts-selection-failure");}
-        assert(receipts.selected==999);
-        assert(lv_obj_has_state(receipts.print,LV_STATE_DISABLED));
-        unsigned exports=test_exports;history_test_click(receipts.export);
-        assert(test_exports==exports+1&&test_exported_count==1&&test_exported_ids[0]==999);
-        receipt_export_fixture=(history_export_status_t){.first_record=999,.record_count=1,.state=HISTORY_EXPORT_WRITING};
-        receipts_refresh();assert(lv_obj_has_state(receipts.export,LV_STATE_DISABLED));
-        receipt_export_fixture.state=HISTORY_EXPORT_SAVED;receipts_refresh();
-        char name[100];snprintf(name,sizeof(name),"receipts-%s",ui_lang_at(language)->tag);history_test_bmp(name);
-        ui_receipts_suspend();assert(ui_receipts_resume());assert(receipts.selected==999);
-        ui_receipts_destroy();saved_selection=0;saved_page=0;
-        for(unsigned lesson=0;lesson<LESSON_COUNT;lesson++){
-            ui_training_create(lv_scr_act());training_select_lesson(lesson);history_test_tick(100);
-            check_single_line(training.root);
-            lv_point_t size;lv_txt_get_size(&size,lv_label_get_text(training.title),lv_obj_get_style_text_font(training.title,0),0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
-            assert(size.x<=lv_obj_get_width(training.title));
-            history_test_tick(1900);uint32_t elapsed=training.elapsed;
-            ui_training_suspend();history_test_tick(400);assert(training.elapsed==elapsed);
-            assert(ui_training_resume());history_test_tick(100);assert(training.elapsed>elapsed);
-            history_test_click(training.pause);elapsed=training.elapsed;history_test_tick(400);assert(training.elapsed==elapsed);
-            history_test_click(training.pause);history_test_tick(5200);assert(training.elapsed==4800&&!training.playing);
-            snprintf(name,sizeof(name),"training-%s-%u",ui_lang_at(language)->tag,lesson);history_test_bmp(name);
-            history_test_click(training.pause);assert(training.elapsed<4800&&training.playing);
-            if(language==1&&lesson==0){
-                training_select_lesson(0);
-                for(unsigned frame=0;frame<=12;frame++){
-                    snprintf(name,sizeof(name),"training-animation-%02u",frame);history_test_bmp(name);
-                    history_test_tick(400);
-                }
-            }
-            ui_training_destroy();assert(history_test_timers()==timers);
-        }
+    ui_lang_set(LANGUAGE_EN);assert(history_test_timers()==timers);
+}
+
+static void history_test_protocol_text(const lv_font_t *font,const char *text,int width,const char *scope)
+{
+    lv_point_t measured;lv_txt_get_size(&measured,text,font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+    if(measured.x>width)fprintf(stderr,"%s locale %u: '%s' width %d exceeds %d\n",scope,(unsigned)ui_lang_get(),text,measured.x,width);
+    assert(measured.x<=width);
+    uint32_t offset=0;
+    while(text[offset]){
+        uint32_t codepoint=_lv_txt_encoded_next(text,&offset);lv_font_glyph_dsc_t glyph={0};
+        assert(lv_font_get_glyph_dsc(font,&glyph,codepoint,0)&&!glyph.is_placeholder);
     }
-    ui_lang_set(LANGUAGE_EN);puts("PASS receipts and six training pages: locales, selection, export, animation pause/resume/replay and timer cleanup");
+}
+static lv_obj_t *history_test_reject_dropdown(lv_obj_t *parent)
+{
+    if(lv_obj_check_type(parent,&lv_dropdown_class)&&lv_dropdown_get_option_cnt(parent)==51)return parent;
+    for(uint32_t i=0;i<lv_obj_get_child_cnt(parent);++i){
+        lv_obj_t *found=history_test_reject_dropdown(lv_obj_get_child(parent,i));if(found)return found;
+    }
+    return NULL;
+}
+static void test_protocol_reject_names(void)
+{
+    unsigned timers=history_test_timers();
+    const int original_x[]={736,868,992,1184},original_w[]={120,112,128,76};
+    for(size_t locale_index=0;locale_index<ui_lang_count();++locale_index){
+        const ui_locale_t *locale=ui_lang_at(locale_index);ui_lang_set(locale->id);history_test_fixtures(1);
+        ui_history_record_t *record=&test_store.records[0];record->session_log[0]=0;record->error_frame_text[0]=0;
+        size_t used=0;
+        /* 0x00 means no rejected note; the real history parser excludes it. */
+        for(unsigned code=1;code<0x32;++code){
+            int written=snprintf(record->session_log+used,sizeof(record->session_log)-used,"0x0C FD DF 07 0C %02X 01 0A\n",code);
+            assert(written>0&&(size_t)written<sizeof(record->session_log)-used);used+=(size_t)written;
+        }
+        ui_page_19_history_open_all();ui_page_19_history_create(lv_scr_act());history_test_tick(100);
+        for(unsigned i=0;i<4;++i){
+            assert(lv_obj_get_x(history->actions[i])==original_x[i]&&lv_obj_get_y(history->actions[i])==16);
+            assert(lv_obj_get_width(history->actions[i])==original_w[i]&&lv_obj_get_height(history->actions[i])==42);
+        }
+        show_record(record->record_no);history_test_tick(60);assert(section_count(2)==49);
+        lv_recycled_list_t *list=history->sections[2].list;lv_obj_t *viewport=lv_recycled_list_object(list);
+        for(unsigned code=1;code<0x32;++code){
+            assert(lv_recycled_list_scroll_to_index(list,code-1));history_test_render();
+            const char *expected=ui_text_counting_reject_reason((uint8_t)code);lv_obj_t *matched=NULL;
+            for(uint32_t row_index=0;row_index<lv_obj_get_child_cnt(viewport);++row_index){
+                lv_obj_t *row=lv_obj_get_child(viewport,row_index);
+                if(lv_obj_has_flag(row,LV_OBJ_FLAG_HIDDEN))continue;
+                lv_obj_t *cell=lv_obj_get_child(row,2);
+                if(!strcmp(lv_label_get_text(cell),expected)){matched=cell;break;}
+            }
+            assert(matched&&lv_obj_get_x(matched)==112&&lv_obj_get_width(matched)==174);
+            const lv_font_t *font=lv_obj_get_style_text_font(matched,0);
+            history_test_protocol_text(font,expected,174,"History C");
+            if(code==1)history_test_protocol_text(font,ui_text_counting_reject_reason(0),174,"History C no-error font");
+        }
+        assert(lv_recycled_list_scroll_to_index(list,9));
+        char raster[96];snprintf(raster,sizeof(raster),"history-protocol-errors-%s",locale->tag);history_test_bmp(raster);
+        open_search();assert(history->search);history_test_tick(60);
+        lv_obj_t *dropdown=history_test_reject_dropdown(history->root);assert(dropdown);
+        assert(lv_obj_get_x(dropdown)==672&&lv_obj_get_y(dropdown)==66&&lv_obj_get_width(dropdown)==312&&lv_obj_get_height(dropdown)==46);
+        /* The existing Serial tab is at 26/248/200/64 in every locale;
+         * use its actual pointer hit area because Arabic labels are shaped. */
+        history_test_tap(126,280);assert(lv_obj_is_visible(dropdown));
+        history_test_click(dropdown);assert(lv_dropdown_is_open(dropdown));history_test_render();
+        lv_obj_t *options=lv_dropdown_get_list(dropdown);
+        const lv_font_t *field_font=lv_obj_get_style_text_font(dropdown,LV_PART_MAIN);
+        const lv_font_t *list_font=lv_obj_get_style_text_font(options,LV_PART_MAIN);
+        const lv_font_t *selected_font=lv_obj_get_style_text_font(options,LV_PART_SELECTED);
+        int field_width=lv_obj_get_width(dropdown)-57;
+        int list_width=lv_obj_get_width(options)-2-lv_obj_get_style_pad_left(options,0)-lv_obj_get_style_pad_right(options,0);
+        for(unsigned code=1;code<0x32;++code){
+            char expected[128],actual[128];snprintf(expected,sizeof(expected),"%02X  %s",code,ui_text_counting_reject_reason((uint8_t)code));
+            lv_dropdown_set_selected(dropdown,(uint16_t)(code+1));lv_dropdown_get_selected_str(dropdown,actual,sizeof(actual));assert(!strcmp(actual,expected));
+            history_test_protocol_text(field_font,actual,field_width,"History reject selector");
+            history_test_protocol_text(list_font,actual,list_width,"History reject options");
+            history_test_protocol_text(selected_font,actual,list_width,"History selected reject option");
+        }
+        lv_dropdown_set_selected(dropdown,11);snprintf(raster,sizeof(raster),"history-protocol-options-%s",locale->tag);history_test_bmp(raster);
+        printf("PASS History protocol names %s: 49 actual rejects and No Error font, fixed C 112/174 and selector 672/66/312/46; options width %d\n",locale->tag,list_width);
+        ui_page_19_history_destroy();history_test_tick(60);assert(history_test_timers()==timers);
+    }
+    ui_lang_set(LANGUAGE_EN);
 }
 
 int main(void)
@@ -1035,15 +1224,21 @@ int main(void)
         lv_txt_get_size(&measured,lv_label_get_text(body),lv_obj_get_style_text_font(body,0),0,0,lv_obj_get_width(body),LV_TEXT_FLAG_NONE);
         assert(measured.y<=lv_obj_get_height(body));
         printf("PASS history capacity locale %s: button/title fit, confirmation height %d/%d\n",locale->tag,measured.y,lv_obj_get_height(body));
+        history_test_confirmation_controls();
         snprintf(name,sizeof(name),"history-capacity-confirm-%s",locale->tag);history_test_bmp(name);close_dialog();test_store.record_count=3;
+        history->selected_count=2;history->selected_ids[0]=test_store.records[0].record_no;history->selected_ids[1]=test_store.records[1].record_no;
+        show_confirmation(false);history_test_render();history_test_confirmation_controls();
+        snprintf(name,sizeof(name),"history-delete-confirm-%s",locale->tag);history_test_bmp(name);close_dialog();history->selected_count=0;
         ui_page_19_history_destroy();
         ui_page_19_history_open_record(test_store.records[0].record_no);ui_page_19_history_create(lv_scr_act());history_test_tick(150);
         check_single_line(lv_scr_act());snprintf(name,sizeof(name),"history-detail-%s",locale->tag);history_test_bmp(name);
         ui_page_19_history_destroy();
     }
     ui_lang_set(LANGUAGE_EN);
+    test_storage_notice_lifecycle();
     test_full_abc_view();
-    test_reading_and_task_pages();
+    test_reading_bookmarks();
+    test_protocol_reject_names();
     puts("PASS: actual History LVGL empty/full smoke, locale glyphs/buttons and timer ownership");
     return 0;
 }

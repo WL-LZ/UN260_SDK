@@ -31,8 +31,28 @@ static ui_message_t apply_message_info;
 static const char *const steps[]={"Speed","Sorting","Sound","Batch","ADD","Start method","Count mode"};
 static unsigned notices;
 static ui_notice_kind_t last;
+static ui_notice_state_t queue;
+static unsigned clears;
+static char cleared_key[UI_NOTICE_KEY_CAPACITY];
+/* This fixture exercises banner ownership with automatic fault guides disabled.
+ * Fault recovery routing itself is covered by the dedicated integration suite. */
+void fault_popup_resolve_setting_rejection(uint8_t command){(void)command;}
+void app_fault_recovery_resolve_setting_rejection(uint8_t command){(void)command;}
+bool app_fault_recovery_report_setting_rejection(uint8_t command){(void)command;return false;}
+bool fault_popup_get_auto_enabled(void){return false;}
+void fault_popup_report_setting_rejection(uint8_t command,uint8_t reason){(void)command;(void)reason;}
+void ui_notice_clear(const char *key){
+    assert(key);++clears;snprintf(cleared_key,sizeof(cleared_key),"%s",key);
+    ui_notice_state_remove(&queue,key,false);
+}
+static void seed_progress(const char *key){
+    ui_notice_config_t config={.kind=UI_NOTICE_PROGRESS,.key=key,.title="Working"};
+    assert(ui_notice_state_post(&queue,&config));
+}
 void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title,const char *detail) {
     assert(key&&title&&detail);notices++;last=kind;
+    ui_notice_config_t config={.kind=kind,.key=key,.title=title,.detail=detail};
+    ui_notice_state_post(&queue,&config);
 }
 ''' + owns + reject + r'''
 int main(void) {
@@ -92,14 +112,40 @@ int main(void) {
     assert(notices==before); /* Main-origin confirmation stays quiet. */
     observer(0x38);app_setting_notice_result("settings.work_mode","Start",true);
     assert(notices==before+1);
-    puts("PASS profile matched reject ends once without child notice; unrelated results visible; timeout remains unconfirmed");
+    /* A terminal result suppressed by page policy still ends only its own
+     * progress lifetime. It cannot cancel unrelated queued operations. */
+    ui_notice_state_init(&queue);page=UI_PAGE_MENU;observer(0x42);
+    seed_progress("settings.flap");seed_progress("records.store");
+    unsigned prior_posts=notices,prior_clears=clears;
+    page=UI_PAGE_MAIN;app_setting_notice_result("settings.flap","Flap position",true);
+    assert(notices==prior_posts&&clears==prior_clears+1&&!strcmp(cleared_key,"settings.flap"));
+    assert(queue.has_active&&!strcmp(queue.active.key,"records.store")&&queue.active.kind==UI_NOTICE_PROGRESS);
+    ui_notice_state_init(&queue);page=UI_PAGE_MENU;observer(0x08);
+    seed_progress("settings.reject_pocket");seed_progress("records.store");
+    prior_clears=clears;page=UI_PAGE_PURE;
+    app_setting_notice_timeout("settings.reject_pocket","Reject capacity");
+    assert(notices==prior_posts&&clears==prior_clears+1&&!strcmp(cleared_key,"settings.reject_pocket"));
+    assert(queue.has_active&&!strcmp(queue.active.key,"records.store")&&queue.active.kind==UI_NOTICE_PROGRESS);
+    /* Main-origin policy also retires stale presentation after entering Menu. */
+    ui_notice_state_init(&queue);page=UI_PAGE_MAIN;observer(0x16);
+    seed_progress("settings.speed");seed_progress("records.store");
+    prior_clears=clears;page=UI_PAGE_MENU;
+    app_setting_notice_result("settings.speed","Speed",true);
+    assert(notices==prior_posts&&clears==prior_clears+1&&!strcmp(cleared_key,"settings.speed"));
+    assert(queue.has_active&&!strcmp(queue.active.key,"records.store"));
+    /* Profile-owned steps stay owned by the aggregate operation even on Home. */
+    ui_notice_state_init(&queue);seed_progress("workspace.apply");
+    apply.active=apply.waiting=true;apply.step=0;page=UI_PAGE_MAIN;prior_clears=clears;
+    app_setting_notice_timeout("settings.speed","Speed");
+    assert(notices==prior_posts&&clears==prior_clears&&queue.has_active&&!strcmp(queue.active.key,"workspace.apply"));
+    puts("PASS profile ownership, unrelated results, unconfirmed timeouts; suppressed terminal results clear only matching progress");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='un260-setting-notice-') as directory:
     work=Path(directory);source=work/'test.c';source.write_text(code)
     binary=work/('test.exe' if os.name=='nt' else 'test')
     command=[os.environ.get('CC','cc'),'-std=c11','-Wall','-Wextra','-Werror',
-             '-I'+str(root),str(source),str(root/'un260/app_service/app_setting_notice.c'),'-o',str(binary)]
+             '-I'+str(root),str(source),str(root/'un260/app_service/app_setting_notice.c'),str(root/'un260/lv_components/ui_notice_state.c'),'-o',str(binary)]
     command[1:1]=list(map(str,with_i18n([],root)))
     if os.name!='nt':command+=['-fsanitize=address,undefined','-no-pie']
     subprocess.run(command,check=True)

@@ -77,7 +77,12 @@ static void test_main_layout(void)
     layout_hold(1210,280);pointer(1210,175,true);pointer(1210,175,false);
     layout_done();tick(300);render();write_bmp("layout-clear-start-swapped");
     assert_skin_positions();
-    for(unsigned i=0;i<4;++i) {
+    /* Mode now owns display switching. A blocked hold neither opens the
+     * layout editor nor falls through to its short-tap count-mode command. */
+    start_busy=true;pointer(50,44,true);tick(700);
+    assert(!editor.editing);pointer(50,44,false);start_busy=false;
+    assert(memcmp(clicks,callbacks,sizeof(clicks))==0);
+    for(unsigned i=1;i<4;++i) {
         layout_hold(50,44+82*i);pointer(50,44+82*i,false);layout_action(1);
     }
     layout_hold(400,180);pointer(400,180,false);layout_action(1);
@@ -174,7 +179,7 @@ static void test_main_layout(void)
     layout_hold(50,45);pointer(50,45,false);layout_action(0);layout_done();
     assert(!host_saved_layout.mirrored && lv_obj_get_y(page_01_main_find_obj("print_btn"))==258);
     /* Destroy while editing: no callback/timer retains deleted objects. */
-    layout_hold(50,45);ui_main_destroy();pointer(50,45,false);tick(100);
+    layout_hold(50,126);ui_main_destroy();pointer(50,126,false);tick(100);
     assert(!editor.root && !host_pointer_policy);
     puts("PASS Main layout: long-press capture, same-group swap, native geometry, moved hit targets, draft/save failure, modal/count/multi-touch cancellation and lifetime");
 }

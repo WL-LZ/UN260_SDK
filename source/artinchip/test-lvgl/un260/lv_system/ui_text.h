@@ -366,7 +366,7 @@ typedef enum {
     UI_TEXT_LIST_NO_SERIAL_NUMBERS,
     UI_TEXT_LIST_NO_REJECT_DETAILS,
     UI_TEXT_LIST_NO_COUNTING_DATA,
-    /* UI-only reason descriptions. Domain/export text is unchanged. */
+    /* Reserved legacy translation IDs; use ui_text_counting_reject_reason. */
     UI_TEXT_COUNTING_REJECT_NO_ERROR,
     UI_TEXT_COUNTING_REJECT_IMG_F1,
     UI_TEXT_COUNTING_REJECT_IMG_F2,
@@ -701,7 +701,7 @@ typedef enum {
 
 const char* ui_text_get(ui_text_id_t text_id);
 const char* ui_text_msgid(ui_text_id_t text_id); //统一获取当前语言文本
-/* Localized presentation only; counting_reject_reason_get remains unchanged. */
+/* Protocol error names remain identical in every language. */
 const char* ui_text_counting_reject_reason(uint8_t code);
 
 #endif

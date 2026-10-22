@@ -204,7 +204,7 @@ static void options_view(lv_obj_t *b)
 {
     heading(b,ui_tr("Counting options"));char value[64],code[4];currency_state_get_selected_code(code);snprintf(value,sizeof(value),ui_tr("%s · current configuration"),currency_state_display_code(code));context(b,value,225);
     lv_obj_t *left=box(b,0,48,504,248,PANEL,18),*right=box(b,524,48,504,248,PANEL,18);
-    const char *modes[]={ui_tr("Mixed"),ui_tr("Single"),ui_tr("Count")},*speeds[]={ui_tr("Low"),ui_tr("Standard"),ui_tr("High")},*work[]={ui_tr("Auto"),ui_tr("Manual")},*sort[]={ui_tr("Off"),ui_tr("Face"),ui_tr("Orient."),ui_tr("Both")};
+    const char *modes[]={ui_text_get(UI_TEXT_PAGE01_BOTTOM_MODE_MDC),ui_text_get(UI_TEXT_PAGE01_BOTTOM_MODE_SDC),ui_text_get(UI_TEXT_PAGE01_BOTTOM_MODE_CNT)},*speeds[]={ui_tr("Low"),ui_tr("Standard"),ui_tr("High")},*work[]={ui_tr("Auto"),ui_tr("Manual")},*sort[]={ui_tr("Off"),ui_tr("Face"),ui_tr("Orient."),ui_tr("Both")};
     option_label(left,0,ui_tr("Count mode"));segments(left,210,12,276,42,modes,3,machine_state_mode()==MODE_SDC?1:machine_state_mode()==MODE_CNT?2:0,450);
     option_label(left,1,ui_tr("Speed"));segments(left,210,71,276,42,speeds,3,machine_state_speed(),400);
     option_label(left,2,ui_tr("Start"));segments(left,210,130,276,42,work,2,machine_state_work_mode(),410);
@@ -284,16 +284,21 @@ static void display_view(lv_obj_t *b)
     icon(left,MICON("volume",22),20,20,BLUE);
     label(left,52,18,400,ui_tr("Sound"),&lv_font_instrument_sans_semibold_21,INK);
     box(left,20,64,464,1,LINE,0);
-    lv_obj_t *machine=box(left,20,77,464,68,0xFFFFFF,12);
+    lv_obj_t *machine=box(left,20,69,464,38,0xFFFFFF,12);
     lv_obj_add_flag(machine,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(machine,action,LV_EVENT_CLICKED,(void *)(uintptr_t)(440+!machine_state_buzzer_enabled()));
-    lv_obj_t *machine_row=box(machine,14,4,436,60,0xFFFFFF,0);
-    toggle(machine_row,0,436,ui_tr("Machine sound"),ui_tr("Machine alerts"),machine_state_buzzer_enabled(),440+!machine_state_buzzer_enabled());
-    lv_obj_t *touch=box(left,20,157,464,68,0xFFFFFF,12);
+    lv_obj_t *machine_row=box(machine,14,0,436,38,0xFFFFFF,0);
+    toggle(machine_row,-3,436,ui_tr("Machine sound"),NULL,machine_state_buzzer_enabled(),440+!machine_state_buzzer_enabled());
+    lv_obj_t *touch=box(left,20,110,464,38,0xFFFFFF,12);
     lv_obj_add_flag(touch,LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(touch,action,LV_EVENT_CLICKED,(void *)(uintptr_t)A_TOUCH_SOUND);
-    lv_obj_t *touch_row=box(touch,14,4,436,60,0xFFFFFF,0);
-    toggle(touch_row,0,436,ui_tr("Touch sound"),ui_tr("Screen taps"),user_cfg_touch_sound_enabled(),A_TOUCH_SOUND);
+    lv_obj_t *touch_row=box(touch,14,0,436,38,0xFFFFFF,0);
+    toggle(touch_row,-3,436,ui_tr("Touch sound"),NULL,user_cfg_touch_sound_enabled(),A_TOUCH_SOUND);
+    box(left,20,151,464,1,LINE,0);
+    text(left,20,177,293,ui_tr("Standby delay"));
+    char duration[32];unsigned minutes=standby_config()->minutes;
+    snprintf(duration,sizeof(duration),minutes?ui_tr("%u min"):ui_tr("Never"),minutes);
+    field_button(left,325,165,159,duration,A_TIMEOUT);
     lv_obj_t *right=box(b,524,48,504,248,PANEL,20);
     /* Full-screen display outline, without a desktop stand. */
     lv_obj_t *screen=box(right,20,22,25,18,PURPLE,4);
@@ -301,14 +306,20 @@ static void display_view(lv_obj_t *b)
     box(glass,2,10,17,2,0xD9CCF1,1);
     label(right,52,18,390,ui_tr("Display"),&lv_font_instrument_sans_semibold_21,INK);
     box(right,20,64,464,1,LINE,0);
-    text(right,20,90,285,ui_tr("Interface language"));
-    label(right,373,89,110,ui_lang_current()->name,&lv_font_instrument_sans_semibold_18,INK);
-    box(right,20,123,464,1,LINE,0);
-    text(right,20,144,300,ui_tr("Standby delay"));
-    char duration[32];unsigned minutes=standby_config()->minutes;
-    snprintf(duration,sizeof(duration),minutes?ui_tr("%u min"):ui_tr("Never"),minutes);
-    field_button(right,325,132,159,duration,A_TIMEOUT);
-    white_button(right,20,187,464,40,ui_tr("Enter standby"),A_STANDBY);
+    lv_obj_t *language=box(right,20,77,464,60,PANEL,8);
+    lv_obj_add_flag(language,LV_OBJ_FLAG_CLICKABLE);palette(language,PANEL);
+    lv_obj_add_event_cb(language,action,LV_EVENT_CLICKED,(void *)(uintptr_t)A_LANGUAGE);
+    text(language,0,13,285,ui_tr("Interface language"));
+    label(language,353,12,110,ui_lang_current()->name,&lv_font_instrument_sans_semibold_18,INK);
+    lv_obj_t *lock=ui_icon_create(language,MICON("lock",22));lv_obj_set_pos(lock,0,40);
+    lv_img_set_pivot(lock,0,0);lv_img_set_zoom(lock,16*256/22);
+    lv_obj_set_style_img_recolor(lock,lv_color_hex(BLUE),0);lv_obj_set_style_img_recolor_opa(lock,LV_OPA_COVER,0);
+    lv_obj_t *language_hint=label(language,20,40,422,ui_tr("Change in protected settings"),&lv_font_instrument_sans_medium_12,BLUE);
+    lv_label_set_long_mode(language_hint,LV_LABEL_LONG_CLIP);
+    icon(language,MICON("next",18),446,39,BLUE);
+    box(right,20,144,464,1,LINE,0);
+    icon(right,MICON("power",22),20,171,PURPLE);
+    white_button(right,58,162,426,48,ui_tr("Enter standby"),A_STANDBY);
 }
 
 static void operators_summary_view(lv_obj_t *b)
@@ -316,7 +327,7 @@ static void operators_summary_view(lv_obj_t *b)
     heading(b,ui_tr("Operators"));
     const workspace_model_t *m=workspace_store_get();const workspace_user_t *active=workspace_active(m);
     lv_obj_t *left=box(b,0,48,360,248,PANEL,20),*right=box(b,380,48,648,248,PANEL,20);
-    small(left,20,18,320,ui_tr("Quick view"));text(left,20,51,320,active&&active->id?active->name:ui_tr("Device workspace"));
+    small(left,20,18,320,ui_tr("Current operator"));text(left,20,51,320,active&&active->id?active->name:ui_tr("Device workspace"));
     small(left,20,93,320,ui_tr(m&&m->operators_enabled?UI_N_("Operators enabled"):UI_N_("Operators disabled")));
     small(left,20,126,320,ui_tr("Names label records; balances are shared."));
     small(left,20,151,320,ui_tr("Manage people and permissions in full view."));
@@ -330,15 +341,27 @@ static void operators_summary_view(lv_obj_t *b)
         const workspace_user_t *u=&m->users[i];bool current=m->operators_enabled&&u->id==m->active_id;
         lv_obj_t *item=lv_settings_button(people,(i%2)*296,(i/2)*76,284,68,"",false,pick_event,(void *)(uintptr_t)i);
         lv_damped_button_set_exact_palette(item,lv_color_hex(menu.selected_user==i?0xE1EEFC:0xFFFFFF),lv_color_hex(0xDCE4E8));
-        lv_obj_set_style_border_width(item,0,0);lv_obj_set_style_radius(item,14,0);
+        lv_obj_set_style_border_width(item,menu.selected_user==i||current?1:0,0);
+        lv_obj_set_style_border_color(item,lv_color_hex(menu.selected_user==i?0x6FA0DD:0xBFDBD3),0);
+        lv_obj_set_style_radius(item,14,0);
         lv_obj_t *avatar=box(item,12,14,40,40,0xEBE5F7,12);char initial[5];operator_initial(u->name,initial);
         lv_obj_t *letter=text(avatar,0,0,40,initial);lv_obj_set_style_text_color(letter,lv_color_hex(PURPLE),0);lv_obj_set_style_text_align(letter,LV_TEXT_ALIGN_CENTER,0);lv_obj_center(letter);
-        lv_obj_t *name=text(item,64,12,208,u->name);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);small(item,64,39,208,ui_tr(m->disabled[i]?UI_N_("Disabled"):current?UI_N_("Current operator"):UI_N_("Available")));
+        lv_obj_t *name=text(item,64,12,208,u->name);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
+        if(current)icon(item,MICON("check",16),64,40,TEAL);
+        lv_obj_t *status=small(item,current?84:64,39,current?188:208,
+            ui_tr(m->disabled[i]?UI_N_("Disabled"):current?UI_N_("In use"):menu.selected_user==i?UI_N_("Viewing"):UI_N_("Available")));
+        if(current)lv_obj_set_style_text_color(status,lv_color_hex(TEAL),0);
         if(m->disabled[i])lv_obj_add_state(item,LV_STATE_DISABLED);
     }
     if(m->operators_enabled&&menu.selected_user<m->user_count&&!m->disabled[menu.selected_user]){
-        small(right,20,213,374,m->users[menu.selected_user].name);
-        lv_obj_t *switch_button=button(right,408,202,220,32,ui_tr(m->users[menu.selected_user].id==m->active_id?UI_N_("Current operator"):UI_N_("Switch operator")),A_USER_SWITCH,false);
-        if(m->users[menu.selected_user].id==m->active_id)lv_obj_add_state(switch_button,LV_STATE_DISABLED);
+        const workspace_user_t *target=&m->users[menu.selected_user];bool current=target->id==m->active_id;
+        char viewing[160],caption[160];snprintf(viewing,sizeof(viewing),ui_tr("Viewing: %s"),target->name);
+        lv_obj_t *viewing_label=small(right,20,213,374,viewing);lv_label_set_long_mode(viewing_label,LV_LABEL_LONG_DOT);
+        if(current)snprintf(caption,sizeof(caption),"%s",ui_tr("In use"));
+        else snprintf(caption,sizeof(caption),ui_tr("Switch to %s"),target->name);
+        lv_obj_t *switch_button=button(right,408,202,220,32,caption,A_USER_SWITCH,!current);
+        lv_obj_t *switch_label=lv_obj_get_child(switch_button,0);lv_obj_set_width(switch_label,200);
+        lv_label_set_long_mode(switch_label,LV_LABEL_LONG_DOT);lv_obj_set_style_text_align(switch_label,LV_TEXT_ALIGN_CENTER,0);lv_obj_center(switch_label);
+        if(current)lv_obj_add_state(switch_button,LV_STATE_DISABLED);
     }else small(right,20,210,608,ui_tr(m->operators_enabled?UI_N_("This operator is disabled. Restore them in Manage operators."):UI_N_("Enable operators in Manage operators.")));
 }

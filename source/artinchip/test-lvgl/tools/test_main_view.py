@@ -65,18 +65,18 @@ def main():
         "un260/lv_components/lv_damped_button.c", "un260/lv_components/lv_loading_orbit.c",
         "un260/lv_components/lv_capsule_pagination.c", "un260/lv_components/smart_island.c",
         "un260/lv_components/smart_island/smart_island_view.c",
-        "un260/lv_components/smart_island/smart_island_activity.c",
         "un260/lv_core/page_collection.c", "un260/app_service/app_collection.c",
         "un260/data_collection/data_collection.c", "un260/protocol/protocol_request.c",
         "un260/lv_components/smart_island/smart_island_action.c",
         "un260/lv_components/smart_island/smart_island_warning.c",
         "un260/lv_components/smart_island/smart_island_result.c",
-        "un260/lv_core/ui_frame_commit.c", "un260/lv_system/ui_update_batch.c",
+        "un260/lv_core/ui_frame_commit.c", "un260/lv_core/ui_deferred_action.c", "un260/lv_system/ui_update_batch.c",
         "un260/lv_system/ui_text_page.c", "un260/lv_system/ui_text_widget.c",
         "un260/lv_system/ui_lang.c", "un260/counting/counting_data_store.c",
         "un260/machine_state/machine_state.c", "un260/currency/currency_state.c",
         "un260/currency/currency_metadata.c", "un260/lv_system/app_clock.c"]
     sources += [ROOT / path for path in actual]
+    sources.append(ROOT / "tools/tests/fullscreen_panel_stubs.c")
     sources = with_i18n(sources, ROOT)
     font_inputs = sources + [ROOT / "un260/lv_components/lv_fault_popup.c", ROOT / "un260/lv_core/page_01_main.c",
                              ROOT / "un260/lv_core/page_01_main_detail.c", ROOT / "un260/lv_core/page_01_main_quick.c"]

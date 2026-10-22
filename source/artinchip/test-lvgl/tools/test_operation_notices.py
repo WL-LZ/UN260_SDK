@@ -16,7 +16,7 @@ while depth:
     if reply[end] == '{': depth += 1
     elif reply[end] == '}': depth -= 1
     end += 1
-fo = 'static void route_fo(const uint8_t *buf, int len) { switch (0x3A) {\n' + reply[begin:end] + '\n} }\n'
+fo = 'static void route_fo(const uint8_t *buf, int len) { const uint8_t cmd=0x3A; switch (cmd) {\n' + reply[begin:end] + '\n} }\n'
 fixture = r'''
 #include <assert.h>
 #include <stdbool.h>

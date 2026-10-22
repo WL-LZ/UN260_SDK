@@ -29,7 +29,7 @@ struct ui_multi_detail {
     scaled_font_t symbol_font;
     uint8_t symbol_pixels[1024];
     lv_recycled_list_t *list,*serial_list;
-    lv_obj_t *serial_headers[3][3],*serial_rules[3],*previous,*next,*range,*details;
+    lv_obj_t *serial_headers[3][3],*serial_rules[3],*previous,*next,*range;
     unsigned serial_columns,serial_rows;
     lv_alnum_keyboard_t *keyboard;
     ui_detail_reveal_t reveal;
@@ -184,11 +184,6 @@ static void serial_page(lv_event_t *e)
     ui_multi_detail_t *v=lv_event_get_user_data(e);
     if(v->visible&&serial_view(v))lv_recycled_list_page_step(v->serial_list,lv_event_get_target(e)==v->previous?-1:1);
 }
-static void serial_open(lv_event_t *e)
-{
-    ui_multi_detail_t *v=lv_event_get_user_data(e);
-    if(v->visible&&serial_view(v)&&v->open)v->open(v->selected,1,v->context);
-}
 static void serial_arrow(lv_event_t *e)
 {
     lv_obj_t *o=lv_event_get_target(e);bool next=(uintptr_t)lv_event_get_user_data(e);
@@ -233,7 +228,6 @@ static void serial_layout(ui_multi_detail_t *v,bool active)
     for(unsigned i=0;i<3;i++)hide(v->headers[i],active);
     hide(lv_recycled_list_object(v->list),active);hide(lv_recycled_list_object(v->serial_list),!active);
     hide(v->previous,!active);hide(v->next,!active);hide(v->range,!active);
-    hide(v->details,!active||v->expanded||!v->open);
     lv_obj_set_width(v->foot,active?180:v->width-450);
     lv_obj_set_x(v->foot,active?270:22);
     if(active)lv_recycled_list_refresh(v->serial_list,(v->count+v->serial_columns-1)/v->serial_columns,old!=v->serial_columns);
@@ -472,8 +466,7 @@ ui_multi_detail_t *ui_multi_detail_create(lv_obj_t *parent,bool expanded,ui_mult
     v->previous=serial_button(v,22,32,"",serial_page);
     v->next=serial_button(v,222,32,"",serial_page);
     v->range=label(v->root,60,v->height-28,156,"",&lv_font_instrument_sans_medium_14,0x7A8D9B);
-    v->details=serial_button(v,462,150,ui_text_get(UI_TEXT_MULTI_DETAILS_ACTION),serial_open);
-    if(!v->previous||!v->next||!v->range||!v->details)goto failed;
+    if(!v->previous||!v->next||!v->range)goto failed;
     lv_obj_set_style_text_align(v->range,LV_TEXT_ALIGN_CENTER,0);
     if(!lv_obj_add_event_cb(v->previous,serial_arrow,LV_EVENT_DRAW_MAIN,(void *)0)||
        !lv_obj_add_event_cb(v->next,serial_arrow,LV_EVENT_DRAW_MAIN,(void *)1))goto failed;

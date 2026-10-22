@@ -34,9 +34,9 @@ with tempfile.TemporaryDirectory(prefix='un260-pure-lifecycle-') as temp:
     with ThreadPoolExecutor(max_workers=4) as pool:list(pool.map(build,zip(sources,objects)))
     exe=work/'test'
     subprocess.run([*common,*map(str,objects),'-lm','-lz','-o',str(exe)],check=True)
-    for name in ('user','settings'):
-        with Image.open(root/'aic_ui/lvgl_data/backgrounds'/(name+'.png')) as image:
-            (work/(name+'.bgra')).write_bytes(image.convert('RGBA').tobytes('raw','BGRA'))
+    with Image.open(root/'aic_ui/lvgl_data/page_pure.png') as image:
+        assert image.size == (1280,400)
+        (work/'page_pure.bgra').write_bytes(image.convert('RGBA').tobytes('raw','BGRA'))
     env=os.environ.copy();env['UN260_BACKGROUND_DIR']=str(work)
     if args.output_dir:
         args.output_dir.mkdir(parents=True,exist_ok=True);env['PURE_RASTER_OUTPUT']=str(args.output_dir.resolve())

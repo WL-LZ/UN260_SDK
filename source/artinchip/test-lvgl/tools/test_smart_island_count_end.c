@@ -155,6 +155,93 @@ static void test_end_lifecycle(void)
     finish_session();assert_settled();
 }
 
+/* A retained island moves between Main and PURE without recreating widgets.
+ * Exercise the real animation owners at the exact handover boundary. */
+static void reparent_round_trip(void)
+{
+    lv_obj_t *other=lv_obj_create(lv_scr_act());
+    smart_island_set_suspended(true);
+    smart_island_create(other);
+    smart_island_set_suspended(true);
+    smart_island_create(main_page);
+    lv_obj_del(other);
+}
+
+static void test_reparent_animation_settlement(void)
+{
+    start_session();finish_session();tick(300);
+    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_RESULT);
+    smart_island_view_result_enter();
+    assert(lv_obj_get_style_bg_opa(g_si_ctx.objects.dot,0)<LV_OPA_COVER);
+    reparent_round_trip();
+    assert(lv_obj_get_style_bg_opa(g_si_ctx.objects.dot,0)==LV_OPA_COVER);
+    assert(lv_obj_get_style_text_opa(g_si_ctx.objects.title,0)==LV_OPA_COVER);
+    assert(lv_obj_get_x(g_si_ctx.objects.dot)==16);
+    assert(lv_obj_get_x(g_si_ctx.objects.title)==36);
+    write_bmp("island-reparent-result");
+    assert_settled();
+
+    start_session();finish_session();tick(1420);
+    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_RESULT);
+    assert(!g_si_ctx.lifecycle.result_timer&&g_si_ctx.view.anim_running);
+    reparent_round_trip();
+    assert_settled();
+    assert(lv_obj_get_width(g_si_ctx.objects.root)==SMART_ISLAND_WIDTH);
+    assert(lv_obj_get_style_bg_opa(g_si_ctx.objects.dot,0)==LV_OPA_COVER);
+    assert(lv_obj_get_style_text_opa(g_si_ctx.objects.time,0)==LV_OPA_COVER);
+
+    uint8_t previous_mode=machine_state_mode();
+    machine_state_confirm_mode(MODE_CNT);
+    start_session();
+    smart_island_update_counting(2,200);
+    tick(40);
+    assert(!lv_obj_has_flag(g_si_ctx.objects.counting_value_next,LV_OBJ_FLAG_HIDDEN));
+    reparent_round_trip();
+    assert(g_si_ctx.lifecycle.count_session_active);
+    assert(g_si_ctx.counting.gate_anim_running);
+    assert(!strcmp(lv_label_get_text(g_si_ctx.objects.counting_value),"2"));
+    assert(lv_obj_get_y(g_si_ctx.objects.counting_value)==10);
+    assert(lv_obj_has_flag(g_si_ctx.objects.counting_value_next,LV_OBJ_FLAG_HIDDEN));
+    write_bmp("island-reparent-counting");
+    finish_session();assert_settled();
+    machine_state_confirm_mode(previous_mode);
+
+    smart_island_view_idle_enter();
+    assert(lv_obj_get_style_text_opa(g_si_ctx.objects.time,0)<LV_OPA_COVER);
+    reparent_round_trip();
+    assert(lv_obj_get_style_text_opa(g_si_ctx.objects.title,0)==LV_OPA_COVER);
+    assert(lv_obj_get_style_text_opa(g_si_ctx.objects.time,0)==LV_OPA_COVER);
+    smart_island_view_message_pulse();tick(80);
+    assert(lv_obj_get_style_transform_width(g_si_ctx.objects.root,0)>0);
+    reparent_round_trip();
+    assert(lv_obj_get_style_transform_width(g_si_ctx.objects.root,0)==0);
+    assert(lv_obj_get_style_translate_x(g_si_ctx.objects.dot,0)==0);
+    assert(lv_obj_get_style_translate_x(g_si_ctx.objects.title,0)==0);
+    write_bmp("island-reparent-idle");
+
+    smart_island_open_info_page();tick(300);reparent_round_trip();
+    assert(g_si_ctx.view.visual==SMART_ISLAND_VISUAL_EXPANDED);
+    assert(smart_island_get_page()==SMART_ISLAND_PAGE_INFO);
+    smart_island_open_action_page();tick(300);
+    smart_island_page_t routed_page=smart_island_get_page();
+    bool time_hidden=lv_obj_has_flag(g_si_ctx.objects.time,LV_OBJ_FLAG_HIDDEN);
+    reparent_round_trip();
+    assert(g_si_ctx.view.visual==SMART_ISLAND_VISUAL_EXPANDED);
+    assert(smart_island_get_page()==routed_page);
+    assert(lv_obj_has_flag(g_si_ctx.objects.time,LV_OBJ_FLAG_HIDDEN)==time_hidden);
+    smart_island_close();tick(300);
+
+    smart_island_notify_preset_full((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4});
+    tick(300);reparent_round_trip();
+    assert(g_si_ctx.warning.fault.valid&&g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING);
+    assert(g_si_ctx.warning.marquee_running&&!g_si_ctx.warning.resume_animation_pending);
+    tick(4000);
+    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE);
+    unsigned timer_count=timers();
+    for(unsigned i=0;i<20;i++)reparent_round_trip();
+    assert(timers()==timer_count);
+}
+
 static void test_notice_during_count(void)
 {
     start_session();
@@ -191,9 +278,9 @@ int main(void)
     lv_img_decoder_set_info_cb(decoder,host_image_info);lv_img_decoder_set_open_cb(decoder,host_image_open);
     lv_img_decoder_set_close_cb(decoder,host_image_close);
     fixture(false);assert(currency_state_confirm_active_code("USD"));ui_main_create(lv_scr_act());tick(400);
-    test_reset_lifecycle();test_end_lifecycle();test_notice_during_count();
+    test_reset_lifecycle();test_end_lifecycle();test_notice_during_count();test_reparent_animation_settlement();
     ui_main_destroy();
     counting_data_clear_serials(counting_data_mutable());counting_data_clear_errors(counting_data_mutable());
     lv_img_decoder_delete(decoder);lv_deinit();host_external_assets_release();
-    puts("PASS actual island count/reset lifecycle: normal, duplicate, hidden/resume, warning, reparent, history backpressure, reset/new start, animation-allocation failure");
+    puts("PASS actual island count/reset lifecycle: normal, duplicate, hidden/resume, warning, reparent animation settlement, history backpressure, reset/new start, animation-allocation failure");
 }

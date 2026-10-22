@@ -1,0 +1,12 @@
+{
+  "en": {"Viewing":"Viewing","Viewing: %s":"Viewing: %s","Switch to %s":"Switch to %s","Change in protected settings":"Change in protected settings"},
+  "zh-Hans": {"Viewing":"正在查看","Viewing: %s":"正在查看：%s","Switch to %s":"切换为 %s","Change in protected settings":"在管理设置中修改"},
+  "fr": {"Viewing":"Consultation","Viewing: %s":"Consultation : %s","Switch to %s":"Passer à %s","Change in protected settings":"Modifier dans les réglages protégés"},
+  "de": {"Viewing":"Ansicht","Viewing: %s":"Ansicht: %s","Switch to %s":"Zu %s wechseln","Change in protected settings":"In geschützten Einstellungen ändern"},
+  "tr": {"Viewing":"Görüntüleniyor","Viewing: %s":"Görüntülenen: %s","Switch to %s":"%s kişisine geç","Change in protected settings":"Korumalı ayarlardan değiştirin"},
+  "pl": {"Viewing":"Podgląd","Viewing: %s":"Podgląd: %s","Switch to %s":"Przełącz na %s","Change in protected settings":"Zmień w chronionych ustawieniach"},
+  "ru": {"Viewing":"Просмотр","Viewing: %s":"Просмотр: %s","Switch to %s":"Перейти к %s","Change in protected settings":"Изменить в защищённых настройках"},
+  "ja": {"Viewing":"表示中","Viewing: %s":"表示中：%s","Switch to %s":"%s に切替","Change in protected settings":"保護された設定で変更"},
+  "ko": {"Viewing":"보기 중","Viewing: %s":"보기 중: %s","Switch to %s":"%s(으)로 전환","Change in protected settings":"보호된 설정에서 변경"},
+  "ar": {"Viewing":"قيد العرض","Viewing: %s":"قيد العرض: %s","Switch to %s":"التبديل إلى %s","Change in protected settings":"التغيير في الإعدادات المحمية"}
+}

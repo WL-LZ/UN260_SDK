@@ -74,7 +74,7 @@ echo "[5/5] Generate lv_font_rajdhani_194.c"
 eval "$LV_FONT_CONV \
   --no-compress --no-prefilter --bpp 4 --size 193 \
   --font \"$FONT_DIR/Rajdhani-Bold.ttf\" \
-  --symbols 0123456789, \
+  --symbols 0123456789,- \
   --format lvgl \
   --lv-font-name lv_font_rajdhani_194 \
   -o \"$OUT_DIR/lv_font_rajdhani_194.c\""

@@ -3,7 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include "test_page_background_asset.h"
+#include <string.h>
+#include "aic_ui/compiled_asset.h"
 #include "src/misc/lv_txt_ap.h"
 #include "un260/font/ui_locale_font_bank.h"
 #include "un260/lv_core/page_18_pure.c"
@@ -11,14 +12,14 @@
 static ui_page_t current=UI_PAGE_MAIN;
 static bool transitioning,reject_navigation,pure_preference,persisted_preference;
 static unsigned saved,closed,start_clicked,clear_clicked;
-static bool navigation_blocked,island_suspended;
+static bool navigation_blocked,island_suspended,multi_selected;
 static lv_obj_t *island,*quick_host;
 static gesture_pointer_policy_t pointer_policy;
 static counting_sim_t result={.total_amount=10692,.total_pcs=231};
 const counting_sim_t *counting_data_current(void){return &result;}
 int counting_data_reject_pcs_count(const counting_sim_t *s){(void)s;return 2;}
-bool counting_data_monetary_result_supported(const counting_sim_t *s){(void)s;return true;}
-bool currency_state_multi_selected(void){return false;}
+bool counting_data_monetary_result_supported(const counting_sim_t *s){return !s->multi_currency_result;}
+bool currency_state_multi_selected(void){return multi_selected;}
 ui_page_t ui_manager_get_current_page(void){return current;}
 bool ui_manager_is_transitioning(void){return transitioning;}
 void ui_manager_switch(ui_page_t target){if(reject_navigation)return;if(current==UI_PAGE_PURE)ui_page_18_pure_suspend();current=target;if(target==UI_PAGE_PURE){if(!ui_page_18_pure_resume())ui_page_18_pure_create(lv_scr_act());}}
@@ -38,7 +39,25 @@ void gesture_service_clear_pointer_policy(uint32_t owner){assert(owner==UI_PAGE_
 void gesture_service_set_navigation_blocked(uint32_t owner,bool blocked){assert(owner==UI_PAGE_PURE);navigation_blocked=blocked;}
 void page_01_start_btn_event_cb(lv_event_t *e){(void)e;start_clicked++;}
 void page_01_esc_btn_event_cb(lv_event_t *e){(void)e;clear_clicked++;}
-static unsigned icon_opens;
+/* Decode the production PURE PNG in the host fixture; firmware uses its
+ * existing image decoder. The pixels stay outside LVGL's heap. */
+static un260_compiled_asset_t pure_background={"page_pure.png",1280,400,5120,1,NULL};
+static void release_background(void){free((void*)pure_background.pixels);pure_background.pixels=NULL;}
+static const un260_compiled_asset_t *test_page_asset_find(const char *src){
+ const un260_compiled_asset_t *a=un260_compiled_asset_find(src);if(a)return a;
+ if(strcmp(src,"L:/usr/local/share/lvgl_data/page_pure.png"))return NULL;
+ if(!pure_background.pixels){
+  const char *dir=getenv("UN260_BACKGROUND_DIR");assert(dir);
+  char path[2048];snprintf(path,sizeof(path),"%s/page_pure.bgra",dir);
+  FILE *f=fopen(path,"rb");assert(f);
+  size_t bytes=pure_background.stride*pure_background.height;
+  unsigned char *data=malloc(bytes);assert(data);
+  assert(fread(data,1,bytes,f)==bytes);fclose(f);
+  pure_background.pixels=data;atexit(release_background);
+ }
+ return &pure_background;
+}
+static unsigned icon_opens,background_opens;
 static lv_res_t asset_info(lv_img_decoder_t *decoder,const void *src,lv_img_header_t *header){
  (void)decoder;if(lv_img_src_get_type(src)!=LV_IMG_SRC_FILE)return LV_RES_INV;
  const un260_compiled_asset_t *a=test_page_asset_find(src);if(!a||!a->has_alpha)return LV_RES_INV;
@@ -48,6 +67,7 @@ static lv_res_t asset_open(lv_img_decoder_t *decoder,lv_img_decoder_dsc_t *dsc){
  if(asset_info(decoder,dsc->src,&dsc->header)!=LV_RES_OK)return LV_RES_INV;
  dsc->img_data=test_page_asset_find(dsc->src)->pixels;
  if(!strcmp(dsc->src,"L:/usr/local/share/lvgl_data/pin_icons/close.png"))++icon_opens;
+ if(!strcmp(dsc->src,"L:/usr/local/share/lvgl_data/page_pure.png"))++background_opens;
  return LV_RES_OK;
 }
 static void asset_close(lv_img_decoder_t *decoder,lv_img_decoder_dsc_t *dsc){(void)decoder;dsc->img_data=NULL;}
@@ -58,7 +78,14 @@ static void raster(const char *tag){
  char name[2048];snprintf(name,sizeof(name),"%s/pure-%s.ppm",dir,tag);FILE *f=fopen(name,"wb");assert(f);
  fprintf(f,"P6\n%u %u\n255\n",snap->header.w,snap->header.h);
  for(unsigned i=0;i<snap->header.w*snap->header.h;i++){const uint8_t *p=snap->data+i*4;fputc(p[2],f);fputc(p[1],f);fputc(p[0],f);}
- fclose(f);lv_snapshot_free(snap);assert(icon_opens);
+ fclose(f);lv_snapshot_free(snap);assert(icon_opens&&background_opens);
+}
+static void assert_refresh(const char *amount,const char *pcs){
+ unsigned char before[sizeof(result)];memcpy(before,&result,sizeof(result));
+ lv_tick_inc(150);lv_timer_handler();
+ assert(!strcmp(lv_label_get_text(g_pure_page.amount_value),amount));
+ assert(!strcmp(lv_label_get_text(g_pure_page.pcs_value),pcs));
+ assert(!memcmp(before,&result,sizeof(result)));
 }
 static void flush(lv_disp_drv_t *d,const lv_area_t *a,lv_color_t *p){(void)a;(void)p;lv_disp_flush_ready(d);}
 int main(void){
@@ -72,6 +99,31 @@ int main(void){
  assert(!g_pure_page.refresh_timer->paused&&!island_suspended);
  assert(!strcmp(lv_label_get_text(g_pure_page.amount_value),"10,692"));
  assert(!strcmp(lv_label_get_text(g_pure_page.pcs_value),"231"));
+ /* Unavailable monetary totals must remain a real dash, not a comma alias.
+  * MULTI selection and a retained multi result independently hide money. */
+ lv_font_glyph_dsc_t dash,comma;
+ assert(lv_font_get_glyph_dsc(&lv_font_rajdhani_194,&dash,'-',0));
+ assert(lv_font_get_glyph_dsc(&lv_font_rajdhani_194,&comma,',',0));
+ assert(dash.box_w>dash.box_h&&dash.ofs_y>0&&dash.adv_w!=comma.adv_w);
+ assert(lv_font_get_glyph_bitmap(&lv_font_rajdhani_194,'-')!=lv_font_get_glyph_bitmap(&lv_font_rajdhani_194,','));
+ multi_selected=true;result.total_amount=12345;result.total_pcs=232;
+ assert_refresh("--","232");raster("multi-unavailable");
+ result.total_amount=7654321;result.total_pcs=234;
+ assert_refresh("--","234");
+ multi_selected=false;result.multi_currency_result=true;result.total_pcs=235;
+ assert_refresh("--","235");raster("result-unavailable");
+ result.multi_currency_result=false;
+ assert_refresh("7,654,321","235");raster("supported-restored");
+ result.total_amount=9876543;result.total_pcs=4321;
+ assert_refresh("9,876,543","4,321");
+ ui_page_18_pure_suspend();result.total_amount=500;result.total_pcs=10;
+ lv_tick_inc(500);lv_timer_handler();
+ assert(!strcmp(lv_label_get_text(g_pure_page.amount_value),"9,876,543"));
+ assert(ui_page_18_pure_resume());
+ assert(!strcmp(lv_label_get_text(g_pure_page.amount_value),"500"));
+ assert(!strcmp(lv_label_get_text(g_pure_page.pcs_value),"10"));
+ result.total_amount=10692;result.total_pcs=231;
+ assert_refresh("10,692","231");
  for(unsigned n=0;n<10;n++){
   ui_page_18_pure_suspend();assert(!navigation_blocked&&!pointer_policy&&g_pure_page.refresh_timer->paused&&island_suspended);
   assert(lv_obj_has_flag(g_pure_page.page,LV_OBJ_FLAG_HIDDEN));
@@ -127,6 +179,6 @@ int main(void){
  lv_obj_t *other=lv_obj_create(lv_scr_act());smart_island_create(other);ui_page_18_pure_destroy();
  assert(island&&lv_obj_is_valid(island)&&!quick_host&&!g_pure_page.page&&!g_pure_page.refresh_timer&&!pointer_policy&&!navigation_blocked);
  assert(ui_page_18_pure_toggle_theme());assert(current==UI_PAGE_PURE&&navigation_blocked);ui_page_18_pure_destroy();assert(!island&&!navigation_blocked);
- puts("PASS production PURE lifecycle: retained timers/policies, theme success/rejection, stale preference recovery, data retention, shared island ownership, destroy/recreate");
+ puts("PASS production PURE lifecycle: monetary placeholder glyph, live totals, unsupported/result transitions, retained timers/policies, theme success/rejection, stale preference recovery, data retention, shared island ownership, destroy/recreate");
  return 0;
 }

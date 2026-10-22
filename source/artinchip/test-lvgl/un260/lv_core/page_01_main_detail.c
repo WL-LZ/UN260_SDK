@@ -16,6 +16,7 @@
 #define DETAIL_TAP_THRESHOLD 10
 #define DETAIL_BODY 0x4C606E
 #define DETAIL_MUTED 0x7A8D9B
+#define DETAIL_HEADER_TEXT 0x526B7B
 
 typedef struct {
     page_01_detail_section_t id;
@@ -296,7 +297,7 @@ static bool section_create(main_detail_section_t *section, unsigned id,
     if (!header) return false;
     for (unsigned i = 0; i < 3; ++i) {
         section->header[i] = label_create(header, section->column_x[i], section->column_width[i],
-            &lv_font_instrument_sans_medium_12, section->align[i], DETAIL_MUTED);
+            &lv_font_instrument_sans_medium_12, section->align[i], DETAIL_HEADER_TEXT);
         if (!section->header[i]) return false;
     }
     lv_recycled_list_config_t config = {0};

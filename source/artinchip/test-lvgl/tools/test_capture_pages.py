@@ -14,11 +14,9 @@ root = Path(__file__).resolve().parents[1]
 lvgl = lvgl_source(root)
 out = Path(sys.argv[1]).resolve()
 out.mkdir(parents=True, exist_ok=True)
-pages = ['05_set_password', '20_set_print', '22_set_double_note', '23_set_flap', '24_set_reject_pocket',
-         '25_set_serial_number', '27_set_cfd_level', '29_set_password', '30_set_factory',
-         '33_set_brightness', '36_display_test']
-parts = [f'un260/lv_core/page_{name}.c' for name in pages]
-parts += ['un260/lv_core/page_collection.c','un260/lv_core/page_protocol_log.c','un260/lv_components/smart_island/smart_island_activity.c','un260/data_collection/data_collection.c','un260/app_service/app_collection.c']
+# This harness owns capture/log views; independent settings pages have their own suite.
+parts = []
+parts += ['un260/lv_core/page_collection.c','un260/lv_core/page_protocol_log.c','un260/data_collection/data_collection.c','un260/app_service/app_collection.c']
 parts += ['un260/font/ui_message_font.c', 'un260/font/ui_locale_font_bank.c']
 parts += ['un260/font/lv_font_message_cjk_'+str(n)+'.c' for n in [12,14,16,18,20,22,24,28]]
 parts += ['un260/lv_components/lv_loading_orbit.c']

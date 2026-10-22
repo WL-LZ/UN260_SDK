@@ -7,7 +7,7 @@ def write_if_changed(path,text):
 from test_list_view import compiled_asset_sources
 root=Path(__file__).resolve().parents[1]
 lvgl = lvgl_source(root)
-parts=['un260/gesture/touch_sound.c','tools/test_menu_view.c','un260/workspace/workspace_model.c','un260/workspace/cashbook.c','un260/counting/counting_reject_reason.c','un260/lv_components/lv_settings.c','un260/lv_components/lv_quick_controls.c','un260/app_service/app_local_setting.c','un260/lv_components/lv_damped_button.c','un260/lv_components/lv_nav_button.c','un260/lv_components/lv_modal_dialog.c','un260/lv_components/lv_popup_style.c','un260/lv_components/lv_alnum_keyboard.c','un260/lv_components/lv_qr_popup.c','un260/lv_components/qrcodegen.c','un260/lv_components/ui_scrollbar.c','un260/lv_core/settings_detail_ui.c','un260/lv_system/ui_lang.c','un260/lv_system/ui_text_widget.c','un260/lv_system/ui_text_page.c']
+parts=['un260/lv_core/page_protocol_log.c','un260/gesture/touch_sound.c','tools/test_menu_view.c','un260/workspace/workspace_model.c','un260/workspace/cashbook.c','un260/counting/counting_reject_reason.c','un260/lv_components/lv_settings.c','un260/lv_components/lv_quick_controls.c','un260/app_service/app_local_setting.c','un260/lv_components/lv_damped_button.c','un260/lv_components/lv_nav_button.c','un260/lv_components/lv_modal_dialog.c','un260/lv_components/lv_popup_style.c','un260/lv_components/lv_alnum_keyboard.c','un260/lv_components/lv_qr_popup.c','un260/lv_components/qrcodegen.c','un260/lv_components/ui_scrollbar.c','un260/lv_core/settings_detail_ui.c','un260/lv_system/ui_lang.c','un260/lv_system/ui_text_widget.c','un260/lv_system/ui_text_page.c']
 inspected=parts+['un260/lv_core/page_03_menu.c']+['un260/lv_core/'+p.name for p in (root/'un260/lv_core').glob('menu_*.inc')]
 parts+=['un260/font/ui_message_font.c','un260/font/ui_locale_font_bank.c']
 parts+=['un260/font/lv_font_message_cjk_'+str(n)+'.c' for n in [12,14,16,18,20,22,24,28]]
@@ -44,6 +44,7 @@ with contextlib.nullcontext(str(cache)) as directory:
     port=(root/'lv_port_indev.c').read_text();helper=re.search(r'void lv_port_indev_set_drag_obj\(.*?\n\}',port,re.S);assert helper
     bridge=work/'port.c';write_if_changed(bridge,'#include "lvgl/lvgl.h"\n'+helper[0])
     sources=[root/p for p in parts]+[root/('un260/font/lv_font_'+f+'.c') for f in fonts]+compiled_asset_sources()+[bridge]+sorted(p for p in (lvgl/'src').rglob('*.c') if p.name!='qrcodegen.c')
+    sources.append(root / "tools/tests/fullscreen_panel_stubs.c")
     sources = with_i18n(sources, root)
     flags=['cc','-DMENU_REAL_FONTS','-DCASH_REAL_FONTS','-DUI_STATE_DIR="/tmp/un260-i18n-tests"','-std=gnu11','-g','-O1','-Wall','-Wextra','-Wno-misleading-indentation','-fsanitize=address,undefined','-fno-sanitize-recover=all','-no-pie','-DLV_DRV_CONF_H','-DLVGL_DIR="L:/usr/local/share/lvgl_data/"',f'-I{work}',f'-I{root}',f'-I{lvgl}',f'-DLV_CONF_PATH={conf}']
     flags+=['-DUN260_LOCALE_FONT_DIR="S:'+str(root/'aic_ui/lvgl_data/locale_fonts')+'/"']
@@ -59,7 +60,11 @@ with contextlib.nullcontext(str(cache)) as directory:
         return obj
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:objects=list(pool.map(compile_one,sources))
     exe=work/'test';subprocess.run(['cc','-fsanitize=address,undefined','-no-pie',*map(str,objects),'-lm','-lz','-o',str(exe)],check=True)
-    result=subprocess.run([str(exe)],env=dict(os.environ,MENU_OUTPUT=str(out)))
+    from PIL import Image
+    for name in ('user','settings'):
+        with Image.open(root/'aic_ui/lvgl_data/backgrounds'/f'{name}.png') as image:
+            (work/f'{name}.bgra').write_bytes(image.convert('RGBA').tobytes('raw','BGRA'))
+    result=subprocess.run([str(exe)],env=dict(os.environ,MENU_OUTPUT=str(out),UN260_BACKGROUND_DIR=str(work)))
     from PIL import Image
     for path in out.glob('*.bgra'):Image.frombytes('RGBA',(1280,400),path.read_bytes(),'raw','BGRA').convert('RGB').save(path.with_suffix('.png'))
     result.check_returncode()

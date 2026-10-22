@@ -67,10 +67,8 @@ void page_switch_btn_event_cb(lv_event_t* e)
 
 
 void page_01_list_btn_event_cb(lv_event_t* e) {
-    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-        /* 0x0C/0x0D 已在 0x0B 面额明细结束时提前发送，此处直接进 list */
-        ui_manager_push_page(UI_PAGE_LIST);
-    }
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        page_01_action_run(PAGE_01_ACTION_LIST);
 }
 
 void page_02_history_btn_event_cb(lv_event_t* e)
@@ -85,10 +83,8 @@ void page_02_history_btn_event_cb(lv_event_t* e)
 
 
 void page_01_menu_btn_event_cb(lv_event_t* e) {
-    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-
-        ui_manager_push_page(UI_PAGE_MENU);
-    }
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        page_01_action_run(PAGE_01_ACTION_MENU);
 }
 
  void page_01_back_btn_event_cb(lv_event_t* e) {
@@ -107,18 +103,14 @@ void page_01_menu_btn_event_cb(lv_event_t* e) {
 
 void page_01_start_btn_event_cb(lv_event_t* e)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-    app_command_runtime_request_count_start();
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        page_01_action_run(PAGE_01_ACTION_START);
 }
 
 void page_01_esc_btn_event_cb(lv_event_t* e)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
-        return;
-    }
-    app_command_runtime_clear_counting_data("user clear");
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        page_01_action_run(PAGE_01_ACTION_CLEAR);
 }
 
 static bool page_01_mode_req_busy(void) //判断模式切换是否仍在等待回包
@@ -126,7 +118,7 @@ static bool page_01_mode_req_busy(void) //判断模式切换是否仍在等待�
     return setting_service_mode_is_pending();
 }
 
-static void page_01_mode_send_next(void) //发送主界面模式切换命令
+void page_01_mode_cycle(void) //发送主界面模式切换命令
 {
     uint8_t next_mode = MODE_MDC;
 
@@ -149,84 +141,55 @@ static void page_01_mode_send_next(void) //发送主界面模式切换命令
 void page_01_mode_btn_event_cb(lv_event_t* e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    page_01_mode_send_next();
+    page_01_mode_cycle();
 }
 
 void page_01_bottom_mode_btn_event_cb(lv_event_t* e) //切换主界面底部A区点钞模式
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    page_01_mode_send_next();
+    page_01_mode_cycle();
 }
 
 void page_01_add_btn_event_cb(lv_event_t* e) //切换主界面底部ADD开关
 {
-    bool target;
-
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-
-    target = !machine_state_add_enabled();
-    if (!setting_service_request_add(target)) return;
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        page_01_action_run(PAGE_01_ACTION_ADD);
 }
 
 void page_01_work_btn_event_cb(lv_event_t* e) //切换主界面底部工作模式
 {
-    uint8_t target_mode;
-
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-
-    target_mode = machine_state_work_mode() ? 0 : 1;
-    if (!setting_service_request_work_mode(target_mode)) return;
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        page_01_action_run(PAGE_01_ACTION_WORK);
 }
 
 void page_01_fo_btn_event_cb(lv_event_t* e) //切换主界面底部F/O开关
 {
-    uint8_t target_mode;
-
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-
-    target_mode = (uint8_t)((machine_state_fo_mode() + 1) % 4);
-    /* 协议第31条：0x00=OFF, 0x01=Face, 0x02=ORT, 0x03=Face&ORT */
-    if (!setting_service_request_fo_mode(target_mode)) return;
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        page_01_action_run(PAGE_01_ACTION_SORT);
 }
 
 void page_01_bottom_batch_btn_event_cb(lv_event_t* e)
 {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    if (ui_state_main_batch_action_get() == UI_MAIN_BATCH_SETTINGS) {
-        page_03_menu_open_batch();
-        return;
-    }
-    (void)workspace_service_batch_next();
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        page_01_action_run(PAGE_01_ACTION_BATCH);
 }
 
 void page_01_bottom_speed_btn_event_cb(lv_event_t* e) //切换主界面底部C区速度
 {
-    uint8_t target_speed;
-
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-
-    target_speed = (uint8_t)((machine_state_speed() + 1) % 3);
-    if (!setting_service_request_speed(target_speed)) return;
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        page_01_action_run(PAGE_01_ACTION_SPEED);
 }
 
 
 void page_01_set_btn_event_cb(lv_event_t* e){
-    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-        uint8_t version_cmd = 0x01;
-        protocol_send(0x17, &version_cmd, 1);
-        ui_manager_switch(UI_PAGE_SET_PASSAGE);
-        }
- }
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        page_01_action_run(PAGE_01_ACTION_SETTINGS);
+}
 
 void page_01_print_btn_event_cb(lv_event_t *e)
 {
-    if(lv_event_get_code(e)!=LV_EVENT_CLICKED)return;
-    const char *reason=receipt_print_blocker(0);
-    if(reason){ui_notice_post_text(UI_NOTICE_WARNING,"print.request",UI_N_("Printing"),reason);return;}
-    bool sent=receipt_print_request(0);
-    ui_notice_post_text(sent?UI_NOTICE_INFO:UI_NOTICE_ERROR,"print.request",
-        sent?UI_N_("Print request sent"):UI_N_("Print request not sent"),
-        sent?UI_N_("Print sent; paper output unverified"):UI_N_("Check controller connection."));
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        page_01_action_run(PAGE_01_ACTION_PRINT);
 }
 
 void page_01_qr_btn_event_cb(lv_event_t* e)
@@ -245,11 +208,8 @@ void page_01_qr_btn_event_cb(lv_event_t* e)
 
 void page_01_curr_btn_event_cb(lv_event_t* e)
 {
-    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
-
-        ui_manager_switch(UI_PAGE_CURR);
-    }
-
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED)
+        page_01_action_run(PAGE_01_ACTION_CURRENCY);
 }
 
 void page_03_batch_set_result(bool success, const setting_batch_result_t *result)
@@ -272,4 +232,68 @@ void page_03_batch_set_result(bool success, const setting_batch_result_t *result
 void page_03_update_menu_button_states_refresh(void)
 {
     ui_page_03_menu_refresh_data(UI_DATA_TOPIC_MACHINE_SETTINGS);
+}
+
+
+void page_01_action_run(page_01_action_t action)
+{
+    switch (action) {
+    case PAGE_01_ACTION_MODE:
+        page_01_mode_cycle();
+        break;
+    case PAGE_01_ACTION_LIST:
+        /* Detail requests were already sent at denomination completion. */
+        ui_manager_push_page(UI_PAGE_LIST);
+        break;
+    case PAGE_01_ACTION_MENU:
+        ui_manager_push_page(UI_PAGE_MENU);
+        break;
+    case PAGE_01_ACTION_SETTINGS: {
+        uint8_t version_cmd = 0x01;
+        protocol_send(0x17, &version_cmd, 1);
+        ui_manager_switch(UI_PAGE_SET_PASSAGE);
+        break;
+    }
+    case PAGE_01_ACTION_START:
+        app_command_runtime_request_count_start();
+        break;
+    case PAGE_01_ACTION_CLEAR:
+        app_command_runtime_clear_counting_data("user clear");
+        break;
+    case PAGE_01_ACTION_ADD:
+        (void)setting_service_request_add(!machine_state_add_enabled());
+        break;
+    case PAGE_01_ACTION_WORK:
+        (void)setting_service_request_work_mode(machine_state_work_mode() ? 0 : 1);
+        break;
+    case PAGE_01_ACTION_SORT:
+        (void)setting_service_request_fo_mode((uint8_t)((machine_state_fo_mode() + 1) % 4));
+        break;
+    case PAGE_01_ACTION_BATCH:
+        if (ui_state_main_batch_action_get() == UI_MAIN_BATCH_SETTINGS)
+            page_03_menu_open_batch();
+        else
+            (void)workspace_service_batch_next();
+        break;
+    case PAGE_01_ACTION_SPEED:
+        (void)setting_service_request_speed((uint8_t)((machine_state_speed() + 1) % 3));
+        break;
+    case PAGE_01_ACTION_PRINT: {
+        const char *reason = receipt_print_blocker(0);
+        if (reason) {
+            ui_notice_post_text(UI_NOTICE_WARNING, "print.request", UI_N_("Printing"), reason);
+            break;
+        }
+        bool sent = receipt_print_request(0);
+        ui_notice_post_text(sent ? UI_NOTICE_INFO : UI_NOTICE_ERROR, "print.request",
+            sent ? UI_N_("Print request sent") : UI_N_("Print request not sent"),
+            sent ? UI_N_("Print sent; paper output unverified") : UI_N_("Check controller connection."));
+        break;
+    }
+    case PAGE_01_ACTION_CURRENCY:
+        ui_manager_switch(UI_PAGE_CURR);
+        break;
+    default:
+        break;
+    }
 }

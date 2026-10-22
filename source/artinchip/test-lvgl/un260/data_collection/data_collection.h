@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define DATA_COLLECTION_REQUEST_TIMEOUT_MS 3000U
+#define DATA_COLLECTION_REQUEST_TIMEOUT_MS 1500U
 
 typedef enum {
     DATA_COLLECT_MODE_NONE = 0,
@@ -23,21 +23,6 @@ typedef enum {
     DATA_COLLECTION_REPLY_UNKNOWN,
 } data_collection_reply_result_t;
 
-typedef enum {
- DATA_COLLECTION_OFF,DATA_COLLECTION_READY,DATA_COLLECTION_OPENING,DATA_COLLECTION_OPEN_UNKNOWN,
- DATA_COLLECTION_COUNTING,DATA_COLLECTION_COLLECTING,DATA_COLLECTION_WAITING,DATA_COLLECTION_SUCCESS,
- DATA_COLLECTION_CLOSING,DATA_COLLECTION_CLOSE_UNKNOWN,DATA_COLLECTION_ERROR
-} data_collection_phase_t;
-typedef struct {
- data_collect_mode_t mode,target;
- data_collection_phase_t phase;
- bool pending,uncertain,counting;
- uint16_t pcs;
- uint32_t completed;
-} data_collection_snapshot_t;
-void data_collection_snapshot(data_collection_snapshot_t *out);
-void data_collection_count_start(void);
-void data_collection_count_end(uint16_t pcs);
 data_collect_mode_t data_collection_state_mode(void);
 uint16_t data_collection_state_pcs(void);
 const char *data_collection_state_status(void);

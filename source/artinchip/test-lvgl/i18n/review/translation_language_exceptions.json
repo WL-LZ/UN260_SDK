@@ -192,20 +192,41 @@
     "tr": {
       "NO. %02d": "Native Turkish abbreviation No. for ordinal number, not negative No.",
       "No.": "Native Turkish number abbreviation.",
-      "UI_TEXT_PAGE01_DETAIL_COL_NO": "Native Turkish number abbreviation in ordinal column."
+      "UI_TEXT_PAGE01_DETAIL_COL_NO": "Native Turkish number abbreviation in ordinal column.",
+      "Demo": "Established Turkish demonstration abbreviation.",
+      "Model": "Native Turkish same-spelling noun for device model."
     },
     "fr": {
-      "MULTI": "Native French short option Multi in currency selector."
+      "MULTI": "Native French short option Multi in currency selector.",
+      "Admin": "Short form of French administrateur on compact control.",
+      "Original": "Native French same-spelling adjective.",
+      "Pause": "Native French same-spelling noun/action.",
+      "min": "Standard abbreviation of minute."
     },
     "de": {
-      "MULTI": "German common commercial compound prefix Multi, here the multiple-currency selector; not a global exception for unrelated English copy."
+      "MULTI": "German common commercial compound prefix Multi, here the multiple-currency selector; not a global exception for unrelated English copy.",
+      "Admin": "Established German Administrator abbreviation on compact control.",
+      "Demo": "Established German demonstration abbreviation.",
+      "Firmware": "Established German technical noun.",
+      "Original": "Native German same-spelling noun.",
+      "Pause": "Native German same-spelling noun/action.",
+      "Panel key\u0004Reset": "Established German technical reset control label on this compact side key; expanded filter instructions remain German. Exact context only."
     },
     "pl": {
       "Mar": {
         "reason": "Native Polish neutral calendar abbreviation mar, shared by day+month and standalone/month+day UI. Not the English verb mar.",
         "source": "https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-dates-full/main/pl/ca-gregorian.json",
         "evidence": "CLDR both Gregorian format.abbreviated.3 and stand-alone.abbreviated.3 = mar; fullformat marca and standalone marzec are different grammatical forms."
-      }
+      },
+      "Admin": "Established Polish administrator abbreviation on compact control.",
+      "Demo": "Established Polish demonstration abbreviation.",
+      "Model": "Native Polish same-spelling noun.",
+      "Operator": "Native Polish same-spelling occupation noun.",
+      "min": "Standard abbreviation of minuta.",
+      "Panel key\u0004Operator": "Operator is the native Polish same-spelling noun for the operator control; exact panel-key context only."
+    },
+    "ar": {
+      "Panel key\u0004PIN": "Exact compact security-key label uses the established PIN identifier; expanded instructions remain Arabic. No global PIN exemption."
     }
   },
   "allowed_words_by_key": {
@@ -392,6 +413,24 @@
           "MG56"
         ],
         "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "ADD combines consecutive counts. Recounting the same notes can count them twice.": {
+        "words": [
+          "ADD"
+        ],
+        "reason": "Exact named ADD control referenced by this explanatory sentence; ordinary verbs remain translated."
+      },
+      "Historical records: export HTML, then print on a computer.": {
+        "words": [
+          "HTML"
+        ],
+        "reason": "HTML is the export document format identity, not an operation word."
+      },
+      "Totals unavailable for MULTI": {
+        "words": [
+          "MULTI"
+        ],
+        "reason": "Currency identifier MULTI must remain English per project currency rules; surrounding sentence is translated."
       }
     },
     "ko": {
@@ -745,6 +784,48 @@
           "PS2"
         ],
         "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "ADD combines consecutive counts. Recounting the same notes can count them twice.": {
+        "words": [
+          "ADD"
+        ],
+        "reason": "Exact named ADD control referenced by this explanatory sentence; ordinary verbs remain translated."
+      },
+      "Historical records: export HTML, then print on a computer.": {
+        "words": [
+          "HTML"
+        ],
+        "reason": "HTML is the export document format identity, not an operation word."
+      },
+      "Totals unavailable for MULTI": {
+        "words": [
+          "MULTI"
+        ],
+        "reason": "Currency identifier MULTI must remain English per project currency rules; surrounding sentence is translated."
+      },
+      "Admin PIN": {
+        "words": [
+          "PIN"
+        ],
+        "reason": "Established PIN security credential acronym; Korean surrounding action and description are translated. Exact security keys only."
+      },
+      "Enter your 4-digit PIN": {
+        "words": [
+          "PIN"
+        ],
+        "reason": "Established PIN security credential acronym; Korean surrounding action and description are translated. Exact security keys only."
+      },
+      "PIN length": {
+        "words": [
+          "PIN"
+        ],
+        "reason": "Established PIN security credential acronym; Korean surrounding action and description are translated. Exact security keys only."
+      },
+      "Verify PIN": {
+        "words": [
+          "PIN"
+        ],
+        "reason": "Established PIN security credential acronym; Korean surrounding action and description are translated. Exact security keys only."
       }
     },
     "ja": {
@@ -1092,6 +1173,24 @@
           "MG56"
         ],
         "reason": "Exact numbered magnetic sensor waveform channel identity, paired with native waveform label in page_21_set_wave; no blanket MG word exemption."
+      },
+      "ADD combines consecutive counts. Recounting the same notes can count them twice.": {
+        "words": [
+          "ADD"
+        ],
+        "reason": "Exact named ADD control referenced by this explanatory sentence; ordinary verbs remain translated."
+      },
+      "Historical records: export HTML, then print on a computer.": {
+        "words": [
+          "HTML"
+        ],
+        "reason": "HTML is the export document format identity, not an operation word."
+      },
+      "Totals unavailable for MULTI": {
+        "words": [
+          "MULTI"
+        ],
+        "reason": "Currency identifier MULTI must remain English per project currency rules; surrounding sentence is translated."
       }
     },
     "ar": {
@@ -1367,6 +1466,24 @@
           "PS2"
         ],
         "reason": "Exact numbered optical sensor identity, paired with native fault or transport-location description in status/guide; retain physical PS identifier, not an English business action."
+      },
+      "ADD combines consecutive counts. Recounting the same notes can count them twice.": {
+        "words": [
+          "ADD"
+        ],
+        "reason": "Exact named ADD control referenced by this explanatory sentence; ordinary verbs remain translated."
+      },
+      "Historical records: export HTML, then print on a computer.": {
+        "words": [
+          "HTML"
+        ],
+        "reason": "HTML is the export document format identity, not an operation word."
+      },
+      "Totals unavailable for MULTI": {
+        "words": [
+          "MULTI"
+        ],
+        "reason": "Currency identifier MULTI must remain English per project currency rules; surrounding sentence is translated."
       }
     }
   },

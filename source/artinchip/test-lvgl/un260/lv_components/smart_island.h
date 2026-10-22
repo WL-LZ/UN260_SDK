@@ -43,6 +43,8 @@ typedef void (*smart_island_action_cb_t)(uint8_t action_id); //动作按钮回�
 void smart_island_create(lv_obj_t *parent); //创建灵动岛
 void smart_island_destroy(void); //销毁灵动岛
 void smart_island_set_suspended(bool suspended); //主页面隐藏时暂停对象刷新
+/* Whether adjacent status controls can be shown without covering an active scene. */
+bool smart_island_status_slot_available(void);
 void smart_island_refresh_time(void); //刷新默认时间显示
 void smart_island_set_visual(smart_island_visual_t visual, bool anim_en); //设置视觉形态
 void smart_island_notify_count_start(void); //通知：开始点钞

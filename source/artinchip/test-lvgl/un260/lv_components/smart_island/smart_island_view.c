@@ -1533,6 +1533,16 @@ void smart_island_view_notice_collapse(lv_anim_ready_cb_t ready_cb)
  * before it is attached to the new page. */
 static void smart_island_prepare_reparent(void)
 {
+    lv_anim_t *collapse = lv_anim_get(g_si_ctx.objects.root, smart_island_anim_w_cb);
+
+    /* The result hold has already expired when its collapse begins. Deleting
+     * that animation must also commit the scene transition it owns. */
+    if (collapse && collapse->ready_cb == smart_island_result_collapse_finish_cb) {
+        smart_island_result_collapse_finish_cb(NULL);
+    }
+    smart_island_pulse_stop();
+    smart_island_counting_anim_stop();
+
     lv_obj_t *animated_objects[] = {
         g_si_ctx.objects.root,
         g_si_ctx.objects.page_info,
@@ -1553,10 +1563,21 @@ static void smart_island_prepare_reparent(void)
         }
     }
 
+    /* Animation cancellation does not apply its final value. Settle the
+     * retained content before another page presents it. Warning text opacity
+     * and positions remain owned by its flash/marquee resume path. */
+    if (g_si_ctx.view.scene != SMART_ISLAND_SCENE_WARNING) {
+        smart_island_reset_compact_header_position();
+        lv_obj_set_style_text_opa(g_si_ctx.objects.title, LV_OPA_COVER, 0);
+    }
+    lv_obj_set_style_bg_opa(g_si_ctx.objects.dot, LV_OPA_COVER, 0);
+    lv_obj_set_style_text_opa(g_si_ctx.objects.time, LV_OPA_COVER, 0);
+    if (g_si_ctx.counting.value_initialized) {
+        smart_island_counting_value_finish_cb(NULL);
+    }
+
     g_si_ctx.view.anim_running = false;
     g_si_ctx.view.bg_anim_running = false;
-    g_si_ctx.view.message_pulse_running = false;
-    g_si_ctx.counting.gate_anim_running = false;
     g_si_ctx.view.page_slide_dir = 0;
     g_si_ctx.view.swipe.pressed = false;
     g_si_ctx.view.swipe.swiped = false;
@@ -1581,14 +1602,14 @@ void smart_island_create(lv_obj_t *parent)
 
             /* create(parent) means that this instance is active on parent.
              * Do not inherit the cached main page's suspended state. */
-            g_si_ctx.lifecycle.suspended = false;
+            smart_island_set_suspended(false);
             smart_island_visual_apply_now(g_si_ctx.view.visual);
             smart_island_reset_page_positions();
             if (g_si_ctx.lifecycle.dirty) {
                 smart_island_rebuild_scene_texts();
-                smart_island_apply_scene_style();
                 g_si_ctx.lifecycle.dirty = false;
             }
+            smart_island_apply_scene_style();
             smart_island_modal_update();
         }
         return;

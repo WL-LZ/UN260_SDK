@@ -15,7 +15,7 @@ struct locale_bank {
     size_t count;
     lv_font_t *fonts[UN260_LOCALE_FONT_SIZE_COUNT];
     bool ready;
-    struct composed_font composed[64];
+    struct composed_font composed[128];
 };
 static struct locale_bank banks[] = UN260_LOCALE_BANKS;
 /* Font decoding makes many one-byte reads and seeks. Keep its read cache

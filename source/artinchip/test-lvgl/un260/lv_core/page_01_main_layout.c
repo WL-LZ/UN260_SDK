@@ -15,7 +15,7 @@ enum { HOLD_MS=650, MOVE_SLOP=10, ITEM_COUNT=PAGE_01_MAIN_LAYOUT_ITEM_COUNT };
 static bool edit_feature_enabled=UI_MAIN_LAYOUT_EDIT_DEFAULT_ENABLED!=0;
 static struct {
     lv_obj_t *root, *items[ITEM_COUNT], *overlay, *marks[4], *hint, *bar;
-    lv_obj_t *actions[3];
+    lv_obj_t *actions[3], *hold_exclusions[2];
     lv_timer_t *timer;
     lv_indev_t *indev;
     void (*apply)(const ui_main_layout_t *);
@@ -68,6 +68,19 @@ static bool contains(lv_obj_t *object,const lv_point_t *point)
     lv_area_t area;lv_obj_get_coords(object,&area);
     return point->x>=area.x1 && point->x<=area.x2 && point->y>=area.y1 && point->y<=area.y2;
 }
+static bool hold_excluded(const lv_point_t *point)
+{
+    for (unsigned i = 0; i < 2; ++i)
+        if (contains(editor.hold_exclusions[i], point)) return true;
+    return false;
+}
+
+void page_01_main_layout_set_hold_exclusions(lv_obj_t *first, lv_obj_t *second)
+{
+    editor.hold_exclusions[0] = first;
+    editor.hold_exclusions[1] = second;
+}
+
 static bool hit_item(const lv_point_t *point,int *group,int *slot)
 {
     /* The editor's toolbar is not part of the underlying panel target. */
@@ -229,7 +242,8 @@ bool page_01_main_layout_pointer(lv_indev_t *indev,lv_event_code_t event,const l
         clear_drag();editor.start=editor.point;editor.tick=lv_tick_get();
         /* Resume/rebuild must not adopt a finger already held on another
          * page or before the feature was enabled. Require a fresh contact. */
-        editor.candidate=event==LV_EVENT_PRESSED && hit_item(&editor.point,&editor.group,&editor.source);
+        editor.candidate=event==LV_EVENT_PRESSED && !hold_excluded(&editor.point) &&
+            hit_item(&editor.point,&editor.group,&editor.source);
         if (editor.candidate) { lv_timer_reset(editor.timer);lv_timer_resume(editor.timer); }
     } else if (editor.candidate &&
         (abs(editor.point.x-editor.start.x)>MOVE_SLOP || abs(editor.point.y-editor.start.y)>MOVE_SLOP)) {

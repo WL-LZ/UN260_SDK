@@ -19,12 +19,13 @@ code=r'''
 typedef int boot_stage_t;
 #define UPGRADE_SESSION_NONE 0
 typedef struct {bool session_active;} calibration_state_snapshot_t;
-static bool mode=true,link=true,fault,busy,calibration,motor,aging,feed;
+static bool mode=true,link=true,fault,busy,calibration,motor,aging,feed,dynamic_capture;
 #define UI_PAGE_CIS_CALIB 9
 static int page=1;
 int ui_manager_get_current_page(void){return page;}
 bool diagnostic_calibration_allows_feed(void){return feed;}
 static int boot=3,upgrade,starts;
+bool ui_page_dynamic_capture_is_capturing(void){return dynamic_capture;}
 bool work_mode_service_diagnostic_ready(void){return mode;}
 const char *work_mode_service_status_msgid(void){return "Manual mode not confirmed";}
 bool protocol_send_is_ready(void){return link;}
@@ -42,8 +43,8 @@ code+=function('diagnostic_operation_blocker')+'\n'+function('app_command_runtim
 code+=r'''
 int main(void){
  assert(app_command_runtime_request_diagnostic_run()&&starts==1);
- bool *gates[]={&fault,&busy,&calibration,&motor,&aging};
- for(unsigned i=0;i<5;i++){*gates[i]=true;assert(!app_command_runtime_request_diagnostic_run());*gates[i]=false;}
+ bool *gates[]={&fault,&busy,&calibration,&motor,&aging,&dynamic_capture};
+ for(unsigned i=0;i<6;i++){*gates[i]=true;assert(!app_command_runtime_request_diagnostic_run());*gates[i]=false;}
  mode=false;assert(!app_command_runtime_request_diagnostic_run());mode=true;
  link=false;assert(!app_command_runtime_request_diagnostic_run());link=true;
  boot=0;assert(!app_command_runtime_request_diagnostic_run());boot=3;

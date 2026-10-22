@@ -13,6 +13,9 @@ typedef enum {
 
 void ui_main_create(lv_obj_t* parent);
 void ui_main_destroy(void);
+/* Display only: accepted on an idle, unobstructed Main; consumes the current
+ * contact and preserves machine mode, result data and navigation identity. */
+bool page_01_main_toggle_display_mode(void);
 /* Set by accepted count start/end reports, independent of page lifetime. */
 void page_01_main_set_counting_locked(bool locked);
 bool page_01_main_is_created(void);

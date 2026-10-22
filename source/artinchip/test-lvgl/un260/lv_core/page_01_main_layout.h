@@ -14,6 +14,8 @@ void page_01_main_layout_attach(lv_obj_t *root, lv_obj_t *const items[PAGE_01_MA
  * an active draft, drains its touch, and retains the last saved positions.
  * This policy survives page suspend/rebuild; the macro sets its boot default. */
 void page_01_main_layout_set_enabled(bool enabled);
+/* Reserved long-press targets remain movable after entering edit elsewhere. */
+void page_01_main_layout_set_hold_exclusions(lv_obj_t *first, lv_obj_t *second);
 bool page_01_main_layout_is_enabled(void);
 bool page_01_main_layout_is_editing(void);
 /* Main owns arbitration between its quick drawer and layout editor. */

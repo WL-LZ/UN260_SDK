@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import gen_i18n
 
-SIZES = (10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 37, 50, 55)
+SIZES = (10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 26, 28, 32, 36, 37, 50, 55)
 
 
 def sha(path):

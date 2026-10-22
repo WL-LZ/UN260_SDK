@@ -50,8 +50,6 @@ typedef enum {
     UI_PAGE_CALCULATOR,
     UI_PAGE_CASH_JOURNAL,
     UI_PAGE_OPERATORS,
-    UI_PAGE_RECEIPTS,
-    UI_PAGE_TRAINING,
     UI_PAGE_COUNT
 } ui_page_t;
 

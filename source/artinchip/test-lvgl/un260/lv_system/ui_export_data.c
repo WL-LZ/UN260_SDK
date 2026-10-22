@@ -420,13 +420,6 @@ static bool ui_export_data_write_html_file(const char *file_path)
 
             lv_snprintf(reason_buf, sizeof(reason_buf), "%s",
                         counting_reject_reason_get(counting_data_current()->err_code[i]));
-            if (strcmp(reason_buf, "Size Unknow") == 0) {
-                lv_snprintf(reason_buf, sizeof(reason_buf), "%s", "Size Unknown");
-            } else if (strcmp(reason_buf, "Ort Unknow") == 0) {
-                lv_snprintf(reason_buf, sizeof(reason_buf), "%s", "Ort Unknown");
-            } else if (strcmp(reason_buf, "Version Unknow") == 0) {
-                lv_snprintf(reason_buf, sizeof(reason_buf), "%s", "Version Unknown");
-            }
             ui_export_data_escape_js_str(reason_js, sizeof(reason_js), reason_buf);
 
             if (counting_data_current()->err_pcs != NULL) {
@@ -542,13 +535,6 @@ static bool ui_export_data_write_csv_file(const char *file_path)
             no++;
             lv_snprintf(reason_buf, sizeof(reason_buf), "%s",
                         counting_reject_reason_get(counting_data_current()->err_code[i]));
-            if (strcmp(reason_buf, "Size Unknow") == 0) {
-                lv_snprintf(reason_buf, sizeof(reason_buf), "%s", "Size Unknown");
-            } else if (strcmp(reason_buf, "Ort Unknow") == 0) {
-                lv_snprintf(reason_buf, sizeof(reason_buf), "%s", "Ort Unknown");
-            } else if (strcmp(reason_buf, "Version Unknow") == 0) {
-                lv_snprintf(reason_buf, sizeof(reason_buf), "%s", "Version Unknown");
-            }
 
             if (counting_data_current()->err_pcs != NULL && counting_data_current()->err_pcs[i] > 0) {
                 fprintf(fp, "%d,%u,%s\n", no, (unsigned)counting_data_current()->err_pcs[i], reason_buf);

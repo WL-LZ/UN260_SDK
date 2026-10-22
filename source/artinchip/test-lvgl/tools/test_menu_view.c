@@ -1,3 +1,7 @@
+#include "un260/storage/protocol_log.h"
+#include "un260/lv_core/page_protocol_log.h"
+#include <stdbool.h>
+#include "test_page_background_asset.h"
 #include "un260/font/ui_locale_font_bank.h"
 #include "test_notice_sink.h"
 #include <assert.h>
@@ -149,7 +153,8 @@ bool workspace_store_scan_usb(void){return true;}
 uint32_t workspace_store_usb_images(void){return 0;}
 bool workspace_store_import_avatar(unsigned i){(void)i;return false;}
 const workspace_avatar_t *workspace_store_avatar(void){static workspace_avatar_t a;return &a;}
-bool workspace_service_applying(void){return false;}
+static bool profile_applying;
+bool workspace_service_applying(void){return profile_applying;}
 void workspace_service_cancel_apply(void){}
 const char *workspace_service_apply_message(void){return "";}
 workspace_apply_result_t workspace_service_apply_result(void){return WORKSPACE_APPLY_IDLE;}
@@ -352,11 +357,11 @@ static void raster(const char *name)
 static lv_res_t asset_info(lv_img_decoder_t *decoder,const void *src,lv_img_header_t *h)
 {
     (void)decoder;if(lv_img_src_get_type(src)!=LV_IMG_SRC_FILE)return LV_RES_INV;
-    const un260_compiled_asset_t *a=un260_compiled_asset_find(src);if(!a){fprintf(stderr,"Missing image: %s\n",(const char *)src);abort();}
+    const un260_compiled_asset_t *a=test_page_asset_find(src);if(!a){fprintf(stderr,"Missing image: %s\n",(const char *)src);abort();}
     memset(h,0,sizeof(*h));h->w=a->width;h->h=a->height;h->cf=LV_IMG_CF_TRUE_COLOR_ALPHA;return LV_RES_OK;
 }
 static lv_res_t asset_open(lv_img_decoder_t *decoder,lv_img_decoder_dsc_t *d)
-{if(asset_info(decoder,d->src,&d->header)!=LV_RES_OK)return LV_RES_INV;d->img_data=un260_compiled_asset_find(d->src)->pixels;return LV_RES_OK;}
+{if(asset_info(decoder,d->src,&d->header)!=LV_RES_OK)return LV_RES_INV;d->img_data=test_page_asset_find(d->src)->pixels;return LV_RES_OK;}
 static void asset_close(lv_img_decoder_t *decoder,lv_img_decoder_dsc_t *d){(void)decoder;(void)d;}
 static void seed_ledger(void)
 {
@@ -438,6 +443,13 @@ static void check_keyboard_labels(lv_obj_t *object)
     for(unsigned i=0;i<lv_obj_get_child_cnt(object);++i)check_keyboard_labels(lv_obj_get_child(object,i));
 }
 #include "test_alnum_keyboard_cases.h"
+static lv_obj_t *find_action(lv_obj_t *root,uintptr_t id){
+ if((uintptr_t)lv_obj_get_event_user_data(root,action)==id)return root;
+ for(unsigned i=0;i<lv_obj_get_child_cnt(root);i++){
+  lv_obj_t *found=find_action(lv_obj_get_child(root,i),id);if(found)return found;
+ }
+ return NULL;
+}
 #ifdef MENU_REAL_FONTS
 static unsigned menu_visual_overflows,menu_visual_checks;
 static void check_menu_role_line(lv_obj_t *label,const char *scope,bool button_role){
@@ -475,6 +487,53 @@ static void check_toggle_alignment(void){
   lv_obj_del(row);
  }
 }
+static void check_original_menu_positions(void){
+ lv_obj_update_layout(menu.root);
+ lv_obj_t *quick=find_action(menu.root,A_QUICK),*lock=find_action(menu.root,A_SETTINGS);
+ lv_obj_t *timeout=find_action(menu.body,A_TIMEOUT),*standby=find_action(menu.body,A_STANDBY);
+ assert(quick&&lock&&timeout&&standby);
+ assert(lv_obj_get_x(quick)+lv_obj_get_width(quick)==1204);
+ assert(lv_obj_get_y(quick)==14&&lv_obj_get_height(quick)==44);
+ assert(lv_obj_get_x(lock)==1212&&lv_obj_get_y(lock)==14&&lv_obj_get_width(lock)==44&&lv_obj_get_height(lock)==44);
+ assert(lv_obj_get_x(timeout)==325&&lv_obj_get_y(timeout)==165&&lv_obj_get_width(timeout)==159);
+ assert(lv_obj_get_x(standby)==58&&lv_obj_get_y(standby)==162&&lv_obj_get_width(standby)==426&&lv_obj_get_height(standby)==48);
+}
+static protocol_log_snapshot_t log_fixture;
+bool protocol_log_init(void){return true;}
+void protocol_log_snapshot(protocol_log_snapshot_t *out){*out=log_fixture;}
+bool protocol_log_start(void){return true;}
+bool protocol_log_stop(void){return true;}
+bool protocol_log_export(uint64_t id){(void)id;return true;}
+bool protocol_log_delete(uint64_t id){(void)id;return true;}
+static void check_log_status_preserves_buttons(void){
+ log_fixture.active=true;log_fixture.state=PLOG_ACTIVE;tick(220);page_protocol_log_poll();
+ lv_obj_t *dot=lv_obj_get_child(lv_layer_top(),-1);lv_obj_update_layout(dot);
+ assert(dot&&lv_obj_is_visible(dot));lv_area_t area;lv_obj_get_coords(dot,&area);
+ assert(area.x1==1270&&area.y1==2&&area.x2==1277&&area.y2==9);
+ assert(!lv_obj_has_flag(dot,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE));
+ check_original_menu_positions();raster("log-status-preserves-buttons");
+ unsigned children=lv_obj_get_child_cnt(lv_layer_top());
+ point=(lv_point_t){1273,5};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);
+ assert(lv_obj_get_child_cnt(lv_layer_top())==children);
+ unsigned navigations=nav_count;point=(lv_point_t){1233,37};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);
+ assert(nav_count==navigations+1);current=UI_PAGE_MENU;
+ log_fixture.active=false;log_fixture.busy=true;tick(220);page_protocol_log_poll();assert(lv_obj_is_visible(dot));
+ page_protocol_log_open();assert(lv_obj_get_child_cnt(lv_layer_top())==children+1);
+ page_protocol_log_close();assert(lv_obj_get_child_cnt(lv_layer_top())==children);
+ log_fixture.busy=false;log_fixture.state=PLOG_IDLE;tick(220);page_protocol_log_poll();assert(!lv_obj_is_visible(dot));
+ puts("PASS global log status: outer gutter, no touch capture, original buttons active, busy/off lifecycle and Debug entry");
+}
+static void check_original_settings_frame(void){
+ lv_settings_header_t header={.title=ui_tr("Settings"),.back=action};
+ lv_settings_frame_t frame=lv_settings_frame_create(lv_scr_act(),&header);
+ lv_settings_button(frame.footer,0,0,140,44,ui_tr("Save"),true,action,NULL);
+ lv_obj_update_layout(frame.root);lv_area_t back;lv_obj_get_coords(frame.back,&back);
+ assert(back.x1==1162&&back.y1==15);
+ assert(lv_obj_get_width(frame.back)==76&&lv_obj_get_height(frame.back)==42);
+ assert(lv_obj_get_x(frame.footer)==640&&lv_obj_get_y(frame.footer)==15&&lv_obj_get_width(frame.footer)==494);
+ char shot[80];snprintf(shot,sizeof(shot),"restored-settings-%s",ui_lang_current()->tag);raster(shot);
+ lv_obj_del(frame.root);
+}
 static void check_sound_text(lv_obj_t *object){
  check_menu_role_line(object,"sound settings",false);
  for(unsigned i=0;i<lv_obj_get_child_cnt(object);++i)check_sound_text(lv_obj_get_child(object,i));
@@ -506,7 +565,7 @@ static void check_options_field_gaps(void){
  char value[64];snprintf(value,sizeof(value),ui_trn("%u notes",100),100U);lv_obj_t *probe=lv_label_create(lv_scr_act());lv_label_set_text(probe,value);assert(!strcmp(lv_label_get_text(lv_obj_get_child(capacity,0)),lv_label_get_text(probe)));assert(!strcmp(lv_label_get_text(lv_obj_get_child(batch,0)),lv_label_get_text(probe)));lv_obj_del(probe);
 }
 static void check_segment_selection_cases(void){
- const char *groups[][4]={{ui_tr("Mixed"),ui_tr("Single"),ui_tr("Count"),NULL},{ui_tr("Low"),ui_tr("Standard"),ui_tr("High"),NULL},{ui_tr("Auto"),ui_tr("Manual"),NULL,NULL},{ui_tr("Off"),ui_tr("Face"),ui_tr("Orient."),ui_tr("Both")}};
+ const char *groups[][4]={{ui_text_get(UI_TEXT_PAGE01_BOTTOM_MODE_MDC),ui_text_get(UI_TEXT_PAGE01_BOTTOM_MODE_SDC),ui_text_get(UI_TEXT_PAGE01_BOTTOM_MODE_CNT),NULL},{ui_tr("Low"),ui_tr("Standard"),ui_tr("High"),NULL},{ui_tr("Auto"),ui_tr("Manual"),NULL,NULL},{ui_tr("Off"),ui_tr("Face"),ui_tr("Orient."),ui_tr("Both")}};
  const unsigned counts[]={3,3,2,4};const unsigned ids[]={450,400,410,430};const char *names[]={"mode","speed","work","sort"};
  for(unsigned g=0;g<4;++g)for(unsigned selected=0;selected<counts[g];++selected){
   lv_obj_t *owner=box(lv_scr_act(),0,0,504,248,PANEL,18);segments(owner,210,12,276,42,groups[g],counts[g],selected,ids[g]);lv_obj_update_layout(owner);
@@ -545,6 +604,65 @@ static void check_profile_summary_locales(void){
  puts("CHECK real profile summary in ten locales: all 3 speeds and actual default, native ADD, modes0..3, sorting0..3, batch1/2/5/102/200, UTF-8 and digits; failures accumulate for final strict assertion");
 }
 #endif
+static void test_operator_identity_and_language_access(void)
+{
+    assert(model.user_count>=2);
+    uint32_t original=model.active_id,first=model.users[0].id,second=model.users[1].id;
+    unsigned tab=menu.tab,sub=menu.sub;
+    model.active_id=first;menu.tab=4;menu.sub=0;menu.selected_user=0;render();
+    click(model.users[1].name);assert(menu.selected_user==1&&model.active_id==first);
+    lv_obj_t *switch_button=find_action(menu.body,A_USER_SWITCH);assert(switch_button);
+    assert(lv_obj_get_x(switch_button)==408&&lv_obj_get_y(switch_button)==202);
+    assert(lv_obj_get_width(switch_button)==220&&lv_obj_get_height(switch_button)==32);
+    lv_event_send(switch_button,LV_EVENT_CLICKED,NULL);
+    assert(settings_detail_overlay_is_open()&&model.active_id==first);raster("operators-switch-confirm");
+    click("Cancel");assert(!settings_detail_overlay_is_open()&&model.active_id==first);
+    switch_button=find_action(menu.body,A_USER_SWITCH);lv_event_send(switch_button,LV_EVENT_CLICKED,NULL);
+    menu.selected_user=0; /* An open confirmation owns its original stable ID. */
+    click("Confirm switch");assert(model.active_id==second);
+    model.active_id=first;menu.selected_user=1;render();
+    switch_button=find_action(menu.body,A_USER_SWITCH);lv_event_send(switch_button,LV_EVENT_CLICKED,NULL);
+    busy=true;click("Confirm switch");assert(model.active_id==first);busy=false;
+    switch_button=find_action(menu.body,A_USER_SWITCH);lv_event_send(switch_button,LV_EVENT_CLICKED,NULL);
+    model.disabled[1]=true;click("Confirm switch");assert(model.active_id==first);model.disabled[1]=false;
+    switch_button=find_action(menu.body,A_USER_SWITCH);lv_event_send(switch_button,LV_EVENT_CLICKED,NULL);
+    ui_page_03_menu_suspend();assert(!settings_detail_overlay_is_open()&&model.active_id==first);
+    ui_page_03_menu_resume();
+    menu.tab=4;menu.sub=2;render();
+    lv_obj_t *language=find_action(menu.body,A_LANGUAGE);assert(language);
+    assert(lv_obj_get_x(language)==20&&lv_obj_get_y(language)==77);
+    assert(lv_obj_get_width(language)==464&&lv_obj_get_height(language)==60);
+    unsigned navigations=nav_count;lv_event_send(language,LV_EVENT_CLICKED,NULL);
+    assert(nav_count==navigations+1); /* Opens the existing PIN page, never the language page directly. */
+    menu.batch_dirty=true;lv_event_send(language,LV_EVENT_CLICKED,NULL);assert(nav_count==navigations+1);menu.batch_dirty=false;
+    menu.saving=1;lv_event_send(language,LV_EVENT_CLICKED,NULL);assert(nav_count==navigations+1);menu.saving=0;
+    model.active_id=original;menu.tab=tab;menu.sub=sub;menu.selected_user=0;clear_notice();render();
+    puts("PASS operator selection/cancel/confirm/stable target/busy/disabled/suspend; language reuses guarded PIN entry with original layout");
+}
+static void test_busy_feedback_lifetime(void)
+{
+    unsigned starts=operation_starts, navigations=nav_count;
+    lv_obj_t *quick=find_action(menu.root,A_QUICK);assert(quick);
+    for(unsigned profile=0;profile<2;++profile){
+        menu.saving=profile?0:1;profile_applying=profile!=0;
+        lv_event_send(quick,LV_EVENT_CLICKED,NULL);
+        assert(!menu.quick && test_notice_visible && test_notice_kind==UI_NOTICE_WARNING);
+        assert(!strcmp(test_notice_key,"menu.operation"));
+        assert(operation_starts==starts && nav_count==navigations);
+        assert(menu.saving==(profile?0:1) && profile_applying==(profile!=0));
+        ui_notice_clear("menu.operation");
+    }
+    menu.saving=0;profile_applying=false;open_quick();assert(menu.quick);
+    bool gestures_before=gestures;
+    menu.saving=1;
+    lv_event_send(menu.quick_controls.tiles[QUICK_GESTURES],LV_EVENT_CLICKED,NULL);
+    assert(test_notice_visible && test_notice_kind==UI_NOTICE_WARNING);
+    assert(!strcmp(test_notice_key,"menu.operation") && gestures==gestures_before);
+    assert(operation_starts==starts && nav_count==navigations && menu.saving==1);
+    menu.saving=0;destroy_quick();ui_notice_clear("menu.operation");
+    puts("PASS busy Menu/profile/Quick feedback is finite; no extra task, setting, navigation or cancellation");
+}
+
 int main(void)
 {
     test_local_feedback_contract();
@@ -565,8 +683,10 @@ int main(void)
     check_profile_summary_locales();
 #endif
     ui_page_03_menu_create(lv_scr_act());tick(200);
+    test_operator_identity_and_language_access();
     assert(menu.tab==1&&!find(menu.root,"Overview")&&!find(menu.root,"Records"));
     raster("menu-default-count");assert(!test_notice_visible);
+    test_busy_feedback_lifetime();
     assert(main_batch_action==UI_MAIN_BATCH_SETTINGS);
     click("Main Batch: Settings");assert(main_batch_action==UI_MAIN_BATCH_CYCLE);
     raster("menu-main-batch-cycle");
@@ -582,7 +702,7 @@ int main(void)
     menu.tab=5;menu.sub=1;menu.dirty=true;tick(120);
     page_03_menu_open_batch();tick(120);assert(menu.tab==1&&menu.sub==0&&find(menu.body,"Batch presets"));
     click("Quick");assert(menu.quick);click("Close");assert(!menu.quick);
-    unsigned nav_before=nav_count;point=(lv_point_t){1133,37};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);assert(nav_count==nav_before+1);
+    unsigned nav_before=nav_count;point=(lv_point_t){1233,37};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);assert(nav_count==nav_before+1);
     nav_before=nav_count;point=(lv_point_t){47,37};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);assert(nav_count==nav_before+1&&current==UI_PAGE_MAIN);current=UI_PAGE_MENU;
     nav_before=nav_count;assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);assert(nav_count==nav_before+1);current=UI_PAGE_MENU;
     click("Count");assert(menu.tab==1);assert(find(menu.body,"Edit")&&find(menu.body,"Remove"));raster("menu-batch");click("Add slot");assert(menu.batch_dirty);assert(!lv_obj_has_state(find(menu.body,"Use this preset"),LV_STATE_DISABLED));assert(find(menu.body,"Save"));click("Cancel");assert(!menu.batch_dirty);
@@ -601,8 +721,10 @@ int main(void)
     click("Profiles");raster("menu-profiles");click("Delete");assert(settings_detail_overlay_is_open());raster("menu-delete-confirm");click("Cancel");assert(model.users[0].profile_count==2);
     click("Delete");click("Delete");assert(model.users[0].profile_count==1);ui_page_03_menu_refresh_data(0);tick(100);assert(model.users[0].profile_count==1);assert(lv_obj_has_state(find(menu.body,"Delete"),LV_STATE_DISABLED));
     click("Options");raster("menu-options");
-    click("Mixed");assert(mode_requests==0&&!settings_detail_overlay_is_open());
-    click("Single");assert(mode_requests==1&&!settings_detail_overlay_is_open()&&!test_notice_visible);
+    assert(!find(menu.body,"Mixed")&&!find(menu.body,"Single"));
+    assert(find(menu.body,"MDC")&&find(menu.body,"SDC")&&find(menu.body,"CNT"));
+    click("MDC");assert(mode_requests==0&&!settings_detail_overlay_is_open());
+    click("SDC");assert(mode_requests==1&&!settings_detail_overlay_is_open()&&!test_notice_visible);
     click("High");assert(!settings_detail_overlay_is_open()&&!test_notice_visible);
     while(model.users[0].profile_count<WORKSPACE_PROFILES){
         workspace_profile_t extra=model.users[0].profiles[0];
@@ -785,11 +907,12 @@ int main(void)
     lv_obj_add_state(menu.nav[1],LV_STATE_FOCUS_KEY);raster("studio-focus");lv_obj_clear_state(menu.nav[1],LV_STATE_FOCUS_KEY);
     const char *shots[][5]={{NULL},{"batch","profiles","options"},{"records","recounts","history","verify","day-closes"},{"print","qr"},{"operators","interaction","display"},{"reject","care","device"}};
     menu.tab=3;menu.sub=0;menu.dirty=true;tick(100);
-    unsigned entry_nav=nav_count;click("Receipts");assert(current==UI_PAGE_RECEIPTS&&nav_count==entry_nav+1&&menu.sub==0);
-    menu.tab=5;menu.sub=0;menu.dirty=true;tick(100);click("Getting started");
-    assert(current==UI_PAGE_TRAINING&&nav_count==entry_nav+2&&menu.sub==0);current=UI_PAGE_MENU;
+    assert(subcounts[3]==2&&!find(menu.root,"Receipts"));
+    assert(find(menu.root,"Print")&&find(menu.root,"QR export"));
+    menu.tab=5;menu.sub=0;menu.dirty=true;tick(100);
+    assert(subcounts[5]==3&&!find(menu.root,"Getting started"));
+    assert(find(menu.root,"Reject guide")&&find(menu.root,"Care")&&find(menu.root,"Device"));
     for(unsigned tab=1;tab<6;tab++)for(unsigned sub=0;sub<subcounts[tab];sub++){
-        if((tab==3&&sub==2)||(tab==5&&sub==3))continue; /* Separate-page links, tested above. */
         menu.tab=tab;menu.sub=sub;menu.selected_group=menu.selected_close=0;menu.record_pending=menu.verify_pick=false;menu.dirty=true;tick(100);
         char filename[80];snprintf(filename,sizeof(filename),"studio-%s",shots[tab][sub]);raster(filename);
         assert(lv_obj_get_y(menu.body)==76&&lv_obj_get_height(menu.body)==296);
@@ -814,7 +937,7 @@ int main(void)
         for(unsigned i=0;i<lv_obj_get_child_cnt(detail);i++){lv_obj_t *child=lv_obj_get_child(detail,i);assert(lv_obj_get_y(child)+lv_obj_get_height(child)<=248);}
         if(code==0x14||code==0x1e||code==0x2e){lv_obj_scroll_to_y(menu.task_scroll,(code-1)*58-90,LV_ANIM_OFF);char filename[64];snprintf(filename,sizeof(filename),"studio-reject-%02x",code);raster(filename);}
     }
-    assert(strstr(counting_reject_guide_get(0x1e)->title,"denomination"));assert(strstr(counting_reject_guide_get(0x2e)->title,"Duplicate"));assert(strstr(counting_reject_guide_get(0xfe)->title,"Unknown"));
+    assert(!strcmp(counting_reject_guide_get(0x1e)->title,"IMG Version Unknow"));assert(!strcmp(counting_reject_guide_get(0x2e)->title,"OCR1 Error"));assert(strstr(counting_reject_guide_get(0xfe)->title,"Unknown"));
     menu.tab=4;menu.sub=0;menu.dirty=true;tick(100);assert(find(menu.body,"Manage operators"));raster("studio-operators-entry");
     for(unsigned i=model.user_count;i<8;++i){char n[25];snprintf(n,sizeof(n),"Operator %u",i+1);assert(workspace_add_user(&model,n,NULL));}
     revision++;menu.dirty=true;tick(120);raster("operators-summary-eight");
@@ -828,10 +951,14 @@ int main(void)
     for(size_t language=0;language<ui_lang_count();++language){
         const ui_locale_t *locale=ui_lang_at(language);assert(ui_lang_prepare_resources(locale->id));ui_lang_set(locale->id);
         check_segment_selection_cases();
-        check_toggle_alignment();
+        check_toggle_alignment();check_original_settings_frame();
         ui_page_03_menu_create(lv_scr_act());
-        menu.tab=4;menu.sub=2;menu.dirty=true;tick(100);check_sound_text(menu.body);check_keyboard_labels(menu.body);
+        menu.tab=4;menu.sub=2;menu.dirty=true;tick(100);check_sound_text(menu.body);check_keyboard_labels(menu.body);check_original_menu_positions();if(language==0)check_log_status_preserves_buttons();
+        lv_obj_t *language_entry=find_action(menu.body,A_LANGUAGE);assert(language_entry);
+        check_menu_role_line(lv_obj_get_child(language_entry,3),"protected language hint",false);
         char sound_shot[80];snprintf(sound_shot,sizeof(sound_shot),"sound-%s",locale->tag);raster(sound_shot);
+        menu.sub=0;menu.selected_user=1;menu.dirty=true;tick(100);check_keyboard_labels(menu.body);
+        snprintf(sound_shot,sizeof(sound_shot),"operators-refined-%s",locale->tag);raster(sound_shot);
         menu.tab=1;menu.sub=1;menu.dirty=true;tick(100);
         const workspace_user_t *profiles_user=user();
         assert(workspace_profile_has_default_name(&profiles_user->profiles[0]));

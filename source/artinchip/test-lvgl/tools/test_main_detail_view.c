@@ -6,6 +6,9 @@
 #include "lvgl/lvgl.h"
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/lv_system/ui_lang.h"
+#ifdef MAIN_DETAIL_REAL_FONTS
+#include "un260/font/ui_locale_font_bank.h"
+#endif
 /* Inspect actual private projection, without firmware test accessors. */
 #include "un260/lv_core/page_01_main_detail.c"
 
@@ -305,6 +308,144 @@ static void test_lifecycle(void)
 }
 
 
+/* Protocol framework 10 / 0x0C. Keep this fixture independent of the
+ * production catalogue, including protocol spelling and the reserved code. */
+static const char *const protocol_reject_names[] = {
+    "No Error",
+    "IMG Feature1 Suspect", "IMG Feature2 Suspect", "IMG Feature3 Suspect",
+    "IMG Feature4 Suspect", "IMG Feature5 Suspect", "IMG Feature6 Suspect",
+    "IMG Feature7 Suspect", "IMG Feature8 Suspect", "IMG Feature9 Suspect",
+    "IMG Feature10 Suspect", "IMG Feature11 Suspect", "IMG Feature12 Suspect",
+    "IMG Feature13 Suspect", "IMG Feature14 Suspect", "IMG Feature15 Suspect",
+    "ST Full", "MG Quantity Suspect", "MG Position Suspect", "MT Quantity Suspect",
+    "MT Code Suspect", "UV Suspect", "Double Suspect 1", "Double Suspect 2",
+    "Long", "Short", "GAP", "IMG Time out", "IMG Size Unknow", "IMG Ort Unknow",
+    "IMG Version Unknow", "IMG Face Error", "IMG Ort Error", "ANGLE", "IR-OVD",
+    "IR –MT", "Hole", "DogEar", "DIRT", "Tape", "Tears", "Crumples", "De_ink",
+    "Soiling", "eError_Limpness", "IMG Face&Ort Error", "OCR1 Error", "OCR2 Error",
+    "OCR3 Error", "0x31"
+};
+
+static unsigned protocol_glyph_failures;
+
+static void assert_protocol_label(lv_obj_t *label, const char *expected,
+                                  const char *locale, unsigned code)
+{
+    assert(!strcmp(lv_label_get_text(label), expected));
+    const lv_font_t *font = lv_obj_get_style_text_font(label, 0);
+    assert(font == ui_message_font(&lv_font_instrument_sans_medium_18));
+    assert(lv_label_get_long_mode(label) == LV_LABEL_LONG_CLIP);
+    lv_point_t size;
+    lv_txt_get_size(&size, expected, font,
+                   lv_obj_get_style_text_letter_space(label, 0),
+                   lv_obj_get_style_text_line_space(label, 0),
+                   LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    if (size.x > lv_obj_get_content_width(label) ||
+        size.y != lv_obj_get_height(label)) {
+        fprintf(stderr, "Protocol label clipped/wrapped: %s code=0x%02X text=%s measured=%dx%d label=%dx%d\n",
+                locale, code, expected, size.x, size.y,
+                lv_obj_get_content_width(label), lv_obj_get_height(label));
+    }
+    assert(size.x <= lv_obj_get_content_width(label));
+    assert(size.y == font->line_height && size.y == lv_obj_get_height(label));
+    for (uint32_t position = 0; expected[position];) {
+        uint32_t unicode = _lv_txt_encoded_next(expected, &position);
+        uint32_t next_position = position;
+        uint32_t next = _lv_txt_encoded_next(expected, &next_position);
+        lv_font_glyph_dsc_t glyph;
+        bool found = lv_font_get_glyph_dsc(font, &glyph, unicode, next);
+        if (!found || glyph.is_placeholder) {
+            fprintf(stderr, "Protocol glyph missing: locale=%s code=0x%02X Unicode=U+%04X text=%s\n",
+                    locale, code, (unsigned)unicode, expected);
+            ++protocol_glyph_failures;
+        }
+        /* Protocol names can also use this existing language-invariant role
+         * if a locale subset lacks a punctuation glyph. Verify, do not apply. */
+        const lv_font_t *english = ui_message_font_for(&lv_font_instrument_sans_medium_18, LANGUAGE_EN);
+        assert(lv_font_get_glyph_dsc(english, &glyph, unicode, next));
+        assert(!glyph.is_placeholder);
+    }
+    printf("PROTOCOL_RENDER locale=%s code=0x%02X width=%d available=%d height=%d text=%s\n",
+           locale, code, size.x, lv_obj_get_content_width(label), size.y, expected);
+    lv_point_t history_size;
+    lv_txt_get_size(&history_size, expected,
+                   ui_message_font(&lv_font_instrument_sans_medium_16),
+                   0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    printf("PROTOCOL_NARROW_MEASURE locale=%s code=0x%02X list18=%d list_available=170 history16=%d history_available=174\n",
+           locale, code, size.x, history_size.x);
+}
+
+static void test_protocol_reject_rendering(void)
+{
+    assert(sizeof(protocol_reject_names) / sizeof(protocol_reject_names[0]) == 50);
+    assert(ui_lang_count() == 10);
+    counting_sim_t *data = counting_data_mutable();
+    counting_data_clear_errors(data);
+    assert(counting_data_ensure_error_capacity(data, 50));
+    data->err_num = 50;
+    for (unsigned code = 0; code < 50; ++code) {
+        data->err_code[code] = code;
+        data->err_pcs[code] = code + 1;
+    }
+    size_t languages = 1;
+#ifdef MAIN_DETAIL_REAL_FONTS
+    ui_lang_set_resource_preparer(ui_locale_font_prepare);
+    ui_message_font_set_provider(ui_locale_font_compose);
+    languages = ui_lang_count();
+#endif
+    for (size_t language = 0; language < languages; ++language) {
+        const ui_locale_t *locale = ui_lang_at(language);
+        assert(locale && ui_lang_is_available(locale));
+#ifdef MAIN_DETAIL_REAL_FONTS
+        assert(ui_lang_prepare_resources(locale->id));
+#endif
+        ui_lang_set(locale->id);
+        assert(ui_lang_get() == locale->id);
+        /* Same production placement/dimensions as page_01_main.c. */
+        assert(page_01_main_detail_create(lv_scr_act(), 620, 76, 518, 244));
+        page_01_main_detail_refresh(PAGE_01_DETAIL_SECTION_C);
+        render();
+        assert(lv_obj_get_x(detail_view->root) == 620);
+        assert(lv_obj_get_y(detail_view->root) == 76);
+        assert(lv_obj_get_width(detail_view->root) == 536);
+        assert(lv_obj_get_height(detail_view->root) == 244);
+        assert(window()->count == 50);
+        assert(window()->rows == 6 && window()->row_height == 34);
+        assert(lv_obj_get_child_cnt(page_01_main_detail_scroll_obj()) == 8);
+        /* Original coordinates are the baseline, not derived from new labels. */
+        static const lv_coord_t original_x[] = {10, 70, 148};
+        static const lv_coord_t original_width[] = {48, 60, 336};
+        for (unsigned first = 0; first < 50; first += 5) {
+            assert(lv_recycled_list_scroll_to_index(active()->list, first));
+            render();
+            for (unsigned code = first; code < first + 5; ++code) {
+                lv_obj_t *row = row_at(code);
+                assert(lv_obj_get_y(row) >= 0 && lv_obj_get_y(row) <= 170);
+                assert(lv_obj_get_height(row) == 34);
+                assert(lv_obj_get_width(row) == 494);
+                for (unsigned column = 0; column < 3; ++column) {
+                    lv_obj_t *label = lv_obj_get_child(row, column);
+                    assert(lv_obj_get_x(label) == original_x[column]);
+                    assert(lv_obj_get_width(label) == original_width[column]);
+                    assert(lv_obj_get_x(label) + lv_obj_get_width(label) <= lv_obj_get_width(row));
+                    assert(abs(2 * lv_obj_get_y(label) + lv_obj_get_height(label) - 34) <= 1);
+                }
+                char ordinal[12]; snprintf(ordinal, sizeof(ordinal), "%u", code + 1);
+                assert(!strcmp(cell(code, 0), ordinal));
+                assert(!strcmp(cell(code, 1), ordinal));
+                assert_protocol_label(lv_obj_get_child(row, 2), protocol_reject_names[code], locale->tag, code);
+            }
+            char name[128];
+            snprintf(name, sizeof(name), "main-protocol-%s-%02X-%02X", locale->tag, first, first + 4);
+            write_bmp(name);
+        }
+        page_01_main_detail_destroy();
+    }
+    ui_lang_set(LANGUAGE_EN);
+    assert(protocol_glyph_failures == 0);
+    printf("PASS real Main C protocol rendering: %zu locales x 50 codes, exact names, glyph coverage, original geometry, single-line and no clipping\n", languages);
+}
+
 static void test_reject_live_projection(void)
 {
     counting_sim_t *data=counting_data_mutable();
@@ -334,6 +475,7 @@ static void test_reject_live_projection(void)
 
 int main(void)
 {
+    setvbuf(stdout, NULL, _IONBF, 0);
     assert(sizeof(lv_coord_t) == 2);
     lv_init();
     static lv_color_t draw_pixels[1280 * 40];
@@ -347,6 +489,7 @@ int main(void)
     lv_indev_t *indev = lv_indev_drv_register(&pointer_driver); assert(indev);
     lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(0xD8E2E8), 0);
     fixture(); test_projection(); test_taps(indev); test_lifecycle();
+    test_protocol_reject_rendering();
     lv_obj_t *parent=lv_obj_create(lv_scr_act());
     page_01_main_detail_create(parent,0,0,518,244);
     page_01_main_detail_set_visible(true);

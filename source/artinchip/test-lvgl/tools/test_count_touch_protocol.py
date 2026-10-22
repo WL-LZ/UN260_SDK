@@ -63,7 +63,7 @@ void uart_debug_printf(const char *s,...){(void)s;}
 #define ui_history_total_notes_counted_get() 0
 #define lv_tick_get() 100
 '''
-noops = '''data_collection_count_start data_collection_count_end app_fault_recovery_clear diagnostic_calibration_feed_started
+noops = '''app_fault_recovery_clear diagnostic_calibration_feed_started
 page_02_list_report_reset page_01_curr_img_refre fault_popup_clear_runtime fault_popup_clear_preset counting_history_session_start
 app_auto_qr_on_start multi_pass_verification_on_count_start multi_pass_verification_get_view
 page_32_innovation_notify_verification_event data_collection_state_set_status page_06_data_collection_refresh

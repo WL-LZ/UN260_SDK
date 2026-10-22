@@ -33,7 +33,7 @@ typedef uint8_t lv_opa_t;
 #define USER_PASSWORD_MAX_LEN 4
 #define lv_snprintf snprintf
 enum {LV_EVENT_CLICKED, LV_EVENT_DELETE};
-enum {UI_PAGE_MAIN, UI_PAGE_SETTING, UI_PAGE_PASSWORD_CHANGE};
+typedef enum {UI_PAGE_MAIN, UI_PAGE_SETTING, UI_PAGE_PASSWORD_CHANGE, UI_PAGE_CFD_LEVEL_SETTING} ui_page_t;
 enum {UI_TEXT_PASSWORD_LOGIN_TITLE, UI_TEXT_SETTINGS_PASSWORD};
 typedef int lv_coord_t;
 typedef uint32_t lv_color_t;

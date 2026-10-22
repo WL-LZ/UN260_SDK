@@ -57,6 +57,23 @@ for size in (12, 14, 16, 18, 24, 20, 22, 28):
     coverage.append(f'{{message_codepoints_{size},sizeof(message_codepoints_{size})/sizeof(uint32_t)}},')
 coverage.append('};')
 write_changed(cache / 'message_codepoints.h', '\n'.join(coverage)+'\n')
+# Exercise the production navigation completion path with real LVGL timers.
+# Extract source instead of maintaining a separate navigation implementation.
+manager = (root / 'un260/lv_core/lv_page_manager.c').read_text()
+def manager_function(name):
+    match = re.search(r'^static (?:void|bool) ' + name + r'\([^)]*\)\n\{.*?^\}', manager, re.M | re.S)
+    assert match, f'missing page manager function: {name}'
+    return match.group(0)
+
+guard = re.search(r'^#define UI_PAGE_INPUT_GUARD_MS .+$', manager, re.M)
+assert guard
+write_changed(cache / 'page_transition_fixture.h', guard.group(0) + "\n" +
+    "static bool g_page_switch_committing;\n"
+    "static lv_timer_t *g_page_input_unlock_timer;\n"
+    "static uint64_t g_transition_input_owners;\n" +
+    "\n".join(manager_function(name) for name in (
+        'ui_manager_set_input_enabled', 'ui_manager_input_unlock_cb',
+        'ui_manager_transition_begin', 'ui_manager_transition_finish')) + "\n")
 sources = [root / 'tools/test_notice_view.c', root / 'un260/lv_components/ui_notice_state.c']
 sources += [root / 'un260/font/ui_message_font.c']
 sources += [root / 'un260/font/ui_locale_font_bank.c']

@@ -13,6 +13,8 @@ bool setting_service_request_beep(bool enabled){machine_state_confirm_buzzer(ena
 /* Surrounding workflows are captured, never sent to hardware/storage. Main,
  * detail projection, styling, hit tests, fonts and Smart Island remain real. */
 static unsigned callbacks[16], pushes, protocol_calls, persisted_tabs;
+static unsigned collection_opens;
+static uint8_t last_protocol_command, last_protocol_sub;
 static uint32_t host_cash_operator_filter;
 static unsigned host_history_open_all, host_history_invalidations;
 void ui_cash_journal_filter_operator(uint32_t id){host_cash_operator_filter=id;}
@@ -106,10 +108,23 @@ CAPTURE(page_01_fo_btn_event_cb, CB_FO)
 CAPTURE(page_01_bottom_batch_btn_event_cb, CB_BATCH)
 CAPTURE(page_01_bottom_speed_btn_event_cb, CB_SPEED)
 #undef CAPTURE
+/* Mode now shares one command bridge. Attribute that command to the actual
+ * LVGL touch target, preserving the existing independent button assertions. */
+void page_01_mode_cycle(void)
+{ ++callbacks[lv_indev_get_obj_act()==s_bottom_a_btn_mode ? CB_BOTTOM_MODE : CB_MODE]; }
+bool workspace_service_applying(void) { return false; }
+bool settings_detail_overlay_is_open(void) { return false; }
+bool ui_page_05_set_password_is_open(void) { return false; }
+void ui_page_05_set_password_destroy(void) {}
+bool ui_manager_navigation_is_blocked(void) { return false; }
+bool ui_manager_invalidate_page_cache(ui_page_t page) { (void)page; return true; }
+void ui_manager_hold_transition_input(ui_page_t owner, bool hold)
+{ (void)owner; (void)hold; }
+uint8_t lv_port_indev_touch_count(void) { return 1; }
 
 #include "un260/lv_core/settings_detail_ui.h"
 void ui_manager_clear_stack(void){}
-void page_06_settings_open_collection(void){}
+void page_06_settings_open_collection(void){++collection_opens;}
 bool settings_detail_dialog_show_ex(settings_detail_dialog_kind_t kind,const char *a,const char *b,const char *c,const char *d,settings_detail_dialog_cb_t e,settings_detail_dialog_cb_t f,void *g){(void)kind;(void)a;(void)b;(void)c;(void)d;(void)e;(void)f;(void)g;return false;}
 bool settings_detail_dialog_show(const char *a,const char *b,const char *c,const char *d,settings_detail_dialog_cb_t e,settings_detail_dialog_cb_t f,void *g){return settings_detail_dialog_show_ex(SETTINGS_DIALOG_INFO,a,b,c,d,e,f,g);}
 void ui_manager_push_page(ui_page_t page) { ++pushes; destination=page; }
@@ -118,9 +133,17 @@ ui_page_t ui_manager_get_current_page(void) { return host_current_page; }
 bool ui_manager_is_prewarming_page(ui_page_t page) { (void)page; return prewarming; }
 bool ui_manager_is_transitioning(void) { return host_transitioning; }
 bool app_command_runtime_count_start_busy(void) { return start_busy; }
+#include "un260/app_service/work_mode_service.h"
+bool work_mode_service_diagnostic_ready(void){return true;}
+const char *work_mode_service_status_msgid(void){return "Ready";}
+const char *work_mode_service_status_text(void){return "Ready";}
+void work_mode_service_get_snapshot(work_mode_snapshot_t *out)
+{memset(out,0,sizeof(*out));out->phase=WORK_MODE_READY;}
+void work_mode_service_retry(void){}
+bool app_command_runtime_request_diagnostic_run(void){return !start_busy;}
 bool protocol_send_is_ready(void) { return true; }
 int protocol_send(uint8_t cmd,const uint8_t *data,uint16_t count)
-{ (void)cmd;(void)data;(void)count;++protocol_calls;return 0; }
+{ last_protocol_command=cmd;last_protocol_sub=count?data[0]:0;++protocol_calls;return 0; }
 void pause_counting_sim(void) {}
 void resume_counting_sim(void) {}
 void start_counting_sim(void) {}

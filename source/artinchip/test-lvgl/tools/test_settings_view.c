@@ -9,6 +9,7 @@
 #include "un260/lv_core/page_21_set_language.c"
 #include "test_settings_actions.h"
 #include "un260/lv_components/lv_damped_button.h"
+#include "un260/lv_components/smart_island.h"
 #include "un260/lv_components/lv_nav_button.h"
 #include "tools/test_page_background_asset.h"
 static bool deny_language_resources(language_t id){(void)id;return false;}
@@ -46,11 +47,12 @@ bool touch_calibration_calibrated(void){return host_touch_calibrated;}
 bool touch_calibration_enabled(void){return host_touch_enabled;}
 void work_mode_service_set_diagnostic(bool active){diagnostic_scope=active;}
 bool work_mode_service_diagnostic_ready(void){return diagnostic_ready;}
-const char *work_mode_service_status_text(void){return diagnostic_ready?"Manual mode confirmed":"Waiting for controller mode";}
+const char *work_mode_service_status_text(void){return ui_tr(diagnostic_ready?"Manual mode confirmed":"Waiting for controller mode");}
 void work_mode_service_get_snapshot(work_mode_snapshot_t *s){memset(s,0,sizeof(*s));s->phase=diagnostic_ready?WORK_MODE_READY:WORK_MODE_WAITING_SYNC;}
 void work_mode_service_retry(void){}
 bool app_command_runtime_count_start_busy(void){return machine_running;}
-ui_page_t ui_manager_get_current_page(void){return UI_PAGE_SETTING;}
+static ui_page_t current_page=UI_PAGE_SETTING;
+ui_page_t ui_manager_get_current_page(void){return current_page;}
 static standby_config_t standby={.minutes=1};
 const standby_config_t *standby_config(void){return &standby;}
 static int light_level=75;
@@ -67,12 +69,18 @@ void ui_manager_invalidate_all_page_caches(void){}
 void ui_manager_on_language_changed(void){}
 void ui_page_cis_calib_select(bool white){white_selected=white;}
 uint32_t app_clock_uptime_ms(void){return lv_tick_get();}
+uint64_t app_clock_monotonic_ms(void){return lv_tick_get();}
 bool app_command_runtime_request_diagnostic_run(void){sends++;return true;}
 bool settings_detail_send_command(uint8_t cmd,const uint8_t *sub,uint16_t len){assert(len==1);sends++;last_command=cmd;last_sub=sub[0];return true;}
 bool settings_detail_overlay_is_open(void){return overlay;}
 void settings_detail_dialog_hide(void){overlay=false;discard=NULL;}
 void settings_detail_keyboard_hide(void){}
 bool settings_detail_dialog_show(const char*a,const char*b,const char*c,const char*d,settings_detail_dialog_cb_t cb,settings_detail_dialog_cb_t cancel,void*data){(void)a;(void)b;(void)c;(void)d;(void)cancel;(void)data;overlay=true;discard=cb;return true;}
+int protocol_send(uint8_t cmd,const uint8_t *sub,uint16_t length)
+{ assert(length==1);sends++;last_command=cmd;last_sub=sub[0];return 6; }
+bool smart_island_status_slot_available(void){return false;}
+bool settings_detail_dialog_show_ex(settings_detail_dialog_kind_t kind,const char*a,const char*b,const char*c,const char*d,settings_detail_dialog_cb_t cb,settings_detail_dialog_cb_t cancel,void*data)
+{(void)kind;return settings_detail_dialog_show(a,b,c,d,cb,cancel,data);}
 static bool (*policy)(gesture_action_t);
 void gesture_service_set_page_policy(uint32_t owner,bool(*drag)(void),bool(*handler)(gesture_action_t)){(void)owner;(void)drag;policy=handler;}
 void gesture_service_clear_page_policy(uint32_t owner){(void)owner;policy=NULL;}
@@ -84,6 +92,7 @@ static bool evdev_press_cancelled;
 static lv_obj_t *evdev_pressed_obj;
 static lv_point_t evdev_press_point;
 static bool evdev_visual_cancelled;
+static lv_port_feedback_observer_t g_feedback_observer;
 #include "actual_settings_pointer.h"
 static void pointer_read(lv_indev_drv_t *d,lv_indev_data_t *data){
  (void)d;data->point=pointer_position;data->state=pointer_state;
@@ -200,18 +209,22 @@ static void directory_test(void){
  puts("PASS touch calibration settings entry: default/disabled/enabled summary, isolated navigation and exact parent return");
  click_label(grid,"White balance");assert(white_selected&&requested==UI_PAGE_CIS_CALIB&&sends==0);assert(ui_page_06_settings_resume());assert(scope_is("calibration"));assert(page_06_settings_back_sub_page());assert(scope_is("maintenance"));
  click_label(sidebar,"Counting");snapshot("counting");click_label(sidebar,"Data");snapshot("data");click_label(grid,"Upgrade");snapshot("upgrade");assert(page_06_settings_back_sub_page());
- click_label(grid,"Data collection");assert(!sidebar&&!grid&&dc_btn_all&&diagnostic_scope);
- assert(action_blocked(dc_btn_start)&&action_blocked(dc_btn_disable));
- snapshot("collection");assert(sends==0);
- diagnostic_ready=false;click_label(view,"All notes");assert(sends==1);diagnostic_ready=true;
- click_label(view,"All notes");assert(last_command==0xC0&&last_sub==1&&sends==1);data_collection_request_cancel();
- data_collection_state_select_mode(DATA_COLLECT_MODE_ALL,"All-note collection confirmed");page_06_data_collection_refresh();
- assert(!action_blocked(dc_btn_start)&&!lv_obj_has_flag(dc_check_all,LV_OBJ_FLAG_HIDDEN));snapshot("collection-confirmed");
- machine_running=true;page_06_data_collection_refresh();assert(action_blocked(dc_btn_start));
- click_label(view,"RUN");assert(sends==1);machine_running=false;
- page_06_data_collection_refresh();assert(label_find(view,"RUN")&&!action_blocked(dc_btn_start));
- click_label(view,"RUN");assert(sends==2&&strstr(data_collection_state_status(),"Counting command sent"));snapshot("collection-run");
- data_collection_state_exit("Select a collection mode");assert(page_06_settings_back_sub_page()&&!diagnostic_scope);
+ /* The legacy controller uses explicit mode selection, RUN and End. */
+ click_label(grid,"Data collection");assert(!sidebar&&!grid&&diagnostic_scope);
+ lv_obj_t *all_button=lv_obj_get_parent(label_find(view,"All notes"));
+ lv_obj_t *false_button=lv_obj_get_parent(label_find(view,"Rejected notes"));
+ lv_obj_t *run_button=lv_obj_get_parent(label_find(view,"RUN"));
+ assert(all_button&&false_button&&run_button);snapshot("collection");assert(sends==0);
+ machine_running=true;page_06_data_collection_refresh();lv_event_send(all_button,LV_EVENT_CLICKED,NULL);assert(sends==0);machine_running=false;page_06_data_collection_refresh();
+ lv_event_send(all_button,LV_EVENT_CLICKED,NULL);assert(last_command==0xC0&&last_sub==1&&sends==1);
+ assert(data_collection_request_pending()&&data_collection_state_mode()==DATA_COLLECT_MODE_NONE);
+ assert(lv_obj_has_state(all_button,LV_STATE_DISABLED)&&lv_obj_has_state(false_button,LV_STATE_DISABLED));
+ data_collection_request_cancel();data_collection_state_select_mode(DATA_COLLECT_MODE_ALL,"All-note collection confirmed");page_06_data_collection_refresh();
+ assert(!lv_obj_has_state(all_button,LV_STATE_DISABLED)&&!lv_obj_has_state(false_button,LV_STATE_DISABLED));snapshot("collection-confirmed");
+ diagnostic_ready=false;page_06_data_collection_refresh();assert(lv_obj_has_state(run_button,LV_STATE_DISABLED));
+ diagnostic_ready=true;page_06_data_collection_refresh();unsigned before_count=sends;click_label(view,"RUN");assert(sends==before_count+1);
+ click_label(view,"End collection");assert(last_command==0xC0&&last_sub==0xFF);
+ data_collection_request_cancel();data_collection_state_exit("Select a collection mode");assert(page_06_settings_back_sub_page()&&!diagnostic_scope);
  click_label(sidebar,"About & security");snapshot("about");
  for(unsigned i=0;i<lv_obj_get_child_cnt(grid);i++){
   lv_obj_t *card=lv_obj_get_child(lv_obj_get_child(grid,i),0),*arrow=lv_obj_get_child(card,-1);lv_area_t ca,ar;
@@ -342,4 +355,4 @@ static void directory_locales_test(void){
 }
 int main(void){lv_init();ui_lang_set_resource_preparer(ui_locale_font_prepare);ui_message_font_set_provider(ui_locale_font_compose);lv_disp_draw_buf_t db;lv_disp_draw_buf_init(&db,buffer,NULL,1280*40);lv_disp_drv_t dd;lv_disp_drv_init(&dd);dd.hor_res=1280;dd.ver_res=400;dd.draw_buf=&db;dd.flush_cb=flush;lv_disp_drv_register(&dd);lv_img_decoder_t*dec=lv_img_decoder_create();lv_img_decoder_set_info_cb(dec,info);lv_img_decoder_set_open_cb(dec,image_open);lv_indev_drv_t input;lv_indev_drv_init(&input);input.type=LV_INDEV_TYPE_POINTER;input.read_cb=pointer_read;input.feedback_cb=evdev_feedback;lv_indev_drv_register(&input);device_info_init("V1.0.0");catalog_test();grid_test();directory_test();third_level_test();details_test();directory_locales_test();puts("PASS actual LVGL settings suite");return 0;}
 
-const char *work_mode_service_status_msgid(void){return work_mode_service_status_text();}
+const char *work_mode_service_status_msgid(void){return diagnostic_ready?"Manual mode confirmed":"Waiting for controller mode";}

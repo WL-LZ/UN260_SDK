@@ -128,14 +128,14 @@ static void help_view(lv_obj_t *b)
             lv_obj_t *v=lv_settings_button(list,0,row++*58,item_width,52,"",false,reject_pick,(void *)(uintptr_t)code);
             palette(v,selected?HEADER_SURFACE:PANEL);lv_obj_set_style_border_width(v,0,0);lv_obj_set_style_radius(v,12,0);
             if(selected)box(v,0,10,3,32,BLUE,2);
-            char line[100];snprintf(line,sizeof(line),"%02X  %s",code,ui_tr(counting_reject_guide_get(code)->title));
+            char line[100];snprintf(line,sizeof(line),"%02X  %s",code,counting_reject_reason_get(code));
             lv_obj_t *l=label(v,12,9,item_width-24,line,&lv_font_instrument_sans_semibold_16,selected?BLUE:INK);lv_label_set_long_mode(l,LV_LABEL_LONG_DOT);
-            snprintf(line,sizeof(line),counts[code]?ui_trn("%s / %u notes", (counts[code])):"%s",ui_text_counting_reject_reason(code),counts[code]);label(v,12,31,item_width-24,line,&lv_font_instrument_sans_medium_13,MUTED);
+            snprintf(line,sizeof(line),ui_trn("%u notes",counts[code]),counts[code]);label(v,12,31,item_width-24,line,&lv_font_instrument_sans_medium_13,MUTED);
         }
         if(!row){label(list,14,28,294,ui_tr("No current rejects"),&lv_font_instrument_sans_semibold_21,INK);small(list,14,70,294,ui_tr("Select All codes to browse the guide."));}
         lv_obj_t *detail=box(b,350,48,678,248,PANEL,20);
         const counting_reject_guide_t *g=counting_reject_guide_get(menu.reject_code);
-        char line[100];snprintf(line,sizeof(line),"%02X / %s",menu.reject_code,ui_tr(g->title));
+        char line[100];snprintf(line,sizeof(line),"%02X / %s",menu.reject_code,g->title);
         label(detail,20,16,616,line,&lv_font_instrument_sans_semibold_21,INK);icon(detail,menu.reject_code?MICON("warning",22):MICON("check",22),636,18,menu.reject_code?ORANGE:TEAL);
         label(detail,20,51,638,ui_tr(g->meaning),&lv_font_instrument_sans_medium_15,INK);
         label(detail,20,98,638,ui_tr("Possible causes"),&lv_font_instrument_sans_semibold_16,ORANGE);

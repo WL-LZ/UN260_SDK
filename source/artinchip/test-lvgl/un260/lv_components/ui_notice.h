@@ -18,9 +18,8 @@ void ui_notice_post(ui_notice_kind_t kind, const char *key, const char *title, c
 void ui_notice_post_text(ui_notice_kind_t kind, const char *key, const char *title_key, const char *detail_key);
 void ui_notice_post_message(ui_notice_kind_t kind, const char *key, const char *title_key, const ui_message_t *message);
 void ui_notice_language_changed(void);
-/* Re-present an operation-owned card after the new page settles; page-owned
- * callers still clear their keys on suspend. */
-void ui_notice_navigation_committed(void);
+/* The global top-layer card keeps its presentation timeline across navigation.
+ * Page-owned operations clear their keys when completed or cancelled. */
 /* Tap/dismiss acknowledges the card only; it never cancels the associated task. */
 void ui_notice_dismiss(const char *key);
 void ui_notice_clear(const char *key);

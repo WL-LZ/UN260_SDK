@@ -1,0 +1,32 @@
+{
+  "en": {
+    "Delete %u": "Delete %u"
+  },
+  "zh-Hans": {
+    "Delete %u": "删除 %u 条"
+  },
+  "ko": {
+    "Delete %u": "%u개 삭제"
+  },
+  "ja": {
+    "Delete %u": "%u件を削除"
+  },
+  "ar": {
+    "Delete %u": "حذف %u"
+  },
+  "tr": {
+    "Delete %u": "%u sil"
+  },
+  "fr": {
+    "Delete %u": "Supprimer %u"
+  },
+  "pl": {
+    "Delete %u": "Usuń %u"
+  },
+  "ru": {
+    "Delete %u": "Удалить %u"
+  },
+  "de": {
+    "Delete %u": "%u löschen"
+  }
+}

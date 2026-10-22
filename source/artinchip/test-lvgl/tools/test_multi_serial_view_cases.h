@@ -79,8 +79,8 @@ static void test_multi_serial_view_cases(void)
         const ui_list_window_t *window=lv_recycled_list_window(v->serial_list);
         assert(window->paged&&window->first==0&&v->count==53);
         assert(lv_obj_get_child_cnt(v->back)==1&&lv_obj_get_width(v->back)==76);
-        lv_obj_t *buttons[]={v->previous,v->next,v->details};
-        for(unsigned i=1;i<3;i++)assert(lv_obj_get_style_bg_color(buttons[i],0).full==lv_color_hex(0xF5F6F7).full);
+        assert(!lv_damped_button_is_enabled(v->previous)&&lv_damped_button_is_enabled(v->next));
+        assert(lv_obj_get_style_bg_color(v->next,0).full==lv_color_hex(0xF5F6F7).full);
         multi_test_rows(v,NULL);multi_test_raster(expanded?"multi-list-serial-page1":"multi-main-serial-page1");
         unsigned opens=multi_open_calls;
         serials_cases_drag(ui_multi_detail_scroll(v),-220,0);
@@ -116,7 +116,14 @@ static void test_multi_serial_view_cases(void)
         assert(v->count==18&&window->first==0);multi_test_rows(v,NULL);
         for(unsigned i=0;i<v->count;i++)assert(counting_multi_serials(0)->rows[v->indices[i]].number==i*3+1);
         multi_test_raster(expanded?"multi-list-serial-filtered":"multi-main-serial-filtered");
-        if(!expanded){serials_cases_tap(v->details);assert(multi_open_calls==opens+1);}
+        if(!expanded){
+            /* Removed footer entry is inert; the existing content tap still opens List. */
+            lv_area_t root;lv_obj_get_coords(v->root,&root);
+            serials_cases_pointer(root.x1+537,root.y1+v->height-20,true);
+            serials_cases_pointer(root.x1+537,root.y1+v->height-20,false);
+            assert(multi_open_calls==opens);
+            serials_cases_tap(ui_multi_detail_scroll(v));assert(multi_open_calls==opens+1);
+        }
         ui_multi_detail_search(v);lv_alnum_keyboard_set_choice_mode(v->keyboard,false);
         lv_alnum_keyboard_set_text(v->keyboard,"NOTFOUND");
         lv_alnum_keyboard_hide(v->keyboard);assert(v->count==18);
@@ -136,5 +143,5 @@ static void test_multi_serial_view_cases(void)
     fail_serials_viewport=true;
     assert(!ui_multi_detail_create(view->page,false,multi_test_open,NULL));
     assert(!fail_serials_viewport&&timers()==baseline);
-    puts("PASS MULTI serial Main two/List three columns: native swipe/buttons, complete ordered pages, original NO after denomination filter, cancelled/vertical/short drag, hidden resume, Detail route and timer cleanup");
+    puts("PASS MULTI serial Main two/List three columns: native swipe/buttons, complete ordered pages, original NO after denomination filter, cancelled/vertical/short drag, hidden resume, removed footer entry, content tap route and timer cleanup");
 }

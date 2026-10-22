@@ -232,11 +232,14 @@ lv_obj_t *lv_settings_header(lv_obj_t *p,int x,int y,int w,const lv_settings_hea
     if(cfg->icon){lv_obj_t *b=lv_settings_box(h,0,6,44,44,0xE8EFF9);lv_obj_set_style_radius(b,12,0);
         lv_settings_icon(b,cfg->icon,10,10);tx=60;}
     lv_obj_t *title=lv_settings_label(h,cfg->title,tx,cfg->subtitle?1:12,&lv_font_instrument_sans_semibold_28,0x1D2B34);
-    lv_obj_set_width(title,w-tx-244);lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
+    lv_obj_set_width(title,w-tx-122);lv_label_set_long_mode(title,LV_LABEL_LONG_DOT);
     if(cfg->subtitle){lv_obj_t *s=lv_settings_label(h,cfg->subtitle,tx,36,&lv_font_instrument_sans_medium_14,0x586B78);
-        lv_obj_set_width(s,w-tx-244);lv_label_set_long_mode(s,LV_LABEL_LONG_DOT);}
+        lv_obj_set_width(s,w-tx-122);lv_label_set_long_mode(s,LV_LABEL_LONG_DOT);}
     /* Reuse the navigation marker, so hardware/gesture Back invokes the same guard. */
-    return lv_nav_back_text_button_create(h,w-216,5,&lv_font_instrument_sans_medium_16,cfg->back,cfg->user_data);
+    lv_obj_t *back=lv_nav_back_text_button_create(h,w-94,5,&lv_font_instrument_sans_medium_16,NULL,NULL);
+    lv_settings_action_guard_init(back);
+    if(cfg->back){lv_nav_button_mark_back(back);lv_obj_add_event_cb(back,cfg->back,LV_EVENT_CLICKED,cfg->user_data);}
+    return back;
 }
 lv_settings_frame_t lv_settings_frame_create(lv_obj_t *parent,const lv_settings_header_t *cfg)
 {
@@ -247,17 +250,17 @@ lv_settings_frame_t lv_settings_frame_create(lv_obj_t *parent,const lv_settings_
     lv_obj_t *heading=lv_obj_get_parent(f.back);
     for(uint32_t i=0;i<lv_obj_get_child_cnt(heading);i++){
         lv_obj_t *child=lv_obj_get_child(heading,i);
-        if(lv_obj_check_type(child,&lv_label_class))lv_obj_set_width(child,520);
+        if(lv_obj_check_type(child,&lv_label_class))lv_obj_set_width(child,540);
     }
     f.body=lv_settings_panel(f.root,24,84,1232,300);
     /* Keep footer as the action owner for existing page lifecycles (PIN overlay).
      * Flex ignores historical absolute button positions and reflows hidden actions. */
-    f.footer=lv_settings_box(f.root,570,15,448,46,0);lv_obj_set_style_bg_opa(f.footer,0,0);
+    f.footer=lv_settings_box(f.root,640,15,494,46,0);lv_obj_set_style_bg_opa(f.footer,0,0);
     lv_obj_add_flag(f.footer,LV_OBJ_FLAG_USER_3);
     lv_obj_set_flex_flow(f.footer,LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(f.footer,LV_FLEX_ALIGN_END,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(f.footer,10,0);
-    lv_settings_box(f.root,1030,23,1,30,LV_SETTINGS_ACTION_DIVIDER);
+    lv_settings_box(f.root,1147,23,1,30,LV_SETTINGS_ACTION_DIVIDER);
     f.message=lv_settings_label(f.root,cfg->subtitle?cfg->subtitle:"",24,65,&lv_font_instrument_sans_medium_12,0x586B78);
     lv_obj_set_width(f.message,1232);lv_label_set_long_mode(f.message,LV_LABEL_LONG_DOT);
     return f;

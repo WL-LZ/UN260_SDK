@@ -204,13 +204,13 @@ int main(int argc, char **argv)
     assert(strstr(csv, "Machine Mode,Not recorded\n"));
     assert(strstr(csv, "Record Time,2026-09-09 12:34:56\n"));
     assert(strstr(csv, "Saved Reject Pcs,4\n"));
-    assert(strstr(csv, "1,4,\"UV\"\n"));
+    assert(strstr(csv, "1,4,\"UV Suspect\"\n"));
     assert(strstr(csv, "1,\"AB123456\",100\n"));
     assert(strstr(csv, "2,\"A<&\"\"123\",100\n"));
     assert(strstr(html, "data-target=\"12510\""));
     assert(strstr(html, "data-target=\"300\""));
     assert(strstr(html, "data-sn=\"A&lt;&amp;&quot;123\""));
-    assert(strstr(html, "savedRejectPcs:4,rejectDetails:[{no:1,pcs:4,reason:\"UV\"}]"));
+    assert(strstr(html, "savedRejectPcs:4,rejectDetails:[{no:1,pcs:4,reason:\"UV Suspect\"}]"));
     char *catalog = strstr(html,"<script>(function(){'use strict';const text=");
     assert(catalog && strstr(catalog,"</body></html>"));
     assert(strstr(catalog,"window.reportLocale=\"en\""));

@@ -9,6 +9,7 @@
 #include "un260/font/ui_locale_font_bank.h"
 #endif
 #include "un260/counting/counting_data_store_internal.h"
+#include "un260/counting/counting_reject_reason.h"
 #include "un260/lv_core/page_02_list_search.c"
 #include "un260/lv_core/page_02_list_serials.c"
 #include "un260/lv_components/ui_multi_detail.c"
@@ -206,8 +207,8 @@ static void assert_home_icon(bool is_visible)
     assert(lv_obj_get_child_cnt(icon)==0);
     assert(lv_obj_get_width(icon)==27 && lv_obj_get_height(icon)==27);
     assert(lv_obj_get_x(icon)==35 && lv_obj_get_y(icon)==17);
-    assert(lv_obj_get_x(home)==1168 && lv_obj_get_y(home)==310);
-    assert(lv_obj_get_width(home)==96 && lv_obj_get_height(home)==78);
+    assert(lv_obj_get_x(home)==1168 && lv_obj_get_y(home)==300);
+    assert(lv_obj_get_width(home)==96 && lv_obj_get_height(home)==88);
     assert_icon(icon,0x496574,21,is_visible);
 }
 static void test_home_glyph(void)
@@ -480,7 +481,7 @@ static void assert_action_rail(bool page_visible)
                                UI_TEXT_LIST_PRINT,UI_TEXT_LIST_MAIN};
     const int order[]={LIST_ACTION_HISTORY,LIST_ACTION_SEARCH,
                        LIST_ACTION_PRINT,LIST_ACTION_MAIN};
-    const int positions[]={52,138,224,310};
+    const int positions[]={12,108,204,300};
     assert(LIST_ACTION_COUNT==4);
     assert(lv_obj_get_child_cnt(view->page)==PAGE_02_SECTION_COUNT+LIST_ACTION_COUNT);
     lv_area_t rail[4];
@@ -490,7 +491,7 @@ static void assert_action_rail(bool page_visible)
         assert(button && lv_obj_check_type(button,&lv_btn_class));
         assert(lv_obj_get_parent(button)==view->page && lv_obj_is_visible(button)==page_visible);
         assert(lv_obj_get_x(button)==1168 && lv_obj_get_y(button)==positions[i]);
-        assert(lv_obj_get_width(button)==96 && lv_obj_get_height(button)==78);
+        assert(lv_obj_get_width(button)==96 && lv_obj_get_height(button)==88);
         assert_background(button,0xFFFFFF,page_visible);
         assert(!strcmp(lv_label_get_text(caption),ui_text_get(text[i])));
         assert(lv_obj_get_style_text_color(caption,0).full==lv_color_hex(0x4C606E).full);
@@ -788,6 +789,79 @@ static void test_search_background(void)
 
 #include "test_multi_serial_view_cases.h"
 
+#ifdef LIST_REAL_FONTS
+static lv_obj_t *protocol_reject_row(void)
+{
+    lv_obj_t *viewport=lv_recycled_list_object(view->section[PAGE_02_SECTION_C].list);
+    for(unsigned i=0;i<lv_obj_get_child_cnt(viewport);++i){
+        lv_obj_t *row=lv_obj_get_child(viewport,i);
+        if(!lv_obj_has_flag(row,LV_OBJ_FLAG_HIDDEN)&&lv_obj_get_child_cnt(row)==3)return row;
+    }
+    assert(!"Missing protocol reject row");return NULL;
+}
+static void assert_protocol_reject_row(lv_obj_t *row,unsigned code)
+{
+    lv_obj_t *number=lv_obj_get_child(row,0),*pcs=lv_obj_get_child(row,1),*reason=lv_obj_get_child(row,2);
+    const char *name=counting_reject_reason_get((uint8_t)code);
+    assert(!strcmp(lv_label_get_text(reason),name));
+    assert(lv_obj_get_height(row)==36);
+    assert(lv_obj_get_x(number)==10&&lv_obj_get_y(number)==9&&lv_obj_get_width(number)==44&&lv_obj_get_height(number)==28);
+    assert(lv_obj_get_x(pcs)==58&&lv_obj_get_y(pcs)==5&&lv_obj_get_width(pcs)==40&&lv_obj_get_height(pcs)==28);
+    assert(lv_obj_get_style_text_font(number,0)==&lv_font_instrument_sans_medium_14);
+    assert(lv_obj_get_style_text_font(pcs,0)==&lv_font_instrument_sans_medium_20);
+    assert(lv_obj_get_x(reason)==110&&lv_obj_get_width(reason)==170);
+    assert(lv_obj_get_style_text_align(reason,0)==LV_TEXT_ALIGN_LEFT);
+    assert(lv_label_get_long_mode(reason)==LV_LABEL_LONG_CLIP);
+    label_fits(reason);
+    const lv_font_t *font=lv_obj_get_style_text_font(reason,0);
+    const int height=lv_font_get_line_height(font),above=lv_obj_get_y(reason),below=36-above-height;
+    assert(height==lv_obj_get_height(reason)&&above>=0&&below>=0&&abs(above-below)<=1);
+    for(uint32_t byte=0;name[byte];){
+        uint32_t codepoint=_lv_txt_encoded_next(name,&byte);
+        lv_font_glyph_dsc_t glyph;
+        assert(lv_font_get_glyph_dsc(font,&glyph,codepoint,0)&&!glyph.is_placeholder);
+    }
+}
+static void test_protocol_reject_names(counting_sim_t *data,const ui_locale_t *locale)
+{
+    assert(counting_data_ensure_error_capacity(data,7));
+    data->err_num=1;data->err_expected=1;data->err_pcs[0]=1;
+    lv_obj_t *reused=NULL;
+    for(unsigned code=0;code<0x32;++code){
+        data->err_code[0]=code;
+        page_02_list_section_data_ready(PAGE_02_SECTION_C);ui_frame_commit_flush();lv_obj_update_layout(view->page);
+        lv_obj_t *row=protocol_reject_row();
+        if(reused)assert(row==reused);else reused=row;
+        assert_protocol_reject_row(row,code);
+    }
+    /* Rebinding a short name must restore the preferred size after a long one. */
+    data->err_code[0]=0x0F;
+    page_02_list_section_data_ready(PAGE_02_SECTION_C);ui_frame_commit_flush();lv_obj_update_layout(view->page);
+    lv_obj_t *reason=lv_obj_get_child(protocol_reject_row(),2);
+    assert(lv_obj_get_style_text_font(reason,0)!=ui_message_font_for(&lv_font_instrument_sans_medium_18,LANGUAGE_EN));
+    data->err_code[0]=0x2E;
+    page_02_list_section_data_ready(PAGE_02_SECTION_C);ui_frame_commit_flush();lv_obj_update_layout(view->page);
+    assert(protocol_reject_row()==reused);assert_protocol_reject_row(reused,0x2E);
+    assert(lv_obj_get_style_text_font(reason,0)==ui_message_font_for(&lv_font_instrument_sans_medium_18,LANGUAGE_EN));
+
+    const unsigned codes[]={0x0F,0x11,0x1E,0x23,0x2D,0x2E,0x31};
+    data->err_num=7;data->err_expected=7;
+    for(unsigned i=0;i<7;++i){data->err_code[i]=codes[i];data->err_pcs[i]=1;}
+    page_02_list_section_data_ready(PAGE_02_SECTION_C);ui_frame_commit_flush();lv_obj_update_layout(view->page);
+    lv_obj_t *panel=view->section[PAGE_02_SECTION_C].panel;
+    assert(lv_obj_get_x(panel)==830&&lv_obj_get_y(panel)==12&&lv_obj_get_width(panel)==326&&lv_obj_get_height(panel)==376);
+    for(unsigned i=0;i<4;++i){
+        lv_obj_t *button=view->actions[i];
+        assert(lv_obj_get_x(button)==1168&&lv_obj_get_y(button)==12+(int)i*96);
+        assert(lv_obj_get_width(button)==96&&lv_obj_get_height(button)==88);
+    }
+    char name[96];snprintf(name,sizeof(name),"list-protocol-errors-locale-%s",locale->tag);write_bmp(name);
+    counting_data_clear_errors(data);data->err_expected=0;
+    page_02_list_section_data_ready(PAGE_02_SECTION_C);ui_frame_commit_flush();lv_obj_update_layout(view->page);
+    printf("PASS List protocol errors: %s; all 50 names fit 170px with complete glyphs, centered rows, unchanged geometry and restored short-name font\n",locale->tag);
+}
+#endif
+
 int main(void)
 {
     setvbuf(stdout,NULL,_IONBF,0);
@@ -815,6 +889,7 @@ int main(void)
         for(size_t i=0;i<ui_lang_count();i++){
             const ui_locale_t *locale=ui_lang_at(i);if(!ui_lang_is_available(locale))continue;
             assert(ui_lang_prepare_resources(locale->id));ui_lang_set(locale->id);
+            test_protocol_reject_names(locale_data,locale);
             test_multi_serial_view_cases();printf("PASS MULTI real fonts: %s\n",locale->tag);
         }
         ui_page_02_list_destroy();return 0;

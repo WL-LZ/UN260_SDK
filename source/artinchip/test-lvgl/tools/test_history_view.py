@@ -80,7 +80,7 @@ def main():
     if not compiler or not (lvgl / "lvgl.h").is_file():
         raise SystemExit("Requires host GCC and full LVGL 8 source")
     assets = compiled_asset_sources()
-    inspected = [ROOT / "un260/lv_core/page_training.c", ROOT / "un260/lv_core/page_receipts.c", ROOT / "un260/lv_core/page_19_history.c", *(ROOT / p for p in COMPONENTS)]
+    inspected = [ROOT / "un260/lv_core/page_19_history.c", *(ROOT / p for p in COMPONENTS)]
     fonts = sorted(set(re.findall(r"lv_font_(instrument_sans_[a-z]+_\d+)",
                                  "\n".join(p.read_text(encoding="utf-8") for p in inspected))))
     cache=Path(tempfile.gettempdir())/'un260-history-host-cache';cache.mkdir(exist_ok=True)

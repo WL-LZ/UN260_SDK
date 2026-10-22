@@ -163,7 +163,15 @@ target_compile_definitions(un260_boot_launch PRIVATE UN260_BOOT_LAUNCH_ONLY=1)
 target_compile_options(un260_boot_launch PRIVATE -ffunction-sections -fdata-sections)
 set_target_properties(un260_boot_launch PROPERTIES LINK_FLAGS "-static -Wl,--gc-sections")
 install(TARGETS un260_boot_launch RUNTIME DESTINATION bin)
+file(GLOB PANEL_FONT_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/panel/lv_font_panel_*.c")
 add_executable(${PROJECT_NAME} main.c
+    ${PANEL_FONT_SOURCES}
+    un260/lv_components/ui_panel.c
+    un260/lv_resources/panel/panel_assets.c
+    un260/lv_core/panel_main.c
+    un260/lv_core/panel_entry.c
+    un260/lv_core/panel_pages.c
+    un260/lv_system/ui_display_mode.c
     un260/app_service/runtime_guard.c
     un260/font/lv_font_standby_112.c
     un260/font/scaled_font.c
@@ -248,7 +256,6 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_core/page_protocol_log.c
     un260/app_service/app_collection.c
     un260/lv_core/page_collection.c
-    un260/lv_components/smart_island/smart_island_activity.c
     un260/lv_components/smart_island.c
     un260/lv_components/smart_island/smart_island_view.c
     un260/lv_components/smart_island/smart_island_action.c
@@ -295,8 +302,6 @@ add_executable(${PROJECT_NAME} main.c
     un260/app_service/app_setting_runtime.c
     un260/app_service/app_ui_runtime.c
     un260/app_service/receipt_print_service.c
-    un260/lv_core/page_receipts.c
-    un260/lv_core/page_training.c
     un260/app_service/app_touch_sound.c
     un260/app_service/buzzer_service.c
     un260/gesture/touch_sound.c

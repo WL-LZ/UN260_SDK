@@ -168,6 +168,7 @@ def main():
         if args.locale_fonts:
             sources += [ROOT / "un260/font/ui_message_font.c",
                         ROOT / "un260/font/ui_locale_font_bank.c"]
+        sources.append(ROOT / "tools/tests/fullscreen_panel_stubs.c")
         sources = with_i18n(sources, ROOT)
         sources += sorted((lvgl / "src").rglob("*.c"))
         executable = work / "test-list"

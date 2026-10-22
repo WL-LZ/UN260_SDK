@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Exercise the real Main detail projection, recycled lists and LVGL 8 renderer.
 
-This uses a 4 MiB LVGL pool and coordinate16, not the board's DMA/touch devices.
+This uses a 4 MiB LVGL pool (24 MiB with locale fonts) and coordinate16,
+not the board's DMA/touch devices.
 The counting store and localization are genuine; only navigation is captured.
 """
 import argparse
@@ -23,6 +24,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lvgl-dir", required=True, type=Path)
     parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--locale-fonts", action="store_true",
+                        help="Load the production locale font bank for all-language raster checks")
     parser.add_argument("--sanitize", default="none" if os.name == "nt" else "undefined",
                         choices=("none", "undefined", "address,undefined"))
     args = parser.parse_args()
@@ -39,7 +42,12 @@ def main():
 #define LV_CONF_H
 #define LV_COLOR_DEPTH 32
 #define LVGL_DIR "L:/usr/local/share/lvgl_data/"
-#define LV_MEM_SIZE (4U * 1024U * 1024U)
+#define LV_MEM_SIZE (""" + ("24U" if args.locale_fonts else "4U") + """ * 1024U * 1024U)
+#define LV_USE_FS_STDIO """ + ("1" if args.locale_fonts else "0") + """
+#define LV_FS_STDIO_LETTER 83
+#define LV_FS_STDIO_PATH ""
+#define LV_USE_BIDI 1
+#define LV_USE_ARABIC_PERSIAN_CHARS 1
 #define LV_USE_LOG 0
 #define LV_USE_GPU_AIC 0
 #define LV_USE_GPU_AIC_GE 0
@@ -65,6 +73,8 @@ def main():
             "un260/counting/counting_data_store.c",
             "un260/font/ui_message_font.c")]
         sources += [ROOT / f"un260/font/lv_font_{font}.c" for font in FONTS]
+        if args.locale_fonts:
+            sources.append(ROOT / "un260/font/ui_locale_font_bank.c")
         sources = with_i18n(sources, ROOT)
         sources += sorted((lvgl / "src").rglob("*.c"))
         executable = work / ("test-main-detail.exe" if os.name == "nt" else "test-main-detail")
@@ -75,10 +85,15 @@ def main():
                    f"-I{work}", f"-I{ROOT}", f"-I{lvgl}", f"-DLV_CONF_PATH={conf}"]
         if args.sanitize != "none":
             command += [f"-fsanitize={args.sanitize}", "-fno-sanitize-recover=all"]
+        if args.locale_fonts:
+            command += ["-DMAIN_DETAIL_REAL_FONTS",
+                        '-DUN260_LOCALE_FONT_DIR="S:' + str(ROOT / "aic_ui/lvgl_data/locale_fonts") + '/"']
         # A response file avoids Windows' 32K command-line limit with SDK sources.
         response = work / "compile.rsp"
         response.write_text("\n".join('"' + str(arg).replace("\\", "/").replace('"', '\\"') + '"'
-                                       for arg in [*command[1:], *map(str, sources), "-lm", "-o", str(executable)]))
+                                       for arg in [*command[1:], *map(str, sources), "-lm",
+                                                   *(["-lz"] if args.locale_fonts else []),
+                                                   "-o", str(executable)]))
         subprocess.run([compiler, f"@{response}"], check=True)
         environment = os.environ.copy()
         if args.output_dir:

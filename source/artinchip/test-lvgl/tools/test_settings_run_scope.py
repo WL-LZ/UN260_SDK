@@ -11,10 +11,10 @@ for path in pages.glob('page_*.c'):
     calls = len(re.findall(r'\bsettings_detail_add_run\s*\(', code))
     if calls:
         callers[path.name] = calls
-    if path.name != 'page_06_settings.c':
+    if path.name != 'page_collection.c':
         assert not re.search(r'"(?:RUN|Run|run)"', code), f'Duplicate private RUN button: {path.name}'
 assert callers == {'page_10_debug.c': 1}, callers
-collection = (pages / 'page_06_settings.c').read_text(encoding='utf-8')
+collection = (pages / 'page_collection.c').read_text(encoding='utf-8')
 assert 'dc_btn_start' in collection and 'data_collect_start_btn_event_cb' in collection
 assert collection.count('"RUN"') == 1
 assert 'ui_tr("RUN"),true,data_collect_start_btn_event_cb' in collection

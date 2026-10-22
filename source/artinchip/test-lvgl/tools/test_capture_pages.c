@@ -130,7 +130,8 @@ static void snapshot(const char *name)
 { lv_obj_update_layout(lv_scr_act());assert_settings_toolbars(lv_scr_act());lv_obj_invalidate(lv_scr_act());lv_refr_now(NULL);
   char path[512];snprintf(path,sizeof(path),"%s/%s.bgra",getenv("OUT"),name);FILE *f=fopen(path,"wb");assert(f);assert(fwrite(pixels,4,1280*400,f)==1280*400);fclose(f); }
 static lv_obj_t *find_label(lv_obj_t *o,const char *text)
-{ if(lv_obj_check_type(o,&lv_label_class)&&!strcmp(lv_label_get_text(o),text))return o;
+{ char shaped[512];assert(_lv_txt_ap_calc_bytes_cnt(text)<sizeof(shaped));_lv_txt_ap_proc(text,shaped);
+  if(lv_obj_check_type(o,&lv_label_class)&&!strcmp(lv_label_get_text(o),shaped))return o;
   for(unsigned i=0;i<lv_obj_get_child_cnt(o);i++){lv_obj_t *r=find_label(lv_obj_get_child(o,i),text);if(r)return r;}return NULL; }
 static lv_obj_t *find_type(lv_obj_t *o,const lv_obj_class_t *type)
 { if(lv_obj_check_type(o,type))return o;for(unsigned i=0;i<lv_obj_get_child_cnt(o);i++){lv_obj_t *r=find_type(lv_obj_get_child(o,i),type);if(r)return r;}return NULL; }
@@ -145,9 +146,17 @@ static void advance(unsigned ms) { lv_tick_inc(ms);lv_timer_handler(); }
 #include "un260/storage/protocol_log.h"
 #include "un260/data_collection/data_collection.h"
 #include "un260/app_service/app_collection.h"
-#include "un260/lv_components/smart_island/smart_island_activity.h"
-#include "un260/lv_components/smart_island/smart_island_internal.h"
-smart_island_context_t g_si_ctx;
+#include "un260/app_service/work_mode_service.h"
+static bool diagnostic_ready=true, machine_running, run_accepted=true, island_slot=true;
+static unsigned run_requests, retries, collection_opens;
+static work_mode_phase_t mode_phase=WORK_MODE_READY;
+bool work_mode_service_diagnostic_ready(void){return diagnostic_ready;}
+const char *work_mode_service_status_msgid(void){return diagnostic_ready?"Manual mode confirmed":"Waiting for controller mode";}
+const char *work_mode_service_status_text(void){return ui_tr(work_mode_service_status_msgid());}
+void work_mode_service_get_snapshot(work_mode_snapshot_t *s){memset(s,0,sizeof(*s));s->phase=mode_phase;}
+void work_mode_service_retry(void){retries++;}
+bool app_command_runtime_request_diagnostic_run(void){run_requests++;return run_accepted;}
+bool smart_island_status_slot_available(void){return island_slot;}
 static protocol_log_snapshot_t log_state;
 void protocol_log_snapshot(protocol_log_snapshot_t *s){*s=log_state;}
 bool protocol_log_init(void){return true;}
@@ -156,31 +165,62 @@ bool protocol_log_stop(void){log_state.active=false;log_state.revision++;return 
 bool protocol_log_export(uint64_t id){(void)id;return true;}
 bool protocol_log_delete(uint64_t id){(void)id;return true;}
 ui_page_t ui_manager_get_current_page(void){return UI_PAGE_MAIN;}
-bool app_command_runtime_count_start_busy(void){return false;}
-void page_06_settings_open_collection(void){}
+bool app_command_runtime_count_start_busy(void){return machine_running;}
+void page_06_settings_open_collection(void){collection_opens++;}
 bool settings_detail_dialog_show(const char *a,const char *b,const char *c,const char *d,settings_detail_dialog_cb_t e,settings_detail_dialog_cb_t f,void *g){return settings_detail_dialog_show_ex(SETTINGS_DIALOG_INFO,a,b,c,d,e,f,g);}
 static void receive(unsigned code){uint8_t b[]={0xFD,0xDF,6,0xC0,code,0x0A};advance(10);data_collection_reply_handle(b,6,lv_tick_get());}
-static void capture_pages(void){
+static void capture_pages(void)
+{
  for(size_t lang=0;lang<ui_lang_count();lang++){
   const ui_locale_t *l=ui_lang_at(lang);assert(ui_lang_prepare_resources(l->id));ui_lang_set(l->id);
   lv_settings_header_t h={.title=ui_tr("Data collection")};lv_settings_frame_t f=lv_settings_frame_create(lv_scr_act(),&h);page_collection_create(&f);
   lv_obj_update_layout(lv_scr_act());char name[100];snprintf(name,sizeof(name),"capture-%s-off",l->tag);snapshot(name);
-  assert(app_collection_request(DATA_COLLECT_MODE_FALSE));assert(last_command==0xC0&&last_payload[0]==2);receive(3);page_collection_refresh();
+  lv_obj_t *all=button(ui_tr("All notes")),*rejected=button(ui_tr("Rejected notes")),*run=button(ui_tr("RUN"));
+  assert(lv_obj_get_width(all)==380&&lv_obj_get_height(all)==62&&lv_obj_get_x(all)==22&&lv_obj_get_y(all)==52);
+  assert(lv_obj_get_width(rejected)==380&&lv_obj_get_height(rejected)==62&&lv_obj_get_x(rejected)==22&&lv_obj_get_y(rejected)==126);
+  lv_obj_t *label=find_label(all,ui_tr("All notes"));lv_area_t a,b;lv_obj_get_coords(all,&a);lv_obj_get_coords(label,&b);
+  assert(abs((a.y1+a.y2)-(b.y1+b.y2))<=2);
+  assert(lv_obj_has_state(run,LV_STATE_DISABLED));
+  unsigned before=sends;machine_running=true;page_collection_refresh();click(ui_tr("All notes"));assert(sends==before);
+  machine_running=false;page_collection_refresh();click(ui_tr("All notes"));assert(last_command==0xC0&&last_payload[0]==1&&sends==before+1);
+  assert(data_collection_request_pending()&&lv_obj_has_state(all,LV_STATE_DISABLED));
+  receive(1);page_collection_refresh();assert(data_collection_state_mode()==DATA_COLLECT_MODE_ALL);
+  assert(!lv_obj_has_state(rejected,LV_STATE_DISABLED));
+  click(ui_tr("Rejected notes"));assert(last_payload[0]==2);receive(3);page_collection_refresh();
+  assert(data_collection_state_mode()==DATA_COLLECT_MODE_FALSE);
   snprintf(name,sizeof(name),"capture-%s-on",l->tag);snapshot(name);
-  assert(app_collection_request(DATA_COLLECT_MODE_NONE));advance(4000);assert(data_collection_request_take_timeout(lv_tick_get()));page_collection_refresh();
-  snprintf(name,sizeof(name),"capture-%s-close-unknown",l->tag);snapshot(name);receive(0xFF);lv_obj_del(f.root);
+  unsigned runs=run_requests;diagnostic_ready=false;mode_phase=WORK_MODE_FAILED;page_collection_refresh();
+  assert(lv_obj_has_state(run,LV_STATE_DISABLED));click(ui_tr("RUN"));assert(run_requests==runs);
+  unsigned retry_count=retries;click(ui_tr("Retry"));assert(retries==retry_count+1);
+  diagnostic_ready=true;mode_phase=WORK_MODE_READY;page_collection_refresh();click(ui_tr("RUN"));assert(run_requests==runs+1);
+  receive(2);page_collection_refresh();assert(!strcmp(data_collection_state_status(),ui_tr("Collection completed. Data can be copied from USB.")));
+  click(ui_tr("End collection"));assert(last_command==0xC0&&last_payload[0]==0xFF);
+  advance(DATA_COLLECTION_REQUEST_TIMEOUT_MS+1);assert(data_collection_request_take_timeout(lv_tick_get()));page_collection_refresh();
+  assert(!data_collection_request_pending()&&data_collection_state_mode()==DATA_COLLECT_MODE_FALSE);
+  assert(!lv_obj_has_state(button(ui_tr("End collection")),LV_STATE_DISABLED));
+  snprintf(name,sizeof(name),"capture-%s-timeout",l->tag);snapshot(name);
+  receive(0xFF);assert(data_collection_state_mode()==DATA_COLLECT_MODE_FALSE);
+  click(ui_tr("End collection"));receive(0xFF);page_collection_refresh();assert(data_collection_state_mode()==DATA_COLLECT_MODE_NONE);
+  send_ok=false;click(ui_tr("All notes"));assert(!data_collection_request_pending()&&data_collection_state_mode()==DATA_COLLECT_MODE_NONE);send_ok=true;
+  lv_obj_add_flag(f.root,LV_OBJ_FLAG_HIDDEN);before=sends;page_collection_refresh();assert(sends==before);lv_obj_del(f.root);page_collection_refresh();
   log_state=(protocol_log_snapshot_t){.active=true,.state=PLOG_ACTIVE,.current=6,.count=5,.revision=lang+1};
   for(unsigned i=0;i<5;i++){log_state.files[i].id=6-i;log_state.files[i].bytes=1024*(i+1);snprintf(log_state.files[i].name,48,"log_%012u.txt",6-i);}
   page_protocol_log_open();advance(250);page_protocol_log_poll();lv_obj_update_layout(lv_layer_top());assert_settings_toolbars(lv_layer_top());snprintf(name,sizeof(name),"logs-%s",l->tag);snapshot(name);page_protocol_log_close();
  }
  ui_lang_set(LANGUAGE_CN);assert(ui_lang_prepare_resources(LANGUAGE_CN));
- g_si_ctx.objects.root=lv_settings_box(lv_scr_act(),492,348,261,44,0x111111);g_si_ctx.lifecycle.created=true;g_si_ctx.view.scene=SMART_ISLAND_SCENE_IDLE;g_si_ctx.view.visual=SMART_ISLAND_VISUAL_COMPACT;
- page_collection_main_badge_create(lv_scr_act());assert(app_collection_request(DATA_COLLECT_MODE_FALSE));receive(3);data_collection_count_start();receive(4);data_collection_count_end(12);advance(250);page_collection_poll();snapshot("island-collecting");
- receive(7);advance(250);page_collection_poll();snapshot("island-success");
- g_si_ctx.lifecycle.count_session_active=true;g_si_ctx.view.scene=SMART_ISLAND_SCENE_COUNTING;assert(!smart_island_activity_set(SI_ACTIVITY_WORKING,"Collecting","",NULL));
- g_si_ctx.lifecycle.count_session_active=false;g_si_ctx.view.scene=SMART_ISLAND_SCENE_IDLE;g_si_ctx.lifecycle.suspended=true;assert(!smart_island_activity_set(SI_ACTIVITY_WORKING,"Collecting","",NULL));smart_island_activity_destroy();lv_obj_del(g_si_ctx.objects.root);g_si_ctx.objects.root=NULL;
- puts("PASS capture settings and log settings: ten locales, actual fonts, protocol controls; collection overlay never replaces counting/suspended scene");
+ page_collection_main_badge_create(lv_scr_act());lv_obj_t *badge=lv_obj_get_child(lv_scr_act(),-1);lv_obj_update_layout(badge);
+ assert(lv_obj_get_x(badge)==755&&lv_obj_get_y(badge)==348&&lv_obj_get_width(badge)==42&&lv_obj_get_height(badge)==44);
+ advance(250);page_collection_poll();assert(lv_obj_has_flag(badge,LV_OBJ_FLAG_HIDDEN));
+ assert(app_collection_request(DATA_COLLECT_MODE_FALSE));receive(3);advance(250);page_collection_poll();assert(!lv_obj_has_flag(badge,LV_OBJ_FLAG_HIDDEN));
+ unsigned opened=collection_opens;lv_event_send(badge,LV_EVENT_CLICKED,NULL);assert(pushed_page==UI_PAGE_SETTING&&collection_opens==opened+1);
+ machine_running=true;advance(250);page_collection_poll();assert(lv_obj_has_flag(badge,LV_OBJ_FLAG_HIDDEN));lv_event_send(badge,LV_EVENT_CLICKED,NULL);assert(collection_opens==opened+1);
+ machine_running=false;island_slot=false;advance(250);page_collection_poll();assert(lv_obj_has_flag(badge,LV_OBJ_FLAG_HIDDEN));
+ island_slot=true;advance(250);page_collection_poll();assert(!lv_obj_has_flag(badge,LV_OBJ_FLAG_HIDDEN));snapshot("main-rejected-capture-badge");
+ assert(app_collection_request(DATA_COLLECT_MODE_NONE));receive(0xFF);advance(250);page_collection_poll();assert(lv_obj_has_flag(badge,LV_OBJ_FLAG_HIDDEN));
+ lv_obj_del(badge);advance(250);page_collection_poll();
+ puts("PASS legacy capture page: ten locales, actual fonts, direct mode changes, diagnostic RUN gate/retry, busy/send-failure/timeout/late reply, hidden/deleted lifecycle, preserved badge geometry/navigation; existing log page rendered");
 }
+
 int main(void)
 {
     lv_init();ui_lang_set_resource_preparer(ui_locale_font_prepare);ui_message_font_set_provider(ui_locale_font_compose);lv_disp_draw_buf_t db;lv_disp_draw_buf_init(&db,buffer,NULL,1280*40);

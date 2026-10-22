@@ -206,9 +206,31 @@ static void ui_update_tests(void) {
     upgrade_session_end(UPGRADE_SESSION_UI);
     puts("PASS UI preflight, start errors, actual-only progress, busy guards, no hidden polling/reset and one result per run");
 }
+static unsigned header_back_calls;
+static void header_back_clicked(lv_event_t *event) {
+    assert(lv_event_get_user_data(event)==&header_back_calls);
+    ++header_back_calls;
+}
+static void header_guard_tests(void) {
+    for(unsigned repeat=0;repeat<2;repeat++) {
+        lv_settings_header_t cfg={.title="Header",.back=header_back_clicked,.user_data=&header_back_calls};
+        lv_settings_frame_t frame=lv_settings_frame_create(lv_scr_act(),&cfg);
+        unsigned before=header_back_calls, notices_before=action_notices;
+        settings_detail_action_block(frame.back,"Update in progress");
+        lv_event_send(frame.back,LV_EVENT_CLICKED,NULL);
+        assert(header_back_calls==before && action_notices==notices_before+1);
+        settings_detail_action_block(frame.back,NULL);
+        lv_event_send(frame.back,LV_EVENT_CLICKED,NULL);
+        assert(header_back_calls==before+1);
+        lv_obj_update_layout(frame.root);
+        assert(lv_obj_get_width(frame.back)==76 && lv_obj_get_height(frame.back)==42);
+        lv_obj_del(frame.root);
+    }
+    puts("PASS common header guard precedes navigation, unblock and recreate");
+}
 int main(void) {
     lv_init();lv_disp_draw_buf_t db;lv_disp_draw_buf_init(&db,buffer,NULL,1280*40);
     lv_disp_drv_t dd;lv_disp_drv_init(&dd);dd.hor_res=1280;dd.ver_res=400;dd.draw_buf=&db;dd.flush_cb=flush;lv_disp_drv_register(&dd);
     lv_img_decoder_t *decoder=lv_img_decoder_create();lv_img_decoder_set_info_cb(decoder,image_info);lv_img_decoder_set_open_cb(decoder,image_open);
-    remote_update_tests();ui_update_tests();puts("PASS actual LVGL upgrade pages");return 0;
+    header_guard_tests();remote_update_tests();ui_update_tests();puts("PASS actual LVGL upgrade pages");return 0;
 }

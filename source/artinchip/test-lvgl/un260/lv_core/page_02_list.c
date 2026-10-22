@@ -1,5 +1,8 @@
 #include "un260/lv_resources/ui_page_background.h"
 #include "page_02_list.h"
+#include "panel_pages.h"
+#include "un260/lv_system/ui_display_mode.h"
+
 #include "un260/font/ui_message_font.h"
 #include "page_02_list_data.h"
 #include "page_02_list_search.h"
@@ -31,8 +34,7 @@
 #define PANEL_Y 12
 #define PANEL_HEIGHT 376
 #define ACTION_GAP 8
-#define ACTION_TOP 52
-#define ACTION_HEIGHT ((PANEL_HEIGHT - (ACTION_TOP-PANEL_Y) - (LIST_ACTION_COUNT - 1) * ACTION_GAP) / LIST_ACTION_COUNT)
+#define ACTION_HEIGHT ((PANEL_HEIGHT - (LIST_ACTION_COUNT - 1) * ACTION_GAP) / LIST_ACTION_COUNT)
 #define BODY_Y 76
 #define HEADER_TOP_Y 48
 #define HEADER_BOTTOM_Y (BODY_Y - 1)
@@ -77,7 +79,7 @@ typedef struct {
 static list_view_t *view;
 static int requested_currency=-1,requested_tab;
 void page_02_list_multi_open(int currency,int tab)
-{requested_currency=currency;requested_tab=tab;}
+{requested_currency=currency;requested_tab=tab;if(ui_display_mode_is_panel())panel_pages_list_select(currency,tab);}
 static bool multi_gesture(gesture_action_t action)
 {return view&&view->multi_visible&&(action==GESTURE_ACTION_EXIT_PAGE||action==GESTURE_ACTION_HOME)&&ui_multi_detail_back(view->multi);}
 static uint32_t dirty = ALL_SECTIONS, reset_positions = ALL_SECTIONS;
@@ -138,6 +140,26 @@ static void number_set(lv_obj_t *label, double value, const lv_font_t *preferred
     }
     if (lv_obj_get_style_text_font(label,0)!=font) lv_obj_set_style_text_font(label,font,0);
     text_set(label, text);
+}
+static void reject_reason_set(lv_obj_t *label, const char *text)
+{
+    if (!label) return;
+    const lv_font_t *const sizes[]={&lv_font_instrument_sans_medium_18,
+        &lv_font_instrument_sans_medium_16,&lv_font_instrument_sans_medium_14};
+    const lv_coord_t available_width=lv_obj_get_style_width(label,0);
+    const lv_font_t *font=NULL;
+    lv_point_t size;
+    /* Protocol names keep English metrics and punctuation in every locale. */
+    for (unsigned i=0;i<sizeof(sizes)/sizeof(sizes[0]);++i) {
+        font=ui_message_font_for(sizes[i],LANGUAGE_EN);
+        lv_txt_get_size(&size,text,font,0,0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+        if (size.x<=available_width) break;
+    }
+    if (lv_obj_get_style_text_font(label,0)!=font) lv_obj_set_style_text_font(label,font,0);
+    const lv_coord_t height=lv_font_get_line_height(font);
+    lv_obj_set_height(label,height);
+    lv_obj_set_y(label,(ROW_HEIGHT-height)/2);
+    text_set(label,text);
 }
 static lv_obj_t *label_create(lv_obj_t *parent, int x, int y, int w, int h,
                               const lv_font_t *font, uint32_t color,
@@ -318,7 +340,7 @@ static void row_bind(lv_obj_t *row,uint32_t index,void *context)
         bool valid=index<(uint32_t)counting_data_error_detail_count(data);
         number_set(a,index+1,&lv_font_instrument_sans_medium_14);
         number_set(b,valid ? data->err_pcs[index] : 0,&lv_font_instrument_sans_medium_20);
-        text_set(c,ui_text_counting_reject_reason(valid ? data->err_code[index] : UINT8_MAX));
+        reject_reason_set(c,ui_text_counting_reject_reason(valid ? data->err_code[index] : UINT8_MAX));
     }
 }
 static void range_changed(const ui_list_window_t *w,void *context)
@@ -619,6 +641,7 @@ static void search_open(lv_event_t *e)
 }
 void page_02_list_section_mark_dirty(page_02_section_id_t id)
 {
+    if(panel_pages_created(UI_PAGE_LIST)){panel_pages_refresh(UI_PAGE_LIST,false);return;}
     if ((unsigned)id>=PAGE_02_SECTION_COUNT) return;
     dirty|=1U<<id;
     if (view && view->search) {
@@ -632,6 +655,7 @@ void page_02_list_section_data_ready(page_02_section_id_t id)
 { page_02_list_section_mark_dirty(id); }
 void page_02_list_report_reset(void)
 {
+    if(panel_pages_created(UI_PAGE_LIST)){panel_pages_refresh(UI_PAGE_LIST,true);return;}
     search_discard();
     if (view) {
         view->located_slot=UINT16_MAX;
@@ -645,6 +669,7 @@ void page_02_list_report_reset(void)
 }
 void ui_page_02_list_create(lv_obj_t *parent)
 {
+    if(ui_display_mode_is_panel()){if(panel_pages_create(UI_PAGE_LIST,parent))return;}
     if (view) return;
     view=lv_mem_alloc(sizeof(*view));
     if (!view) return;
@@ -656,7 +681,7 @@ void ui_page_02_list_create(lv_obj_t *parent)
     for (int i=0;i<PAGE_02_SECTION_COUNT;++i)
         if (!section_create(&view->section[i],&layouts[i])) goto creation_failed;
     for (int i=0;i<LIST_ACTION_COUNT;++i) {
-        view->actions[i]=button_create(view->page,1168,ACTION_TOP+i*(ACTION_HEIGHT+ACTION_GAP),96,ACTION_HEIGHT,
+        view->actions[i]=button_create(view->page,1168,PANEL_Y+i*(ACTION_HEIGHT+ACTION_GAP),96,ACTION_HEIGHT,
             &lv_font_instrument_sans_semibold_12,action_layouts[i].clicked,NULL);
         if (!view->actions[i]) goto creation_failed;
         if(i==LIST_ACTION_HISTORY || i==LIST_ACTION_SEARCH) {
@@ -678,6 +703,7 @@ creation_failed:
 }
 bool ui_page_02_list_resume(void)
 {
+    if(panel_pages_created(UI_PAGE_LIST))return panel_pages_resume(UI_PAGE_LIST);
     if (!view || !view->page) return false;
     lv_obj_clear_flag(view->page,LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(view->page);
     /* Reentry also covers prewarm before runtime notifications existed. Keep
@@ -693,6 +719,7 @@ bool ui_page_02_list_resume(void)
 }
 void ui_page_02_list_suspend(void)
 {
+    if(panel_pages_created(UI_PAGE_LIST)){panel_pages_suspend(UI_PAGE_LIST);return;}
     if (!view) return;
     ui_frame_commit_cancel(commit,NULL);
     ui_multi_detail_visible(view->multi,false);
@@ -704,6 +731,7 @@ void ui_page_02_list_suspend(void)
 }
 void ui_page_02_list_destroy(void)
 {
+    if(panel_pages_created(UI_PAGE_LIST)){panel_pages_destroy(UI_PAGE_LIST);return;}
     if (!view) return;
     ui_page_02_list_suspend();
     serials_discard();

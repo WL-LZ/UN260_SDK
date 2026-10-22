@@ -133,6 +133,11 @@ uint32_t app_command_runtime_count_end_generation(void)
     return g_count_end_generation;
 }
 
+bool app_command_runtime_counting_confirmed(void)
+{
+    return g_counting_session.start_confirmed;
+}
+
 bool app_command_runtime_count_start_busy(void)
 {
     return g_no_note_motor_active || counting_action_start_pending() || g_counting_session.start_confirmed ||

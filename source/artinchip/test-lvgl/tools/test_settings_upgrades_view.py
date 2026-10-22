@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory(prefix='un260-settings-view-') as temp:
     work=Path(temp);(work/'lvgl').mkdir();(work/'lvgl/lvgl.h').write_text(f'#include "{lvgl}/lvgl.h"\n')
     (work/'lv_drv_conf.h').write_text('/* Driver configuration is not used by this renderer. */\n')
     (work/'actual_upgrade_pointer.h').write_text(function((root/'lv_port_indev.c').read_text(),'lv_port_indev_set_drag_obj'))
-    conf=work/'lv_conf.h';conf.write_text('#ifndef LV_CONF_H\n#define LV_CONF_H\n#define LV_COLOR_DEPTH 32\n#define LV_MEM_SIZE (16U*1024U*1024U)\n#define LV_USE_THEME_DEFAULT 0\n#define LV_USE_LOG 0\n#define LV_FONT_MONTSERRAT_18 1\n#define LV_FONT_CUSTOM_DECLARE '+' '.join(f'LV_FONT_DECLARE({f});' for f in fonts)+'\n#endif\n')
+    conf=work/'lv_conf.h';conf.write_text('#ifndef LV_CONF_H\n#define LV_CONF_H\n#define LV_COLOR_DEPTH 32\n#define LV_MEM_SIZE (16U*1024U*1024U)\n#define LV_USE_THEME_DEFAULT 0\n#define LV_USE_LOG 0\n#define LV_ASSERT_HANDLER_INCLUDE <stdlib.h>\n#define LV_ASSERT_HANDLER abort();\n#define LV_FONT_MONTSERRAT_18 1\n#define LV_FONT_CUSTOM_DECLARE '+' '.join(f'LV_FONT_DECLARE({f});' for f in fonts)+'\n#endif\n')
     sources=[*compiled_asset_sources(),root/'tools/test_settings_upgrades_view.c',*[root/p for p in pages],root/'un260/lv_components/lv_settings.c',
       root/'un260/app_service/upgrade_session.c',
       root/'un260/lv_components/lv_nav_button.c',root/'un260/lv_components/lv_damped_button.c',
@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix='un260-settings-view-') as temp:
     def build(pair):subprocess.run([*common,'-c',str(pair[0]),'-o',str(pair[1])],check=True)
     with ThreadPoolExecutor(max_workers=4) as pool:list(pool.map(build,zip(sources,objects)))
     exe=work/'view';subprocess.run([*common,*map(str,objects),'-lm','-o',str(exe)],check=True)
-    result=subprocess.run([str(exe)],env={**os.environ,'OUT':str(out),'UN260_BACKGROUND_DIR':str(out)},check=False)
+    result=subprocess.run([str(exe)],env={**os.environ,'OUT':str(out),'UN260_BACKGROUND_DIR':str(out)},check=False,timeout=90)
 for file in out.glob('*.bgra'):
     Image.frombytes('RGBA',(1280,400),file.read_bytes(),'raw','BGRA').convert('RGB').save(file.with_suffix('.png'))
 sys.exit(result.returncode)

@@ -189,7 +189,9 @@ static void test_main(void)
 {
     fixture(false);assert(currency_state_confirm_active_code("USD"));
     prewarming=true;ui_main_create(lv_scr_act());assert(protocol_calls==0);
-    prewarming=false;assert(page_01_main_resume());assert(protocol_calls==0);
+    prewarming=false;assert(page_01_main_resume());assert(protocol_calls==1);
+    assert(last_protocol_command==0xC0 && last_protocol_sub==0x02);
+    assert(page_01_main_resume());assert(protocol_calls==1);
     render();assert(asset_opens>0 && page_01_main_is_created());assert_labels(main_page);
     lv_obj_t *bordered_cards[]={s_summary_card,s_detail_card};
     for(unsigned i=0;i<2;++i) {
@@ -731,7 +733,6 @@ static void test_main_locales(void){
 }
 #include "un260/lv_core/page_collection.h"
 #include "un260/data_collection/data_collection.h"
-#include "un260/lv_components/smart_island/smart_island_activity.h"
 static void capture_reply(unsigned code)
 {
     uint8_t bytes[]={0xFD,0xDF,6,0xC0,code,0x0A};
@@ -739,19 +740,49 @@ static void capture_reply(unsigned code)
 }
 static void test_capture_island(void)
 {
+    unsigned initialized=protocol_calls;
     ui_main_destroy();fixture(true);ui_main_create(lv_scr_act());page_01_main_resume();
+    assert(protocol_calls==initialized); /* Rebuild does not resend legacy initialization. */
     smart_island_notify_count_reset();tick(500);
+    lv_obj_t *indicator=NULL;
+    for(unsigned i=0;i<lv_obj_get_child_cnt(main_page);++i){
+        lv_obj_t *child=lv_obj_get_child(main_page,i);
+        if(lv_obj_get_x(child)==755&&lv_obj_get_y(child)==348&&
+           lv_obj_get_width(child)==42&&lv_obj_get_height(child)==44)indicator=child;
+    }
+    assert(indicator);assert(!lv_obj_is_visible(indicator));
+    assert(data_collection_request_begin(DATA_COLLECT_MODE_ALL,"enable",lv_tick_get()));capture_reply(1);
+    tick(200);page_collection_poll();render();
+    assert(smart_island_status_slot_available()&&lv_obj_is_visible(indicator));
+    assert(lv_obj_is_visible(lv_obj_get_child(indicator,0)));
+    assert(!lv_obj_is_visible(lv_obj_get_child(indicator,1)));
+    write_bmp("capture-all-badge");
+    unsigned opened=collection_opens, pushed=pushes;
+    click_object(indicator);
+    assert(collection_opens==opened+1&&pushes==pushed+1&&destination==UI_PAGE_SETTING);
     assert(data_collection_request_begin(DATA_COLLECT_MODE_FALSE,"enable",lv_tick_get()));capture_reply(3);
-    data_collection_count_start();smart_island_notify_count_start();capture_reply(4);tick(500);page_collection_poll();render();
-    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_COUNTING&&!smart_island_activity_slot_available());
-    write_bmp("island-capture-normal-counting");
-    data_collection_count_end(12);smart_island_notify_count_end(NULL);tick(3500);page_collection_poll();render();
-    assert(smart_island_activity_slot_available());write_bmp("island-capture-working");
-    capture_reply(7);tick(250);page_collection_poll();render();write_bmp("island-capture-success");
+    tick(200);page_collection_poll();render();
+    assert(!lv_obj_is_visible(lv_obj_get_child(indicator,0)));
+    assert(lv_obj_is_visible(lv_obj_get_child(indicator,1)));
+    write_bmp("capture-rejected-badge");
+    unsigned children=lv_obj_get_child_cnt(g_si_ctx.objects.root);
+    capture_reply(2);tick(200);page_collection_poll();render();
     assert(data_collection_state_mode()==DATA_COLLECT_MODE_FALSE);
-    assert(data_collection_request_begin(DATA_COLLECT_MODE_NONE,"disable",lv_tick_get()));capture_reply(0xFF);page_collection_poll();
-    ui_main_destroy();
-    puts("PASS actual Main capture: unchanged COUNTING scene, deferred collecting/success overlay, retained mode and confirmed close");
+    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE);
+    assert(lv_obj_get_child_cnt(g_si_ctx.objects.root)==children); /* No new capture overlay. */
+    smart_island_notify_count_start();tick(500);page_collection_poll();render();
+    assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_COUNTING&&!smart_island_status_slot_available());
+    assert(!lv_obj_is_visible(indicator));write_bmp("island-capture-normal-counting");
+    smart_island_notify_count_end(NULL);tick(3500);page_collection_poll();render();
+    assert(smart_island_status_slot_available()&&lv_obj_is_visible(indicator));
+    smart_island_open_info_page();tick(500);page_collection_poll();assert(!lv_obj_is_visible(indicator));
+    smart_island_close();tick(500);page_collection_poll();assert(lv_obj_is_visible(indicator));
+    page_01_main_suspend();tick(200);page_collection_poll();assert(!lv_obj_is_visible(indicator));
+    assert(page_01_main_resume());tick(200);page_collection_poll();assert(lv_obj_is_visible(indicator));
+    assert(data_collection_request_begin(DATA_COLLECT_MODE_NONE,"disable",lv_tick_get()));capture_reply(0xFF);
+    tick(200);page_collection_poll();assert(!lv_obj_is_visible(indicator));
+    ui_main_destroy();tick(200);page_collection_poll();
+    puts("PASS Main legacy capture: one-time initialization, unchanged badge geometry, both mode icons and settings entry, scene avoidance and lifecycle, no capture overlay");
 }
 
 int main(void)
