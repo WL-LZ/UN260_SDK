@@ -27,6 +27,13 @@ static counting_session_state_t g_counting_session;
 static counting_detail_state_t g_counting_detail_state;
 static counting_sim_t data;
 static bool g_no_note_motor_active, g_no_note_denom_pending, diagnostic, locked, multi_query;
+static bool g_add_result_cleared;
+static bool add_commit_deferred;
+static bool app_add_runtime_before_count_start(void){return !add_commit_deferred;}
+static void app_add_runtime_poll(void){}
+static bool counting_denom_query_complete(counting_detail_state_t *state)
+{assert(state==&g_counting_detail_state);state->query_pending=false;return true;}
+
 static uint32_t g_count_end_generation;
 static bool multi, warning_visible;
 static struct { bool counting; } multi_model;
@@ -80,7 +87,13 @@ static void app_counting_runtime_handle_info(counting_session_state_t *s,countin
 #define app_currency_runtime_handle_detected(...) ((void)0)
 #define app_counting_runtime_handle_detail(...) ((void)0)
 #define app_boot_runtime_handle_reply(...) ((void)0)
-#define app_currency_runtime_handle_reply(...) ((void)0)
+static bool accepted_currency;
+static void app_currency_runtime_handle_reply(counting_detail_state_t *detail,
+    counting_session_state_t *session,const uint8_t *buf,uint8_t len)
+{
+    (void)session;(void)buf;(void)len;
+    if(accepted_currency){detail->query_wait_push=true;detail->query_expired=false;}
+}
 #define app_counting_runtime_handle_denom(...) (++denoms)
 '''
 cases = r'''
@@ -89,7 +102,8 @@ static void reset(void){
  counting_action_cancel_all();
  memset(&g_counting_session,0,sizeof(g_counting_session));
  memset(&g_counting_detail_state,0,sizeof(g_counting_detail_state));
- g_no_note_motor_active=g_no_note_denom_pending=diagnostic=locked=multi_query=multi=warning_visible=false;
+ g_no_note_motor_active=g_no_note_denom_pending=diagnostic=locked=multi_query=multi=warning_visible=g_add_result_cleared=false;
+ add_commit_deferred=accepted_currency=false;
  resets=faults=warnings=starts=ends=prepares=reports=denoms=stacker=g_count_end_generation=0;
  data.total_pcs=23;data.total_amount=2300;data.denom_number=1;data.denom[0].pcs=23;
 }
@@ -192,6 +206,33 @@ int main(void){
   live[11]=2;dispatch(live);dispatch(live);
   assert(!locked&&!app_command_runtime_count_start_busy()&&ends==1&&g_count_end_generation==1);
  }
+ /* ADD clearing quarantines prior streams until a genuine new owner exists.
+    Failed/unsolicited currency replies and idle AUTO detection are not owners. */
+ reset();g_add_result_cleared=true;
+ uint8_t currency_failed[]={0xFD,0xDF,6,0x03,2,0};
+ uint8_t currency_success[]={0xFD,0xDF,6,0x03,1,0};
+ uint8_t detected[]={0xFD,0xDF,8,0x50,'U','S','D',0};
+ uint8_t old_denom[16]={0xFD,0xDF,16,0x0B};
+ uint8_t old_serial[24]={0xFD,0xDF,24,0x49};
+ dispatch(currency_failed);assert(g_add_result_cleared);
+ dispatch(currency_success);assert(g_add_result_cleared);
+ dispatch(detected);assert(g_add_result_cleared);
+ detected[3]=0x49;dispatch(detected);assert(g_add_result_cleared);
+ dispatch(old_denom);dispatch(old_serial);dispatch(live);
+ assert(!denoms&&!ends&&data.total_pcs==23&&g_add_result_cleared);
+ g_counting_detail_state.query_pending=g_counting_detail_state.query_expired=true;
+ memset(old_denom+4,0xFF,11);dispatch(old_denom);
+ assert(!g_counting_detail_state.query_pending&&g_add_result_cleared&&!denoms);
+ accepted_currency=true;dispatch(currency_success);assert(!g_add_result_cleared);
+ dispatch(old_denom);assert(denoms==1);
+ /* A confirmed CLEAR waiting for its history commit retains the exact START
+    frame. Replaying once ready opens the new generation, never an old frame. */
+ reset();g_add_result_cleared=true;add_commit_deferred=true;
+ assert(!app_command_runtime_dispatch(0x0A,start,sizeof(start)));
+ assert(!starts&&!reports&&!prepares&&g_add_result_cleared);
+ add_commit_deferred=false;dispatch(start);
+ assert(starts==1&&reports==1&&prepares==1&&!g_add_result_cleared);
+ puts("PASS ADD clear dispatcher: failed/unsolicited03 and idle AUTO detection retain old-frame quarantine; late 0B/49/0E ignored, query END drains, accepted currency transition/new START reopen, commit backpressure preserves START order");
  puts("PASS full dispatcher + real START request owner: 52 fault/layout/order cases, active-session protection, supplied empty-motion sequence, prior result preservation, legacy end/fault, malformed/duplicate replies, query ownership, diagnostics and next real count");
 }
 '''

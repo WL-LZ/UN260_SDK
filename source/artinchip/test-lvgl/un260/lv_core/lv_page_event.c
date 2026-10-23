@@ -1,5 +1,6 @@
 #include "un260/app_service/receipt_print_service.h"
 #include "un260/lv_system/ui_i18n.h"
+#include "un260/app_service/app_add_runtime.h"
 #include "un260/lv_components/ui_notice.h"
 #include "lvgl/lvgl.h"
 #include "un260/lv_core/lv_page_manager.h"
@@ -237,6 +238,9 @@ void page_03_update_menu_button_states_refresh(void)
 
 void page_01_action_run(page_01_action_t action)
 {
+    if (app_add_runtime_busy() && action != PAGE_01_ACTION_ADD &&
+        action != PAGE_01_ACTION_CLEAR && action != PAGE_01_ACTION_LIST &&
+        action != PAGE_01_ACTION_MENU && action != PAGE_01_ACTION_START) return;
     switch (action) {
     case PAGE_01_ACTION_MODE:
         page_01_mode_cycle();
@@ -261,7 +265,8 @@ void page_01_action_run(page_01_action_t action)
         app_command_runtime_clear_counting_data("user clear");
         break;
     case PAGE_01_ACTION_ADD:
-        (void)setting_service_request_add(!machine_state_add_enabled());
+        (void)app_add_runtime_request(!machine_state_add_enabled());
+        page_01_main_refresh_start_state();
         break;
     case PAGE_01_ACTION_WORK:
         (void)setting_service_request_work_mode(machine_state_work_mode() ? 0 : 1);

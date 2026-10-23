@@ -10,11 +10,20 @@ typedef enum {
     COUNTING_ACTION_TIMEOUT_CLEAR = 1U << 1,
 } counting_action_timeout_t;
 
+typedef enum {
+    COUNTING_CLEAR_RESULT_NONE = 0,
+    COUNTING_CLEAR_RESULT_SUCCESS,
+    COUNTING_CLEAR_RESULT_FAILED,
+    COUNTING_CLEAR_RESULT_TIMEOUT,
+} counting_clear_result_t;
+
 bool counting_action_request_start(void);
 bool counting_action_request_clear(void);
 void counting_action_handle_reply(uint8_t cmd, const uint8_t *frame,
                                   uint8_t frame_len);
 uint32_t counting_action_take_timeouts(void);
+/* One-shot result from an owned valid reply or take_timeouts(). */
+counting_clear_result_t counting_action_take_clear_result(void);
 bool counting_action_clear_pending(void);
 bool counting_action_start_pending(void);
 void counting_action_cancel_all(void);

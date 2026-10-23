@@ -12,7 +12,7 @@ reviewed={
  'page_03_menu_show_batch_saved_tip':'legacy notification adapter',
  'print_config_request_field':'print_config result/timeout + app_setting_reply_detail',
  'record_request':'cashbook async owner',
- 'setting_service_request_add':'settings.add',
+ 'app_add_runtime_request':'app_add_runtime: settings.add confirmation then count.add-reset outcome/retry',
  'setting_service_request_batch_switch':'settings.batch',
  'setting_service_request_beep':'settings.sound',
  'setting_service_request_fo_mode':'settings.sorting',
@@ -41,6 +41,8 @@ for key in reviewed.values():
  if key.startswith('settings.'):
   assert re.search(r'app_setting_notice_result\("'+re.escape(key)+r'"',reply), 'Missing completion: '+key
   assert key in runtime, 'Missing timeout/failure owner: '+key
+assert 'app_add_runtime_setting_result' in reply, 'ADD must hand matched confirmation to its transaction owner'
+assert 'app_add_runtime_setting_timeout' in runtime, 'ADD timeout must settle its transaction owner'
 quick=(root/'un260/lv_components/lv_quick_controls.h').read_text().split('typedef enum {',1)[1].split('}',1)[0]
 quick_ids=set(re.findall(r'QUICK_[A-Z_]+',quick))
 assert quick_ids=={'QUICK_LAYOUT','QUICK_GESTURES','QUICK_PURE','QUICK_POPUP','QUICK_TOUCH','QUICK_EXPORT','QUICK_QR','QUICK_STANDBY','QUICK_TOP_POPUP','QUICK_CALCULATOR','QUICK_CASH_JOURNAL','QUICK_HISTORY','QUICK_OPERATORS'}, 'Classify new shortcut as setting or action'

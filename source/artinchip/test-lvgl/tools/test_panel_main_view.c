@@ -27,6 +27,7 @@ uint8_t lv_port_indev_touch_count(void){return fingers;}
 bool app_command_runtime_count_start_busy(void){return busy;}
 bool app_command_runtime_counting_confirmed(void){return confirmed;}
 bool workspace_service_applying(void){return applying;}
+bool app_add_runtime_busy(void){return false;}
 bool setting_service_mode_is_pending(void){return false;}
 bool setting_service_request_speed(uint8_t value){requests++;requested_speed=value;return send_ok;}
 bool setting_service_request_mode(uint8_t value){requests++;requested_mode=value;return send_ok;}

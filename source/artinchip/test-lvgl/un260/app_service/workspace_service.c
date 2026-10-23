@@ -1,4 +1,5 @@
 #include "un260/lv_system/ui_i18n.h"
+#include "app_add_runtime.h"
 #include "un260/lv_system/ui_message.h"
 #include "workspace_service.h"
 #include "setting_service.h"
@@ -58,6 +59,7 @@ const char *workspace_service_switch_blocker(void)
     if(workspace_store_busy())return UI_N_("A workspace save or photo import is in progress.");
     if(apply.active||batch_save.pending)return UI_N_("Wait for the workspace change to finish.");
     if(counting_cashbook_verify_group())return UI_N_("Finish or cancel the armed recount before switching workspaces.");
+    if(app_add_runtime_busy())return UI_N_("Finish the current operation before changing settings.");
     if(app_command_runtime_result_pending())return UI_N_("Wait for the last counting result to finish.");
     if(counting_data_current()->multi_currency_result&&counting_multi_current()->total_pcs)
         return UI_N_("Finish and clear the MULTI group before switching operator or applying a profile.");

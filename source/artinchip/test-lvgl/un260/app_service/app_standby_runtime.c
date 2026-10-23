@@ -4,6 +4,7 @@
 #include "touch_calibration_service.h"
 #include "un260/lv_components/ui_notice.h"
 #include "app_command_runtime.h"
+#include "app_add_runtime.h"
 #include "un260/storage/standby_store.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/page_34_standby.h"
@@ -18,7 +19,7 @@ static const char *standby_operation_blocker(void)
 {
  if(ui_factory_reset_blocks_navigation())return UI_N_("Complete the factory reset and restart before standby.");
  if(touch_calibration_busy())return UI_N_("Finish or cancel the touchscreen calibration before standby.");
- if(app_command_runtime_count_start_busy())return UI_N_("Finish counting before standby.");
+ if(app_add_runtime_busy()||app_command_runtime_count_start_busy())return UI_N_("Finish counting before standby.");
  if(machine_state_aging_running())return UI_N_("Wait for the aging test to finish before standby.");
  /* Acknowledged records remain available for inspection until a controller
   * report resolves them. They are not a pending UI operation (e.g. No notes).
@@ -49,7 +50,7 @@ bool app_standby_runtime_request(void)
 bool app_standby_runtime_needs_fault_review(void)
 {
  if(ui_factory_reset_blocks_navigation()||touch_calibration_busy())return false;
- return !ui_manager_is_transitioning()&&!app_command_runtime_count_start_busy()&&
+ return !ui_manager_is_transitioning()&&!app_add_runtime_busy()&&!app_command_runtime_count_start_busy()&&
   !machine_state_aging_running()&&!fault_popup_is_showing()&&
   !lv_upgrade_popup_is_showing()&&!lv_qr_popup_is_showing()&&
   machine_fault_first_unread(NULL);

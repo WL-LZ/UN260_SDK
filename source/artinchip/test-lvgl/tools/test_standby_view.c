@@ -56,6 +56,8 @@ static unsigned fault_presentations;
 bool lv_upgrade_popup_is_showing(void){return upgrade_block;}
 bool lv_qr_popup_is_showing(void){return qr_block;}
 void standby_store_init(void){}
+static bool add_block;
+bool app_add_runtime_busy(void){return add_block;}
 bool app_command_runtime_count_start_busy(void){return counting_block;}
 bool machine_state_aging_running(void){return aging_block;}
 bool fault_popup_is_showing(void){return fault_block;}
@@ -80,6 +82,7 @@ static void runtime_test(void){
 }
 static void standby_request_test(void){
  current_page=UI_PAGE_PURE;touching=false;capture=false;saved.minutes=1;
+ add_block=true;assert(app_standby_runtime_blocker()&&!app_standby_runtime_needs_fault_review());assert(!app_standby_runtime_request());add_block=false;
  machine_fault_key_t no_notes={MACHINE_FAULT_START,1,2};
  assert(machine_fault_report(no_notes));
  assert(app_standby_runtime_blocker()&&app_standby_runtime_needs_fault_review());

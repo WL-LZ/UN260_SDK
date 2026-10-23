@@ -3,6 +3,7 @@
 #include "work_mode_service.h"
 #include "workspace_service.h"
 #include "app_command_runtime.h"
+#include "app_add_runtime.h"
 #include "upgrade_session.h"
 #include "touch_calibration_service.h"
 #include "un260/counting/counting_history_service.h"
@@ -31,7 +32,8 @@ static bool independent_storage_busy(void)
 const char *ui_factory_reset_blocker(void)
 {
     if (phase != UI_FACTORY_RESET_IDLE) return UI_N_("Reset is in progress. Keep power connected.");
-    if (app_command_runtime_count_start_busy() || app_command_runtime_result_pending())
+    if (app_add_runtime_busy() || app_command_runtime_count_start_busy() ||
+        app_command_runtime_result_pending())
         return UI_N_("Finish counting and receiving results before resetting.");
     if (machine_state_aging_running() || work_mode_service_operation_active())
         return UI_N_("Stop the running test before resetting.");

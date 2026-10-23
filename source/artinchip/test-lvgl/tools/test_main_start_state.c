@@ -11,6 +11,14 @@ typedef struct { int unused; } counting_sim_t;
 enum { COUNTING_SESSION_IDLE, COUNTING_SESSION_ACTIVE, COUNTING_SESSION_FINISHED_WAIT_START };
 enum { SMART_ISLAND_WARNING_LEVEL_ERROR = 1 };
 static protocol_request_t g_start_request, g_clear_request;
+typedef enum { COUNTING_CLEAR_RESULT_NONE, COUNTING_CLEAR_RESULT_SUCCESS,
+    COUNTING_CLEAR_RESULT_FAILED, COUNTING_CLEAR_RESULT_TIMEOUT } counting_clear_result_t;
+static counting_clear_result_t g_clear_result;
+static bool add_busy, add_retry_ok;
+static unsigned add_retries;
+static bool app_add_runtime_busy(void) { return add_busy; }
+static bool app_add_runtime_retry_clear(void) { ++add_retries; return add_retry_ok; }
+
 static counting_session_state_t g_counting_session;
 static bool g_no_note_motor_active;
 static counting_sim_t data;
@@ -74,7 +82,7 @@ static void fixture(bool existing_clear, bool successful_send)
     g_start_request.pending = true; g_clear_request.pending = existing_clear;
     g_counting_session = (counting_session_state_t){true, COUNTING_SESSION_ACTIVE};
     reset_allowed = true; send_ok = successful_send; observed_busy = true;
-    transport_ready = true; guard_fault = false;
+    transport_ready = true; guard_fault = false; add_busy=add_retry_ok=false; add_retries=0;
     sequence = reset_projection_at = finish_start_at = begin_clear_at = 0;
     send_at = finish_clear_at = refresh_at = refreshes = warnings = 0;
 }
@@ -87,10 +95,12 @@ static void test_clear_projection(bool existing_clear, bool successful_send)
     assert(g_counting_session.phase == COUNTING_SESSION_IDLE);
     assert(!warnings);
     assert(reset_projection_at && finish_start_at > reset_projection_at);
-    assert(begin_clear_at > finish_start_at);
+    if (existing_clear) assert(!begin_clear_at);
+    else assert(begin_clear_at > finish_start_at);
     /* This is the regression: every CLEAR result must replace the stale busy
      * projection only after the request service has finished cancelling START. */
-    assert(refreshes == 1 && refresh_at > begin_clear_at);
+    assert(refreshes == 1 && refresh_at > finish_start_at);
+    if (!existing_clear) assert(refresh_at > begin_clear_at);
     assert(!observed_busy && !app_command_runtime_count_start_busy());
     if (existing_clear) {
         assert(!send_at && !finish_clear_at && g_clear_request.pending);
@@ -133,8 +143,18 @@ static void test_uncertain_transport_preserves_projection(void)
     }
 }
 
+static void test_add_retry_owner(void)
+{
+    fixture(false, true); add_busy=add_retry_ok=true;
+    assert(app_command_runtime_clear_counting_data("ADD retry"));
+    assert(add_retries==1 && !sequence && !warnings && !refreshes);
+    add_retry_ok=false;
+    assert(!app_command_runtime_clear_counting_data("ADD retry"));
+    assert(add_retries==2 && !sequence && !warnings && !refreshes);
+}
 int main(void)
 {
+    test_add_retry_owner();
     test_clear_projection(false, true);
     test_clear_projection(false, false);
     test_clear_projection(true, true);

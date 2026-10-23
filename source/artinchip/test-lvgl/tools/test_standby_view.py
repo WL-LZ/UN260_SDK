@@ -12,12 +12,13 @@ out=Path(sys.argv[1]).resolve();out.mkdir(parents=True,exist_ok=True)
 for src,name,size in [('standby/mist.png','mist',(1280,400)),('backgrounds/user.png','user',(1280,400)),('standby/celadon.png','wallpaper',(1280,400)),('standby/silver.png','silver',(1280,400)),('standby/champagne.png','champagne',(1280,400)),('standby/un260-mark.png','gear',(24,28))]:
     im=Image.open(root/'aic_ui/lvgl_data'/src).convert('RGBA').resize(size)
     (out/(name+'.bgra')).write_bytes(im.tobytes('raw','BGRA'))
-fonts=sorted(set(re.findall(r'\blv_font_(?:instrument_sans|standby)_[a-zA-Z0-9_]+',(root/'un260/lv_core/page_34_standby.c').read_text())))
+font_text='\n'.join((root/path).read_text() for path in ('un260/lv_core/page_34_standby.c','un260/font/ui_message_font.c'))
+fonts=sorted(set(re.findall(r'\blv_font_(?:instrument_sans|standby|message_cjk)_[a-zA-Z0-9_]+',font_text)))
 with tempfile.TemporaryDirectory(prefix='un260-standby-view-') as temp:
     work=Path(temp);(work/'lvgl').mkdir();(work/'lvgl/lvgl.h').write_text(f'#include "{lvgl}/lvgl.h"\n')
     (work/'lv_port_indev.h').write_text('#include "lvgl/lvgl.h"\nvoid lv_port_indev_set_drag_obj(lv_obj_t*,bool);\n')
     conf=work/'lv_conf.h';conf.write_text('#ifndef LV_CONF_H\n#define LV_CONF_H\n#define LV_COLOR_DEPTH 32\n#define LV_MEM_SIZE (8U*1024U*1024U)\n#define LV_USE_THEME_DEFAULT 1\n#define LV_USE_LOG 0\n#define LV_FONT_CUSTOM_DECLARE '+' '.join(f'LV_FONT_DECLARE({f});' for f in fonts)+'\n#endif\n')
-    sources=[*compiled_asset_sources(),root/'tools/test_standby_view.c',root/'un260/font/scaled_font.c',*[root/'un260/font'/f'{f}.c' for f in fonts],*lvgl.joinpath('src').rglob('*.c')]
+    sources=[*compiled_asset_sources(),root/'tools/test_standby_view.c',root/'un260/font/ui_message_font.c',root/'un260/font/scaled_font.c',*[root/'un260/font'/f'{f}.c' for f in fonts],*lvgl.joinpath('src').rglob('*.c')]
     sources = with_i18n(sources, root)
     common=['gcc','-DLVGL_DIR="L:/usr/local/share/lvgl_data/"','-DUI_STATE_DIR="/tmp/un260-i18n-tests"','-std=gnu11','-O1','-g','-fsanitize=undefined','-fno-sanitize-recover=all',f'-I{work}',f'-I{root}',f'-I{lvgl}',f'-DLV_CONF_PATH={conf}']
     objects=[work/f'{i}.o' for i in range(len(sources))]

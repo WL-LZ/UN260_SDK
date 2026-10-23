@@ -592,6 +592,11 @@ static void sim_reset_counting_data(counting_sim_t *sim_data,
     smart_island_refresh_summary();
 }
 
+void sim_reset_counting_group(counting_sim_t *sim_data)
+{
+    sim_reset_counting_data(sim_data, true);
+}
+
 void sim_reset_for_currency(counting_sim_t* sim_data)
 {
     sim_reset_counting_data(sim_data, true);

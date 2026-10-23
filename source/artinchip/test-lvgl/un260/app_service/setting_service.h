@@ -53,6 +53,7 @@ bool setting_service_take_mode_result(uint8_t *target);
 void setting_service_cancel_mode_request(void);
 
 bool setting_service_request_add(bool target);
+bool setting_service_add_is_pending(void);
 bool setting_service_take_add_result(bool *target);
 
 bool setting_service_request_fo_mode(uint8_t target);

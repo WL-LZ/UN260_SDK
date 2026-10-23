@@ -2,6 +2,7 @@
 #include "un260/lv_system/ui_lang.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/ui_i18n.h"
+#include "un260/app_service/app_add_runtime.h"
 #include "un260/lv_components/ui_notice.h"
 #include "un260/app_service/app_ui_runtime.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
@@ -610,11 +611,12 @@ static void action(lv_event_t *event)
     }
     if(id==A_TOUCH_SOUND){app_local_setting_apply(APP_LOCAL_TOUCH_SOUND,!user_cfg_touch_sound_enabled(),0);menu.dirty=true;return;}
     if(id==813)id=440+!machine_state_buzzer_enabled();
-    if(id>=400&&id<450){if(id<440&&(workspace_service_applying()||app_command_runtime_count_start_busy())){notify(UI_NOTICE_WARNING,UI_N_("Finish the current operation before changing settings."));return;}unsigned kind=(id-400)/10,v=(id-400)%10;bool ok=false;
+    if(id>=400&&id<450){if(id<440&&(workspace_service_applying()||app_command_runtime_count_start_busy()||
+            (app_add_runtime_busy()&&(id<420||id>=430)))){notify(UI_NOTICE_WARNING,UI_N_("Finish the current operation before changing settings."));return;}unsigned kind=(id-400)/10,v=(id-400)%10;bool ok=false;
         switch(kind){
             case 0:ok=setting_service_request_speed(v);break;
             case 1:ok=setting_service_request_work_mode(v);break;
-            case 2:ok=setting_service_request_add(v);break;
+            case 2:ok=app_add_runtime_request(v);break;
             case 3:ok=setting_service_request_fo_mode(v);break;
             case 4:ok=setting_service_request_beep(v);break;
         }
@@ -632,7 +634,7 @@ static void action(lv_event_t *event)
     if(id==A_EDIT_BATCH){if(!menu.selected_batch){explain(UI_N_("OFF is a fixed slot."));return;}char v[8];snprintf(v,sizeof(v),"%u",menu.batches[menu.selected_batch]);settings_detail_keyboard_show(ui_tr("Notes per batch (1-199)"),v,3,SETTINGS_DETAIL_KEYBOARD_UINT,batch_submit,NULL);return;}
     if(id==A_DELETE_BATCH){if(!menu.selected_batch||menu.batch_count<=2){explain(UI_N_("Keep OFF and at least one numeric slot."));return;}if(!menu.batch_dirty)capture_batch_active();if(menu.batches[menu.selected_batch]==menu.batch_active_edited)menu.batch_active_original=menu.batch_active_edited=0;memmove(menu.batches+menu.selected_batch,menu.batches+menu.selected_batch+1,menu.batch_count-menu.selected_batch-1);menu.batch_count--;if(menu.selected_batch>=menu.batch_count)menu.selected_batch=menu.batch_count-1;menu.batch_page=menu.selected_batch/5;menu.batch_dirty=menu.dirty=true;return;}
     if(id==A_APPLY_BATCH){
-        if(app_command_runtime_count_start_busy()||workspace_service_applying()){notify(UI_NOTICE_WARNING,UI_N_("Finish the current operation first."));return;}
+        if((app_command_runtime_count_start_busy()||app_add_runtime_busy())||workspace_service_applying()){notify(UI_NOTICE_WARNING,UI_N_("Finish the current operation first."));return;}
         unsigned n=menu.batches[menu.selected_batch];
         if(menu.batch_dirty){
             if(workspace_service_save_batches(menu.owner,menu.batches,menu.batch_count,0,0)){

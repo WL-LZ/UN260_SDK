@@ -1,5 +1,6 @@
 #include "un260/lv_system/ui_i18n.h"
 #include "app_setting_runtime.h"
+#include "app_add_runtime.h"
 #include "app_setting_notice.h"
 #include "app_fault_recovery.h"
 #include "ui_factory_reset_service.h"
@@ -23,6 +24,7 @@
 #include "un260/lv_core/lv_page_event.h"
 #include "un260/lv_core/page_06_settings.h"
 #include "un260/lv_core/page_03_menu.h"
+#include "un260/lv_core/page_01_main.h"
 #include "un260/lv_core/page_20_set_print.h"
 #include "un260/lv_drivers/lv_drivers.h"
 #include "un260/lv_core/page_07_curr.h"
@@ -153,8 +155,16 @@ void app_setting_runtime_poll(uint32_t now_ms)
             { SETTING_REQUEST_TIMEOUT_WORK_MODE, "settings.work_mode", UI_N_("Work mode") },
             { SETTING_REQUEST_TIMEOUT_BEEP, "settings.sound", UI_N_("Sound") }
         };
+        const bool add_timeout = (basic_timeouts & SETTING_REQUEST_TIMEOUT_ADD) &&
+                                 app_add_runtime_waiting_setting();
+        if (add_timeout) {
+            ui_notice_clear("settings.add");
+            app_add_runtime_setting_timeout();
+            page_01_main_refresh_start_state();
+        }
         for (unsigned i = 0; i < sizeof(notices)/sizeof(notices[0]); ++i)
-            if (basic_timeouts & notices[i].bit)
+            if ((basic_timeouts & notices[i].bit) &&
+                !(add_timeout && notices[i].bit == SETTING_REQUEST_TIMEOUT_ADD))
                 app_setting_notice_timeout(notices[i].key, notices[i].title);
         page_03_update_menu_button_states_refresh();
     }

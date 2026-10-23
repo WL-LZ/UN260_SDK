@@ -20,6 +20,8 @@ bool workspace_store_ready(void){return ready;}
 bool workspace_store_busy(void){return busy;}
 const workspace_model_t *workspace_store_get(void){return &model;}
 bool workspace_store_save(const workspace_model_t *m){if(busy||!workspace_model_valid(m))return false;if(async_save){save_draft=*m;busy=true;}else model=*m;return true;}
+static bool add_busy;
+bool app_add_runtime_busy(void){return add_busy;}
 bool app_command_runtime_count_start_busy(void){return running;}
 bool app_command_runtime_result_pending(void){return pending;}
 bool machine_state_aging_running(void){return false;}
@@ -47,6 +49,7 @@ int main(void)
 {
     workspace_defaults(&model);model.operators_enabled=1;uint32_t id;assert(workspace_add_user(&model,"Taylor",&id));
     assert(!workspace_service_switch_blocker());
+    add_busy=true;assert(!workspace_service_switch(id));add_busy=false;
     running=true;assert(!workspace_service_switch(id));running=false;
     pending=true;assert(!workspace_service_switch(id));pending=false;
     capacity=false;assert(!workspace_service_switch(id));capacity=true;

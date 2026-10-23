@@ -133,6 +133,7 @@ ui_page_t ui_manager_get_current_page(void) { return host_current_page; }
 bool ui_manager_is_prewarming_page(ui_page_t page) { (void)page; return prewarming; }
 bool ui_manager_is_transitioning(void) { return host_transitioning; }
 bool app_command_runtime_count_start_busy(void) { return start_busy; }
+bool app_add_runtime_busy(void) { return false; }
 #include "un260/app_service/work_mode_service.h"
 bool work_mode_service_diagnostic_ready(void){return true;}
 const char *work_mode_service_status_msgid(void){return "Ready";}

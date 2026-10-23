@@ -173,6 +173,8 @@ bool setting_service_request_speed(uint8_t n){actual_state.speed=n;return true;}
 bool setting_service_request_work_mode(uint8_t n){actual_state.work_mode=n;return true;}
 bool setting_service_request_fo_mode(uint8_t n){actual_state.fo_mode=n;return true;}
 bool setting_service_request_add(bool n){actual_state.add_enabled=n;return true;}
+bool app_add_runtime_request(bool n){return setting_service_request_add(n); }
+bool app_add_runtime_busy(void){return false;}
 bool setting_service_request_beep(bool n){actual_state.buzzer_enabled=n;return true;}
 bool setting_service_request_batch_switch(bool enabled,uint8_t n,bool e,uint8_t old){(void)e;(void)old;actual_state.batch_enabled=enabled;actual_state.batch_num=n;return true;}
 bool app_command_runtime_count_start_busy(void){return busy;}

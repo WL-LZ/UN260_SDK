@@ -8,6 +8,7 @@
 #include "un260/lv_components/lv_fault_popup.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_system/ui_i18n.h"
+#include "un260/app_service/app_add_runtime.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_system/ui_state_runtime.h"
 #include "un260/lv_system/counting_ui_runtime.h"
@@ -112,9 +113,9 @@ static const char *speed_text(uint8_t speed)
 }
 static void close_picker(void *user)
 {(void)user;main_view.picker=PICK_NONE;refresh_motion();}
-static bool setting_blocked(void)
+static bool setting_blocked(bool allow_add_clear)
 {
-    if(!app_command_runtime_count_start_busy() && !workspace_service_applying())return false;
+    if(!app_command_runtime_count_start_busy() && !workspace_service_applying() && (allow_add_clear || !app_add_runtime_busy()))return false;
     ui_notice_post_text(UI_NOTICE_WARNING,"panel.settings",UI_N_("Settings"),
         UI_N_("Finish the current operation before changing settings."));
     return true;
@@ -122,7 +123,7 @@ static bool setting_blocked(void)
 static bool picker_confirm(uint32_t value,void *user)
 {
     (void)user;bool sent=false;
-    if(setting_blocked()){panel_choice_set_error(ui_tr("Finish the current operation first."));return false;}
+    if(setting_blocked(main_view.picker==PICK_CLEAR)){panel_choice_set_error(ui_tr("Finish the current operation first."));return false;}
     if(main_view.picker==PICK_SPEED)sent=setting_service_request_speed((uint8_t)value);
     else if(main_view.picker==PICK_MODE)sent=setting_service_request_mode((uint8_t)value);
     else if(main_view.picker==PICK_CLEAR){
@@ -168,7 +169,7 @@ static void open_picker(picker_t kind)
 static bool batch_confirm(const char *text,void *user)
 {
     (void)user;unsigned long value=strtoul(text,NULL,10);
-    if(setting_blocked()){panel_entry_set_error(ui_tr("Finish the current operation first."));return false;}
+    if(setting_blocked(false)){panel_entry_set_error(ui_tr("Finish the current operation first."));return false;}
     if(value<1 || value>200){panel_entry_set_error(ui_tr("Check the value"));return false;}
     bool sent=setting_service_request_batch_switch(value!=200,(uint8_t)value,
         machine_state_batch_enabled(),machine_state_batch_num());
@@ -203,7 +204,7 @@ static void action(void *user,uint16_t id,ui_panel_event_t event)
         ui_state_save_page01_detail_section();panel_main_refresh(PAGE_01_MAIN_DIRTY_COUNTING);return;
     }
     if((id==A_BATCH || id==A_SPEED || id==A_CURRENCY || id==A_MODE_PICK ||
-        id==A_MODE || id==A_SORT || id==A_ADD || id==A_WORK || id==A_CLEAR) && setting_blocked())return;
+        id==A_MODE || id==A_SORT || id==A_ADD || id==A_WORK || id==A_CLEAR) && setting_blocked(id==A_ADD || id==A_CLEAR))return;
     if(id==A_BATCH){open_batch();return;}
     if(id==A_SPEED){open_picker(PICK_SPEED);return;}
     if(id==A_CURRENCY){open_picker(PICK_CURRENCY);return;}
@@ -255,7 +256,7 @@ static void refresh_keys(void)
         {.action=A_CLEAR,.icon="rotate-ccw",.label=ui_tr("Clear"),.motion=UI_PANEL_KEY_TURN},
         {.action=A_PRINT,.icon="printer",.label=ui_tr("Print"),.motion=UI_PANEL_KEY_FEED},
         {.action=A_START,.icon="play",.label=ui_tr("Start"),.primary=true,.lit=main_view.running,
-         .disabled=app_command_runtime_count_start_busy()}
+         .disabled=app_command_runtime_count_start_busy() || app_add_runtime_busy()}
     };
     /* Firmware has no general STOP command. While counting the original Start
      * command remains guarded instead of presenting a fictitious Stop action. */

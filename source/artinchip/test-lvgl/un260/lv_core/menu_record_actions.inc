@@ -82,14 +82,14 @@ static void mode_confirm(void *context)
 {
     /* Re-selecting the confirmed mode must not schedule a destructive result clear. */
     if((uintptr_t)context==machine_state_mode())return;
-    if(app_command_runtime_count_start_busy()||!setting_service_request_mode((uintptr_t)context))notify(UI_NOTICE_WARNING,UI_N_("Mode not sent. Finish counting and try again."));
+    if(app_add_runtime_busy()||app_command_runtime_count_start_busy()||!setting_service_request_mode((uintptr_t)context))notify(UI_NOTICE_WARNING,UI_N_("Mode not sent. Finish counting and try again."));
     else clear_notice();
 }
 static void capacity_done(const char *value,void *unused)
 {
     (void)unused;char *end;long v=strtol(value,&end,10);
     if(!*value||*end||v<REJECT_POCKET_MIN_CAPACITY||v>REJECT_POCKET_MAX_CAPACITY){explain(UI_N_("Enter a capacity from 30 to 100 notes."));return;}
-    if(app_command_runtime_count_start_busy()||!setting_service_request_reject_pocket_max(v,machine_state_reject_pocket_max()))notify(UI_NOTICE_WARNING,UI_N_("Capacity not sent. Finish the current operation and retry."));
+    if(app_add_runtime_busy()||app_command_runtime_count_start_busy()||!setting_service_request_reject_pocket_max(v,machine_state_reject_pocket_max()))notify(UI_NOTICE_WARNING,UI_N_("Capacity not sent. Finish the current operation and retry."));
     else clear_notice();
 }
 static void timeout_done(const char *value,void *unused)

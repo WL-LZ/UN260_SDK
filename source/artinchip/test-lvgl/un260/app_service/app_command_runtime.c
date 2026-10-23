@@ -1,5 +1,8 @@
 #include "un260/lv_system/ui_i18n.h"
 #include "app_command_runtime.h"
+#include "app_add_runtime.h"
+#include "un260/lv_components/ui_notice.h"
+#include "workspace_service.h"
 #include "runtime_guard.h"
 #include "ui_factory_reset_service.h"
 #include "touch_calibration_service.h"
@@ -60,6 +63,9 @@ static uint32_t g_count_end_generation;
  * New controllers finish with 0x0E; older controllers use 0x37. */
 static bool g_no_note_motor_active;
 static bool g_no_note_denom_pending;
+/* After an acknowledged explicit group reset, idle late data cannot publish.
+ * Currency refresh or the next real START establishes the next result scope. */
+static bool g_add_result_cleared;
 /* One indivisible transition frame retained ahead of the RX queue when its
  * predecessor's history cannot yet be preserved. Never dequeue past it. */
 static protocol_frame_t g_deferred_frame;
@@ -81,6 +87,7 @@ static const char *diagnostic_operation_blocker(bool allow_calibration_feed)
     if(!protocol_send_is_ready())return UI_N_("Controller connection is unavailable.");
     if(upgrade_session_owner()!=UPGRADE_SESSION_NONE)return UI_N_("Wait for the update to finish.");
     if(app_command_runtime_count_start_busy())return UI_N_("A count is already in progress.");
+    if(app_add_runtime_busy())return UI_N_("Finish the current operation, then try again.");
     calibration_state_snapshot_t calibration;diagnostic_calibration_get_snapshot(&calibration);
     if(calibration.session_active &&
        !(allow_calibration_feed && diagnostic_calibration_allows_feed()))
@@ -110,6 +117,11 @@ bool app_command_runtime_request_diagnostic_run(void)
 bool app_command_runtime_request_count_start(void)
 {
     if (ui_factory_reset_blocks_navigation() || touch_calibration_busy()) return false;
+    if (app_add_runtime_busy()) {
+        ui_notice_post_text(UI_NOTICE_WARNING, "count.add-reset", UI_N_("Clear"),
+                            UI_N_("Please try again."));
+        return false;
+    }
     if (upgrade_session_owner() != UPGRADE_SESSION_NONE ||
         app_command_runtime_count_start_busy() || counting_action_clear_pending() ||
         !counting_history_can_start()) return false;
@@ -148,7 +160,7 @@ app_ui_upgrade_readiness_t app_command_runtime_prepare_ui_upgrade(void)
 {
     if (ui_factory_reset_blocks_navigation() || touch_calibration_busy()) return APP_UI_UPGRADE_BUSY;
     if (app_command_runtime_count_start_busy() || counting_action_clear_pending() ||
-        counting_multi_current()->counting)
+        app_add_runtime_busy() || counting_multi_current()->counting)
         return APP_UI_UPGRADE_BUSY;
     if (ui_history_data_is_initialized() && !ui_history_data_is_available())
         return APP_UI_UPGRADE_FAILED;
@@ -179,8 +191,55 @@ app_ui_upgrade_readiness_t app_command_runtime_prepare_ui_upgrade(void)
     return APP_UI_UPGRADE_READY;
 }
 
+bool app_command_runtime_add_clear_allowed(void)
+{
+    return !app_command_runtime_count_start_busy() &&
+        !counting_action_clear_pending() && protocol_send_is_ready() &&
+        !runtime_guard_has_fault() && !ui_factory_reset_blocks_navigation() &&
+        !touch_calibration_busy() && !workspace_service_applying() &&
+        upgrade_session_owner() == UPGRADE_SESSION_NONE &&
+        !work_mode_service_diagnostic_active() &&
+        !machine_state_aging_running() && !motor_test_service_busy() &&
+        boot_service_get_stage() == BOOT_STAGE_DONE &&
+        !g_deferred_frame_blocked && !protocol_frame_queue_has_pending() &&
+        !counting_multi_query_busy() && !counting_multi_extra_busy();
+}
+
+bool app_command_runtime_prepare_add_reset(void)
+{
+    if (!app_command_runtime_add_clear_allowed()) return false;
+    return counting_history_prepare_reset(&g_counting_session,
+        counting_data_current(), app_clock_uptime_ms());
+}
+
+bool app_command_runtime_commit_add_reset(void)
+{
+    if (app_command_runtime_count_start_busy()) return false;
+    if (!app_counting_runtime_reset_session(&g_counting_session, "ADD group change"))
+        return false;
+    app_setting_runtime_cancel_mode_clear();
+    stop_counting_sim();
+    /* Keep an old untagged 0B query's drain ownership, but revoke publication. */
+    const bool drain_query = g_counting_detail_state.query_pending;
+    const uint32_t query_tick = g_counting_detail_state.query_tick;
+    g_counting_detail_state = (counting_detail_state_t){0};
+    g_counting_detail_state.query_pending = drain_query;
+    g_counting_detail_state.query_expired = drain_query;
+    g_counting_detail_state.query_failed = true;
+    g_counting_detail_state.query_tick = query_tick;
+    g_add_result_cleared = true;
+    sim_reset_counting_group(counting_data_mutable());
+    currency_state_clear_detected_result();
+    if (currency_state_multi_selected())
+        counting_data_mark_multi_result(counting_data_mutable());
+    page_01_curr_img_refre();
+    page_01_main_refresh_start_state();
+    return true;
+}
+
 bool app_command_runtime_clear_counting_data(const char *reason)
 {
+    if (app_add_runtime_busy()) return app_add_runtime_retry_clear();
     /* Preserve the current model when the controller channel is uncertain. */
     if (g_no_note_motor_active || !protocol_send_is_ready() || runtime_guard_has_fault()) return false;
     if (!app_counting_runtime_reset_session(&g_counting_session, reason)) {
@@ -322,6 +381,8 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
     if (app_command_runtime_handle_no_note_motion(cmd,buf,len)) return true;
     /* Preflight BEFORE taking request results or invoking any dispatcher. A
      * retried frame therefore cannot duplicate protocol/UI side effects. */
+    if (cmd == 0x0A && len == 7 && buf[4] == 0x01 && buf[5] == 0x01 &&
+        !app_add_runtime_before_count_start()) return false;
     if (cmd == 0x0A && len >= 7 && buf[4] == 0x01 && buf[5] == 0x01 &&
         !counting_history_prepare_start(&g_counting_session, counting_data_mutable(),
                                         app_clock_uptime_ms())) {
@@ -336,6 +397,7 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
         !counting_history_prepare_reset(&g_counting_session, counting_data_mutable(),
                                         app_clock_uptime_ms())) return false;
     if (cmd == 0x0A && len >= 7 && buf[4] == 1 && buf[5] == 1) {
+        g_add_result_cleared = false;
         counting_report_begin(machine_state_add_enabled(), counting_data_mutable());
         /* Interrupted snapshots cannot publish into a new run. The report
          * owner still drains any already-open untagged reply through END. */
@@ -347,6 +409,21 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
         return true;
     }
     counting_action_handle_reply(cmd, buf, len);
+    /* Settle CLEAR before the next queued hardware START can own a new run. */
+    if (cmd == 0x3B) {
+        app_add_runtime_poll();
+        return true;
+    }
+    if (g_add_result_cleared &&
+        (cmd == 0x0B || cmd == 0x0C || cmd == 0x0D || cmd == 0x0E ||
+         (cmd == 0x49 && len == 0x18))) {
+        if (cmd == 0x0B && g_counting_detail_state.query_pending) {
+            bool end = len == 16;
+            for (unsigned i = 4; end && i < 15; ++i) end = buf[i] == 0xFF;
+            if (end) (void)counting_denom_query_complete(&g_counting_detail_state);
+        }
+        return true;
+    }
 
     /* New 0x49/8 currency detection shares a command with 0x49/24 serials. */
     if (cmd == 0x49 && len == 8) {
@@ -379,6 +456,11 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
                                           &g_counting_session,
                                           buf,
                                           len);
+        /* Only an accepted currency transition owns a new denomination push.
+         * A failure/unsolicited ACK or idle AUTO detection does not reopen it. */
+        if (g_add_result_cleared && g_counting_detail_state.query_wait_push &&
+            !g_counting_detail_state.query_expired)
+            g_add_result_cleared = false;
         break;
     case 0x50:
         app_currency_runtime_handle_detected(buf, len);
@@ -529,7 +611,10 @@ void app_command_runtime_poll(uint32_t now_ms)
         uart_debug_printf("count clear request timeout\n");
     }
 
-    if (app_setting_runtime_take_mode_clear()) {
+    const bool add_was_busy = app_add_runtime_busy();
+    app_add_runtime_poll();
+    if (add_was_busy != app_add_runtime_busy()) page_01_main_refresh_start_state();
+    if (!app_add_runtime_busy() && app_setting_runtime_take_mode_clear()) {
         (void)app_command_runtime_clear_counting_data("mode change");
     }
     app_counting_runtime_poll_history(&g_counting_session, counting_data_mutable(), now_ms);
@@ -538,7 +623,8 @@ void app_command_runtime_poll(uint32_t now_ms)
     counting_multi_extra_poll(now_ms);
     if (multi_revision != counting_multi_current()->revision)
         ui_refresh_main_page();
-    if (currency_state_multi_selected() || counting_data_current()->multi_currency_result ||
+    if (app_add_runtime_busy() || g_add_result_cleared ||
+        currency_state_multi_selected() || counting_data_current()->multi_currency_result ||
         counting_multi_query_busy() || counting_multi_extra_busy()) return;
     counting_denom_query_poll(&g_counting_detail_state,
                               now_ms,

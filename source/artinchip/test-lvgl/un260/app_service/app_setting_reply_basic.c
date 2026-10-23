@@ -1,6 +1,9 @@
 #include "un260/lv_system/ui_i18n.h"
 #include "app_setting_reply.h"
 #include "app_setting_notice.h"
+#include "app_add_runtime.h"
+#include "un260/lv_components/ui_notice.h"
+#include "un260/protocol/protocol_frame.h"
 
 #include <stdbool.h>
 
@@ -135,31 +138,42 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
 
     case 0x39:
     {
-        if (len < 6) break;
+        if (!protocol_frame_is_valid(buf, len) || (len != 6 && len != 7)) break;
         uint8_t sub = buf[4];
 
         if (sub == 0x00) {
+            if (len != 6) break;
+            const bool user_change = app_add_runtime_waiting_setting();
             bool target;
             if (!setting_service_take_add_result(&target)) {
                 uart_debug_printf("ADD set success ignored: no pending request\n");
                 break;
             }
             machine_state_confirm_add(target);
-            app_setting_notice_result("settings.add", UI_N_("ADD"), true);
+            if (user_change) {
+                ui_notice_clear("settings.add");
+                app_add_runtime_setting_result(target, true);
+            } else app_setting_notice_result("settings.add", UI_N_("ADD"), true);
             page_01_bottom_a_refresh_add(true);
             page_03_update_menu_button_states_refresh();
             uart_debug_printf("ADD set success\n");
             smart_island_refresh_summary();
         } else if (sub == 0x01) {
-            if (!setting_service_take_add_result(NULL)) {
+            if (len != 6) break;
+            const bool user_change = app_add_runtime_waiting_setting();
+            bool target;
+            if (!setting_service_take_add_result(&target)) {
                 uart_debug_printf("ADD set failed ignored: no pending request\n");
                 break;
             }
             uart_debug_printf("ADD set failed\n");
-            app_setting_notice_result("settings.add", UI_N_("ADD"), false);
+            if (user_change) {
+                ui_notice_clear("settings.add");
+                app_add_runtime_setting_result(target, false);
+            } else app_setting_notice_result("settings.add", UI_N_("ADD"), false);
             page_03_update_menu_button_states_refresh();
         } else if (sub == 0x02) {
-            if (len < 7) break;
+            if (len != 7 || setting_service_add_is_pending() || app_add_runtime_busy()) break;
             uint8_t v = buf[5];
             if (v == 0x00) {
                 machine_state_confirm_add(false);

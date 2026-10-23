@@ -28,6 +28,10 @@ typedef enum {
 /* UI-thread, nonblocking: freeze current results into their owning history
  * queue, then wait for local writes. Does not clear controller/counting data. */
 app_ui_upgrade_readiness_t app_command_runtime_prepare_ui_upgrade(void);
+/* ADD group ownership is application-scoped, independent of visible pages. */
+bool app_command_runtime_prepare_add_reset(void);
+bool app_command_runtime_add_clear_allowed(void);
+bool app_command_runtime_commit_add_reset(void);
 bool app_command_runtime_clear_counting_data(const char *reason);
 void app_command_runtime_process_frames(void);
 /* A frame is indivisible. Zero budget dispatches at most one ready frame.

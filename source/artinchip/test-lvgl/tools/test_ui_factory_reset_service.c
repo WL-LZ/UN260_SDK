@@ -11,6 +11,8 @@ static work_mode_snapshot_t mode;
 static storage_job_status_t lane_status = STORAGE_JOB_SUCCEEDED;
 static upgrade_session_owner_t upgrade_owner = UPGRADE_SESSION_NONE;
 bool setting_service_request_factory_reset(void) { ++sends; return send_ok; }
+static bool add_busy;
+bool app_add_runtime_busy(void) { return add_busy; }
 bool app_command_runtime_count_start_busy(void) { return running; }
 bool app_command_runtime_result_pending(void) { return result_pending; }
 bool machine_state_aging_running(void) { return aging; }
@@ -38,7 +40,7 @@ int main(void)
     assert(ui_factory_reset_get_phase() == UI_FACTORY_RESET_IDLE && !ui_factory_reset_blocks_navigation());
     ui_factory_reset_on_controller_result(true); ui_factory_reset_poll();
     assert(local_begins == 0 && stops == 0); /* No unsolicited/duplicate ACK. */
-    bool *gates[] = {&running, &result_pending, &aging, &operation_active, &settings_busy, &touch_busy,
+    bool *gates[] = {&add_busy, &running, &result_pending, &aging, &operation_active, &settings_busy, &touch_busy,
         &workspace_busy, &cashbook_busy, &standby_busy, &touch_storage_busy, &mode_store_busy};
     for (unsigned i = 0; i < sizeof(gates) / sizeof(gates[0]); ++i) {
         *gates[i] = true; assert(!ui_factory_reset_request() && ui_factory_reset_blocker()); *gates[i] = false;

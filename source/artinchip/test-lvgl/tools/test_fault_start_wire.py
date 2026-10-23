@@ -36,6 +36,8 @@ code=r'''
 #include "tools/test_maintenance_state.h"
 static uint64_t now;static unsigned tx,refresh,resolved,repeated;static uint8_t cmds[64];
 static bool history_ready=true,busy,modal,auto_popup;static uint8_t fail_cmd;
+static bool add_busy;
+bool app_add_runtime_busy(void){return add_busy;}
 static unsigned controller_starts,operation_guides;
 void page_01_main_set_counting_locked(bool locked){(void)locked;}
 void smart_island_notify_no_note(machine_fault_key_t key){(void)key;}
@@ -102,7 +104,7 @@ static const counting_control_reply_hooks_t g_counting_control_hooks={
 static void reset(void){
  counting_action_cancel_all();setting_service_cancel_all();app_fault_recovery_clear();machine_fault_clear();
  memset(&race_session,0,sizeof(race_session));operation_guides=0;
- now=0;tx=refresh=resolved=repeated=controller_starts=0;history_ready=true;busy=modal=auto_popup=false;fail_cmd=0;
+ now=0;tx=refresh=resolved=repeated=controller_starts=0;history_ready=true;busy=modal=auto_popup=false;add_busy=false;fail_cmd=0;
  session_owner=UPGRADE_SESSION_NONE;host_factory_reset_blocked=false;host_touch_calibration_busy=false;
 }
 static void report(machine_fault_key_t key){
@@ -145,6 +147,7 @@ static void clear_before_start(machine_fault_key_t key){
 static void start_gates(void){
  reset();report((machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,2});
  history_ready=false;assert(!app_command_runtime_request_count_start()&&!tx);history_ready=true;
+ add_busy=true;assert(!app_command_runtime_request_count_start()&&!tx);add_busy=false;
  busy=true;assert(!app_command_runtime_request_count_start()&&!tx);busy=false;
  modal=true;assert(!app_command_runtime_request_count_start()&&!tx);modal=false;
  assert(counting_action_request_clear()&&tx==1&&cmds[0]==0x3B);
@@ -286,6 +289,6 @@ with tempfile.TemporaryDirectory(prefix='un260-start-wire-') as d:
  w=Path(d);(w/'lvgl').mkdir();(w/'lvgl/lvgl.h').write_text('#include "'+str(lvgl/'lvgl.h')+'"\n')
  (w/'lv_conf.h').write_text('#define LV_CONF_H\n#define LV_COLOR_DEPTH 32\n#define LV_USE_GPU_AIC 0\n#define LV_USE_GPU_AIC_GE 0\n')
  (w/'test.c').write_text(code)
- sources=['un260/app_service/app_fault_recovery.c','un260/machine_state/machine_fault.c','un260/machine_state/machine_state.c','un260/counting/counting_control_reply.c','un260/counting/counting_action_service.c','un260/protocol/protocol_request.c','un260/protocol/mode_codec.c','un260/app_service/setting_service.c']
+ sources=['un260/app_service/app_fault_recovery.c','un260/machine_state/machine_fault.c','un260/machine_state/machine_state.c','un260/counting/counting_control_reply.c','un260/counting/counting_action_service.c','un260/protocol/protocol_frame.c','un260/protocol/protocol_request.c','un260/protocol/mode_codec.c','un260/app_service/setting_service.c']
  subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-no-pie','-I'+str(w),'-I'+str(root),'-DLV_CONF_PATH='+str(w/'lv_conf.h'),str(w/'test.c'),*[str(root/p) for p in sources],'-o',str(w/'test')],check=True)
  subprocess.run([str(w/'test')],check=True)

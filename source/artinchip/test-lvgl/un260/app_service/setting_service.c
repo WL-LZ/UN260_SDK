@@ -360,6 +360,11 @@ bool setting_service_request_add(bool target)
                                        &add_cmd, 1, target ? 1 : 0);
 }
 
+bool setting_service_add_is_pending(void)
+{
+    return setting_basic_request_is_pending(&g_add_request);
+}
+
 bool setting_service_take_add_result(bool *target)
 {
     uint8_t raw_target;

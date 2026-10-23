@@ -12,6 +12,8 @@ void sim_data_init(void);
 void cleanup_counting_sim(void);
 
 void sim_reset_counting_result(counting_sim_t *sim_data);
+/* Explicit new group: current details and all accumulation/analysis baselines. */
+void sim_reset_counting_group(counting_sim_t *sim_data);
 void sim_reset_for_currency(counting_sim_t *sim_data);
 
 void ui_refresh_main_page(void);
