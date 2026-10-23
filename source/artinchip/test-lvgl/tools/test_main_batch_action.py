@@ -249,7 +249,12 @@ p18_reserved=1
             assert original.count('int main(void)')==1
             original=original.replace('int main(void)', 'static void workspace_existing_tests(void)', 1)
             callback=actual_function((ROOT/'un260/lv_core/lv_page_event.c').read_text(), 'page_01_bottom_batch_btn_event_cb')
-            test.write_text(original+CALLBACK_TEST+callback+CALLBACK_CASES)
+            # The callback now delegates to the shared action dispatcher. Include
+            # its production Batch branch instead of duplicating the routing rule.
+            event_source=(ROOT/'un260/lv_core/lv_page_event.c').read_text()
+            branch=event_source.split('    case PAGE_01_ACTION_BATCH:',1)[1].split('    case PAGE_01_ACTION_SPEED:',1)[0]
+            dispatch='enum {PAGE_01_ACTION_BATCH};\nstatic void page_01_action_run(unsigned action){switch(action){case PAGE_01_ACTION_BATCH:'+branch+'}}\n'
+            test.write_text(original+CALLBACK_TEST+dispatch+callback+CALLBACK_CASES)
             command=[compiler,'-std=gnu11',optimization,'-g','-Wall','-Wextra','-Werror',
                      '-Wno-misleading-indentation','-fsanitize=address,undefined',
                      '-fno-sanitize-recover=all','-no-pie','-I'+str(ROOT),str(test),

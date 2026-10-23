@@ -137,6 +137,33 @@ int main(void){
  ws_busy=false;app_ui_runtime_poll_operation_notices();assert(last_kind==UI_NOTICE_SUCCESS&&!strcmp(last_detail,"Switched to Alex"));
  unsigned switched=posts;app_ui_runtime_poll_operation_notices();assert(posts==switched);
  ws_busy=true;app_ui_runtime_notice_started(APP_UI_NOTICE_OPERATOR_SWITCH,"Switching workspace...");ws_ok=false;ws_busy=false;app_ui_runtime_poll_operation_notices();assert(last_kind==UI_NOTICE_ERROR&&!strstr(last_detail,"Switched"));
+
+ /* Editing and applying a preset has one command-owned result. Storage must
+  * neither announce premature success nor replay success after a timeout. */
+ ui_notice_state_init(&queue);ws_ok=true;ws_busy=true;
+ ui_notice_post(UI_NOTICE_WARNING,"settings.batch","Batch","Old timeout");
+ ui_notice_post(UI_NOTICE_SUCCESS,"workspace.batch","Batch cycle","Old save");
+ app_ui_runtime_notice_started(APP_UI_NOTICE_BATCH_APPLY,"Saving...");
+ assert(queue.has_active&&!strcmp(queue.active.key,"settings.batch")&&!queue.queued_count);
+ unsigned batch_posts=posts;
+ ws_busy=false;app_ui_runtime_poll_operation_notices();
+ assert(posts==batch_posts&&queue.active.kind==UI_NOTICE_PROGRESS);
+ ui_notice_post(UI_NOTICE_WARNING,"settings.batch","Batch","No response");
+ app_ui_runtime_poll_operation_notices();assert(posts==batch_posts+1&&!queue.queued_count);
+ /* Fast ACK before the storage observer: preserve that final result. */
+ ws_busy=true;app_ui_runtime_notice_started(APP_UI_NOTICE_BATCH_APPLY,"Saving...");
+ ui_notice_post(UI_NOTICE_SUCCESS,"settings.batch","Batch","Setting saved.");
+ batch_posts=posts;ws_busy=false;app_ui_runtime_poll_operation_notices();
+ assert(posts==batch_posts&&queue.active.kind==UI_NOTICE_SUCCESS&&!queue.queued_count);
+ /* Storage failure terminates the shared progress; no command was sent. */
+ ws_busy=true;app_ui_runtime_notice_started(APP_UI_NOTICE_BATCH_APPLY,"Saving...");
+ ws_busy=false;ws_ok=false;app_ui_runtime_poll_operation_notices();
+ assert(queue.active.kind==UI_NOTICE_ERROR&&!strcmp(queue.active.key,"settings.batch")&&!queue.queued_count);
+ /* Leaving the page consumes storage ownership without a delayed success. */
+ ws_busy=true;ws_ok=true;app_ui_runtime_notice_started(APP_UI_NOTICE_BATCH_APPLY,"Saving...");
+ notices_allowed=false;ws_busy=false;app_ui_runtime_poll_operation_notices();
+ batch_posts=posts;notices_allowed=true;app_ui_runtime_poll_operation_notices();
+ assert(posts==batch_posts&&!queue.has_active);
  /* A 6-byte frame contains only type then checksum, never a result byte. */
  uint8_t truncated[]={0xfd,0xdf,6,0x3a,1,1};route_fo(truncated,6);
  assert(fo_pending&&!fo_consumed&&!fo_confirmed&&!fo_notice);

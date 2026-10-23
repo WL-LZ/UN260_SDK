@@ -20,6 +20,10 @@ bool app_setting_notice_page_allowed(void)
 }
 static void request_started(uint8_t command)
 {
+    if (command == 0x06) {
+        ui_notice_clear("settings.batch");
+        ui_notice_clear("workspace.batch");
+    }
     fault_popup_resolve_setting_rejection(command);
     request_origin[command] = command == 0x04 && count_mode_service_currency_mode() ? 3 :
         app_setting_notice_page_allowed() ? 1 : 2;

@@ -409,7 +409,7 @@ static void batch_submit(const char *value,void *unused)
     /* Persist first; the storage completion callback sends the controller command. */
     if(workspace_service_save_batches(menu.owner,menu.batches,menu.batch_count,0,0)){
         menu.batch_apply_target=(uint8_t)v;menu.saving=4;
-        app_ui_runtime_notice_started(APP_UI_NOTICE_BATCH_SAVE,UI_N_("Saving..."));
+        app_ui_runtime_notice_started(APP_UI_NOTICE_BATCH_APPLY,UI_N_("Saving..."));
     }else notify(UI_NOTICE_ERROR,UI_N_("Save failed. Finish the current task and check storage."));
 }
 static void photo_event(lv_event_t *e)
@@ -636,7 +636,7 @@ static void action(lv_event_t *event)
         if(menu.batch_dirty){
             if(workspace_service_save_batches(menu.owner,menu.batches,menu.batch_count,0,0)){
                 menu.batch_apply_target=(uint8_t)n;menu.saving=4;
-                app_ui_runtime_notice_started(APP_UI_NOTICE_BATCH_SAVE,UI_N_("Saving..."));
+                app_ui_runtime_notice_started(APP_UI_NOTICE_BATCH_APPLY,UI_N_("Saving..."));
             }else notify(UI_NOTICE_ERROR,UI_N_("Save failed. Finish the current task and check storage."));
             return;
         }
@@ -759,7 +759,7 @@ void ui_page_03_menu_refresh_data(uint32_t topics)
                 uint8_t target=menu.batch_apply_target;
                 if(!setting_service_request_batch_switch(target!=0,target?target:200,
                         machine_state_batch_enabled(),machine_state_batch_num()))
-                    notify(UI_NOTICE_ERROR,UI_N_("Batch was saved, but could not be sent. Use this preset to retry."));
+                    ui_notice_post_text(UI_NOTICE_ERROR,"settings.batch",UI_N_("Batch"),UI_N_("Batch was saved, but could not be sent. Use this preset to retry."));
             }
         }else if(workspace_store_last_success())menu.user_edit=false;
         menu.batch_apply_target=0;

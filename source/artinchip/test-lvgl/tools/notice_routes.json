@@ -55,19 +55,25 @@
   },
   {
     "file": "un260/app_service/app_setting_notice.c",
-    "line": 57,
+    "line": 24,
+    "api": "ui_notice_clear",
+    "args": "\"settings.batch\""
+  },
+  {
+    "file": "un260/app_service/app_setting_notice.c",
+    "line": 25,
+    "api": "ui_notice_clear",
+    "args": "\"workspace.batch\""
+  },
+  {
+    "file": "un260/app_service/app_setting_notice.c",
+    "line": 62,
     "api": "ui_notice_clear",
     "args": "key"
   },
   {
     "file": "un260/app_service/app_setting_notice.c",
-    "line": 68,
-    "api": "ui_notice_clear",
-    "args": "key"
-  },
-  {
-    "file": "un260/app_service/app_setting_notice.c",
-    "line": 72,
+    "line": 73,
     "api": "ui_notice_clear",
     "args": "key"
   },
@@ -79,19 +85,25 @@
   },
   {
     "file": "un260/app_service/app_setting_notice.c",
-    "line": 83,
-    "api": "ui_notice_post_text",
-    "args": "success ? UI_NOTICE_SUCCESS : UI_NOTICE_ERROR, key, title, detail"
-  },
-  {
-    "file": "un260/app_service/app_setting_notice.c",
-    "line": 89,
+    "line": 82,
     "api": "ui_notice_clear",
     "args": "key"
   },
   {
     "file": "un260/app_service/app_setting_notice.c",
-    "line": 92,
+    "line": 88,
+    "api": "ui_notice_post_text",
+    "args": "success ? UI_NOTICE_SUCCESS : UI_NOTICE_ERROR, key, title, detail"
+  },
+  {
+    "file": "un260/app_service/app_setting_notice.c",
+    "line": 94,
+    "api": "ui_notice_clear",
+    "args": "key"
+  },
+  {
+    "file": "un260/app_service/app_setting_notice.c",
+    "line": 97,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_WARNING, key, title, UI_N_(\"No response received. Check device status.\")"
   },
@@ -295,91 +307,103 @@
   },
   {
     "file": "un260/app_service/app_ui_runtime.c",
-    "line": 101,
+    "line": 104,
+    "api": "ui_notice_clear",
+    "args": "\"settings.batch\""
+  },
+  {
+    "file": "un260/app_service/app_ui_runtime.c",
+    "line": 105,
+    "api": "ui_notice_clear",
+    "args": "\"workspace.batch\""
+  },
+  {
+    "file": "un260/app_service/app_ui_runtime.c",
+    "line": 108,
     "api": "ui_notice_clear",
     "args": "key"
   },
   {
     "file": "un260/app_service/app_ui_runtime.c",
-    "line": 102,
+    "line": 109,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_PROGRESS, key, operation_title(operation), detail"
   },
   {
     "file": "un260/app_service/app_ui_runtime.c",
-    "line": 111,
+    "line": 118,
     "api": "ui_notice_clear",
     "args": "operation_key(operation)"
   },
   {
     "file": "un260/app_service/app_ui_runtime.c",
-    "line": 115,
+    "line": 125,
     "api": "ui_notice_post_message",
     "args": "UI_NOTICE_SUCCESS,operation_key(operation),operation_title(operation),&detail"
   },
   {
     "file": "un260/app_service/app_ui_runtime.c",
-    "line": 117,
+    "line": 127,
     "api": "ui_notice_post_message",
     "args": "success ? UI_NOTICE_SUCCESS : UI_NOTICE_ERROR, operation_key(operation), operation_title(operation), success && operation == APP_UI_NOTICE_BATCH_SAVE ? workspace_service_batch_save_message_info() : workspace_store_message_info()"
   },
   {
     "file": "un260/app_service/app_ui_runtime.c",
-    "line": 124,
+    "line": 134,
     "api": "ui_notice_clear",
     "args": "\"records.store\""
   },
   {
     "file": "un260/app_service/app_ui_runtime.c",
-    "line": 125,
+    "line": 135,
     "api": "ui_notice_post_message",
     "args": "cashbook_store_last_success() ? UI_NOTICE_SUCCESS : UI_NOTICE_ERROR, \"records.store\", UI_N_(\"Records\"), cashbook_store_message_info()"
   },
   {
     "file": "un260/app_service/app_ui_runtime.c",
-    "line": 134,
+    "line": 144,
     "api": "ui_notice_clear",
     "args": "\"workspace.apply\""
   },
   {
     "file": "un260/app_service/app_ui_runtime.c",
-    "line": 135,
+    "line": 145,
     "api": "ui_notice_post_message",
     "args": "kind, \"workspace.apply\", UI_N_(\"Counting profile\"), workspace_service_apply_message_info()"
   },
   {
     "file": "un260/app_service/app_ui_runtime.c",
-    "line": 143,
+    "line": 153,
     "api": "ui_notice_init",
     "args": ""
   },
   {
     "file": "un260/app_service/app_ui_runtime.c",
-    "line": 189,
+    "line": 199,
     "api": "ui_notice_language_changed",
     "args": ""
   },
   {
     "file": "un260/app_service/app_ui_runtime.c",
-    "line": 193,
+    "line": 203,
     "api": "ui_notice_set_suspended",
     "args": "UI_NOTICE_SUSPEND_STANDBY, page == UI_PAGE_STANDBY"
   },
   {
     "file": "un260/app_service/app_ui_runtime.c",
-    "line": 194,
+    "line": 204,
     "api": "ui_notice_set_suspended",
     "args": "UI_NOTICE_SUSPEND_MODAL, ui_page_00_boot_anim_is_active() || page == UI_PAGE_BOOT || page == UI_PAGE_BOOT_ANIM || page == UI_PAGE_UI_UPGRADE || lv_upgrade_popup_is_showing()"
   },
   {
     "file": "un260/app_service/app_ui_runtime.c",
-    "line": 202,
+    "line": 212,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_SUCCESS,\"cash.save\",UI_N_(\"Cash journal\"),UI_N_(\"Cash entry saved.\")"
   },
   {
     "file": "un260/app_service/app_ui_runtime.c",
-    "line": 202,
+    "line": 212,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_ERROR,\"cash.save\",UI_N_(\"Cash journal\"),UI_N_(\"Cash entry not confirmed. Retry the same save.\")"
   },
@@ -633,7 +657,7 @@
     "file": "un260/lv_core/page_03_menu.c",
     "line": 412,
     "api": "app_ui_runtime_notice_started",
-    "args": "APP_UI_NOTICE_BATCH_SAVE,UI_N_(\"Saving...\")"
+    "args": "APP_UI_NOTICE_BATCH_APPLY,UI_N_(\"Saving...\")"
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
@@ -693,13 +717,19 @@
     "file": "un260/lv_core/page_03_menu.c",
     "line": 639,
     "api": "app_ui_runtime_notice_started",
-    "args": "APP_UI_NOTICE_BATCH_SAVE,UI_N_(\"Saving...\")"
+    "args": "APP_UI_NOTICE_BATCH_APPLY,UI_N_(\"Saving...\")"
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
     "line": 667,
     "api": "app_ui_runtime_notice_started",
     "args": "APP_UI_NOTICE_WORKSPACE_STORE,UI_N_(\"Looking for USB photos...\")"
+  },
+  {
+    "file": "un260/lv_core/page_03_menu.c",
+    "line": 762,
+    "api": "ui_notice_post_text",
+    "args": "UI_NOTICE_ERROR,\"settings.batch\",UI_N_(\"Batch\"),UI_N_(\"Batch was saved, but could not be sent. Use this preset to retry.\")"
   },
   {
     "file": "un260/lv_core/page_07_curr.c",

@@ -10,6 +10,8 @@ code=r'''
 #include <stdint.h>
 #include <stdio.h>
 #include "un260/app_service/setting_service.h"
+/* This transport fixture uses an ordinary currency; mode policy has its own suite. */
+void currency_state_get_selected_code(char out[4]){out[0]='U';out[1]='S';out[2]='D';out[3]=0;}
 static uint64_t now;
 static unsigned sends,observed;
 static uint8_t sent_command,sent_value,observed_command;

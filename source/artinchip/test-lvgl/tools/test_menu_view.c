@@ -715,6 +715,7 @@ int main(void)
     menu.selected_batch=1;menu.dirty=true;tick(120);click("Edit");assert(settings_detail_overlay_is_open());check_numeric_keypad();raster("menu-batch-keypad");settings_detail_keyboard_hide();
     ui_page_03_menu_suspend();actual_state.batch_num=10;assert(ui_page_03_menu_resume());assert(menu.selected_batch==1);
     batch_submit("13",NULL);assert(menu.saving==4&&menu.batch_apply_target==13);
+    assert(operation_started==APP_UI_NOTICE_BATCH_APPLY);
     assert(batch_edit_saves==1&&batch_edit_previous==0&&batch_edit_target==0);
     ui_page_03_menu_refresh_data(0);tick(120);
     assert(!menu.batch_dirty&&actual_state.batch_num==13);

@@ -147,6 +147,22 @@ int main(void) {
     apply.active=apply.waiting=true;apply.step=0;page=UI_PAGE_MAIN;prior_clears=clears;
     app_setting_notice_timeout("settings.speed","Speed");
     assert(notices==prior_posts&&clears==prior_clears&&queue.has_active&&!strcmp(queue.active.key,"workspace.apply"));
+
+    /* A retry clears both old Batch outcomes, including queued cycle success,
+     * and preserves unrelated notices. Its ACK cannot replay stale results. */
+    apply.active=apply.waiting=false;page=UI_PAGE_MENU;ui_notice_state_init(&queue);
+    app_setting_notice_timeout("settings.batch","Batch");
+    ui_notice_post_text(UI_NOTICE_SUCCESS,"workspace.batch","Batch cycle","Saved");
+    ui_notice_post_text(UI_NOTICE_INFO,"records.store","Records","Saved");
+    observer(0x06);
+    assert(queue.has_active&&!strcmp(queue.active.key,"records.store")&&!queue.queued_count);
+    ui_notice_clear("records.store");
+    app_setting_notice_result("settings.batch","Batch",true);
+    assert(queue.has_active&&queue.active.kind==UI_NOTICE_SUCCESS&&!queue.queued_count);
+    observer(0x06);app_setting_notice_timeout("settings.batch","Batch");
+    assert(queue.active.kind==UI_NOTICE_WARNING&&!queue.queued_count);
+    observer(0x06);app_setting_notice_result("settings.batch","Batch",true);
+    assert(queue.active.kind==UI_NOTICE_SUCCESS&&!queue.queued_count);
     puts("PASS profile ownership, unrelated results, unconfirmed timeouts; suppressed terminal results clear only matching progress");
 }
 '''

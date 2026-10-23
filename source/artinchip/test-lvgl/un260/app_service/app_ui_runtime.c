@@ -59,6 +59,7 @@ static const char *operation_key(app_ui_notice_operation_t operation)
     case APP_UI_NOTICE_WORKSPACE_STORE: return "workspace.store";
     case APP_UI_NOTICE_OPERATOR_SWITCH: return "workspace.operator";
     case APP_UI_NOTICE_BATCH_SAVE: return "workspace.batch";
+    case APP_UI_NOTICE_BATCH_APPLY: return "settings.batch";
     case APP_UI_NOTICE_RECORD_STORE: return "records.store";
     case APP_UI_NOTICE_PROFILE_APPLY: return "workspace.apply";
     default: return NULL;
@@ -69,6 +70,7 @@ static const char *operation_title(app_ui_notice_operation_t operation)
 {
     switch (operation) {
     case APP_UI_NOTICE_BATCH_SAVE: return UI_N_("Batch cycle");
+    case APP_UI_NOTICE_BATCH_APPLY: return UI_N_("Batch");
     case APP_UI_NOTICE_OPERATOR_SWITCH: return UI_N_("Current operator");
     case APP_UI_NOTICE_RECORD_STORE: return UI_N_("Records");
     case APP_UI_NOTICE_PROFILE_APPLY: return UI_N_("Counting profile");
@@ -84,6 +86,7 @@ void app_ui_runtime_notice_started(app_ui_notice_operation_t operation, const ch
     case APP_UI_NOTICE_WORKSPACE_STORE:
     case APP_UI_NOTICE_OPERATOR_SWITCH:
     case APP_UI_NOTICE_BATCH_SAVE:
+    case APP_UI_NOTICE_BATCH_APPLY:
         if (!workspace_store_busy()) return;
         g_operation_notice.workspace = true;
         g_operation_notice.workspace_operation = operation;
@@ -97,6 +100,10 @@ void app_ui_runtime_notice_started(app_ui_notice_operation_t operation, const ch
         g_operation_notice.profile = true;
         break;
     }
+    if (operation == APP_UI_NOTICE_BATCH_SAVE || operation == APP_UI_NOTICE_BATCH_APPLY) {
+        ui_notice_clear("settings.batch");
+        ui_notice_clear("workspace.batch");
+    }
     /* A new accepted request is a new acknowledgement lifetime. */
     ui_notice_clear(key);
     ui_notice_post_text(UI_NOTICE_PROGRESS, key, operation_title(operation), detail);
@@ -109,6 +116,9 @@ static void app_ui_runtime_poll_operation_notices(void)
         bool success = workspace_store_last_success();
         g_operation_notice.workspace = false;
         if (!app_setting_notice_page_allowed()) ui_notice_clear(operation_key(operation));
+        /* Saving an edited preset is intermediate; the command result owns
+         * the final notice, even if its ACK arrived before this poll. */
+        else if(success&&operation==APP_UI_NOTICE_BATCH_APPLY) { }
         else if(success&&operation==APP_UI_NOTICE_OPERATOR_SWITCH){
             const workspace_user_t *active=workspace_active(workspace_store_get());ui_message_t detail;
             ui_message_string(&detail,UI_N_("Switched to %s"),active?active->name:"");
