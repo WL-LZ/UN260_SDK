@@ -1,3 +1,5 @@
+#include "un260/app_service/count_mode_service.h"
+#include "un260/currency/currency_state.h"
 #include "un260/app_service/receipt_print_service.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/app_service/app_add_runtime.h"
@@ -121,22 +123,9 @@ static bool page_01_mode_req_busy(void) //判断模式切换是否仍在等待�
 
 void page_01_mode_cycle(void) //发送主界面模式切换命令
 {
-    uint8_t next_mode = MODE_MDC;
-
-    if (page_01_mode_req_busy()) {
-        return;
-    }
-
-    if (machine_state_mode() == MODE_MDC)
-        next_mode = MODE_SDC;
-    else if (machine_state_mode() == MODE_SDC)
-        next_mode = MODE_CNT;
-    else if (machine_state_mode() == MODE_CNT)
-        next_mode = MODE_MDC;
-    else
-        next_mode = MODE_MDC;
-
-    setting_service_request_mode(next_mode);
+    if (page_01_mode_req_busy()) return;
+    char code[4]; currency_state_get_selected_code(code);
+    (void)count_mode_service_request(count_mode_next(code, machine_state_mode()));
 }
 
 void page_01_mode_btn_event_cb(lv_event_t* e)

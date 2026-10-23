@@ -163,7 +163,7 @@ static void batch_view(lv_obj_t *b)
 static bool profile_matches(const workspace_profile_t *p)
 {
     workspace_profile_t c=current_profile();
-    return p->speed==c.speed&&p->work==c.work&&p->add==c.add&&p->sort==c.sort&&p->beep==c.beep&&(!p->mode||p->mode==c.mode)&&p->batch_enabled==c.batch_enabled&&(!p->batch_enabled||p->batch==c.batch);
+    return p->speed==c.speed&&p->work==c.work&&p->add==c.add&&p->sort==c.sort&&p->beep==c.beep&&(workspace_service_profile_mode(p)==c.mode&&count_mode_service_confirmed())&&p->batch_enabled==c.batch_enabled&&(!p->batch_enabled||p->batch==c.batch);
 }
 static const char *profile_display_name(const workspace_profile_t *profile)
 {
@@ -205,7 +205,13 @@ static void options_view(lv_obj_t *b)
     heading(b,ui_tr("Counting options"));char value[64],code[4];currency_state_get_selected_code(code);snprintf(value,sizeof(value),ui_tr("%s · current configuration"),currency_state_display_code(code));context(b,value,225);
     lv_obj_t *left=box(b,0,48,504,248,PANEL,18),*right=box(b,524,48,504,248,PANEL,18);
     const char *modes[]={ui_text_get(UI_TEXT_PAGE01_BOTTOM_MODE_MDC),ui_text_get(UI_TEXT_PAGE01_BOTTOM_MODE_SDC),ui_text_get(UI_TEXT_PAGE01_BOTTOM_MODE_CNT)},*speeds[]={ui_tr("Low"),ui_tr("Standard"),ui_tr("High")},*work[]={ui_tr("Auto"),ui_tr("Manual")},*sort[]={ui_tr("Off"),ui_tr("Face"),ui_tr("Orient."),ui_tr("Both")};
-    option_label(left,0,ui_tr("Count mode"));segments(left,210,12,276,42,modes,3,machine_state_mode()==MODE_SDC?1:machine_state_mode()==MODE_CNT?2:0,450);
+    option_label(left,0,ui_tr("Count mode"));lv_obj_t *mode_options=segments(left,210,12,276,42,modes,3,machine_state_mode()==MODE_SDC?1:machine_state_mode()==MODE_CNT?2:0,450);
+    const uint8_t mode_values[]={MODE_MDC,MODE_SDC,MODE_CNT};
+    for(unsigned i=0;i<3;i++)if(!strcmp(code,"MUL")||!count_mode_allowed(code,mode_values[i])){
+        lv_obj_t *option=lv_obj_get_child(mode_options,i);
+        lv_obj_add_state(option,LV_STATE_DISABLED);
+        lv_obj_set_style_text_color(lv_obj_get_child(option,0),lv_color_hex(0x98A3AA),0);
+    }
     option_label(left,1,ui_tr("Speed"));segments(left,210,71,276,42,speeds,3,machine_state_speed(),400);
     option_label(left,2,ui_tr("Start"));segments(left,210,130,276,42,work,2,machine_state_work_mode(),410);
     box(left,18,181,468,1,LINE,0);lv_obj_t *acc=box(left,18,191,468,46,PANEL,0);toggle(acc,0,468,ui_tr("ADD accumulation"),NULL,machine_state_add_enabled(),420+!machine_state_add_enabled());

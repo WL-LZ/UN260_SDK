@@ -57,7 +57,7 @@ static void page_01_curr_img_refre(void)
 static void smart_island_refresh_summary(void)
 { ++summaries; currency_state_get_effective_code(island_code); }
 static void page_01_main_set_counting_locked(bool value)
-{ locked = value; if (value) ++locks; else ++unlocks; }
+{ if (locked != value) { if (value) ++locks; else ++unlocks; } locked = value; }
 static bool app_counting_runtime_main_page_active(void) { return main_visible; }
 static void smart_island_notify_count_start(void) { ++starts; }
 static void smart_island_notify_count_end(const char *result) { (void)result; ++ends; }
@@ -128,6 +128,13 @@ static void ui_page_dynamic_capture_on_count_info(uint16_t valid, uint8_t issue,
 #define page_01_main_refresh_start_state() ((void)0)
 #define page_01_mode_switch_refre() ((void)0)
 
+/* Other transaction owners are idle in this result-visibility fixture. */
+static bool g_no_note_motor_active;
+static bool app_add_runtime_busy(void){return false;}
+static bool app_add_runtime_retry_clear(void){return false;}
+static void count_mode_service_mode_result(bool ok,bool timeout){(void)ok;(void)timeout;}
+static void count_mode_service_mode_sync(void){}
+static bool count_mode_service_result_may_clear(void){return true;}
 #include "auto_currency_runtime_under_test.inc"
 
 static const counting_control_reply_hooks_t control_hooks = {

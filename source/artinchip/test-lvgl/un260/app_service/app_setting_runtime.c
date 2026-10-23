@@ -1,5 +1,6 @@
 #include "un260/lv_system/ui_i18n.h"
 #include "app_setting_runtime.h"
+#include "count_mode_service.h"
 #include "app_add_runtime.h"
 #include "app_setting_notice.h"
 #include "app_fault_recovery.h"
@@ -144,6 +145,7 @@ void app_setting_runtime_poll(uint32_t now_ms)
     }
 
     basic_timeouts = setting_service_take_basic_timeouts();
+    if (basic_timeouts & SETTING_REQUEST_TIMEOUT_MODE) count_mode_service_mode_result(false, true);
     if (basic_timeouts != SETTING_REQUEST_TIMEOUT_NONE) {
         uart_debug_printf("basic setting request timeout mask=0x%02X\n",
                     (unsigned int)basic_timeouts);
@@ -200,6 +202,7 @@ void app_setting_runtime_poll(uint32_t now_ms)
     }
 
     if (currency_service_take_switch_timeout(&currency_result)) {
+        count_mode_service_currency_result(&currency_result);
         page_07_curr_apply_switch_result(&currency_result);
         uart_debug_printf("currency switch request timeout\n");
     }

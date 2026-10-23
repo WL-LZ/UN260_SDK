@@ -1,3 +1,5 @@
+#include "count_mode_service.h"
+#include "un260/currency/currency_state.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "app_add_runtime.h"
 #include "un260/lv_system/ui_message.h"
@@ -42,7 +44,7 @@ static bool request(unsigned step,unsigned target)
 {
     switch(step){case 0:return setting_service_request_speed(target);case 1:return setting_service_request_fo_mode(target);
         case 2:return setting_service_request_beep(target);case 3:return setting_service_request_batch_switch(target!=0,target?target:200,machine_state_batch_enabled(),machine_state_batch_num());
-        case 4:return setting_service_request_add(target);case 5:return setting_service_request_work_mode(target);default:return setting_service_request_mode(target==2?MODE_SDC:target==3?MODE_CNT:MODE_MDC);}
+        case 4:return setting_service_request_add(target);case 5:return setting_service_request_work_mode(target);default:return count_mode_service_request(target==2?MODE_SDC:target==3?MODE_CNT:MODE_MDC);}
 }
 void workspace_service_init(void){workspace_store_init();}
 static const char *machine_blocker(void)
@@ -78,11 +80,18 @@ bool workspace_service_switch(uint32_t id)
     *next=*saved;bool ok=false;for(unsigned i=0;i<next->user_count;++i)if(next->users[i].id==id&&!next->disabled[i])ok=true;
     next->active_id=id;if(ok)ok=workspace_store_save(next);free(next);return ok;
 }
+uint8_t workspace_service_profile_mode(const workspace_profile_t *p)
+{
+    char code[4]; currency_state_get_selected_code(code);
+    uint8_t mode=!p->mode?machine_state_mode():p->mode==2?MODE_SDC:p->mode==3?MODE_CNT:MODE_MDC;
+    mode=count_mode_resolve(code,mode);
+    return mode==MODE_SDC?2:mode==MODE_CNT?3:1;
+}
 bool workspace_service_apply(const workspace_profile_t *p,uint32_t now)
 {
-    if(!p||workspace_service_switch_blocker()||!protocol_send_is_ready()||boot_service_get_stage()!=BOOT_STAGE_DONE)return false;
+    if(!p||count_mode_service_busy()||workspace_service_switch_blocker()||!protocol_send_is_ready()||boot_service_get_stage()!=BOOT_STAGE_DONE)return false;
     if(p->mode>3||p->speed>2||p->sort>3||p->beep>1||p->add>1||p->work>1||p->batch>200||(p->batch_enabled&&(!p->batch||p->batch==200)))return false;
-    apply.target=*p;if(!apply.target.mode)apply.target.mode=actual(6);apply.active=true;apply.waiting=false;apply.step=apply.confirmed=0;apply.since=now;
+    apply.target=*p;apply.target.mode=workspace_service_profile_mode(p);apply.active=true;apply.waiting=false;apply.step=apply.confirmed=0;apply.since=now;
     apply_result=WORKSPACE_APPLY_PENDING;
     ui_message_key(&apply_message_info,UI_N_("Applying profile..."));return true;
 }
@@ -112,10 +121,10 @@ bool workspace_service_poll(uint32_t now)
     finish_batch_save();
     if(!apply.active)return changed;
     /* A matching confirmed value is evidence; sending a command is not. */
-    if(apply.waiting&&actual(apply.step)==value(apply.step,&apply.target)) {
+    if(apply.waiting&&actual(apply.step)==value(apply.step,&apply.target)&&(apply.step!=6||count_mode_service_confirmed())) {
         apply.waiting=false;apply.confirmed++;apply.step++;changed=true;
     }
-    while(!apply.waiting&&apply.step<7&&actual(apply.step)==value(apply.step,&apply.target))apply.step++;
+    while(!apply.waiting&&apply.step<7&&actual(apply.step)==value(apply.step,&apply.target)&&(apply.step!=6||count_mode_service_confirmed()))apply.step++;
     if(apply.step==7) {apply.active=false;apply_result=WORKSPACE_APPLY_SUCCEEDED;ui_message_key(&apply_message_info,UI_N_("Profile applied. Device values confirmed."));return true;}
     const char *blocked=machine_blocker();
     if(blocked||(apply.waiting&&(uint32_t)(now-apply.since)>1800)) {

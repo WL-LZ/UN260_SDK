@@ -24,7 +24,8 @@ def main():
         exe = folder / ('core.exe' if os.name == 'nt' else 'core')
         files = ['tools/test_i18n_core.c', 'un260/lv_system/ui_i18n.c',
                  'un260/lv_system/ui_lang.c', 'un260/lv_system/ui_text_page.c',
-                 'un260/lv_system/ui_text_widget.c', 'i18n/generated/lv_i18n.c']
+                 'un260/lv_system/ui_text_widget.c', 'un260/counting/counting_reject_reason.c',
+                 'i18n/generated/lv_i18n.c']
         subprocess.run([args.cc, *flags, *(str(ROOT / file) for file in files), '-o', str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
         # An enabled fixture exercises production resource gates without

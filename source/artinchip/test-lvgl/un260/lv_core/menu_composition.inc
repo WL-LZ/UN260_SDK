@@ -5,9 +5,9 @@ static lv_obj_t *icon(lv_obj_t *p,const char *src,int x,int y,uint32_t color)
     lv_obj_set_style_img_recolor(im,lv_color_hex(color),0);
     lv_obj_set_style_img_recolor_opa(im,LV_OPA_COVER,0);return im;
 }
-static void segments(lv_obj_t *p,int x,int y,int w,int h,const char *const *names,unsigned count,unsigned value,unsigned action_base)
+static lv_obj_t *segments(lv_obj_t *p,int x,int y,int w,int h,const char *const *names,unsigned count,unsigned value,unsigned action_base)
 {
-    if(!count)return;
+    if(!count)return NULL;
     lv_obj_t *base=box(p,x,y,w,h,HEADER_SURFACE,13);
     int inner=w-8-(count-1)*2,needed=0;
     const lv_font_t *normal=ui_message_font(&lv_font_instrument_sans_medium_16);
@@ -35,6 +35,7 @@ static void segments(lv_obj_t *p,int x,int y,int w,int h,const char *const *name
         lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_CENTER,0);lv_obj_center(l);
         left+=width+2;
     }
+    return base;
 }
 static uint32_t business_day(void)
 {

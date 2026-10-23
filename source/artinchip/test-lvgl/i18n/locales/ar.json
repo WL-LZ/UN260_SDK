@@ -44,7 +44,7 @@
     "Select a saved record": "اختر سجلًا محفوظًا",
     "Stop at the preset quantity. Remove the completed stack before continuing.": "يتوقف العد عند العدد المحدد. أزل الحزمة المعدودة قبل المتابعة.",
     "The first note sets the denomination. Other denominations go to the reject pocket.": "تحدد الورقة الأولى الفئة. تذهب الفئات الأخرى إلى جيب الرفض.",
-    "This is the current controller result. Check the paper after printing.": "هذه نتيجة وحدة التحكم الحالية. تحقق من الورق بعد الطباعة.",
+    "This is the current controller result. Check the paper after printing.": "هذه نتيجة اللوحة الرئيسية الحالية. تحقق من الورق بعد الطباعة.",
     "Wait a moment before printing again.": "انتظر قليلًا قبل الطباعة مجددًا.",
     "Writing to USB": "جارٍ الكتابة على USB",
     "Input": "الإدخال"

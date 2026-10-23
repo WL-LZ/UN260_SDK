@@ -190,7 +190,7 @@
         "BACKUP   STORAGE   APPLICATION   VERIFY": "BACKUP   STORAGE   APPLICATION   VERIFY",
         "CHECKING THE SAME USB PACKAGE": "CHECKING THE SAME USB PACKAGE",
         "CONTACT SERVICE  DO NOT RESUME COUNTING": "CONTACT SERVICE  DO NOT RESUME COUNTING",
-        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "COUNT AND MAINBOARD STATE REQUIRE CHECKING",
         "Insert USB drive with update/UN260_UPDATE.upk": "Insert USB drive with update/UN260_UPDATE.upk",
         "KEEP BACKUPS AND CHECK THE ERROR": "KEEP BACKUPS AND CHECK THE ERROR",
         "KEEP NOTES SEPARATE AND RECOUNT": "KEEP NOTES SEPARATE AND RECOUNT",
@@ -207,7 +207,7 @@
         "BACKUP   STORAGE   APPLICATION   VERIFY": "备份   存储   应用   校验",
         "CHECKING THE SAME USB PACKAGE": "正在核对原U盘升级包",
         "CONTACT SERVICE  DO NOT RESUME COUNTING": "请联系售后，勿继续点钞",
-        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "请检查点钞结果和控制器状态",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "请检查点钞结果和主板状态",
         "Insert USB drive with update/UN260_UPDATE.upk": "请插入含 update/UN260_UPDATE.upk 的U盘",
         "KEEP BACKUPS AND CHECK THE ERROR": "保留备份并检查错误",
         "KEEP NOTES SEPARATE AND RECOUNT": "请将钞票单独存放并重新清点",
@@ -224,7 +224,7 @@
         "BACKUP   STORAGE   APPLICATION   VERIFY": "백업   저장소   앱   검증",
         "CHECKING THE SAME USB PACKAGE": "동일한 USB 패키지 확인 중",
         "CONTACT SERVICE  DO NOT RESUME COUNTING": "서비스에 문의하세요. 계수를 재개하지 마세요",
-        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "계수 결과와 제어기 상태를 확인해야 합니다",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "계수 결과와 메인 보드 상태를 확인해야 합니다",
         "Insert USB drive with update/UN260_UPDATE.upk": "update/UN260_UPDATE.upk가 있는 USB를 삽입하세요",
         "KEEP BACKUPS AND CHECK THE ERROR": "백업을 보관하고 오류를 확인하세요",
         "KEEP NOTES SEPARATE AND RECOUNT": "지폐를 따로 보관하고 다시 계수하세요",
@@ -241,7 +241,7 @@
         "BACKUP   STORAGE   APPLICATION   VERIFY": "バックアップ   ストレージ   アプリ   検証",
         "CHECKING THE SAME USB PACKAGE": "同じUSBパッケージを確認中",
         "CONTACT SERVICE  DO NOT RESUME COUNTING": "サービス窓口へ連絡し、計数を再開しないでください",
-        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "計数結果とコントローラーの状態を確認してください",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "計数結果とメインボードの状態を確認してください",
         "Insert USB drive with update/UN260_UPDATE.upk": "update/UN260_UPDATE.upkを保存したUSBを挿入してください",
         "KEEP BACKUPS AND CHECK THE ERROR": "バックアップを保管し、エラーを確認",
         "KEEP NOTES SEPARATE AND RECOUNT": "紙幣を分けて保管し、再計数してください",
@@ -258,7 +258,7 @@
         "BACKUP   STORAGE   APPLICATION   VERIFY": "نسخ احتياطي   تخزين   تطبيق   تحقق",
         "CHECKING THE SAME USB PACKAGE": "جارٍ التحقق من حزمة USB نفسها",
         "CONTACT SERVICE  DO NOT RESUME COUNTING": "اتصل بخدمة الصيانة ولا تستأنف العد",
-        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "يجب فحص نتيجة العد وحالة وحدة التحكم",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "يجب فحص نتيجة العد وحالة اللوحة الرئيسية",
         "Insert USB drive with update/UN260_UPDATE.upk": "أدخل وحدة USB تحتوي على update/UN260_UPDATE.upk",
         "KEEP BACKUPS AND CHECK THE ERROR": "احتفظ بالنسخ الاحتياطية وتحقق من الخطأ",
         "KEEP NOTES SEPARATE AND RECOUNT": "احتفظ بالأوراق منفصلة وأعد عدها",
@@ -275,7 +275,7 @@
         "BACKUP   STORAGE   APPLICATION   VERIFY": "YEDEK DEPOLAMA UYGULAMASINI DOĞRULA",
         "CHECKING THE SAME USB PACKAGE": "AYNI USB PAKETİNİ KONTROL ETMEK",
         "CONTACT SERVICE  DO NOT RESUME COUNTING": "SERVİSE BAŞVURUN. SAYIMI SÜRDÜRMEYİN",
-        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "SAYIM SONUCU VE DENETLEYİCİ DURUMU KONTROL EDİLMELİ",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "SAYIM SONUCU VE ANA KART DURUMU KONTROL EDİLMELİ",
         "Insert USB drive with update/UN260_UPDATE.upk": "update/UN260_UPDATE.upk içeren USB sürücüsünü takın",
         "KEEP BACKUPS AND CHECK THE ERROR": "YEDEKLEMELERİ TUTUN VE HATALARI KONTROL EDİN",
         "KEEP NOTES SEPARATE AND RECOUNT": "BANKNOTLARI AYRI TUTUN VE YENİDEN SAYIN",
@@ -292,7 +292,7 @@
         "BACKUP   STORAGE   APPLICATION   VERIFY": "SAUVEGARDE   STOCKAGE   APPLICATION   VÉRIFICATION",
         "CHECKING THE SAME USB PACKAGE": "VÉRIFICATION DU MÊME FORFAIT USB",
         "CONTACT SERVICE  DO NOT RESUME COUNTING": "CONTACTEZ LE SERVICE. NE REPRENEZ PAS LE COMPTAGE",
-        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "LE RÉSULTAT DU COMPTAGE ET L’ÉTAT DU CONTRÔLEUR DOIVENT ÊTRE VÉRIFIÉS",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "LE RÉSULTAT DU COMPTAGE ET L’ÉTAT DE LA CARTE MÈRE DOIVENT ÊTRE VÉRIFIÉS",
         "Insert USB drive with update/UN260_UPDATE.upk": "Insérez une clé USB contenant update/UN260_UPDATE.upk",
         "KEEP BACKUPS AND CHECK THE ERROR": "CONSERVER DES SAUVEGARDES ET VÉRIFIER L'ERREUR",
         "KEEP NOTES SEPARATE AND RECOUNT": "GARDEZ LES BILLETS SÉPARÉS ET RECOMPTEZ",
@@ -309,7 +309,7 @@
         "BACKUP   STORAGE   APPLICATION   VERIFY": "KOPIA   PAMIĘĆ   APLIKACJA   WERYFIKACJA",
         "CHECKING THE SAME USB PACKAGE": "SPRAWDZANIE TEGO SAMEGO PAKIETU USB",
         "CONTACT SERVICE  DO NOT RESUME COUNTING": "SKONTAKTUJ SIĘ Z SERWISEM. NIE WZNAWIAJ LICZENIA",
-        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "WYMAGANE SPRAWDZENIE WYNIKU LICZENIA I STANU KONTROLERA",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "WYMAGANE SPRAWDZENIE WYNIKU LICZENIA I STANU PŁYTY GŁÓWNEJ",
         "Insert USB drive with update/UN260_UPDATE.upk": "Włóż nośnik USB z plikiem update/UN260_UPDATE.upk",
         "KEEP BACKUPS AND CHECK THE ERROR": "ZACHOWAJ KOPIE ZAPASOWE I SPRAWDŹ BŁĄD",
         "KEEP NOTES SEPARATE AND RECOUNT": "ODŁÓŻ BANKNOTY OSOBNO I PRZELICZ PONOWNIE",
@@ -326,7 +326,7 @@
         "BACKUP   STORAGE   APPLICATION   VERIFY": "КОПИЯ   ХРАНИЛИЩЕ   ПРИЛОЖЕНИЕ   ПРОВЕРКА",
         "CHECKING THE SAME USB PACKAGE": "ПРОВЕРКА ТО ЖЕ USB-ПАКЕТА",
         "CONTACT SERVICE  DO NOT RESUME COUNTING": "ОБРАТИТЕСЬ В СЕРВИС. НЕ ВОЗОБНОВЛЯЙТЕ СЧЁТ",
-        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "ТРЕБУЕТСЯ ПРОВЕРКА РЕЗУЛЬТАТА СЧЁТА И СОСТОЯНИЯ КОНТРОЛЛЕРА",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "ТРЕБУЕТСЯ ПРОВЕРКА РЕЗУЛЬТАТА СЧЁТА И СОСТОЯНИЯ ОСНОВНОЙ ПЛАТЫ",
         "Insert USB drive with update/UN260_UPDATE.upk": "Подключите USB-накопитель с файлом update/UN260_UPDATE.upk",
         "KEEP BACKUPS AND CHECK THE ERROR": "СОХРАНИТЕ РЕЗЕРВНЫЕ КОПИИ И ПРОВЕРЬТЕ ОШИБКУ",
         "KEEP NOTES SEPARATE AND RECOUNT": "ХРАНИТЕ БАНКНОТЫ ОТДЕЛЬНО И ПЕРЕСЧИТАЙТЕ",
@@ -343,7 +343,7 @@
         "BACKUP   STORAGE   APPLICATION   VERIFY": "SICHERUNG   SPEICHER   ANWENDUNG   PRÜFUNG",
         "CHECKING THE SAME USB PACKAGE": "ÜBERPRÜFEN DESSELBEN USB-PAKETS",
         "CONTACT SERVICE  DO NOT RESUME COUNTING": "SERVICE KONTAKTIEREN. ZÄHLEN NICHT FORTSETZEN",
-        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "ZÄHLERGEBNIS UND CONTROLLER-ZUSTAND MÜSSEN GEPRÜFT WERDEN",
+        "COUNT AND CONTROLLER STATE REQUIRE CHECKING": "ZÄHLERGEBNIS UND HAUPTPLATINEN-ZUSTAND MÜSSEN GEPRÜFT WERDEN",
         "Insert USB drive with update/UN260_UPDATE.upk": "USB-Laufwerk mit update/UN260_UPDATE.upk einstecken",
         "KEEP BACKUPS AND CHECK THE ERROR": "Bewahren Sie Backups auf und überprüfen Sie den Fehler",
         "KEEP NOTES SEPARATE AND RECOUNT": "BANKNOTEN GETRENNT HALTEN UND ERNEUT ZÄHLEN",
@@ -365,8 +365,8 @@
     }
   },
   "generator_sha256": "b8c78e0034d061a39c968a461f28b296caf4a5d0ffcfa7170600a987b3f86d92",
-  "output_sha256": "6ee1389cd83c84d66de708c0c5f524cd0b8b5d54215d56575be574f12c96cf40",
-  "compressed_bytes": 204876,
+  "output_sha256": "31f2b9b4b67d1845e337a881adabbb5068eb2eac08df9b13dab28cb1ac0b6baa",
+  "compressed_bytes": 205389,
   "labels": [
     {
       "tag": "en",
@@ -398,11 +398,11 @@
     {
       "tag": "en",
       "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
-      "text": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
-      "width": 620,
+      "text": "COUNT AND MAINBOARD STATE REQUIRE CHECKING",
+      "width": 607,
       "height": 22,
       "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
-      "pixels_sha256": "12855f12b66666aa619c51e8c5e1bf5b7a1fce8f50ba324e1a77636d3233dbb1"
+      "pixels_sha256": "fda724afced6bd46480e9f4d2876cd294ae4f935b8a3e840433cc88b477e6b36"
     },
     {
       "tag": "en",
@@ -533,11 +533,11 @@
     {
       "tag": "zh-Hans",
       "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
-      "text": "请检查点钞结果和控制器状态",
-      "width": 301,
+      "text": "请检查点钞结果和主板状态",
+      "width": 278,
       "height": 25,
       "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
-      "pixels_sha256": "a0a5b8ecddbbefc84232f4fe9483f9024167a7cdfd3912af93855ecd45cfa596"
+      "pixels_sha256": "7b87f913f2b3c537b3a8927e751b2fad8c3d545332bb7167e29840f2cb27873b"
     },
     {
       "tag": "zh-Hans",
@@ -668,11 +668,11 @@
     {
       "tag": "ko",
       "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
-      "text": "계수 결과와 제어기 상태를 확인해야 합니다",
-      "width": 415,
+      "text": "계수 결과와 메인 보드 상태를 확인해야 합니다",
+      "width": 443,
       "height": 25,
       "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
-      "pixels_sha256": "25ee16bf90a7acd31389d7ffe7174fa755279dd22ce00a46faa690128cbc03f7"
+      "pixels_sha256": "21bfc5d3109c9c79e0737dc927b7bbc5e6c5f3f8348396e768986524b70420cf"
     },
     {
       "tag": "ko",
@@ -803,11 +803,11 @@
     {
       "tag": "ja",
       "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
-      "text": "計数結果とコントローラーの状態を確認してください",
-      "width": 553,
+      "text": "計数結果とメインボードの状態を確認してください",
+      "width": 530,
       "height": 25,
       "source_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
-      "pixels_sha256": "b3c88e14d4f67b5f27ead5df524dd46bc5479562d183f04b52ff7f14c2beafdf"
+      "pixels_sha256": "4fb280bef460d9cb5a0edb37fa80022d9bdddd0b50c0d30bbe9d40251144dfa6"
     },
     {
       "tag": "ja",
@@ -938,11 +938,11 @@
     {
       "tag": "ar",
       "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
-      "text": "يجب فحص نتيجة العد وحالة وحدة التحكم",
-      "width": 392,
+      "text": "يجب فحص نتيجة العد وحالة اللوحة الرئيسية",
+      "width": 418,
       "height": 26,
       "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
-      "pixels_sha256": "a0dec91a4b4a1d4a17a173c98207cb59146c9ef0eb1472a9eed6c0307521dd1a"
+      "pixels_sha256": "fb72f871456b6b14607711aae978756df100bbd6d4b6f6cc1cd09d3f5e3e1a29"
     },
     {
       "tag": "ar",
@@ -1073,11 +1073,11 @@
     {
       "tag": "tr",
       "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
-      "text": "SAYIM SONUCU VE DENETLEYİCİ DURUMU KONTROL EDİLMELİ",
-      "width": 714,
+      "text": "SAYIM SONUCU VE ANA KART DURUMU KONTROL EDİLMELİ",
+      "width": 680,
       "height": 23,
       "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
-      "pixels_sha256": "6c4ddab3fc0ebec81e6fd1a252fe769d49b1a6d651850ffd4f83bd442b67e652"
+      "pixels_sha256": "35eda396ebead30d44b567a3cc4ed5e4cda9f969fafaa597494cb306cd786ca9"
     },
     {
       "tag": "tr",
@@ -1208,11 +1208,11 @@
     {
       "tag": "fr",
       "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
-      "text": "LE RÉSULTAT DU COMPTAGE ET L’ÉTAT DU CONTRÔLEUR DOIVENT ÊTRE VÉRIFIÉS",
-      "width": 940,
+      "text": "LE RÉSULTAT DU COMPTAGE ET L’ÉTAT DE LA CARTE MÈRE DOIVENT ÊTRE VÉRIFIÉS",
+      "width": 961,
       "height": 23,
       "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
-      "pixels_sha256": "d83376a9fa0da50cfe0951a83c3cafacf3697dbd9d93f76ea1443796ea4acc7a"
+      "pixels_sha256": "12364ca50a59b72dda9b62c3118d11b76d24fef6251a29d6a9529ad599a95fe2"
     },
     {
       "tag": "fr",
@@ -1343,11 +1343,11 @@
     {
       "tag": "pl",
       "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
-      "text": "WYMAGANE SPRAWDZENIE WYNIKU LICZENIA I STANU KONTROLERA",
-      "width": 787,
-      "height": 19,
+      "text": "WYMAGANE SPRAWDZENIE WYNIKU LICZENIA I STANU PŁYTY GŁÓWNEJ",
+      "width": 818,
+      "height": 28,
       "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
-      "pixels_sha256": "ec30136d27631b8f33395bce5fa5cd430dcbcead8ac80fcfb306bff05dff528c"
+      "pixels_sha256": "188803547e96d45da0f05c13e415883f21ce780b3128120fa8671e8eec02f0db"
     },
     {
       "tag": "pl",
@@ -1478,11 +1478,11 @@
     {
       "tag": "ru",
       "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
-      "text": "ТРЕБУЕТСЯ ПРОВЕРКА РЕЗУЛЬТАТА СЧЁТА И СОСТОЯНИЯ КОНТРОЛЛЕРА",
-      "width": 874,
+      "text": "ТРЕБУЕТСЯ ПРОВЕРКА РЕЗУЛЬТАТА СЧЁТА И СОСТОЯНИЯ ОСНОВНОЙ ПЛАТЫ",
+      "width": 927,
       "height": 23,
       "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
-      "pixels_sha256": "9f3e59d57b1a31c6f435460579a95733cd5d675e2e629faf341402f36dd8732b"
+      "pixels_sha256": "82aca2fbfd51ee891f4a2ebf615a22df0ae21b3cf762f85314679458cc774a1c"
     },
     {
       "tag": "ru",
@@ -1613,11 +1613,11 @@
     {
       "tag": "de",
       "key": "COUNT AND CONTROLLER STATE REQUIRE CHECKING",
-      "text": "ZÄHLERGEBNIS UND CONTROLLER-ZUSTAND MÜSSEN GEPRÜFT WERDEN",
-      "width": 848,
+      "text": "ZÄHLERGEBNIS UND HAUPTPLATINEN-ZUSTAND MÜSSEN GEPRÜFT WERDEN",
+      "width": 882,
       "height": 23,
       "source_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
-      "pixels_sha256": "48d170f815f5f8249a1b45ad8771214e1c135a3f144853acc64a6b80b6086c5d"
+      "pixels_sha256": "a3a414094c7ea5855e626071a0a02164b836731956cac13e47795fe99c3f07a6"
     },
     {
       "tag": "de",

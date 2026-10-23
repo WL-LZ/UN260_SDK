@@ -209,8 +209,7 @@
       "Demo": "Established German demonstration abbreviation.",
       "Firmware": "Established German technical noun.",
       "Original": "Native German same-spelling noun.",
-      "Pause": "Native German same-spelling noun/action.",
-      "Panel key\u0004Reset": "Established German technical reset control label on this compact side key; expanded filter instructions remain German. Exact context only."
+      "Pause": "Native German same-spelling noun/action."
     },
     "pl": {
       "Mar": {
@@ -222,12 +221,9 @@
       "Demo": "Established Polish demonstration abbreviation.",
       "Model": "Native Polish same-spelling noun.",
       "Operator": "Native Polish same-spelling occupation noun.",
-      "min": "Standard abbreviation of minuta.",
-      "Panel key\u0004Operator": "Operator is the native Polish same-spelling noun for the operator control; exact panel-key context only."
+      "min": "Standard abbreviation of minuta."
     },
-    "ar": {
-      "Panel key\u0004PIN": "Exact compact security-key label uses the established PIN identifier; expanded instructions remain Arabic. No global PIN exemption."
-    }
+    "ar": {}
   },
   "allowed_words_by_key": {
     "zh-Hans": {

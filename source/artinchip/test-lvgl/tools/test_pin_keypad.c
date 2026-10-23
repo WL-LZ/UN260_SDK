@@ -28,21 +28,6 @@ lv_obj_t *lv_damped_button_get_label(lv_obj_t *button){return button;}
 void lv_nav_button_mark_back(lv_obj_t *button){assert(lv_obj_is_valid(button));}
 
 #include "../un260/lv_components/lv_pin_keypad.c"
-/* Only the new panel presentation is stubbed here. The original PIN
- * component/page remains production code, including fallback authentication. */
-#include "un260/lv_core/panel_entry.h"
-#include "un260/lv_system/ui_display_mode.h"
-static bool test_panel_mode,test_panel_fail,test_panel_open;
-static unsigned test_panel_attempts;
-static panel_entry_config_t test_panel_config;
-static lv_obj_t *test_panel_parent;
-static const char *test_panel_error;
-bool ui_display_mode_is_panel(void){return test_panel_mode;}
-bool panel_entry_open(lv_obj_t *parent,const panel_entry_config_t *config)
-{++test_panel_attempts;test_panel_parent=parent;test_panel_config=*config;return test_panel_open=!test_panel_fail;}
-bool panel_entry_is_open_for(const void *owner){return test_panel_open&&test_panel_config.user==owner;}
-void panel_entry_close_for(const void *owner){if(panel_entry_is_open_for(owner))test_panel_open=false;}
-void panel_entry_set_error(const char *message){test_panel_error=message;}
 static bool test_legacy_pin_fail;
 static bool test_pin_keypad_create(lv_pin_keypad_t *keypad,lv_obj_t *parent,lv_coord_t x,lv_coord_t y)
 {return !test_legacy_pin_fail&&lv_pin_keypad_create(keypad,parent,x,y);}
@@ -458,74 +443,39 @@ static void test_change_password_page(void)
     ui_page_29_set_password_destroy();
 }
 
-static void test_panel_password_fallback(void)
-{
-    test_panel_mode=true;test_panel_fail=true;switched_page=UI_PAGE_MAIN;
-    ui_page_05_set_password_open();
-    assert(test_panel_attempts>=1&&!test_panel_open);
-    assert(lv_pin_keypad_is_visible(&g_password_page.keypad));
-    assert(switched_page==UI_PAGE_MAIN);
-    type_pin(&g_password_page.keypad,"9999");
-    assert(switched_page==UI_PAGE_MAIN&&ui_page_05_set_password_is_open());
-    assert(ui_page_05_set_password_request_back());
-    assert(!ui_page_05_set_password_is_open());
-    assert(ui_page_05_set_password_resume());
-    assert(lv_pin_keypad_is_visible(&g_password_page.keypad));
-    ui_page_05_set_password_suspend();
-    test_panel_fail=false;ui_page_05_set_password_open();
-    assert(test_panel_open&&test_panel_parent==lv_layer_top());
-    assert(!lv_pin_keypad_is_visible(&g_password_page.keypad));
-    assert(!test_panel_config.confirm("9999",test_panel_config.user));
-    assert(test_panel_error&&test_panel_open&&switched_page==UI_PAGE_MAIN);
-    assert(ui_page_05_set_password_request_back()&&!test_panel_open);
-    ui_page_05_set_password_open();
-    assert(test_panel_config.confirm(user_cfg_password_get(),test_panel_config.user));
-    assert(switched_page==UI_PAGE_SETTING&&!test_panel_open);
-    ui_page_05_set_password_destroy();test_panel_mode=false;
-    puts("PASS panel PIN allocation fallback, cancel, wrong/correct authentication and top-layer ownership");
-}
-
 static void test_password_destination(void)
 {
-    for(unsigned panel=0;panel<2;panel++){
-        test_panel_mode=panel;test_panel_fail=false;switched_page=UI_PAGE_MAIN;
+    {
+        switched_page=UI_PAGE_MAIN;
         assert(!ui_page_05_set_password_open_for(UI_PAGE_PASSWORD_CHANGE));
         assert(!ui_page_05_set_password_is_open());
         assert(ui_page_05_set_password_open_for(UI_PAGE_CFD_LEVEL_SETTING));
         assert(!ui_page_05_set_password_open_for(UI_PAGE_SETTING));
         ui_page_05_set_password_open(); /* A second entry cannot replace target. */
         assert(g_password_page.destination==UI_PAGE_CFD_LEVEL_SETTING);
-        if(panel)assert(!test_panel_config.confirm("9999",test_panel_config.user));
-        else type_pin(&g_password_page.keypad,"9999");
+        type_pin(&g_password_page.keypad,"9999");
         assert(switched_page==UI_PAGE_MAIN&&g_password_page.destination==UI_PAGE_CFD_LEVEL_SETTING);
-        if(panel)assert(test_panel_config.confirm(user_cfg_password_get(),test_panel_config.user));
-        else type_pin(&g_password_page.keypad,user_cfg_password_get());
+        type_pin(&g_password_page.keypad,user_cfg_password_get());
         assert(switched_page==UI_PAGE_CFD_LEVEL_SETTING&&!ui_page_05_set_password_is_open());
         assert(g_password_page.destination==UI_PAGE_SETTING);
         assert(ui_page_05_set_password_open_for(UI_PAGE_CFD_LEVEL_SETTING));
-        if(panel){
-            assert(test_panel_config.cancel);
-            test_panel_open=false; /* Shared entry closes before its cancel callback. */
-            test_panel_config.cancel(test_panel_config.user);
-            assert(!ui_page_05_set_password_is_open()&&g_password_page.destination==UI_PAGE_SETTING);
-        }else assert(ui_page_05_set_password_request_back()&&g_password_page.destination==UI_PAGE_SETTING);
+        assert(ui_page_05_set_password_request_back()&&g_password_page.destination==UI_PAGE_SETTING);
         ui_page_05_set_password_open();
-        if(panel)assert(test_panel_config.confirm(user_cfg_password_get(),test_panel_config.user));
-        else type_pin(&g_password_page.keypad,user_cfg_password_get());
+        type_pin(&g_password_page.keypad,user_cfg_password_get());
         assert(switched_page==UI_PAGE_SETTING);
         ui_page_05_set_password_destroy();assert(g_password_page.destination==UI_PAGE_SETTING);
     }
-    test_panel_mode=test_panel_fail=test_legacy_pin_fail=true;switched_page=UI_PAGE_MAIN;
+    test_legacy_pin_fail=true;switched_page=UI_PAGE_MAIN;
     assert(!ui_page_05_set_password_open_for(UI_PAGE_CFD_LEVEL_SETTING));
     assert(!ui_page_05_set_password_is_open()&&!g_password_page.page&&switched_page==UI_PAGE_MAIN);
     assert(g_password_page.destination==UI_PAGE_SETTING);
     test_legacy_pin_fail=false;
     assert(ui_page_05_set_password_open_for(UI_PAGE_CFD_LEVEL_SETTING));
-    assert(!test_panel_open&&lv_pin_keypad_is_visible(&g_password_page.keypad));
+    assert(lv_pin_keypad_is_visible(&g_password_page.keypad));
     type_pin(&g_password_page.keypad,user_cfg_password_get());
     assert(switched_page==UI_PAGE_CFD_LEVEL_SETTING);
-    ui_page_05_set_password_destroy();test_panel_mode=test_panel_fail=false;
-    puts("PASS PIN destination whitelist, immutable active target, both UI authentication, cancel/reset and complete/fallback allocation failure");
+    ui_page_05_set_password_destroy();
+    puts("PASS PIN destination whitelist, immutable active target, authentication, cancel/reset and allocation failure/retry");
 }
 
 int main(void)
@@ -534,7 +484,6 @@ int main(void)
     test_component();
     test_visibility();
     test_login_page();
-    test_panel_password_fallback();
     test_password_destination();
     test_change_password_page();
     assert(live_count == 0 && timers_created == timers_deleted);

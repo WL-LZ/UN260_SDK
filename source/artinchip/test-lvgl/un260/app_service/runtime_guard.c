@@ -140,7 +140,7 @@ static bool marker(int dir)
 {
     int fd = openat(dir, "pending", O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW | O_CLOEXEC, 0600);
     if (fd < 0) return errno == EEXIST;
-    const char text[] = "Runtime fault. Physical notes and controller state must be reconciled.\n";
+    const char text[] = "Runtime fault. Physical notes and mainboard state must be reconciled.\n";
     bool ok = write_all(fd, text, sizeof(text)-1) && fsync(fd) == 0;
     if (close(fd)) ok = false;
     if (fsync(dir)) ok = false;
@@ -173,7 +173,7 @@ static bool save_evidence(int dir, int status, const char *maps)
     fprintf(out,"UN260 runtime evidence v1\nuptime_ms=%llu wait_status=%d fault=%u\n"
         "signal=%d code=%d address=0x%llx pc=0x%llx\n"
         "LAST UI SNAPSHOT ONLY - NOT FINAL PHYSICAL COUNT\nsnapshot_valid=%u\npcs=%d amount=%.9g phase=%u busy=%u pending=%u multi=%u\n"
-        "RX contains received frames, not proof of application processing. TX completion means host write only, not controller ACK.\n"
+        "RX contains received frames, not proof of application processing. TX completion means host write only, not mainboard ACK.\n"
         "Journal is bounded; overwritten/incomplete records require manual reconciliation.\n",
         (unsigned long long)now_ms(),status,shared->fault,shared->signal_number,
         shared->signal_code,(unsigned long long)shared->signal_address,

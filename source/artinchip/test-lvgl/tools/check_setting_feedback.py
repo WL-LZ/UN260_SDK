@@ -16,7 +16,7 @@ reviewed={
  'setting_service_request_batch_switch':'settings.batch',
  'setting_service_request_beep':'settings.sound',
  'setting_service_request_fo_mode':'settings.sorting',
- 'setting_service_request_mode':'settings.mode',
+ 'count_mode_service_request':'settings.mode',
  'setting_service_request_reject_pocket_max':'settings.reject_pocket',
  'setting_service_request_speed':'settings.speed',
  'setting_service_request_work_mode':'settings.work_mode',

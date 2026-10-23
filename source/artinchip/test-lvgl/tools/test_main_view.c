@@ -785,6 +785,26 @@ static void test_capture_island(void)
     puts("PASS Main legacy capture: one-time initialization, unchanged badge geometry, both mode icons and settings entry, scene avoidance and lifecycle, no capture overlay");
 }
 
+static void multi_mode_controls_test(void)
+{
+    ui_main_destroy();host_current_page=UI_PAGE_MAIN;page_01_main_set_counting_locked(false);
+    ui_main_create(lv_scr_act());page_01_main_resume();
+    currency_state_confirm_multi_selection();page_01_curr_img_refre();tick(50);
+    lv_obj_t *mode=page_01_main_find_obj("mode_btn");
+    assert(lv_obj_has_state(mode,LV_STATE_DISABLED));
+    assert(lv_obj_get_style_opa(mode,0)==LV_OPA_COVER);
+    assert(lv_obj_get_style_opa(s_bottom_a_btn_mode,0)==LV_OPA_COVER);
+    assert(lv_obj_has_state(s_bottom_a_btn_mode,LV_STATE_DISABLED));
+    unsigned n=callbacks[CB_MODE]+callbacks[CB_BOTTOM_MODE],sounds=touch_sounds;
+    click_object(mode);click_object(s_bottom_a_btn_mode);
+    assert(callbacks[CB_MODE]+callbacks[CB_BOTTOM_MODE]==n&&touch_sounds==sounds);
+    write_bmp("multi-mode-disabled");
+    currency_state_confirm_auto_selection();page_01_curr_img_refre();tick(50);
+    assert(!lv_obj_has_state(mode,LV_STATE_DISABLED)&&!lv_obj_has_state(s_bottom_a_btn_mode,LV_STATE_DISABLED));
+    click_object(mode);assert(callbacks[CB_MODE]+callbacks[CB_BOTTOM_MODE]==n+1);
+    puts("PASS MULTI mode keys disabled and quiet; AUTO restores mode interaction");
+}
+
 int main(void)
 {
     setvbuf(stdout,NULL,_IONBF,0);
@@ -831,7 +851,7 @@ int main(void)
         assert(frame.root == NULL && timers() == test_timer_count);
     }
 #endif
-    test_main_locales();test_capture_island();
+    test_main_locales();test_capture_island();multi_mode_controls_test();ui_main_destroy();
     counting_data_clear_serials(counting_data_mutable());counting_data_clear_errors(counting_data_mutable());
     lv_indev_delete(indev);lv_img_decoder_delete(decoder);lv_deinit();host_external_assets_release();
     puts("PASS actual Main/detail/Smart Island raster and pointer dispatch, all modes, pending START, retained lifecycle; DMA/controller/Innovation navigation remain board tests");

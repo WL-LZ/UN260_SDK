@@ -20,7 +20,6 @@ lvgl = lvgl_source(root)
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('output_dir',type=Path)
 parser.add_argument('--harness',type=Path,help='Explicit focused harness; default keeps the complete legacy suite')
-parser.add_argument('--panel-fixture-in-harness',action='store_true',help='Harness supplies the Panel navigation boundary')
 args=parser.parse_args()
 out=args.output_dir.resolve();out.mkdir(parents=True,exist_ok=True)
 for name in ['user','settings']:
@@ -44,8 +43,6 @@ with tempfile.TemporaryDirectory(prefix='un260-settings-view-') as temp:
       root/'un260/lv_core/page_collection.c',root/'un260/app_service/app_collection.c',root/'un260/protocol/protocol_request.c',
       root/'un260/font/ui_message_font.c',root/'un260/font/ui_locale_font_bank.c',
       *[root/'un260/font'/f'{f}.c' for f in fonts],*lvgl.joinpath('src').rglob('*.c')]
-    if not args.panel_fixture_in_harness:
-        sources.append(root / "tools/tests/fullscreen_panel_stubs.c")
     sources = with_i18n(sources, root)
     # Exercise every language row before the production readiness gate opens.
     (work/'i18n/generated').mkdir(parents=True)

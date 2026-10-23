@@ -1,6 +1,11 @@
 /* Real setting request owners, negative reply branches and notice policy. */
 #include <assert.h>
 #include <stdbool.h>
+/* Currency orchestration is tested separately; this fixture exercises fault routing. */
+bool count_mode_service_currency_mode(void){return false;}
+void count_mode_service_mode_result(bool success,bool timeout){(void)success;(void)timeout;}
+void count_mode_service_mode_sync(void){}
+bool count_mode_service_result_may_clear(void){return true;}
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>

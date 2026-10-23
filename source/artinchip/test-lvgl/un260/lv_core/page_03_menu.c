@@ -1,3 +1,4 @@
+#include "un260/app_service/count_mode_service.h"
 #include "un260/app_service/app_local_setting.h"
 #include "un260/lv_system/ui_lang.h"
 #include "un260/lv_system/ui_text.h"
@@ -7,10 +8,6 @@
 #include "un260/app_service/app_ui_runtime.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "page_03_menu.h"
-#include "panel_pages.h"
-#include "un260/lv_system/ui_display_mode.h"
-static bool panel_detail,panel_rebuild_pending;
-static bool menu_return_to_panel(void);
 
 #include "operator_initial.h"
 #include "lv_page_manager.h"
@@ -358,7 +355,7 @@ static void render(void)
     menu.rendered_tab=menu.tab;menu.rendered_sub=menu.sub;menu.dirty=false;
 }
 static void confirmed_back(void *unused)
-{(void)unused;menu.batch_dirty=menu.user_edit=false;workspace_service_cancel_apply();reset_batch();if(menu_return_to_panel())return;if(!ui_manager_pop_page())ui_manager_switch(UI_PAGE_MAIN);}
+{(void)unused;menu.batch_dirty=menu.user_edit=false;workspace_service_cancel_apply();reset_batch();if(!ui_manager_pop_page())ui_manager_switch(UI_PAGE_MAIN);}
 static void delete_profile(void *unused)
 {
     (void)unused;const workspace_user_t *u=user();if(!u||menu.selected_profile>=u->profile_count)return;workspace_model_t *m=draft();if(!m)return;
@@ -650,7 +647,15 @@ static void action(lv_event_t *event)
     }
     if(id==A_NEW_PROFILE){settings_detail_keyboard_show(ui_tr("Name this profile"),"",WORKSPACE_NAME,SETTINGS_DETAIL_KEYBOARD_TEXT,name_submit,(void *)1);return;}
     if(id==A_DELETE_PROFILE){if(!u||u->profile_count<=1){explain(UI_N_("Keep at least one counting profile."));return;}char s[120];snprintf(s,sizeof(s),ui_tr("Delete %s? Current machine values will not change."),profile_display_name(&u->profiles[menu.selected_profile]));settings_detail_dialog_show_ex(SETTINGS_DIALOG_DESTRUCTIVE,ui_tr("Delete profile"),s,ui_tr("Delete"),ui_tr("Cancel"),delete_profile,NULL,NULL);return;}
-    if(id==A_APPLY_PROFILE){settings_detail_dialog_show(ui_tr("Apply profile?"),ui_tr("Speed, sorting, sound, Batch, ADD and start method will be confirmed one at a time. Currency is unchanged. A count-mode change clears the current Main result after confirmation; saved history remains."),ui_tr("Apply"),ui_tr("Cancel"),apply_profile,NULL,NULL);return;}
+    if(id==A_APPLY_PROFILE){
+        const workspace_user_t *u=user();if(!u||menu.selected_profile>=u->profile_count)return;
+        const workspace_profile_t *p=&u->profiles[menu.selected_profile];
+        uint8_t requested=p->mode?p->mode:current_profile().mode;
+        const char *message=workspace_service_profile_mode(p)!=requested?
+            UI_N_("This currency requires MDC for this profile. Other settings apply normally. Currency and the saved profile stay unchanged. A confirmed count-mode change clears the current result; saved history remains."):
+            UI_N_("Speed, sorting, sound, Batch, ADD and start method will be confirmed one at a time. Currency is unchanged. A count-mode change clears the current Main result after confirmation; saved history remains.");
+        settings_detail_dialog_show(ui_tr("Apply profile?"),ui_tr(message),ui_tr("Apply"),ui_tr("Cancel"),apply_profile,NULL,NULL);return;
+    }
     if(id==A_QUICK_TOGGLE||id==A_AUTO_QR){workspace_model_t *m=draft();if(!m)return;workspace_user_t *v=workspace_find(m,m->operators_enabled?m->active_id:0);if(id==A_QUICK_TOGGLE)v->quick_enabled=!v->quick_enabled;else v->qr_after_count=!v->qr_after_count;save(m);return;}
     if(id==A_NEW_USER){if(workspace_store_get()->user_count>=WORKSPACE_USERS){explain(UI_N_("This device supports up to 8 local operators."));return;}menu.editing_user=0;menu.user_edit=true;menu.user_name[0]=menu.employee_id[0]=menu.team[0]=0;memset(&menu.avatar,0,sizeof(menu.avatar));menu.dirty=true;return;}
     if(id==A_DELETE_USER){ui_manager_push_page(UI_PAGE_OPERATORS);return;}
@@ -706,8 +711,6 @@ static void timer(lv_timer_t *t)
 }
 void ui_page_03_menu_create(lv_obj_t *parent)
 {
-    if(panel_rebuild_pending&&ui_display_mode_is_panel())ui_page_03_menu_destroy();
-    if(ui_display_mode_is_panel()&&!panel_detail){if(panel_pages_create(UI_PAGE_MENU,parent))return;}
     if(menu.root)return;
     menu.root=box(parent?parent:lv_scr_act(),0,0,1280,400,0xFFFFFF,0);
     lv_obj_t *back=lv_nav_back_text_button_create(menu.root,24,15,
@@ -742,11 +745,10 @@ void ui_page_03_menu_create(lv_obj_t *parent)
     menu.body=box(menu.root,24,76,1232,296,0xFFFFFF,0);lv_obj_set_style_bg_opa(menu.body,LV_OPA_TRANSP,0);
     reset_batch();menu.timer=lv_timer_create(timer,80,NULL);render();
 }
-bool page_03_menu_is_created(void){return panel_pages_created(UI_PAGE_MENU)||menu.root!=NULL;}
-bool page_03_menu_is_visible(void){return panel_pages_visible(UI_PAGE_MENU)||(menu.root&&lv_obj_is_visible(menu.root));}
+bool page_03_menu_is_created(void){return menu.root!=NULL;}
+bool page_03_menu_is_visible(void){return (menu.root&&lv_obj_is_visible(menu.root));}
 void ui_page_03_menu_refresh_data(uint32_t topics)
 {
-    if(panel_pages_created(UI_PAGE_MENU)){panel_pages_refresh(UI_PAGE_MENU,false);return;}
     (void)topics;menu.dirty=true;if(!menu.root)return;
     if(menu.saving&&!workspace_store_busy()) {
         if((menu.saving==1||menu.saving==4)&&workspace_store_last_success()) {
@@ -766,40 +768,17 @@ void ui_page_03_menu_refresh_data(uint32_t topics)
     if((menu.scan_wait||menu.photo_wait)&&!workspace_store_busy()) {menu.scan_wait=menu.photo_wait=false;if(menu.user_edit&&page_03_menu_is_visible())menu.photo_ready=true;}
 }
 void page_03_menu_clear_batch_tip(void){clear_notice();}
-void page_03_menu_show_batch_saved_tip(void){menu.dirty=true;panel_pages_refresh(UI_PAGE_MENU,false);}
-void page_03_menu_refresh_batch_number(void){menu.dirty=true;panel_pages_refresh(UI_PAGE_MENU,false);}
-void page_03_menu_refresh_batch_mode(void){menu.dirty=true;panel_pages_refresh(UI_PAGE_MENU,false);}
+void page_03_menu_show_batch_saved_tip(void){menu.dirty=true;}
+void page_03_menu_refresh_batch_number(void){menu.dirty=true;}
+void page_03_menu_refresh_batch_mode(void){menu.dirty=true;}
 bool ui_page_03_menu_resume(void)
-{if(panel_rebuild_pending&&ui_display_mode_is_panel()){ui_page_03_menu_destroy();ui_page_03_menu_create(lv_scr_act());return page_03_menu_is_created();}if(panel_pages_created(UI_PAGE_MENU))return panel_pages_resume(UI_PAGE_MENU);if(!menu.root)return false;if(!menu.batch_dirty&&!menu.saving)reset_batch();lv_obj_clear_flag(menu.root,LV_OBJ_FLAG_HIDDEN);lv_obj_move_foreground(menu.root);lv_timer_resume(menu.timer);menu.dirty=true;render();return true;}
+{if(!menu.root)return false;if(!menu.batch_dirty&&!menu.saving)reset_batch();lv_obj_clear_flag(menu.root,LV_OBJ_FLAG_HIDDEN);lv_obj_move_foreground(menu.root);lv_timer_resume(menu.timer);menu.dirty=true;render();return true;}
 void ui_page_03_menu_suspend(void)
-{if(panel_pages_created(UI_PAGE_MENU)){panel_pages_suspend(UI_PAGE_MENU);return;}if(!menu.root)return;if(menu.qr_generation&&menu.qr_generation==lv_qr_popup_generation())lv_qr_popup_hide();menu.qr_generation=0;workspace_service_cancel_apply();settings_detail_keyboard_hide();settings_detail_dialog_hide();destroy_quick();if(menu.photo_sheet)lv_obj_del(menu.photo_sheet);if(menu.user_sheet)lv_obj_del(menu.user_sheet);if(menu.record_sheet)lv_obj_del(menu.record_sheet);menu.user_sheet=menu.record_sheet=NULL;menu.photo_sheet=NULL;menu.scan_wait=menu.photo_wait=menu.photo_ready=false;clear_notice();if(menu.interaction_created)lv_quick_controls_reset(&menu.interaction_controls);gesture_service_clear_pointer_policy(UI_PAGE_MENU);lv_timer_pause(menu.timer);lv_obj_add_flag(menu.root,LV_OBJ_FLAG_HIDDEN);}
+{if(!menu.root)return;if(menu.qr_generation&&menu.qr_generation==lv_qr_popup_generation())lv_qr_popup_hide();menu.qr_generation=0;workspace_service_cancel_apply();settings_detail_keyboard_hide();settings_detail_dialog_hide();destroy_quick();if(menu.photo_sheet)lv_obj_del(menu.photo_sheet);if(menu.user_sheet)lv_obj_del(menu.user_sheet);if(menu.record_sheet)lv_obj_del(menu.record_sheet);menu.user_sheet=menu.record_sheet=NULL;menu.photo_sheet=NULL;menu.scan_wait=menu.photo_wait=menu.photo_ready=false;clear_notice();if(menu.interaction_created)lv_quick_controls_reset(&menu.interaction_controls);gesture_service_clear_pointer_policy(UI_PAGE_MENU);lv_timer_pause(menu.timer);lv_obj_add_flag(menu.root,LV_OBJ_FLAG_HIDDEN);}
 void ui_page_03_menu_destroy(void)
-{panel_rebuild_pending=false;if(panel_pages_created(UI_PAGE_MENU)){panel_pages_destroy(UI_PAGE_MENU);panel_detail=false;return;}ui_page_03_menu_suspend();panel_detail=false;if(menu.timer)lv_timer_del(menu.timer);if(menu.root)lv_obj_del(menu.root);memset(&menu,0,sizeof(menu));}
-/* Root navigation ends a legacy-detail visit. Defer rebuilding until this
- * retained page is resumed; calibration/service child returns keep their tree. */
-void ui_page_03_menu_reset_navigation(void)
-{if(panel_detail&&ui_display_mode_is_panel())panel_rebuild_pending=true;}
-static bool menu_return_to_panel(void)
-{
-    if(!panel_detail||!ui_display_mode_is_panel())return false;
-    ui_page_03_menu_destroy();ui_page_03_menu_create(lv_scr_act());
-    return page_03_menu_is_created();
-}
+{ui_page_03_menu_suspend();if(menu.timer)lv_timer_del(menu.timer);if(menu.root)lv_obj_del(menu.root);memset(&menu,0,sizeof(menu));}
 void page_03_menu_open_batch(void)
 {
     menu.tab=1;menu.sub=0;menu.dirty=true;
     ui_manager_push_page(UI_PAGE_MENU);
-    /* Keep the public preset-editor route and its original return stack. */
-    if(ui_display_mode_is_panel()&&ui_manager_get_current_page()==UI_PAGE_MENU)
-        page_03_menu_open_detail(1,0);
-}
-
-void page_03_menu_open_detail(unsigned category,unsigned subcategory)
-{
-    if(category>=6||subcategory>=3)return;
-    if(ui_manager_get_current_page()!=UI_PAGE_MENU)ui_manager_switch(UI_PAGE_MENU);
-    if(ui_manager_get_current_page()!=UI_PAGE_MENU)return;
-    panel_pages_destroy(UI_PAGE_MENU);panel_detail=true;panel_rebuild_pending=false;
-    menu.tab=category;menu.sub=subcategory;menu.dirty=true;
-    if(!menu.root)ui_page_03_menu_create(lv_scr_act());else render();
 }

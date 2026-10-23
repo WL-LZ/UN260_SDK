@@ -5,20 +5,12 @@
 #include "page_01_multi.h"
 #include "page_01_main_layout.h"
 #include "page_01_main_quick.h"
-#include "panel_main.h"
-#include "panel_entry.h"
-#include "settings_detail_ui.h"
-#include "ui_deferred_action.h"
-#include "un260/lv_system/ui_display_mode.h"
-#include "un260/lv_components/lv_fault_popup.h"
-#include "page_05_set_password.h"
 #include "lv_port_indev.h"
 #include "un260/gesture/gesture_service.h"
 #include "un260/lv_core/page_01_main_detail.h"
 #include "page_collection.h"
 #include "un260/lv_components/lv_loading_orbit.h"
 #include "un260/app_service/app_command_runtime.h"
-#include "un260/app_service/workspace_service.h"
 #include "un260/currency/currency_metadata.h"
 #include "un260/font/main_fonts.h"
 #include "un260/lv_core/lv_page_manager.h"
@@ -59,12 +51,6 @@ static lv_obj_t *s_detail_frame;
 static lv_obj_t *s_amount_unit_icon, *s_currency_code;
 static lv_obj_t *s_start_orbit;
 static bool s_multi_layout;
-static bool s_panel_layout;
-static bool s_display_switching, s_display_rebuilding;
-static ui_display_mode_t s_display_target;
-static ui_deferred_action_t s_display_action;
-static lv_dma_static_surface_t s_display_surface;
-static void page_01_display_transition_stop(void);
 static void page_01_mode_button_bind(lv_obj_t *button);
 static lv_obj_t* s_time_label = NULL;
 static lv_timer_t* s_time_timer = NULL;
@@ -175,12 +161,6 @@ static void page_01_main_commit(void *context, uint32_t flags)
     }
     s_main_commit_animation_flags = ui_manager_is_transitioning() ? 0 :
         ((flags >> PAGE_01_MAIN_BOTTOM_ANIM_SHIFT) & PAGE_01_MAIN_BOTTOM_ANIM_MASK);
-    if (s_panel_layout) {
-        panel_main_refresh(flags & PAGE_01_MAIN_DIRTY_ALL);
-        s_main_dirty &= ~(flags & PAGE_01_MAIN_DIRTY_ALL);
-        s_main_commit_animation_flags = 0;
-        return;
-    }
     if (flags & PAGE_01_MAIN_DIRTY_MODE) page_01_mode_switch_refre();
     if (flags & PAGE_01_MAIN_DIRTY_ADD) page_01_add_refre();
     if (flags & PAGE_01_MAIN_DIRTY_WORK) page_01_work_refre();
@@ -303,10 +283,30 @@ static void page_01_main_detect_snapshot_changes(void)
 
 static const char *page_01_mode_text_get(uint8_t mode);
 
+static void page_01_mode_controls_refresh(void)
+{
+    bool disabled = currency_state_multi_selected();
+    lv_obj_t *buttons[] = {page_01_main_find_obj("mode_btn"), s_bottom_a_btn_mode};
+    lv_obj_t *labels[] = {page_01_main_find_obj("mode_label"), s_bottom_a_label_mode};
+    for (unsigned i = 0; i < 2; ++i) {
+        if (!buttons[i] || lv_obj_has_state(buttons[i], LV_STATE_DISABLED) == disabled) continue;
+        lv_damped_button_set_enabled(buttons[i], !disabled);
+        if (labels[i]) lv_obj_set_style_text_color(labels[i],
+            lv_color_hex(disabled ? 0x98A3AA : 0x4C606E), 0);
+        if (i == 0) {
+            lv_obj_t *icon = page_01_main_find_obj("page_01_mode_icon.png");
+            if (icon) {
+                lv_obj_set_style_img_recolor(icon, lv_color_hex(0x98A3AA), 0);
+                lv_obj_set_style_img_recolor_opa(icon, disabled ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+            }
+        }
+    }
+}
+
 void page_01_mode_switch_refre(void)
 {
     if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_MODE)) return;
-    if (s_panel_layout) { panel_main_refresh(PAGE_01_MAIN_DIRTY_MODE); return; }
+    page_01_mode_controls_refresh();
     const char *mode = page_01_mode_text_get(machine_state_mode());
     update_label_by_name(page_01_main_obj, page_01_main_len, "mode_label", "%s", mode);
     page_01_bottom_a_refresh_mode(false);
@@ -352,7 +352,6 @@ void page_01_err_num_refre(void)
 {
     char text[20];
     if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_ERROR)) return;
-    if (s_panel_layout) { panel_main_refresh(PAGE_01_MAIN_DIRTY_ERROR); return; }
     lv_snprintf(text, sizeof(text), "%d", counting_data_reject_pcs_count(counting_data_current()));
     update_label_by_name(page_01_main_obj, page_01_main_len, "reject_num_label", "%s", text);
 }
@@ -361,8 +360,8 @@ void page_01_curr_img_refre(void)
 {
     char code[4], effective[4];
     if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_CURRENCY)) return;
-    if (s_panel_layout) { panel_main_refresh(PAGE_01_MAIN_DIRTY_CURRENCY); return; }
     currency_state_get_selected_code(code);
+    page_01_mode_controls_refresh();
     currency_state_get_effective_code(effective);
     page_01_main_layout_refresh();
     if (s_curr_rendered_valid && strcmp(code, s_curr_rendered_code) == 0 &&
@@ -882,7 +881,6 @@ static void page_01_bottom_bg_destroy_all(void) //销毁主界面底部三个背
 void page_01_bottom_a_refresh_mode(bool anim_en) //刷新主界面底部A区模式文本
 {
     if (page_01_main_defer_bottom_refresh(PAGE_01_MAIN_DIRTY_MODE, &anim_en)) return;
-    if (s_panel_layout) { panel_main_refresh(PAGE_01_MAIN_DIRTY_MODE); return; }
     page_01_bottom_label_anim_run(s_bottom_a_label_mode, page_01_mode_text_get(machine_state_mode()),
         anim_en ? PAGE_01_BOTTOM_TEXT_ANIM_SLIDE : PAGE_01_BOTTOM_TEXT_ANIM_NONE);
 }
@@ -890,7 +888,6 @@ void page_01_bottom_a_refresh_mode(bool anim_en) //刷新主界面底部A区模�
 void page_01_bottom_a_refresh_mode_preview(uint8_t mode) //预刷新主界面底部A区模式文本
 {
     if (!page_01_main_is_visible()) return;
-    if (s_panel_layout) return; /* Only confirmed machine state is rendered. */
     page_01_bottom_label_anim_run(s_bottom_a_label_mode, page_01_mode_text_get(mode),
         PAGE_01_BOTTOM_TEXT_ANIM_SLIDE);
 }
@@ -898,7 +895,6 @@ void page_01_bottom_a_refresh_mode_preview(uint8_t mode) //预刷新主界面底
 void page_01_bottom_a_refresh_add(bool anim_en) //刷新主界面底部A区ADD文本
 {
     if (page_01_main_defer_bottom_refresh(PAGE_01_MAIN_DIRTY_ADD, &anim_en)) return;
-    if (s_panel_layout) { panel_main_refresh(PAGE_01_MAIN_DIRTY_ADD); return; }
     page_01_bottom_label_anim_run(s_bottom_a_label_add, page_01_bottom_add_text_get(),
         anim_en ? PAGE_01_BOTTOM_TEXT_ANIM_SLIDE : PAGE_01_BOTTOM_TEXT_ANIM_NONE);
 }
@@ -906,7 +902,6 @@ void page_01_bottom_a_refresh_add(bool anim_en) //刷新主界面底部A区ADD�
 void page_01_bottom_a_refresh_work(bool anim_en) //刷新主界面底部A区工作模式文本
 {
     if (page_01_main_defer_bottom_refresh(PAGE_01_MAIN_DIRTY_WORK, &anim_en)) return;
-    if (s_panel_layout) { panel_main_refresh(PAGE_01_MAIN_DIRTY_WORK); return; }
     page_01_bottom_label_anim_run(s_bottom_a_label_work, page_01_bottom_work_text_get(),
         anim_en ? PAGE_01_BOTTOM_TEXT_ANIM_SLIDE : PAGE_01_BOTTOM_TEXT_ANIM_NONE);
 }
@@ -914,7 +909,6 @@ void page_01_bottom_a_refresh_work(bool anim_en) //刷新主界面底部A区工�
 void page_01_bottom_a_refresh_fo(bool anim_en) //刷新主界面底部A区F/O文本
 {
     if (page_01_main_defer_bottom_refresh(PAGE_01_MAIN_DIRTY_FO, &anim_en)) return;
-    if (s_panel_layout) { panel_main_refresh(PAGE_01_MAIN_DIRTY_FO); return; }
     page_01_bottom_label_anim_run(s_bottom_a_label_fo, page_01_bottom_fo_text_get(),
         anim_en ? PAGE_01_BOTTOM_TEXT_ANIM_SLIDE : PAGE_01_BOTTOM_TEXT_ANIM_NONE);
 }
@@ -924,7 +918,6 @@ void page_01_bottom_c_refresh_batch(bool anim_en) //刷新主界面底部C区Bat
     char text_buf[32];
 
     if (page_01_main_defer_bottom_refresh(PAGE_01_MAIN_DIRTY_BATCH, &anim_en)) return;
-    if (s_panel_layout) { panel_main_refresh(PAGE_01_MAIN_DIRTY_BATCH); return; }
 
     if (machine_state_batch_enabled()) {
         lv_snprintf(text_buf, sizeof(text_buf), ui_text_get(UI_TEXT_PAGE01_BOTTOM_BATCH_VALUE_FMT),
@@ -940,7 +933,6 @@ void page_01_bottom_c_refresh_batch(bool anim_en) //刷新主界面底部C区Bat
 void page_01_bottom_c_refresh_speed(bool anim_en) //刷新主界面底部C区速度文本
 {
     if (page_01_main_defer_bottom_refresh(PAGE_01_MAIN_DIRTY_SPEED, &anim_en)) return;
-    if (s_panel_layout) { panel_main_refresh(PAGE_01_MAIN_DIRTY_SPEED); return; }
     page_01_bottom_label_anim_run(s_bottom_c_label_speed, page_01_bottom_speed_text_get(),
         anim_en ? PAGE_01_BOTTOM_TEXT_ANIM_SLIDE : PAGE_01_BOTTOM_TEXT_ANIM_NONE);
 }
@@ -950,7 +942,6 @@ void page_01_bottom_c_refresh_cfd(void) //刷新主界面底部C区CFD文本
     char text_buf[96];
 
     if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_CFD)) return;
-    if (s_panel_layout) { panel_main_refresh(PAGE_01_MAIN_DIRTY_CFD); return; }
 
     const uint8_t mode = machine_state_cfd_mode();
     const char *level = mode == 1 ? ui_trc("Detection level", "Medium") :
@@ -1107,7 +1098,6 @@ static void page_01_main_layout_refresh(void)
 void page_01_main_refresh_start_state(void)
 {
     if (!page_01_main_is_created()) return;
-    if (s_panel_layout) { panel_main_refresh_start_state(); return; }
     lv_obj_t *icon = page_01_main_find_obj("page_01_start_icon.png");
     lv_obj_t *button = page_01_main_find_obj("start_btn");
     const bool busy = app_command_runtime_count_start_busy();
@@ -1127,7 +1117,6 @@ void page_01_main_refresh_start_state(void)
 void ui_refresh_main_page(void)
 {
     if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_COUNTING)) return;
-    if (s_panel_layout) { panel_main_refresh(PAGE_01_MAIN_DIRTY_COUNTING | PAGE_01_MAIN_DIRTY_CURRENCY); page_01_main_snapshot_capture(); return; }
     const counting_sim_t *data = counting_data_current();
     char amount[64];
     format_amount_with_comma(amount, sizeof(amount), data ? data->total_amount : 0);
@@ -1141,7 +1130,6 @@ void ui_refresh_main_page(void)
 void page_01_main_detail_refresh_rows_only(void)
 {
     if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_COUNTING)) return;
-    if (s_panel_layout) { panel_main_refresh(PAGE_01_MAIN_DIRTY_COUNTING); return; }
     if (!s_multi_layout) page_01_main_detail_refresh(s_detail_section);
 }
 
@@ -1175,7 +1163,6 @@ static bool page_01_main_pointer(lv_indev_t *indev,lv_event_code_t event,const l
         if(quick_open)page_01_main_layout_suspend();else page_01_main_layout_resume();
     }
     if (consumed || quick_open)return consumed;
-    if (s_panel_layout) return false;
     return page_01_main_layout_pointer(indev,event,point,count);
 }
 
@@ -1231,13 +1218,6 @@ void ui_main_create(lv_obj_t *parent)
     s_detail_section = (page_01_detail_section_t)ui_state_page01_detail_section_get();
     if ((unsigned)s_detail_section > PAGE_01_DETAIL_SECTION_C)
         s_detail_section = PAGE_01_DETAIL_SECTION_A;
-    s_panel_layout = ui_display_mode_is_panel();
-    if (s_panel_layout && !panel_main_create(main_page)) {
-        panel_main_destroy();
-        s_panel_layout = false;
-        (void)ui_display_mode_set(UI_DISPLAY_MODE_FULLSCREEN);
-    }
-    if (!s_panel_layout) {
     page_01_main_build_content();
     page_01_main_action_skins_attach();
     page_01_bottom_bg_create_all();
@@ -1250,7 +1230,6 @@ void ui_main_create(lv_obj_t *parent)
     page_01_face_refre();
     page_01_cfd_refre();
     page_01_speed_refre();
-    }
     ui_refresh_main_page();
     machine_time_init();
     s_time_timer = lv_timer_create(main_time_timer_cb, 1000, NULL);
@@ -1258,12 +1237,11 @@ void ui_main_create(lv_obj_t *parent)
     ui_state_apply_common_runtime();
     if (!ui_manager_is_prewarming_page(UI_PAGE_MAIN))
         page_01_main_send_init_protocol();
-    if (!s_panel_layout && !ui_manager_is_prewarming_page(UI_PAGE_MAIN))
+    if (!ui_manager_is_prewarming_page(UI_PAGE_MAIN))
         smart_island_create(main_page);
     smart_island_register_action_cb(page_01_smart_island_action_cb);
     smart_island_refresh_time();
     page_01_main_quick_attach(main_page,UI_PAGE_MAIN);
-    if (!s_panel_layout) {
     lv_obj_t *layout_items[]={page_01_main_find_obj("mode_btn"),
         page_01_main_find_obj("setting_btn"),page_01_main_find_obj("list_btn"),
         page_01_main_find_obj("print_btn"),page_01_main_find_obj("menu_btn"),
@@ -1271,7 +1249,6 @@ void ui_main_create(lv_obj_t *parent)
         s_summary_card,s_detail_card,s_bottom_area_a,s_bottom_area_c};
     page_01_main_layout_attach(main_page,layout_items,page_01_apply_customer_layout);
     page_01_main_layout_set_hold_exclusions(page_01_main_find_obj("mode_btn"), s_bottom_a_btn_mode);
-    }
     s_quick_owns_pointer=false;
     gesture_service_set_pointer_policy(UI_PAGE_MAIN,page_01_main_pointer);
     if (s_counting_locked) page_01_main_set_counting_locked(true);
@@ -1281,7 +1258,6 @@ void ui_main_create(lv_obj_t *parent)
 
 void ui_main_destroy(void)
 {
-    if (!s_display_rebuilding) page_01_display_transition_stop();
     gesture_service_clear_pointer_policy(UI_PAGE_MAIN);
     page_01_main_quick_detach_host(main_page);s_quick_owns_pointer=false;
     page_01_main_layout_detach();
@@ -1291,7 +1267,6 @@ void ui_main_destroy(void)
     if (page_01_main_is_created()) {
         /* The counting store outlives a cached page. UI destruction must never
          * clear a customer's count or pending history transaction. */
-        panel_main_destroy();
         page_01_multi_destroy();
         page_01_main_detail_destroy();
         page_01_main_action_skins_release();
@@ -1311,7 +1286,7 @@ void ui_main_destroy(void)
     s_amount_unit_icon = s_currency_code = NULL;
     s_curr_img = s_curr_label = NULL;
     s_total_pcs_label = s_total_amount_label = NULL;
-    s_curr_rendered_valid = s_main_snapshot_valid = s_multi_layout = s_panel_layout = false;
+    s_curr_rendered_valid = s_main_snapshot_valid = s_multi_layout = false;
     s_total_pcs_compact = s_total_amount_compact = false;
     s_curr_rendered_code[0] = '\0';
     s_main_dirty = PAGE_01_MAIN_DIRTY_ALL;
@@ -1329,7 +1304,6 @@ lv_obj_t *page_01_main_find_obj(const char *name)
 
 lv_obj_t *page_01_main_scroll_obj(void)
 {
-    if (s_panel_layout) return panel_main_scroll_obj();
     if (s_multi_layout) return page_01_multi_scroll();
     return page_01_main_detail_scroll_obj();
 }
@@ -1371,7 +1345,6 @@ void page_01_main_refresh_totals(int total_pcs, const char *amount_text)
 {
     char pcs_text[32];
     if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_COUNTING)) return;
-    if (s_panel_layout) { panel_main_refresh(PAGE_01_MAIN_DIRTY_COUNTING | PAGE_01_MAIN_DIRTY_ERROR); return; }
     lv_snprintf(pcs_text, sizeof(pcs_text), "%d", total_pcs);
     page_01_err_num_refre();
     if (s_multi_layout) { page_01_multi_refresh(); return; }
@@ -1383,9 +1356,7 @@ void page_01_main_refresh_totals(int total_pcs, const char *amount_text)
 
 void page_01_main_suspend(void)
 {
-    page_01_display_transition_stop();
     if (!page_01_main_is_created()) return;
-    if (s_panel_layout) panel_main_set_visible(false);
     gesture_service_clear_pointer_policy(UI_PAGE_MAIN);
     page_01_main_quick_suspend();s_quick_owns_pointer=false;
     page_01_main_layout_suspend();
@@ -1410,22 +1381,12 @@ bool page_01_main_resume(void)
     const uint32_t dirty = s_main_dirty;
     lv_obj_clear_flag(main_page, LV_OBJ_FLAG_HIDDEN);
     resume_counting_sim();
-    if (!s_panel_layout) {
-        smart_island_create(main_page);
-        smart_island_set_suspended(false);
-    }
+    smart_island_create(main_page);
+    smart_island_set_suspended(false);
     page_01_main_quick_attach(main_page,UI_PAGE_MAIN);
     page_01_main_send_init_protocol();
     main_time_timer_cb(NULL);
     if (s_time_timer) lv_timer_resume(s_time_timer);
-    if (s_panel_layout) {
-        panel_main_set_visible(true);
-        panel_main_refresh(dirty);
-        panel_main_refresh_start_state();
-        s_main_dirty = 0;
-        page_01_main_snapshot_capture();
-        return true;
-    }
     page_01_main_layout_refresh();
     if (dirty & PAGE_01_MAIN_DIRTY_MODE) page_01_mode_switch_refre();
     if (dirty & PAGE_01_MAIN_DIRTY_ADD) page_01_add_refre();
@@ -1452,8 +1413,7 @@ void page_01_main_reveal_for_transition(void)
     lv_obj_clear_flag(main_page, LV_OBJ_FLAG_HIDDEN);
     /* Innovation exposes Main before normal resume. Restore the static detail
      * tree for that first frame; motion was stopped by suspend. */
-    if (s_panel_layout) panel_main_set_visible(true);
-    else page_01_main_layout_refresh();
+    page_01_main_layout_refresh();
     lv_obj_move_background(main_page);
 }
 
@@ -1464,7 +1424,6 @@ void page_01_update_language_texts(void) //刷新主界面多语言文本
 
     if (page_01_main_defer_refresh(PAGE_01_MAIN_DIRTY_LANGUAGE |
                                    PAGE_01_MAIN_DIRTY_ALL)) return;
-    if (s_panel_layout) { panel_main_refresh(PAGE_01_MAIN_DIRTY_ALL); return; }
 
     page_01_detail_section_btn_text_refresh();
     page_01_mode_switch_refre();
@@ -1533,10 +1492,8 @@ static void page_01_mode_contact_event(lv_event_t *event)
             contact->cancelled = true;
             return;
         }
-        /* A hold never becomes a mode-cycle tap, even if the display change
-         * is rejected or its deferred allocation fails. */
+        /* Holding the key is not a mode-cycle tap. */
         contact->held = true;
-        (void)page_01_main_toggle_display_mode();
     } else if (code == LV_EVENT_CLICKED) {
         bool tap = contact->pressed && !contact->cancelled && !contact->held &&
             !lv_obj_has_state(contact->button, LV_STATE_DISABLED);
@@ -1561,107 +1518,4 @@ static void page_01_mode_button_bind(lv_obj_t *button)
                                 &s_mode_contacts[i]);
         return;
     }
-}
-
-static void page_01_display_transition_y(void *object, int32_t y)
-{
-    if (object && lv_obj_is_valid(object)) lv_obj_set_y(object, (lv_coord_t)y);
-}
-
-static void page_01_display_transition_stop(void)
-{
-    ui_deferred_action_cancel(&s_display_action);
-    if (s_display_surface.image)
-        lv_anim_del(s_display_surface.image, page_01_display_transition_y);
-    lv_dma_static_surface_release(&s_display_surface);
-    if (s_display_switching)
-        ui_manager_hold_transition_input(UI_PAGE_MAIN, false);
-    s_display_switching = false;
-}
-
-static void page_01_display_transition_ready(lv_anim_t *animation)
-{
-    (void)animation;
-    page_01_display_transition_stop();
-}
-
-static bool page_01_display_change_allowed(void)
-{
-    fault_source_t source;
-    uint8_t type, code;
-    return !s_counting_locked && ui_manager_get_current_page() == UI_PAGE_MAIN &&
-        page_01_main_is_visible() && !ui_manager_navigation_is_blocked() &&
-        !app_command_runtime_count_start_busy() && !machine_state_aging_running() &&
-        !workspace_service_applying() && !panel_entry_is_open() && !panel_choice_is_open() &&
-        !settings_detail_overlay_is_open() &&
-        !ui_page_05_set_password_is_open() && !page_01_main_quick_is_open() &&
-        !page_01_main_layout_is_editing() && !fault_popup_is_showing() &&
-        !fault_popup_get_pending_fault(&source, &type, &code);
-}
-
-static void page_01_display_switch_commit(void *unused)
-{
-    (void)unused;
-    /* A controller reply or fault can arrive after the accepted hold but
-     * before this deferred callback. Recheck the operation boundary. */
-    if (!s_display_switching || !page_01_display_change_allowed()) {
-        page_01_display_transition_stop();
-        return;
-    }
-    ui_display_mode_t previous = s_panel_layout ? UI_DISPLAY_MODE_PANEL : UI_DISPLAY_MODE_FULLSCREEN;
-    ui_frame_commit_begin_sync();
-    /* The snapshot is a sibling of Main. It owns no live-page pointers after
-     * capture, so the old tree can be released without retaining a second UI. */
-    bool captured = lv_dma_transition_surface_capture(&s_display_surface,
-                                                      main_page, "MAIN_DISPLAY_SWITCH");
-    s_display_surface.source = NULL;
-    s_display_rebuilding = true;
-    ui_main_destroy();
-    (void)ui_display_mode_set(s_display_target);
-    ui_main_create(lv_scr_act());
-    if (!page_01_main_is_created()) {
-        (void)ui_display_mode_set(UI_DISPLAY_MODE_FULLSCREEN);
-        ui_main_create(lv_scr_act());
-    }
-    s_display_rebuilding = false;
-    /* Only idle Main owns display-mode changes. No active secondary-page
-     * draft is discarded, and the manager's existing logical IDs stay intact. */
-    (void)ui_manager_invalidate_page_cache(UI_PAGE_LIST);
-    (void)ui_manager_invalidate_page_cache(UI_PAGE_MENU);
-    (void)ui_manager_invalidate_page_cache(UI_PAGE_SETTING);
-    /* PIN is a top-layer modal, not a registered page-manager cache. */
-    ui_page_05_set_password_destroy();
-    lv_obj_update_layout(lv_scr_act());
-    if (captured && ui_display_mode_get() != previous &&
-        page_01_main_is_created() && s_display_surface.image) {
-        lv_obj_move_foreground(s_display_surface.image);
-        lv_obj_clear_flag(s_display_surface.image, LV_OBJ_FLAG_HIDDEN);
-        lv_anim_t animation;
-        lv_anim_init(&animation);
-        lv_anim_set_var(&animation, s_display_surface.image);
-        lv_anim_set_values(&animation, 0,
-            ui_display_mode_is_panel() ? -400 : 400);
-        lv_anim_set_time(&animation, 200);
-        lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
-        lv_anim_set_exec_cb(&animation, page_01_display_transition_y);
-        lv_anim_set_ready_cb(&animation, page_01_display_transition_ready);
-        if (!lv_anim_start(&animation)) page_01_display_transition_stop();
-    } else {
-        page_01_display_transition_stop();
-    }
-    ui_frame_commit_end_sync();
-}
-
-bool page_01_main_toggle_display_mode(void)
-{
-    if (s_display_switching || ui_manager_is_transitioning() ||
-        !page_01_display_change_allowed())
-        return false;
-    s_display_target = s_panel_layout ? UI_DISPLAY_MODE_FULLSCREEN : UI_DISPLAY_MODE_PANEL;
-    if (!ui_deferred_action_schedule(&s_display_action, page_01_display_switch_commit, NULL))
-        return false;
-    s_display_switching = true;
-    lv_port_indev_capture_pointer(lv_indev_get_act());
-    ui_manager_hold_transition_input(UI_PAGE_MAIN, true);
-    return true;
 }

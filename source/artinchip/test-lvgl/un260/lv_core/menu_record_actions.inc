@@ -81,8 +81,7 @@ static bool record_action(unsigned id)
 static void mode_confirm(void *context)
 {
     /* Re-selecting the confirmed mode must not schedule a destructive result clear. */
-    if((uintptr_t)context==machine_state_mode())return;
-    if(app_add_runtime_busy()||app_command_runtime_count_start_busy()||!setting_service_request_mode((uintptr_t)context))notify(UI_NOTICE_WARNING,UI_N_("Mode not sent. Finish counting and try again."));
+    if(!count_mode_service_request((uintptr_t)context))notify(UI_NOTICE_WARNING,UI_N_("Mode not sent. Finish counting and try again."));
     else clear_notice();
 }
 static void capacity_done(const char *value,void *unused)

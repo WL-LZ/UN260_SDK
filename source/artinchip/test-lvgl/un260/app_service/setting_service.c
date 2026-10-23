@@ -2,6 +2,8 @@
 #include "un260/app_service/work_mode_service.h"
 #include "un260/protocol/protocol_send.h"
 #include "un260/protocol/mode_codec.h"
+#include "count_mode_policy.h"
+#include "un260/currency/currency_state.h"
 #include "un260/protocol/protocol_request.h"
 #include <stddef.h>
 #include <stdio.h>
@@ -331,7 +333,8 @@ bool setting_service_request_mode(uint8_t target)
 {
     uint8_t protocol_mode;
 
-    if (!mode_codec_encode(target, &protocol_mode)) return false;
+    char code[4]; currency_state_get_selected_code(code);
+    if (!count_mode_allowed(code, target) || !mode_codec_encode(target, &protocol_mode)) return false;
     return setting_basic_request_begin(&g_mode_request, 0x04,
                                        &protocol_mode, 1, target);
 }

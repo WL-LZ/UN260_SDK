@@ -21,6 +21,8 @@ code = r'''
 #include "un260/app_service/setting_service.h"
 #include "un260/lv_core/lv_page_manager.h"
 static ui_page_t page=UI_PAGE_MENU;
+static bool currency_mode;
+bool count_mode_service_currency_mode(void){return currency_mode;}
 static setting_request_observer_t observer;
 ui_page_t ui_manager_get_current_page(void){return page;}
 void setting_service_set_request_observer(setting_request_observer_t value){observer=value;}
@@ -57,6 +59,13 @@ void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title
 ''' + owns + reject + r'''
 int main(void) {
     app_setting_notice_init();
+    page=UI_PAGE_MAIN;currency_mode=true;observer(0x04);currency_mode=false;
+    app_setting_notice_result("settings.mode","Count mode",true);assert(notices==0);
+    app_setting_notice_timeout("settings.mode","Count mode");assert(notices==1&&last==UI_NOTICE_WARNING);
+    app_setting_notice_result("settings.mode","Count mode",false);assert(notices==2&&last==UI_NOTICE_ERROR);
+    page=UI_PAGE_MENU;observer(0x04);app_setting_notice_result("settings.mode","Count mode",true);
+    assert(notices==3&&last==UI_NOTICE_SUCCESS);notices=0;
+
     apply.active=apply.waiting=true;apply.step=0;
     apply.confirmed=2;apply_result=WORKSPACE_APPLY_PENDING;
     app_setting_notice_result("settings.speed","Speed",true);assert(!notices);

@@ -8,6 +8,10 @@ static counting_multi_t multi;
 const counting_multi_t *counting_multi_current(void){return &multi;}
 static bool ready=true,busy,running,diagnostic,pending,capacity=true,connected=true,fail_send;
 static unsigned commands,last_step,last_value;
+static char selected_code[4]="USD";
+void currency_state_get_selected_code(char code[4]){memcpy(code,selected_code,4);}
+bool count_mode_service_busy(void){return false;}
+bool count_mode_service_confirmed(void){return true;}
 static unsigned actuals[7]={1,0,1,0,0,0,1};
 static bool async_save,save_done,save_success=true;
 static workspace_model_t save_draft;
@@ -38,7 +42,7 @@ bool machine_state_batch_enabled(void){return actuals[3]!=0;}
 bool machine_state_add_enabled(void){return actuals[4];}
 uint8_t machine_state_work_mode(void){return actuals[5];}
 static bool send(unsigned step,unsigned target){commands++;last_step=step;last_value=target;return !fail_send;}
-bool setting_service_request_mode(uint8_t n){return send(6,n==MODE_SDC?2:n==MODE_CNT?3:1);}
+bool count_mode_service_request(uint8_t n){return send(6,n==MODE_SDC?2:n==MODE_CNT?3:1);}
 bool setting_service_request_speed(uint8_t n){return send(0,n);}
 bool setting_service_request_fo_mode(uint8_t n){return send(1,n);}
 bool setting_service_request_beep(bool n){return send(2,n);}
@@ -47,6 +51,28 @@ bool setting_service_request_add(bool n){return send(4,n);}
 bool setting_service_request_work_mode(uint8_t n){return send(5,n);}
 int main(void)
 {
+    const char *codes[]={"USD","EUR","AUT","MUL"};
+    for(unsigned c=0;c<4;c++)for(unsigned m=0;m<4;m++){
+        memcpy(selected_code,codes[c],4);workspace_profile_t original={.mode=m};
+        actuals[6]=3;
+        uint8_t expected=(c==3||(c==2&&(m==0||m==3)))?1:(m?m:3);
+        assert(workspace_service_profile_mode(&original)==expected);
+        assert(original.mode==m);
+    }
+    workspace_defaults(&model);
+    for(unsigned c=0;c<4;c++)for(unsigned m=0;m<4;m++){
+        memcpy(selected_code,codes[c],4);actuals[6]=3;
+        workspace_profile_t profile={.mode=m,.speed=actuals[0],.sort=actuals[1],.work=actuals[5]};
+        workspace_profile_t saved_profile=profile;uint8_t wanted=workspace_service_profile_mode(&profile);
+        assert(workspace_service_apply(&profile,10));
+        for(unsigned t=11;workspace_service_applying()&&t<30;t++){
+            workspace_service_poll(t);
+            if(apply.waiting)actuals[last_step]=last_value;
+        }
+        assert(workspace_service_apply_result()==WORKSPACE_APPLY_SUCCEEDED);
+        assert(actuals[6]==wanted&&!memcmp(&profile,&saved_profile,sizeof(profile)));
+    }
+    commands=0;memcpy(selected_code,"USD",4);actuals[6]=1;
     workspace_defaults(&model);model.operators_enabled=1;uint32_t id;assert(workspace_add_user(&model,"Taylor",&id));
     assert(!workspace_service_switch_blocker());
     add_busy=true;assert(!workspace_service_switch(id));add_busy=false;

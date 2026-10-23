@@ -1,3 +1,4 @@
+#include "un260/app_service/count_mode_service.h"
 #include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_components/ui_notice.h"
@@ -227,25 +228,11 @@ static void curr_scroll_to_visible_idx(int vis_idx, bool anim)
 
 static void curr_select_and_exit_abs(int abs_idx)
 {
-    char curr_code[4];
     char target_code[4];
-
     if (abs_idx < 0 || !currency_state_get_code((uint8_t)abs_idx, target_code)) return;
-    if (currency_service_switch_pending() || setting_service_mode_is_pending()) return;
-    currency_state_get_selected_code(curr_code);
-    if (page07_curr_model_code_equal(curr_code, target_code)) {
-        ui_manager_switch(UI_PAGE_MAIN);
-        return;
-    }
+    count_currency_request_t result = count_mode_service_select_currency((uint8_t)abs_idx, target_code);
+    if (result == COUNT_CURRENCY_UNCHANGED) ui_manager_switch(UI_PAGE_MAIN);
 
-    if (!currency_service_request_switch((uint8_t)abs_idx, target_code)) return;
-    if (protocol_send(0x03, (const uint8_t*)target_code, 3) < 0) {
-        currency_service_cancel_switch();
-        ui_notice_post_text(UI_NOTICE_ERROR,"settings.currency",UI_N_("Currency not sent"),UI_N_("Previous currency retained."));
-    } else {
-        ui_message_t info;ui_message_literal(&info,target_code);
-        ui_notice_post_message(UI_NOTICE_PROGRESS,"settings.currency",UI_N_("Changing currency"),&info);
-    }
 }
 
 void page_07_curr_apply_switch_result(const currency_switch_result_t* result)

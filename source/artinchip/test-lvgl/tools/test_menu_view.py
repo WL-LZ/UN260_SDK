@@ -44,7 +44,6 @@ with contextlib.nullcontext(str(cache)) as directory:
     port=(root/'lv_port_indev.c').read_text();helper=re.search(r'void lv_port_indev_set_drag_obj\(.*?\n\}',port,re.S);assert helper
     bridge=work/'port.c';write_if_changed(bridge,'#include "lvgl/lvgl.h"\n'+helper[0])
     sources=[root/p for p in parts]+[root/('un260/font/lv_font_'+f+'.c') for f in fonts]+compiled_asset_sources()+[bridge]+sorted(p for p in (lvgl/'src').rglob('*.c') if p.name!='qrcodegen.c')
-    sources.append(root / "tools/tests/fullscreen_panel_stubs.c")
     sources = with_i18n(sources, root)
     flags=['cc','-DMENU_REAL_FONTS','-DCASH_REAL_FONTS','-DUI_STATE_DIR="/tmp/un260-i18n-tests"','-std=gnu11','-g','-O1','-Wall','-Wextra','-Wno-misleading-indentation','-fsanitize=address,undefined','-fno-sanitize-recover=all','-no-pie','-DLV_DRV_CONF_H','-DLVGL_DIR="L:/usr/local/share/lvgl_data/"',f'-I{work}',f'-I{root}',f'-I{lvgl}',f'-DLV_CONF_PATH={conf}']
     flags+=['-DUN260_LOCALE_FONT_DIR="S:'+str(root/'aic_ui/lvgl_data/locale_fonts')+'/"']

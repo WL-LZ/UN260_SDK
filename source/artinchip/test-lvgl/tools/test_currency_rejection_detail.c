@@ -87,6 +87,17 @@ static void app_counting_runtime_handle_denom(counting_detail_state_t *d,countin
 static void app_counting_runtime_handle_detail(uint8_t command,counting_detail_state_t *d,counting_session_state_t *s,counting_sim_t *data,const uint8_t *frame,uint8_t length)
 {(void)command;(void)d;(void)s;(void)data;(void)frame;(void)length;}
 
+/* Isolated rejection fixture: no ADD reset, no-note run or mode request. */
+static bool g_add_result_cleared;
+static bool app_command_runtime_handle_no_note_motion(uint8_t cmd,const uint8_t *frame,uint8_t len){(void)cmd;(void)frame;(void)len;return false;}
+static bool app_add_runtime_before_count_start(void){return true;}
+static void app_add_runtime_poll(void){}
+static bool counting_denom_query_complete(counting_detail_state_t *state){state->query_pending=false;return true;}
+static void count_mode_service_currency_result(const currency_switch_result_t *result){(void)result;}
+static void count_mode_service_currency_sync(void){}
+static void count_mode_service_count_started(void){}
+static unsigned mode_clear_cancellations;
+static void app_setting_runtime_cancel_mode_clear(void){mode_clear_cancellations++;}
 #include "currency_rejection_under_test.inc"
 
 static void preserved(void)

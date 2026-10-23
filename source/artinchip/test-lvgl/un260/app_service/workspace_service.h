@@ -6,6 +6,7 @@ void workspace_service_init(void);
 bool workspace_service_poll(uint32_t now_ms);
 const char *workspace_service_switch_blocker(void);
 bool workspace_service_switch(uint32_t id);
+uint8_t workspace_service_profile_mode(const workspace_profile_t *profile);
 bool workspace_service_apply(const workspace_profile_t *profile, uint32_t now_ms);
 bool workspace_service_applying(void);
 bool workspace_service_settings_busy(void);

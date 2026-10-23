@@ -73,10 +73,13 @@ void machine_time_get(machine_time_value_t *v){*v=(machine_time_value_t){2026,9,
 void ui_page_19_history_open_record(uint32_t n){assert(n);}
 void ui_page_19_history_open_all(void){}
 void ui_page_19_history_open_operator(uint32_t id){assert(id);}
-uint8_t machine_state_mode(void){return MODE_MDC;}
+static uint8_t test_mode=MODE_MDC;static char test_currency[4]="CNY";
+uint8_t machine_state_mode(void){return test_mode;}
+bool count_mode_service_confirmed(void){return true;}
 uint8_t machine_state_reject_pocket_max(void){return 100;}
 static unsigned mode_requests;
-bool setting_service_request_mode(uint8_t n){(void)n;mode_requests++;return true;}
+bool count_mode_service_request(uint8_t n){if(!count_mode_allowed(test_currency,n))return false;if(n!=test_mode)mode_requests++;return true;}
+uint8_t workspace_service_profile_mode(const workspace_profile_t *p){uint8_t n=p->mode?p->mode:test_mode;return count_mode_resolve(test_currency,n);}
 bool setting_service_request_reject_pocket_max(uint8_t n,uint8_t p){(void)n;(void)p;return true;}
 static ui_history_store_t history_fixture;
 static unsigned revision,nav_count,printed;
@@ -194,11 +197,11 @@ bool user_cfg_qr_option(unsigned i){return i<3&&qr_test_options[i];}
 bool user_cfg_qr_option_save(unsigned i,bool enabled){if(i>=3)return false;qr_test_options[i]=enabled;return true;}
 bool ui_qr_data_build_summary(char *b,size_t n){snprintf(b,n,"UN260 SUMMARY fixture");return true;}
 const ui_history_store_t *ui_history_data_get(void){return &history_fixture;}
-void currency_state_get_selected_code(char c[4]){memcpy(c,"CNY",4);}
-void currency_state_get_effective_code(char c[4]){memcpy(c,"CNY",4);}
+void currency_state_get_selected_code(char c[4]){memcpy(c,test_currency,4);}
+void currency_state_get_effective_code(char c[4]){memcpy(c,test_currency,4);}
 bool currency_state_is_auto_code(const char c[4]){return c && !strncmp(c,CURRENCY_AUTO_CODE,3);}
 bool currency_state_is_multi_code(const char c[4]){return c && !strncmp(c,CURRENCY_MULTI_CODE,3);}
-const char *currency_state_display_code(const char c[4]){return c;}
+const char *currency_state_display_code(const char c[4]){return currency_state_is_multi_code(c)?"MULTI":currency_state_is_auto_code(c)?"AUTO":c;}
 const char *device_info_main_app(void){return "1.0";}
 const char *device_info_image_app(void){return "1.0";}
 const char *device_info_display_app(void){return "1.0";}
@@ -670,6 +673,7 @@ int main(void)
     test_local_feedback_contract();
     cashbook_defaults(&ledger);workspace_defaults(&model);model.operators_enabled=1;strcpy(model.users[0].name,"Alex Morgan");
     seed_ledger();char report[8192];assert(support_report_build(report,sizeof(report)));
+    assert(strstr(report,"Mainboard:")&&strstr(report,"Mainboard boot:")&&!strstr(report,"Controller:"));
     assert(strstr(report,"Confirmed settings")&&!strstr(report,"Alex Morgan")&&!strstr(report,"10000"));assert(!support_report_build(report,8));
     workspace_profile_t p=model.users[0].profiles[0];strcpy(p.name,"Bundle preparation");p.batch_enabled=1;p.batch=100;assert(workspace_add_profile(&model,1,&p));
     uint32_t uid;assert(workspace_add_user(&model,"Taylor",&uid));
@@ -722,7 +726,28 @@ int main(void)
     model.users[0].batches[1]=10;actual_state.batch_num=50;reset_batch();menu.dirty=true;tick(120);
     click("Profiles");raster("menu-profiles");click("Delete");assert(settings_detail_overlay_is_open());raster("menu-delete-confirm");click("Cancel");assert(model.users[0].profile_count==2);
     click("Delete");click("Delete");assert(model.users[0].profile_count==1);ui_page_03_menu_refresh_data(0);tick(100);assert(model.users[0].profile_count==1);assert(lv_obj_has_state(find(menu.body,"Delete"),LV_STATE_DISABLED));
-    click("Options");raster("menu-options");
+    click("Options");
+    const char *mode_currencies[]={"USD","AUT","MUL"};
+    lv_area_t original_bounds[3];
+    for(unsigned c=0;c<3;c++){
+        memcpy(test_currency,mode_currencies[c],4);ui_page_03_menu_refresh_data(UI_DATA_TOPIC_CURRENCY_CATALOG);tick(120);
+        for(unsigned i=0;i<3;i++){
+            lv_obj_t *option=find_action(menu.body,450+i);assert(option);
+            bool disabled=c==2|| (c==1&&i==2);
+            assert(lv_obj_has_state(option,LV_STATE_DISABLED)==disabled);
+            lv_area_t bounds;lv_obj_get_coords(option,&bounds);
+            if(!c)original_bounds[i]=bounds;else assert(!memcmp(&bounds,&original_bounds[i],sizeof(bounds)));
+        }
+        raster(c==0?"menu-mode-usd":c==1?"menu-mode-auto":"menu-mode-multi");
+        ui_page_03_menu_suspend();assert(ui_page_03_menu_resume());tick(120);
+        assert(lv_obj_has_state(find_action(menu.body,452),LV_STATE_DISABLED)==(c!=0));
+    }
+    memcpy(test_currency,"AUT",4);menu.tab=1;menu.sub=1;menu.selected_profile=0;
+    workspace_profile_t saved_profile=model.users[0].profiles[0];model.users[0].profiles[0].mode=3;model.users[0].profiles[0].speed=2;
+    render();lv_event_send(find_action(menu.body,A_APPLY_PROFILE),LV_EVENT_CLICKED,NULL);
+    assert(settings_detail_overlay_is_open());raster("menu-auto-profile-fallback");click("Cancel");
+    assert(model.users[0].profiles[0].mode==3);model.users[0].profiles[0]=saved_profile;
+    memcpy(test_currency,"CNY",4);menu.tab=1;menu.sub=2;render();raster("menu-options");
     assert(!find(menu.body,"Mixed")&&!find(menu.body,"Single"));
     assert(find(menu.body,"MDC")&&find(menu.body,"SDC")&&find(menu.body,"CNT"));
     click("MDC");assert(mode_requests==0&&!settings_detail_overlay_is_open());
@@ -955,6 +980,22 @@ int main(void)
         check_segment_selection_cases();
         check_toggle_alignment();check_original_settings_frame();
         ui_page_03_menu_create(lv_scr_act());
+        open_quick();lv_quick_controls_show_versions(&menu.quick_controls,true);tick(30);
+        lv_obj_t *board_probe=lv_label_create(lv_scr_act());lv_label_set_text(board_probe,ui_tr("Controller"));
+        lv_obj_t *board_name=NULL;
+        for(unsigned child=0;child<lv_obj_get_child_cnt(menu.quick_controls.version_panel);child++){
+            lv_obj_t *candidate=lv_obj_get_child(menu.quick_controls.version_panel,child);
+            if(lv_obj_check_type(candidate,&lv_label_class)&&!strcmp(lv_label_get_text(candidate),lv_label_get_text(board_probe)))board_name=candidate;
+        }
+        assert(board_name);lv_obj_del(board_probe);
+        const lv_font_t *board_font=lv_obj_get_style_text_font(board_name,0);
+        int board_width=lv_txt_get_width(lv_label_get_text(board_name),strlen(lv_label_get_text(board_name)),board_font,0,LV_TEXT_FLAG_NONE);
+        assert(lv_obj_get_width(board_name)==125&&board_width<=125);
+        assert(lv_obj_get_x(board_name)==20&&lv_obj_get_y(board_name)==64);
+        assert(!find(menu.quick_controls.version_panel,"Controller"));
+        check_keyboard_labels(menu.quick_controls.version_panel);
+        char board_shot[80];snprintf(board_shot,sizeof(board_shot),"mainboard-quick-%s",locale->tag);raster(board_shot);
+        destroy_quick();
         menu.tab=4;menu.sub=2;menu.dirty=true;tick(100);check_sound_text(menu.body);check_keyboard_labels(menu.body);check_original_menu_positions();if(language==0)check_log_status_preserves_buttons();
         lv_obj_t *language_entry=find_action(menu.body,A_LANGUAGE);assert(language_entry);
         check_menu_role_line(lv_obj_get_child(language_entry,3),"protected language hint",false);

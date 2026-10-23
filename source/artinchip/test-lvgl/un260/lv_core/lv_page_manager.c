@@ -271,7 +271,6 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
         .static_image_count = UI_ARRAY_SIZE(g_page_menu_static_images),
         .data_topics = UI_DATA_TOPIC_CURRENCY_CATALOG | UI_DATA_TOPIC_MACHINE_SETTINGS,
         .refresh_data = ui_page_03_menu_refresh_data,
-        .reset_navigation = ui_page_03_menu_reset_navigation,
     },
     [UI_PAGE_SETTING] = {
         .create = ui_page_06_settings_create,

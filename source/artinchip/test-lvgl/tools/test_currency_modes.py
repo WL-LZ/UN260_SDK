@@ -30,7 +30,7 @@ def block(source, opening):
 
 def function(source, name):
     signature = re.search(r"^(?:static )?[\w *]+\b" + re.escape(name)
-                          + r"\([^;]*?\)\s*\{", source, re.M)
+                          + r"\([^;]*?\)\s*(?://[^\n]*)?\s*\{", source, re.M)
     assert signature, name
     opening = source.index("{", signature.start())
     return source[signature.start():opening] + block(source, opening)
@@ -60,6 +60,9 @@ def main():
     for name in ("curr_select_and_exit_abs", "page_07_curr_apply_switch_result",
                  "curr_grid_item_click_cb"):
         parts.append(function(page, name))
+    events=(ROOT / "un260/lv_core/lv_page_event.c").read_text(encoding="utf-8")
+    for name in ("page_01_mode_req_busy", "page_01_mode_cycle"):
+        parts.append(function(events,name))
     parts.append(mode_reply)
     with tempfile.TemporaryDirectory(prefix="un260-currency-modes-") as temp:
         work = Path(temp)
@@ -72,7 +75,7 @@ def main():
         binary = work / ("currency-modes.exe" if os.name == "nt" else "currency-modes")
         sources = ["tools/test_currency_modes.c", "un260/currency/currency_state.c",
                    "un260/currency/currency_service.c", "un260/currency/currency_reply.c",
-                   "un260/app_service/setting_service.c", "un260/protocol/protocol_request.c",
+                   "un260/app_service/count_mode_service.c", "un260/app_service/setting_service.c", "un260/protocol/protocol_request.c",
                    "un260/protocol/mode_codec.c", "un260/machine_state/machine_state.c"]
         for optimization in ("-O0", "-O2"):
             command = [os.environ.get("CC", "cc"), "-std=c11", optimization,
@@ -81,7 +84,8 @@ def main():
                 command += ["-fsanitize=undefined", "-fno-sanitize-recover=all"]
             subprocess.run(command + list(map(str, with_i18n([ROOT / path for path in sources], ROOT))) +
                            ["-o", str(binary)], check=True)
-            subprocess.run([str(binary)], check=True, timeout=30)
+            for args in ([], ["mode-first"], ["currency-first"]):
+                subprocess.run([str(binary), *args], check=True, timeout=30)
 
 
 if __name__ == "__main__":

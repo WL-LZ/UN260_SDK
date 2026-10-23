@@ -57,6 +57,8 @@ int main(void){
         if(i)assert(strcmp(expected[i-1].key,expected[i].key)<0);
         assert(!strcmp(ui_tr_for(LANGUAGE_EN,expected[i].key),expected[i].text));
     }
+    assert(!strcmp(ui_tr_for(LANGUAGE_EN,"COUNT AND CONTROLLER STATE REQUIRE CHECKING"),
+                   "COUNT AND MAINBOARD STATE REQUIRE CHECKING"));
     assert(!strcmp(ui_tr_for(LANGUAGE_EN,NULL),""));
     assert(!strcmp(ui_tr_for(LANGUAGE_EN,"External %n"),"External %n"));
     char out[320];

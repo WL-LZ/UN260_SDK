@@ -10,7 +10,7 @@
     {"Bridge ready; restart with the SAME USB to finish the upgrade", "Bridge ready; restart with the SAME USB to finish the upgrade"},
     {"CHECKING THE SAME USB PACKAGE", "CHECKING THE SAME USB PACKAGE"},
     {"CONTACT SERVICE  DO NOT RESUME COUNTING", "CONTACT SERVICE  DO NOT RESUME COUNTING"},
-    {"COUNT AND CONTROLLER STATE REQUIRE CHECKING", "COUNT AND CONTROLLER STATE REQUIRE CHECKING"},
+    {"COUNT AND CONTROLLER STATE REQUIRE CHECKING", "COUNT AND MAINBOARD STATE REQUIRE CHECKING"},
     {"Cannot adopt package engine staging", "Cannot adopt package engine staging"},
     {"Cannot back up installed file", "Cannot back up installed file"},
     {"Cannot clean unified staging", "Cannot clean unified staging"},

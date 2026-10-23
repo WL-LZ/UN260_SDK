@@ -1,5 +1,6 @@
 #include "un260/lv_system/ui_i18n.h"
 #include "app_setting_reply.h"
+#include "count_mode_service.h"
 #include "app_setting_notice.h"
 #include "app_add_runtime.h"
 #include "un260/lv_components/ui_notice.h"
@@ -44,13 +45,15 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                 break;
             }
             machine_state_confirm_mode(requested_mode);
+            count_mode_service_mode_result(true, false);
             app_setting_notice_result("settings.mode", UI_N_("Count mode"), true);
             page_01_mode_switch_refre();
             page_01_bottom_a_refresh_mode(true);
             page_01_curr_img_refre();
             ui_manager_publish_data_changed(UI_DATA_TOPIC_MACHINE_SETTINGS);
-            actions = (app_setting_reply_action_t)(actions |
-                      APP_SETTING_REPLY_ACTION_SCHEDULE_MODE_CLEAR);
+            if (count_mode_service_result_may_clear())
+                actions = (app_setting_reply_action_t)(actions |
+                          APP_SETTING_REPLY_ACTION_SCHEDULE_MODE_CLEAR);
             uart_debug_printf("Set work mode success\n");
             smart_island_refresh_summary();
         }
@@ -62,6 +65,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
                 uart_debug_printf("Set work mode fail ignored: no pending request\n");
                 break;
             }
+            count_mode_service_mode_result(false, false);
             uart_debug_printf("Set work mode fail\n");
             app_setting_notice_result("settings.mode", UI_N_("Count mode"), false);
         }
@@ -77,6 +81,7 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
             }
             machine_state_confirm_mode(machine_mode);
             setting_service_cancel_mode_request();
+            count_mode_service_mode_sync();
             page_01_mode_switch_refre();
             page_01_curr_img_refre();
             uart_debug_printf("Boot work mode: 0x%02X\n", protocol_mode);

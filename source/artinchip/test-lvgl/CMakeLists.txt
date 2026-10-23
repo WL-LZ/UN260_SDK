@@ -163,15 +163,7 @@ target_compile_definitions(un260_boot_launch PRIVATE UN260_BOOT_LAUNCH_ONLY=1)
 target_compile_options(un260_boot_launch PRIVATE -ffunction-sections -fdata-sections)
 set_target_properties(un260_boot_launch PROPERTIES LINK_FLAGS "-static -Wl,--gc-sections")
 install(TARGETS un260_boot_launch RUNTIME DESTINATION bin)
-file(GLOB PANEL_FONT_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/un260/font/panel/lv_font_panel_*.c")
 add_executable(${PROJECT_NAME} main.c
-    ${PANEL_FONT_SOURCES}
-    un260/lv_components/ui_panel.c
-    un260/lv_resources/panel/panel_assets.c
-    un260/lv_core/panel_main.c
-    un260/lv_core/panel_entry.c
-    un260/lv_core/panel_pages.c
-    un260/lv_system/ui_display_mode.c
     un260/app_service/runtime_guard.c
     un260/font/lv_font_standby_112.c
     un260/font/scaled_font.c
@@ -277,6 +269,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_components/lv_select_dropdown.c
     un260/lv_core/page_02_list_data.c
     un260/lv_core/page_02_list_search.c
+    un260/app_service/count_mode_service.c
     un260/app_service/setting_service.c
     un260/app_service/work_mode_service.c
     un260/app_service/motor_test_service.c

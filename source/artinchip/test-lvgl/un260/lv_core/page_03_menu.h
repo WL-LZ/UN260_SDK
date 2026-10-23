@@ -5,7 +5,6 @@ void ui_page_03_menu_create(lv_obj_t *parent);
 void ui_page_03_menu_destroy(void);
 bool ui_page_03_menu_resume(void);
 void ui_page_03_menu_suspend(void);
-void ui_page_03_menu_reset_navigation(void);
 bool page_03_menu_is_created(void);
 bool page_03_menu_is_visible(void);
 void ui_page_03_menu_refresh_data(uint32_t topics);

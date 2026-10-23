@@ -8,6 +8,8 @@
 #include "un260/currency/currency_service.h"
 #include "un260/currency/currency_reply.h"
 #include "un260/app_service/setting_service.h"
+#include "un260/app_service/count_mode_service.h"
+#include "un260/boot/boot_service.h"
 #include "un260/app_service/app_setting_reply.h"
 #include "un260/machine_state/machine_state.h"
 #include "un260/protocol/mode_codec.h"
@@ -27,7 +29,11 @@ static uint64_t tick;
 static unsigned sends, saves, navigations;
 static uint8_t last_cmd, last_payload[8];
 static uint16_t last_length;
-static bool send_fails, mode_clear;
+static bool send_fails, mode_clear, running, applying;
+bool app_add_runtime_busy(void) { return false; }
+bool app_command_runtime_count_start_busy(void) { return running; }
+bool workspace_service_applying(void) { return applying; }
+boot_stage_t boot_service_get_stage(void) { return BOOT_STAGE_DONE; }
 typedef struct { int code; intptr_t data; } lv_event_t;
 static int lv_event_get_code(lv_event_t *e) { return e->code; }
 static void *lv_event_get_user_data(lv_event_t *e) { return (void *)e->data; }
@@ -98,9 +104,10 @@ static void reset(void)
     currency_service_cancel_switch();
     memset(&saved, 0, sizeof(saved)); memset(&g_page07_curr, 0, sizeof(g_page07_curr));
     machine_state_confirm_mode(MODE_MDC);
+    count_mode_service_currency_sync();count_mode_service_mode_sync();
     page07_curr_model_load(); page07_curr_model_refresh_visible();
     sends = saves = navigations = 0;
-    tick = 0; send_fails = mode_clear = false;
+    tick += 1000; send_fails = mode_clear = running = applying = false;
 }
 static void test_catalog_and_model(void)
 {
@@ -158,17 +165,19 @@ static void currency_ack(uint8_t status)
     uint8_t frame[] = {0xFD,0xDF,6,3,status,0};
     currency_reply_result_t r = currency_reply_handle(frame,sizeof(frame));
     if (r.kind == CURRENCY_REPLY_SWITCH_SUCCESS || r.kind == CURRENCY_REPLY_SWITCH_FAILURE)
-        page_07_curr_apply_switch_result(&r.switch_result);
+        { count_mode_service_currency_result(&r.switch_result);page_07_curr_apply_switch_result(&r.switch_result); }
 }
 static void boot_currency(const char *code)
 {
     uint8_t frame[] = {0xFD,0xDF,9,3,3,0,0,0,0};
     memcpy(frame+5,code,3);
     assert(currency_reply_handle(frame,sizeof(frame)).kind == CURRENCY_REPLY_BOOT_ACTIVE);
+    count_mode_service_currency_sync();
 }
 static void test_requests_replies_and_boot(void)
 {
-    reset(); choose("MUL");
+    reset(); unsigned initial_notices=test_notice_count; choose("MUL");
+    assert(test_notice_count==initial_notices);
     assert(sends==1 && last_cmd==3 && last_length==3 && !memcmp(last_payload,"MUL",3));
     selected("CNY"); assert(currency_service_switch_pending());
     choose("AUT"); assert(sends==1);
@@ -178,8 +187,9 @@ static void test_requests_replies_and_boot(void)
     choose("MUL"); currency_ack(1); selected("MUL");
     assert(machine_state_mode()==MODE_MDC);
     choose("AUT"); selected("MUL");
-    tick=801; currency_switch_result_t result;
+    tick+=801; currency_switch_result_t result;
     assert(currency_service_take_switch_timeout(&result));
+    count_mode_service_currency_result(&result);
     page_07_curr_apply_switch_result(&result); selected("MUL");
     assert(result.timeout&&test_notice_kind==UI_NOTICE_WARNING);
     currency_ack(1); selected("MUL");
@@ -220,14 +230,14 @@ static void test_exit_special_and_grid(void)
 {
     for (unsigned feature=0;feature<2;feature++) {
         reset(); machine_state_confirm_mode(MODE_SDC);
-        choose(feature?"MUL":"AUT"); currency_ack(1);
+        choose(feature?"MUL":"AUT"); currency_ack(1); if(feature){count_mode_service_poll();reply_mode(1,0);}
         unsigned before=sends;
         choose("EUR");
         assert(sends==before+1 && last_cmd==3 && last_length==3 && !memcmp(last_payload,"EUR",3));
         selected(feature?"MUL":"AUT");
         currency_ack(2); selected(feature?"MUL":"AUT");
         choose("EUR"); currency_ack(1); selected("EUR");
-        assert(machine_state_mode()==MODE_SDC);
+        assert(machine_state_mode()==(feature?MODE_MDC:MODE_SDC));
     }
     reset(); g_page07_curr.model.view_mode=PAGE07_CURR_VIEW_GRID;
     lv_event_t event={LV_EVENT_CLICKED,1};curr_grid_item_click_cb(&event);
@@ -237,9 +247,96 @@ static void test_exit_special_and_grid(void)
     choose("AUT");curr_page=NULL;unsigned before=navigations;
     currency_ack(1);selected("AUT");assert(navigations==before);curr_page=(void*)1;
 }
-int main(void)
+static void test_policy_transitions(void)
 {
-    test_catalog_and_model();test_requests_replies_and_boot();test_exit_special_and_grid();
+    const char *codes[]={"USD","EUR","AUT","MUL"};
+    const uint8_t modes[]={MODE_MDC,MODE_SDC,MODE_CNT};
+    for(unsigned a=0;a<4;a++)for(unsigned m=0;m<3;m++)for(unsigned b=0;b<4;b++) {
+        if(!count_mode_allowed(codes[a],modes[m]))continue;
+        reset();boot_currency(codes[a]);machine_state_confirm_mode(modes[m]);count_mode_service_mode_sync();
+        unsigned before=sends;choose(codes[b]);
+        if(a==b){assert(sends==before);continue;}
+        bool change=!count_mode_allowed(codes[b],modes[m]);
+        assert(sends==before+1 && last_cmd==3);
+        assert(!memcmp(last_payload,codes[b],3));
+        unsigned notices=test_notice_count;choose("EUR");assert(sends==before+1&&test_notice_count==notices);
+        currency_ack(1);selected(codes[b]);
+        if(change){assert(machine_state_mode()==modes[m]);count_mode_service_poll();
+            assert(sends==before+2&&last_cmd==4&&last_payload[0]==3);
+            reply_mode(1,0);assert(!mode_clear);}
+        assert(!count_mode_service_busy());
+        assert(machine_state_mode()==(change?MODE_MDC:modes[m]));
+        assert(!count_mode_service_request(MODE_NONE));
+        if(b==3)assert(!count_mode_service_request(MODE_SDC));
+        if(b>=2)assert(!count_mode_service_request(MODE_CNT));
+        before=sends;assert(count_mode_service_request(machine_state_mode()));assert(sends==before);
+    }
+    for(unsigned c=0;c<4;c++)for(unsigned m=0;m<3;m++){
+        if(!count_mode_allowed(codes[c],modes[m]))continue;
+        reset();boot_currency(codes[c]);machine_state_confirm_mode(modes[m]);count_mode_service_mode_sync();
+        unsigned before=sends;uint8_t expected=c==3?MODE_MDC:m==0?MODE_SDC:(c<2&&m==1)?MODE_CNT:MODE_MDC;
+        page_01_mode_cycle();
+        assert(sends==before+(expected!=modes[m]));
+        if(expected!=modes[m]){assert(last_cmd==4);reply_mode(1,0);assert(machine_state_mode()==expected);}
+    }
+    reset();boot_currency("AUT");assert(currency_state_confirm_detected_code("USD"));
+    assert(!count_mode_service_request(MODE_CNT));
+    assert(count_mode_next("AUT",MODE_SDC)==MODE_MDC);
+    assert(count_mode_next("MUL",MODE_MDC)==MODE_MDC);
+    assert(count_mode_next("USD",MODE_SDC)==MODE_CNT);
+    assert(count_mode_next("USD",MODE_CNT)==MODE_MDC);
+    reset();machine_state_confirm_mode(MODE_CNT);send_fails=true;choose("MUL");
+    assert(last_cmd==3&&!count_mode_service_busy()&&!currency_service_switch_pending());
+    assert(test_notice_kind==UI_NOTICE_ERROR&&!strcmp(test_notice_key,"settings.currency"));
+    send_fails=false;
+    /* Currency rejection/timeout must never send a mode command. */
+    reset();machine_state_confirm_mode(MODE_CNT);choose("MUL");assert(last_cmd==3);
+    unsigned before=sends;currency_ack(2);count_mode_service_poll();
+    assert(sends==before&&!count_mode_service_busy());selected("CNY");assert(machine_state_mode()==MODE_CNT);
+    choose("AUT");tick+=801;currency_switch_result_t result;assert(currency_service_take_switch_timeout(&result));
+    count_mode_service_currency_result(&result);before=sends;count_mode_service_poll();assert(sends==before);
+    choose("CNY");assert(sends==before+1&&last_cmd==3);currency_ack(1);
+    /* Mode follow-on failure preserves the successful currency and allows retry. */
+    choose("MUL");currency_ack(1);count_mode_service_poll();assert(last_cmd==4);
+    reply_mode(2,0);selected("MUL");assert(machine_state_mode()==MODE_CNT&&!count_mode_service_busy());
+    before=sends;choose("MUL");assert(last_cmd==3&&sends==before+1);currency_ack(1);count_mode_service_poll();
+    tick+=801;assert(setting_service_take_basic_timeouts()&SETTING_REQUEST_TIMEOUT_MODE);
+    count_mode_service_mode_result(false,true);assert(!count_mode_service_busy());selected("MUL");
+    before=sends;reply_mode(1,0);assert(sends==before&&machine_state_mode()==MODE_CNT);
+    choose("MUL");currency_ack(1);count_mode_service_poll();reply_mode(1,0);assert(machine_state_mode()==MODE_MDC);
+    /* A subsequent direct/manual request is not mistaken for the follow-on. */
+    choose("USD");currency_ack(1);assert(count_mode_service_request(MODE_SDC));mode_clear=false;
+    reply_mode(1,0);assert(mode_clear&&count_mode_service_result_may_clear());
+    reset();machine_state_confirm_mode(MODE_SDC);choose("MUL");currency_ack(1);send_fails=true;
+    count_mode_service_poll();assert(!count_mode_service_busy());selected("MUL");assert(machine_state_mode()==MODE_SDC);
+    send_fails=false;choose("MUL");currency_ack(1);count_mode_service_poll();reply_mode(1,0);
+    /* Physical START cancels only unsent mode work; a sent result cannot clear the new run. */
+    reset();machine_state_confirm_mode(MODE_CNT);choose("MUL");before=sends;
+    count_mode_service_count_started();running=true;currency_ack(1);count_mode_service_poll();
+    assert(sends==before&&!count_mode_service_busy()&&!mode_clear);running=false;
+    choose("MUL");currency_ack(1);count_mode_service_poll();before=sends;
+    count_mode_service_count_started();running=true;reply_mode(1,0);count_mode_service_poll();
+    assert(sends==before&&!count_mode_service_busy()&&!mode_clear);running=false;
+    reset();applying=true;before=sends;choose("MUL");assert(sends==before);applying=false;
+    puts("PASS currency/mode matrix, same-value no-op, AUTO detection, failures, timeout retry, START cancellation and profile conflict");
+}
+static void test_boot_policy(bool mode_first)
+{
+    currency_state_reset();tick=100;
+    if(mode_first){reply_mode(3,4);count_mode_service_poll();assert(sends==0);boot_currency("MUL");}
+    else {boot_currency("MUL");count_mode_service_poll();assert(sends==0);reply_mode(3,4);}
+    running=true;count_mode_service_poll();assert(sends==0);running=false;
+    count_mode_service_poll();assert(sends==1&&last_cmd==4&&last_payload[0]==3);
+    tick+=801;assert(setting_service_take_basic_timeouts()&SETTING_REQUEST_TIMEOUT_MODE);
+    count_mode_service_mode_result(false,true);
+    for(unsigned i=0;i<100;i++)count_mode_service_poll();assert(sends==1&&!count_mode_service_busy());
+    assert(count_mode_service_request(MODE_MDC));reply_mode(1,0);assert(machine_state_mode()==MODE_MDC);
+    assert(count_mode_service_confirmed());puts("PASS boot sync order, defer during run, one automatic correction, timeout and explicit recovery");
+}
+int main(int argc,char **argv)
+{
+    if(argc>1){test_boot_policy(!strcmp(argv[1],"mode-first"));return 0;}
+    test_catalog_and_model();test_requests_replies_and_boot();test_exit_special_and_grid();test_policy_transitions();
     send_fails=false;unsigned before=sends;setting_batch_result_t batch;
     assert(!setting_service_request_batch_number(200,false,200));
     assert(!setting_service_request_batch_number(0,false,200));assert(sends==before);

@@ -1,0 +1,32 @@
+{
+  "en": {
+    "This currency requires MDC for this profile. Other settings apply normally. Currency and the saved profile stay unchanged. A confirmed count-mode change clears the current result; saved history remains.": "This currency requires MDC for this profile. Other settings apply normally. Currency and the saved profile stay unchanged. A confirmed count-mode change clears the current result; saved history remains."
+  },
+  "zh-Hans": {
+    "This currency requires MDC for this profile. Other settings apply normally. Currency and the saved profile stay unchanged. A confirmed count-mode change clears the current result; saved history remains.": "当前币种下，此配置将使用 MDC。其他设置正常应用，币种和已保存配置不变。点钞模式确认切换后清空当前结果，保留历史记录。"
+  },
+  "de": {
+    "This currency requires MDC for this profile. Other settings apply normally. Currency and the saved profile stay unchanged. A confirmed count-mode change clears the current result; saved history remains.": "Für diese Währung verwendet das Profil MDC. Andere Einstellungen werden normal angewendet. Währung und gespeichertes Profil bleiben unverändert. Ein bestätigter Zählmoduswechsel löscht das aktuelle Ergebnis; gespeicherte Daten bleiben erhalten."
+  },
+  "fr": {
+    "This currency requires MDC for this profile. Other settings apply normally. Currency and the saved profile stay unchanged. A confirmed count-mode change clears the current result; saved history remains.": "Pour cette devise, ce profil utilise MDC. Les autres réglages sont appliqués normalement. La devise et le profil enregistré restent inchangés. Un changement de mode confirmé efface le résultat actuel ; l’historique est conservé."
+  },
+  "ja": {
+    "This currency requires MDC for this profile. Other settings apply normally. Currency and the saved profile stay unchanged. A confirmed count-mode change clears the current result; saved history remains.": "この通貨では、このプロファイルに MDC を使用します。他の設定は通常どおり適用されます。通貨と保存済みプロファイルは変更しません。計数モードの変更確認後、現在の結果を消去し、履歴は保持します。"
+  },
+  "ko": {
+    "This currency requires MDC for this profile. Other settings apply normally. Currency and the saved profile stay unchanged. A confirmed count-mode change clears the current result; saved history remains.": "이 통화에서는 이 프로필에 MDC를 사용합니다. 다른 설정은 정상 적용됩니다. 통화와 저장된 프로필은 유지됩니다. 계수 모드 변경이 확인되면 현재 결과는 지워지고 기록은 유지됩니다."
+  },
+  "pl": {
+    "This currency requires MDC for this profile. Other settings apply normally. Currency and the saved profile stay unchanged. A confirmed count-mode change clears the current result; saved history remains.": "Dla tej waluty profil użyje MDC. Pozostałe ustawienia zostaną zastosowane normalnie. Waluta i zapisany profil nie zmienią się. Potwierdzona zmiana trybu liczenia usunie bieżący wynik; historia zostanie zachowana."
+  },
+  "ru": {
+    "This currency requires MDC for this profile. Other settings apply normally. Currency and the saved profile stay unchanged. A confirmed count-mode change clears the current result; saved history remains.": "Для этой валюты профиль использует MDC. Остальные настройки применяются как обычно. Валюта и сохранённый профиль не меняются. После подтверждения смены режима текущий результат очищается; история сохраняется."
+  },
+  "tr": {
+    "This currency requires MDC for this profile. Other settings apply normally. Currency and the saved profile stay unchanged. A confirmed count-mode change clears the current result; saved history remains.": "Bu para biriminde bu profil MDC kullanır. Diğer ayarlar normal uygulanır. Para birimi ve kayıtlı profil değişmez. Sayım modu değişikliği onaylanınca mevcut sonuç temizlenir; geçmiş korunur."
+  },
+  "ar": {
+    "This currency requires MDC for this profile. Other settings apply normally. Currency and the saved profile stay unchanged. A confirmed count-mode change clears the current result; saved history remains.": "تستخدم هذه العملة وضع MDC لهذا الملف. تُطبّق الإعدادات الأخرى كالمعتاد. تبقى العملة والملف المحفوظ دون تغيير. بعد تأكيد تغيير وضع العد تُمسح النتيجة الحالية ويُحتفظ بالسجل."
+  }
+}

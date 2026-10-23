@@ -26,6 +26,7 @@
 #include "un260/app_service/app_boot_runtime.h"
 #include "un260/app_service/app_counting_runtime.h"
 #include "un260/app_service/app_currency_runtime.h"
+#include "un260/app_service/count_mode_service.h"
 #include "un260/app_service/app_protocol_runtime.h"
 #include "un260/app_service/app_setting_runtime.h"
 #include "un260/boot/boot_service.h"
@@ -117,6 +118,7 @@ bool app_command_runtime_request_diagnostic_run(void)
 bool app_command_runtime_request_count_start(void)
 {
     if (ui_factory_reset_blocks_navigation() || touch_calibration_busy()) return false;
+    if (count_mode_service_busy()) return false;
     if (app_add_runtime_busy()) {
         ui_notice_post_text(UI_NOTICE_WARNING, "count.add-reset", UI_N_("Clear"),
                             UI_N_("Please try again."));
@@ -379,6 +381,10 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
         return true;
     }
     if (app_command_runtime_handle_no_note_motion(cmd,buf,len)) return true;
+    if (cmd == 0x0A && len == 7 && buf[4] == 0x01 && buf[5] == 0x01) {
+        count_mode_service_count_started();
+        app_setting_runtime_cancel_mode_clear();
+    }
     /* Preflight BEFORE taking request results or invoking any dispatcher. A
      * retried frame therefore cannot duplicate protocol/UI side effects. */
     if (cmd == 0x0A && len == 7 && buf[4] == 0x01 && buf[5] == 0x01 &&
@@ -617,6 +623,7 @@ void app_command_runtime_poll(uint32_t now_ms)
     if (!app_add_runtime_busy() && app_setting_runtime_take_mode_clear()) {
         (void)app_command_runtime_clear_counting_data("mode change");
     }
+    count_mode_service_poll();
     app_counting_runtime_poll_history(&g_counting_session, counting_data_mutable(), now_ms);
     uint32_t multi_revision = counting_multi_current()->revision;
     counting_multi_poll(now_ms);

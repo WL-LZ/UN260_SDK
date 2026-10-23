@@ -76,7 +76,6 @@ def main():
         "un260/machine_state/machine_state.c", "un260/currency/currency_state.c",
         "un260/currency/currency_metadata.c", "un260/lv_system/app_clock.c"]
     sources += [ROOT / path for path in actual]
-    sources.append(ROOT / "tools/tests/fullscreen_panel_stubs.c")
     sources = with_i18n(sources, ROOT)
     font_inputs = sources + [ROOT / "un260/lv_components/lv_fault_popup.c", ROOT / "un260/lv_core/page_01_main.c",
                              ROOT / "un260/lv_core/page_01_main_detail.c", ROOT / "un260/lv_core/page_01_main_quick.c"]

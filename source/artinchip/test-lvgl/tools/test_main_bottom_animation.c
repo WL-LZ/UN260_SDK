@@ -128,6 +128,7 @@ static void page_01_err_num_refre(void) {}
 static void page_01_curr_img_refre(void) {}
 static void page_01_update_language_texts(void) {}
 static void ui_refresh_main_page(void) {}
+static void page_01_mode_controls_refresh(void) {}
 #include "main_animation_under_test.h"
 
 static void (*const bottom[])(bool) = { page_01_bottom_a_refresh_mode,

@@ -2,6 +2,7 @@
 #include "app_setting_notice.h"
 #include "workspace_service.h"
 #include "setting_service.h"
+#include "count_mode_service.h"
 #include "app_fault_recovery.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include <string.h>
@@ -9,6 +10,7 @@
 #include "un260/lv_components/lv_fault_popup.h"
 /* This is application presentation policy. Protocol state is always consumed,
  * including rejected profile steps, whether or not a banner is permitted. */
+/* 1: secondary page, 2: Main, 3: automatic mode follow-on after currency ACK. */
 static uint8_t request_origin[256];
 bool app_setting_notice_page_allowed(void)
 {
@@ -19,7 +21,8 @@ bool app_setting_notice_page_allowed(void)
 static void request_started(uint8_t command)
 {
     fault_popup_resolve_setting_rejection(command);
-    request_origin[command] = app_setting_notice_page_allowed() ? 1 : 2;
+    request_origin[command] = command == 0x04 && count_mode_service_currency_mode() ? 3 :
+        app_setting_notice_page_allowed() ? 1 : 2;
 }
 void app_setting_notice_init(void)
 {
@@ -40,6 +43,7 @@ static uint8_t notice_command(const char *key)
 }
 bool app_setting_notice_allowed(const char *key)
 {
+    if (key && !strcmp(key,"settings.mode") && request_origin[0x04] == 3) return true;
     return app_setting_notice_page_allowed() && request_origin[notice_command(key)] != 2;
 }
 static uint8_t profile_command(const char *key)
@@ -50,6 +54,10 @@ static uint8_t profile_command(const char *key)
 void app_setting_notice_result(const char *key, const char *title, bool success)
 {
     if (success) app_fault_recovery_resolve_setting_rejection(notice_command(key));
+    if (success && !strcmp(key,"settings.mode") && request_origin[0x04] == 3) {
+        ui_notice_clear(key);
+        return;
+    }
     uint8_t command = profile_command(key);
     if (command) {
         /* Capture ownership before rejection ends the profile. Its global

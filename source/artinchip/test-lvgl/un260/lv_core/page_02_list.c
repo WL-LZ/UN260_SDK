@@ -1,7 +1,5 @@
 #include "un260/lv_resources/ui_page_background.h"
 #include "page_02_list.h"
-#include "panel_pages.h"
-#include "un260/lv_system/ui_display_mode.h"
 
 #include "un260/font/ui_message_font.h"
 #include "page_02_list_data.h"
@@ -79,7 +77,7 @@ typedef struct {
 static list_view_t *view;
 static int requested_currency=-1,requested_tab;
 void page_02_list_multi_open(int currency,int tab)
-{requested_currency=currency;requested_tab=tab;if(ui_display_mode_is_panel())panel_pages_list_select(currency,tab);}
+{requested_currency=currency;requested_tab=tab;}
 static bool multi_gesture(gesture_action_t action)
 {return view&&view->multi_visible&&(action==GESTURE_ACTION_EXIT_PAGE||action==GESTURE_ACTION_HOME)&&ui_multi_detail_back(view->multi);}
 static uint32_t dirty = ALL_SECTIONS, reset_positions = ALL_SECTIONS;
@@ -641,7 +639,6 @@ static void search_open(lv_event_t *e)
 }
 void page_02_list_section_mark_dirty(page_02_section_id_t id)
 {
-    if(panel_pages_created(UI_PAGE_LIST)){panel_pages_refresh(UI_PAGE_LIST,false);return;}
     if ((unsigned)id>=PAGE_02_SECTION_COUNT) return;
     dirty|=1U<<id;
     if (view && view->search) {
@@ -655,7 +652,6 @@ void page_02_list_section_data_ready(page_02_section_id_t id)
 { page_02_list_section_mark_dirty(id); }
 void page_02_list_report_reset(void)
 {
-    if(panel_pages_created(UI_PAGE_LIST)){panel_pages_refresh(UI_PAGE_LIST,true);return;}
     search_discard();
     if (view) {
         view->located_slot=UINT16_MAX;
@@ -669,7 +665,6 @@ void page_02_list_report_reset(void)
 }
 void ui_page_02_list_create(lv_obj_t *parent)
 {
-    if(ui_display_mode_is_panel()){if(panel_pages_create(UI_PAGE_LIST,parent))return;}
     if (view) return;
     view=lv_mem_alloc(sizeof(*view));
     if (!view) return;
@@ -703,7 +698,6 @@ creation_failed:
 }
 bool ui_page_02_list_resume(void)
 {
-    if(panel_pages_created(UI_PAGE_LIST))return panel_pages_resume(UI_PAGE_LIST);
     if (!view || !view->page) return false;
     lv_obj_clear_flag(view->page,LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(view->page);
     /* Reentry also covers prewarm before runtime notifications existed. Keep
@@ -719,7 +713,6 @@ bool ui_page_02_list_resume(void)
 }
 void ui_page_02_list_suspend(void)
 {
-    if(panel_pages_created(UI_PAGE_LIST)){panel_pages_suspend(UI_PAGE_LIST);return;}
     if (!view) return;
     ui_frame_commit_cancel(commit,NULL);
     ui_multi_detail_visible(view->multi,false);
@@ -731,7 +724,6 @@ void ui_page_02_list_suspend(void)
 }
 void ui_page_02_list_destroy(void)
 {
-    if(panel_pages_created(UI_PAGE_LIST)){panel_pages_destroy(UI_PAGE_LIST);return;}
     if (!view) return;
     ui_page_02_list_suspend();
     serials_discard();

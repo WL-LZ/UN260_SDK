@@ -44,7 +44,7 @@
     "Select a saved record": "保存済み履歴を選択してください",
     "Stop at the preset quantity. Remove the completed stack before continuing.": "設定枚数で停止します。計数済みの紙幣を取り出してから続けてください。",
     "The first note sets the denomination. Other denominations go to the reject pocket.": "最初の紙幣で金種を決めます。異なる金種はリジェクト口に送られます。",
-    "This is the current controller result. Check the paper after printing.": "本体の現在の結果です。印刷後に用紙を確認してください。",
+    "This is the current controller result. Check the paper after printing.": "メインボードの現在の結果です。印刷後に用紙を確認してください。",
     "Wait a moment before printing again.": "少し待ってから再度印刷してください。",
     "Writing to USB": "USB に書き込み中",
     "Input": "投入"

@@ -1,4 +1,6 @@
 #include "app_currency_runtime.h"
+#include "count_mode_service.h"
+#include "app_setting_runtime.h"
 
 #include <stdbool.h>
 #include "lvgl/lvgl.h"
@@ -67,6 +69,8 @@ void app_currency_runtime_handle_reply(counting_detail_state_t *detail_state,
                                         app_clock_uptime_ms())) return;
     reply = currency_reply_handle(buf, len);
     if (reply.kind == CURRENCY_REPLY_SWITCH_SUCCESS) {
+        count_mode_service_currency_result(&reply.switch_result);
+        app_setting_runtime_cancel_mode_clear();
         app_fault_recovery_resolve_setting_rejection(0x03);
         ui_manager_publish_data_changed(UI_DATA_TOPIC_CURRENCY_CATALOG);
         if (!app_counting_runtime_reset_session(session, "currency change")) return;
@@ -79,12 +83,15 @@ void app_currency_runtime_handle_reply(counting_detail_state_t *detail_state,
         uart_debug_printf("Set %s curr success\n", reply.active_code);
         app_currency_runtime_expect_denom_refresh(detail_state);
     } else if (reply.kind == CURRENCY_REPLY_SWITCH_FAILURE) {
+        count_mode_service_currency_result(&reply.switch_result);
         page_07_curr_apply_switch_result(&reply.switch_result);
         if (reply.switch_result.controller_rejected)
             (void)app_fault_recovery_report_setting_rejection(0x03);
         uart_debug_printf("Set %s curr fail; retained %s\n",
                           reply.switch_result.target_code, reply.active_code);
     } else if (reply.kind == CURRENCY_REPLY_BOOT_ACTIVE) {
+        count_mode_service_currency_sync();
+        app_setting_runtime_cancel_mode_clear();
         if (currency_state_auto_selected()) {
             /* Keep the controller's last real currency as fallback, but AUTO
              * remains the selected feature until a 0x50 detection arrives. */
