@@ -3,6 +3,8 @@
 #include "un260/app_service/app_fault_recovery.h"
 #include "un260/protocol/protocol_request.h"
 #include "un260/lv_components/smart_island.h"
+static bool report_active;
+bool counting_report_transfer_active(void){return report_active;}
 static uint32_t now;static unsigned tx,shown,resolved,repeated;static bool auto_popup,modal,fail;
 static smart_island_fault_phase_cb_t phase;
 static machine_fault_key_t key={MACHINE_FAULT_START,2,9};
@@ -441,6 +443,27 @@ int main(void){
  unsigned old_repeated=repeated;elapsed(3000);assert(repeated==old_repeated&&machine_fault_find(jam,NULL));
  modal=true;assert(!app_fault_recovery_prepare_start());modal=false;
  assert(shown==0);
+ /* Batch clear waits for the report that was already sent, not a 3s retry. */
+ fixture((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4},false);
+ app_fault_recovery_report(key);before=tx;report_active=true;
+ phase(key,SMART_ISLAND_FAULT_END);elapsed(100);assert(tx==before);
+ report_active=false;elapsed(1);assert(tx==before+1);
+ app_fault_recovery_stacker_cleared();elapsed(3001);assert(tx==before+1);
+ /* Explicit Confirm after transfer completion consumes the queued send once. */
+ fixture(batch_full,false);batch_report();before=tx;report_active=true;
+ assert(app_fault_recovery_request_clear(batch_full)&&tx==before);
+ report_active=false;assert(app_fault_recovery_request_clear(batch_full)&&tx==before+1);
+ app_fault_recovery_handle_clear_result(1);elapsed(1);assert(tx==before+1);
+ app_fault_recovery_stacker_cleared();
+ /* START/clear and a new unrelated fault cancel a queued old Batch clear. */
+ fixture((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4},false);
+ app_fault_recovery_report(key);before=tx;report_active=true;
+ phase(key,SMART_ISLAND_FAULT_END);app_fault_recovery_stacker_cleared();
+ report_active=false;elapsed(1);assert(tx==before);
+ fixture((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4},false);
+ app_fault_recovery_report(key);report_active=true;phase(key,SMART_ISLAND_FAULT_END);
+ app_fault_recovery_report((machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,3});
+ report_active=false;elapsed(1);assert(tx==before);
  test_latched_popup_modes();
  test_pocket_modes();test_pending_coalescing();test_pocket_send_failure();test_pocket_timeout_ordering();test_waiting_pocket();
  test_confirmed_pocket_no_replay();test_superseded_failure_no_old_presentation();

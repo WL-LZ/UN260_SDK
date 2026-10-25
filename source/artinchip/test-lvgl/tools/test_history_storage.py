@@ -52,13 +52,13 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
                         str(ROOT / "un260/history/history_export_sn_parser.c"),
                         str(ROOT / "un260/protocol/protocol_frame.c"),
                         str(ROOT / "un260/counting/counting_history_service.c"),
-                        str(ROOT / "un260/counting/counting_cashbook.c"),
-                        str(ROOT / "un260/workspace/cashbook.c"),
-                        str(ROOT / "tools/test_cashbook_history_bridge.c"),
                         str(ROOT / "un260/counting/counting_data_store.c"),
                         "-Wl,--wrap=malloc", "-o", str(output)], check=True)
 
     compile_binary(binary)
+    secondary=work / "secondary-ledger-test"
+    compile_binary(secondary,store_path=work / "secondary-history")
+    subprocess.run([str(secondary),"continuous-batch-history"],check=True)
     queued_binary=work / "history-queued-failure-test"
     compile_binary(queued_binary,store_path=work / "queued-history")
     subprocess.run([str(queued_binary),"queued-failure"],check=True)
@@ -108,6 +108,13 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
     assert authoritative.read_bytes() == legacy_index, "Upgrade read must not rewrite the old index"
     subprocess.run([str(binary), "fill-capacity"], check=True)
     assert dump() == (capacity, capacity, capacity + 1)
+    # Preserve the populated fixture for independent delete/leave/new-count qualification.
+    deletion_state=work / "delete-history"
+    shutil.copytree(state,deletion_state)
+    deletion_binary=work / "delete-then-count-test"
+    compile_binary(deletion_binary,store_path=deletion_state)
+    subprocess.run([str(deletion_binary),"delete-then-count"],check=True)
+
     expanded = record_fields()
     for i in range(20):
         for key, value in legacy_records.items():

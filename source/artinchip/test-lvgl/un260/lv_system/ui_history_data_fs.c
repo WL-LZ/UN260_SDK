@@ -701,6 +701,9 @@ static bool history_write_full_detail(const ui_history_store_t *store,const unsi
     return history_commit_atomic_file(fp,fd,tmp,path,true)==0;
 }
 
+/* Worker-owned knowledge of diagnostic mirrors already absent on disk. */
+static bool g_mirror_absent[UI_HISTORY_MAX_RECORDS];
+
 static bool history_save_snapshot(const void *snapshot, size_t size)
 {
     const ui_history_store_t *store = snapshot;
@@ -741,6 +744,7 @@ static bool history_save_snapshot(const void *snapshot, size_t size)
 
         if (slot_no > 0 && slot_no <= UI_HISTORY_MAX_RECORDS) {
             slot_present[slot_no] = true;
+            g_mirror_absent[slot_no - 1] = false;
             if ((!g_mirror_valid[slot_no - 1] ||
                  g_mirror_fingerprints[slot_no - 1] != fingerprint) &&
                 history_write_slot_file(record) == 0) {
@@ -751,11 +755,12 @@ static bool history_save_snapshot(const void *snapshot, size_t size)
     }
 
     for (i = 1; i <= UI_HISTORY_MAX_RECORDS; i++) {
-        if (!slot_present[i]) {
+        if (!slot_present[i] && !g_mirror_absent[i - 1]) {
             char slot_path[128];
 
             snprintf(slot_path, sizeof(slot_path), UI_HISTORY_SLOT_PATH_FMT, (unsigned)i);
-            (void)unlink(slot_path);
+            if (unlink(slot_path) == 0 || errno == ENOENT)
+                g_mirror_absent[i - 1] = true;
             g_mirror_valid[i - 1] = false;
         }
     }
@@ -1469,8 +1474,8 @@ bool ui_history_record_append_snapshot(const ui_history_record_t *record,
     return history_submit_or_restore();
 }
 
-bool ui_history_record_append_full_snapshot(const ui_history_record_t *record,
-    uint32_t total_notes_after,const history_record_snapshot_t *detail)
+static bool history_record_write_full_snapshot(const ui_history_record_t *record,
+    uint32_t total_notes_after,const history_record_snapshot_t *detail,bool update)
 {
     if(!record || !detail || !detail->bytes || !detail->size || detail->size>HISTORY_SNAPSHOT_MAX_BYTES ||
        detail->hash!=history_record_snapshot_hash(detail->bytes,detail->size))return false;
@@ -1481,10 +1486,19 @@ bool ui_history_record_append_full_snapshot(const ui_history_record_t *record,
     memcpy(preview.denom,detail->denoms,sizeof(preview.denom));
     history_format_denom(&preview,copy.denom_text,sizeof(copy.denom_text));
     g_submitting_detail=detail;
-    bool ok=ui_history_record_append_snapshot(&copy,total_notes_after);
+    bool ok=update ? ui_history_record_update_snapshot(&copy,total_notes_after) :
+        ui_history_record_append_snapshot(&copy,total_notes_after);
     g_submitting_detail=NULL;return ok;
 }
 
+
+bool ui_history_record_append_full_snapshot(const ui_history_record_t *record,
+    uint32_t total_notes_after,const history_record_snapshot_t *detail)
+{ return history_record_write_full_snapshot(record,total_notes_after,detail,false); }
+
+bool ui_history_record_update_full_snapshot(const ui_history_record_t *record,
+    uint32_t total_notes_after,const history_record_snapshot_t *detail)
+{ return history_record_write_full_snapshot(record,total_notes_after,detail,true); }
 
 bool ui_history_record_update_snapshot(const ui_history_record_t *record, uint32_t total_notes_after)
 {

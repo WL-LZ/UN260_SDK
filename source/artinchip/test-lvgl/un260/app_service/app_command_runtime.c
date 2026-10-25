@@ -201,25 +201,40 @@ bool app_command_runtime_add_clear_allowed(void)
         upgrade_session_owner() == UPGRADE_SESSION_NONE &&
         !work_mode_service_diagnostic_active() &&
         !machine_state_aging_running() && !motor_test_service_busy() &&
-        boot_service_get_stage() == BOOT_STAGE_DONE &&
-        !g_deferred_frame_blocked && !protocol_frame_queue_has_pending() &&
+        /* A completed self-test failure remains available for diagnosis;
+         * it does not make an idle ADD setting permanently unavailable. */
+        (boot_service_get_stage() == BOOT_STAGE_DONE ||
+         boot_service_get_stage() == BOOT_STAGE_FAIL) &&
+        !g_deferred_frame_blocked &&
+        /* A queued START must settle before clearing its count. Unrelated
+         * replies (including touch sound ACKs) do not own the ADD operation. */
+        !protocol_frame_queue_has_command_between(0x0A, 0, UINT64_MAX) &&
         !counting_multi_query_busy() && !counting_multi_extra_busy();
 }
 
 bool app_command_runtime_prepare_add_reset(void)
 {
-    if (!app_command_runtime_add_clear_allowed()) return false;
-    return counting_history_prepare_reset(&g_counting_session,
+    if (!app_command_runtime_add_clear_allowed()) {
+        uart_debug_printf("ADD admission blocked: count=%d clear=%d wire=%d fault=%d reset=%d touch=%d profile=%d upgrade=%d diagnostic=%d aging=%d motor=%d boot=%d deferred=%d start_rx=%d multi=%d extra=%d\n",
+            app_command_runtime_count_start_busy(), counting_action_clear_pending(),
+            protocol_send_is_ready(), runtime_guard_has_fault(),
+            ui_factory_reset_blocks_navigation(), touch_calibration_busy(),
+            workspace_service_applying(), upgrade_session_owner(),
+            work_mode_service_diagnostic_active(), machine_state_aging_running(),
+            motor_test_service_busy(), boot_service_get_stage(), g_deferred_frame_blocked,
+            protocol_frame_queue_has_command_between(0x0A, 0, UINT64_MAX),
+            counting_multi_query_busy(), counting_multi_extra_busy());
+        return false;
+    }
+    bool ready = counting_history_prepare_reset(&g_counting_session,
         counting_data_current(), app_clock_uptime_ms());
+    if (!ready) uart_debug_printf("ADD admission blocked: pending history snapshot could not be preserved\n");
+    return ready;
 }
 
-bool app_command_runtime_commit_add_reset(void)
+/* Revoke publication, while allowing an already-open untagged query to drain. */
+static void app_command_runtime_revoke_result_replies(void)
 {
-    if (app_command_runtime_count_start_busy()) return false;
-    if (!app_counting_runtime_reset_session(&g_counting_session, "ADD group change"))
-        return false;
-    app_setting_runtime_cancel_mode_clear();
-    stop_counting_sim();
     /* Keep an old untagged 0B query's drain ownership, but revoke publication. */
     const bool drain_query = g_counting_detail_state.query_pending;
     const uint32_t query_tick = g_counting_detail_state.query_tick;
@@ -229,6 +244,16 @@ bool app_command_runtime_commit_add_reset(void)
     g_counting_detail_state.query_failed = true;
     g_counting_detail_state.query_tick = query_tick;
     g_add_result_cleared = true;
+}
+
+bool app_command_runtime_commit_add_reset(void)
+{
+    if (app_command_runtime_count_start_busy()) return false;
+    if (!app_counting_runtime_reset_session(&g_counting_session, "ADD group change"))
+        return false;
+    app_setting_runtime_cancel_mode_clear();
+    stop_counting_sim();
+    app_command_runtime_revoke_result_replies();
     sim_reset_counting_group(counting_data_mutable());
     currency_state_clear_detected_result();
     if (currency_state_multi_selected())
@@ -250,6 +275,7 @@ bool app_command_runtime_clear_counting_data(const char *reason)
     }
     app_setting_runtime_cancel_mode_clear();
     stop_counting_sim();
+    app_command_runtime_revoke_result_replies();
     sim_reset_counting_result(counting_data_mutable());
     currency_state_clear_detected_result();
     page_01_curr_img_refre();

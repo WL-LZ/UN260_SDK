@@ -545,7 +545,7 @@ void resume_counting_sim(void)
 }
 
 static void sim_reset_counting_data(counting_sim_t *sim_data,
-                                    bool clear_denominations)
+                                    bool clear_denominations, bool clear_baselines)
 {
     int denom_count;
 
@@ -556,12 +556,6 @@ static void sim_reset_counting_data(counting_sim_t *sim_data,
     if (clear_denominations) {
         memset(sim_data->denom, 0, sizeof(sim_data->denom));
         sim_data->denom_number = 0;
-        sim_data->last_total_pcs = 0;
-        sim_data->last_total_amount = 0.0f;
-        sim_data->last_valid_pcs = 0;
-        sim_data->last_issue_pcs = 0;
-        sim_data->last_suspect_pcs = 0;
-        sim_data->last_damaged_pcs = 0;
     } else {
         denom_count = sim_data->denom_number;
         if (denom_count >
@@ -573,6 +567,15 @@ static void sim_reset_counting_data(counting_sim_t *sim_data,
             sim_data->denom[i].pcs = 0;
             sim_data->denom[i].amount = 0;
         }
+    }
+
+    if (clear_baselines) {
+        sim_data->last_total_pcs = 0;
+        sim_data->last_total_amount = 0.0f;
+        sim_data->last_valid_pcs = 0;
+        sim_data->last_issue_pcs = 0;
+        sim_data->last_suspect_pcs = 0;
+        sim_data->last_damaged_pcs = 0;
     }
 
     sim_data->total_pcs = 0;
@@ -594,16 +597,16 @@ static void sim_reset_counting_data(counting_sim_t *sim_data,
 
 void sim_reset_counting_group(counting_sim_t *sim_data)
 {
-    sim_reset_counting_data(sim_data, true);
+    sim_reset_counting_data(sim_data, false, true);
 }
 
 void sim_reset_for_currency(counting_sim_t* sim_data)
 {
-    sim_reset_counting_data(sim_data, true);
+    sim_reset_counting_data(sim_data, true, true);
 }
 
 void sim_reset_counting_result(counting_sim_t* sim_data)
 {
     if (sim_data == NULL) return;
-    sim_reset_counting_data(sim_data, false);
+    sim_reset_counting_data(sim_data, false, false);
 }

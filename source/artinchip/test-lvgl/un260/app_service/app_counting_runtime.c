@@ -99,6 +99,8 @@ static void app_counting_visual_commit(void *context, uint32_t flags)
         page_01_main_refresh_totals(sim_data->total_pcs, amount_buf);
     }
     if ((flags & 4U) ||
+        ((flags & 1U) && sim_data && !sim_data->multi_currency_result &&
+         page_01_detail_section_get() == PAGE_01_DETAIL_SECTION_A) ||
         ((flags & 2U) && page_01_detail_section_get() == PAGE_01_DETAIL_SECTION_B) ||
         ((flags & 8U) && page_01_detail_section_get() == PAGE_01_DETAIL_SECTION_C))
         page_01_main_detail_refresh_rows_only();
@@ -146,6 +148,7 @@ static void app_counting_runtime_on_start_success(const uint8_t *buf, uint8_t le
     page_01_curr_img_refre();
     fault_popup_clear_runtime();
     fault_popup_clear_preset();
+    counting_history_begin_group(machine_state_add_enabled() && !currency_state_multi_selected());
     counting_history_session_start(buf, len);
     app_auto_qr_on_start();
     if (multi_pass_verification_is_active()) {
@@ -533,6 +536,13 @@ void app_counting_runtime_handle_info(counting_session_state_t *session,
         (buf[8] != 0 || buf[9] != 0) && currency_state_restore_detected_result()) {
         page_01_curr_img_refre();
         smart_island_refresh_summary();
+    }
+    if (!multi && result.kind == COUNTING_INFO_REPLY_LIVE) {
+        if (counting_report_observe_total(sim_data,
+            ((uint32_t)buf[4] << 24) | ((uint32_t)buf[5] << 16) |
+            ((uint32_t)buf[6] << 8) | buf[7],
+            ((unsigned)buf[8] << 8) | buf[9]))
+            counting_history_restart_group();
     }
     if (result.kind == COUNTING_INFO_REPLY_LIVE) {
         app_counting_runtime_refresh_compact(sim_data);

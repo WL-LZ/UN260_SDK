@@ -1325,15 +1325,24 @@ static void page_01_main_summary_label_set(lv_obj_t **cached_label,
     if (!label) return;
     if (strcmp(lv_label_get_text(label), text) == 0 && *geometry_compact) return;
     lv_label_set_text(label, text);
-    const lv_font_t *large = &lv_font_main_numeric_64;
-    lv_obj_set_style_text_font(label,large, 0);
-    lv_obj_set_width(label, LV_SIZE_CONTENT);
-    lv_obj_update_layout(label);
-    if (lv_obj_get_width(label) > SUMMARY_MAX_WIDTH) {
-        lv_obj_set_style_text_font(label, &lv_font_manrope_bold_32, 0);
-        lv_obj_update_layout(label);
+    const lv_font_t *font = &lv_font_main_numeric_64;
+    lv_point_t text_size;
+    const lv_coord_t letter_space = lv_obj_get_style_text_letter_space(label, 0);
+    const lv_coord_t line_space = lv_obj_get_style_text_line_space(label, 0);
+    const lv_coord_t inset = lv_obj_get_style_pad_left(label, 0) +
+                             lv_obj_get_style_pad_right(label, 0) +
+                             2 * lv_obj_get_style_border_width(label, 0);
+    /* Measure this single line without synchronously laying out the entire
+     * screen twice per total frame. The normal render pass owns layout. */
+    lv_txt_get_size(&text_size, text, font, letter_space, line_space,
+                    LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    if (text_size.x + inset > SUMMARY_MAX_WIDTH) {
+        font = &lv_font_manrope_bold_32;
+        lv_txt_get_size(&text_size, text, font, letter_space, line_space,
+                        LV_COORD_MAX, LV_TEXT_FLAG_NONE);
     }
-    lv_coord_t width = lv_obj_get_width(label);
+    lv_obj_set_style_text_font(label, font, 0);
+    lv_coord_t width = text_size.x + inset;
     if (width > SUMMARY_MAX_WIDTH) width = SUMMARY_MAX_WIDTH;
     if (width < 1) width = 1;
     lv_obj_set_width(label, width);

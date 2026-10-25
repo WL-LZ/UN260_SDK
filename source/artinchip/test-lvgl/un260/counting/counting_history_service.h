@@ -15,6 +15,9 @@ typedef enum {
     COUNTING_HISTORY_COMMIT_FAILED,
 } counting_history_commit_result_t;
 
+/* ADD checkpoints replace one record until a result reset closes the group. */
+void counting_history_begin_group(bool add);
+void counting_history_restart_group(void);
 void counting_history_session_start(const uint8_t *buf, uint8_t len);
 void counting_history_capture_error(const char *tag,
                                     const uint8_t *buf,

@@ -14,6 +14,9 @@ static struct {
     bool live_limit_reported;
     unsigned rows, published_rows;
     int live_next;
+    uint32_t denom_amount;
+    unsigned denom_pcs;
+    bool denom_seen;
     uint8_t last_payload[20];
     counting_sim_t staging;
     struct {
@@ -55,6 +58,15 @@ void counting_report_begin(bool add, counting_sim_t *data)
     report.enabled = true;
     if (report.stage == REPORT_IDLE) report.invalid = report.started = false;
     report.add = add;
+    report.denom_seen = false;
+    report.denom_pcs = add && data && data->total_pcs > 0 ? (unsigned)data->total_pcs : 0;
+    report.denom_amount = add && data && data->total_amount > 0 ? (uint32_t)data->total_amount : 0;
+    if (!add && data) {
+        for (unsigned i = 0; i < data->denom_number; ++i) {
+            data->denom[i].pcs = 0;
+            data->denom[i].amount = 0;
+        }
+    }
     report.reusable = add && report.cache.valid && report.stage == REPORT_IDLE;
     report.live_seen = report.due = report.scheduled = false;
     report.live_limit_reported = false;
@@ -72,6 +84,64 @@ void counting_report_begin(bool add, counting_sim_t *data)
     }
 }
 
+/* Zero-valued startup frames are markers, not an ADD clear. A first
+ * positive total below the retained total establishes a fresh controller
+ * result. Repeated totals/reject-only frames never contribute another note. */
+static bool denom_add(counting_sim_t *d, unsigned value)
+{
+    if (!value || value > 2147483647U) return false;
+    unsigned i = 0;
+    while (i < d->denom_number && d->denom[i].value != (int)value) ++i;
+    if (i == d->denom_number) {
+        if (i == COUNTING_DENOM_MAX_ITEMS) return false;
+        d->denom[i] = (denom_t){.value = (int)value};
+        ++d->denom_number;
+    }
+    if (d->denom[i].pcs == UINT16_MAX) return false;
+    ++d->denom[i].pcs;
+    d->denom[i].amount = (float)value * d->denom[i].pcs;
+    return true;
+}
+
+bool counting_report_observe_total(counting_sim_t *d, uint32_t amount, unsigned pcs)
+{
+    if (!report.enabled || !d || d->multi_currency_result) return false;
+    if (!pcs) {
+        if (!report.denom_seen && report.add && !amount) {
+            d->total_pcs = (int)report.denom_pcs;
+            d->total_amount = (float)report.denom_amount;
+        }
+        return false;
+    }
+    bool restarted = !report.denom_seen && pcs < report.denom_pcs;
+    if (restarted) {
+        report.denom_pcs = report.denom_amount = 0;
+        /* The controller established a new cumulative result. Every consumer
+         * must use the same zero baseline, not the previous ADD group's end. */
+        d->last_total_pcs = d->last_valid_pcs = 0;
+        d->last_total_amount = 0;
+        d->last_issue_pcs = d->last_suspect_pcs = d->last_damaged_pcs = 0;
+        report.cache.valid = report.reusable = false;
+        report.published_rows = 0;
+        report.live_next = -1;
+        counting_data_clear_serials(d);
+        counting_data_clear_errors(d);
+        for (unsigned i = 0; i < d->denom_number; ++i) {
+            d->denom[i].pcs = 0;
+            d->denom[i].amount = 0;
+        }
+    }
+    report.denom_seen = true;
+    if (pcs <= report.denom_pcs) return false;
+    /* Several missing notes cannot be assigned their average denomination.
+     * The complete serial snapshot can reconcile that gap after STOP. */
+    if (pcs == report.denom_pcs + 1 && amount > report.denom_amount)
+        denom_add(d, amount - report.denom_amount);
+    report.denom_pcs = pcs;
+    report.denom_amount = amount;
+    return restarted;
+}
+
 void counting_report_reset(void)
 {
     counting_report_begin(false, NULL);
@@ -83,6 +153,11 @@ void counting_report_shutdown(void)
 {
     counting_data_clear_serials(&report.staging);
     memset(&report, 0, sizeof(report));
+}
+
+bool counting_report_transfer_active(void)
+{
+    return report.stage != REPORT_IDLE && !report.invalid;
 }
 
 static bool unchanged(const counting_sim_t *d)

@@ -26,7 +26,7 @@ static bool g_wire_amount_seen;
 typedef struct {
     ui_history_record_t record;
     storage_job_id_t job;
-    uint32_t multi_group, generation;
+    uint32_t multi_group, single_group, generation;
     history_record_snapshot_t detail;
 } counting_history_snapshot_t;
 static counting_history_snapshot_t g_snapshots[COUNTING_HISTORY_PENDING_CAPACITY];
@@ -38,6 +38,8 @@ static bool g_failure_reported;
 static uint32_t g_multi_generation, g_submitted_group, g_submitted_id, g_submitted_pcs;
 static ui_history_record_t g_multi_snapshot;
 static uint32_t g_current_generation=1, g_current_record;
+static uint32_t g_single_generation, g_single_group, g_submitted_single_group;
+static uint32_t g_operator_single_group;
 static uint32_t g_operator_id;
 static uint32_t g_operator_group;
 static char g_operator_name[25];
@@ -89,7 +91,7 @@ void counting_history_append_frame(const char *tag,
     int written;
     if(tag && buf && len==13 && !strcmp(tag,"0x0E")){
         uint32_t amount=(uint32_t)buf[4]<<24|(uint32_t)buf[5]<<16|(uint32_t)buf[6]<<8|buf[7];
-        if(amount || !g_wire_amount_seen || buf[11]<2){g_wire_amount=amount;g_wire_amount_seen=true;}
+        if(amount || buf[8] || buf[9]){g_wire_amount=amount;g_wire_amount_seen=true;}
     }
 
     /* Completion evidence must survive a saturated diagnostic log. */
@@ -118,12 +120,32 @@ void counting_history_append_frame(const char *tag,
     }
 }
 
+void counting_history_begin_group(bool add)
+{
+    if (!add) { g_single_group = 0; return; }
+    if (!g_single_group) {
+        if (++g_single_generation == 0) ++g_single_generation;
+        g_single_group = g_single_generation;
+    }
+}
+
+void counting_history_restart_group(void)
+{
+    /* Earlier snapshots already own their group IDs and remain unchanged. */
+    counting_history_current_invalidate();
+    counting_history_begin_group(true);
+    g_operator_single_group = g_single_group;
+}
+
 void counting_history_session_start(const uint8_t *buf, uint8_t len)
 {
     ++g_current_generation;g_current_record=0;
     const workspace_user_t *operator=workspace_store_ready()?workspace_active(workspace_store_get()):NULL;
-    g_operator_id=operator?operator->id:0;
-    snprintf(g_operator_name,sizeof(g_operator_name),"%s",operator?operator->name:"Unassigned");
+    if (!g_single_group || g_operator_single_group != g_single_group) {
+        g_operator_id=operator?operator->id:0;
+        snprintf(g_operator_name,sizeof(g_operator_name),"%s",operator?operator->name:"Unassigned");
+        g_operator_single_group=g_single_group;
+    }
     g_last_error_frame_text[0] = '\0';
     counting_history_session_reset();
     counting_history_frame_to_hex(buf, len,
@@ -181,7 +203,8 @@ static void counting_history_submit_snapshots(void)
         if (!ui_history_data_can_accept()) break;
         total = ui_history_total_notes_counted_get();
         counting_history_snapshot_t *s=&g_snapshots[i];
-        bool update=s->multi_group && s->multi_group==g_submitted_group;
+        bool update=(s->multi_group && s->multi_group==g_submitted_group) ||
+            (s->single_group && s->single_group==g_submitted_single_group);
         increment=update ? (s->record.pcs>g_submitted_pcs ? s->record.pcs-g_submitted_pcs : 0) : s->record.pcs;
         total=increment>UINT32_MAX-total ? UINT32_MAX : total+increment;
         if(update) {
@@ -191,7 +214,8 @@ static void counting_history_submit_snapshots(void)
             for(unsigned j=0;j<store->record_count;j++)
                 if(store->records[j].record_no==g_submitted_id) exists=true;
             if(exists) {
-                if(!ui_history_record_update_snapshot(&s->record,total)) break;
+                if(s->detail.bytes ? !ui_history_record_update_full_snapshot(&s->record,total,&s->detail) :
+                    !ui_history_record_update_snapshot(&s->record,total)) break;
             } else {
                 /* Deletion wins over late detail; lifetime accounting remains independent. */
                 ui_history_total_notes_counted_set(total);
@@ -201,7 +225,7 @@ static void counting_history_submit_snapshots(void)
             uint32_t id=ui_history_data_get()->next_record_no;
             if(s->detail.bytes ? !ui_history_record_append_full_snapshot(&s->record,total,&s->detail) :
                 !ui_history_record_append_snapshot(&s->record,total)) break;
-            g_submitted_id=id;g_submitted_group=s->multi_group;
+            g_submitted_id=id;g_submitted_group=s->multi_group;g_submitted_single_group=s->single_group;
         }
         g_submitted_pcs=s->record.pcs;
         s->record.record_no=g_submitted_id;
@@ -317,6 +341,7 @@ counting_history_commit_result_t counting_history_try_commit(
     snprintf(snapshot->record.operator_name,sizeof(snapshot->record.operator_name),"%s",g_operator_name);
     snapshot->job = 0;
     snapshot->multi_group = 0;
+    snapshot->single_group = g_single_group;
     if (overflow) g_overflow_valid = true;
     else g_snapshot_count++;
     g_uncaptured_pending = false;
@@ -415,4 +440,4 @@ bool counting_history_prepare_start(counting_session_state_t *session,
 }
 
 uint32_t counting_history_current_record(void){return counting_history_is_idle()?g_current_record:0;}
-void counting_history_current_invalidate(void){++g_current_generation;g_current_record=0;}
+void counting_history_current_invalidate(void){++g_current_generation;g_current_record=0;g_single_group=0;}

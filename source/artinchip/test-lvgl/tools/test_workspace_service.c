@@ -15,7 +15,6 @@ bool count_mode_service_confirmed(void){return true;}
 static unsigned actuals[7]={1,0,1,0,0,0,1};
 static bool async_save,save_done,save_success=true;
 static workspace_model_t save_draft;
-uint32_t counting_cashbook_verify_group(void){return 0;}
 uint8_t machine_state_mode(void){return actuals[6]==2?MODE_SDC:actuals[6]==3?MODE_CNT:MODE_MDC;}
 void workspace_store_init(void){}
 bool workspace_store_poll(void){if(!busy||!save_done)return false;busy=false;save_done=false;if(save_success)model=save_draft;return true;}
@@ -146,17 +145,40 @@ int main(void)
     assert(workspace_service_save_batches(1,slots,5,10,13));actuals[3]=50;save_done=true;
     workspace_service_poll(9070);assert(commands==before&&actuals[3]==50);
     workspace_defaults(&model);model.operators_enabled=1;actuals[3]=10;
-    running=true;assert(!workspace_service_save_batches(1,slots,5,10,13));running=false;
+    /* Preset storage is independent from applying to a running machine. */
+    running=true;assert(workspace_service_save_batches(1,slots,5,10,13));
+    running=false;save_done=true;workspace_service_poll(9071);
+    assert(commands==before&&actuals[3]==10&&model.users[0].batches[1]==13);
+    assert(strstr(workspace_service_batch_save_message(),"not changed"));
+    workspace_service_poll(9072);assert(commands==before);
+    workspace_defaults(&model);model.operators_enabled=1;
     assert(workspace_service_save_batches(1,slots,5,10,13));running=true;save_done=true;
     workspace_service_poll(9080);assert(commands==before);running=false;
     workspace_service_poll(9090);assert(commands==before); /* No surprise delayed apply. */
     workspace_defaults(&model);model.operators_enabled=1;assert(workspace_service_save_batches(1,slots,5,10,13));
     fail_send=true;save_done=true;workspace_service_poll(9100);fail_send=false;
     assert(commands==before+1&&actuals[3]==10&&strstr(workspace_service_batch_save_message(),"not changed"));
+    /* History backpressure must still protect operator changes, but does
+     * not prevent a Batch setting which preserves the existing result. */
+    workspace_defaults(&model);model.operators_enabled=1;
+    capacity=false;actuals[3]=10;before=commands;
+    assert(workspace_service_batch_next()&&commands==before+1);
+    assert(workspace_service_switch_blocker());
+    assert(workspace_service_save_batches(1,slots,5,10,13));
+    save_done=true;workspace_service_poll(9110);
+    assert(commands==before+2&&last_value==13&&actuals[3]==10);
+    capacity=true;
+    /* Disconnected save succeeds locally, with no late automatic command. */
+    workspace_defaults(&model);model.operators_enabled=1;
+    connected=false;before=commands;
+    assert(workspace_service_save_batches(1,slots,5,10,13));
+    connected=true;save_done=true;workspace_service_poll(9120);
+    assert(commands==before&&model.users[0].batches[1]==13&&actuals[3]==10);
+    assert(strstr(workspace_service_batch_save_message(),"not changed"));
+    running=true;assert(!workspace_service_batch_next());running=false;
+    diagnostic=true;assert(!workspace_service_batch_next());diagnostic=false;
     assert(!workspace_service_save_batches(999,slots,5,10,13));
     assert(!workspace_service_save_batches(1,slots,1,10,13));
     slots[1]=200;assert(!workspace_service_save_batches(1,slots,5,10,200));
     puts("PASS workspace service: profile apply + active Batch edit save/send/ACK boundaries, non-active/OFF/delete, ADD, storage/send failure, changed state, lifecycle and no delayed retry");
 }
-
-cash_store_status_t cash_journal_store_status(void){return CASH_STORE_READY;}

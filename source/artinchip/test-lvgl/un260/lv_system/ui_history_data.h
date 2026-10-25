@@ -94,6 +94,8 @@ bool ui_history_record_read_detail(const ui_history_record_t *record,history_rec
 bool ui_history_record_build_multi_base(const counting_sim_t *sim,uint32_t pcs,
     const char *error,const char *start,const char *end,const char *log,ui_history_record_t *out);
 /* Replaces an existing stable ID only; deleted/evicted records never reappear. */
+bool ui_history_record_update_full_snapshot(const ui_history_record_t *record,
+    uint32_t total_notes_after,const history_record_snapshot_t *detail);
 bool ui_history_record_update_snapshot(const ui_history_record_t *record,
                                        uint32_t total_notes_after);
 const ui_history_store_t *ui_history_data_get(void);

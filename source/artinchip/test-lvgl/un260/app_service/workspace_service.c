@@ -45,10 +45,16 @@ static bool request(unsigned step,unsigned target)
         case 4:return setting_service_request_add(target);case 5:return setting_service_request_work_mode(target);default:return count_mode_service_request(target==2?MODE_SDC:target==3?MODE_CNT:MODE_MDC);}
 }
 void workspace_service_init(void){workspace_store_init();}
-static const char *machine_blocker(void)
+static const char *machine_operation_blocker(void)
 {
     if(app_command_runtime_count_start_busy()||machine_state_aging_running())return UI_N_("Finish counting before changing the workspace.");
     if(work_mode_service_diagnostic_active())return UI_N_("Finish the diagnostic operation first.");
+    return NULL;
+}
+static const char *machine_blocker(void)
+{
+    const char *reason=machine_operation_blocker();
+    if(reason)return reason;
     if(!counting_history_can_start())return UI_N_("The last result is still being saved. Try again shortly.");
     return NULL;
 }
@@ -103,7 +109,7 @@ static void finish_batch_save(void)
             if(u->batches[i]==batch_save.target)target_saved=true;
     /* Never replace a newer controller choice or apply later during a run. */
     if(!target_saved||!machine_state_batch_enabled()||
-       machine_state_batch_num()!=batch_save.previous||machine_blocker()||
+       machine_state_batch_num()!=batch_save.previous||machine_operation_blocker()||
        !protocol_send_is_ready()||boot_service_get_stage()!=BOOT_STAGE_DONE||
        !setting_service_request_batch_switch(true,batch_save.target,true,batch_save.previous)) {
         ui_message_key(&batch_message_info,UI_N_("Cycle saved; active Batch was not changed. Select the preset to apply it when idle."));
@@ -161,7 +167,7 @@ bool workspace_service_batch_next(void)
 {
     /* Changing the Batch cycle during an idle ADD session does not change
      * ownership or clear totals. Do not inherit the operator-switch blocker. */
-    if(!workspace_store_ready()||workspace_store_busy()||batch_save.pending||apply.active||machine_blocker()||!protocol_send_is_ready())return false;
+    if(!workspace_store_ready()||workspace_store_busy()||batch_save.pending||apply.active||machine_operation_blocker()||!protocol_send_is_ready())return false;
     const workspace_user_t *u=workspace_active(workspace_store_get());
     uint8_t target=workspace_next_batch(u,machine_state_batch_enabled()?machine_state_batch_num():0);
     return setting_service_request_batch_switch(target!=0,target?target:200,machine_state_batch_enabled(),machine_state_batch_num());
@@ -181,15 +187,21 @@ bool workspace_service_save_batches(uint32_t owner,const uint8_t *values,
     for(unsigned i=1;i<count;i++)if(values[i]==edited_active)target_found=true;
     bool sync=previous_found&&target_found&&previous_active!=edited_active&&
               machine_state_batch_enabled()&&machine_state_batch_num()==previous_active;
-    if(sync&&(machine_blocker()||!protocol_send_is_ready()||boot_service_get_stage()!=BOOT_STAGE_DONE))return false;
+    /* Saving a local preset does not change the running machine. If applying
+     * it is unavailable now, leave the current Batch alone, without retrying
+     * that old choice later when the machine becomes idle. */
+    bool apply_after_save=sync&&!machine_operation_blocker()&&
+                          protocol_send_is_ready()&&boot_service_get_stage()==BOOT_STAGE_DONE;
     workspace_model_t *next=malloc(sizeof(*next));if(!next)return false;
     *next=*workspace_store_get();workspace_user_t *v=workspace_find(next,owner);
     v->batch_count=count;memset(v->batches,0,sizeof(v->batches));memcpy(v->batches,values,count);
     bool ok=workspace_store_save(next);free(next);
     if(!ok)return false;
-    batch_save.pending=sync;batch_save.owner=owner;
+    batch_save.pending=apply_after_save;batch_save.owner=owner;
     batch_save.previous=previous_active;batch_save.target=edited_active;
-    ui_message_key(&batch_message_info,UI_N_("Batch cycle saved."));
+    ui_message_key(&batch_message_info,sync&&!apply_after_save?
+        UI_N_("Cycle saved; active Batch was not changed. Select the preset to apply it when idle."):
+        UI_N_("Batch cycle saved."));
     return true;
 }
 const char *workspace_service_batch_save_message(void){ui_message_render(&batch_message_info,batch_save.message,sizeof(batch_save.message));return batch_save.message;}

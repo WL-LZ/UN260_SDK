@@ -21,8 +21,12 @@ typedef enum {
 /* One controller, one untagged detail transaction. All calls belong to the
  * protocol consumer; neither timers nor views write these snapshots. */
 void counting_report_begin(bool add, counting_sim_t *data);
+/* Returns true once when a positive total proves controller group restart. */
+bool counting_report_observe_total(counting_sim_t *data, uint32_t amount, unsigned pcs);
 void counting_report_reset(void);
 void counting_report_shutdown(void);
+/* Active transfer only; an expired report must not defer unrelated recovery. */
+bool counting_report_transfer_active(void);
 void counting_report_schedule(const counting_session_state_t *session,
                               uint32_t now);
 void counting_report_poll(const counting_session_state_t *session,

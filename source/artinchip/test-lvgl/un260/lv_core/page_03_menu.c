@@ -630,6 +630,8 @@ static void action(lv_event_t *event)
             case 3:ok=setting_service_request_fo_mode(v);break;
             case 4:ok=setting_service_request_beep(v);break;
         }
+        /* ADD owns its setting/clear notices, including recovery. */
+        if(kind==2)return;
         if(!ok)notify(UI_NOTICE_WARNING,UI_N_("Setting not sent. Finish the current operation and try again."));else clear_notice();return;}
     if(output_action(id))return;
     if(id==A_DIAGNOSTICS){settings_detail_dialog_show(ui_tr("Export support report?"),ui_tr("Insert a USB drive. The report contains versions, confirmed settings and current reject codes only. It excludes serials, note images, amounts, names, photos and passwords."),ui_tr("Export"),ui_tr("Cancel"),support_export,NULL,NULL);return;}

@@ -442,6 +442,53 @@ static void exercise(void)
     puts("PASS: worker-only I/O, immutable bounded jobs, durable completion, failure rollback/retry, incremental mirrors, counting backpressure");
 }
 
+static void test_delete_then_count(void)
+{
+    /* Existing 1000-record index, then leave the page while its delete is held. */
+    uint32_t id=ui_history_data_get()->next_record_no;
+    unsigned count=ui_history_data_get()->record_count;
+    assert(count==UI_HISTORY_MAX_RECORDS);
+    uint32_t ids[UI_HISTORY_MAX_RECORDS];
+    for(unsigned i=0;i<count;i++)ids[i]=ui_history_data_get()->records[i].record_no;
+    hold_worker(true);
+    assert(ui_history_record_delete_records(ids,count));
+    storage_job_id_t deletion=ui_history_last_commit_id();
+    counting_session_state_t session={0};counting_sim_t sim={0};
+    counting_history_session_start(NULL,0);
+    session.history_record.valid=session.history_record.end_seen=true;
+    session.history_record.pcs=10;
+    assert(counting_history_try_commit(&session,&sim,0)==COUNTING_HISTORY_COMMIT_PENDING);
+    storage_job_id_t next=ui_history_last_commit_id();assert(next>deletion);
+    /* No History-page callback participates after acceptance. */
+    hold_worker(false);wait_saved(next,1);
+    assert(counting_history_poll_commit(&session,&sim,1)==COUNTING_HISTORY_COMMIT_SAVED);
+    assert(ui_history_data_get()->record_count==1);
+    assert(ui_history_data_get()->records[0].record_no==id);
+    assert(ui_history_data_get()->records[0].pcs==10&&counting_history_can_start());
+    assert(storage_worker_shutdown());
+    puts("PASS delete 1000 then leave/count: global worker completes deletion and following count in order; new record retained, START restored");
+}
+
+static void test_continuous_batch_history(void)
+{
+    counting_session_state_t session={0};counting_sim_t sim={0};
+    uint32_t base=ui_history_total_notes_counted_get();
+    unsigned before=ui_history_data_get()->record_count;
+    for(unsigned i=0;i<60;i++){
+        counting_history_session_start(NULL,0);
+        session.history_record.valid=session.history_record.end_seen=true;
+        session.history_record.pcs=10;
+        assert(counting_history_try_commit(&session,&sim,i)==COUNTING_HISTORY_COMMIT_PENDING);
+        wait_saved(ui_history_last_commit_id(),i);
+        assert(counting_history_poll_commit(&session,&sim,i)==COUNTING_HISTORY_COMMIT_SAVED);
+        assert(counting_history_is_idle()&&counting_history_can_start());
+        assert(ui_history_data_get()->record_count==before+i+1);
+        assert(ui_history_total_notes_counted_get()==base+(i+1)*10);
+    }
+    assert(storage_worker_shutdown());
+    puts("PASS 60 Batch runs / 600 notes: durable History releases START without an accounting dependency; all history retained");
+}
+
 static void test_total_arithmetic(void)
 {
     counting_session_state_t session = { 0 };
@@ -907,6 +954,8 @@ int main(int argc, char **argv)
     }
     else if (strcmp(argv[1], "multi-history") == 0) test_multi_history();
     else if (strcmp(argv[1], "exercise") == 0) exercise();
+    else if (strcmp(argv[1], "delete-then-count") == 0) test_delete_then_count();
+    else if (strcmp(argv[1], "continuous-batch-history") == 0) test_continuous_batch_history();
     else if (strcmp(argv[1], "total-arithmetic") == 0) test_total_arithmetic();
     else if (strcmp(argv[1], "retention") == 0) test_retention();
     else if (strcmp(argv[1], "delete-records") == 0) test_delete_records();

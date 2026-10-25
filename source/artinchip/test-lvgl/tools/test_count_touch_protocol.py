@@ -26,6 +26,7 @@ head = r'''
 #include <string.h>
 #include "un260/counting/counting_control_reply.h"
 #include "un260/counting/counting_info_reply.h"
+#include "un260/counting/counting_report_sync.h"
 #include "un260/counting/counting_multi.h"
 #include "un260/innovation/multi_pass_verification.h"
 static counting_sim_t data;
@@ -36,7 +37,10 @@ static unsigned capture_starts,capture_infos;
 static uint32_t capture_baseline;static uint16_t capture_issue_baseline,capture_valid;static uint8_t capture_issue,capture_status;static bool capture_add;
 static void ui_page_dynamic_capture_on_count_start(uint32_t valid,uint16_t issue,bool cumulative){++capture_starts;capture_baseline=valid;capture_issue_baseline=issue;capture_add=cumulative;}
 static void ui_page_dynamic_capture_on_count_info(uint16_t valid,uint8_t issue,uint8_t status){++capture_infos;capture_valid=valid;capture_issue=issue;capture_status=status;}
-static unsigned locks,unlocks;
+static unsigned locks,unlocks,restarted_groups;
+static int island_pcs;
+static void counting_history_restart_group(void){++restarted_groups;}
+static void smart_island_update_counting(int pcs,float amount){(void)amount;island_pcs=pcs;}
 /* Observe the UI publication without simulating protocol or lock events. */
 static unsigned reject_notifications;
 static void app_counting_runtime_on_reject_report_changed(void *context){(void)context;++reject_notifications;}
@@ -64,12 +68,12 @@ void uart_debug_printf(const char *s,...){(void)s;}
 #define lv_tick_get() 100
 '''
 noops = '''app_fault_recovery_clear diagnostic_calibration_feed_started
-page_02_list_report_reset page_01_curr_img_refre fault_popup_clear_runtime fault_popup_clear_preset counting_history_session_start
+counting_history_begin_group page_02_list_report_reset page_01_curr_img_refre fault_popup_clear_runtime fault_popup_clear_preset counting_history_session_start
 app_auto_qr_on_start multi_pass_verification_on_count_start multi_pass_verification_get_view
 page_32_innovation_notify_verification_event data_collection_state_set_status page_06_data_collection_refresh
 ui_manager_switch smart_island_notify_count_start app_counting_runtime_refresh_compact counting_history_append_frame
 page_02_list_section_mark_dirty counting_history_capture_end smart_island_set_count_analysis
-smart_island_update_counting smart_island_notify_count_end app_counting_runtime_try_history_commit
+smart_island_notify_count_end app_counting_runtime_try_history_commit
 ui_refresh_main_page app_auto_qr_on_end smart_island_refresh_summary'''.split()
 head += '\n'.join(f'#define {name}(...) ((void)0)' for name in noops)+'\n'
 test = r'''
@@ -131,15 +135,38 @@ int main(void){
  report[9]=report[10]=0;report[11]=2;runtime_info(&session,&data,report,13);
  assert(capture_valid==0&&capture_issue==0&&capture_status==2&&data.total_pcs==101);
  unsigned end_infos=capture_infos;runtime_info(&session,&data,report,13);assert(capture_infos==end_infos);
+ /* Captured ADD group restart, then normal cumulative continuation. */
+ memset(&session,0,sizeof(session));memset(&data,0,sizeof(data));multi=false;add=true;
+ data.total_pcs=83;data.total_amount=4150;
+ session.last_result=(counting_pending_result_t){.valid=true,.pcs=83,.amount=4150};
+ counting_report_begin(true,&data);
+ counting_control_reply_dispatch(0x0A,&session,reply,7,&hooks);
+ memset(report+4,0,8);report[11]=1;runtime_info(&session,&data,report,13);
+ assert(data.total_pcs==83&&data.last_total_pcs==83&&!restarted_groups);
+ for(unsigned n=1;n<=83;++n){unsigned amount=n*50;report[6]=amount>>8;report[7]=amount;report[9]=n;runtime_info(&session,&data,report,13);}
+ assert(restarted_groups==1&&data.last_total_pcs==0);
+ memset(report+4,0,8);report[11]=2;runtime_info(&session,&data,report,13);
+ assert(island_pcs==83&&data.total_pcs==83&&session.history_record.pcs==83);
+ counting_report_begin(true,&data);
+ counting_control_reply_dispatch(0x0A,&session,reply,7,&hooks);
+ report[11]=1;runtime_info(&session,&data,report,13);
+ for(unsigned n=84;n<=166;++n){unsigned amount=n*50;report[6]=amount>>8;report[7]=amount;report[9]=n;runtime_info(&session,&data,report,13);}
+ assert(restarted_groups==1&&data.last_total_pcs==83);
+ memset(report+4,0,8);report[11]=2;runtime_info(&session,&data,report,13);
+ assert(island_pcs==83&&data.total_pcs==166&&session.history_record.pcs==166);
+ counting_report_begin(true,&data);counting_control_reply_dispatch(0x0A,&session,reply,7,&hooks);
+ report[11]=1;runtime_info(&session,&data,report,13);report[11]=2;runtime_info(&session,&data,report,13);
+ assert(island_pcs==0&&data.total_pcs==166&&restarted_groups==1);
+ puts("PASS actual runtime ADD: controller 1->83 restart shows83, 84->166 continuation shows83, empty pass shows0; cumulative history totals preserved");
  puts("PASS exact accepted capture notifications: successful START only, raw LIVE/END status/values, ADD baseline before reset, invalid/unarmed/duplicate END ignored");
  puts("PASS accepted count-end generation: boot/duplicate/unknown ignored, AUTO start/end in one tick and reset retain epoch");
  puts("PASS exact app start/end + control/info/MUL: unsolicited start, failures, invalid/truncated/live reports, fault/reset reports, all four terminal statuses, duplicate end");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='un260-count-touch-protocol-') as temp:
-    w=Path(temp);(w/'test.c').write_text(head+preflight+start+'\n'+info+'\n'+end_generation+'\n'+end_dispatch+'\n'+test)
-    sources=['un260/counting/counting_control_reply.c','un260/counting/counting_info_reply.c','un260/counting/counting_multi.c']
+    w=Path(temp);stub=w/'un260/lv_drivers/lv_drivers.h';stub.parent.mkdir(parents=True);stub.write_text('void uart_debug_printf(const char *, ...);\n');(w/'test.c').write_text(head+preflight+start+'\n'+info+'\n'+end_generation+'\n'+end_dispatch+'\n'+test)
+    sources=['un260/counting/counting_control_reply.c','un260/counting/counting_info_reply.c','un260/counting/counting_multi.c','un260/counting/counting_report_sync.c','un260/counting/counting_data_store.c']
     subprocess.run(['cc','-std=c11','-g','-fsanitize=address,undefined','-fno-sanitize-recover=all',
-                    '-ffunction-sections','-fdata-sections','-no-pie','-I'+str(root),str(w/'test.c'),
+                    '-ffunction-sections','-fdata-sections','-no-pie','-I'+str(w),'-I'+str(root),str(w/'test.c'),
                     *[str(root/p) for p in sources],'-Wl,--gc-sections','-o',str(w/'test')],check=True)
     subprocess.run([str(w/'test')],check=True)

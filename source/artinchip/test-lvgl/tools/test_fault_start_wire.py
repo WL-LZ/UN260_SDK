@@ -15,6 +15,13 @@ from test_currency_modes import block
 basic_mode="app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,const uint8_t *buf,uint8_t len){app_setting_reply_action_t actions=0;switch(cmd){case 0x04:"+block(basic_source,basic_source.index("{",start))+"break;default:break;}return actions;}"
 code=r'''
 #include <assert.h>
+#include <stdbool.h>
+bool counting_report_transfer_active(void){return false;}
+/* Currency follow-on policy is covered separately; these START fixtures use no currency transaction. */
+bool count_mode_service_busy(void){return false;}
+void count_mode_service_mode_result(bool ok,bool timeout){(void)ok;(void)timeout;}
+bool count_mode_service_result_may_clear(void){return true;}
+void count_mode_service_mode_sync(void){}
 #include <stdio.h>
 #include <string.h>
 #include "un260/app_service/app_fault_recovery.h"
@@ -32,6 +39,8 @@ code=r'''
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/lv_system/ui_text.h"
 #include "un260/lv_components/ui_notice.h"
+void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title,const char *detail){(void)kind;(void)key;(void)title;(void)detail;}
+void currency_state_get_selected_code(char out[4]){memcpy(out,"USD",4);}
 #include "un260/machine_state/machine_state.h"
 #include "tools/test_maintenance_state.h"
 static uint64_t now;static unsigned tx,refresh,resolved,repeated;static uint8_t cmds[64];

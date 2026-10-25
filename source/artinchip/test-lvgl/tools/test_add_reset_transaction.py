@@ -27,9 +27,13 @@ hooks = '\n\n'.join((
     function(count_runtime, 'app_counting_runtime_reset_session'),
     function(platform, 'sim_reset_counting_data'),
     function(platform, 'sim_reset_counting_group'),
+    function(platform, 'sim_reset_counting_result'),
+    function(platform, 'sim_reset_for_currency'),
     function(runtime, 'app_command_runtime_add_clear_allowed'),
     function(runtime, 'app_command_runtime_prepare_add_reset'),
+    function(runtime, 'app_command_runtime_revoke_result_replies'),
     function(runtime, 'app_command_runtime_commit_add_reset'),
+    function(runtime, 'app_command_runtime_clear_counting_data'),
 ))
 hook_fixture = r'''
 #include <assert.h>
@@ -41,12 +45,14 @@ hook_fixture = r'''
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/counting/counting_session_state.h"
 #include "un260/counting/counting_detail_state.h"
+#include "un260/protocol/protocol_frame_queue.h"
+#include "un260/boot/boot_reply.h"
 static counting_session_state_t g_counting_session;
 static counting_detail_state_t g_counting_detail_state;
 static bool g_add_result_cleared, history_ok=true, multi_selected;
 static unsigned blockers, preserved_history=7, history_checks, invalidations;
 static unsigned reports, multi_resets, ui_resets;
-enum {BOOT_STAGE_DONE=1,UPGRADE_SESSION_NONE=0};
+enum {UPGRADE_SESSION_NONE=0};
 #define BIT(n) (1U<<(n))
 static bool app_command_runtime_count_start_busy(void){return (blockers&BIT(0))!=0;}
 static bool counting_action_clear_pending(void){return (blockers&BIT(1))!=0;}
@@ -59,11 +65,18 @@ static int upgrade_session_owner(void){return (blockers&BIT(7))?1:UPGRADE_SESSIO
 static bool work_mode_service_diagnostic_active(void){return (blockers&BIT(8))!=0;}
 static bool machine_state_aging_running(void){return (blockers&BIT(9))!=0;}
 static bool motor_test_service_busy(void){return (blockers&BIT(10))!=0;}
-static int boot_service_get_stage(void){return (blockers&BIT(11))?0:BOOT_STAGE_DONE;}
-static bool protocol_frame_queue_has_pending(void){return (blockers&BIT(12))!=0;}
+
+uint64_t app_clock_monotonic_ms(void){return 500;}
+void app_runtime_wakeup_notify(void){}
 static bool counting_multi_query_busy(void){return (blockers&BIT(13))!=0;}
 static bool counting_multi_extra_busy(void){return (blockers&BIT(14))!=0;}
-static bool g_deferred_frame_blocked;
+static bool g_deferred_frame_blocked, g_no_note_motor_active;
+static bool app_add_runtime_busy(void){return false;}
+static bool app_add_runtime_retry_clear(void){return false;}
+static bool counting_action_request_clear(void){return true;}
+#define page_01_main_set_counting_locked(x) ((void)(x))
+#define smart_island_notify_warning_level(a,b) ((void)0)
+
 static uint32_t app_clock_uptime_ms(void){return 500;}
 static uint32_t lv_tick_get(void){return 500;}
 static bool counting_history_prepare_reset(counting_session_state_t *session,
@@ -98,7 +111,10 @@ static void seed(void)
     data->last_total_pcs=80;data->last_total_amount=8000;
     data->last_valid_pcs=79;data->last_issue_pcs=3;
     data->last_suspect_pcs=2;data->last_damaged_pcs=1;
-    data->denom_number=1;data->denom[0]=(denom_t){100,100,10000};
+    data->denom_number=3;
+    data->denom[0]=(denom_t){10,2,20};
+    data->denom[1]=(denom_t){50,3,150};
+    data->denom[2]=(denom_t){100,95,9500};
     assert(counting_data_ensure_serial_capacity(data,2));
     data->sn_str[0]=malloc(8);assert(data->sn_str[0]);memcpy(data->sn_str[0],"ABC123",7);
     data->denom_mix[0]=100;
@@ -120,12 +136,61 @@ static void seed(void)
 }
 int main(void)
 {
-    seed();assert(app_command_runtime_add_clear_allowed());
+    seed();g_counting_detail_state.query_pending=true;
+    assert(app_command_runtime_clear_counting_data("user clear"));
+    assert(g_add_result_cleared && !g_counting_detail_state.live_denom_started);
+    assert(g_counting_detail_state.query_pending && g_counting_detail_state.query_expired);
+    assert(!counting_data_current()->total_pcs && counting_data_current()->denom[0].pcs==0);
+    assert(counting_data_current()->denom_number==3 && preserved_history==7);
+    const int cleared_values[]={10,50,100};
+    for(unsigned i=0;i<3;++i)
+        assert(counting_data_current()->denom[i].value==cleared_values[i] &&
+               !counting_data_current()->denom[i].pcs && !counting_data_current()->denom[i].amount);
+    seed();sim_reset_for_currency(counting_data_mutable());
+    assert(!counting_data_current()->denom_number && !counting_data_current()->denom[0].value);
+    assert(!counting_data_current()->last_total_pcs && preserved_history==7);
+    seed();boot_service_set_stage(BOOT_STAGE_DONE);assert(app_command_runtime_add_clear_allowed());
+    /* Captured boot: configuration OK, sensor 02, then remaining steps OK. */
+    boot_service_set_stage(BOOT_STAGE_HANDSHAKE);boot_service_start(100);
+    assert(boot_service_request_handshake(100));
+    uint8_t handshake[]={0xFD,0xDF,6,1,1,0xC3};
+    assert(boot_reply_dispatch(1,handshake,6).kind==BOOT_REPLY_HANDSHAKE_ACCEPTED);
+    const uint8_t order[]={4,1,2,3,5};
+    for(unsigned i=0;i<5;++i){
+        uint8_t next;assert(boot_service_next_self_test_protocol_step(&next)&&next==order[i]);
+        uint8_t reply[]={0xFD,0xDF,7,0x37,next,i==1?2:1,0};
+        assert(boot_reply_dispatch(0x37,reply,7).kind==BOOT_REPLY_SELF_TEST_RECORDED);
+    }
+    assert(boot_service_get_stage()==BOOT_STAGE_FAIL);
+    assert(app_command_runtime_prepare_add_reset());
+    assert(app_command_runtime_add_clear_allowed());
+    blockers=BIT(0);assert(!app_command_runtime_prepare_add_reset());
+    blockers=0;boot_service_set_stage(BOOT_STAGE_DONE);
     for(unsigned bit=0;bit<15;++bit){
-        blockers=BIT(bit);unsigned previous=history_checks;
+        if(bit==12)continue; /* Queue content is exercised with real frames below. */
+        blockers=BIT(bit);boot_service_set_stage(bit==11?BOOT_STAGE_SENSOR:BOOT_STAGE_DONE);unsigned previous=history_checks;
         assert(!app_command_runtime_prepare_add_reset()&&history_checks==previous);
     }
-    blockers=0;g_deferred_frame_blocked=true;
+    blockers=0;
+    /* Captured click feedback must not prevent ADD while the RX queue is busy. */
+    const uint8_t sound_on[]={0xFD,0xDF,6,0x4A,1,0x50};
+    const uint8_t sound_off[]={0xFD,0xDF,6,0x4A,2,3};
+    const uint8_t motor_ack[]={0xFD,0xDF,6,0x52,1,9};
+    for(unsigned tap=0;tap<6;++tap){
+        assert(protocol_frame_queue_push(sound_on,sizeof(sound_on)));
+        assert(protocol_frame_queue_push(motor_ack,sizeof(motor_ack)));
+        assert(protocol_frame_queue_push(sound_off,sizeof(sound_off)));
+        assert(protocol_frame_queue_has_pending());
+        assert(app_command_runtime_prepare_add_reset());
+        assert(app_command_runtime_add_clear_allowed());
+    }
+    const uint8_t start[]={0xFD,0xDF,7,0x0A,1,1,0x26};
+    assert(protocol_frame_queue_push(start,sizeof(start)));
+    assert(!app_command_runtime_prepare_add_reset());
+    protocol_frame_t queued;
+    while(protocol_frame_queue_pop(&queued)){}
+    assert(app_command_runtime_prepare_add_reset());
+    g_deferred_frame_blocked=true;
     assert(!app_command_runtime_prepare_add_reset());g_deferred_frame_blocked=false;
     history_ok=false;assert(!app_command_runtime_prepare_add_reset());
     assert(!app_command_runtime_commit_add_reset());
@@ -139,7 +204,10 @@ int main(void)
         assert(app_command_runtime_prepare_add_reset());
         assert(app_command_runtime_commit_add_reset());
         const counting_sim_t *data=counting_data_current();
-        assert(!data->total_pcs&&data->total_amount==0&&!data->denom_number);
+        assert(!data->total_pcs&&data->total_amount==0&&data->denom_number==3);
+        const int values[]={10,50,100};
+        for(unsigned i=0;i<3;++i)
+            assert(data->denom[i].value==values[i]&&!data->denom[i].pcs&&data->denom[i].amount==0);
         assert(!data->last_total_pcs&&data->last_total_amount==0&&!data->last_valid_pcs);
         assert(!data->last_issue_pcs&&!data->last_suspect_pcs&&!data->last_damaged_pcs);
         assert(!data->sn_str&&!data->sn_capacity&&!data->denom_mix[0]);
@@ -154,7 +222,7 @@ int main(void)
         assert(g_add_result_cleared&&!g_counting_session.history_record.valid);
         assert(reports==1&&multi_resets==1&&ui_resets==1&&preserved_history==7);
     }
-    puts("PASS actual ADD admission/commit/reset: 16 blocker gates, history refusal preserves data, complete totals/details/last_* baselines clear, old query drain retained without publication, single/MULTI scope, historical records retained");
+    puts("PASS actual ADD admission/commit/reset: queued touch ACKs allow ADD, queued START blocks then recovers, real conflicts and history refusal preserves data, complete totals/details/last_* baselines clear, old query drain retained without publication, single/MULTI scope, historical records retained");
 }
 '''
 
@@ -236,7 +304,11 @@ with tempfile.TemporaryDirectory(prefix='un260-add-reset-') as directory:
         os.environ.get('CC', 'cc'), '-std=c11', '-O1', '-g', '-Wall', '-Wextra',
         '-Werror', '-fsanitize=address,undefined', '-fno-sanitize-recover=all',
         '-no-pie', '-I' + str(ROOT), str(hook_source),
-        str(ROOT / 'un260/counting/counting_data_store.c'), '-o', str(hook_binary),
+        str(ROOT / 'un260/counting/counting_data_store.c'),
+        '-D_POSIX_C_SOURCE=200809L', '-pthread',
+        str(ROOT / 'un260/protocol/protocol_frame.c'),
+        str(ROOT / 'un260/protocol/protocol_frame_queue.c'),
+        str(ROOT / 'un260/boot/boot_service.c'), str(ROOT / 'un260/boot/boot_reply.c'), '-o', str(hook_binary),
     ], check=True)
     subprocess.run([str(hook_binary)], check=True, timeout=10)
     reply_source = work / 'reply.c'
