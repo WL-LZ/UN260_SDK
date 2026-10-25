@@ -37,37 +37,6 @@ static lv_obj_t *field_button(lv_obj_t *p,int x,int y,int w,const char *s,int id
     lv_obj_t *l=lv_obj_get_child(v,0);lv_obj_set_width(l,w-52);lv_label_set_long_mode(l,LV_LABEL_LONG_DOT);lv_obj_align(l,LV_ALIGN_LEFT_MID,13,0);
     icon(v,MICON("edit",18),w-31,11,MUTED);return v;
 }
-static void hero_amount(lv_obj_t *p,int x,int y,int w,uint64_t amount,bool inverse)
-{
-    char s[32];money_text(s,amount);char *dot=strchr(s,'.');if(dot)*dot=0;
-    const lv_font_t *f=strlen(s)>10?&lv_font_instrument_sans_semibold_37:inverse?&lv_font_instrument_sans_semibold_52:&lv_font_instrument_sans_semibold_50;
-    lv_obj_t *n=label(p,x,y,w,s,f,inverse?0xFFFFFF:INK);lv_obj_set_width(n,LV_SIZE_CONTENT);lv_obj_set_style_text_letter_space(n,-2,0);lv_obj_update_layout(n);
-    const lv_font_t *fraction=inverse?&lv_font_instrument_sans_semibold_28:&lv_font_instrument_sans_medium_16;
-    label(p,x+lv_obj_get_width(n)+1,y+f->line_height-f->base_line-fraction->line_height+fraction->base_line,62,".00",fraction,inverse?0xFFFFFF:MUTED);
-}
-static void avatar_size(lv_obj_t *p,int x,int y,int size,const workspace_avatar_t *a,const char *name,lv_img_dsc_t *d)
-{
-    lv_obj_t *frame=box(p,x,y,size,size,INK,size==72?20:15);lv_obj_set_style_clip_corner(frame,true,0);
-    if(a&&a->present){
-        *d=(lv_img_dsc_t){.header={.cf=LV_IMG_CF_TRUE_COLOR,.w=64,.h=64},.data_size=WORKSPACE_AVATAR_BYTES,.data=a->pixels};
-        lv_obj_t *im=lv_img_create(frame);lv_img_set_src(im,d);lv_img_set_pivot(im,0,0);lv_img_set_zoom(im,size*256/64);
-    }else{
-        char initial[5]="U";
-        if(name&&*name){unsigned n=_lv_txt_encoded_size(name);if(n&&n<sizeof(initial)){memcpy(initial,name,n);initial[n]=0;}}
-        lv_obj_t *l=label(frame,0,0,size,initial,size==72?&lv_font_instrument_sans_medium_32:&lv_font_instrument_sans_medium_24,0xFFFFFF);lv_obj_center(l);lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_CENTER,0);
-    }
-}
-static void flag_icon(lv_obj_t *p,int x,int y,const char *code)
-{
-    /* Only display an installed flag; unsupported currencies retain their code. */
-    const char *known[]={"CNY","USD","EUR"};
-    for(unsigned i=0;i<3;i++)if(!strcmp(code,known[i])){
-        char path[128];snprintf(path,sizeof(path),LVGL_DIR "menu_icons/flag_%s.png",code);
-        lv_obj_t *im=lv_img_create(p);lv_img_set_src(im,path);lv_obj_set_pos(im,x,y);
-        lv_img_header_t info;if(lv_img_decoder_get_info(path,&info)==LV_RES_OK&&info.w){lv_img_set_pivot(im,0,0);lv_img_set_zoom(im,30*256/info.w);}
-        return;
-    }
-}
 static void step_card(lv_obj_t *p,int x,int y,int w,int h,const char *n,const char *title,const char *detail,const char *src)
 {
     lv_obj_t *v=box(p,x,y,w,h,PANEL,16);
@@ -75,56 +44,6 @@ static void step_card(lv_obj_t *p,int x,int y,int w,int h,const char *n,const ch
     lv_obj_t *t=label(v,16,49,w-32,title,&lv_font_instrument_sans_semibold_19,INK);
     lv_obj_update_layout(t);int dy=49+lv_obj_get_height(t)+13;
     lv_obj_t *d=small(v,16,dy,w-32,detail);lv_obj_set_style_text_line_space(d,5,0);
-}
-static void overview(void)
-{
-    lv_obj_t *b=menu.body;char line[120],code[4];
-    lv_obj_t *count=box(b,0,0,482,296,PANEL,20);
-    icon(count,MICON("note",22),20,29,ORANGE);
-    label(count,52,29,274,ui_tr("Ready to count"),&lv_font_instrument_sans_semibold_20,INK);
-    link_button(count,365,20,97,ui_tr("Options"),303);
-    lv_obj_t *batch=white_button(count,20,76,160,132,"",301);
-    small(batch,16,14,126,ui_tr("Batch"));
-    snprintf(line,sizeof(line),machine_state_batch_enabled()?"%u":ui_tr("OFF"),machine_state_batch_num());
-    label(batch,16,38,133,line,&lv_font_instrument_sans_semibold_55,INK);
-    small(batch,16,105,130,machine_state_batch_enabled()?ui_tr("notes per batch"):ui_tr("No batch limit"));icon(batch,MICON("next",18),130,99,ORANGE);
-    currency_state_get_selected_code(code);flag_icon(count,202,77,code);
-    label(count,241,77,207,currency_state_display_code(code),&lv_font_instrument_sans_semibold_28,INK);
-    text(count,202,115,260,machine_state_mode()==MODE_CNT?ui_tr("Piece counting"):machine_state_mode()==MODE_SDC?ui_tr("Single denomination"):ui_tr("Mixed denominations"));
-    snprintf(line,sizeof(line),ui_tr("%s start · ADD %s"),machine_state_work_mode()?ui_tr("Manual"):ui_tr("Auto"),machine_state_add_enabled()?ui_tr("on"):ui_tr("off"));small(count,202,145,260,line);
-    link_button(count,202,169,181,ui_tr("Counting profiles"),302);
-    text(count,20,246,65,ui_tr("Speed"));const char *speeds[]={ui_tr("Low"),ui_tr("Standard"),ui_tr("High")};segments(count,88,230,374,46,speeds,3,machine_state_speed(),400);
-    lv_obj_t *today=box(b,498,0,452,296,BLUE,20);
-    label(today,20,20,376,ui_tr("Today's confirmed total"),&lv_font_instrument_sans_medium_19,0xFFFFFF);icon(today,MICON("history",22),410,20,0xFFFFFF);
-    uint32_t day=business_day();char date[24];short_day(date,sizeof(date),day);snprintf(line,sizeof(line),ui_tr("%s · currencies kept separate"),date);
-    label(today,20,48,412,line,&lv_font_instrument_sans_menumedium_14,0xD9E7FB);
-    cashbook_money_t totals[CASHBOOK_CURRENCIES];unsigned n=0,confirmed=0,pending=0;cashbook_totals(cashbook_store_get(),day,totals,&n,&confirmed,&pending);
-    const cashbook_money_t *primary=NULL,*secondary=NULL;
-    for(unsigned i=0;i<n;i++)if(!strcmp(totals[i].code,code))primary=&totals[i];
-    if(!primary&&n)primary=&totals[0];
-    for(unsigned i=0;i<n;i++)if(&totals[i]!=primary){secondary=&totals[i];break;}
-    const char *primary_code=primary?primary->code:code;
-    flag_icon(today,20,84,primary_code);label(today,58,84,190,primary_code,&lv_font_instrument_sans_medium_16,0xFFFFFF);
-    icon(today,MICON("check",16),322,85,0xFFFFFF);label(today,344,84,88,ui_tr("Confirmed"),&lv_font_instrument_sans_menumedium_14,0xFFFFFF);
-    hero_amount(today,20,111,412,primary?primary->amount:0,true);
-    lv_obj_t *rule=box(today,20,184,412,1,0xFFFFFF,0);lv_obj_set_style_bg_opa(rule,LV_OPA_20,0);
-    label(today,20,198,120,secondary?secondary->code:"",&lv_font_instrument_sans_medium_16,0xFFFFFF);
-    if(secondary){money_text(line,secondary->amount);lv_obj_t *v=label(today,154,195,278,line,&lv_font_instrument_sans_semibold_20,0xFFFFFF);lv_obj_set_style_text_align(v,LV_TEXT_ALIGN_RIGHT,0);}
-    snprintf(line,sizeof(line),pending?ui_trn("Review %u pending counts", (pending)):ui_tr("View daily totals"),pending);
-    lv_obj_t *review=white_button(today,20,232,412,44,line,306);lv_obj_set_style_text_color(review,lv_color_hex(BLUE),0);
-    lv_obj_align(lv_obj_get_child(review,0),LV_ALIGN_LEFT_MID,17,0);icon(review,MICON("next",22),373,11,BLUE);
-    lv_obj_t *person=box(b,966,0,266,82,PANEL,20);const workspace_user_t *u=user();
-    avatar_size(person,16,17,48,u?&u->avatar:NULL,u?u->name:NULL,&menu.avatar_desc);
-    lv_obj_t *name=label(person,76,21,174,u?u->name:ui_tr("Local operator"),&lv_font_instrument_sans_semibold_18,INK);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
-    label(person,76,46,174,ui_tr("Current operator"),&lv_font_instrument_sans_medium_13,MUTED);
-    const char *titles[]={ui_tr("Calculator"),ui_tr("Cash journal")},*icons[]={MICON("layers",19),MICON("history",19)};
-    const counting_sim_t *result=counting_data_current();snprintf(line,sizeof(line),ui_trn("%u notes to check", (result?result->err_expected:0)),result?result->err_expected:0);
-    for(unsigned i=0;i<2;i++){
-        lv_obj_t *v=button(b,966,94+i*107,266,95,"",i?1901:1900,false);palette(v,PANEL);lv_obj_set_style_radius(v,18,0);
-        icon(v,icons[i],17,35,i?ORANGE:BLUE);label(v,55,26,179,titles[i],&lv_font_instrument_sans_semibold_18,INK);
-        label(v,55,53,184,ui_tr(i?UI_N_("Cash receipts and payments"):UI_N_("Ordinary and cash")),&lv_font_instrument_sans_medium_13,MUTED);
-        icon(v,MICON("next",18),233,39,MUTED);
-    }
 }
 static void batch_view(lv_obj_t *b)
 {
@@ -268,7 +187,7 @@ static void interaction_view(lv_obj_t *b)
     uint16_t mask=ui_state_quick_visible_get();
     unsigned shown=0;
     for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
-        if(order[i]==QUICK_CASH_JOURNAL)continue;
+        if(order[i]==QUICK_RESERVED)continue;
         bool selected=(mask&(1U<<order[i]))!=0;
         lv_obj_t *item=button(shortcuts,(shown%2)*(item_width+8),(shown/2)*38,item_width,34,
             lv_quick_controls_title(order[i]),A_QUICK_ORDER_BASE+order[i],false);
@@ -335,7 +254,7 @@ static void operators_summary_view(lv_obj_t *b)
     lv_obj_t *left=box(b,0,48,360,248,PANEL,20),*right=box(b,380,48,648,248,PANEL,20);
     small(left,20,18,320,ui_tr("Current operator"));text(left,20,51,320,active&&active->id?active->name:ui_tr("Device workspace"));
     small(left,20,93,320,ui_tr(m&&m->operators_enabled?UI_N_("Operators enabled"):UI_N_("Operators disabled")));
-    small(left,20,126,320,ui_tr("Names label records; balances are shared."));
+    small(left,20,126,320,ui_tr("Historical names and stable IDs are retained."));
     small(left,20,151,320,ui_tr("Manage people and permissions in full view."));
     button(left,20,192,320,40,ui_tr("Manage operators"),1902,true);
     if(!m)return;

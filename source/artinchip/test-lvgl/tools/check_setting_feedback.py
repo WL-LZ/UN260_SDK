@@ -11,7 +11,6 @@ reviewed={
  'app_standby_runtime_request':'navigation + blocker',
  'page_03_menu_show_batch_saved_tip':'legacy notification adapter',
  'print_config_request_field':'print_config result/timeout + app_setting_reply_detail',
- 'record_request':'cashbook async owner',
  'app_add_runtime_request':'app_add_runtime: settings.add confirmation then count.add-reset outcome/retry',
  'setting_service_request_batch_switch':'settings.batch',
  'setting_service_request_beep':'settings.sound',
@@ -45,5 +44,5 @@ assert 'app_add_runtime_setting_result' in reply, 'ADD must hand matched confirm
 assert 'app_add_runtime_setting_timeout' in runtime, 'ADD timeout must settle its transaction owner'
 quick=(root/'un260/lv_components/lv_quick_controls.h').read_text().split('typedef enum {',1)[1].split('}',1)[0]
 quick_ids=set(re.findall(r'QUICK_[A-Z_]+',quick))
-assert quick_ids=={'QUICK_LAYOUT','QUICK_GESTURES','QUICK_PURE','QUICK_POPUP','QUICK_TOUCH','QUICK_EXPORT','QUICK_QR','QUICK_STANDBY','QUICK_TOP_POPUP','QUICK_CALCULATOR','QUICK_CASH_JOURNAL','QUICK_HISTORY','QUICK_OPERATORS'}, 'Classify new shortcut as setting or action'
+assert quick_ids=={'QUICK_LAYOUT','QUICK_GESTURES','QUICK_PURE','QUICK_POPUP','QUICK_TOUCH','QUICK_EXPORT','QUICK_QR','QUICK_STANDBY','QUICK_TOP_POPUP','QUICK_CALCULATOR','QUICK_RESERVED','QUICK_HISTORY','QUICK_OPERATORS'}, 'Classify new shortcut as setting or action'
 print(f'PASS setting feedback contract: {len(reviewed)} Menu mutation boundaries, {len(ids)} local policies, {sum(key.startswith("settings.") for key in reviewed.values())} protocol settings, {len(quick_ids)} shortcut classifications (four navigation actions)')

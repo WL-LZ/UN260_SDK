@@ -8,9 +8,7 @@
 #include "work_mode_service.h"
 #include "app_command_runtime.h"
 #include "un260/storage/workspace_store.h"
-#include "un260/storage/cash_journal_store.h"
 #include "un260/counting/counting_history_service.h"
-#include "un260/counting/counting_cashbook.h"
 #include "un260/counting/counting_data_store.h"
 #include "un260/counting/counting_multi.h"
 #include "un260/machine_state/machine_state.h"
@@ -56,11 +54,9 @@ static const char *machine_blocker(void)
 }
 const char *workspace_service_switch_blocker(void)
 {
-    if(cash_journal_store_status()==CASH_STORE_SAVING||cash_journal_store_status()==CASH_STORE_FAILED)return UI_N_("Finish saving the cash entry before changing operator.");
     if(!workspace_store_ready())return UI_N_("The workspace is not available yet.");
     if(workspace_store_busy())return UI_N_("A workspace save or photo import is in progress.");
     if(apply.active||batch_save.pending)return UI_N_("Wait for the workspace change to finish.");
-    if(counting_cashbook_verify_group())return UI_N_("Finish or cancel the armed recount before switching workspaces.");
     if(app_add_runtime_busy())return UI_N_("Finish the current operation before changing settings.");
     if(app_command_runtime_result_pending())return UI_N_("Wait for the last counting result to finish.");
     if(counting_data_current()->multi_currency_result&&counting_multi_current()->total_pcs)

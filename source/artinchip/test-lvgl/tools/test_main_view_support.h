@@ -15,9 +15,7 @@ bool setting_service_request_beep(bool enabled){machine_state_confirm_buzzer(ena
 static unsigned callbacks[16], pushes, protocol_calls, persisted_tabs;
 static unsigned collection_opens;
 static uint8_t last_protocol_command, last_protocol_sub;
-static uint32_t host_cash_operator_filter;
 static unsigned host_history_open_all, host_history_invalidations;
-void ui_cash_journal_filter_operator(uint32_t id){host_cash_operator_filter=id;}
 void ui_page_19_history_open_all(void){++host_history_open_all;}
 void counting_history_current_invalidate(void){++host_history_invalidations;}
 static unsigned host_notice_posts;

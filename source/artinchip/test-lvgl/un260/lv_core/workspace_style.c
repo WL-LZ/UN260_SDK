@@ -1,4 +1,4 @@
-#include "cash_workspace_style.h"
+#include "workspace_style.h"
 lv_obj_t *cw_box(lv_obj_t *p,int x,int y,int w,int h,uint32_t color,int radius)
 {lv_obj_t *o=lv_obj_create(p);lv_obj_remove_style_all(o);lv_obj_set_pos(o,x,y);lv_obj_set_size(o,w,h);lv_obj_clear_flag(o,LV_OBJ_FLAG_SCROLLABLE|LV_OBJ_FLAG_CLICKABLE);lv_obj_set_style_bg_color(o,lv_color_hex(color),0);lv_obj_set_style_bg_opa(o,LV_OPA_COVER,0);lv_obj_set_style_radius(o,radius,0);return o;}
 lv_obj_t *cw_label(lv_obj_t *p,int x,int y,int w,const char *s,const lv_font_t *font,uint32_t color)

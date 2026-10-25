@@ -1,6 +1,6 @@
-#ifndef CASH_WORKSPACE_STYLE_H
-#define CASH_WORKSPACE_STYLE_H
-/* Page-private visual contract: design_cash_workspace_20261006, 1280 x 400. */
+#ifndef UN260_WORKSPACE_STYLE_H
+#define UN260_WORKSPACE_STYLE_H
+/* Page-private visual contract: design_workspace_access_20261006, 1280 x 400. */
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "settings_detail_ui.h"
 #include "un260/lv_components/lv_nav_button.h"

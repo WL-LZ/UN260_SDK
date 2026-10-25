@@ -14,9 +14,6 @@
 #include "un260/app_service/work_mode_service.h"
 #include "un260/app_service/workspace_service.h"
 #include "un260/storage/workspace_store.h"
-#include "un260/storage/cashbook_store.h"
-#include "un260/storage/cash_journal_store.h"
-#include "un260/storage/cash_journal_export.h"
 #include "un260/diagnostic/diagnostic.h"
 #include "un260/lv_components/lv_components.h"
 #include "un260/lv_components/lv_debug_overlay.h"
@@ -49,7 +46,7 @@ static uint32_t g_language_generation;
  * registered. Storage accepts one job per service, so its busy -> idle edge
  * belongs to the accepted request until this UI-thread observer consumes it. */
 static struct {
-    bool workspace, records, profile;
+    bool workspace, profile;
     app_ui_notice_operation_t workspace_operation;
 } g_operation_notice;
 
@@ -60,7 +57,6 @@ static const char *operation_key(app_ui_notice_operation_t operation)
     case APP_UI_NOTICE_OPERATOR_SWITCH: return "workspace.operator";
     case APP_UI_NOTICE_BATCH_SAVE: return "workspace.batch";
     case APP_UI_NOTICE_BATCH_APPLY: return "settings.batch";
-    case APP_UI_NOTICE_RECORD_STORE: return "records.store";
     case APP_UI_NOTICE_PROFILE_APPLY: return "workspace.apply";
     default: return NULL;
     }
@@ -72,7 +68,6 @@ static const char *operation_title(app_ui_notice_operation_t operation)
     case APP_UI_NOTICE_BATCH_SAVE: return UI_N_("Batch cycle");
     case APP_UI_NOTICE_BATCH_APPLY: return UI_N_("Batch");
     case APP_UI_NOTICE_OPERATOR_SWITCH: return UI_N_("Current operator");
-    case APP_UI_NOTICE_RECORD_STORE: return UI_N_("Records");
     case APP_UI_NOTICE_PROFILE_APPLY: return UI_N_("Counting profile");
     default: return UI_N_("Workspace");
     }
@@ -90,10 +85,6 @@ void app_ui_runtime_notice_started(app_ui_notice_operation_t operation, const ch
         if (!workspace_store_busy()) return;
         g_operation_notice.workspace = true;
         g_operation_notice.workspace_operation = operation;
-        break;
-    case APP_UI_NOTICE_RECORD_STORE:
-        if (!cashbook_store_busy()) return;
-        g_operation_notice.records = true;
         break;
     case APP_UI_NOTICE_PROFILE_APPLY:
         if (!workspace_service_applying()) return;
@@ -129,12 +120,6 @@ static void app_ui_runtime_poll_operation_notices(void)
             success && operation == APP_UI_NOTICE_BATCH_SAVE ?
                 workspace_service_batch_save_message_info() : workspace_store_message_info());
     }
-    if (g_operation_notice.records && !cashbook_store_busy()) {
-        g_operation_notice.records = false;
-        if (!app_setting_notice_page_allowed()) ui_notice_clear("records.store");
-        else ui_notice_post_message(cashbook_store_last_success() ? UI_NOTICE_SUCCESS : UI_NOTICE_ERROR,
-            "records.store", UI_N_("Records"), cashbook_store_message_info());
-    }
     if (g_operation_notice.profile && !workspace_service_applying()) {
         workspace_apply_result_t result = workspace_service_apply_result();
         ui_notice_kind_t kind = result == WORKSPACE_APPLY_SUCCEEDED ? UI_NOTICE_SUCCESS :
@@ -157,8 +142,6 @@ void app_ui_runtime_init(void)
     g_language_generation = ui_lang_generation();
     work_mode_service_init();
     workspace_service_init();
-    cashbook_store_init();
-    cash_journal_store_init();
     lv_debug_overlay_init();
     lv_debug_overlay_set_enabled(user_cfg_performance_monitor_enabled());
 }
@@ -169,7 +152,7 @@ static void app_ui_runtime_poll_upgrade(uint32_t now_ms)
     ui_page_t current_page = ui_manager_get_current_page();
     if (ui_factory_reset_blocks_navigation() || touch_calibration_busy()) return;
     /* Do not offer an upgrade while a photo/config transaction owns storage. */
-    if (standby_store_busy() || workspace_store_busy() || cashbook_store_busy()) return;
+    if (standby_store_busy() || workspace_store_busy()) return;
 
     if (current_page == UI_PAGE_BOOT_ANIM ||
         current_page == UI_PAGE_BOOT ||
@@ -208,10 +191,6 @@ void app_ui_runtime_poll(uint32_t now_ms)
     app_setting_runtime_poll(now_ms);
     page_collection_poll();
     page_protocol_log_poll();
-    cash_store_status_t cash_before=cash_journal_store_status();
-    if(cash_journal_store_poll()&&cash_before!=CASH_STORE_LOADING){cash_store_status_t cash_after=cash_journal_store_status();if(cash_after==CASH_STORE_READY)ui_notice_post_text(UI_NOTICE_SUCCESS,"cash.save",UI_N_("Cash journal"),UI_N_("Cash entry saved."));else if(cash_after==CASH_STORE_FAILED||cash_after==CASH_STORE_CORRUPT)ui_notice_post_text(UI_NOTICE_ERROR,"cash.save",UI_N_("Cash journal"),UI_N_("Cash entry not confirmed. Retry the same save."));}
-    cash_journal_export_poll();
-    if(cashbook_store_poll()) ui_manager_publish_data_changed(UI_DATA_TOPIC_MACHINE_SETTINGS);
     if (workspace_service_poll(now_ms))
         ui_manager_publish_data_changed(UI_DATA_TOPIC_MACHINE_SETTINGS);
     app_ui_runtime_poll_operation_notices();

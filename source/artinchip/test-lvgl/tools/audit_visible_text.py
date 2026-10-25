@@ -86,7 +86,7 @@ def analyze(source, name):
                     localized.append({'file': name, 'line': source.count('\n', 0, tokens[k][1])+1,
                                       'marker': function, 'text': value})
     sinks=dict(SINKS)
-    if name.endswith('page_cash_tools.c'):sinks.update({'button':{6},'hint':{4},'overlay':{1}})
+    if name.endswith('page_calculator.c'):sinks.update({'button':{6},'hint':{4},'overlay':{1}})
     if name.endswith('page_operators.c'):sinks.update({'button':{5},'hint':{4},'overlay':{0}})
     findings = []
     seen = set()

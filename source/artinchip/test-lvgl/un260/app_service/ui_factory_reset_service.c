@@ -12,7 +12,6 @@
 #include "un260/storage/storage_worker.h"
 #include "un260/storage/work_mode_store.h"
 #include "un260/storage/workspace_store.h"
-#include "un260/storage/cashbook_store.h"
 #include "un260/storage/standby_store.h"
 #include "un260/lv_core/page_30_set_factory.h"
 #include "un260/lv_system/ui_i18n.h"
@@ -25,7 +24,7 @@ ui_factory_reset_phase_t ui_factory_reset_get_phase(void) { return phase; }
 bool ui_factory_reset_blocks_navigation(void) { return phase != UI_FACTORY_RESET_IDLE; }
 static bool independent_storage_busy(void)
 {
-    return workspace_store_busy() || cashbook_store_busy() || standby_store_busy() ||
+    return workspace_store_busy() || standby_store_busy() ||
            touch_calibration_storage_busy();
 }
 

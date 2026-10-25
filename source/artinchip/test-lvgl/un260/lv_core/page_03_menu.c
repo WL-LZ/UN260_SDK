@@ -38,11 +38,9 @@
 #include "un260/gesture/gesture_service.h"
 #include "un260/gesture/gesture_guide.h"
 #include "un260/device_info/device_info.h"
-#include "un260/storage/cashbook_store.h"
 #include "un260/lv_system/machine_time.h"
 #include "un260/counting/counting_data_store.h"
 #include "un260/counting/counting_multi.h"
-#include "un260/counting/counting_cashbook.h"
 #include "un260/counting/counting_history_service.h"
 #include "un260/counting/counting_reject_reason.h"
 #include "un260/print/print_config.h"
@@ -64,25 +62,25 @@ enum {A_BACK=1,A_QUICK,A_SETTINGS,A_HISTORY,A_PRINT_SETUP,A_PRINT,A_QR,A_STANDBY
       A_QUICK_TOGGLE,A_NEW_PROFILE,A_APPLY_PROFILE,
       A_DELETE_PROFILE,A_SAVE_BATCH,A_ADD_BATCH,A_EDIT_BATCH,A_DELETE_BATCH,A_APPLY_BATCH,
       A_NEW_USER,A_EDIT_NAME,A_USB_SCAN,A_USER_SAVE,A_USER_CANCEL,A_USER_SWITCH,A_USB_CLOSE,A_QUICK_CLOSE,
-      A_AUTO_QR,A_CAPACITY,A_LANGUAGE,A_TIMEOUT,A_BUSINESS_DAY,A_CLOSE_DAY,A_CONFIRM_RUN,A_MERGE_RUN,A_SPLIT_RUN,A_EXCLUDE_RUN,A_DIAGNOSTICS,A_ARCHIVES,A_ARCHIVE_PERIOD,A_EXPORT_RECORDS,A_CURRENT_RECORDS,A_CANCEL_VERIFY,A_EDIT_USER,A_EMPLOYEE_ID,A_TEAM,A_REMOVE_PHOTO,A_DELETE_USER,A_INTERACTION_CONTROLS,A_SHORTCUT_VISIBILITY,A_BATCH_BEHAVIOR,A_TOUCH_SOUND,A_QUICK_ORDER_BASE=900};
-static const char *const tabs[]={UI_N_("Overview"),UI_N_("Count"),UI_N_("Records"),UI_N_("Output"),UI_N_("Preferences"),UI_N_("Help")};
+      A_AUTO_QR,A_CAPACITY,A_LANGUAGE,A_TIMEOUT,A_DIAGNOSTICS,A_EDIT_USER,A_EMPLOYEE_ID,A_TEAM,A_REMOVE_PHOTO,A_DELETE_USER,A_INTERACTION_CONTROLS,A_SHORTCUT_VISIBILITY,A_BATCH_BEHAVIOR,A_TOUCH_SOUND,A_QUICK_ORDER_BASE=900};
+static const char *const tabs[]={NULL,UI_N_("Count"),NULL,UI_N_("Output"),UI_N_("Preferences"),UI_N_("Help")};
 static const char *const tab_icons[]={MICON("overview",19),MICON("layers",19),MICON("history",19),MICON("output",19),MICON("settings",19),MICON("help",19)};
 static const uint32_t accents[]={BLUE,ORANGE,TEAL,BLUE,PURPLE,TEAL};
-/* Keep section IDs stable while Overview and Records are temporarily hidden. */
+/* Retain IDs of the remaining Menu sections. */
 static const uint8_t visible_tabs[]={1,3,4,5};
 static const char *const sublabels[][5]={{NULL},{UI_N_("Batch presets"),UI_N_("Profiles"),UI_N_("Options")},
-    {UI_N_("Daily totals"),UI_N_("History"),UI_N_("Day closes")},{UI_N_("Print"),UI_N_("QR export")},
+    {NULL},{UI_N_("Print"),UI_N_("QR export")},
     {UI_N_("Operators"),UI_N_("Interaction"),UI_N_("Display & sound")},{UI_N_("Reject guide"),UI_N_("Care"),UI_N_("Device")}};
-static const unsigned subcounts[]={0,3,3,2,3,3};
+static const unsigned subcounts[]={0,3,0,2,3,3};
 static struct {
-    lv_obj_t *root,*body,*quick,*quick_context,*photo_sheet,*user_sheet,*record_sheet,*nav[6],*task_scroll;
+    lv_obj_t *root,*body,*quick,*quick_context,*photo_sheet,*user_sheet,*nav[6],*task_scroll;
     lv_timer_t *timer;
     unsigned tab,sub,selected_batch,selected_profile,selected_user,batch_page;
-    bool record_pending,verify_pick,reject_all;
-    bool dirty,batch_dirty,user_edit,scan_wait,photo_wait,photo_ready,show_archives;
+    bool reject_all;
+    bool dirty,batch_dirty,user_edit,scan_wait,photo_wait,photo_ready;
     unsigned saving;
     uint8_t batch_apply_target;
-    uint32_t selected_group,selected_run,selected_close,record_day,qr_generation;
+    uint32_t qr_generation;
     unsigned reject_code;
     lv_quick_controls_t quick_controls,interaction_controls;
     uint8_t interaction_page;
@@ -98,10 +96,8 @@ static struct {
 } menu;
 static void action(lv_event_t *event);
 static void render(void);
-static void records_detail(lv_obj_t *);
 static void quick_tile(lv_event_t *event);
 static bool menu_quick_pointer(lv_indev_t *,lv_event_code_t,const lv_point_t *,uint8_t);
-static uint32_t business_day(void);
 static void photo_sheet(void);
 static void clear_notice(void)
 {ui_notice_dismiss("menu.operation");}
@@ -241,16 +237,16 @@ static void tab_event(lv_event_t *e)
 {
     if(menu.saving||menu.batch_dirty||menu.user_edit){explain(UI_N_("Save or cancel your changes before switching sections."));return;}
     if(workspace_service_applying()){notify(UI_NOTICE_WARNING,UI_N_("Wait for the profile to finish applying."));return;}
-    clear_notice();menu.show_archives=false;menu.selected_close=0;
-    menu.tab=(uintptr_t)lv_event_get_user_data(e);menu.sub=0;menu.selected_group=0;menu.record_pending=menu.verify_pick=false;menu.dirty=true;
+    clear_notice();
+    menu.tab=(uintptr_t)lv_event_get_user_data(e);menu.sub=0;menu.dirty=true;
 }
 static void sub_event(lv_event_t *e)
 {
     if(workspace_service_applying()){notify(UI_NOTICE_WARNING,UI_N_("Wait for the profile to finish applying."));return;}
     if(menu.saving||menu.batch_dirty||menu.user_edit){explain(UI_N_("Save or cancel your changes first."));return;}
-    clear_notice();menu.show_archives=false;
+    clear_notice();
     unsigned sub=(uintptr_t)lv_event_get_user_data(e);
-    menu.sub=sub;menu.selected_group=menu.selected_close=0;menu.record_pending=menu.verify_pick=false;menu.dirty=true;
+    menu.sub=sub;menu.dirty=true;
 }
 static void pick_event(lv_event_t *e)
 {
@@ -307,7 +303,6 @@ static workspace_profile_t current_profile(void)
     return (workspace_profile_t){.mode=machine_state_mode()==MODE_SDC?2:machine_state_mode()==MODE_CNT?3:1,.speed=machine_state_speed(),.work=machine_state_work_mode(),.add=machine_state_add_enabled(),.sort=machine_state_fo_mode(),.beep=machine_state_buzzer_enabled(),.batch_enabled=machine_state_batch_enabled(),.batch=machine_state_batch_num()};
 }
 #include "menu_studio_views.inc"
-#include "menu_records.inc"
 #include "menu_output_help.inc"
 static const char *const side_icons[][5]={
     {NULL},{"layers","profiles","options"},
@@ -322,7 +317,6 @@ static void render(void)
     if(menu.task_scroll)menu.scroll_y[menu.rendered_tab][menu.rendered_sub]=lv_obj_get_scroll_y(menu.task_scroll);
     menu.task_scroll=NULL;
     if(menu.user_sheet){lv_obj_del(menu.user_sheet);menu.user_sheet=NULL;}
-    if(menu.record_sheet){lv_obj_del(menu.record_sheet);menu.record_sheet=NULL;}
     if(menu.interaction_created){
         menu.interaction_page=lv_quick_controls_page(&menu.interaction_controls);
         lv_quick_controls_reset(&menu.interaction_controls);
@@ -330,10 +324,10 @@ static void render(void)
     menu.interaction_created=false;
     gesture_service_clear_pointer_policy(UI_PAGE_MENU);
     lv_obj_clean(menu.body);memset(&menu.interaction_controls,0,sizeof(menu.interaction_controls));lv_obj_t *b=menu.body;
-    if(!menu.tab)overview();else {
+    {
         lv_obj_t *side=box(b,0,0,180,296,0xFFFFFF,0);
         for(unsigned i=0;i<subcounts[menu.tab];i++) {
-            unsigned sub=menu.tab==2?i*2:i;
+            unsigned sub=i;
             bool selected=menu.sub==sub;
             lv_obj_t *v=lv_settings_button(side,0,2+48*i,180,44,"",false,sub_event,(void *)(uintptr_t)sub);
             lv_damped_button_set_exact_palette(v,lv_color_hex(selected?HEADER_SURFACE:0xFFFFFF),lv_color_hex(0xDCE4E8));
@@ -345,7 +339,6 @@ static void render(void)
         }
         lv_obj_t *content=box(b,204,0,1028,296,0xFFFFFF,0);
         if(menu.tab==1){if(!menu.sub)batch_view(content);else if(menu.sub==1)profiles_view(content);else options_view(content);}
-        if(menu.tab==2)records_view(content);
         if(menu.tab==3)output_view(content);
         if(menu.tab==4){if(!menu.sub){operators_summary_view(content);}else if(menu.sub==1)interaction_view(content);else display_view(content);}
         if(menu.tab==5)help_view(content);
@@ -559,7 +552,28 @@ static void open_quick(void)
     refresh_quick();
 }
 
- #include "menu_record_actions.inc"
+static void mode_confirm(void *context)
+{
+    /* Re-selecting the confirmed mode must not schedule a destructive result clear. */
+    if(!count_mode_service_request((uintptr_t)context))notify(UI_NOTICE_WARNING,UI_N_("Mode not sent. Finish counting and try again."));
+    else clear_notice();
+}
+static void capacity_done(const char *value,void *unused)
+{
+    (void)unused;char *end;long v=strtol(value,&end,10);
+    if(!*value||*end||v<REJECT_POCKET_MIN_CAPACITY||v>REJECT_POCKET_MAX_CAPACITY){explain(UI_N_("Enter a capacity from 30 to 100 notes."));return;}
+    if(app_add_runtime_busy()||app_command_runtime_count_start_busy()||!setting_service_request_reject_pocket_max(v,machine_state_reject_pocket_max()))notify(UI_NOTICE_WARNING,UI_N_("Capacity not sent. Finish the current operation and retry."));
+    else clear_notice();
+}
+static void timeout_done(const char *value,void *unused)
+{
+    (void)unused;char *end;long v=strtol(value,&end,10);
+    if(!*value||*end||v<0||v>60){explain(UI_N_("Enter 0 to disable automatic standby, or 1-60 minutes."));return;}
+    standby_config_t config=*standby_config();config.minutes=v;
+    if(!standby_store_save(&config))explain(UI_N_("Standby settings could not be saved. Try again shortly."));
+    else ui_notice_post_text(UI_NOTICE_PROGRESS,"settings.standby",UI_N_("Standby settings"),UI_N_("Saving..."));
+}
+
 static void action(lv_event_t *event)
 {
     unsigned id=(uintptr_t)lv_event_get_user_data(event);const workspace_user_t *u=user();
@@ -594,7 +608,6 @@ static void action(lv_event_t *event)
     if(id==A_USB_CLOSE){if(menu.photo_sheet)lv_obj_del(menu.photo_sheet);menu.photo_sheet=NULL;menu.scan_wait=menu.photo_wait=menu.photo_ready=false;return;}
     if(id==1902){ui_manager_push_page(UI_PAGE_OPERATORS);return;}
     if(id==1900){ui_manager_push_page(UI_PAGE_CALCULATOR);return;}
-    if(id==1901){ui_manager_push_page(UI_PAGE_CASH_JOURNAL);return;}
     if(id==A_HISTORY){ui_page_19_history_open_all();return;}if(id==A_PRINT_SETUP){ui_manager_push_page(UI_PAGE_PRINT_SETTING);return;}
     if(id==A_PRINT){if(app_command_runtime_count_start_busy()||print_config_pending()){explain(UI_N_("Finish counting and receipt settings before printing."));return;}page_01_print_btn_event_cb(event);return;}
     if(id==A_QR){char payload[3072];if(app_command_runtime_count_start_busy()||!ui_qr_data_build_summary(payload,sizeof(payload))||!lv_qr_popup_show(payload))explain(UI_N_("Finish counting and wait for the complete summary."));else menu.qr_generation=lv_qr_popup_generation();return;}
@@ -602,9 +615,9 @@ static void action(lv_event_t *event)
     if(id==A_STANDBY){const char*reason=app_standby_runtime_blocker();if(reason&&!app_standby_runtime_needs_fault_review())explain(reason);else (void)app_standby_runtime_request();return;}
     if(id==307||id==308){menu.tab=id==307?3:5;menu.sub=0;menu.dirty=true;return;}
     if(id==510||id==511){if(id==510&&menu.batch_page)menu.batch_page--;if(id==511&&(menu.batch_page+1)*5<menu.batch_count)menu.batch_page++;menu.dirty=true;return;}
-    if(id>=301&&id<=306){
-        menu.tab=id<=303?1:id==306?2:4;
-        menu.sub=id==302?1:id==303?2:id==304?1:0;menu.selected_group=0;menu.dirty=true;return;
+    if(id>=301&&id<=305){
+        menu.tab=id<=303?1:4;
+        menu.sub=id==302?1:id==303?2:id==304?1:0;menu.dirty=true;return;
     }
     if(id==A_TOUCH_SOUND){app_local_setting_apply(APP_LOCAL_TOUCH_SOUND,!user_cfg_touch_sound_enabled(),0);menu.dirty=true;return;}
     if(id==813)id=440+!machine_state_buzzer_enabled();
@@ -618,8 +631,7 @@ static void action(lv_event_t *event)
             case 4:ok=setting_service_request_beep(v);break;
         }
         if(!ok)notify(UI_NOTICE_WARNING,UI_N_("Setting not sent. Finish the current operation and try again."));else clear_notice();return;}
-    if(id==A_CANCEL_VERIFY){counting_cashbook_cancel_verify();menu.dirty=true;notify(UI_NOTICE_INFO,UI_N_("Verification cancelled. Existing results are unchanged."));return;}
-    if(record_action(id)||output_action(id))return;
+    if(output_action(id))return;
     if(id==A_DIAGNOSTICS){settings_detail_dialog_show(ui_tr("Export support report?"),ui_tr("Insert a USB drive. The report contains versions, confirmed settings and current reject codes only. It excludes serials, note images, amounts, names, photos and passwords."),ui_tr("Export"),ui_tr("Cancel"),support_export,NULL,NULL);return;}
     if(id>=450&&id<=452){static const uint8_t modes[]={MODE_MDC,MODE_SDC,MODE_CNT};mode_confirm((void *)(uintptr_t)modes[id-450]);return;}
     if(id==A_CAPACITY){char value[8];snprintf(value,sizeof(value),"%u",machine_state_reject_pocket_max());settings_detail_keyboard_show(ui_tr("Reject pocket / 30-100 notes"),value,3,SETTINGS_DETAIL_KEYBOARD_UINT,capacity_done,NULL);return;}
@@ -774,7 +786,7 @@ void page_03_menu_refresh_batch_mode(void){menu.dirty=true;}
 bool ui_page_03_menu_resume(void)
 {if(!menu.root)return false;if(!menu.batch_dirty&&!menu.saving)reset_batch();lv_obj_clear_flag(menu.root,LV_OBJ_FLAG_HIDDEN);lv_obj_move_foreground(menu.root);lv_timer_resume(menu.timer);menu.dirty=true;render();return true;}
 void ui_page_03_menu_suspend(void)
-{if(!menu.root)return;if(menu.qr_generation&&menu.qr_generation==lv_qr_popup_generation())lv_qr_popup_hide();menu.qr_generation=0;workspace_service_cancel_apply();settings_detail_keyboard_hide();settings_detail_dialog_hide();destroy_quick();if(menu.photo_sheet)lv_obj_del(menu.photo_sheet);if(menu.user_sheet)lv_obj_del(menu.user_sheet);if(menu.record_sheet)lv_obj_del(menu.record_sheet);menu.user_sheet=menu.record_sheet=NULL;menu.photo_sheet=NULL;menu.scan_wait=menu.photo_wait=menu.photo_ready=false;clear_notice();if(menu.interaction_created)lv_quick_controls_reset(&menu.interaction_controls);gesture_service_clear_pointer_policy(UI_PAGE_MENU);lv_timer_pause(menu.timer);lv_obj_add_flag(menu.root,LV_OBJ_FLAG_HIDDEN);}
+{if(!menu.root)return;if(menu.qr_generation&&menu.qr_generation==lv_qr_popup_generation())lv_qr_popup_hide();menu.qr_generation=0;workspace_service_cancel_apply();settings_detail_keyboard_hide();settings_detail_dialog_hide();destroy_quick();if(menu.photo_sheet)lv_obj_del(menu.photo_sheet);if(menu.user_sheet)lv_obj_del(menu.user_sheet);menu.user_sheet=NULL;menu.photo_sheet=NULL;menu.scan_wait=menu.photo_wait=menu.photo_ready=false;clear_notice();if(menu.interaction_created)lv_quick_controls_reset(&menu.interaction_controls);gesture_service_clear_pointer_policy(UI_PAGE_MENU);lv_timer_pause(menu.timer);lv_obj_add_flag(menu.root,LV_OBJ_FLAG_HIDDEN);}
 void ui_page_03_menu_destroy(void)
 {ui_page_03_menu_suspend();if(menu.timer)lv_timer_del(menu.timer);if(menu.root)lv_obj_del(menu.root);memset(&menu,0,sizeof(menu));}
 void page_03_menu_open_batch(void)

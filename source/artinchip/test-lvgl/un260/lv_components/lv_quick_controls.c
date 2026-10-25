@@ -1,6 +1,6 @@
 #include "un260/app_service/app_local_setting.h"
 #include "un260/lv_core/page_19_history.h"
-#include "un260/lv_core/page_cash_tools.h"
+#include "un260/lv_core/page_calculator.h"
 #define SETTINGS_THEME_DISABLE_COLOR_REMAP
 #include "lv_quick_controls.h"
 #include "lv_settings.h"
@@ -31,13 +31,13 @@ LV_FONT_DECLARE(lv_font_instrument_sans_semibold_20);
 
 static const char *const titles[QUICK_CONTROL_COUNT]={
     UI_N_("Layout edit"),UI_N_("Gestures"),UI_N_("Pure count"),UI_N_("Popup"),
-    UI_N_("Touch guide"),UI_N_("Export"),UI_N_("QR code"),UI_N_("Standby"),UI_N_("Top popup"),UI_N_("Calculator"),UI_N_("Cash journal"),UI_N_("History"),UI_N_("Operators")};
+    UI_N_("Touch guide"),UI_N_("Export"),UI_N_("QR code"),UI_N_("Standby"),UI_N_("Top popup"),UI_N_("Calculator"),"",UI_N_("History"),UI_N_("Operators")};
 static const char *const subtitles[QUICK_CONTROL_COUNT]={
     UI_N_("Long-press on Main"),UI_N_("Swipe navigation"),UI_N_("Focused counting"),
     UI_N_("Auto-open fault guide"),UI_N_("Show touch points"),UI_N_("Current result to USB"),
-    UI_N_("Share current result"),UI_N_("Touch screen to wake"),UI_N_("Show operation messages"),UI_N_("Calculate and convert"),UI_N_("Confirm actual cash movement"),UI_N_("Saved counting results"),UI_N_("Identity and preferences")};
+    UI_N_("Share current result"),UI_N_("Touch screen to wake"),UI_N_("Show operation messages"),UI_N_("Calculate and convert"),"",UI_N_("Saved counting results"),UI_N_("Identity and preferences")};
 static const char *const icons[QUICK_CONTROL_COUNT]={
-    "layout", "gesture", "pure", "popup", "touch", "export", "qr", "standby", "popup", "calculator", "journal", "history", "operators"};
+    "layout", "gesture", "pure", "popup", "touch", "export", "qr", "standby", "popup", "calculator", "", "history", "operators"};
 static bool is_switch(unsigned id)
 { return id==QUICK_LAYOUT || id==QUICK_GESTURES || id==QUICK_POPUP || id==QUICK_TOUCH || id==QUICK_TOP_POPUP; }
 static bool action_enabled(const lv_quick_controls_state_t *s,unsigned id)
@@ -99,6 +99,7 @@ static bool controls_create(lv_quick_controls_t *v,lv_obj_t *parent,int x,int y,
     lv_content_pager_set_indicator_position(v->pager,all?width/2-31:205,214);
     lv_obj_add_event_cb(v->viewport,cb,LV_EVENT_VALUE_CHANGED,(void *)QUICK_REORDER);
     for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
+        if(i==QUICK_RESERVED)continue;
         lv_obj_t *tile=box(lv_content_pager_get_page(v->pager,0),0,0,tile_width,96,0xFFFFFF,13);
         v->tiles[i]=tile;
         lv_obj_set_style_border_width(tile,1,0);
@@ -161,6 +162,7 @@ void lv_quick_controls_set_editing(lv_quick_controls_t *v,bool editing,int selec
 {
     v->editing=editing;v->selected=selected;
     for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
+        if(i==QUICK_RESERVED)continue;
         bool chosen=editing && selected==(int)i;
         visible(v->switches[i],!editing);visible(v->arrows[i],!editing);
         visible(v->states[i],!editing);visible(v->handles[i],editing);
@@ -182,8 +184,8 @@ bool lv_quick_controls_refresh(lv_quick_controls_t *v,lv_quick_controls_state_t 
         if(id>=QUICK_CONTROL_COUNT || (used&(1U<<id)))return false;
         used|=1U<<id;
     }
-    /* Keep persisted IDs/order intact while this unfinished action is hidden. */
-    const uint16_t available=UI_STATE_QUICK_VISIBLE_ALL & ~(1U<<QUICK_CASH_JOURNAL);
+    /* Keep persisted IDs/order compatible; the removed action has no tile. */
+    const uint16_t available=UI_STATE_QUICK_VISIBLE_ALL & ~(1U<<QUICK_RESERVED);
     uint16_t mask=(v->show_all?UI_STATE_QUICK_VISIBLE_ALL:state.visible_mask)&available;
     uint16_t previous=(v->show_all?UI_STATE_QUICK_VISIBLE_ALL:v->state.visible_mask)&available;
     bool layout_changed=!v->initialized || mask!=previous ||
@@ -209,6 +211,7 @@ bool lv_quick_controls_refresh(lv_quick_controls_t *v,lv_quick_controls_state_t 
         visible(v->empty,!count);changed=true;
     }
     for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
+        if(i==QUICK_RESERVED)continue;
         bool enabled=action_enabled(&state,i);
         if(v->initialized && action_enabled(&v->state,i)==enabled)continue;
         changed=true;
@@ -241,7 +244,7 @@ bool lv_quick_controls_execute(quick_control_action_t action)
         case QUICK_QR:smart_island_show_qr_popup();return true;
         case QUICK_STANDBY:return app_standby_runtime_request();
         case QUICK_CALCULATOR:ui_manager_push_page(UI_PAGE_CALCULATOR);return true;
-        case QUICK_CASH_JOURNAL:return false;
+        case QUICK_RESERVED:return false;
         case QUICK_HISTORY:ui_page_19_history_open_all();return true;
         case QUICK_OPERATORS:ui_manager_push_page(UI_PAGE_OPERATORS);return true;
         default:return false;
@@ -257,7 +260,7 @@ static int tile_at(lv_quick_controls_t *v,const lv_point_t *point)
     if(!contains(v->viewport,point))return -1;
     lv_obj_t *page=lv_content_pager_get_page(v->pager,lv_quick_controls_page(v));
     for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++)
-        if(!lv_obj_has_flag(v->tiles[i],LV_OBJ_FLAG_HIDDEN) && lv_obj_get_parent(v->tiles[i])==page && contains(v->tiles[i],point))return (int)i;
+        if(i!=QUICK_RESERVED && !lv_obj_has_flag(v->tiles[i],LV_OBJ_FLAG_HIDDEN) && lv_obj_get_parent(v->tiles[i])==page && contains(v->tiles[i],point))return (int)i;
     return -1;
 }
 static void release_pressed(lv_quick_controls_t *v)

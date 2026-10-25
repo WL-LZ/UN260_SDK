@@ -44,10 +44,7 @@ with tempfile.TemporaryDirectory(prefix="un260-history-async-") as directory:
                         str(ROOT / "un260/history/history_export_sn_parser.c"),
                         str(ROOT / "un260/protocol/protocol_frame.c"),
                     str(ROOT / "un260/counting/counting_history_service.c"),
-                        str(ROOT / "un260/counting/counting_cashbook.c"),
-                        str(ROOT / "un260/workspace/cashbook.c"),
-                        str(ROOT / "tools/test_cashbook_history_bridge.c"),
-                    str(ROOT / "un260/counting/counting_data_store.c"),
+                        str(ROOT / "un260/counting/counting_data_store.c"),
                     "-Wl,--wrap=malloc", "-o", str(binary)], check=True)
     index = state / "index.cfg"
 

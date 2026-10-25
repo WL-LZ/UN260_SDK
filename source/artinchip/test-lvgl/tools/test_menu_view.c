@@ -25,19 +25,6 @@ static app_ui_notice_operation_t operation_started;
 void app_ui_runtime_notice_started(app_ui_notice_operation_t operation,const char *detail)
 {(void)detail;operation_starts++;operation_started=operation;}
 static workspace_model_t model;
-static cashbook_t ledger;
-const cashbook_t *cashbook_store_view(void){return &ledger;}
-bool cashbook_store_view_archived(void){return false;}
-void cashbook_store_close_view(void){}
-unsigned cashbook_store_archives(const cashbook_archive_t **items){*items=NULL;return 0;}
-bool cashbook_store_scan_archives(void){return true;}
-bool cashbook_store_open_archive(uint32_t id){(void)id;return false;}
-bool cashbook_store_archive(void){return false;}
-bool cashbook_store_export(void){return true;}
-bool counting_history_is_idle(void){return true;}
-bool counting_history_can_archive(void){return true;}
-uint32_t counting_cashbook_verify_group(void){return 0;}
-void counting_cashbook_cancel_verify(void){}
 static standby_config_t standby_fixture={.version=2,.minutes=5};
 static int backlight=75;
 static counting_sim_t count_fixture={.total_pcs=85,.total_amount=425};
@@ -54,14 +41,6 @@ bool device_info_is_valid(void){return true;}
 const char *device_info_fpga(void){return "1.2";}
 const char *device_info_main_boot(void){return "1.0";}
 const char *device_info_image_boot(void){return "1.1";}
-const cashbook_t *cashbook_store_get(void){return &ledger;}
-bool cashbook_store_ready(void){return true;}
-bool cashbook_store_busy(void){return false;}
-static bool record_success=true;
-bool cashbook_store_last_success(void){return record_success;}
-const char *cashbook_store_message(void){return "Records ready.";}
-bool cashbook_store_submit(const cashbook_command_t *c){char reason[160];return cashbook_apply(&ledger,c,reason,sizeof(reason));}
-bool counting_cashbook_arm_verify(uint32_t g){return g>0;}
 bool backlight_service_probe(void){return true;}
 int backlight_service_level(void){return backlight;}
 int backlight_service_max(void){return 100;}
@@ -102,10 +81,9 @@ void gesture_service_clear_pointer_policy(uint32_t owner)
 {assert(owner==UI_PAGE_MENU);quick_pointer_policy=NULL;}
 void gesture_service_set_navigation_blocked(uint32_t owner,bool blocked)
 {assert(owner==UI_PAGE_MENU);quick_navigation_blocked=blocked;}
-#if !defined(CASH_REAL_FONTS) || defined(MENU_REAL_FONTS)
-void ui_cash_journal_filter_operator(uint32_t id){(void)id;}
+#if !defined(CALCULATOR_REAL_FONTS) || defined(MENU_REAL_FONTS)
 #endif
-#ifndef CASH_REAL_FONTS
+#ifndef CALCULATOR_REAL_FONTS
 const lv_font_t *ui_message_font(const lv_font_t *font){return font;}
 #endif
 static uint16_t quick_visible=UI_STATE_QUICK_VISIBLE_ALL;
@@ -176,7 +154,11 @@ bool setting_service_request_speed(uint8_t n){actual_state.speed=n;return true;}
 bool setting_service_request_work_mode(uint8_t n){actual_state.work_mode=n;return true;}
 bool setting_service_request_fo_mode(uint8_t n){actual_state.fo_mode=n;return true;}
 bool setting_service_request_add(bool n){actual_state.add_enabled=n;return true;}
-bool app_add_runtime_request(bool n){return setting_service_request_add(n); }
+static bool add_request_fails;
+bool app_add_runtime_request(bool n){
+    if(add_request_fails){ui_notice_post_text(UI_NOTICE_WARNING,"count.add-reset","ADD","No response received. Check device status.");return false;}
+    return setting_service_request_add(n);
+}
 bool app_add_runtime_busy(void){return false;}
 bool setting_service_request_beep(bool n){actual_state.buzzer_enabled=n;return true;}
 bool setting_service_request_batch_switch(bool enabled,uint8_t n,bool e,uint8_t old){(void)e;(void)old;actual_state.batch_enabled=enabled;actual_state.batch_num=n;return true;}
@@ -368,19 +350,6 @@ static lv_res_t asset_info(lv_img_decoder_t *decoder,const void *src,lv_img_head
 static lv_res_t asset_open(lv_img_decoder_t *decoder,lv_img_decoder_dsc_t *d)
 {if(asset_info(decoder,d->src,&d->header)!=LV_RES_OK)return LV_RES_INV;d->img_data=test_page_asset_find(d->src)->pixels;return LV_RES_OK;}
 static void asset_close(lv_img_decoder_t *decoder,lv_img_decoder_dsc_t *d){(void)decoder;(void)d;}
-static void seed_ledger(void)
-{
-    cashbook_command_t c={.operation=CASHBOOK_INGEST,.result={.source=1,.day=20260923,.hour=9,.minute=10,.operator_id=1,.operator_name="Alex Morgan",.pcs=100,.currencies=1,.complete=true,
-        .money={{.code="CNY",.pcs=100,.amount=10000}},.sample_count=4,.samples={11,22,33,44}}};
-    assert(cashbook_store_submit(&c));
-    cashbook_command_t confirm={.operation=CASHBOOK_CONFIRM,.group=1,.run=1};assert(cashbook_store_submit(&confirm));
-    c.result.source=2;c.result.minute=15;c.result.recount_group=1;assert(cashbook_store_submit(&c));
-    c.result.source=3;c.result.minute=20;assert(cashbook_store_submit(&c));
-    confirm.run=3;assert(cashbook_store_submit(&confirm));
-    c.result.source=4;c.result.recount_group=0;c.result.sample_count=0;c.result.pcs=12;c.result.money[0]=(cashbook_money_t){.code="USD",.pcs=12,.amount=240};assert(cashbook_store_submit(&c));
-    confirm.group=2;confirm.run=4;assert(cashbook_store_submit(&confirm));
-    c.result.source=5;c.result.pcs=85;c.result.money[0]=(cashbook_money_t){.code="CNY",.pcs=85,.amount=425};assert(cashbook_store_submit(&c));
-}
 static void test_auto_qr(void)
 {
     current=UI_PAGE_MAIN;model.users[0].qr_after_count=true;model.active_id=1;
@@ -671,8 +640,8 @@ static void test_busy_feedback_lifetime(void)
 int main(void)
 {
     test_local_feedback_contract();
-    cashbook_defaults(&ledger);workspace_defaults(&model);model.operators_enabled=1;strcpy(model.users[0].name,"Alex Morgan");
-    seed_ledger();char report[8192];assert(support_report_build(report,sizeof(report)));
+    workspace_defaults(&model);model.operators_enabled=1;strcpy(model.users[0].name,"Alex Morgan");
+    char report[8192];assert(support_report_build(report,sizeof(report)));
     assert(strstr(report,"Mainboard:")&&strstr(report,"Mainboard boot:")&&!strstr(report,"Controller:"));
     assert(strstr(report,"Confirmed settings")&&!strstr(report,"Alex Morgan")&&!strstr(report,"10000"));assert(!support_report_build(report,8));
     workspace_profile_t p=model.users[0].profiles[0];strcpy(p.name,"Bundle preparation");p.batch_enabled=1;p.batch=100;assert(workspace_add_profile(&model,1,&p));
@@ -754,6 +723,11 @@ int main(void)
     click("MDC");assert(mode_requests==0&&!settings_detail_overlay_is_open());
     click("SDC");assert(mode_requests==1&&!settings_detail_overlay_is_open()&&!test_notice_visible);
     click("High");assert(!settings_detail_overlay_is_open()&&!test_notice_visible);
+    unsigned add_notices=test_notice_count;add_request_fails=true;
+    lv_obj_t *add_option=find_action(menu.body,420+!machine_state_add_enabled());assert(add_option);
+    lv_event_send(add_option,LV_EVENT_CLICKED,NULL);
+    assert(test_notice_count==add_notices+1&&!strcmp(test_notice_key,"count.add-reset"));
+    add_request_fails=false;ui_notice_clear("count.add-reset");
     while(model.users[0].profile_count<WORKSPACE_PROFILES){
         workspace_profile_t extra=model.users[0].profiles[0];
         snprintf(extra.name,sizeof(extra.name),"Profile %u",model.users[0].profile_count+1);
@@ -768,17 +742,7 @@ int main(void)
         assert(lv_obj_get_x(card)+lv_obj_get_width(card)<=ui_scrollbar_content_width(menu.task_scroll));
     }
     lv_obj_scroll_to_y(menu.task_scroll,500,LV_ANIM_OFF);tick(120);click("Profile 8");assert(menu.selected_profile==7&&lv_obj_get_scroll_y(menu.task_scroll)>200);raster("menu-profiles-scrolled");
-    /* Hidden records keep their implementation and stable ID for future reuse. */
-    menu.tab=2;menu.sub=0;menu.dirty=true;tick(120);raster("menu-records-retained-private");
-    uint32_t prior_day=business_day();
-    record_date_done("20260925",NULL);assert(settings_detail_overlay_is_open());
-    assert(business_day()==prior_day);click("Cancel");assert(business_day()==prior_day);
-    menu.selected_group=1;menu.selected_run=2;menu.dirty=true;tick(120);raster("menu-recount-detail");
-    click("Count this result");click("Confirm");assert(ledger.groups[0].selected==2);click("Back to list");
-    click("Confirm singles");click("Confirm");assert(ledger.groups[2].confirmed);
-    click("Close day");click("Confirm");assert(ledger.close_count==1);click("Day closes");raster("menu-day-closes");
-    show_closed_day(1);tick(120);raster("menu-saved-close");click("Show saved totals QR");assert(lv_qr_popup_is_showing());raster("menu-saved-close-qr");lv_qr_popup_hide();click("Back to list");
-    click("History");raster("menu-history");assert(!find(menu.body,"Next"));click("Output");assert(!test_notice_visible);raster("menu-output");
+    click("Output");
     assert(output_action(807));tick(120);raster("menu-receipt-layout");
     assert(output_action(822));tick(120);assert(print_fixture.space_top==2&&test_notice_visible&&test_notice_kind==UI_NOTICE_PROGRESS);
     assert(output_action(827));assert(settings_detail_overlay_is_open());check_numeric_keypad();raster("menu-receipt-keypad");settings_detail_keyboard_hide();
@@ -817,7 +781,7 @@ int main(void)
     click("Quick");assert(menu.quick);assert(!test_notice_visible);
     quick_visible=0;tick(120);assert(lv_content_pager_get_count(menu.quick_controls.pager)==1);
     assert(lv_obj_is_visible(menu.quick_controls.empty));
-    for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++)assert(lv_obj_has_flag(menu.quick_controls.tiles[i],LV_OBJ_FLAG_HIDDEN));
+    for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++)assert(!menu.quick_controls.tiles[i]||lv_obj_has_flag(menu.quick_controls.tiles[i],LV_OBJ_FLAG_HIDDEN));
     quick_visible=1U<<QUICK_LAYOUT;tick(120);assert(!lv_obj_has_flag(menu.quick_controls.tiles[QUICK_LAYOUT],LV_OBJ_FLAG_HIDDEN));
     assert(lv_content_pager_get_count(menu.quick_controls.pager)==1);
     quick_visible=UI_STATE_QUICK_VISIBLE_ALL;tick(120);
@@ -879,15 +843,9 @@ int main(void)
     test_touch_save_ok=false;click("Touch sound");tick(120);assert(!test_touch_sound);
     test_touch_save_ok=true;click("Touch sound");tick(120);assert(test_touch_sound);
     click("Help");raster("menu-help-empty");click("All codes");raster("menu-help");click("Care");raster("menu-care");click("Device");raster("menu-device");ui_page_03_menu_suspend();assert(!page_03_menu_is_visible());assert(ui_page_03_menu_resume());assert(menu.tab==5);
-    cashbook_t *saved=malloc(sizeof(*saved));assert(saved);*saved=ledger;cashbook_defaults(&ledger);
-    menu.tab=2;menu.sub=0;menu.selected_group=menu.selected_close=0;menu.dirty=true;tick(120);
-    assert(lv_obj_has_state(find(menu.body,"Close day"),LV_STATE_DISABLED)&&!find(menu.body,"Confirm singles"));raster("menu-records-empty");
-    ledger=*saved;free(saved);
     notify(UI_NOTICE_SUCCESS,"Saved");assert(test_notice_visible&&test_notice_kind==UI_NOTICE_SUCCESS);
     unsigned notice_count=test_notice_count;ui_page_03_menu_refresh_data(0);tick(3600);assert(test_notice_count==notice_count);
     /* Page refresh cannot duplicate a storage result: the app owns it. */
-    record_success=false;ui_page_03_menu_refresh_data(0);assert(test_notice_count==notice_count);record_success=true;
-    export_records_confirm(NULL);assert(operation_starts&&operation_started==APP_UI_NOTICE_RECORD_STORE);
     notify(UI_NOTICE_ERROR,"Setting rejected");assert(test_notice_visible&&!settings_detail_overlay_is_open());
     ui_page_03_menu_suspend();notify(UI_NOTICE_INFO,"Hidden update");assert(!test_notice_visible);assert(ui_page_03_menu_resume());
     /* Repeated show/hide and parent destruction balance independent owners. */
@@ -917,21 +875,11 @@ int main(void)
     ui_page_03_menu_destroy();workspace_defaults(&model);model.operators_enabled=1;strcpy(model.users[0].name,"Local operator");assert(workspace_add_user(&model,"Alex",&uid));strcpy(model.users[1].employee_id,"A-002");
     p=model.users[0].profiles[0];p.add=1;model.users[0].profiles[0]=p;strcpy(p.name,"Bundle preparation");p.batch_enabled=1;p.batch=100;assert(workspace_add_profile(&model,1,&p));
     strcpy(p.name,"Careful verification");p.speed=0;p.work=1;p.batch_enabled=0;assert(workspace_add_profile(&model,1,&p));
-    cashbook_defaults(&ledger);
-    cashbook_command_t golden_day={.operation=CASHBOOK_SET_DAY,.day=20260924};assert(cashbook_store_submit(&golden_day));
-    cashbook_command_t golden={.operation=CASHBOOK_INGEST,.result={.source=30,.day=20260924,.hour=8,.minute=58,.operator_id=1,.operator_name="Foreign currency",.pcs=12,.currencies=1,.complete=true,.money={{.code="USD",.pcs=12,.amount=240}}}};
-    assert(cashbook_store_submit(&golden));cashbook_command_t accepted={.operation=CASHBOOK_CONFIRM,.group=1,.run=1};assert(cashbook_store_submit(&accepted));
-    golden.result.source=31;golden.result.hour=9;golden.result.minute=10;strcpy(golden.result.operator_name,"Opening balance");golden.result.pcs=100;golden.result.money[0]=(cashbook_money_t){.code="CNY",.pcs=100,.amount=10000};assert(cashbook_store_submit(&golden));accepted.group=2;accepted.run=2;assert(cashbook_store_submit(&accepted));
-    golden.result.source=32;golden.result.minute=31;strcpy(golden.result.operator_name,"Cash deposit");golden.result.pcs=60;golden.result.money[0].pcs=60;golden.result.money[0].amount=6000;assert(cashbook_store_submit(&golden));
-    golden.result.source=33;golden.result.minute=38;strcpy(golden.result.operator_name,"Counter 02");golden.result.pcs=137;golden.result.money[0].pcs=137;golden.result.money[0].amount=6850;assert(cashbook_store_submit(&golden));
-    golden.result.source=34;golden.result.minute=42;strcpy(golden.result.operator_name,"Morning count");golden.result.pcs=773;golden.result.money[0].pcs=773;golden.result.money[0].amount=7730;assert(cashbook_store_submit(&golden));
-    golden.result.recount_group=5;golden.result.source=35;golden.result.pcs=771;golden.result.money[0].pcs=771;golden.result.money[0].amount=7710;assert(cashbook_store_submit(&golden));
-    golden.result.source=36;golden.result.pcs=773;golden.result.money[0].pcs=773;golden.result.money[0].amount=7730;assert(cashbook_store_submit(&golden));
+
     actual_state.add_enabled=true;actual_state.speed=0;actual_state.buzzer_enabled=true;gestures=true;backlight=75;
     count_fixture.total_pcs=773;count_fixture.total_amount=7730;
     current=UI_PAGE_MENU;ui_page_03_menu_create(lv_scr_act());tick(120);
     assert(menu.tab==1&&!menu.nav[0]&&!menu.nav[2]);raster("studio-default-count");
-    menu.tab=0;menu.sub=0;menu.dirty=true;tick(120);assert(business_day()==20260924);assert(find(menu.body,"Review 3 pending counts"));raster("studio-overview-retained-private");
     lv_obj_add_state(menu.nav[1],LV_STATE_FOCUS_KEY);raster("studio-focus");lv_obj_clear_state(menu.nav[1],LV_STATE_FOCUS_KEY);
     const char *shots[][5]={{NULL},{"batch","profiles","options"},{"records","recounts","history","verify","day-closes"},{"print","qr"},{"operators","interaction","display"},{"reject","care","device"}};
     menu.tab=3;menu.sub=0;menu.dirty=true;tick(100);
@@ -941,7 +889,7 @@ int main(void)
     assert(subcounts[5]==3&&!find(menu.root,"Getting started"));
     assert(find(menu.root,"Reject guide")&&find(menu.root,"Care")&&find(menu.root,"Device"));
     for(unsigned tab=1;tab<6;tab++)for(unsigned sub=0;sub<subcounts[tab];sub++){
-        menu.tab=tab;menu.sub=sub;menu.selected_group=menu.selected_close=0;menu.record_pending=menu.verify_pick=false;menu.dirty=true;tick(100);
+        menu.tab=tab;menu.sub=sub;menu.dirty=true;tick(100);
         char filename[80];snprintf(filename,sizeof(filename),"studio-%s",shots[tab][sub]);raster(filename);
         assert(lv_obj_get_y(menu.body)==76&&lv_obj_get_height(menu.body)==296);
     }
@@ -1025,6 +973,7 @@ int main(void)
             char name[80];snprintf(name,sizeof(name),"controls-%s-page-%u",locale->tag,page+1);raster(name);
         }
         for(unsigned i=0;i<QUICK_CONTROL_COUNT;i++){
+        if(i==QUICK_RESERVED)continue;
             lv_obj_t *title=lv_obj_get_child(menu.interaction_controls.tiles[i],1);
             const char *text=lv_label_get_text(title);const lv_font_t *font=lv_obj_get_style_text_font(title,0);
             int width=lv_txt_get_width(text,strlen(text),font,0,LV_TEXT_FLAG_NONE);
@@ -1096,7 +1045,7 @@ int main(void)
     open_quick();raster("quick-filtered-order");
     assert(lv_obj_has_flag(menu.quick_controls.tiles[QUICK_LAYOUT],LV_OBJ_FLAG_HIDDEN));
     assert(lv_obj_has_flag(menu.quick_controls.tiles[QUICK_TOUCH],LV_OBJ_FLAG_HIDDEN));
-    assert(lv_obj_has_flag(menu.quick_controls.tiles[QUICK_CASH_JOURNAL],LV_OBJ_FLAG_HIDDEN));
+    assert(!menu.quick_controls.tiles[QUICK_RESERVED]);
     assert(lv_obj_get_x(menu.quick_controls.tiles[QUICK_STANDBY])==0 && lv_obj_get_y(menu.quick_controls.tiles[QUICK_STANDBY])==0);
     assert(!memcmp(menu.quick_controls.state.order,quick_order,sizeof(quick_order)));
     destroy_quick();memcpy(quick_order,hidden_order,sizeof(hidden_order));quick_visible=UI_STATE_QUICK_VISIBLE_ALL;
@@ -1113,8 +1062,10 @@ int main(void)
     current=UI_PAGE_MENU;ui_page_03_menu_create(lv_scr_act());tick(120);
     assert(find(menu.body,"Batch presets")&&find(menu.body,"Main Batch: Settings"));
     raster("menu-cold-main-batch-entry");ui_page_03_menu_destroy();
-    tick(200);test_auto_qr();puts("PASS native Menu: four visible tabs, retained private ledger decisions/close/QR, batch action/drafts/keypad, minimum-one delete, registration, outside-close, resume/destroy; 1280x400");return 0;
+    tick(200);test_auto_qr();puts("PASS native Menu: four visible tabs, batch action/drafts/keypad, minimum-one delete, registration, outside-close, resume/destroy; 1280x400");return 0;
 }
 
 const char *work_mode_service_status_msgid(void){return work_mode_service_status_text();}
 const ui_message_t *workspace_store_message_info(void){static ui_message_t m;ui_message_key(&m,workspace_store_message());return &m;}
+
+void ui_manager_hold_transition_input(ui_page_t owner,bool hold){(void)owner;(void)hold;}

@@ -50,7 +50,6 @@
 #include "un260/protocol/protocol_frame.h"
 #include "un260/protocol/protocol_frame_queue.h"
 #include "un260/protocol/protocol_request.h"
-#include "un260/storage/cashbook_store.h"
 #include "un260/storage/workspace_store.h"
 #include "un260/storage/standby_store.h"
 
@@ -172,9 +171,9 @@ app_ui_upgrade_readiness_t app_command_runtime_prepare_ui_upgrade(void)
     if (!ui_history_data_is_initialized()) return APP_UI_UPGRADE_WAIT;
 
     uint32_t now_ms = app_clock_uptime_ms();
-    if (cashbook_store_busy() || workspace_store_busy() || standby_store_busy())
+    if (workspace_store_busy() || standby_store_busy())
         return APP_UI_UPGRADE_WAIT;
-    if (!cashbook_store_ready() || !workspace_store_ready() ||
+    if (!workspace_store_ready() ||
         !standby_store_storage_ready())
         return APP_UI_UPGRADE_FAILED;
 
@@ -187,7 +186,7 @@ app_ui_upgrade_readiness_t app_command_runtime_prepare_ui_upgrade(void)
     if (history == STORAGE_JOB_FAILED || writes == STORAGE_JOB_FAILED)
         return APP_UI_UPGRADE_FAILED;
     if (!captured || !counting_history_is_idle() || history == STORAGE_JOB_PENDING ||
-        writes == STORAGE_JOB_PENDING || cashbook_store_busy() || workspace_store_busy() ||
+        writes == STORAGE_JOB_PENDING || workspace_store_busy() ||
         standby_store_busy())
         return APP_UI_UPGRADE_WAIT;
     return APP_UI_UPGRADE_READY;

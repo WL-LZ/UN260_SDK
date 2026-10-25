@@ -8,9 +8,9 @@ def write_if_changed(path,text):
 from test_list_view import compiled_asset_sources
 root=Path(__file__).resolve().parents[1]
 lvgl = lvgl_source(root)
-parts=['un260/gesture/touch_sound.c','un260/lv_core/cash_workspace_style.c','tools/test_cash_view.c','un260/font/ui_message_font.c','un260/lv_core/page_cash_tools.c','un260/lv_core/page_operators.c','un260/lv_components/lv_pin_keypad.c','un260/lv_components/lv_pin_input.c','un260/workspace/cash_tools.c','un260/workspace/workspace_model.c','un260/workspace/cashbook.c','un260/counting/counting_reject_reason.c','un260/lv_components/lv_settings.c','un260/lv_components/lv_quick_controls.c','un260/app_service/app_local_setting.c','un260/lv_components/lv_damped_button.c','un260/lv_components/lv_nav_button.c','un260/lv_components/lv_modal_dialog.c','un260/lv_components/lv_popup_style.c','un260/lv_components/lv_alnum_keyboard.c','un260/lv_components/lv_qr_popup.c','un260/lv_components/qrcodegen.c','un260/lv_components/ui_scrollbar.c','un260/lv_core/settings_detail_ui.c','un260/lv_system/ui_lang.c','un260/lv_system/ui_text_widget.c','un260/lv_system/ui_text_page.c']
+parts=['un260/gesture/touch_sound.c','un260/lv_core/workspace_style.c','tools/test_cash_view.c','un260/font/ui_message_font.c','un260/lv_core/page_calculator.c','un260/lv_core/page_operators.c','un260/lv_components/lv_pin_keypad.c','un260/lv_components/lv_pin_input.c','un260/workspace/calculator_math.c','un260/workspace/workspace_model.c','un260/counting/counting_reject_reason.c','un260/lv_components/lv_settings.c','un260/lv_components/lv_quick_controls.c','un260/app_service/app_local_setting.c','un260/lv_components/lv_damped_button.c','un260/lv_components/lv_nav_button.c','un260/lv_components/lv_modal_dialog.c','un260/lv_components/lv_popup_style.c','un260/lv_components/lv_alnum_keyboard.c','un260/lv_components/lv_qr_popup.c','un260/lv_components/qrcodegen.c','un260/lv_components/ui_scrollbar.c','un260/lv_core/settings_detail_ui.c','un260/lv_system/ui_lang.c','un260/lv_system/ui_text_widget.c','un260/lv_system/ui_text_page.c']
 parts+=['un260/lv_core/boot_anim/page_08_boot_flow.c','un260/lv_core/boot_anim/page_00_boot_anim_theme_d.c','un260/font/lv_font_boot_welcome_compact.c']
-inspected=['un260/lv_core/cash_workspace_style.h']+parts+['tools/test_menu_view.c']+['un260/lv_core/page_03_menu.c']+['un260/lv_core/'+p.name for p in (root/'un260/lv_core').glob('menu_*.inc')]
+inspected=['un260/lv_core/workspace_style.h']+parts+['tools/test_menu_view.c']+['un260/lv_core/page_03_menu.c']+['un260/lv_core/'+p.name for p in (root/'un260/lv_core').glob('menu_*.inc')]
 parts+=['un260/font/lv_font_message_cjk_'+str(n)+'.c' for n in [12,14,16,18,20,22,24,28]]
 parts+=['un260/lv_system/ui_update_batch.c','un260/lv_components/lv_recycled_list.c','un260/lv_components/ui_list_window.c','un260/lv_components/ui_scroll_physics.c','un260/font/ui_locale_font_bank.c']
 parts+=['un260/app_service/support_report.c','un260/app_service/app_auto_qr.c','un260/lv_components/lv_content_pager.c']
@@ -69,7 +69,7 @@ with contextlib.nullcontext(str(cache)) as directory:
         return obj
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:objects=list(pool.map(compile_one,sources))
     exe=work/'test';subprocess.run(['cc','-fsanitize=address,undefined','-no-pie',*map(str,objects),'-lm','-lz','-o',str(exe)],check=True)
-    result=subprocess.run([str(exe)],env=dict(os.environ,MENU_OUTPUT=str(out),UN260_CASH_BACKGROUND=str(background_path),UN260_BOOT_BACKGROUND=str(boot_path),UN260_READY_BACKGROUND=str(ready_path),UN260_BOOT_EMBLEM=str(emblem_path)))
+    result=subprocess.run([str(exe)],env=dict(os.environ,MENU_OUTPUT=str(out),UN260_CALCULATOR_BACKGROUND=str(background_path),UN260_BOOT_BACKGROUND=str(boot_path),UN260_READY_BACKGROUND=str(ready_path),UN260_BOOT_EMBLEM=str(emblem_path)))
     from PIL import Image
     for path in out.glob('*.bgra'):Image.frombytes('RGBA',(1280,400),path.read_bytes(),'raw','BGRA').convert('RGB').save(path.with_suffix('.png'))
     result.check_returncode()

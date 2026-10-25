@@ -10,8 +10,8 @@ with tempfile.TemporaryDirectory(prefix='un260-history-abc-') as temp:
     source=(ROOT/'un260/app_service/app_counting_runtime.c').read_text()
     (work/'history_runtime_under_test.h').write_text(function(source,'app_counting_runtime_reset_session'))
     parts=['tools/test_history_abc.c','un260/storage/storage_worker.c',
-        'un260/counting/counting_history_service.c','un260/counting/counting_cashbook.c',
-        'un260/workspace/cashbook.c','tools/test_cashbook_history_bridge.c','un260/counting/counting_data_store.c',
+        'un260/counting/counting_history_service.c',
+        'un260/counting/counting_data_store.c',
         'un260/history/history_record_snapshot.c','un260/history/history_record_reader.c',
         'un260/history/history_read_task.c','un260/history/history_record_detail.c',
         'un260/history/history_export_sn_parser.c','un260/history/history_query.c',

@@ -21,8 +21,13 @@ head = r'''
 #include "un260/storage/storage_worker.h"
 #include "tools/test_maintenance_state.h"
 static counting_session_state_t g_counting_session;
+static bool g_no_note_motor_active;
+#define app_add_runtime_busy() false
+#define count_mode_service_busy() false
+#define ui_notice_post_text(...) ((void)0)
+#define page_01_main_set_counting_locked(...) ((void)0)
 static bool start_pending, clear_pending, g_deferred_frame_valid, frames, query;
-static bool initialized=true, available=true, cash_busy, workspace_busy, standby_busy;
+static bool initialized=true, available=true, workspace_busy, standby_busy;
 static bool standby_ready=true;
 static bool ready=true, saved=true, captured=true, idle=true;
 static unsigned captures, starts, refreshes;
@@ -39,15 +44,11 @@ static storage_job_status_t mock_history=STORAGE_JOB_SUCCEEDED, mock_writes=STOR
 #define ui_history_data_is_initialized() initialized
 #define ui_history_data_is_available() available
 #define app_clock_uptime_ms() 42U
-#define cashbook_store_poll() false
 #define workspace_store_poll() false
-#define cashbook_store_busy() cash_busy
 #define workspace_store_busy() workspace_busy
 #define standby_store_busy() standby_busy
 #define standby_store_storage_ready() standby_ready
-#define cashbook_store_ready() ready
 #define workspace_store_ready() ready
-#define cashbook_store_last_success() saved
 #define workspace_store_last_success() saved
 #define counting_data_mutable() (&data)
 #define counting_history_poll_commit(...) 0
@@ -89,8 +90,8 @@ int main(void){
  initialized=true;available=false;g_deferred_frame_valid=true;
  assert(app_command_runtime_prepare_ui_upgrade()==APP_UI_UPGRADE_FAILED);
  g_deferred_frame_valid=false;
- available=true;cash_busy=true;assert(app_command_runtime_prepare_ui_upgrade()==APP_UI_UPGRADE_WAIT);
- cash_busy=false;standby_busy=true;assert(app_command_runtime_prepare_ui_upgrade()==APP_UI_UPGRADE_WAIT);
+ available=true;workspace_busy=true;assert(app_command_runtime_prepare_ui_upgrade()==APP_UI_UPGRADE_WAIT);
+ workspace_busy=false;standby_busy=true;assert(app_command_runtime_prepare_ui_upgrade()==APP_UI_UPGRADE_WAIT);
  standby_busy=false;standby_ready=false;assert(app_command_runtime_prepare_ui_upgrade()==APP_UI_UPGRADE_FAILED);
  standby_ready=true;ready=false;assert(app_command_runtime_prepare_ui_upgrade()==APP_UI_UPGRADE_FAILED);
  ready=true;saved=false;assert(app_command_runtime_prepare_ui_upgrade()==APP_UI_UPGRADE_READY);

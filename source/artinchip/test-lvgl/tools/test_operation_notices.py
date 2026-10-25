@@ -31,22 +31,18 @@ static workspace_model_t operator_model;
 const workspace_model_t *workspace_store_get(void){return &operator_model;}
 static bool notices_allowed=true;
 bool app_setting_notice_page_allowed(void){return notices_allowed;}
-static ui_message_t ws_message, records_message, profile_message, batch_message;
-static bool ws_busy, ws_ok=true, records_busy, records_ok=true, applying;
+static ui_message_t ws_message, profile_message, batch_message;
+static bool ws_busy, ws_ok=true, applying;
 static workspace_apply_result_t profile_result=WORKSPACE_APPLY_IDLE;
 bool workspace_store_busy(void){return ws_busy;}
 bool workspace_store_last_success(void){return ws_ok;}
 const char *workspace_store_message(void){return ws_ok?"Saved":"Storage failed";}
 const char *workspace_service_batch_save_message(void){return "Cycle saved; active Batch awaits confirmation";}
-bool cashbook_store_busy(void){return records_busy;}
-bool cashbook_store_last_success(void){return records_ok;}
-const char *cashbook_store_message(void){return records_ok?"Exported":"USB unavailable";}
 bool workspace_service_applying(void){return applying;}
 workspace_apply_result_t workspace_service_apply_result(void){return profile_result;}
 const char *workspace_service_apply_message(void){return "Profile result";}
 const ui_message_t *workspace_store_message_info(void){ui_message_key(&ws_message,workspace_store_message());return &ws_message;}
 const ui_message_t *workspace_service_batch_save_message_info(void){ui_message_key(&batch_message,workspace_service_batch_save_message());return &batch_message;}
-const ui_message_t *cashbook_store_message_info(void){ui_message_key(&records_message,cashbook_store_message());return &records_message;}
 const ui_message_t *workspace_service_apply_message_info(void){ui_message_key(&profile_message,workspace_service_apply_message());return &profile_message;}
 static ui_notice_state_t queue;
 static unsigned posts;
@@ -83,8 +79,8 @@ main = r'''
 int main(void){
  ui_notice_state_init(&queue);
  /* Startup load/maintenance edges have no registered user request. */
- ws_busy=records_busy=true;app_ui_runtime_poll_operation_notices();
- ws_busy=records_busy=false;app_ui_runtime_poll_operation_notices();assert(posts==0);
+ ws_busy=true;app_ui_runtime_poll_operation_notices();
+ ws_busy=false;app_ui_runtime_poll_operation_notices();assert(posts==0);
  app_ui_runtime_notice_started(APP_UI_NOTICE_WORKSPACE_STORE,"No-op");assert(posts==0);
  ws_busy=true;app_ui_runtime_notice_started(APP_UI_NOTICE_WORKSPACE_STORE,"Saving");
  assert(posts==1&&last_kind==UI_NOTICE_PROGRESS&&!strcmp(last_key,"workspace.store"));
@@ -96,14 +92,11 @@ int main(void){
  assert(posts==2&&last_kind==UI_NOTICE_ERROR&&queue.has_active);
  assert(!strcmp(last_key,"workspace.store"));
  app_ui_runtime_poll_operation_notices();assert(posts==2);
- ws_busy=true;records_busy=true;
+ ws_busy=true;
  app_ui_runtime_notice_started(APP_UI_NOTICE_BATCH_SAVE,"Saving cycle");
- app_ui_runtime_notice_started(APP_UI_NOTICE_RECORD_STORE,"Exporting records");
  ws_busy=false;ws_ok=true;app_ui_runtime_poll_operation_notices();
  assert(last_kind==UI_NOTICE_SUCCESS&&!strcmp(last_key,"workspace.batch"));
  assert(strstr(last_detail,"awaits confirmation"));
- records_busy=false;records_ok=false;app_ui_runtime_poll_operation_notices();
- assert(last_kind==UI_NOTICE_ERROR&&!strcmp(last_key,"records.store"));
  /* A matched negative ACK has already ended the profile before this poll.
   * Only this owner posts its final ERROR; a second poll is silent. */
  applying=true;profile_result=WORKSPACE_APPLY_PENDING;

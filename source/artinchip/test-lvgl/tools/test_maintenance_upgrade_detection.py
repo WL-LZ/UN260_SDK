@@ -22,13 +22,12 @@ code = r'''
 #include "un260/lv_core/ui_upgrade_service.h"
 #include "tools/test_maintenance_state.h"
 static ui_page_t current_page=UI_PAGE_MAIN;
-static bool standby_busy,workspace_busy,cashbook_busy;
+static bool standby_busy,workspace_busy;
 static uint32_t g_upgrade_detect_tick;
 static unsigned detections,presentations;
 ui_page_t ui_manager_get_current_page(void){return current_page;}
 bool standby_store_busy(void){return standby_busy;}
 bool workspace_store_busy(void){return workspace_busy;}
-bool cashbook_store_busy(void){return cashbook_busy;}
 void ui_upgrade_service_detect(ui_upgrade_detect_info_t *info){
  ++detections;*info=(ui_upgrade_detect_info_t){true,true,true,UI_UPGRADE_PACKAGE_HASH_DIFFERENT};
 }
@@ -41,7 +40,7 @@ code += '#define APP_UI_UPGRADE_DETECT_INTERVAL_MS ' + interval.group(1) + '\n'
 code += function(source, 'app_ui_runtime_poll_upgrade')
 code += r'''
 int main(void){
- bool *guards[]={&host_factory_reset_blocked,&host_touch_calibration_busy,&standby_busy,&workspace_busy,&cashbook_busy};
+ bool *guards[]={&host_factory_reset_blocked,&host_touch_calibration_busy,&standby_busy,&workspace_busy};
  for(unsigned i=0;i<sizeof(guards)/sizeof(guards[0]);i++){
   g_upgrade_detect_tick=0;unsigned calls=detections;
   *guards[i]=true;app_ui_runtime_poll_upgrade(5000);

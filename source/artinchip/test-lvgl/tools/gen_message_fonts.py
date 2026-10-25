@@ -19,7 +19,7 @@ INPUTS = ('i18n/legacy_ids.json', 'i18n/locales.json',
           'un260/lv_components/fault_guide/fault_guide_catalog.c',
           'un260/lv_components/lv_quick_controls.c',
           'un260/lv_core/page_01_main_quick.c',
-          'un260/lv_core/page_cash_tools.c',
+          'un260/lv_core/page_calculator.c',
           'un260/lv_core/page_operators.c')
 ASSETS = ROOT / 'aic_ui/font/message'
 

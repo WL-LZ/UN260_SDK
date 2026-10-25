@@ -3,7 +3,7 @@
 #include "un260/app_service/ui_factory_reset_service.c"
 static bool operation_active, reset_pending;
 static bool running, result_pending, aging, diagnostic, settings_busy, touch_busy, touch_storage_busy;
-static bool workspace_busy, cashbook_busy, standby_busy, mode_store_busy, history_ready = true;
+static bool workspace_busy, standby_busy, mode_store_busy, history_ready = true;
 static bool send_ok = true, submit_ok = true, store_ready, store_success;
 static unsigned sends, local_begins, stops, view_results;
 static bool view_success;
@@ -21,7 +21,6 @@ void work_mode_service_set_reset_pending(bool value) { reset_pending=value; }
 bool work_mode_service_diagnostic_active(void) { return diagnostic; }
 bool workspace_service_settings_busy(void) { return settings_busy; }
 bool workspace_store_busy(void) { return workspace_busy; }
-bool cashbook_store_busy(void) { return cashbook_busy; }
 bool standby_store_busy(void) { return standby_busy; }
 bool touch_calibration_busy(void) { return touch_busy || touch_storage_busy; }
 bool touch_calibration_storage_busy(void) { return touch_storage_busy; }
@@ -41,7 +40,7 @@ int main(void)
     ui_factory_reset_on_controller_result(true); ui_factory_reset_poll();
     assert(local_begins == 0 && stops == 0); /* No unsolicited/duplicate ACK. */
     bool *gates[] = {&add_busy, &running, &result_pending, &aging, &operation_active, &settings_busy, &touch_busy,
-        &workspace_busy, &cashbook_busy, &standby_busy, &touch_storage_busy, &mode_store_busy};
+        &workspace_busy, &standby_busy, &touch_storage_busy, &mode_store_busy};
     for (unsigned i = 0; i < sizeof(gates) / sizeof(gates[0]); ++i) {
         *gates[i] = true; assert(!ui_factory_reset_request() && ui_factory_reset_blocker()); *gates[i] = false;
     }

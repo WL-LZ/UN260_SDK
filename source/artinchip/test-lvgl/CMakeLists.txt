@@ -168,19 +168,12 @@ add_executable(${PROJECT_NAME} main.c
     un260/font/lv_font_standby_112.c
     un260/font/scaled_font.c
     un260/storage/standby_store.c
-    un260/workspace/cash_tools.c
-    un260/storage/cash_journal_store.c
-    un260/storage/cash_journal_export.c
-    un260/app_service/cash_tools_service.c
-    un260/lv_core/cash_workspace_style.c
-    un260/lv_core/page_cash_tools.c
+    un260/workspace/calculator_math.c
+    un260/app_service/calculator_import.c
+    un260/app_service/workspace_access.c
+    un260/lv_core/workspace_style.c
+    un260/lv_core/page_calculator.c
     un260/lv_core/page_operators.c
-    un260/app_service/cash_workspace_access.c
-    un260/lv_core/page_operators.c
-    un260/app_service/cash_workspace_access.c
-    un260/storage/cashbook_store.c
-    un260/workspace/cashbook.c
-    un260/counting/counting_cashbook.c
     un260/storage/workspace_store.c
     un260/workspace/workspace_model.c
     un260/app_service/workspace_service.c

@@ -7,8 +7,6 @@
 #include "un260/lv_system/ui_history_data.h"
 #include "counting_data_store.h"
 #include "counting_multi.h"
-#include "counting_cashbook.h"
-#include "un260/storage/cashbook_store.h"
 #include "un260/storage/workspace_store.h"
 
 #define COUNTING_HISTORY_FRAME_TEXT_SIZE 160
@@ -29,7 +27,6 @@ typedef struct {
     ui_history_record_t record;
     storage_job_id_t job;
     uint32_t multi_group, generation;
-    cashbook_result_t cashbook;
     history_record_snapshot_t detail;
 } counting_history_snapshot_t;
 static counting_history_snapshot_t g_snapshots[COUNTING_HISTORY_PENDING_CAPACITY];
@@ -124,7 +121,6 @@ void counting_history_append_frame(const char *tag,
 void counting_history_session_start(const uint8_t *buf, uint8_t len)
 {
     ++g_current_generation;g_current_record=0;
-    counting_cashbook_on_start();
     const workspace_user_t *operator=workspace_store_ready()?workspace_active(workspace_store_get()):NULL;
     g_operator_id=operator?operator->id:0;
     snprintf(g_operator_name,sizeof(g_operator_name),"%s",operator?operator->name:"Unassigned");
@@ -208,7 +204,7 @@ static void counting_history_submit_snapshots(void)
             g_submitted_id=id;g_submitted_group=s->multi_group;
         }
         g_submitted_pcs=s->record.pcs;
-        s->cashbook.source=g_submitted_id;
+        s->record.record_no=g_submitted_id;
         g_snapshots[i].job = ui_history_last_commit_id();
     }
 }
@@ -271,7 +267,6 @@ static counting_history_commit_result_t capture_multi(counting_session_state_t *
     s->record.multi=data;s->record.pcs=m->total_pcs;s->record.amount=0;
     memcpy(s->record.currency,"MUL",4);
     s->multi_group=m->group_generation;
-    counting_cashbook_capture(&s->cashbook,&s->record,sim);
     g_multi_snapshot=s->record;g_multi_generation=m->generation;
     if(overflow)g_overflow_valid=true;else g_snapshot_count++;
     g_uncaptured_pending=false;
@@ -320,7 +315,6 @@ counting_history_commit_result_t counting_history_try_commit(
     }
     snapshot->record.operator_id=g_operator_id;
     snprintf(snapshot->record.operator_name,sizeof(snapshot->record.operator_name),"%s",g_operator_name);
-    counting_cashbook_capture(&snapshot->cashbook,&snapshot->record,sim_data);
     snapshot->job = 0;
     snapshot->multi_group = 0;
     if (overflow) g_overflow_valid = true;
@@ -341,9 +335,8 @@ counting_history_commit_result_t counting_history_poll_commit(
     bool saved = false;
     (void)now_ms;
     while (g_snapshot_count > 0 && g_snapshots[0].job != 0 &&
-           ui_history_commit_status(g_snapshots[0].job) == STORAGE_JOB_SUCCEEDED &&
-           counting_cashbook_commit(&g_snapshots[0].cashbook)) {
-        if(g_snapshots[0].generation==g_current_generation)g_current_record=g_snapshots[0].cashbook.source;
+           ui_history_commit_status(g_snapshots[0].job) == STORAGE_JOB_SUCCEEDED) {
+        if(g_snapshots[0].generation==g_current_generation)g_current_record=g_snapshots[0].record.record_no;
         history_record_snapshot_release(&g_snapshots[0].detail);
         memmove(g_snapshots, g_snapshots + 1,
                 (--g_snapshot_count) * sizeof(g_snapshots[0]));
@@ -390,21 +383,6 @@ bool counting_history_can_start(void)
 }
 bool counting_history_is_idle(void)
 {return !g_uncaptured_pending&&!g_overflow_valid&&!g_snapshot_count;}
-bool counting_history_can_archive(void)
-{
-    if(g_uncaptured_pending||g_overflow_valid)return false;
-    const cashbook_t *book=cashbook_store_get();
-    for(unsigned i=0;i<g_snapshot_count;i++){
-        const counting_history_snapshot_t *s=&g_snapshots[i];
-        if(!s->job||ui_history_commit_status(s->job)!=STORAGE_JOB_SUCCEEDED)return false;
-        for(unsigned j=0;j<book->run_count;j++)if(book->runs[j].result.source==s->cashbook.source){
-            const cashbook_group_t *g=cashbook_group(book,book->runs[j].group);
-            if(!g||!g->excluded)return false;
-        }
-    }
-    return true;
-}
-
 bool counting_history_prepare_reset(counting_session_state_t *session,
     const counting_sim_t *sim_data, uint32_t now_ms)
 {

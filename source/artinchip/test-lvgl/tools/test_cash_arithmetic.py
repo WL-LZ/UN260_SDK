@@ -3,8 +3,8 @@ from fractions import Fraction
 import ctypes,random,subprocess,tempfile
 r=Path(__file__).resolve().parents[1];limit=999999999999999;scale=1000000
 with tempfile.TemporaryDirectory(prefix='un260-arithmetic-') as directory:
- lib=Path(directory)/'cash.so';subprocess.run(['cc','-shared','-fPIC','-I.','un260/workspace/cash_tools.c','-o',str(lib)],cwd=r,check=True)
- f=ctypes.CDLL(str(lib)).cash_calculate;f.argtypes=[ctypes.c_int64,ctypes.c_char,ctypes.c_int64,ctypes.POINTER(ctypes.c_int64)];f.restype=ctypes.c_int
+ lib=Path(directory)/'cash.so';subprocess.run(['cc','-shared','-fPIC','-I.','un260/workspace/calculator_math.c','-o',str(lib)],cwd=r,check=True)
+ f=ctypes.CDLL(str(lib)).calculator_calculate;f.argtypes=[ctypes.c_int64,ctypes.c_char,ctypes.c_int64,ctypes.POINTER(ctypes.c_int64)];f.restype=ctypes.c_int
  rng=random.Random(260)
  for i in range(5000):
   a=rng.randint(-limit,limit);b=rng.randint(-limit,limit);op=rng.choice('+-*/');out=ctypes.c_int64(731)
