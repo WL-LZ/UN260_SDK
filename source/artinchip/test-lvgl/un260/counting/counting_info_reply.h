@@ -26,4 +26,9 @@ counting_info_reply_result_t counting_info_reply_handle(counting_session_state_t
                                                         uint8_t len,
                                                         uint32_t history_total_notes_counted);
 
+/* Complete nonempty denomination reports are the final monetary snapshot.
+ * CNT sends no monetary rows and retains its accepted-note total. */
+bool counting_info_reply_reconcile_denoms(counting_session_state_t *session,
+                                           counting_sim_t *sim_data);
+
 #endif

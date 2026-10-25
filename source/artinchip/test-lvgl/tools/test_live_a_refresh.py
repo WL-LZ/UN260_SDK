@@ -22,7 +22,7 @@ preamble=r'''
 typedef struct {int total_pcs; float total_amount; bool multi_currency_result;} counting_sim_t;
 static counting_sim_t data;
 static bool visible=true;
-static unsigned section,rows,totals,dirty;
+static unsigned section,rows,totals,dirty,list_dirty;
 static int displayed_pcs;
 
 static const counting_sim_t *counting_data_current(void){return &data;}
@@ -31,7 +31,7 @@ static void page_01_main_mark_dirty(unsigned f){dirty|=f;}
 static void page_01_main_refresh_totals(int n,const char *s){(void)s;totals++;displayed_pcs=n;}
 static unsigned page_01_detail_section_get(void){return section;}
 static void page_01_main_detail_refresh_rows_only(void){rows++;displayed_pcs=data.total_pcs;}
-static void page_02_list_section_mark_dirty(unsigned s){(void)s;}
+static void page_02_list_section_mark_dirty(unsigned s){list_dirty|=1U<<s;}
 static void smart_island_update_counting(int p,double a){(void)p;(void)a;}
 static void flush(void){ui_frame_commit_flush();}
 '''
@@ -59,10 +59,17 @@ int main(void){
  section=1;app_counting_visual_commit(NULL,2);assert(rows==4);
  section=2;app_counting_visual_commit(NULL,8);assert(rows==5);
  app_counting_visual_commit(NULL,4);assert(rows==6);
- puts("PASS live A refresh before end; coalescing, hidden, B/C, MULTI, fallback");
+ ui_frame_commit_begin_batch();section=0;unsigned before=rows;list_dirty=0;
+ app_counting_runtime_on_denom_item_changed(NULL);app_counting_runtime_on_denom_item_changed(NULL);
+ assert(rows==before && (list_dirty&1));flush();assert(rows==before+1);
+ section=1;app_counting_runtime_on_denom_item_changed(NULL);flush();assert(rows==before+1);
+ section=2;app_counting_runtime_on_denom_item_changed(NULL);flush();assert(rows==before+1);
+ section=0;visible=false;app_counting_runtime_on_denom_item_changed(NULL);flush();assert(rows==before+1);
+ visible=true;ui_frame_commit_end_batch();
+ puts("PASS direct 49 A refresh before end; coalescing, hidden, B/C, MULTI, fallback");
 }
 '''
-source=preamble+'\n'.join(function(runtime,n) for n in ['app_counting_runtime_format_amount','app_counting_visual_commit','app_counting_runtime_refresh_compact'])+main
+source=preamble+'\n'.join(function(runtime,n) for n in ['app_counting_runtime_format_amount','app_counting_visual_commit','app_counting_runtime_refresh_compact','app_counting_runtime_on_live_denom_changed','app_counting_runtime_on_denom_item_changed'])+main
 with tempfile.TemporaryDirectory(prefix='un260-live-a-') as t:
  p=Path(t);(p/'test.c').write_text(source)
  subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=undefined','-I'+str(root),str(p/'test.c'),str(root/'un260/lv_core/ui_frame_commit.c'),'-o',str(p/'test')],check=True)

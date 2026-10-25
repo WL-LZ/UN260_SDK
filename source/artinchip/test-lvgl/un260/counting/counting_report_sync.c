@@ -15,8 +15,11 @@ static struct {
     unsigned rows, published_rows;
     int live_next;
     uint64_t denom_amount;
-    unsigned denom_pcs;
-    bool denom_seen;
+    unsigned denom_pcs, pass_pcs, serial_base;
+    bool denom_seen, final_denoms, group_restart;
+    uint8_t base_count, pass_count;
+    denom_t base_denoms[COUNTING_DENOM_MAX_ITEMS];
+    denom_t pass_denoms[COUNTING_DENOM_MAX_ITEMS];
     uint8_t last_payload[20];
     counting_sim_t staging;
     struct {
@@ -58,7 +61,23 @@ void counting_report_begin(bool add, counting_sim_t *data)
     report.enabled = true;
     if (report.stage == REPORT_IDLE) report.invalid = report.started = false;
     report.add = add;
-    report.denom_seen = false;
+    report.denom_seen = report.final_denoms = report.group_restart = false;
+    report.pass_pcs = report.pass_count = report.base_count = 0;
+    memset(report.pass_denoms, 0, sizeof(report.pass_denoms));
+    memset(report.base_denoms, 0, sizeof(report.base_denoms));
+    if (add && data) {
+        report.base_count = data->denom_number;
+        memcpy(report.base_denoms, data->denom, sizeof(report.base_denoms));
+    }
+    unsigned serial_rows = data ? (unsigned)counting_data_serial_scan_limit(data) : 0;
+    while (serial_rows && !data->sn_str[serial_rows - 1U]) --serial_rows;
+    /* Allocation capacity is not the previous note count. Preserve trailing
+     * unreadable serial slots from either the live pass or final report. */
+    if (add && report.live_seen && report.live_next > (int)serial_rows)
+        serial_rows = (unsigned)report.live_next;
+    if (add && report.cache.valid && report.published_rows > serial_rows)
+        serial_rows = report.published_rows;
+    report.serial_base = add ? serial_rows : 0;
     report.denom_pcs = add && data && data->total_pcs > 0 ? (unsigned)data->total_pcs : 0;
     report.denom_amount = add && data && data->total_amount > 0 ? (uint64_t)data->total_amount : 0;
     if (!add && data) {
@@ -84,28 +103,65 @@ void counting_report_begin(bool add, counting_sim_t *data)
     }
 }
 
-/* Zero-valued startup frames are markers, not an ADD clear. A first
- * positive total below the retained total establishes a fresh controller
- * result. Repeated totals/reject-only frames never contribute another note. */
-static bool denom_add(counting_sim_t *d, unsigned value)
+/* A is a projection of explicit note denominations, never amount differences. */
+static void denom_publish(counting_sim_t *d)
 {
-    if (!value || value > 2147483647U) return false;
-    unsigned i = 0;
-    while (i < d->denom_number && d->denom[i].value != (int)value) ++i;
-    if (i == d->denom_number) {
-        if (i == COUNTING_DENOM_MAX_ITEMS) return false;
-        d->denom[i] = (denom_t){.value = (int)value};
-        ++d->denom_number;
+    for (unsigned i = 0; i < d->denom_number; ++i)
+        d->denom[i].pcs = 0, d->denom[i].amount = 0;
+    for (unsigned source = 0; source < 2; ++source) {
+        const denom_t *rows = source ? report.pass_denoms : report.base_denoms;
+        unsigned count = source ? report.pass_count : report.base_count;
+        for (unsigned i = 0; i < count; ++i) {
+            unsigned slot = 0;
+            while (slot < d->denom_number && d->denom[slot].value != rows[i].value) ++slot;
+            if (slot == d->denom_number) {
+                if (slot == COUNTING_DENOM_MAX_ITEMS) continue;
+                d->denom[slot] = (denom_t){.value = rows[i].value};
+                ++d->denom_number;
+            }
+            unsigned pcs = (unsigned)d->denom[slot].pcs + rows[i].pcs;
+            d->denom[slot].pcs = pcs > UINT16_MAX ? UINT16_MAX : pcs;
+            d->denom[slot].amount = (float)d->denom[slot].value * d->denom[slot].pcs;
+        }
     }
-    if (d->denom[i].pcs == UINT16_MAX) return false;
-    ++d->denom[i].pcs;
-    d->denom[i].amount = (float)value * d->denom[i].pcs;
-    return true;
+}
+
+static void denom_restart(counting_sim_t *d)
+{
+    if (!report.denom_pcs && !report.base_count) return;
+    report.denom_pcs = report.denom_amount = report.base_count = 0;
+    memset(report.base_denoms, 0, sizeof(report.base_denoms));
+    report.group_restart = true;
+    d->last_total_pcs = d->last_valid_pcs = 0;
+    d->last_total_amount = 0;
+    d->last_issue_pcs = d->last_suspect_pcs = d->last_damaged_pcs = 0;
+    report.cache.valid = report.reusable = false;
+    report.published_rows = 0;
+    /* Keep this pass's serials when notes arrived before the first total. */
+    unsigned base = report.serial_base;
+    if (report.live_seen && d->sn_str && base <= (unsigned)d->sn_capacity) {
+        for (unsigned i = 0; i < base; ++i) free(d->sn_str[i]);
+        unsigned remain = (unsigned)d->sn_capacity - base;
+        memmove(d->sn_str, d->sn_str + base, remain * sizeof(*d->sn_str));
+        memset(d->sn_str + remain, 0, base * sizeof(*d->sn_str));
+        memmove(d->denom_mix, d->denom_mix + base,
+                (COUNTING_DATA_MAX_ITEMS - base) * sizeof(d->denom_mix[0]));
+        memset(d->denom_mix + COUNTING_DATA_MAX_ITEMS - base, 0,
+               base * sizeof(d->denom_mix[0]));
+        report.live_next -= (int)base;
+    } else {
+        counting_data_clear_serials(d);
+        report.live_next = report.live_seen ?
+            (report.live_next > (int)base ? report.live_next - (int)base : 0) : -1;
+    }
+    report.serial_base = 0;
+    counting_data_clear_errors(d);
+    denom_publish(d);
 }
 
 bool counting_report_observe_total(counting_sim_t *d, uint32_t amount, unsigned pcs)
 {
-    if (!report.enabled || !d || d->multi_currency_result) return false;
+    if (!report.enabled || !d || d->multi_currency_result || report.final_denoms) return false;
     if (!pcs) {
         if (!report.denom_seen && report.add && !amount) {
             d->total_pcs = (int)report.denom_pcs;
@@ -114,31 +170,63 @@ bool counting_report_observe_total(counting_sim_t *d, uint32_t amount, unsigned 
         return false;
     }
     bool restarted = !report.denom_seen && pcs < report.denom_pcs;
-    if (restarted) {
-        report.denom_pcs = report.denom_amount = 0;
-        /* The controller established a new cumulative result. Every consumer
-         * must use the same zero baseline, not the previous ADD group's end. */
-        d->last_total_pcs = d->last_valid_pcs = 0;
-        d->last_total_amount = 0;
-        d->last_issue_pcs = d->last_suspect_pcs = d->last_damaged_pcs = 0;
-        report.cache.valid = report.reusable = false;
-        report.published_rows = 0;
-        report.live_next = -1;
-        counting_data_clear_serials(d);
-        counting_data_clear_errors(d);
-        for (unsigned i = 0; i < d->denom_number; ++i) {
-            d->denom[i].pcs = 0;
-            d->denom[i].amount = 0;
-        }
-    }
+    if (restarted) denom_restart(d);
     report.denom_seen = true;
-    if (pcs <= report.denom_pcs) return false;
-    /* Several missing notes cannot be assigned their average denomination.
-     * The complete serial snapshot can reconcile that gap after STOP. */
-    if (pcs == report.denom_pcs + 1 && amount > report.denom_amount)
-        denom_add(d, amount - report.denom_amount);
-    report.denom_pcs = pcs;
-    report.denom_amount = amount;
+    return restarted;
+}
+
+bool counting_report_observe_note(counting_sim_t *d, unsigned value)
+{
+    if (!report.enabled || !d || d->multi_currency_result || report.final_denoms ||
+        !value || value > 2147483647U) return false;
+    unsigned slot = 0;
+    while (slot < report.pass_count && report.pass_denoms[slot].value != (int)value) ++slot;
+    if (slot == report.pass_count) {
+        if (slot == COUNTING_DENOM_MAX_ITEMS) return false;
+        report.pass_denoms[slot] = (denom_t){.value = (int)value};
+        ++report.pass_count;
+    }
+    if (report.pass_denoms[slot].pcs == UINT16_MAX) return false;
+    ++report.pass_denoms[slot].pcs;
+    ++report.pass_pcs;
+    report.cache.valid = report.reusable = false;
+    denom_publish(d);
+    return true;
+}
+
+void counting_report_denom_snapshot(counting_sim_t *d, bool final)
+{
+    if (!d || !report.enabled || !final) return;
+    /* Equal first totals cannot distinguish retained ADD state from a reset.
+     * Resolve that ambiguity using the complete explicit denomination table. */
+    bool pass_matches = report.pass_pcs != 0;
+    for (unsigned i = 0; i < d->denom_number; ++i) {
+        unsigned pcs = 0;
+        for (unsigned j = 0; j < report.pass_count; ++j)
+            if (d->denom[i].value == report.pass_denoms[j].value) pcs = report.pass_denoms[j].pcs;
+        if (pcs != d->denom[i].pcs) pass_matches = false;
+    }
+    for (unsigned i = 0; i < report.pass_count; ++i) {
+        bool found = false;
+        for (unsigned j = 0; j < d->denom_number; ++j)
+            if (report.pass_denoms[i].value == d->denom[j].value) found = true;
+        if (!found) pass_matches = false;
+    }
+    if (report.add && report.denom_pcs && pass_matches) {
+        denom_t snapshot[COUNTING_DENOM_MAX_ITEMS];
+        uint8_t count = d->denom_number;
+        memcpy(snapshot, d->denom, sizeof(snapshot));
+        denom_restart(d);
+        memcpy(d->denom, snapshot, sizeof(snapshot));
+        d->denom_number = count;
+    }
+    report.final_denoms = true;
+}
+
+bool counting_report_take_group_restart(void)
+{
+    bool restarted = report.group_restart;
+    report.group_restart = false;
     return restarted;
 }
 
@@ -390,10 +478,7 @@ int counting_report_live_slot(counting_sim_t *d, bool *cleared)
             report.published_rows = 0;
             *cleared = true;
         }
-        int last = counting_data_serial_scan_limit(d);
-        while (last > 0 && d->sn_str[last - 1] == NULL) --last;
-        report.live_next = report.add && report.cache.valid && report.published_rows > (unsigned)last
-            ? (int)report.published_rows : last;
+        report.live_next = (int)report.serial_base;
     }
     report.live_seen = true;
     report.cache.valid = false;

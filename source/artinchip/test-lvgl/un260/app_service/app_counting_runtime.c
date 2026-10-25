@@ -99,6 +99,7 @@ static void app_counting_visual_commit(void *context, uint32_t flags)
         page_01_main_refresh_totals(sim_data->total_pcs, amount_buf);
     }
     if ((flags & 4U) ||
+        ((flags & 16U) && page_01_detail_section_get() == PAGE_01_DETAIL_SECTION_A) ||
         ((flags & 1U) && sim_data && !sim_data->multi_currency_result &&
          page_01_detail_section_get() == PAGE_01_DETAIL_SECTION_A) ||
         ((flags & 2U) && page_01_detail_section_get() == PAGE_01_DETAIL_SECTION_B) ||
@@ -294,8 +295,8 @@ static void app_counting_runtime_on_main_data_changed(void)
 static void app_counting_runtime_on_live_denom_changed(void)
 {
     page_02_list_section_mark_dirty(PAGE_02_SECTION_A);
-    if (!ui_frame_commit_defer(app_counting_visual_commit, NULL, 4U))
-        app_counting_visual_commit(NULL, 4U);
+    if (!ui_frame_commit_defer(app_counting_visual_commit, NULL, 16U))
+        app_counting_visual_commit(NULL, 16U);
 }
 
 static const counting_denom_reply_hooks_t g_counting_denom_hooks = {
@@ -383,6 +384,12 @@ static void app_counting_runtime_on_serial_ui_complete(void *context,
     if (begin_end_anim) {
         ui_count_end_anim_begin(NULL);
     }
+}
+
+static void app_counting_runtime_on_denom_item_changed(void *context)
+{
+    (void)context;
+    app_counting_runtime_on_live_denom_changed();
 }
 
 static void app_counting_runtime_on_serial_item_changed(void *context)
@@ -538,11 +545,11 @@ void app_counting_runtime_handle_info(counting_session_state_t *session,
         smart_island_refresh_summary();
     }
     if (!multi && result.kind == COUNTING_INFO_REPLY_LIVE) {
-        if (counting_report_observe_total(sim_data,
+        counting_report_observe_total(sim_data,
             ((uint32_t)buf[4] << 24) | ((uint32_t)buf[5] << 16) |
             ((uint32_t)buf[6] << 8) | buf[7],
-            ((unsigned)buf[8] << 8) | buf[9]))
-            counting_history_restart_group();
+            ((unsigned)buf[8] << 8) | buf[9]);
+        if (counting_report_take_group_restart()) counting_history_restart_group();
     }
     if (result.kind == COUNTING_INFO_REPLY_LIVE) {
         app_counting_runtime_refresh_compact(sim_data);
@@ -615,12 +622,26 @@ void app_counting_runtime_handle_denom(counting_detail_state_t *detail_state,
     counting_denom_reply_hooks_t hooks = g_counting_denom_hooks;
     if (session->phase == COUNTING_SESSION_ACTIVE)
         hooks.on_main_data_changed = app_counting_runtime_on_live_denom_changed;
-    counting_denom_reply_handle(detail_state,
+    counting_denom_reply_result_t result = counting_denom_reply_handle(detail_state,
                                 session,
                                 sim_data,
                                 buf,
                                 len,
                                 &hooks);
+    bool restarted = counting_report_take_group_restart();
+    if (restarted) counting_history_restart_group();
+    bool reconciled = result == COUNTING_DENOM_REPLY_SESSION_END &&
+        counting_info_reply_reconcile_denoms(session, sim_data);
+    if (restarted || reconciled) {
+        int current_pcs = sim_data->total_pcs;
+        if (machine_state_add_enabled() && sim_data->last_total_pcs > 0 &&
+            current_pcs >= sim_data->last_total_pcs)
+            current_pcs -= sim_data->last_total_pcs;
+        session->analysis_valid_pcs = current_pcs;
+        app_counting_runtime_refresh_compact(sim_data);
+        smart_island_update_counting(current_pcs, sim_data->total_amount);
+        smart_island_set_count_analysis(current_pcs, sim_data->err_expected, 0);
+    }
 }
 
 void app_counting_runtime_handle_detail(uint8_t cmd,
@@ -656,6 +677,7 @@ void app_counting_runtime_handle_detail(uint8_t cmd,
     hooks.on_serial_data_started = app_counting_runtime_on_serial_data_started;
     hooks.on_serial_report_ready = app_counting_runtime_on_serial_report_ready;
     hooks.on_serial_ui_complete = app_counting_runtime_on_serial_ui_complete;
+    hooks.on_denom_item_changed = app_counting_runtime_on_denom_item_changed;
     hooks.on_serial_item_changed = app_counting_runtime_on_serial_item_changed;
     hooks.on_live_serial_received = app_counting_runtime_on_live_serial_received;
     hooks.on_history_record_ready = app_counting_runtime_on_history_record;

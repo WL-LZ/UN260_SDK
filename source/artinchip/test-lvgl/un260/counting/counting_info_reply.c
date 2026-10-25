@@ -86,18 +86,24 @@ static counting_info_reply_result_t counting_info_handle_finished(counting_sessi
         return counting_info_reply_result(COUNTING_INFO_REPLY_IGNORED);
     }
 
+    if (session->phase != COUNTING_SESSION_ACTIVE)
+        counting_info_commit_previous_result(session, sim_data);
     session->phase = COUNTING_SESSION_FINISHED_WAIT_START;
     session->start_confirmed = false;
     session->end_anim_wait_detail = true;
     session->last_result.valid = true;
 
-    if (sim_data->total_pcs > 0 || sim_data->total_amount > 0.0f) {
-        result.final_pcs = sim_data->total_pcs;
-        result.final_amount = sim_data->total_amount;
-    } else {
+    /* A STOP with a positive quantity carries the final controller result.
+     * Zero-quantity STOP frames are boundaries and retain the latest LIVE. */
+    if (qty != 0) {
         result.final_pcs = (int)qty;
         result.final_amount = (double)amount;
+    } else {
+        result.final_pcs = sim_data->total_pcs;
+        result.final_amount = sim_data->total_amount;
     }
+    sim_data->total_pcs = result.final_pcs;
+    sim_data->total_amount = result.final_amount;
     result.final_issue = (int)issue > session->expected_issue
         ? (int)issue : session->expected_issue;
     sim_data->err_expected = result.final_issue;
@@ -158,4 +164,41 @@ counting_info_reply_result_t counting_info_reply_handle(counting_session_state_t
                                              history_total_notes_counted);
     }
     return counting_info_reply_result(COUNTING_INFO_REPLY_IGNORED);
+}
+
+
+bool counting_info_reply_reconcile_denoms(counting_session_state_t *session,
+                                           counting_sim_t *sim_data)
+{
+    if (!session || !sim_data || sim_data->multi_currency_result ||
+        session->phase != COUNTING_SESSION_FINISHED_WAIT_START) return false;
+    uint32_t pcs = 0;
+    uint64_t amount = 0;
+    for (unsigned i = 0; i < sim_data->denom_number; ++i) {
+        const denom_t *row = &sim_data->denom[i];
+        if (row->value <= 0) continue;
+        pcs += row->pcs;
+        amount += (uint64_t)row->value * row->pcs;
+    }
+    if (!pcs) return false;
+    bool changed = sim_data->total_pcs != (int)pcs ||
+                   sim_data->total_amount != (double)amount;
+    bool pending_history = session->history_record.valid ||
+        (session->last_result.valid && session->last_result.pcs == 0);
+    sim_data->total_pcs = (int)pcs;
+    sim_data->total_amount = (double)amount;
+    if (session->last_result.valid) {
+        session->last_result.pcs = session->last_result.valid_pcs = (int)pcs;
+        session->last_result.amount = (double)amount;
+    }
+    if (pending_history) {
+        session->history_record.valid = true;
+        uint32_t previous = session->history_record.pcs;
+        uint32_t lifetime = session->history_record.total_after >= previous
+            ? session->history_record.total_after - previous : 0;
+        session->history_record.pcs = pcs;
+        session->history_record.amount = (double)amount;
+        session->history_record.total_after = counting_info_saturating_add_u32(lifetime, pcs);
+    }
+    return changed;
 }

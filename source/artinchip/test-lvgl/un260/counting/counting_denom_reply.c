@@ -110,8 +110,9 @@ static counting_denom_reply_result_t counting_denom_handle_end(
         if (changed) {
             memcpy(sim_data->denom, detail->live_denom, sizeof(sim_data->denom));
             sim_data->denom_number = detail->live_denom_number;
-            counting_denom_notify_main_data_changed(hooks);
         }
+        counting_report_denom_snapshot(sim_data, session->phase == COUNTING_SESSION_FINISHED_WAIT_START);
+        if (changed) counting_denom_notify_main_data_changed(hooks);
         /* A snapshot that straddles the real stop still needs final queries. */
         if (session->phase == COUNTING_SESSION_ACTIVE) {
             counting_denom_record_history(hooks, buf, len);

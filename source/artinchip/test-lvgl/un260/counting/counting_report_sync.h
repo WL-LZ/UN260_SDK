@@ -23,6 +23,10 @@ typedef enum {
 void counting_report_begin(bool add, counting_sim_t *data);
 /* Returns true once when a positive total proves controller group restart. */
 bool counting_report_observe_total(counting_sim_t *data, uint32_t amount, unsigned pcs);
+/* Each accepted 49 is one independent note, including equal serial text. */
+bool counting_report_observe_note(counting_sim_t *data, unsigned value);
+void counting_report_denom_snapshot(counting_sim_t *data, bool final);
+bool counting_report_take_group_restart(void);
 void counting_report_reset(void);
 void counting_report_shutdown(void);
 /* Active transfer only; an expired report must not defer unrelated recovery. */

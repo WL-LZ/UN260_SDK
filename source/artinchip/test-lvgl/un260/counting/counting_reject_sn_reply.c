@@ -264,6 +264,10 @@ static counting_detail_reply_result_t counting_sn_push_handle(
         return COUNTING_DETAIL_REPLY_IGNORED;
     }
 
+    if (counting_report_observe_note(sim_data, (unsigned)denom_value))
+        counting_detail_notify(hooks, hooks ? hooks->on_denom_item_changed : NULL);
+    counting_detail_record_history(hooks, "0x49", buf, len);
+
     serial_len = (int)len - 1 - 4 - DENOM_FIELD_LEN;
     if (serial_len <= 0 || serial_len >= (int)sizeof(serial_text)) {
         return COUNTING_DETAIL_REPLY_INVALID;
@@ -274,13 +278,13 @@ static counting_detail_reply_result_t counting_sn_push_handle(
     while (*serial_start == ' ') serial_start++;
     serial_end = serial_start + strlen(serial_start);
     while (serial_end > serial_start && serial_end[-1] == ' ') *--serial_end = '\0';
-    if (*serial_start == '\0') return COUNTING_DETAIL_REPLY_IGNORED;
-
     bool cleared;
     index = counting_report_live_slot(sim_data, &cleared);
     if (cleared) counting_detail_notify(hooks, hooks ? hooks->on_serial_data_started : NULL);
-    if (index < 0 || index >= COUNTING_DATA_MAX_ITEMS ||
-        !counting_data_ensure_serial_capacity(sim_data, index + 1)) {
+    if (index < 0 || index >= COUNTING_DATA_MAX_ITEMS) return COUNTING_DETAIL_REPLY_MEMORY_ERROR;
+    /* An unreadable serial is still an independent note and keeps its NO. */
+    if (*serial_start == '\0') return COUNTING_DETAIL_REPLY_DATA;
+    if (!counting_data_ensure_serial_capacity(sim_data, index + 1)) {
         return COUNTING_DETAIL_REPLY_MEMORY_ERROR;
     }
 
@@ -291,7 +295,6 @@ static counting_detail_reply_result_t counting_sn_push_handle(
     sim_data->sn_str[index] = sn_copy;
     sim_data->denom_mix[index] = (int)denom_value;
 
-    counting_detail_record_history(hooks, "0x49", buf, len);
     counting_sn_notify_item(hooks);
     counting_sn_notify_live(hooks, (int)denom_value, serial_start);
     return COUNTING_DETAIL_REPLY_DATA;
