@@ -32,7 +32,7 @@ static void page_01_main_refresh_totals(int n,const char *s){(void)s;totals++;di
 static unsigned page_01_detail_section_get(void){return section;}
 static void page_01_main_detail_refresh_rows_only(void){rows++;displayed_pcs=data.total_pcs;}
 static void page_02_list_section_mark_dirty(unsigned s){(void)s;}
-static void smart_island_update_counting(int p,float a){(void)p;(void)a;}
+static void smart_island_update_counting(int p,double a){(void)p;(void)a;}
 static void flush(void){ui_frame_commit_flush();}
 '''
 main=r'''

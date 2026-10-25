@@ -430,7 +430,7 @@ void stop_counting_sim(void)
     safe_reset_timer_schedule();
 }
 //处理金额格式
-void format_amount_with_comma(char* dest, size_t dest_size, float amount) {
+void format_amount_with_comma(char* dest, size_t dest_size, double amount) {
     char temp[32];
     int len;
     int dest_index = 0;

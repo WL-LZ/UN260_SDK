@@ -14,7 +14,7 @@ static struct {
     bool live_limit_reported;
     unsigned rows, published_rows;
     int live_next;
-    uint32_t denom_amount;
+    uint64_t denom_amount;
     unsigned denom_pcs;
     bool denom_seen;
     uint8_t last_payload[20];
@@ -22,7 +22,7 @@ static struct {
     struct {
         bool valid;
         int pcs;
-        float amount;
+        double amount;
         uint16_t rejects, error_count;
         uint8_t denom_count, error_codes[256], error_pcs[256];
         denom_t denoms[COUNTING_DENOM_MAX_ITEMS];
@@ -60,7 +60,7 @@ void counting_report_begin(bool add, counting_sim_t *data)
     report.add = add;
     report.denom_seen = false;
     report.denom_pcs = add && data && data->total_pcs > 0 ? (unsigned)data->total_pcs : 0;
-    report.denom_amount = add && data && data->total_amount > 0 ? (uint32_t)data->total_amount : 0;
+    report.denom_amount = add && data && data->total_amount > 0 ? (uint64_t)data->total_amount : 0;
     if (!add && data) {
         for (unsigned i = 0; i < data->denom_number; ++i) {
             data->denom[i].pcs = 0;
@@ -109,7 +109,7 @@ bool counting_report_observe_total(counting_sim_t *d, uint32_t amount, unsigned 
     if (!pcs) {
         if (!report.denom_seen && report.add && !amount) {
             d->total_pcs = (int)report.denom_pcs;
-            d->total_amount = (float)report.denom_amount;
+            d->total_amount = (double)report.denom_amount;
         }
         return false;
     }

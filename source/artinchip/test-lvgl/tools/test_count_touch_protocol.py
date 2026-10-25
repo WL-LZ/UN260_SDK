@@ -40,7 +40,7 @@ static void ui_page_dynamic_capture_on_count_info(uint16_t valid,uint8_t issue,u
 static unsigned locks,unlocks,restarted_groups;
 static int island_pcs;
 static void counting_history_restart_group(void){++restarted_groups;}
-static void smart_island_update_counting(int pcs,float amount){(void)amount;island_pcs=pcs;}
+static void smart_island_update_counting(int pcs,double amount){(void)amount;island_pcs=pcs;}
 /* Observe the UI publication without simulating protocol or lock events. */
 static unsigned reject_notifications;
 static void app_counting_runtime_on_reject_report_changed(void *context){(void)context;++reject_notifications;}

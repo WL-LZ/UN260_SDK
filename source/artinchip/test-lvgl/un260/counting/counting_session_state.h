@@ -7,7 +7,7 @@
 typedef struct {
     bool valid;
     int pcs;
-    float amount;
+    double amount;
     int valid_pcs;
     int issue_pcs;
     int suspect_pcs;
@@ -22,7 +22,7 @@ typedef struct {
     uint32_t retry_tick;
     uint32_t pcs;
     uint32_t total_after;
-    float amount;
+    double amount;
 } counting_pending_history_record_t;
 
 typedef enum {

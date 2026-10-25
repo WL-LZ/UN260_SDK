@@ -115,7 +115,7 @@ typedef struct {
 
 typedef struct {
     int pcs;
-    int amount;
+    double amount;
     int denomination;
     uint8_t mode;
     uint8_t gate_phase;

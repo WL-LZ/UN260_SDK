@@ -288,12 +288,12 @@ static bool history_parse_bool(const char *value, bool *out)
     return true;
 }
 
-static uint32_t history_amount_to_u32(float amount)
+static uint32_t history_amount_to_u32(double amount)
 {
     if (!(amount > 0.0f)) {
         return 0;
     }
-    if (amount >= (float)UINT32_MAX) {
+    if (amount >= (double)UINT32_MAX) {
         return UINT32_MAX;
     }
     return (uint32_t)amount;
@@ -1389,7 +1389,7 @@ static void history_format_session_log(const counting_sim_t *sim, const char *lo
 }
 
 static bool history_record_build(const counting_sim_t *sim_data, uint32_t pcs_total,
-                                           float amount_total,
+                                           double amount_total,
                                            const char *error_frame_text,
                                            const char *start_frame_text, const char *end_frame_text,
                                            const char *session_log_text, ui_history_record_t *out, bool multi)
@@ -1438,7 +1438,7 @@ static bool history_record_build(const counting_sim_t *sim_data, uint32_t pcs_to
     return true;
 }
 
-bool ui_history_record_build_from_session(const counting_sim_t *sim,uint32_t pcs,float amount,
+bool ui_history_record_build_from_session(const counting_sim_t *sim,uint32_t pcs,double amount,
     const char *error,const char *start,const char *end,const char *log,ui_history_record_t *out)
 {
     return history_record_build(sim,pcs,amount,error,start,end,log,out,false);
@@ -1481,6 +1481,8 @@ static bool history_record_write_full_snapshot(const ui_history_record_t *record
        detail->hash!=history_record_snapshot_hash(detail->bytes,detail->size))return false;
     ui_history_record_t copy=*record;copy.detail_hash=detail->hash;copy.detail_bytes=(uint32_t)detail->size;
     copy.detail_amount=detail->amount_complete?detail->amount:record->detail_amount;
+    if(detail->amount_complete)
+        copy.amount=detail->amount>UINT32_MAX?UINT32_MAX:(uint32_t)detail->amount;
     memcpy(copy.detail_reject_codes,detail->reject_codes,32);
     counting_sim_t preview={0};preview.denom_number=detail->denom_count;
     memcpy(preview.denom,detail->denoms,sizeof(preview.denom));
@@ -1516,7 +1518,7 @@ bool ui_history_record_update_snapshot(const ui_history_record_t *record, uint32
 }
 
 bool ui_history_record_append_from_session(const counting_sim_t *sim_data, uint32_t pcs_total,
-                                           float amount_total, uint32_t total_notes_after,
+                                           double amount_total, uint32_t total_notes_after,
                                            const char *error_frame_text,
                                            const char *start_frame_text, const char *end_frame_text,
                                            const char *session_log_text)

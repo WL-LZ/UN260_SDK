@@ -80,7 +80,7 @@ uint16_t ui_history_capacity_get(void);
  * removal publish together only after durable save. Pending resize blocks edits. */
 bool ui_history_capacity_set(uint16_t capacity);
 bool ui_history_record_build_from_session(const counting_sim_t *sim_data,
-    uint32_t pcs_total, float amount_total, const char *error_frame_text,
+    uint32_t pcs_total, double amount_total, const char *error_frame_text,
     const char *start_frame_text, const char *end_frame_text,
     const char *session_log_text, ui_history_record_t *out);
 bool ui_history_record_append_snapshot(const ui_history_record_t *record,
@@ -103,7 +103,7 @@ uint32_t ui_history_total_notes_counted_get(void);
 void ui_history_total_notes_counted_set(uint32_t total);
 void ui_history_total_notes_counted_clear(void);
 bool ui_history_record_append_from_session(const counting_sim_t *sim_data, uint32_t pcs_total,
-                                           float amount_total, uint32_t total_notes_after,
+                                           double amount_total, uint32_t total_notes_after,
                                            const char *error_frame_text,
                                            const char *start_frame_text, const char *end_frame_text,
                                            const char *session_log_text);

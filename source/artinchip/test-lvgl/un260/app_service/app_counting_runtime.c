@@ -55,7 +55,7 @@ typedef struct {
 
 static void app_counting_runtime_format_amount(char *dest,
                                                size_t dest_size,
-                                               float amount)
+                                               double amount)
 {
     char temp[32];
     int len;

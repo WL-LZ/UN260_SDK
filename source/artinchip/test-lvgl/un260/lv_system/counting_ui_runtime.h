@@ -17,7 +17,7 @@ void sim_reset_counting_group(counting_sim_t *sim_data);
 void sim_reset_for_currency(counting_sim_t *sim_data);
 
 void ui_refresh_main_page(void);
-void format_amount_with_comma(char *dest, size_t dest_size, float amount);
+void format_amount_with_comma(char *dest, size_t dest_size, double amount);
 void page_01_main_detail_refresh_rows_only(void);
 void ui_count_end_anim_cancel(void);
 void ui_count_end_anim_begin(const char *result_text);

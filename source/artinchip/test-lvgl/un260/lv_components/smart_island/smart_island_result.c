@@ -111,7 +111,7 @@ void smart_island_notify_count_start(void)
     g_si_ctx.text.result[0] = '\0';
     g_si_ctx.text.serial_ticker[0] = '\0';
     g_si_ctx.counting.pcs = counting_data_current()->total_pcs;
-    g_si_ctx.counting.amount = (int)counting_data_current()->total_amount;
+    g_si_ctx.counting.amount = counting_data_current()->total_amount;
     g_si_ctx.counting.denomination = 0;
     g_si_ctx.counting.mode = machine_state_mode();
     g_si_ctx.counting.serial[0] = '\0';
@@ -124,9 +124,9 @@ void smart_island_notify_count_start(void)
     smart_island_view_message_pulse();
 }
 
-void smart_island_update_counting(int pcs, float amount)
+void smart_island_update_counting(int pcs, double amount)
 {
-    int amount_integer = amount > 0.0f ? (int)(amount + 0.5f) : 0;
+    double amount_value = amount > 0.0 ? amount : 0.0;
     uint8_t mode = machine_state_mode();
     bool mode_changed = g_si_ctx.counting.mode != mode;
     uint32_t multi_revision = counting_multi_current()->revision;
@@ -135,13 +135,13 @@ void smart_island_update_counting(int pcs, float amount)
 
     if (pcs < 0) pcs = 0;
     if (g_si_ctx.counting.pcs == pcs &&
-        g_si_ctx.counting.amount == amount_integer &&
+        g_si_ctx.counting.amount == amount_value &&
         g_si_ctx.counting.mode == mode && !multi_changed) {
         return;
     }
 
     g_si_ctx.counting.pcs = pcs;
-    g_si_ctx.counting.amount = amount_integer;
+    g_si_ctx.counting.amount = amount_value;
     g_si_ctx.counting.mode = mode;
     g_si_ctx.counting.multi_revision = multi_revision;
     if (mode_changed && g_si_ctx.view.scene == SMART_ISLAND_SCENE_COUNTING &&

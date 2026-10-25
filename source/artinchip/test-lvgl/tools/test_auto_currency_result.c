@@ -77,7 +77,7 @@ static void app_counting_runtime_refresh_compact(const counting_sim_t *data) { C
 static void app_counting_runtime_try_history_commit(counting_session_state_t *session,
     const counting_sim_t *data, uint32_t now)
 { CHECK(session && data); (void)now; }
-static void smart_island_update_counting(int pcs, float amount) { (void)pcs; (void)amount; }
+static void smart_island_update_counting(int pcs, double amount) { (void)pcs; (void)amount; }
 static void smart_island_set_count_analysis(int accepted, int suspect, int damaged)
 { (void)accepted; (void)suspect; (void)damaged; }
 static void page_02_list_section_mark_dirty(int section) { (void)section; }

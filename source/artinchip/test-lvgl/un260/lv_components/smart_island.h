@@ -48,7 +48,7 @@ bool smart_island_status_slot_available(void);
 void smart_island_refresh_time(void); //刷新默认时间显示
 void smart_island_set_visual(smart_island_visual_t visual, bool anim_en); //设置视觉形态
 void smart_island_notify_count_start(void); //通知：开始点钞
-void smart_island_update_counting(int pcs, float amount); //更新跑钞态实时数量/金额
+void smart_island_update_counting(int pcs, double amount); //更新跑钞态实时数量/金额
 void smart_island_notify_count_end(const char *result_text); //通知：点钞结束
 /* The owner accepted a result/session reset. Cancel counting presentation,
  * but retain unrelated warning scenes. */

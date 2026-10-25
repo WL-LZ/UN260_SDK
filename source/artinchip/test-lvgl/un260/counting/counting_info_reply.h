@@ -16,7 +16,7 @@ typedef enum {
 typedef struct {
     counting_info_reply_kind_t kind;
     int final_pcs;
-    float final_amount;
+    double final_amount;
     int final_issue;
 } counting_info_reply_result_t;
 

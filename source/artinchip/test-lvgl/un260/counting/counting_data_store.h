@@ -5,6 +5,14 @@
 
 #include "counting_data_types.h"
 
+/* Face values and piece counts are integers; do not round them through the
+ * legacy float amount cache when displaying or exporting a denomination. */
+static inline uint64_t counting_data_denom_amount(const denom_t *denom)
+{
+    return denom && denom->value > 0
+        ? (uint64_t)(unsigned)denom->value * denom->pcs : 0;
+}
+
 /* Read-only view of the single application counting-result store. */
 const counting_sim_t *counting_data_current(void);
 /* Sticky until an actual result clear; changing selected mode is not a clear. */

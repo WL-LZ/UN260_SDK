@@ -146,7 +146,7 @@ static void row_bind(lv_obj_t *row, uint32_t index, void *context)
         number_text(cells[0], text);
         snprintf(text, sizeof(text), "%u", (unsigned)denom.pcs);
         number_text(cells[1], text);
-        snprintf(text, sizeof(text), "%.0f", (double)denom.amount);
+        snprintf(text, sizeof(text), "%.0f", (double)counting_data_denom_amount(&denom));
         number_text(cells[2], text);
     } else if (section->id == PAGE_01_DETAIL_SECTION_B) {
         unsigned slot = index < detail_view->serial_count ? detail_view->serial_slots[index] :

@@ -53,7 +53,7 @@ static void page_02_list_section_mark_dirty(unsigned id){assert(id<3);list_dirty
 static void page_02_list_section_data_ready(unsigned id){assert(id==PAGE_02_SECTION_C);list_dirty[id]++;}
 static void app_counting_runtime_format_amount(char *out,size_t size,float value){snprintf(out,size,"%.0f",value);}
 static void page_01_main_refresh_totals(int pcs,const char *amount){assert(pcs==data.total_pcs);assert(strcmp(amount,"123")==0);totals++;}
-static void smart_island_update_counting(int pcs,float amount){assert(pcs==data.total_pcs && amount==data.total_amount);island_updates++;}
+static void smart_island_update_counting(int pcs,double amount){assert(pcs==data.total_pcs && amount==data.total_amount);island_updates++;}
 static int page_01_detail_section_get(void){return active_section;}
 static void page_01_main_detail_refresh_rows_only(void){rows++;shown_err_num=data.err_num;shown_err_pcs=data.err_pcs[0];}
 """

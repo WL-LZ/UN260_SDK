@@ -28,7 +28,7 @@ bool ui_history_record_update_snapshot(const ui_history_record_t*r,uint32_t tota
 bool ui_history_record_build_multi_base(const counting_sim_t*s,uint32_t p,const char*e,const char*a,const char*b,const char*l,ui_history_record_t*r){
  (void)s;(void)e;(void)a;(void)b;(void)l;memset(r,0,sizeof(*r));r->valid=true;r->pcs=p;return true;
 }
-bool ui_history_record_build_from_session(const counting_sim_t*s,uint32_t p,float m,const char*e,const char*a,const char*b,const char*l,ui_history_record_t*r){
+bool ui_history_record_build_from_session(const counting_sim_t*s,uint32_t p,double m,const char*e,const char*a,const char*b,const char*l,ui_history_record_t*r){
  (void)m;return ui_history_record_build_multi_base(s,p,e,a,b,l,r);
 }
 static void live(const char*c,unsigned amount,unsigned pcs){uint8_t f[16]={0xfd,0xdf,16,14};memcpy(f+4,c,3);f[7]=amount>>24;f[8]=amount>>16;f[9]=amount>>8;f[10]=amount;f[11]=pcs>>8;f[12]=pcs;f[14]=1;assert(counting_multi_info(f,16));}

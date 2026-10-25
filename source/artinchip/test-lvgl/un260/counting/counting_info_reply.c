@@ -96,7 +96,7 @@ static counting_info_reply_result_t counting_info_handle_finished(counting_sessi
         result.final_amount = sim_data->total_amount;
     } else {
         result.final_pcs = (int)qty;
-        result.final_amount = (float)amount;
+        result.final_amount = (double)amount;
     }
     result.final_issue = (int)issue > session->expected_issue
         ? (int)issue : session->expected_issue;

@@ -249,7 +249,7 @@ static bool ui_export_data_write_html_file(const char *file_path)
     int reject_no = 0;
     int total_pcs = counting_data_current()->total_pcs > 0 ? counting_data_current()->total_pcs : 0;
     int reject_total = ui_export_data_get_reject_count();
-    float total_amount = counting_data_current()->total_amount > 0.0f ? counting_data_current()->total_amount : 0.0f;
+    double total_amount = counting_data_current()->total_amount > 0.0f ? counting_data_current()->total_amount : 0.0f;
     const char *mode_key = UI_N_("None");
     char sort_buf[16] = "SORT:OFF";
     char add_buf[16] = "ADD:OFF";
@@ -340,7 +340,7 @@ static bool ui_export_data_write_html_file(const char *file_path)
         }
         fprintf(fp,
                 "<tr><td class=\"num-font\">%d</td><td class=\"text-right num-font\">%u</td><td class=\"text-right num-font\">%.0f</td></tr>\n",
-                counting_data_current()->denom[i].value, (unsigned)counting_data_current()->denom[i].pcs, counting_data_current()->denom[i].amount);
+                counting_data_current()->denom[i].value, (unsigned)counting_data_current()->denom[i].pcs, (double)counting_data_denom_amount(&counting_data_current()->denom[i]));
     }
 
     fprintf(fp,
@@ -349,7 +349,7 @@ static bool ui_export_data_write_html_file(const char *file_path)
         "<div class=\"graph-title\"><div data-i18n=\"Amount Distribution\">Amount Distribution</div><span data-i18n=\"Horizontal overview\">Horizontal overview</span></div>\n");
 
     for (i = 0; i < counting_data_current()->denom_number && i < (int)(sizeof(counting_data_current()->denom) / sizeof(counting_data_current()->denom[0])); i++) {
-        float amount = counting_data_current()->denom[i].amount;
+        double amount = (double)counting_data_denom_amount(&counting_data_current()->denom[i]);
         float pct = (total_amount > 0.0f) ? (amount * 100.0f / total_amount) : 0.0f;
 
         if (counting_data_current()->denom[i].value <= 0) {
@@ -500,7 +500,7 @@ static bool ui_export_data_write_csv_file(const char *file_path)
         fprintf(fp, "%d,%u,%.0f\n",
                 counting_data_current()->denom[i].value,
                 (unsigned)counting_data_current()->denom[i].pcs,
-                counting_data_current()->denom[i].amount);
+                (double)counting_data_denom_amount(&counting_data_current()->denom[i]));
     }
 
     fprintf(fp, "\nSERIAL NUMBER LIST\n");

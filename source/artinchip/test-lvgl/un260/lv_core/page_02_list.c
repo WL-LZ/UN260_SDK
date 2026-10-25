@@ -323,7 +323,7 @@ static void row_bind(lv_obj_t *row,uint32_t index,void *context)
         const denom_t *d=index<view->data.denom_count ? &data->denom[view->data.denom[index]] : &zero;
         number_set(a,d->value,&lv_font_instrument_sans_medium_20);
         number_set(b,d->pcs,&lv_font_instrument_sans_medium_20);
-        number_set(c,d->amount,&lv_font_instrument_sans_medium_20);
+        number_set(c,(double)counting_data_denom_amount(d),&lv_font_instrument_sans_medium_20);
     } else if (s->layout->id==PAGE_02_SECTION_B) {
         int slot=index<view->data.serial_count ? view->data.serial[index] : -1;
         number_set(a,slot>=0 ? slot+1 : 0,&lv_font_instrument_sans_medium_14);

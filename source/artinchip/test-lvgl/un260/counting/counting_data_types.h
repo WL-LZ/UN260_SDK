@@ -17,7 +17,7 @@ typedef struct {
     denom_t denom[COUNTING_DENOM_MAX_ITEMS];
     uint8_t denom_number;
     int total_pcs;
-    float total_amount;
+    double total_amount;
     /* Current result contains MULTI notes without per-currency protocol data. */
     bool multi_currency_result;
     char **sn_str;
@@ -30,7 +30,7 @@ typedef struct {
     uint16_t err_expected; /* Reject count reported by the count result. */
     int denom_mix[COUNTING_DATA_MAX_ITEMS];
     int last_total_pcs;
-    float last_total_amount;
+    double last_total_amount;
     int last_valid_pcs;
     int last_issue_pcs;
     int last_suspect_pcs;

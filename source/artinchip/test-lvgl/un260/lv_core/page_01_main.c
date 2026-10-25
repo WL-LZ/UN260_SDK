@@ -90,7 +90,7 @@ typedef struct {
     denom_t denom[COUNTING_DENOM_MAX_ITEMS];
     uint8_t denom_number;
     int total_pcs;
-    float total_amount;
+    double total_amount;
     uint16_t err_num;
     uint16_t err_expected;
     int serial_count;
