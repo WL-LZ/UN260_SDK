@@ -2,7 +2,7 @@
 """Production deferred page lifecycle with isolated object/service stubs."""
 from pathlib import Path
 import subprocess,tempfile
-from test_main_top_gesture import function
+from test_currency_modes import function
 root=Path(__file__).resolve().parents[1]
 source=(root/'un260/lv_core/page_08_boot.c').read_text()
 names=['ui_page_08_curr_defer_next_create','ui_page_08_curr_create',

@@ -38,7 +38,8 @@ int main(void){
  for(unsigned c=8;c<256;++c)assert(!machine_runtime_error_desc(c));
  app_counting_runtime_on_runtime_fault(8);
  assert(pending==8 && notices==1 && !popups);
- assert(!strcmp(message,"Controller report 0x08"));
+ char expected[80];snprintf(expected,sizeof(expected),ui_tr("Controller report 0x%02X"),8U);
+ assert(!strcmp(message,expected));
  now=100;app_counting_runtime_on_runtime_fault(8);assert(notices==1);
  now=30000;app_counting_runtime_on_runtime_fault(8);assert(notices==2);
  app_counting_runtime_on_runtime_fault(9);assert(notices==3 && pending==9);
