@@ -48,6 +48,7 @@ static void stop(void)
 {
     session.start_confirmed=false;session.phase=COUNTING_SESSION_FINISHED_WAIT_START;
     session.history_record.valid=true;session.history_record.end_seen=false;
+    counting_report_denom_complete(&session,now);
     counting_report_schedule(&session,now);
 }
 static void request_serial(void)
@@ -118,8 +119,10 @@ static void test_failure(void)
     now+=3001;counting_report_poll(&session,now);
     assert(counting_report_take_failure() && data.sn_str==before);
     start(false);live();stop();unsigned sent=requests[0x0C];
-    now+=10000;counting_report_poll(&session,now);assert(requests[0x0C]==sent);
-    mark(0x0D,255);counting_report_poll(&session,now);assert(requests[0x0C]==sent+1);
+    /* Timeout already established an idle boundary: the new query starts
+     * immediately, without waiting for an old END or another timeout. */
+    assert(sent==4);
+    mark(0x0D,255);counting_report_poll(&session,now);assert(requests[0x0C]==sent);
     counting_report_reset();mark(0x0C,255);
     start(false);send_failed=true;stop();assert(counting_report_take_failure());
     assert(!session.history_record.end_seen);
@@ -328,7 +331,9 @@ static void test_live_reject_stop_timeout(void)
     reset();start(false);data.err_expected=1;live_reject_snapshot(0x1C,1);
     mark(0x0C,0);reject_row(0x1C,9);stop();
     now+=3001;counting_report_poll(&session,now);
-    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_REJECT&&!requests[0x0C]);
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_REJECT&&requests[0x0C]==1);
+    /* The expired live push releases immediately; its delayed END cannot
+     * arm the final query before that query receives its own START. */
     mark(0x0C,255);counting_report_poll(&session,++now);
     assert(reject_pcs(0x1C)==1&&requests[0x0C]==1&&!requests[0x0D]);
     mark(0x0C,0);reject_row(0x1C,1);mark(0x0C,255);
@@ -407,8 +412,247 @@ static void captured_reports(const char *path)
     }
     fclose(input);assert(reports>=2 && complete_reports>=2);reset();
 }
+
+static void test_controller_denom_ownership(void)
+{
+    reset();
+    denom_t original[COUNTING_DENOM_MAX_ITEMS];
+    memcpy(original,data.denom,sizeof(original));
+    start(false);
+    assert(data.denom_number==1 && !memcmp(data.denom,original,sizeof(original)));
+    live();live();
+    assert(data.denom_number==1 && !memcmp(data.denom,original,sizeof(original)));
+    assert(counting_data_serial_valid_count(&data)==2);
+    reset();start(true);
+    /* An authoritative row already arrived before the first 0E. */
+    data.denom[0]=(denom_t){100,1,100};
+    memcpy(original,data.denom,sizeof(original));
+    assert(counting_report_observe_total(&data,100,1));
+    assert(counting_report_take_group_restart());
+    assert(!counting_report_take_group_restart());
+    assert(data.denom_number==1 && !memcmp(data.denom,original,sizeof(original)));
+    assert(!counting_report_observe_total(&data,200,2));
+    assert(!counting_report_take_group_restart());
+    assert(!memcmp(data.denom,original,sizeof(original)));
+}
+
+static void test_denom_end_stop_orders(void)
+{
+    reset();start(false);
+    counting_report_denom_complete(&session,now);
+    counting_report_denom_complete(&session,now+1);
+    assert(requests[0x0C]==0);
+    session.start_confirmed=false;
+    session.phase=COUNTING_SESSION_FINISHED_WAIT_START;
+    counting_report_schedule(&session,now+2);
+    assert(requests[0x0C]==1);
+    counting_report_schedule(&session,now+3);
+    counting_report_denom_complete(&session,now+4);
+    assert(requests[0x0C]==1);
+
+    reset();start(false);
+    session.start_confirmed=false;
+    session.phase=COUNTING_SESSION_FINISHED_WAIT_START;
+    counting_report_schedule(&session,now);
+    assert(requests[0x0C]==0 && !counting_report_transfer_active());
+    counting_report_denom_complete(&session,now+1);
+    assert(requests[0x0C]==1);
+    counting_report_denom_complete(&session,now+2);
+    assert(requests[0x0C]==1);
+
+    reset();start(false);
+    counting_report_denom_complete(&session,now);
+    start(false); /* A new run cannot reuse the preceding run's END. */
+    session.start_confirmed=false;
+    session.phase=COUNTING_SESSION_FINISHED_WAIT_START;
+    counting_report_schedule(&session,now+1);
+    assert(requests[0x0C]==0);
+    counting_report_denom_complete(&session,now+2);
+    assert(requests[0x0C]==1);
+}
+
+
+static void final_serial(void)
+{
+    mark(0x0C,0);mark(0x0C,255);
+    mark(0x0D,0);row(1,false);mark(0x0D,255);
+}
+static void test_timeout_next_run(void)
+{
+    for(unsigned add=0;add<2;++add) {
+        reset();start(false);live();request_serial();mark(0x0D,0);row(1,false);
+        char **before=data.sn_str;
+        denom_t denoms[COUNTING_DENOM_MAX_ITEMS];memcpy(denoms,data.denom,sizeof(denoms));
+        int total_pcs=data.total_pcs;double total_amount=data.total_amount;
+        now+=3000;counting_report_poll(&session,now);
+        assert(!counting_report_transfer_active());
+        assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_SERIAL);
+        assert(!counting_report_take_failure()&&data.sn_str==before&&!publications&&!session.history_record.end_seen);
+        assert(data.total_pcs==total_pcs&&data.total_amount==total_amount&&!memcmp(denoms,data.denom,sizeof(denoms)));
+        start(add!=0);live();stop();
+        assert(requests[0x0C]==2&&requests[0x0D]==1);
+        row(2,false);mark(0x0D,255);
+        assert(!publications&&!session.history_record.end_seen&&!counting_report_take_failure());
+        final_serial();
+        assert(publications==1&&completions==1&&session.history_record.end_seen);
+        assert(requests[0x0C]==2&&requests[0x0D]==2&&!counting_report_take_failure());
+    }
+}
+static void test_reject_timeout_next_run(void)
+{
+    reset();start(false);stop();mark(0x0C,0);
+    now+=3000;counting_report_poll(&session,now);
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_REJECT);
+    assert(!counting_report_transfer_active()&&!requests[0x0D]);
+    start(false);live();stop();assert(requests[0x0C]==2);
+    mark(0x0C,255);assert(!requests[0x0D]&&!counting_report_take_failure());
+    final_serial();assert(publications==1&&completions==1&&requests[0x0D]==1);
+}
+static void test_invalid_sequence_next_run(void)
+{
+    reset();start(false);live();request_serial();mark(0x0D,0);row(1,false);row(3,false);
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_SERIAL);
+    assert(!strcmp(data.sn_str[0],"NEW123456789")&&!publications&&!session.history_record.end_seen);
+    now+=3000;counting_report_poll(&session,now);
+    assert(!counting_report_take_failure());
+    start(false);live();stop();assert(requests[0x0C]==2);
+    final_serial();assert(publications==1&&completions==1);
+}
+static void test_retired_failure_ownership(void)
+{
+    reset();start(false);request_serial();mark(0x0D,0);row(1,false);
+    start(false);live();assert(!counting_report_transfer_active());
+    now+=3000;counting_report_poll(&session,now);
+    assert(!counting_report_take_failure());
+    stop();assert(requests[0x0C]==2);final_serial();assert(publications==1);
+    /* A failure queued for the preceding run is not an error on the new one. */
+    reset();start(false);request_serial();mark(0x0D,0);row(3,false);
+    start(false);assert(!counting_report_take_failure());
+    now+=3000;counting_report_poll(&session,now);stop();
+    assert(requests[0x0C]==2);final_serial();assert(publications==1&&!counting_report_take_failure());
+}
+static void test_retired_tail_idle(void)
+{
+    reset();start(false);request_serial();mark(0x0D,0);row(1,false);
+    start(false);live();stop();assert(requests[0x0C]==1);
+    now+=2000;row(2,false);uint32_t tail=now;
+    now=tail+2999;counting_report_poll(&session,now);
+    assert(requests[0x0C]==1&&!counting_report_take_failure());
+    now=tail+3000;counting_report_poll(&session,now);
+    assert(requests[0x0C]==2&&!counting_report_take_failure());
+    assert(!strcmp(data.sn_str[0],"NEW123456789")&&!publications);
+    final_serial();assert(publications==1&&completions==1);
+}
+static void test_retired_end_immediate(void)
+{
+    reset();start(false);request_serial();mark(0x0D,0);row(1,false);
+    start(false);live();stop();assert(requests[0x0C]==1);
+    row(2,false);mark(0x0D,255);counting_report_poll(&session,now);
+    assert(requests[0x0C]==2&&!publications&&!counting_report_take_failure());
+    final_serial();assert(publications==1&&completions==1);
+}
+static void test_retired_total_bound(void)
+{
+    reset();start(false);request_serial();uint32_t requested=now;
+    mark(0x0D,0);row(1,false);start(false);live();stop();
+    for(unsigned elapsed=2000;elapsed<120000;elapsed+=2000) {
+        now=requested+elapsed-1;row(2,false);counting_report_poll(&session,now);
+        assert(requests[0x0C]==1&&!counting_report_take_failure());
+    }
+    now=requested+120000;counting_report_poll(&session,now);
+    assert(requests[0x0C]==2&&!counting_report_take_failure());
+    assert(!strcmp(data.sn_str[0],"NEW123456789")&&!publications);
+    final_serial();assert(publications==1&&completions==1);
+}
+static void test_late_end_before_start(void)
+{
+    reset();start(false);live();request_serial();uint32_t requested=now;
+    row(50,false);mark(0x0D,255);
+    assert(counting_report_accept_serial(&session)&&!counting_report_take_failure());
+    assert(!publications&&!session.history_record.end_seen&&!strcmp(data.sn_str[0],"NEW123456789"));
+    now=requested+2999;mark(0x0D,255);counting_report_poll(&session,now);
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_SERIAL);
+    assert(!counting_report_transfer_active());
+    start(false);live();request_serial();mark(0x0D,255);
+    assert(!counting_report_take_failure());
+    mark(0x0D,0);row(1,false);mark(0x0D,255);
+    assert(publications==1&&session.history_record.end_seen);
+}
+static void test_no_same_run_retry(void)
+{
+    reset();start(false);request_serial();mark(0x0D,0);row(1,false);
+    now+=3000;counting_report_poll(&session,now);
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_SERIAL);
+    for(unsigned i=0;i<5;++i) {
+        now+=30000;counting_report_poll(&session,now);counting_report_schedule(&session,now);
+        counting_report_denom_complete(&session,now);
+        assert(requests[0x0C]==1&&requests[0x0D]==1&&!counting_report_take_failure());
+    }
+    assert(!publications&&!session.history_record.end_seen);
+}
+static void test_live_timeout_owner_release(void)
+{
+    reset();start(false);data.err_expected=1;live_reject_snapshot(0x1C,1);
+    mark(0x0C,0);reject_row(0x15,9);unsigned before=reject_publications;
+    now+=3000;counting_report_poll(&session,now);
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_REJECT);
+    reject_row(0x15,10);mark(0x0C,255);
+    assert(reject_publications==before&&reject_pcs(0x1C)==1&&!reject_pcs(0x15));
+    live_reject_snapshot(0x1C,2);
+    assert(reject_publications==before+1&&reject_pcs(0x1C)==2);
+    data.err_expected=2;stop();mark(0x0C,0);reject_row(0x1C,2);mark(0x0C,255);
+    mark(0x0D,0);row(1,false);mark(0x0D,255);
+    assert(requests[0x0C]==1&&requests[0x0D]==1&&publications==1&&!counting_report_take_failure());
+}
+static void test_wrapped_clock_recovery(void)
+{
+    reset();now=UINT32_MAX-1000U;start(false);request_serial();mark(0x0D,0);row(1,false);
+    now+=3000;counting_report_poll(&session,now);
+    assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_SERIAL);
+    start(false);live();stop();assert(requests[0x0C]==2);
+    final_serial();assert(publications==1&&!counting_report_take_failure());
+}
+
+static void test_current_and_invalid_total_bound(void)
+{
+    for(unsigned invalid=0;invalid<2;++invalid) {
+        reset();start(false);live();request_serial();uint32_t requested=now;
+        mark(0x0D,0);row(1,false);
+        if(invalid) {
+            row(3,false);
+            assert(counting_report_take_failure()==COUNTING_REPORT_FAILURE_SERIAL);
+        }
+        for(unsigned elapsed=2000;elapsed<120000;elapsed+=2000) {
+            now=requested+elapsed-1;row(invalid?3:1,false);counting_report_poll(&session,now);
+            assert(requests[0x0C]==1&&requests[0x0D]==1&&!counting_report_take_failure());
+        }
+        now=requested+120000;counting_report_poll(&session,now);
+        assert(counting_report_take_failure()==(invalid?COUNTING_REPORT_FAILURE_NONE:COUNTING_REPORT_FAILURE_SERIAL));
+        assert(!counting_report_transfer_active()&&!publications&&!session.history_record.end_seen);
+        assert(!strcmp(data.sn_str[0],"NEW123456789"));
+        start(false);live();stop();assert(requests[0x0C]==2);
+        final_serial();assert(publications==1&&completions==1&&!counting_report_take_failure());
+    }
+}
+
+static void recovery_case(const char *name)
+{
+#define CASE(n) if(!strcmp(name,#n)){test_##n();reset();counting_report_shutdown();puts("PASS recovery " #n);return;}
+    CASE(timeout_next_run) CASE(reject_timeout_next_run) CASE(invalid_sequence_next_run)
+    CASE(retired_failure_ownership) CASE(retired_tail_idle) CASE(retired_end_immediate)
+    CASE(retired_total_bound) CASE(late_end_before_start) CASE(no_same_run_retry)
+    CASE(live_timeout_owner_release) CASE(wrapped_clock_recovery) CASE(current_and_invalid_total_bound)
+#undef CASE
+    assert(!"unknown recovery case");
+}
+
 int main(int argc,char **argv)
 {
+    if(argc==3&&!strcmp(argv[1],"--recovery")){recovery_case(argv[2]);return 0;}
+    test_controller_denom_ownership();
+    test_denom_end_stop_orders();
+    puts("PASS controller denomination ownership: START/49/scalar restart preserve A; END/STOP in either order schedules once; a new run resets completion");
+
     test_wrap_atomic();test_empty_add();test_interleave();test_failure();test_capacity();test_empty_reject_compatibility();
     test_live_reject_atomic();test_live_reject_add_and_owner();test_live_reject_final_and_drain();test_live_reject_stop_timeout();test_live_reject_duplicate_deadline();test_live_reject_serial_capacity();reset();
     if(argc==2)captured_reports(argv[1]);

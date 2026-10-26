@@ -11,6 +11,7 @@ void app_currency_runtime_handle_reply(counting_detail_state_t *detail_state,
                                        counting_session_state_t *session,
                                        const uint8_t *buf,
                                        uint8_t len);
-void app_currency_runtime_handle_detected(const uint8_t *buf, uint8_t len);
+void app_currency_runtime_handle_detected(counting_detail_state_t *detail_state,
+                                          const uint8_t *buf, uint8_t len);
 
 #endif

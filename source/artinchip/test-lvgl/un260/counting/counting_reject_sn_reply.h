@@ -30,7 +30,6 @@ typedef struct {
     void (*on_serial_data_started)(void *context);
     void (*on_serial_report_ready)(void *context);
     void (*on_serial_ui_complete)(void *context, bool begin_end_anim);
-    void (*on_denom_item_changed)(void *context);
     void (*on_serial_item_changed)(void *context);
     void (*on_live_serial_received)(void *context,
                                     int denomination,

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Production note/report/runtime/history/storage integration with disk reread."""
 from pathlib import Path
+import argparse
 import json
 import os
 import subprocess
@@ -9,7 +10,9 @@ from test_i18n_support import with_i18n
 from test_main_view import function
 
 root = Path(__file__).resolve().parents[1]
-out = Path("/dev/shm/un260-a-accuracy")
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--output-dir", type=Path, default=Path("/dev/shm/un260-controller-denom-live/history"))
+out = parser.parse_args().output_dir
 out.mkdir(parents=True, exist_ok=True)
 temp_root = out / "temp"
 temp_root.mkdir(exist_ok=True)

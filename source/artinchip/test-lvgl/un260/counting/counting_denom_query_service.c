@@ -55,6 +55,21 @@ void counting_denom_query_invalidate(counting_detail_state_t *detail)
     }
 }
 
+void counting_denom_query_cancel(counting_detail_state_t *detail)
+{
+    if (detail == NULL) return;
+    detail->query_pending = false;
+    detail->query_deferred = false;
+    detail->query_started = false;
+    detail->query_complete = false;
+    detail->query_failed = false;
+    detail->query_expired = false;
+    detail->query_overflow = false;
+    detail->query_wait_push = false;
+    detail->query_retry = 0;
+    detail->query_denom_number = 0;
+}
+
 bool counting_denom_query_mark_start(counting_detail_state_t *detail)
 {
     if (detail == NULL || !detail->query_pending) {
@@ -123,6 +138,8 @@ void counting_denom_query_trigger(counting_detail_state_t *detail,
     }
 
     detail->query_retry = 0;
+    detail->live_denom_count_owned = false;
+    detail->live_denom_started = false;
     detail->query_wait_push = false;
     detail->query_failed = false;
     detail->query_expired = false;
@@ -145,6 +162,8 @@ void counting_denom_query_expect_push(counting_detail_state_t *detail,
     if (detail == NULL) return;
     /* Arm reception synchronously with the currency acknowledgement. Frames
      * already queued behind it must belong to this refresh, not a count. */
+    detail->live_denom_count_owned = false;
+    detail->live_denom_started = false;
     detail->query_retry = 0;
     detail->query_failed = false;
     detail->query_expired = false;
@@ -165,6 +184,10 @@ void counting_denom_query_poll(counting_detail_state_t *detail,
     if (detail == NULL) {
         return;
     }
+
+    /* The live count owns 0B until a new explicit catalogue refresh or reset.
+     * This only suspends background queries, never a customer operation. */
+    if (detail->live_denom_count_owned) return;
 
     if (detail->query_deferred && detail->query_wait_push) {
         if (!boot_ready) return;

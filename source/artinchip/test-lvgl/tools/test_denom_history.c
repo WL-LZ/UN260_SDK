@@ -81,7 +81,9 @@ static void begin(bool add)
     assert(counting_history_prepare_start(&note_session, &note_data, app_clock_uptime_ms()));
     note_add = add;
     counting_report_begin(add, &note_data);
-    note_detail.live_denom_started = note_detail.live_reject_started = false;
+    /* Match the real command-runtime START ownership initialization. */
+    counting_denom_reply_begin_count(&note_detail);
+    note_detail.live_reject_started = false;
     uint8_t b[7] = {0xFD, 0xDF, 7, 0x0A, 1, 1, 0};
     counting_control_reply_hooks_t hooks = {.on_start_success = start_history};
     counting_control_reply_dispatch(0x0A, &note_session, b, sizeof(b), &hooks);
@@ -107,6 +109,7 @@ static void denom_boundary(unsigned fill)
 }
 static void denom_row(unsigned value, unsigned pcs)
 {
+    assert(value>0 && value<=99999999U && pcs<=999U);
     uint8_t b[16] = {0xFD, 0xDF, 16, 0x0B}; char text[16];
     snprintf(text, sizeof(text), "%8u%3u", value, pcs); memcpy(b + 4, text, 11);
     app_counting_runtime_handle_denom(&note_detail, &note_session, &note_data, b, sizeof(b));
@@ -169,17 +172,36 @@ static void check_record(unsigned index, uint32_t id, unsigned ten, unsigned fif
     if (first_serial) assert(!strcmp(detail.serials[0].sn, first_serial));
     history_record_detail_release(&detail);
 }
+static void check_unmatched_qty(unsigned index)
+{
+    const ui_history_record_t *record=&ui_history_data_get()->records[index];
+    assert(record->pcs==1 && record->amount==50 && record->detail_amount==50);
+    history_record_detail_t detail={0};assert(ui_history_record_read_detail(record,&detail));
+    assert(!detail.denoms_complete && !detail.serials_complete);
+    assert(detail.denomination_pcs==2 && detail.denomination_amount==100);
+    assert(saved_denom(&detail,50)==2 && detail.serial_count==2);
+    assert(!strcmp(detail.serials[0].sn,"QTYFIX000001"));
+    history_record_detail_release(&detail);
+}
+static void check_controller_a(unsigned index)
+{
+    const ui_history_record_t *record=&ui_history_data_get()->records[index];
+    check_record(index,record->record_no,2,0,"AOWN00000001");
+    history_record_detail_t detail={0};assert(ui_history_record_read_detail(record,&detail));
+    assert(detail.serial_count==2 && detail.serials[0].denom==50 && detail.serials[1].denom==50);
+    history_record_detail_release(&detail);
+}
 static void check_big_record(unsigned index)
 {
     const ui_history_record_t *record = &ui_history_data_get()->records[index];
-    assert(record->pcs == 9999 && record->amount == 499950000u);
-    assert(record->detail_amount == 499950000u);
+    assert(record->pcs == 999 && record->amount == 499500999u);
+    assert(record->detail_amount == 499500999u);
     history_record_detail_t detail = {0}; assert(ui_history_record_read_detail(record, &detail));
     assert(detail.denoms_complete && detail.serials_complete);
-    assert(detail.denomination_pcs == 9999 && detail.denomination_amount == 499950000u);
-    assert(saved_denom(&detail, 50000) == 9999 && detail.serial_count == 9999);
-    for (unsigned i = 0; i < 9999; ++i)
-        assert(detail.serials[i].no == i + 1 && detail.serials[i].denom == 50000);
+    assert(detail.denomination_pcs == 999 && detail.denomination_amount == 499500999u);
+    assert(saved_denom(&detail, 500001) == 999 && detail.serial_count == 999);
+    for (unsigned i = 0; i < 999; ++i)
+        assert(detail.serials[i].no == i + 1 && detail.serials[i].denom == 500001);
     history_record_detail_release(&detail);
 }
 static void check_wire_fallback(unsigned index, uint32_t amount)
@@ -205,17 +227,17 @@ static void check_wire_full(unsigned index)
 static void read_final_store(void)
 {
     const ui_history_store_t *store = ui_history_data_get();
-    assert(store->record_count == 11 && store->total_notes_counted == 10578);
+    assert(store->record_count == 12 && store->total_notes_counted == 1580);
     check_wire_fallback(0, UINT32_MAX); check_wire_fallback(1, UINT32_MAX - 1u);
-    check_wire_full(2); check_big_record(3);
-    check_record(4, store->records[4].record_no, 1, 2, "ONLY49000001");
+    check_wire_full(2); check_big_record(3); check_controller_a(4);
+    check_record(5, store->records[5].record_no, 1, 2, "ONLY49000001");
     /* CNT has an accepted count but no denomination/serial protocol. */
-    assert(store->records[5].pcs == 3 && store->records[5].amount == 0);
-    check_record(6, store->records[6].record_no, 0, 2, "QTYFIX000001");
-    check_record(7, store->records[7].record_no, 0, 2, "DELAY0000001");
-    check_record(8, store->records[8].record_no, 1, 0, "NONADD000001");
-    check_record(9, store->records[9].record_no, 1, 1, "RESET0000001");
-    check_record(10, store->records[10].record_no, 0, 1, "OLD000000001");
+    assert(store->records[6].pcs == 3 && store->records[6].amount == 0);
+    check_unmatched_qty(7);
+    check_record(8, store->records[8].record_no, 0, 2, "DELAY0000001");
+    check_record(9, store->records[9].record_no, 1, 0, "NONADD000001");
+    check_record(10, store->records[10].record_no, 1, 1, "RESET0000001");
+    check_record(11, store->records[11].record_no, 0, 2, "OLD000000001");
 }
 int main(int argc, char **argv)
 {
@@ -223,11 +245,11 @@ int main(int argc, char **argv)
     ui_history_data_init(); assert(ui_history_data_is_available());
     if (!strcmp(argv[1], "read")) {
         read_final_store(); assert(storage_worker_shutdown());
-        puts("PASS fresh process: eleven records: UINT32 edge fallback/full snapshots, 499950000, 49-only ADD, CNT; lifetime 10578"); return 0;
+        puts("PASS fresh process: twelve records: authoritative A, UINT32 edge fallback/full snapshots, 499500999, no-live-0E ADD, CNT; lifetime 1580"); return 0;
     }
     note_data.denom_number = 2; note_data.denom[0].value = 10; note_data.denom[1].value = 50;
     unsigned one50[] = {50}, one10[] = {10}, mixed[] = {50, 10};
-    const char *old_serial[] = {"OLD000000001"};
+    const char *old_serial[] = {"OLD000000001", "OLD000000002"};
     const char *reset_serial[] = {"RESET0000001"};
     const char *mixed_serials[] = {"RESET0000001", "ADDED0000001"};
     const char *nonadd_serial[] = {"NONADD000001"};
@@ -238,82 +260,91 @@ int main(int argc, char **argv)
     unsigned only_add_values[] = {50, 10, 50};
     const char *only_add_serials[] = {"ONLY49000001", "ONLY49000002", "ONLYADD00001"};
 
-    begin(true); info(0, 0, 1); note(50, old_serial[0]); info(50, 1, 1); info(0, 0, 2);
-    assert(ui_history_data_get()->record_count == 0); final_a(0, 1);
+    begin(true); info(0, 0, 1); note(50, old_serial[0]); note(50, old_serial[1]); info(100, 2, 1); info(0, 0, 2);
+    assert(ui_history_data_get()->record_count == 0); final_a(0, 2);
     assert(ui_history_data_get()->record_count == 0);
-    finish_details(1, one50, old_serial);
+    finish_details(2, delayed_values, old_serial);
     uint32_t old_id = ui_history_data_get()->records[0].record_no;
-    check_record(0, old_id, 0, 1, old_serial[0]);
+    check_record(0, old_id, 0, 2, old_serial[0]);
 
     begin(true); info(0, 0, 1); note(50, reset_serial[0]); info(50, 1, 1); info(0, 0, 2);
-    assert(note_data.last_total_pcs == 1); /* Equal total is still ambiguous. */
-    check_record(0, old_id, 0, 1, old_serial[0]);
+    assert(note_data.last_total_pcs == 0); /* 0E drops from two to one: confirmed restart. */
+    check_record(0, old_id, 0, 2, old_serial[0]);
     final_a(0, 1); assert(note_data.last_total_pcs == 0);
     assert(!counting_report_take_group_restart()); /* Actual runtime consumed it. */
-    check_record(0, old_id, 0, 1, old_serial[0]);
+    check_record(0, old_id, 0, 2, old_serial[0]);
     finish_details(1, one50, reset_serial);
     const ui_history_store_t *store = ui_history_data_get();
-    assert(store->record_count == 2 && store->total_notes_counted == 2);
+    assert(store->record_count == 2 && store->total_notes_counted == 3);
     uint32_t new_id = store->records[0].record_no; assert(new_id != old_id);
-    check_record(0, new_id, 0, 1, reset_serial[0]); check_record(1, old_id, 0, 1, old_serial[0]);
+    check_record(0, new_id, 0, 1, reset_serial[0]); check_record(1, old_id, 0, 2, old_serial[0]);
 
     begin(true); info(0, 0, 1); info(50, 1, 1); note(10, mixed_serials[1]); info(60, 2, 1);
     info(0, 0, 2); final_a(1, 1); finish_details(2, mixed, mixed_serials);
-    store = ui_history_data_get(); assert(store->record_count == 2 && store->total_notes_counted == 3);
-    check_record(0, new_id, 1, 1, reset_serial[0]); check_record(1, old_id, 0, 1, old_serial[0]);
+    store = ui_history_data_get(); assert(store->record_count == 2 && store->total_notes_counted == 4);
+    check_record(0, new_id, 1, 1, reset_serial[0]); check_record(1, old_id, 0, 2, old_serial[0]);
 
     begin(true); info(0, 0, 1); info(0, 0, 2); final_a(1, 1);
     marker(0x0C, 0); marker(0x0C, 255);
     assert(!note_session.history_record.valid);
-    assert(ui_history_data_get()->record_count == 2 && ui_history_data_get()->total_notes_counted == 3);
+    assert(ui_history_data_get()->record_count == 2 && ui_history_data_get()->total_notes_counted == 4);
 
     begin(false); info(0, 0, 1); note(10, nonadd_serial[0]); info(10, 1, 1); info(0, 0, 2);
     final_a(1, 0); finish_details(1, one10, nonadd_serial);
 
-    /* The last LIVE pair is split and STOP is a zero marker. Only complete
-     * final A supplies the missing amount; saved summary must agree with it. */
+    /* Final A stays independent of a lagging LIVE amount and zero STOP.
+     * Existing complete-A history summaries remain; the live 0E total does not change. */
     begin(false); info(0, 0, 1); note(50, delayed_serials[0]); info(50, 1, 1);
     note(50, delayed_serials[1]); info(50, 2, 1); info(0, 0, 2);
-    final_a(0, 2); finish_details(2, delayed_values, delayed_serials);
+    final_a(0, 2); assert(note_data.total_pcs==2 && note_data.total_amount==50);
+    finish_details(2, delayed_values, delayed_serials);
     check_record(0, ui_history_data_get()->records[0].record_no, 0, 2, delayed_serials[0]);
 
-    /* Final A also owns a missing last accepted count, not only its amount. */
+    /* A may disagree with the last 0E count. Preserve both without synthesizing
+     * a new total or rebuilding A from the complete B report. */
     begin(false); info(0, 0, 1); note(50, qty_serials[0]); info(50, 1, 1);
     note(50, qty_serials[1]); info(0, 0, 2); final_a(0, 2);
     finish_details(2, delayed_values, qty_serials);
-    check_record(0, ui_history_data_get()->records[0].record_no, 0, 2, qty_serials[0]);
+    assert(note_data.total_pcs==1 && note_data.total_amount==50);
+    check_unmatched_qty(0);
 
     /* CNT: an empty A protocol cannot erase the authoritative total count. */
     begin(false); info(0, 3, 1); info(0, 0, 2);
     denom_boundary(0); denom_boundary(255); finish_details(0, NULL, NULL);
 
-    /* Start from an empty display and deliver no live 0E at all. A zero STOP
-     * initially has no history candidate; final A must establish one. */
+    /* No live 0E is required when the authoritative STOP carries its totals. */
     note_data.total_pcs = 0; note_data.total_amount = 0;
-    begin(true); note(50, only_serials[0]); note(10, only_serials[1]); info(0, 0, 2);
+    begin(true); note(50, only_serials[0]); note(10, only_serials[1]); info(60, 2, 2);
     final_a(1, 1); finish_details(2, mixed, only_serials);
     check_record(0, ui_history_data_get()->records[0].record_no, 1, 1, only_serials[0]);
     uint32_t only_id = ui_history_data_get()->records[0].record_no;
-    /* Normal cumulative next run also omits every live 0E. The previous
-     * result must become the baseline before this zero STOP is processed. */
-    begin(true); note(50, only_add_serials[2]); info(0, 0, 2); final_a(1, 2);
+    /* Normal cumulative next run also omits live 0E; STOP supplies the total.
+     * The previous result becomes the baseline before STOP is processed. */
+    begin(true); note(50, only_add_serials[2]); info(110, 3, 2); final_a(1, 2);
     assert(note_session.analysis_valid_pcs == 1 && note_data.last_total_pcs == 2);
     finish_details(3, only_add_values, only_add_serials);
     check_record(0, only_id, 1, 2, only_serials[0]);
 
-    /* 50000 * 9999 cannot survive a float round trip exactly. All stored
+    /* A and B can have the same number of notes but disagree on face value.
+     * The authoritative controller A must survive the full history chain. */
+    const char *a_owned_serials[]={"AOWN00000001","AOWN00000002"};
+    begin(false); info(0,0,1);
+    note(50,a_owned_serials[0]); note(50,a_owned_serials[1]);
+    info(100,2,1); info(0,0,2); final_a(2,0);
+    assert(note_data.total_pcs==2 && note_data.total_amount==100);
+    finish_details(2,delayed_values,a_owned_serials); check_controller_a(0);
+
+    /* 500001 * 999 cannot survive a float round trip exactly. All stored
      * money fields must preserve the integer denomination multiplication. */
     begin(false); info(0, 0, 1);
-    for (unsigned i = 0; i < 9999; ++i) note(50000, "BIG000000001");
-    info(499950000u, 9999, 2);
-    denom_boundary(0);
-    for (unsigned i = 0; i < 10; ++i) denom_row(50000, 999);
-    denom_row(50000, 9); denom_boundary(255);
-    unsigned *big_values = calloc(9999, sizeof(*big_values));
-    const char **big_serials = calloc(9999, sizeof(*big_serials));
+    for (unsigned i = 0; i < 999; ++i) note(500001, "BIG000000001");
+    info(499500999u, 999, 2);
+    denom_boundary(0); denom_row(500001, 999); denom_boundary(255);
+    unsigned *big_values = calloc(999, sizeof(*big_values));
+    const char **big_serials = calloc(999, sizeof(*big_serials));
     assert(big_values && big_serials);
-    for (unsigned i = 0; i < 9999; ++i) { big_values[i] = 50000; big_serials[i] = "BIG000000001"; }
-    finish_details(9999, big_values, big_serials);
+    for (unsigned i = 0; i < 999; ++i) { big_values[i] = 500001; big_serials[i] = "BIG000000001"; }
+    finish_details(999, big_values, big_serials);
     free(big_values); free(big_serials);
     check_big_record(0);
 
@@ -342,6 +373,6 @@ int main(int argc, char **argv)
     read_final_store();
     counting_report_shutdown(); counting_data_clear_serials(&note_data); counting_data_clear_errors(&note_data);
     assert(storage_worker_shutdown());
-    puts("PASS actual 49 -> runtime 0E -> runtime 0B -> 0C/0D -> storage: late reset adds group, continuation updates same group, empty ADD saves nothing, non-ADD independent");
+    puts("PASS actual 49 -> runtime 0E -> runtime 0B -> 0C/0D -> storage: 0E restart adds group, continuation updates same group, empty ADD saves nothing, non-ADD independent");
     return 0;
 }

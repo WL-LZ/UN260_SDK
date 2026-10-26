@@ -862,6 +862,52 @@ static void test_protocol_reject_names(counting_sim_t *data,const ui_locale_t *l
 }
 #endif
 
+static void assert_list_denom_row(unsigned row,const char *value,const char *pcs,const char *amount)
+{
+    lv_obj_t *viewport=lv_recycled_list_object(view->section[0].list);
+    lv_obj_t *object=lv_obj_get_child(viewport,row);assert(object);
+    assert(!strcmp(lv_label_get_text(lv_obj_get_child(object,0)),value));
+    assert(!strcmp(lv_label_get_text(lv_obj_get_child(object,1)),pcs));
+    assert(!strcmp(lv_label_get_text(lv_obj_get_child(object,2)),amount));
+}
+static void test_live_denom_projection(counting_sim_t *data)
+{
+    assert(currency_state_confirm_active_code("USD"));
+    data->denom_number=3;
+    data->denom[0]=(denom_t){5,0,0};data->denom[1]=(denom_t){10,0,0};
+    data->denom[2]=(denom_t){500001,0,0};
+    page_02_list_section_mark_dirty(PAGE_02_SECTION_A);
+    assert_list_denom_row(0,"5","0","0");
+    ui_frame_commit_begin_batch();
+    data->denom[0].pcs=1;page_02_list_section_mark_dirty(PAGE_02_SECTION_A);
+    data->denom[0].pcs=2;page_02_list_section_mark_dirty(PAGE_02_SECTION_A);
+    assert_list_denom_row(0,"5","0","0");
+    ui_frame_commit_end_batch();ui_frame_commit_flush();
+    assert_list_denom_row(0,"5","2","10");
+    ui_page_02_list_suspend();data->denom[0].pcs=3;
+    page_02_list_section_mark_dirty(PAGE_02_SECTION_A);ui_frame_commit_flush();
+    assert_list_denom_row(0,"5","2","10");
+    assert(ui_page_02_list_resume());assert_list_denom_row(0,"5","3","15");
+    data->denom[2].pcs=999;data->denom[2].amount=-1;
+    page_02_list_section_mark_dirty(PAGE_02_SECTION_A);
+    assert_list_denom_row(2,"500001","999","499500999");
+    write_bmp("list-live-0b-exact-amount");
+    for(unsigned i=0;i<data->denom_number;i++)data->denom[i].pcs=0,data->denom[i].amount=0;
+    page_02_list_section_mark_dirty(PAGE_02_SECTION_A);
+    assert_list_denom_row(0,"5","0","0");assert_list_denom_row(1,"10","0","0");
+    assert(lv_recycled_list_window(view->section[0].list)->count==3);
+    data->denom_number=15;
+    for(unsigned i=0;i<15;i++)data->denom[i]=(denom_t){(int)(5*(i+1)),1,0};
+    page_02_list_section_mark_dirty(PAGE_02_SECTION_A);
+    assert(lv_recycled_list_scroll_to_index(view->section[0].list,10));
+    uint32_t first=lv_recycled_list_window(view->section[0].list)->first;
+    data->denom[10].pcs=2;page_02_list_section_mark_dirty(PAGE_02_SECTION_A);
+    assert(lv_recycled_list_window(view->section[0].list)->first==first);
+    memset(data->denom,0,sizeof(data->denom));data->denom_number=0;
+    page_02_list_report_reset();
+    puts("PASS actual List A labels: absolute state, frame merge, hidden resume, exact integer amount, retained zero rows and scroll anchor");
+}
+
 int main(void)
 {
     setvbuf(stdout,NULL,_IONBF,0);
@@ -909,6 +955,7 @@ int main(void)
         assert(lv_obj_has_flag(viewport,LV_OBJ_FLAG_USER_4));
         assert(lv_obj_has_flag(viewport,LV_OBJ_FLAG_PRESS_LOCK));
     }
+    test_live_denom_projection(data);
     test_handdrawn_icons();test_button_feedback();test_reject_summary_without_details(data);test_icon_visibility(data);
     test_search_retry();test_search_background();
     test_serial_search_cases(data);

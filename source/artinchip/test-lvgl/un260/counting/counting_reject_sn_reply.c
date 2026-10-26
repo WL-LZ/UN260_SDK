@@ -264,8 +264,6 @@ static counting_detail_reply_result_t counting_sn_push_handle(
         return COUNTING_DETAIL_REPLY_IGNORED;
     }
 
-    if (counting_report_observe_note(sim_data, (unsigned)denom_value))
-        counting_detail_notify(hooks, hooks ? hooks->on_denom_item_changed : NULL);
     counting_detail_record_history(hooks, "0x49", buf, len);
 
     serial_len = (int)len - 1 - 4 - DENOM_FIELD_LEN;

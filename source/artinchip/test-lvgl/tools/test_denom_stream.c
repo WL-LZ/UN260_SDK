@@ -18,7 +18,7 @@ static counting_sim_t sim;
 #ifndef TEST_REAL_REPORT_SYNC
 /* These tests isolate denomination acquisition; report ownership is covered
  * with production code in test_counting_report_sync and test_live_detail. */
-void counting_report_schedule(const counting_session_state_t *session,
+void counting_report_denom_complete(const counting_session_state_t *session,
                              uint32_t tick)
 { (void)session; (void)tick; }
 #endif
@@ -98,11 +98,13 @@ int main(int argc, char **argv)
     reset();counting_denom_query_trigger(&d,now,true);marker(0);
     for(int i=0;i<601;i++){now+=100;row(100);poll();}
     assert(d.query_expired && sends==1);
+    counting_denom_reply_begin_count(&d);
     s.phase=COUNTING_SESSION_ACTIVE;marker(0);row(10);marker(255);
     assert(sim.denom_number==1 && rejects==0);
 
     reset();now=UINT32_MAX-1000;counting_denom_query_trigger(&d,now,true);marker(0);
     for(int i=0;i<100;i++){now+=50;row(100);poll();}marker(255);
     assert(d.query_complete && sends==1);
-    puts("PASS: long stream, idle gap, bounded retries, overflow, hard deadline, counting recovery, clock wrap");
+    puts("PASS: long stream, idle gap, bounded retries, overflow, hard deadline, counting recovery, clock wrap" );
+    return 0;
 }

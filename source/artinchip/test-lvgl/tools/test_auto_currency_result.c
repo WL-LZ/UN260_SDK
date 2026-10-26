@@ -7,6 +7,8 @@
 #include "un260/currency/currency_state.h"
 #include "un260/currency/currency_reply.h"
 #include "un260/counting/counting_control_reply.h"
+#include "un260/counting/counting_denom_reply.h"
+#include "un260/counting/counting_report_sync.h"
 #include "un260/counting/counting_info_reply.h"
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/counting/counting_multi.h"
@@ -23,6 +25,8 @@
 } } while (0)
 
 static counting_session_state_t g_counting_session;
+static counting_detail_state_t g_counting_detail_state;
+static bool g_add_result_cleared;
 static unsigned images, summaries, starts, ends, resets, locks, unlocks, failures;
 static unsigned fault_clears, report_resets, clear_sends, navigations;
 static bool locked, main_visible = true, history_ready = true;
@@ -33,6 +37,7 @@ static uint8_t last_command, last_payload[8];
 static uint16_t last_length;
 
 uint64_t app_clock_monotonic_ms(void) { return tick; }
+uint32_t app_clock_uptime_ms(void) { return (uint32_t)tick; }
 void uart_debug_printf(const char *format, ...) { (void)format; }
 int protocol_send(uint8_t cmd, const uint8_t *payload, uint16_t len)
 {
@@ -47,6 +52,8 @@ bool counting_history_discard_pending(counting_session_state_t *session)
 { (void)session; return false; }
 bool counting_history_can_start(void) { return true; }
 void counting_history_current_invalidate(void) {}
+static void counting_history_begin_group(bool add){(void)add;}
+static void counting_history_restart_group(void){}
 static bool counting_history_prepare_reset(counting_session_state_t *session,
     const counting_sim_t *data, uint32_t now)
 { (void)session; (void)data; (void)now; return history_ready; }
@@ -117,7 +124,6 @@ static void ui_page_dynamic_capture_on_count_info(uint16_t valid, uint8_t issue,
 #define fault_popup_clear_preset() ((void)0)
 #define app_auto_qr_on_start() ((void)0)
 #define app_auto_qr_cancel() ((void)0)
-#define counting_report_reset() ((void)0)
 #define ui_count_end_anim_cancel() ((void)0)
 #define smart_island_clear_count_analysis() ((void)0)
 #define page_01_main_scroll_reset() ((void)0)
@@ -150,7 +156,7 @@ static bool receive(const uint8_t *frame, uint8_t len)
     switch (frame[3]) {
     case 0x51: return app_command_runtime_handle_stacker_clear(frame, len);
     case 0x50:
-    case 0x49: app_currency_runtime_handle_detected(frame, len); return true;
+    case 0x49: app_currency_runtime_handle_detected(&g_counting_detail_state, frame, len); return true;
     case 0x0A:
     case 0x0F:
         counting_control_reply_dispatch(frame[3], &g_counting_session, frame, len, &control_hooks);

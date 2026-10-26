@@ -122,8 +122,8 @@ static void seed(void)
     data->err_code[0]=17;data->err_pcs[0]=2;data->err_num=1;data->err_expected=2;
     memset(&g_counting_detail_state,0,sizeof(g_counting_detail_state));
     g_counting_detail_state.live_denom_started=true;
-    g_counting_detail_state.live_denom_number=1;
-    g_counting_detail_state.live_denom[0]=data->denom[0];
+    g_counting_detail_state.live_denom_count_owned=true;
+    g_counting_detail_state.live_denom_seen=1;
     g_counting_detail_state.live_reject_started=true;
     g_counting_detail_state.live_reject_number=1;
     g_counting_detail_state.query_started=true;
@@ -214,7 +214,8 @@ int main(void)
         assert(!data->err_pcs&&!data->err_code&&!data->err_num&&!data->err_expected);
         assert(data->multi_currency_result==(currency!=0));
         assert(!g_counting_detail_state.live_denom_started&&!g_counting_detail_state.live_reject_started);
-        assert(!g_counting_detail_state.live_denom_number&&!g_counting_detail_state.live_reject_number);
+        assert(!g_counting_detail_state.live_denom_count_owned&&!g_counting_detail_state.live_denom_seen);
+        assert(!g_counting_detail_state.live_reject_number);
         assert(!g_counting_detail_state.query_started&&!g_counting_detail_state.query_complete);
         assert(!g_counting_detail_state.query_deferred&&g_counting_detail_state.query_failed);
         assert(g_counting_detail_state.query_pending==(drain!=0));

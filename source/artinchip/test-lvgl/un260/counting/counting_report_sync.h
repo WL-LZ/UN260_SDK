@@ -21,15 +21,18 @@ typedef enum {
 /* One controller, one untagged detail transaction. All calls belong to the
  * protocol consumer; neither timers nor views write these snapshots. */
 void counting_report_begin(bool add, counting_sim_t *data);
-/* Returns true once when a positive total proves controller group restart. */
+/* A lower first positive controller total restarts serial/history ownership.
+ * This observer never writes the controller-owned denomination table. */
 bool counting_report_observe_total(counting_sim_t *data, uint32_t amount, unsigned pcs);
-/* Each accepted 49 is one independent note, including equal serial text. */
-bool counting_report_observe_note(counting_sim_t *data, unsigned value);
-void counting_report_denom_snapshot(counting_sim_t *data, bool final);
+/* Accepted 0B END and real STOP may arrive in either order. Begin resets this
+ * completion latch; the report query chain starts once both are present. */
+void counting_report_denom_complete(const counting_session_state_t *session,
+                                    uint32_t now);
 bool counting_report_take_group_restart(void);
 void counting_report_reset(void);
 void counting_report_shutdown(void);
-/* Active transfer only; an expired report must not defer unrelated recovery. */
+/* Current active transfer only; retired/failed reports never defer unrelated
+ * recovery. Their tail drains until END, 3s idle or the original 120s bound. */
 bool counting_report_transfer_active(void);
 void counting_report_schedule(const counting_session_state_t *session,
                               uint32_t now);

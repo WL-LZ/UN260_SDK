@@ -50,6 +50,8 @@ bool currency_state_leave_special_selection(void);
 void currency_state_clear_detected_result(void);
 bool currency_state_restore_detected_result(void);
 bool currency_state_confirm_detected_code(const char code[4]);
+/* Controller-confirmed AUTO recognition, including temporarily hidden results. */
+bool currency_state_get_detected_code(char code[4]);
 curr_item_t currency_state_active_currency(void);
 uint8_t currency_state_active_index(void);
 curr_item_t currency_state_code_to_item(const char* code);

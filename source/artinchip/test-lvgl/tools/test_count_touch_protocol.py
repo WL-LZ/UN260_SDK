@@ -47,6 +47,9 @@ static void app_counting_runtime_on_reject_report_changed(void *context){(void)c
 static void page_01_main_set_counting_locked(bool value){locked=value;if(value)++locks;else ++unlocks;}
 bool counting_history_discard_pending(counting_session_state_t *s){(void)s;return false;}
 void uart_debug_printf(const char *s,...){(void)s;}
+uint32_t app_clock_uptime_ms(void){return 100;}
+int protocol_send(uint8_t cmd,const uint8_t *payload,uint16_t len)
+{(void)cmd;assert(payload&&len);return 0;}
 #define counting_history_prepare_start(...) false
 #define counting_data_current() (&data)
 #define counting_data_mutable() (&data)

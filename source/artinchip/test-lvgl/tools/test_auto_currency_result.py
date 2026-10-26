@@ -66,6 +66,7 @@ def main():
     parts = [function(platform, "sim_reset_counting_data"),
              function(platform, "sim_reset_counting_result"),
              function(count, "app_counting_runtime_reset_session"),
+             function(command, "app_command_runtime_revoke_result_replies"),
              function(command, "app_command_runtime_clear_counting_data"),
              function(command, "app_command_runtime_handle_stacker_clear"),
              function(currency, "app_currency_runtime_handle_detected"),
@@ -76,6 +77,8 @@ def main():
     sources = ["un260/currency/currency_state.c", "un260/currency/currency_reply.c",
                "un260/counting/counting_info_reply.c", "un260/counting/counting_control_reply.c",
                "un260/counting/counting_data_store.c", "un260/counting/counting_multi.c",
+               "un260/counting/counting_denom_reply.c", "un260/counting/counting_denom_query_service.c",
+               "un260/counting/counting_report_sync.c",
                "un260/counting/counting_action_service.c", "un260/protocol/protocol_frame.c",
                "un260/protocol/protocol_request.c", "un260/protocol/mode_codec.c",
                "un260/machine_state/machine_state.c", "un260/app_service/setting_service.c"]

@@ -45,10 +45,10 @@ class ListInvalidationContracts(unittest.TestCase):
         self.assertIn(second, source)
         self.assertLess(source.index(first), source.index(second))
 
-    def test_live_totals_publish_a_and_reject_summary_without_reset(self):
+    def test_live_totals_preserve_a_source_and_publish_reject_summary_without_reset(self):
         body = function(RUNTIME, "app_counting_runtime_refresh_compact")
-        for section in "AC":
-            self.assert_before(body, mark(section), "ui_frame_commit_defer(")
+        self.assert_before(body, mark("C"), "ui_frame_commit_defer(")
+        self.assert_before(body, "if (sim_data->multi_currency_result)", mark("A"))
         self.assertIn("smart_island_update_counting", body)
         self.assertNotIn("page_02_list_report_reset", body)
 
@@ -68,8 +68,8 @@ class ListInvalidationContracts(unittest.TestCase):
         for expression in ("sim_data->total_pcs = 0;", "sim_data->total_amount = 0.0f;", "sim_data->err_expected = 0;"):
             self.assert_before(reset, expression, "page_02_list_report_reset();")
         self.assert_before(reset, "page_02_list_report_reset();", "ui_refresh_main_page();")
-        self.assertIn("sim_reset_counting_data(sim_data, true);", function(PLATFORM, "sim_reset_for_currency"))
-        self.assertIn("sim_reset_counting_data(sim_data, false);", function(PLATFORM, "sim_reset_counting_result"))
+        self.assertIn("sim_reset_counting_data(sim_data, true, true);", function(PLATFORM, "sim_reset_for_currency"))
+        self.assertIn("sim_reset_counting_data(sim_data, false, false);", function(PLATFORM, "sim_reset_counting_result"))
         self.assertEqual(RUNTIME.count("page_02_list_report_reset();"), 1)
         self.assertEqual(PLATFORM.count("page_02_list_report_reset();"), 1)
 
@@ -108,17 +108,27 @@ class ListInvalidationContracts(unittest.TestCase):
         reject = function(RUNTIME, "app_counting_runtime_on_reject_report_changed")
         self.assertIn("page_02_list_section_data_ready(PAGE_02_SECTION_C);", reject)
         summary = function(RUNTIME, "app_counting_runtime_on_summary_changed")
-        for section in "AC":
-            self.assert_before(summary, mark(section), "if (refresh_main")
+        self.assert_before(summary, mark("C"), "if (refresh_main")
+        self.assertNotIn(mark("A"), summary)
         self.assertIn("smart_island_refresh_summary();", summary)
         for body in (reject, summary):
             self.assertNotIn("ui_manager_switch", body)
             self.assertNotIn("page_02_list_report_reset", body)
 
-    def test_denom_completion_publishes_a_and_keeps_main_refresh(self):
-        body = function(RUNTIME, "app_counting_runtime_on_main_data_changed")
-        self.assertIn(mark("A"), body)
-        self.assertIn("ui_refresh_main_page();", body)
+    def test_controller_denom_updates_publish_a_without_serial_a_hook(self):
+        body = function(RUNTIME, "app_counting_runtime_on_live_denom_changed")
+        self.assert_before(body, mark("A"), "ui_frame_commit_defer(")
+        self.assertIn("app_counting_visual_commit, NULL, 16U", body)
+        handler = function(RUNTIME, "app_counting_runtime_handle_denom")
+        self.assertIn("app_counting_runtime_on_live_denom_changed", handler)
+        self.assertIn("counting_denom_reply_handle", handler)
+        row = function(DENOM, "counting_denom_data")
+        self.assertIn("counting_denom_notify_changed", row)
+        self.assertNotIn("on_denom_item_changed", function(RUNTIME, "app_counting_runtime_handle_detail"))
+        self.assertNotIn("counting_report_observe_note", DETAIL)
+        main = function(RUNTIME, "app_counting_runtime_on_main_data_changed")
+        self.assertIn(mark("A"), main)
+        self.assertIn("ui_refresh_main_page();", main)
 
     def test_reject_start_invalidates_only_after_parser_accepts_and_clears(self):
         body = function(RUNTIME, "app_counting_runtime_handle_detail")
@@ -142,13 +152,13 @@ class ListInvalidationContracts(unittest.TestCase):
         self.assertIn("if (sim_data->err_expected == 0)", reject)
         self.assertIn("counting_report_accept_reject(session)", reject)
         self.assertIn("counting_report_reject_end(session", reject)
-        self.assertIn("counting_report_schedule(session", function(DENOM, "counting_denom_handle_end"))
+        self.assertIn("counting_report_denom_complete(session", function(DENOM, "counting_denom_end"))
 
     def test_ui_notifications_add_no_protocol_requests(self):
         for name in ("app_counting_runtime_refresh_compact", "app_counting_runtime_on_main_data_changed",
                      "app_counting_runtime_on_reject_report_changed", "app_counting_runtime_on_summary_changed",
                      "app_counting_runtime_on_serial_data_started", "app_counting_runtime_on_serial_report_ready",
-                     "app_counting_runtime_on_serial_item_changed"):
+                     "app_counting_runtime_on_serial_item_changed", "app_counting_runtime_on_live_denom_changed"):
             self.assertNotIn("protocol_send", function(RUNTIME, name))
 
 

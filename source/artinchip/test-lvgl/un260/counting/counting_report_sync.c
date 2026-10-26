@@ -1,6 +1,7 @@
 #include "counting_report_sync.h"
 #include "counting_data_store.h"
 #include "un260/protocol/protocol_send.h"
+#include "un260/lv_system/app_clock.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -8,18 +9,15 @@ enum { REPORT_IDLE, REPORT_REJECT_LIVE, REPORT_REJECT, REPORT_SERIAL };
 enum { REPORT_IDLE_TIMEOUT_MS = 3000, REPORT_TOTAL_TIMEOUT_MS = 120000 };
 static struct {
     unsigned stage;
-    uint32_t generation, owner, requested, activity;
+    uint32_t generation, owner, requested, activity, live_owner;
     bool enabled, add, due, scheduled, started, invalid, live_seen, reusable;
     counting_report_failure_t failure;
     bool live_limit_reported;
     unsigned rows, published_rows;
     int live_next;
-    uint64_t denom_amount;
-    unsigned denom_pcs, pass_pcs, serial_base;
-    bool denom_seen, final_denoms, group_restart;
-    uint8_t base_count, pass_count;
-    denom_t base_denoms[COUNTING_DENOM_MAX_ITEMS];
-    denom_t pass_denoms[COUNTING_DENOM_MAX_ITEMS];
+    uint64_t previous_total_amount;
+    unsigned previous_total_pcs, serial_base;
+    bool first_total_seen, denom_complete, group_restart;
     uint8_t last_payload[20];
     counting_sim_t staging;
     struct {
@@ -52,23 +50,33 @@ static void fail(counting_report_failure_t reason)
     counting_data_clear_serials(&report.staging);
 }
 
+static void next_live_owner(void)
+{
+    if (++report.live_owner == 0) ++report.live_owner;
+}
+
+static void release_transfer(void)
+{
+    /* Retire a live C snapshot token too: its parser may still hold a partial
+     * row set, which a delayed END must not publish after this boundary. */
+    if (report.stage == REPORT_REJECT_LIVE) next_live_owner();
+    report.stage = REPORT_IDLE;
+    report.invalid = report.started = false;
+    counting_data_clear_serials(&report.staging);
+}
+
 void counting_report_begin(bool add, counting_sim_t *data)
 {
     if (++report.generation == 0) ++report.generation;
-    /* An old query remains owned until its END arrives. Without a wire
-     * transaction id, a timeout is not permission to overlap another query. */
+    next_live_owner();
+    report.failure = COUNTING_REPORT_FAILURE_NONE;
+    /* Retired untagged replies drain until END or their existing timeout.
+     * A new run neither renews that deadline nor inherits an old failure. */
     counting_data_clear_serials(&report.staging);
     report.enabled = true;
     if (report.stage == REPORT_IDLE) report.invalid = report.started = false;
     report.add = add;
-    report.denom_seen = report.final_denoms = report.group_restart = false;
-    report.pass_pcs = report.pass_count = report.base_count = 0;
-    memset(report.pass_denoms, 0, sizeof(report.pass_denoms));
-    memset(report.base_denoms, 0, sizeof(report.base_denoms));
-    if (add && data) {
-        report.base_count = data->denom_number;
-        memcpy(report.base_denoms, data->denom, sizeof(report.base_denoms));
-    }
+    report.first_total_seen = report.denom_complete = report.group_restart = false;
     unsigned serial_rows = data ? (unsigned)counting_data_serial_scan_limit(data) : 0;
     while (serial_rows && !data->sn_str[serial_rows - 1U]) --serial_rows;
     /* Allocation capacity is not the previous note count. Preserve trailing
@@ -78,14 +86,8 @@ void counting_report_begin(bool add, counting_sim_t *data)
     if (add && report.cache.valid && report.published_rows > serial_rows)
         serial_rows = report.published_rows;
     report.serial_base = add ? serial_rows : 0;
-    report.denom_pcs = add && data && data->total_pcs > 0 ? (unsigned)data->total_pcs : 0;
-    report.denom_amount = add && data && data->total_amount > 0 ? (uint64_t)data->total_amount : 0;
-    if (!add && data) {
-        for (unsigned i = 0; i < data->denom_number; ++i) {
-            data->denom[i].pcs = 0;
-            data->denom[i].amount = 0;
-        }
-    }
+    report.previous_total_pcs = add && data && data->total_pcs > 0 ? (unsigned)data->total_pcs : 0;
+    report.previous_total_amount = add && data && data->total_amount > 0 ? (uint64_t)data->total_amount : 0;
     report.reusable = add && report.cache.valid && report.stage == REPORT_IDLE;
     report.live_seen = report.due = report.scheduled = false;
     report.live_limit_reported = false;
@@ -103,34 +105,10 @@ void counting_report_begin(bool add, counting_sim_t *data)
     }
 }
 
-/* A is a projection of explicit note denominations, never amount differences. */
-static void denom_publish(counting_sim_t *d)
+static void restart_group(counting_sim_t *d)
 {
-    for (unsigned i = 0; i < d->denom_number; ++i)
-        d->denom[i].pcs = 0, d->denom[i].amount = 0;
-    for (unsigned source = 0; source < 2; ++source) {
-        const denom_t *rows = source ? report.pass_denoms : report.base_denoms;
-        unsigned count = source ? report.pass_count : report.base_count;
-        for (unsigned i = 0; i < count; ++i) {
-            unsigned slot = 0;
-            while (slot < d->denom_number && d->denom[slot].value != rows[i].value) ++slot;
-            if (slot == d->denom_number) {
-                if (slot == COUNTING_DENOM_MAX_ITEMS) continue;
-                d->denom[slot] = (denom_t){.value = rows[i].value};
-                ++d->denom_number;
-            }
-            unsigned pcs = (unsigned)d->denom[slot].pcs + rows[i].pcs;
-            d->denom[slot].pcs = pcs > UINT16_MAX ? UINT16_MAX : pcs;
-            d->denom[slot].amount = (float)d->denom[slot].value * d->denom[slot].pcs;
-        }
-    }
-}
-
-static void denom_restart(counting_sim_t *d)
-{
-    if (!report.denom_pcs && !report.base_count) return;
-    report.denom_pcs = report.denom_amount = report.base_count = 0;
-    memset(report.base_denoms, 0, sizeof(report.base_denoms));
+    if (!report.previous_total_pcs) return;
+    report.previous_total_pcs = report.previous_total_amount = 0;
     report.group_restart = true;
     d->last_total_pcs = d->last_valid_pcs = 0;
     d->last_total_amount = 0;
@@ -156,71 +134,22 @@ static void denom_restart(counting_sim_t *d)
     }
     report.serial_base = 0;
     counting_data_clear_errors(d);
-    denom_publish(d);
 }
 
 bool counting_report_observe_total(counting_sim_t *d, uint32_t amount, unsigned pcs)
 {
-    if (!report.enabled || !d || d->multi_currency_result || report.final_denoms) return false;
+    if (!report.enabled || !d || d->multi_currency_result) return false;
     if (!pcs) {
-        if (!report.denom_seen && report.add && !amount) {
-            d->total_pcs = (int)report.denom_pcs;
-            d->total_amount = (double)report.denom_amount;
+        if (!report.first_total_seen && report.add && !amount) {
+            d->total_pcs = (int)report.previous_total_pcs;
+            d->total_amount = (double)report.previous_total_amount;
         }
         return false;
     }
-    bool restarted = !report.denom_seen && pcs < report.denom_pcs;
-    if (restarted) denom_restart(d);
-    report.denom_seen = true;
+    bool restarted = !report.first_total_seen && pcs < report.previous_total_pcs;
+    if (restarted) restart_group(d);
+    report.first_total_seen = true;
     return restarted;
-}
-
-bool counting_report_observe_note(counting_sim_t *d, unsigned value)
-{
-    if (!report.enabled || !d || d->multi_currency_result || report.final_denoms ||
-        !value || value > 2147483647U) return false;
-    unsigned slot = 0;
-    while (slot < report.pass_count && report.pass_denoms[slot].value != (int)value) ++slot;
-    if (slot == report.pass_count) {
-        if (slot == COUNTING_DENOM_MAX_ITEMS) return false;
-        report.pass_denoms[slot] = (denom_t){.value = (int)value};
-        ++report.pass_count;
-    }
-    if (report.pass_denoms[slot].pcs == UINT16_MAX) return false;
-    ++report.pass_denoms[slot].pcs;
-    ++report.pass_pcs;
-    report.cache.valid = report.reusable = false;
-    denom_publish(d);
-    return true;
-}
-
-void counting_report_denom_snapshot(counting_sim_t *d, bool final)
-{
-    if (!d || !report.enabled || !final) return;
-    /* Equal first totals cannot distinguish retained ADD state from a reset.
-     * Resolve that ambiguity using the complete explicit denomination table. */
-    bool pass_matches = report.pass_pcs != 0;
-    for (unsigned i = 0; i < d->denom_number; ++i) {
-        unsigned pcs = 0;
-        for (unsigned j = 0; j < report.pass_count; ++j)
-            if (d->denom[i].value == report.pass_denoms[j].value) pcs = report.pass_denoms[j].pcs;
-        if (pcs != d->denom[i].pcs) pass_matches = false;
-    }
-    for (unsigned i = 0; i < report.pass_count; ++i) {
-        bool found = false;
-        for (unsigned j = 0; j < d->denom_number; ++j)
-            if (report.pass_denoms[i].value == d->denom[j].value) found = true;
-        if (!found) pass_matches = false;
-    }
-    if (report.add && report.denom_pcs && pass_matches) {
-        denom_t snapshot[COUNTING_DENOM_MAX_ITEMS];
-        uint8_t count = d->denom_number;
-        memcpy(snapshot, d->denom, sizeof(snapshot));
-        denom_restart(d);
-        memcpy(d->denom, snapshot, sizeof(snapshot));
-        d->denom_number = count;
-    }
-    report.final_denoms = true;
 }
 
 bool counting_report_take_group_restart(void)
@@ -245,7 +174,8 @@ void counting_report_shutdown(void)
 
 bool counting_report_transfer_active(void)
 {
-    return report.stage != REPORT_IDLE && !report.invalid;
+    return report.stage != REPORT_IDLE && !report.invalid &&
+           report.owner == report.generation;
 }
 
 static bool unchanged(const counting_sim_t *d)
@@ -284,12 +214,14 @@ void counting_report_poll(const counting_session_state_t *s,
                           uint32_t now)
 {
     if (report.stage != REPORT_IDLE) {
-        if (!report.invalid &&
-            ((uint32_t)(now - report.activity) >= REPORT_IDLE_TIMEOUT_MS ||
-             (uint32_t)(now - report.requested) >= REPORT_TOTAL_TIMEOUT_MS))
+        if ((uint32_t)(now - report.activity) < REPORT_IDLE_TIMEOUT_MS &&
+            (uint32_t)(now - report.requested) < REPORT_TOTAL_TIMEOUT_MS) return;
+        if (!report.invalid && report.owner == report.generation)
             fail(report.stage != REPORT_SERIAL ? COUNTING_REPORT_FAILURE_REJECT
                                               : COUNTING_REPORT_FAILURE_SERIAL);
-        return;
+        /* Expiry already establishes the boundary. Release now, including
+         * invalid/retired owners; only an independently queued run may send. */
+        release_transfer();
     }
     if (!report.enabled || !report.due || !settled(s)) return;
     report.due = false;
@@ -301,10 +233,18 @@ void counting_report_poll(const counting_session_state_t *s,
     report.stage = REPORT_REJECT;
 }
 
+void counting_report_denom_complete(const counting_session_state_t *s,
+                                    uint32_t now)
+{
+    if (!report.enabled || !s) return;
+    report.denom_complete = true;
+    counting_report_schedule(s, now);
+}
+
 void counting_report_schedule(const counting_session_state_t *s,
                               uint32_t now)
 {
-    if (!report.enabled || report.scheduled || !settled(s)) return;
+    if (!report.enabled || !report.denom_complete || report.scheduled || !settled(s)) return;
     report.scheduled = report.due = true;
     counting_report_poll(s, now);
 }
@@ -317,11 +257,10 @@ bool counting_report_discard_stale(uint8_t cmd, const uint8_t *buf, uint8_t len)
     if (!stage || report.stage != stage ||
         (!report.invalid && report.owner == report.generation)) return false;
     if ((cmd == 0x0C && len == 7) || (cmd == 0x0D && len == 25)) {
-        if (marker(buf, len, 0xFF)) {
-            report.stage = REPORT_IDLE;
-            report.invalid = report.started = false;
-            counting_data_clear_serials(&report.staging);
-        }
+        /* Tail traffic extends only inactivity, never the original total
+         * deadline. It cannot publish data or report a new owner's failure. */
+        report.activity = app_clock_uptime_ms();
+        if (marker(buf, len, 0xFF)) release_transfer();
     }
     return true;
 }
@@ -332,7 +271,7 @@ uint32_t counting_report_live_owner(const counting_session_state_t *s)
         (report.stage != REPORT_IDLE && report.stage != REPORT_REJECT_LIVE)) return 0;
     if (report.stage == REPORT_REJECT_LIVE && report.owner != report.generation) return 0;
     if ((s->start_confirmed && s->phase != COUNTING_SESSION_FINISHED_WAIT_START) ||
-        (report.stage == REPORT_REJECT_LIVE && settled(s))) return report.generation;
+        (report.stage == REPORT_REJECT_LIVE && settled(s))) return report.live_owner;
     return 0;
 }
 
@@ -417,8 +356,8 @@ counting_report_result_t counting_report_serial(
     const uint8_t *buf, uint8_t len, uint32_t now)
 {
     if (len != 25 || !counting_report_accept_serial(s)) return COUNTING_REPORT_IGNORED;
-    report.activity = now;
     if (marker(buf, len, 0)) {
+        report.activity = now;
         if (report.started) { fail(COUNTING_REPORT_FAILURE_SERIAL); return COUNTING_REPORT_FAILED; }
         counting_data_clear_serials(&report.staging);
         report.started = true;
@@ -426,12 +365,15 @@ counting_report_result_t counting_report_serial(
         return COUNTING_REPORT_IGNORED;
     }
     if (marker(buf, len, 255)) {
+        /* A late tail cannot arm or fail a newly requested report. Its own
+         * START is required, and orphan traffic does not renew inactivity. */
+        if (!report.started) return COUNTING_REPORT_IGNORED;
         report.stage = REPORT_IDLE;
-        if (!report.started || report.invalid) { fail(COUNTING_REPORT_FAILURE_SERIAL); return COUNTING_REPORT_FAILED; }
         publish(d);
         return COUNTING_REPORT_READY;
     }
     if (!report.started || report.invalid) return COUNTING_REPORT_IGNORED;
+    report.activity = now;
     /* All 256 sequence bytes are valid for a data row. Only the entire
      * all-zero/all-FF payload denotes a boundary. Empty serial rows still
      * consume their original NO; equal serial text is never deduplicated. */

@@ -10,6 +10,7 @@
 #include "un260/app_service/app_fault_recovery.h"
 #include "un260/boot/boot_service.h"
 #include "un260/counting/counting_denom_query_service.h"
+#include "un260/counting/counting_denom_reply.h"
 #include "un260/counting/counting_multi.h"
 #include <string.h>
 #include "un260/counting/counting_action_service.h"
@@ -17,6 +18,7 @@
 #include "un260/currency/currency_reply.h"
 #include "un260/currency/currency_state.h"
 #include "un260/lv_core/page_01_main.h"
+#include "un260/lv_core/page_02_list.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/lv_core/page_07_curr.h"
 #include "un260/lv_components/smart_island.h"
@@ -106,20 +108,28 @@ void app_currency_runtime_handle_reply(counting_detail_state_t *detail_state,
     }
 }
 
-void app_currency_runtime_handle_detected(const uint8_t *buf, uint8_t len)
+void app_currency_runtime_handle_detected(counting_detail_state_t *detail_state,
+                                          const uint8_t *buf, uint8_t len)
 {
-    char detected_code[4];
+    char detected_code[4], previous_code[4];
 
     /* Transport validates CRC; the currency layer validates the exact shape. */
     if (!currency_reply_detected_code(buf, len, detected_code)) {
         uart_debug_printf("detected currency invalid len=%u\n", len);
         return;
     }
+    const bool currency_changed = !currency_state_get_detected_code(previous_code) ||
+                                  strcmp(previous_code, detected_code) != 0;
     if (!currency_state_confirm_detected_code(detected_code)) {
         uart_debug_printf("detected currency ignored: %s\n", detected_code);
         return;
     }
 
+    if (currency_changed && counting_denom_reply_currency_changed(
+            detail_state, counting_data_mutable())) {
+        page_02_list_section_mark_dirty(PAGE_02_SECTION_A);
+        ui_refresh_main_page();
+    }
     page_01_curr_img_refre();
     smart_island_refresh_summary();
     uart_debug_printf("AUTO detected currency: %s\n", detected_code);

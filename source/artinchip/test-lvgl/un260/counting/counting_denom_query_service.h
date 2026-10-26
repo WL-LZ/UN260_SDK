@@ -17,6 +17,8 @@ bool counting_denom_query_commit(const counting_detail_state_t *detail,
 void counting_denom_query_trigger(counting_detail_state_t *detail,
                                   uint32_t now_ms,
                                   bool boot_ready);
+/* A confirmed hardware count supersedes background denomination queries. */
+void counting_denom_query_cancel(counting_detail_state_t *detail);
 void counting_denom_query_poll(counting_detail_state_t *detail,
                                uint32_t now_ms,
                                bool boot_ready,

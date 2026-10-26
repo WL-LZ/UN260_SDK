@@ -1,12 +1,7 @@
-/*
- * Customer-result tests: every accepted 0x49 frame is one physical note,
- * including equal serial text and blank serial text. 0x0E never identifies a
- * denomination. The final 0x0B snapshot is authoritative, not an increment.
- *
- * The runner extracts the production runtime INFO handler into an include.
- * Only unrelated UI/history persistence effects are stubbed; all note, totals,
- * denomination parsing, ADD baseline and session state changes are production.
- */
+/* Controller 0B rows own A; 0E owns totals and completion. 49 owns B only.
+ * The runtime INFO handler is production code; only UI/storage effects are
+ * stubbed. Every 0B START clears quantities/amounts while retaining the
+ * denomination catalogue; ADD totals are supplied entirely by the controller. */
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -24,8 +19,10 @@ static counting_sim_t data;
 static counting_session_state_t session;
 static counting_detail_state_t detail;
 static bool add_enabled, locked;
-static unsigned restarts;
+static unsigned restarts, row_changes;
 static uint32_t tick;
+static void changed(void) { ++row_changes; }
+static const counting_denom_reply_hooks_t hooks = {.on_main_data_changed = changed};
 static int island_pcs;
 static double island_amount;
 uint32_t app_clock_uptime_ms(void) { return ++tick; }
@@ -75,11 +72,11 @@ static unsigned counted(void)
     for (unsigned i = 0; i < data.denom_number; ++i) n += data.denom[i].pcs;
     return n;
 }
-static unsigned money(void)
+static uint64_t money(void)
 {
-    unsigned amount = 0;
+    uint64_t amount = 0;
     for (unsigned i = 0; i < data.denom_number; ++i)
-        amount += (unsigned)data.denom[i].value * data.denom[i].pcs;
+        amount += counting_data_denom_amount(&data.denom[i]);
     return amount;
 }
 static void reset(void)
@@ -92,7 +89,7 @@ static void reset(void)
     memset(&detail, 0, sizeof(detail));
     data.denom_number = 3;
     data.denom[0].value = 10; data.denom[1].value = 50; data.denom[2].value = 100;
-    add_enabled = locked = false; restarts = 0; tick = 100; island_pcs = -1;
+    add_enabled = locked = false; restarts = row_changes = 0; tick = 100; island_pcs = -1;
 }
 static void begin(bool add)
 {
@@ -103,7 +100,7 @@ static void begin(bool add)
     session.start_confirmed = true;
     session.end_anim_wait_detail = false;
     session.expected_issue = 0;
-    detail.live_denom_started = false;
+    counting_denom_reply_begin_count(&detail);
     detail.live_reject_started = false;
     locked = true;
 }
@@ -126,222 +123,185 @@ static void boundary(unsigned fill)
 {
     uint8_t b[16] = {0xFD, 0xDF, 16, 0x0B};
     memset(b + 4, fill, 11);
-    counting_denom_reply_handle(&detail, &session, &data, b, sizeof(b), NULL);
+    counting_denom_reply_handle(&detail, &session, &data, b, sizeof(b), &hooks);
 }
-static void final_row(unsigned value, unsigned pcs)
+static void row(unsigned value, unsigned pcs)
 {
     uint8_t b[16] = {0xFD, 0xDF, 16, 0x0B};
     char fields[16];
     snprintf(fields, sizeof(fields), "%8u%3u", value, pcs);
     memcpy(b + 4, fields, 11);
-    counting_denom_reply_handle(&detail, &session, &data, b, sizeof(b), NULL);
+    counting_denom_reply_handle(&detail, &session, &data, b, sizeof(b), &hooks);
 }
-static void snapshot(unsigned ten, unsigned fifty, unsigned hundred)
-{
-    boundary(0); final_row(10, ten); final_row(50, fifty); final_row(100, hundred); boundary(255);
-    /* Inspect the report-layer event here; production consumes it before history save. */
-    if (counting_report_take_group_restart()) counting_history_restart_group();
-}
+static void rows(unsigned ten, unsigned fifty, unsigned hundred)
+{ row(10, ten); row(50, fifty); row(100, hundred); }
 static bool exact(unsigned ten, unsigned fifty, unsigned hundred)
 {
     CHECK(quantity(10) == ten && quantity(50) == fifty && quantity(100) == hundred);
     CHECK(counted() == ten + fifty + hundred);
     CHECK(money() == 10 * ten + 50 * fifty + 100 * hundred);
     for (unsigned i = 0; i < data.denom_number; ++i)
-        CHECK(data.denom[i].amount == (float)data.denom[i].value * data.denom[i].pcs);
+        CHECK(counting_data_denom_amount(&data.denom[i]) ==
+              (uint64_t)(unsigned)data.denom[i].value * data.denom[i].pcs);
     return true;
 }
 
-static bool duplicate_note(void)
+
+static bool absolute_rows(void)
 {
-    begin(false); info(0, 0, 1);
-    note(50, "SAME12345678"); note(50, "SAME12345678");
-    CHECK(exact(0, 2, 0));
-    info(100, 2, 1); info(100, 2, 1); CHECK(exact(0, 2, 0));
-    info(0, 0, 2); CHECK(!locked); snapshot(0, 2, 0); CHECK(exact(0, 2, 0));
+    begin(false); boundary(0); row(100, 1); CHECK(exact(0, 0, 1));
+    row(100, 2); CHECK(exact(0, 0, 2)); row(100, 3); CHECK(exact(0, 0, 3));
+    unsigned changes = row_changes; row(100, 3); CHECK(row_changes == changes);
+    row(100, 1); CHECK(exact(0, 0, 1)); row(100, 0); CHECK(exact(0, 0, 0));
+    CHECK(data.denom_number == 3 && data.denom[2].value == 100);
+    CHECK(data.total_pcs == 0 && data.total_amount == 0); boundary(255);
     return true;
 }
-static bool blank_serial(void)
+static bool serials_do_not_write_a(void)
 {
-    begin(false); note(50, ""); note(10, NULL); note(50, "            ");
-    CHECK(exact(1, 2, 0)); info(110, 3, 1); info(0, 0, 2);
-    snapshot(1, 2, 0); CHECK(exact(1, 2, 0)); return true;
+    begin(false); boundary(0); row(50, 2);
+    note(100, "SAME12345678"); note(100, "SAME12345678"); note(10, "");
+    CHECK(exact(0, 2, 0)); CHECK(data.sn_capacity >= 3);
+    CHECK(data.sn_str[0] && data.sn_str[1] && !data.sn_str[2]);
+    CHECK(!strcmp(data.sn_str[0], data.sn_str[1]));
+    CHECK(data.denom_mix[0] == 100 && data.denom_mix[1] == 100);
+    info(100, 2, 1); info(0, 0, 2); boundary(255);
+    note(100, "AFTER-END"); CHECK(exact(0, 2, 0)); return true;
+}
+static bool start_before_first_info(void)
+{
+    begin(false); boundary(0); rows(1, 2, 0); CHECK(exact(1, 2, 0));
+    info(0, 0, 0); CHECK(exact(1, 2, 0)); info(110, 3, 1);
+    CHECK(exact(1, 2, 0)); info(0, 0, 2); boundary(255);
+    CHECK(!locked && island_pcs == 3); return true;
 }
 static bool count_first(void)
 {
-    begin(false); info(0, 0, 1);
-    note(50, "A"); info(0, 1, 1); CHECK(exact(0, 1, 0));
-    info(50, 1, 1); note(10, "B"); info(50, 2, 1); info(60, 2, 1);
-    CHECK(exact(1, 1, 0)); info(0, 0, 2); snapshot(1, 1, 0); CHECK(exact(1, 1, 0));
+    begin(false); boundary(0); info(0, 0, 1);
+    info(0, 1, 1); row(50, 1); CHECK(exact(0, 1, 0));
+    CHECK(data.total_pcs == 1 && data.total_amount == 0);
+    info(50, 1, 1); info(50, 2, 1); row(10, 1); CHECK(exact(1, 1, 0));
+    CHECK(data.total_pcs == 2 && data.total_amount == 50);
+    info(60, 2, 1); CHECK(exact(1, 1, 0)); info(0, 0, 2); boundary(255);
+    CHECK(session.last_result.amount == 60 && session.history_record.amount == 60);
     return true;
 }
 static bool amount_first(void)
 {
-    begin(false); info(0, 0, 1); note(50, "A"); info(50, 0, 1); info(50, 1, 1);
-    note(50, "B"); info(100, 1, 1); CHECK(exact(0, 2, 0)); info(100, 2, 1);
-    note(10, "C"); info(110, 2, 1); info(110, 3, 1);
-    CHECK(exact(1, 2, 0)); info(0, 0, 2); snapshot(1, 2, 0); CHECK(exact(1, 2, 0));
+    begin(false); boundary(0); info(50, 0, 1); row(50, 1);
+    CHECK(exact(0, 1, 0) && data.total_pcs == 0 && data.total_amount == 50);
+    info(50, 1, 1); info(100, 1, 1); row(50, 2); CHECK(exact(0, 2, 0));
+    info(100, 2, 1); row(10, 1); info(110, 2, 1); info(110, 3, 1);
+    info(0, 0, 2); boundary(255);
+    CHECK(exact(1, 2, 0) && island_pcs == 3 && island_amount == 110);
     return true;
 }
-static bool end_amount(void)
+static bool positive_stop_final(void)
 {
-    begin(false); info(0, 0, 1); note(50, "A"); info(50, 1, 1);
-    note(50, "B"); info(50, 2, 1); info(100, 2, 2);
-    CHECK(!locked && exact(0, 2, 0));
+    begin(false); boundary(0); row(50, 2); info(50, 1, 1);
+    info(100, 2, 2); CHECK(!locked && island_pcs == 2 && island_amount == 100);
     CHECK(session.history_record.pcs == 2 && session.history_record.amount == 100);
-    snapshot(0, 2, 0); CHECK(exact(0, 2, 0));
+    boundary(255); CHECK(exact(0, 2, 0)); return true;
+}
+static bool zero_stop_retains_live(void)
+{
+    begin(false); boundary(0); row(100, 3); info(60, 2, 1); info(0, 0, 2);
+    CHECK(!locked && island_pcs == 2 && island_amount == 60);
+    boundary(255); CHECK(exact(0, 0, 3));
+    CHECK(data.total_pcs == 2 && data.total_amount == 60);
+    CHECK(session.last_result.pcs == 2 && session.last_result.amount == 60);
+    CHECK(session.history_record.pcs == 2 && session.history_record.amount == 60);
     return true;
 }
-static bool missing_info(void)
+static bool no_live_positive_stop(void)
 {
-    begin(false);
-    note(10, "A"); note(50, "B"); note(50, "C"); note(10, "D");
-    CHECK(exact(2, 2, 0)); info(120, 4, 2);
-    CHECK(!locked); snapshot(2, 2, 0); CHECK(exact(2, 2, 0)); return true;
+    begin(false); boundary(0); rows(2, 2, 0); info(120, 4, 2); boundary(255);
+    CHECK(exact(2, 2, 0) && !locked && island_pcs == 4);
+    CHECK(session.history_record.pcs == 4 && session.history_record.amount == 120);
+    return true;
+}
+static bool empty_cnt(void)
+{
+    begin(false); boundary(0); info(0, 317, 1); info(0, 0, 2); boundary(255);
+    CHECK(exact(0, 0, 0) && data.total_pcs == 317 && data.total_amount == 0);
+    CHECK(!locked && island_pcs == 317 && session.history_record.pcs == 317);
+    return true;
+}
+static bool start_clears_rows_for_both_add_states(void)
+{
+    for (unsigned add = 0; add < 2; ++add) {
+        reset(); data.denom[0].pcs = 2; data.denom[0].amount = 20;
+        begin(add != 0); CHECK(exact(2, 0, 0)); boundary(0);
+        CHECK(exact(0, 0, 0));
+        CHECK(data.denom_number == 3 && data.denom[0].value == 10);
+        row(50, 1); CHECK(exact(0, 1, 0)); boundary(255);
+    }
+    return true;
 }
 static bool add_continue(void)
 {
-    begin(false); info(0, 0, 1); note(10, "A"); note(50, "B");
-    info(60, 2, 1); info(0, 0, 2); snapshot(1, 1, 0);
-    begin(true); info(0, 0, 1); CHECK(exact(1, 1, 0));
-    info(60, 2, 1); /* delayed unchanged cumulative total is not reset */
-    note(50, "C"); info(110, 3, 1); note(10, "D"); info(120, 4, 1);
-    CHECK(exact(2, 2, 0)); CHECK(restarts == 0);
-    info(0, 0, 2); CHECK(island_pcs == 2 && !locked); snapshot(2, 2, 0);
-    CHECK(exact(2, 2, 0)); return true;
-}
-static bool restart_before_note(void)
-{
-    begin(false); note(50, "A"); note(50, "B"); info(100, 2, 1);
-    info(0, 0, 2); snapshot(0, 2, 0);
-    begin(true); info(0, 0, 1); info(10, 1, 1); note(10, "C");
-    CHECK(exact(1, 0, 0)); CHECK(restarts == 1 && data.last_total_pcs == 0);
-    info(0, 0, 2); CHECK(island_pcs == 1); snapshot(1, 0, 0); CHECK(exact(1, 0, 0)); return true;
-}
-static bool restart_after_note(void)
-{
-    begin(false); note(50, "A"); note(50, "B"); info(100, 2, 1);
-    info(0, 0, 2); snapshot(0, 2, 0);
-    begin(true); info(0, 0, 1); note(10, "C"); info(10, 1, 1);
-    CHECK(exact(1, 0, 0)); CHECK(restarts == 1 && data.last_total_pcs == 0);
-    info(0, 0, 2); CHECK(island_pcs == 1); snapshot(1, 0, 0); CHECK(exact(1, 0, 0)); return true;
-}
-static bool restart_equal(void)
-{
-    begin(false); note(50, "A"); info(50, 1, 1); info(0, 0, 2); snapshot(0, 1, 0);
-    begin(true); info(0, 0, 1); note(10, "B"); info(10, 1, 1);
-    /* Equal first total cannot distinguish a delayed old baseline from reset.
-     * The complete final snapshot resolves that ambiguity without blocking. */
-    info(0, 0, 2); CHECK(!locked); snapshot(1, 0, 0);
-    CHECK(exact(1, 0, 0)); CHECK(restarts == 1 && data.last_total_pcs == 0);
-    snapshot(1, 0, 0); CHECK(restarts == 1 && !counting_report_take_group_restart());
+    begin(false); boundary(0); rows(1, 1, 0);
+    info(60, 2, 1); info(0, 0, 2); boundary(255);
+    begin(true); boundary(0); CHECK(exact(0, 0, 0)); rows(1, 1, 0);
+    info(0, 0, 1); CHECK(exact(1, 1, 0));
+    info(60, 2, 1); rows(2, 2, 0); info(120, 4, 1);
+    CHECK(exact(2, 2, 0) && restarts == 0);
+    info(0, 0, 2); boundary(255);
+    CHECK(!locked && island_pcs == 2 && session.analysis_valid_pcs == 2);
+    CHECK(data.last_total_pcs == 2 && session.history_record.pcs == 4);
     return true;
 }
 static bool empty_add(void)
 {
-    begin(false); note(10, "A"); note(50, "B"); info(60, 2, 1);
-    info(0, 0, 2); snapshot(1, 1, 0);
-    begin(true); info(0, 0, 1); info(0, 0, 1); info(0, 0, 2);
-    CHECK(exact(1, 1, 0)); CHECK(restarts == 0 && island_pcs == 0 && !locked);
-    snapshot(1, 1, 0); CHECK(exact(1, 1, 0)); return true;
-}
-static bool final_replace(void)
-{
-    begin(false); note(10, "A"); info(60, 2, 1); info(0, 0, 2);
-    snapshot(1, 1, 0); CHECK(exact(1, 1, 0));
-    snapshot(1, 1, 0); CHECK(exact(1, 1, 0)); /* duplicate whole snapshot */
-    begin(true); note(50, "B"); info(110, 3, 1); CHECK(exact(1, 2, 0));
-    info(0, 0, 2); snapshot(1, 2, 0); CHECK(exact(1, 2, 0)); return true;
-}
-static bool live_snapshot(void)
-{
-    begin(false); info(0, 0, 1); note(50, "A"); snapshot(0, 1, 0);
-    info(50, 1, 1); CHECK(exact(0, 1, 0));
-    note(10, "B"); info(60, 2, 1); CHECK(exact(1, 1, 0));
-    info(0, 0, 2); snapshot(1, 1, 0); CHECK(exact(1, 1, 0)); return true;
-}
-static bool non_add_after_add(void)
-{
-    begin(false); note(10, "A"); note(50, "B"); info(60, 2, 1); info(0, 0, 2); snapshot(1, 1, 0);
-    begin(true); note(50, "C"); info(110, 3, 1); info(0, 0, 2); snapshot(1, 2, 0);
-    begin(false); CHECK(exact(0, 0, 0)); CHECK(data.denom_number == 3);
-    info(0, 0, 1); note(10, "D"); info(10, 1, 1); CHECK(exact(1, 0, 0));
-    info(0, 0, 2); snapshot(1, 0, 0); CHECK(exact(1, 0, 0)); return true;
-}
-static bool restart_missing_first(void)
-{
-    begin(false); note(50, "A"); note(50, "B"); info(100, 2, 1);
-    info(0, 0, 2); snapshot(0, 2, 0);
-    begin(true); note(10, "C"); note(10, "D"); note(10, "E");
-    info(30, 3, 1); info(0, 0, 2); snapshot(3, 0, 0);
-    CHECK(exact(3, 0, 0)); CHECK(restarts == 1 && data.last_total_pcs == 0);
-    snapshot(3, 0, 0); CHECK(restarts == 1 && !counting_report_take_group_restart());
+    begin(false); boundary(0); rows(1, 1, 0);
+    info(60, 2, 1); info(0, 0, 2); boundary(255);
+    begin(true); boundary(0); rows(1, 1, 0);
+    info(0, 0, 1); info(0, 0, 1); info(0, 0, 2); boundary(255);
+    CHECK(exact(1, 1, 0) && restarts == 0 && island_pcs == 0 && !locked);
     return true;
 }
-static bool restart_equal_amount(void)
+static bool restart_a_is_independent(void)
 {
-    begin(false); note(50, "SAME"); info(50, 1, 1); info(0, 0, 2); snapshot(0, 1, 0);
-    begin(true); note(50, "SAME"); info(50, 1, 1);
-    info(0, 0, 2); snapshot(0, 1, 0);
-    CHECK(exact(0, 1, 0)); CHECK(restarts == 1 && data.last_total_pcs == 0);
-    snapshot(0, 1, 0); CHECK(restarts == 1 && !counting_report_take_group_restart());
+    begin(false); boundary(0); rows(0, 2, 0);
+    info(100, 2, 1); info(0, 0, 2); boundary(255);
+    begin(true); boundary(0); rows(1, 2, 0); info(0, 0, 1);
+    CHECK(exact(1, 2, 0)); info(10, 1, 1);
+    CHECK(restarts == 1 && data.last_total_pcs == 0 && exact(1, 2, 0));
+    /* The controller, not the scalar restart, clears the old denomination. */
+    row(50, 0); CHECK(exact(1, 0, 0)); info(10, 1, 1);
+    CHECK(restarts == 1 && !counting_report_take_group_restart());
+    info(0, 0, 2); boundary(255); CHECK(!locked && island_pcs == 1);
     return true;
 }
-static bool late_note_after_end(void)
+static bool a_cannot_guess_group_reset(void)
 {
-    begin(false); note(50, "A"); info(50, 1, 1); info(0, 0, 2); snapshot(0, 1, 0);
-    note(100, "LATE"); CHECK(exact(0, 1, 0));
-    CHECK(!counting_report_observe_note(&data, 100)); CHECK(exact(0, 1, 0));
-    begin(true); note(10, "B"); info(60, 2, 1); CHECK(exact(1, 1, 0));
-    info(0, 0, 2); snapshot(1, 1, 0); CHECK(exact(1, 1, 0)); return true;
-}
-static bool end_count(void)
-{
-    begin(false); note(50, "A"); info(50, 1, 1); note(50, "B");
-    info(100, 2, 2); CHECK(!locked && exact(0, 2, 0));
-    CHECK(session.history_record.pcs == 2 && session.history_record.amount == 100);
-    snapshot(0, 2, 0); CHECK(exact(0, 2, 0)); return true;
-}
-static bool zero_end_retains(void)
-{
-    begin(false); note(50, "A"); info(50, 1, 1); note(10, "B"); info(60, 2, 1);
-    info(0, 0, 2); CHECK(!locked && exact(1, 1, 0));
-    CHECK(session.history_record.pcs == 2 && session.history_record.amount == 60);
-    snapshot(1, 1, 0); CHECK(exact(1, 1, 0)); return true;
-}
-static bool blank_serial_order(void)
-{
-    begin(false); note(50, ""); note(10, "VALID0000001"); note(50, ""); note(10, "VALID0000002");
-    CHECK(exact(2, 2, 0)); CHECK(data.sn_capacity >= 4);
-    CHECK(!data.sn_str[0] && data.sn_str[1] && !data.sn_str[2] && data.sn_str[3]);
-    CHECK(!strcmp(data.sn_str[1], "VALID0000001") && !strcmp(data.sn_str[3], "VALID0000002"));
-    CHECK(data.denom_mix[1] == 10 && data.denom_mix[3] == 10);
-    info(120, 4, 1); info(0, 0, 2); snapshot(2, 2, 0);
-    CHECK(exact(2, 2, 0)); return true;
-}
-static bool all_amounts_ahead(void)
-{
-    begin(false); info(170, 0, 1);
-    note(50, "A"); note(10, "B"); note(100, "C"); note(10, "D");
-    CHECK(exact(2, 1, 1)); info(170, 4, 1); info(0, 0, 2);
-    snapshot(2, 1, 1); CHECK(exact(2, 1, 1)); return true;
-}
-static bool all_counts_ahead(void)
-{
-    begin(false); info(0, 4, 1);
-    note(50, "A"); note(10, "B"); note(100, "C"); note(10, "D");
-    CHECK(exact(2, 1, 1)); info(170, 4, 1); info(0, 0, 2);
-    snapshot(2, 1, 1); CHECK(exact(2, 1, 1)); return true;
-}
-static bool ten_thousand_notes(void)
-{
-    begin(false);
-    for (unsigned i = 0; i < 10000; ++i) note(i % 2 ? 50 : 10, "");
-    CHECK(exact(5000, 5000, 0)); info(300000, 10000, 1); info(0, 0, 2);
-    CHECK(session.history_record.pcs == 10000 && session.history_record.amount == 300000);
-    /* This boundary validates explicit-note accumulation, not unspecified
-     * controller chunking for 0B's three-character count field. */
+    begin(false); boundary(0); rows(0, 1, 0);
+    info(50, 1, 1); info(0, 0, 2); boundary(255);
+    begin(true); boundary(0); rows(1, 0, 0); info(10, 1, 1);
+    info(0, 0, 2); boundary(255);
+    CHECK(exact(1, 0, 0) && data.total_pcs == 1 && data.total_amount == 10);
+    CHECK(restarts == 0 && data.last_total_pcs == 1);
+    /* Equal counts cannot identify a reset; A is never repurposed as a reset
+     * signal. This is a protocol ambiguity boundary, not reset detection. */
+    puts("BOUNDARY equal first total has no reset evidence; no A-based group inference");
     return true;
+}
+static bool non_add_clear_after_add(void)
+{
+    begin(true); boundary(0); rows(1, 2, 0); info(110, 3, 1);
+    info(0, 0, 2); boundary(255); begin(false);
+    CHECK(exact(1, 2, 0)); boundary(0); CHECK(exact(0, 0, 0));
+    CHECK(data.denom_number == 3); row(10, 1); info(10, 1, 1);
+    info(0, 0, 2); boundary(255); CHECK(exact(1, 0, 0) && island_pcs == 1);
+    return true;
+}
+static bool end_order_and_late_frames(void)
+{
+    begin(false); boundary(0); row(50, 2); boundary(255);
+    CHECK(locked && exact(0, 2, 0)); row(100, 3); note(100, "LATE");
+    CHECK(exact(0, 2, 0)); info(100, 2, 1); info(0, 0, 2);
+    CHECK(!locked && island_pcs == 2 && exact(0, 2, 0));
+    boundary(255); CHECK(session.history_record.amount == 100); return true;
 }
 static void detail_marker(unsigned command, unsigned fill)
 {
@@ -359,49 +319,58 @@ static void serial_note(unsigned no, unsigned value, const char *serial)
 }
 static void seed_tail_empty(void)
 {
-    begin(false); note(50, "OLD000000001"); note(10, ""); note(10, "");
-    info(70, 3, 1); info(0, 0, 2); snapshot(2, 1, 0);
-    detail_marker(0x0C, 0); detail_marker(0x0C, 255);
-    detail_marker(0x0D, 0);
+    begin(false); boundary(0); rows(2, 1, 0);
+    note(50, "OLD000000001"); note(10, ""); note(10, "");
+    info(70, 3, 1); info(0, 0, 2); boundary(255);
+    detail_marker(0x0C, 0); detail_marker(0x0C, 255); detail_marker(0x0D, 0);
     serial_note(1, 50, "OLD000000001"); serial_note(2, 10, ""); serial_note(3, 10, "");
     detail_marker(0x0D, 255);
 }
 static bool add_tail_empty(void)
 {
     seed_tail_empty(); CHECK(exact(2, 1, 0)); CHECK(data.sn_str && data.sn_str[0]);
-    begin(true); info(0, 0, 1); note(50, "NEW000000001"); info(120, 4, 1);
-    CHECK(exact(2, 2, 0)); CHECK(data.sn_capacity >= 4);
+    begin(true); boundary(0); info(0, 0, 1); note(50, "NEW000000001");
+    CHECK(exact(0, 0, 0)); rows(2, 2, 0); info(120, 4, 1);
+    CHECK(exact(2, 2, 0) && data.sn_capacity >= 4);
     CHECK(!strcmp(data.sn_str[0], "OLD000000001") && !data.sn_str[1] && !data.sn_str[2]);
     CHECK(data.sn_str[3] && !strcmp(data.sn_str[3], "NEW000000001"));
-    info(0, 0, 2); snapshot(2, 2, 0); CHECK(restarts == 0); return true;
+    info(0, 0, 2); boundary(255); CHECK(restarts == 0 && island_pcs == 1); return true;
+}
+static bool restart_before_serial(void)
+{
+    seed_tail_empty(); begin(true); boundary(0); rows(1, 1, 0);
+    info(0, 0, 1); info(60, 2, 1); note(50, ""); note(10, "NEW000000001");
+    CHECK(exact(1, 1, 0) && restarts == 1 && data.last_total_pcs == 0);
+    CHECK(data.sn_str && !data.sn_str[0] && data.sn_str[1]);
+    CHECK(!strcmp(data.sn_str[1], "NEW000000001") && data.denom_mix[1] == 10);
+    info(0, 0, 2); boundary(255); CHECK(island_pcs == 2); return true;
 }
 static bool restart_keeps_current_serials(void)
 {
-    seed_tail_empty(); begin(true); info(0, 0, 1);
-    note(50, ""); note(10, "NEW000000001"); info(60, 2, 1);
-    CHECK(exact(1, 1, 0)); CHECK(restarts == 1 && data.last_total_pcs == 0);
+    seed_tail_empty(); begin(true); boundary(0); rows(1, 1, 0);
+    info(0, 0, 1); note(50, ""); note(10, "NEW000000001"); info(60, 2, 1);
+    CHECK(exact(1, 1, 0) && restarts == 1 && data.last_total_pcs == 0);
     CHECK(data.sn_str && !data.sn_str[0] && data.sn_str[1]);
     CHECK(!strcmp(data.sn_str[1], "NEW000000001") && data.denom_mix[1] == 10);
     CHECK(counting_data_serial_valid_count(&data) == 1);
-    info(0, 0, 2); snapshot(1, 1, 0); CHECK(exact(1, 1, 0)); return true;
+    info(0, 0, 2); boundary(255); CHECK(exact(1, 1, 0) && island_pcs == 2);
+    return true;
 }
 static bool wire_amount_limits(void)
 {
     const uint32_t values[] = {UINT32_MAX, UINT32_MAX - 1u};
     const char *headers[] = {"4,294,967,295", "4,294,967,294"};
     for (unsigned i = 0; i < 2; ++i) {
-        reset(); begin(false); info(values[i], 1, 1);
-        CHECK(data.total_amount == (double)values[i]);
-        char header[32];
+        reset(); begin(false); boundary(0); row(50, 1); info(values[i], 1, 1);
+        CHECK(data.total_amount == (double)values[i]); char header[32];
         app_counting_runtime_format_amount(header, sizeof(header), data.total_amount);
-        CHECK(!strcmp(header, headers[i]));
-        info(0, 0, 2);
+        CHECK(!strcmp(header, headers[i])); info(0, 0, 2); boundary(255);
         CHECK(session.last_result.amount == (double)values[i]);
         CHECK(session.history_record.amount == (double)values[i]);
         CHECK(island_amount == (double)values[i]);
-        begin(true); info(0, 0, 1);
+        begin(true); boundary(0); info(0, 0, 1);
         CHECK(data.total_amount == (double)values[i] && data.last_total_amount == (double)values[i]);
-        info(0, 0, 2); CHECK(island_amount == (double)values[i]);
+        info(0, 0, 2); boundary(255); CHECK(island_amount == (double)values[i]);
     }
     return true;
 }
@@ -409,8 +378,8 @@ static bool wire_stop_amount_limits(void)
 {
     const uint32_t values[] = {UINT32_MAX, UINT32_MAX - 1u};
     for (unsigned i = 0; i < 2; ++i) {
-        reset(); begin(false); info(values[i] - 1u, 1, 1);
-        info(values[i], 1, 2);
+        reset(); begin(false); boundary(0); info(values[i] - 1u, 1, 1);
+        info(values[i], 1, 2); boundary(255);
         CHECK(data.total_amount == (double)values[i]);
         CHECK(session.last_result.amount == (double)values[i]);
         CHECK(session.history_record.amount == (double)values[i]);
@@ -418,77 +387,69 @@ static bool wire_stop_amount_limits(void)
     }
     return true;
 }
+static bool row_field_limits(void)
+{
+    begin(false); boundary(0); row(99999999, 999);
+    CHECK(data.denom_number == 4 && quantity(99999999) == 999);
+    CHECK(counting_data_denom_amount(&data.denom[3]) == UINT64_C(99899999001));
+    row(99999999, 0); CHECK(counting_data_denom_amount(&data.denom[3]) == 0);
+    row(50000, 999); CHECK(money() == UINT64_C(49950000)); return true;
+}
 static uint32_t random_state;
 static unsigned next_random(void)
-{
-    random_state = random_state * 1664525u + 1013904223u;
-    return random_state;
-}
+{ random_state = random_state * 1664525u + 1013904223u; return random_state; }
 static bool randomized(void)
 {
-    unsigned checked_notes = 0;
+    unsigned checked_rows = 0;
+    const unsigned values[] = {10, 50, 100};
     for (unsigned seed = 1; seed <= 80; ++seed) {
-        reset(); random_state = seed;
-        unsigned ten = 0, fifty = 0, pcs = 0, amount = 0;
+        reset(); random_state = seed; unsigned q[3] = {0};
         for (unsigned run = 0; run < 5; ++run) {
-            begin(run != 0); info(0, 0, 1);
-            unsigned notes = 1 + next_random() % 37;
-            for (unsigned i = 0; i < notes; ++i) {
-                unsigned value = next_random() % 3 == 0 ? 10 : 50;
-                unsigned previous_amount = amount, previous_pcs = pcs;
-                ++pcs; ++checked_notes; amount += value; ten += value == 10; fifty += value == 50;
-                /* Repeated text is intentionally common; each note is distinct. */
-                const char *serial = next_random() % 4 == 0 ? "" : "SAME12345678";
-                switch (next_random() % 6) {
-                case 0: note(value, serial); info(amount, pcs, 1); break;
-                case 1: info(previous_amount, pcs, 1); note(value, serial); info(amount, pcs, 1); break;
-                case 2: info(amount, previous_pcs, 1); note(value, serial); info(amount, pcs, 1); break;
-                case 3: note(value, serial); break; /* omitted 0E */
-                case 4: note(value, serial); info(amount, pcs, 1); info(amount, pcs, 1); break;
-                default: info(amount, pcs, 1); note(value, serial); break;
+            begin(run != 0); boundary(0);
+            memset(q, 0, sizeof(q));
+            CHECK(exact(q[0], q[1], q[2]));
+            /* Controller rows alone establish this run; no local ADD base. */
+            rows(q[0], q[1], q[2]); info(0, 0, 1);
+            unsigned n = 20 + next_random() % 50;
+            for (unsigned i = 0; i < n; ++i) {
+                unsigned slot = next_random() % 3, previous_pcs = counted();
+                unsigned previous_amount = (unsigned)money();
+                q[slot] = next_random() % 1000;
+                unsigned pcs = q[0] + q[1] + q[2], amount = 10*q[0] + 50*q[1] + 100*q[2];
+                switch (next_random() % 4) {
+                case 0: info(previous_amount, pcs, 1); row(values[slot], q[slot]); info(amount, pcs, 1); break;
+                case 1: info(amount, previous_pcs, 1); row(values[slot], q[slot]); info(amount, pcs, 1); break;
+                case 2: row(values[slot], q[slot]); break;
+                default: row(values[slot], q[slot]); row(values[slot], q[slot]); info(amount, pcs, 1); break;
                 }
-                if (!exact(ten, fifty, 0)) {
-                    fprintf(stderr, "seed=%u run=%u note=%u\n", seed, run, i); return false;
-                }
+                ++checked_rows;
+                CHECK(exact(q[0], q[1], q[2]));
             }
-            info(amount, pcs, 1); info(0, 0, 2);
-            CHECK(!locked); CHECK(exact(ten, fifty, 0));
-            snapshot(ten, fifty, 0); CHECK(exact(ten, fifty, 0));
-            CHECK(restarts == 0);
+            unsigned pcs = counted(), amount = (unsigned)money();
+            info(amount, pcs, 1); info(amount, pcs, 2); boundary(255);
+            CHECK(!locked && exact(q[0], q[1], q[2]));
+            CHECK(data.total_pcs == (int)pcs && data.total_amount == amount);
         }
     }
-    printf("PROPERTY 80 seeds x 5 runs, %u note prefixes: every live prefix and final 0B histogram match\n", checked_notes);
-    return true;
-}
-static bool diagnostic_0b_rows(void)
-{
-    begin(false); note(50, "A"); info(50, 1, 1); info(0, 0, 2);
-    boundary(0); final_row(50, 1); final_row(50, 1); boundary(255);
-    printf("DIAGNOSTIC duplicate 0B row: A50=%u (wire has two identical rows; controller row semantics need confirmation)\n", quantity(50));
-    snapshot(0, 1, 0); boundary(0); final_row(10, 0); boundary(255);
-    printf("DIAGNOSTIC missing 0B row: A50=%u A10=%u (0B is authoritative; no invented reconstruction)\n", quantity(50), quantity(10));
-    snapshot(0, 0, 1);
-    printf("DIAGNOSTIC conflicting 0B vs 0E: A100=%u total=%d/%.0f\n", quantity(100), data.total_pcs, data.total_amount);
+    printf("PROPERTY 80 seeds x 5 runs: %u absolute row updates, every A prefix exact\n", checked_rows);
     return true;
 }
 struct test_case { const char *name; bool (*run)(void); };
 static const struct test_case cases[] = {
-    {"duplicate_note", duplicate_note}, {"blank_serial", blank_serial},
+    {"absolute_rows", absolute_rows}, {"serials_do_not_write_a", serials_do_not_write_a},
+    {"start_before_first_info", start_before_first_info},
     {"count_first", count_first}, {"amount_first", amount_first},
-    {"end_amount", end_amount}, {"end_count", end_count}, {"zero_end_retains", zero_end_retains},
-    {"missing_info", missing_info}, {"blank_serial_order", blank_serial_order},
-    {"all_amounts_ahead", all_amounts_ahead}, {"all_counts_ahead", all_counts_ahead},
-    {"ten_thousand_notes", ten_thousand_notes},
-    {"add_continue", add_continue}, {"restart_before_note", restart_before_note},
-    {"restart_after_note", restart_after_note}, {"restart_equal", restart_equal},
-    {"empty_add", empty_add}, {"final_replace", final_replace},
-    {"live_snapshot", live_snapshot}, {"non_add_after_add", non_add_after_add},
-    {"restart_missing_first", restart_missing_first}, {"restart_equal_amount", restart_equal_amount},
-    {"late_note_after_end", late_note_after_end}, {"add_tail_empty", add_tail_empty},
+    {"positive_stop_final", positive_stop_final}, {"zero_stop_retains_live", zero_stop_retains_live},
+    {"no_live_positive_stop", no_live_positive_stop}, {"empty_cnt", empty_cnt},
+    {"start_clears_rows_for_both_add_states", start_clears_rows_for_both_add_states}, {"add_continue", add_continue},
+    {"empty_add", empty_add}, {"restart_a_is_independent", restart_a_is_independent},
+    {"a_cannot_guess_group_reset", a_cannot_guess_group_reset},
+    {"non_add_clear_after_add", non_add_clear_after_add},
+    {"end_order_and_late_frames", end_order_and_late_frames},
+    {"add_tail_empty", add_tail_empty}, {"restart_before_serial", restart_before_serial},
     {"restart_keeps_current_serials", restart_keeps_current_serials},
     {"wire_amount_limits", wire_amount_limits}, {"wire_stop_amount_limits", wire_stop_amount_limits},
-    {"randomized", randomized},
-    {"diagnostic_0b_rows", diagnostic_0b_rows},
+    {"row_field_limits", row_field_limits}, {"randomized", randomized},
 };
 int main(int argc, char **argv)
 {

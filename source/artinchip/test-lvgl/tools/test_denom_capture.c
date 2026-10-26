@@ -1,4 +1,6 @@
-/* External UART capture replay: no private log content is stored here. */
+/* External UART replay: each received 0B row is an absolute controller value.
+ * Captures containing only a final 0B prove final projection, not live timing.
+ * No private capture content or 49-derived denomination oracle is stored here. */
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -15,215 +17,152 @@
 static counting_sim_t data;
 static counting_session_state_t session;
 static counting_detail_state_t detail;
-static denom_t expected[COUNTING_DENOM_MAX_ITEMS], stopped[COUNTING_DENOM_MAX_ITEMS];
-static unsigned expected_count, stopped_count, run_id, run_line, failures;
-static unsigned checked, excluded, counted, cnt_runs, clear_count, restart_count;
-static unsigned expected_pcs, expected_amount, note_count, serial_completions;
-static unsigned total_frames, stop_count, final_count;
-static bool add, skip, have_stop, have_final;
+static denom_t expected[COUNTING_DENOM_MAX_ITEMS];
+static unsigned expected_count, run_id, source_line, failures, completed, incomplete;
+static unsigned row_checks, live_rows, final_only_runs, serial_completions, clear_count;
+static unsigned restart_count, total_frames, stops, ends, current_live_rows;
+static bool add, have_stop, have_end, have_table;
 static uint32_t now;
-
 uint32_t app_clock_uptime_ms(void) { return now; }
 void uart_debug_printf(const char *fmt, ...) { (void)fmt; }
 int protocol_send(uint8_t cmd, const uint8_t *payload, uint16_t len)
 { (void)cmd; assert(payload && len); return 0; }
 bool counting_history_discard_pending(counting_session_state_t *state)
 { (void)state; return false; }
-
-static unsigned pcs_for(const denom_t *rows, unsigned count, int value)
-{
-    unsigned pcs = 0;
-    for (unsigned i = 0; i < count; ++i) if (rows[i].value == value) pcs += rows[i].pcs;
-    return pcs;
-}
-
-static bool same_table(const denom_t *rows, unsigned count, const char *where)
-{
-    bool equal = true;
-    for (unsigned side = 0; side < 2; ++side) {
-        const denom_t *keys = side ? rows : expected;
-        unsigned key_count = side ? count : expected_count;
-        for (unsigned i = 0; i < key_count; ++i) {
-            unsigned want = pcs_for(expected, expected_count, keys[i].value);
-            unsigned got = pcs_for(rows, count, keys[i].value);
-            if (want != got) {
-                fprintf(stderr, "FAIL RUN %u line %u %s denomination=%d expected=%u actual=%u\n",
-                        run_id, run_line, where, keys[i].value, want, got);
-                equal = false;
-            }
-        }
-    }
-    return equal;
-}
-
+void counting_history_current_invalidate(void) {}
 static void require(bool condition, const char *message)
 {
-    if (!condition) {
-        fprintf(stderr, "FAIL RUN %u line %u %s\n", run_id, run_line, message);
-        ++failures;
+    if (!condition) { ++failures; fprintf(stderr,"FAIL run=%u line=%u: %s\n",run_id,source_line,message); }
+}
+static unsigned pcs_for(const denom_t *rows,unsigned count,int value)
+{
+    for(unsigned i=0;i<count;++i)if(rows[i].value==value)return rows[i].pcs;
+    return 0;
+}
+static void check_table(void)
+{
+    for(unsigned side=0;side<2;++side) {
+        const denom_t *keys=side?data.denom:expected;
+        unsigned n=side?data.denom_number:expected_count;
+        for(unsigned i=0;i<n;++i) {
+            unsigned want=pcs_for(expected,expected_count,keys[i].value);
+            unsigned actual=pcs_for(data.denom,data.denom_number,keys[i].value);
+            if(want!=actual) {
+                fprintf(stderr,"  denom=%d expected=%u got=%u\n",keys[i].value,want,actual);
+                require(false,"A differs from received absolute 0B rows");
+            }
+        }
     }
 }
-
+static void history_ready(void *context)
+{ (void)context; ++serial_completions; if(have_table)check_table(); }
 static void consume_restart(void)
 {
-    if (counting_report_take_group_restart()) ++restart_count;
-    require(restart_count <= 1, "more than one history group restart notification");
+    if(counting_report_take_group_restart())++restart_count;
+    require(restart_count<=1,"history group reset notified more than once per pass");
 }
-
-static void history_ready(void *context)
-{
-    (void)context;
-    ++serial_completions;
-    if (run_id && !skip && have_final)
-        require(same_table(data.denom, data.denom_number, "at history-ready"),
-                "A table changed before history completion");
-}
-
 static void clear_result(void)
 {
-    counting_report_reset();
-    counting_data_clear_serials(&data);
-    counting_data_clear_errors(&data);
-    denom_t catalogue[COUNTING_DENOM_MAX_ITEMS];
-    unsigned count = data.denom_number;
-    memcpy(catalogue, data.denom, sizeof(catalogue));
-    memset(&data, 0, sizeof(data));
-    data.denom_number = count;
-    for (unsigned i = 0; i < count; ++i) data.denom[i].value = catalogue[i].value;
-    memset(&session, 0, sizeof(session));
-    memset(&detail, 0, sizeof(detail));
-    ++clear_count;
+    counting_report_reset(); counting_data_clear_serials(&data); counting_data_clear_errors(&data);
+    denom_t old[COUNTING_DENOM_MAX_ITEMS];unsigned n=data.denom_number;
+    memcpy(old,data.denom,sizeof(old));memset(&data,0,sizeof(data));data.denom_number=n;
+    for(unsigned i=0;i<n;++i)data.denom[i].value=old[i].value;
+    memset(&session,0,sizeof(session));memset(&detail,0,sizeof(detail));
+    expected_count=0;have_table=false;++clear_count;
 }
-
-static bool payload_is(const uint8_t *b, unsigned len, uint8_t value)
-{
-    for (unsigned i = 4; i + 1 < len; ++i) if (b[i] != value) return false;
-    return true;
-}
-
 static void finish_run(void)
 {
-    if (!run_id) return;
-    if (skip) {
-        ++excluded;
-        printf("EXCLUDED RUN %u: initial retained baseline absent or incomplete STOP/0B; complete 0B is used only as next baseline\n", run_id);
+    if(!run_id)return;
+    if(have_stop&&have_end) {
+        ++completed;if(!current_live_rows)++final_only_runs;
+        printf("CHECK run=%u ADD=%u rows_before_STOP=%u totals=%d/%.0f A_complete=1\n",
+               run_id,add,current_live_rows,data.total_pcs,data.total_amount);
     } else {
-        require(have_stop, "missing accepted STOP");
-        require(have_final, "missing complete final 0B");
-        ++checked;
+        ++incomplete;
+        printf("INCOMPLETE run=%u STOP=%u complete0B=%u; received prefixes checked only\n",run_id,have_stop,have_end);
     }
 }
-
-static void receive(uint8_t *b, unsigned n, unsigned line)
+static void receive(uint8_t *b,unsigned n)
 {
-    ++now; ++total_frames;
-    if (b[3] == 0x3B && n == 6 && b[4] == 1) {
-        clear_result();
-        return;
-    }
-    if (!run_id) return;
-    if (b[3] == 0x0A) {
-        if (n == 7 && b[4] == 1 && b[5] == 1) {
-            counting_report_begin(add, &data);
-            detail.live_denom_started = detail.live_reject_started = false;
+    ++now;++total_frames;
+    if(b[3]==0x3B&&n==6&&b[4]==1){clear_result();return;}
+    if(!run_id)return;
+    if(b[3]==0x0A) {
+        if(n==7&&b[4]==1&&b[5]==1) {
+            counting_report_begin(add,&data);counting_denom_reply_begin_count(&detail);
+            detail.live_reject_started=false;
         }
-        counting_control_reply_dispatch(b[3], &session, b, n, NULL);
-        return;
+        counting_control_reply_dispatch(b[3],&session,b,n,NULL);return;
     }
-    if (b[3] == 0x0E && n == 13) {
-        counting_info_reply_result_t result = counting_info_reply_handle(&session, &data, b, n, 0);
-        if (result.kind == COUNTING_INFO_REPLY_LIVE) {
-            counting_report_observe_total(&data,
-                ((uint32_t)b[4] << 24) | ((uint32_t)b[5] << 16) | ((uint32_t)b[6] << 8) | b[7],
-                ((unsigned)b[8] << 8) | b[9]);
-            consume_restart();
-        } else if (result.kind == COUNTING_INFO_REPLY_FINISHED) {
-            have_stop = true; ++stop_count;
-            stopped_count = data.denom_number;
-            memcpy(stopped, data.denom, sizeof(stopped));
-            if (!skip) {
-                require(result.final_pcs == (int)expected_pcs, "STOP total pieces differs from capture");
-                require(result.final_amount == (double)expected_amount, "STOP amount differs from capture");
-            }
+    denom_t before[COUNTING_DENOM_MAX_ITEMS];memcpy(before,data.denom,sizeof(before));
+    unsigned before_count=data.denom_number;
+    if(b[3]==0x0E&&n==13) {
+        int before_pcs=data.total_pcs;double before_amount=data.total_amount;
+        unsigned wire_pcs=((unsigned)b[8]<<8)|b[9];
+        uint32_t wire_amount=((uint32_t)b[4]<<24)|((uint32_t)b[5]<<16)|((uint32_t)b[6]<<8)|b[7];
+        counting_info_reply_result_t result=counting_info_reply_handle(&session,&data,b,n,0);
+        if(result.kind==COUNTING_INFO_REPLY_LIVE) {
+            counting_report_observe_total(&data,wire_amount,wire_pcs);consume_restart();
+        } else if(result.kind==COUNTING_INFO_REPLY_FINISHED) {
+            have_stop=true;++stops;
+            require(result.final_pcs==(wire_pcs?(int)wire_pcs:before_pcs),"STOP quantity is not its 0E source");
+            require(result.final_amount==(wire_pcs?(double)wire_amount:before_amount),"STOP amount is not its 0E source");
+            counting_report_schedule(&session,now);
         }
+        require(before_count==data.denom_number&&!memcmp(before,data.denom,sizeof(before)),"0E wrote A rows");
         return;
     }
-    if (b[3] == 0x0B && n == 16) {
-        counting_denom_reply_result_t result = counting_denom_reply_handle(&detail, &session, &data, b, n, NULL);
-        consume_restart();
-        if (have_stop && payload_is(b, n, 255) && result == COUNTING_DENOM_REPLY_SESSION_END) {
-            have_final = true; ++final_count;
-            if (!skip) {
-                bool cnt = note_count == 0 && expected_amount == 0;
-                if (cnt) {
-                    ++cnt_runs;
-                    unsigned monetary_notes = 0;
-                    for (unsigned i = 0; i < expected_count; ++i) monetary_notes += expected[i].pcs;
-                    require(monetary_notes == 0, "CNT final 0B unexpectedly contains monetary counts");
-                } else {
-                    ++counted;
-                    require(same_table(stopped, stopped_count, "before final 0B"), "live A differs from final controller table");
-                }
-                require(same_table(data.denom, data.denom_number, "after final 0B"), "published A differs from final controller table");
-                printf("CHECK RUN %u line %u ADD=%u notes49=%u total=%u amount=%u restart=%u %s\n",
-                       run_id, line, add, note_count, expected_pcs, expected_amount, restart_count,
-                       cnt ? "CNT totals checked; no denomination stream" : "live/final denomination comparison completed");
-            }
+    if(b[3]==0x0B&&n==16) {
+        int before_pcs=data.total_pcs;double before_amount=data.total_amount;
+        counting_denom_reply_result_t result=counting_denom_reply_handle(&detail,&session,&data,b,n,NULL);
+        require(data.total_pcs==before_pcs&&data.total_amount==before_amount,"0B changed 0E totals");
+        if(result==COUNTING_DENOM_REPLY_START) {
+            expected_count=0;have_table=true;
+            require(data.denom_number==before_count,"START discarded denomination catalogue");
+            for(unsigned i=0;i<before_count;++i)
+                require(data.denom[i].value==before[i].value,"START changed a denomination value");
+            check_table();
+        } else if(result==COUNTING_DENOM_REPLY_DATA&&have_table) {
+            char denomination[9]={0},quantity[4]={0};
+            memcpy(denomination,b+4,8);memcpy(quantity,b+12,3);
+            unsigned value=(unsigned)strtoul(denomination,NULL,10),pcs=(unsigned)strtoul(quantity,NULL,10);
+            unsigned slot=0;while(slot<expected_count&&expected[slot].value!=(int)value)++slot;
+            assert(slot<COUNTING_DENOM_MAX_ITEMS);
+            expected[slot]=(denom_t){.value=(int)value,.pcs=(uint16_t)pcs};
+            if(slot==expected_count)++expected_count;
+            ++row_checks;if(!have_stop){++live_rows;++current_live_rows;}
+            check_table();
+        } else if(result==COUNTING_DENOM_REPLY_SESSION_END) {
+            have_end=true;++ends;check_table();
         }
         return;
     }
-    if (b[3] == 0x49 || b[3] == 0x0C || b[3] == 0x0D) {
-        counting_reject_sn_reply_hooks_t hooks = {.on_history_record_ready = history_ready};
-        counting_detail_reply_result_t result = counting_reject_sn_reply_dispatch(
-            b[3], &detail, &session, &data, b, n, &hooks);
-        if (b[3] == 0x49 && n == 24 && result == COUNTING_DETAIL_REPLY_DATA) {
-            ++note_count;
-            /* In this captured, complete note stream, no intermediate row
-             * may exceed its final controller count (including zero rows). */
-            if (!skip) for (unsigned i = 0; i < data.denom_number; ++i)
-                require(data.denom[i].pcs <= pcs_for(expected, expected_count, data.denom[i].value),
-                        "intermediate A contains notes absent from final controller table");
-        }
+    if(b[3]==0x49||b[3]==0x0C||b[3]==0x0D) {
+        counting_reject_sn_reply_hooks_t hooks={.on_history_record_ready=history_ready};
+        counting_reject_sn_reply_dispatch(b[3],&detail,&session,&data,b,n,&hooks);
+        require(before_count==data.denom_number&&!memcmp(before,data.denom,sizeof(before)),"49/0C/0D changed A rows");
         consume_restart();
     }
 }
-
-int main(int argc, char **argv)
+int main(int argc,char **argv)
 {
-    assert(argc == 2);
-    FILE *input = fopen(argv[1], "r"); assert(input);
-    char line[2048];
-    while (fgets(line, sizeof(line), input)) {
-        if (line[0] == 'R') {
-            finish_run();
-            unsigned add_value, skip_value;
-            assert(sscanf(line, "R %u %u %u %u %u %u", &run_id, &add_value, &skip_value,
-                          &expected_pcs, &expected_amount, &run_line) == 6);
-            add = add_value != 0; skip = skip_value != 0;
-            expected_count = stopped_count = restart_count = note_count = 0;
-            have_stop = have_final = false;
-            memset(expected, 0, sizeof(expected));
-        } else if (line[0] == 'X') {
-            unsigned value, pcs;
-            assert(sscanf(line, "X %u %u", &value, &pcs) == 2);
-            assert(expected_count < COUNTING_DENOM_MAX_ITEMS && pcs <= UINT16_MAX);
-            expected[expected_count++] = (denom_t){.value = (int)value, .pcs = pcs, .amount = (float)value * pcs};
-        } else if (line[0] == 'F') {
-            unsigned source_line; int used;
-            assert(sscanf(line, "F %u %n", &source_line, &used) == 1);
-            char *p = line + used; uint8_t b[256]; unsigned n = 0, value;
-            while (sscanf(p, " %x%n", &value, &used) == 1) {
-                assert(n < sizeof(b) && value <= 255); b[n++] = value; p += used;
-            }
-            assert(n >= 5 && n == b[2]); receive(b, n, source_line);
+    assert(argc==2);FILE *input=fopen(argv[1],"r");assert(input);char line[2048];
+    while(fgets(line,sizeof(line),input)) {
+        if(line[0]=='R') {
+            finish_run();unsigned enabled;
+            assert(sscanf(line,"R %u %u %u",&run_id,&enabled,&source_line)==3);add=enabled!=0;
+            restart_count=current_live_rows=0;have_stop=have_end=have_table=false;expected_count=0;
+        } else if(line[0]=='F') {
+            int used;assert(sscanf(line,"F %u %n",&source_line,&used)==1);
+            char *p=line+used;uint8_t b[256];unsigned n=0,value;
+            while(sscanf(p," %x%n",&value,&used)==1){assert(n<sizeof(b)&&value<=255);b[n++]=value;p+=used;}
+            assert(n>=5&&n==b[2]);receive(b,n);
         }
     }
-    finish_run(); fclose(input);
-    counting_report_shutdown(); counting_data_clear_serials(&data); counting_data_clear_errors(&data);
-    require(checked > 0, "no complete captured runs checked");
-    printf("%s capture replay: runs=%u excluded=%u monetary=%u CNT=%u clear_acks=%u STOP=%u final0B=%u serial_completions=%u frames=%u failures=%u\n",
-           failures ? "FAIL" : "PASS", checked, excluded, counted, cnt_runs, clear_count,
-           stop_count, final_count, serial_completions, total_frames, failures);
-    return failures ? 1 : 0;
+    finish_run();fclose(input);
+    counting_report_shutdown();counting_data_clear_serials(&data);counting_data_clear_errors(&data);
+    require(completed>0,"capture has no complete START/STOP/0B run");
+    printf("%s controller A capture: complete=%u incomplete=%u rows=%u rows_before_STOP=%u final_only_runs=%u clear=%u STOP=%u END=%u history_ready=%u frames=%u failures=%u\n",
+           failures?"FAIL":"PASS",completed,incomplete,row_checks,live_rows,final_only_runs,clear_count,stops,ends,serial_completions,total_frames,failures);
+    return failures?1:0;
 }
-void counting_history_current_invalidate(void) {}

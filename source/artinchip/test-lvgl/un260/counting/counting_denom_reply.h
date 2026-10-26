@@ -21,6 +21,14 @@ typedef struct {
     void (*on_main_data_changed)(void);
 } counting_denom_reply_hooks_t;
 
+/* Call once for an accepted 0A. Clearing applies at the next 0B start and
+ * retains the currency's denomination values. */
+void counting_denom_reply_begin_count(counting_detail_state_t *detail);
+
+/* An accepted AUTO currency change keeps only rows received in this stream. */
+bool counting_denom_reply_currency_changed(counting_detail_state_t *detail,
+                                            counting_sim_t *data);
+
 counting_denom_reply_result_t counting_denom_reply_handle(
     counting_detail_state_t *detail,
     const counting_session_state_t *session,

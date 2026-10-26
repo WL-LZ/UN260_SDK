@@ -34,6 +34,7 @@
 #include "un260/counting/counting_history_service.h"
 #include "un260/counting/counting_report_sync.h"
 #include "un260/counting/counting_denom_query_service.h"
+#include "un260/counting/counting_denom_reply.h"
 #include "un260/counting/counting_session_state.h"
 #include "un260/currency/currency_state.h"
 #include "un260/lv_core/lv_page_manager.h"
@@ -432,7 +433,7 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
         counting_report_begin(machine_state_add_enabled(), counting_data_mutable());
         /* Interrupted snapshots cannot publish into a new run. The report
          * owner still drains any already-open untagged reply through END. */
-        g_counting_detail_state.live_denom_started = false;
+        counting_denom_reply_begin_count(&g_counting_detail_state);
         g_counting_detail_state.live_reject_started = false;
     }
     if (counting_report_discard_stale(cmd, buf, len)) {
@@ -458,7 +459,7 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
 
     /* New 0x49/8 currency detection shares a command with 0x49/24 serials. */
     if (cmd == 0x49 && len == 8) {
-        app_currency_runtime_handle_detected(buf, len);
+        app_currency_runtime_handle_detected(&g_counting_detail_state, buf, len);
         return true;
     }
     /* 0x49/0x18 is the controller's live serial-number frame. */
@@ -494,7 +495,7 @@ static bool app_command_runtime_dispatch(uint8_t cmd,
             g_add_result_cleared = false;
         break;
     case 0x50:
-        app_currency_runtime_handle_detected(buf, len);
+        app_currency_runtime_handle_detected(&g_counting_detail_state, buf, len);
         break;
     case 0x0E: {
         const bool armed = g_counting_session.start_confirmed;

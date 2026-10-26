@@ -35,27 +35,8 @@ bool history_record_snapshot_capture(const counting_sim_t *sim,uint32_t pcs,
         if(n>=HISTORY_EXPORT_SN_TEXT_SIZE || sim->denom_mix[i]<0)return false;
         serials++;size+=9+n;
     }
-    /* The final B report identifies each accepted note. Reconcile stale or
-     * partial A snapshots against that complete report, without changing the
-     * live counting model. Keep A's existing order when its quantities agree. */
-    denom_t reconciled[COUNTING_DENOM_MAX_ITEMS]={0};unsigned groups=0;
-    bool can_reconcile=serials==pcs;
-    if(can_reconcile)for(int i=0;i<sim->sn_capacity;i++)if(sim->sn_str[i]){
-        int value=sim->denom_mix[i];if(value<=0){can_reconcile=false;break;}
-        unsigned g=0;while(g<groups && reconciled[g].value!=value)g++;
-        if(g==groups){if(groups==COUNTING_DENOM_MAX_ITEMS){can_reconcile=false;break;}reconciled[groups++].value=value;}
-        reconciled[g].pcs++;
-    }
-    if(can_reconcile){
-        bool same=accepted==pcs;
-        for(unsigned g=0;g<groups;g++){
-            uint64_t count=0;for(unsigned i=0;i<sim->denom_number;i++)if(sim->denom[i].value==reconciled[g].value)count+=sim->denom[i].pcs;
-            if(count!=reconciled[g].pcs)same=false;
-        }
-        if(!same){
-            size-=denoms*8U;denom=reconciled;denom_count=groups;denoms=groups;size+=groups*8U;accepted=pcs;
-        }
-    }
+    /* A is the controller denomination table. B preserves serial details;
+     * even a complete B report must not replace or fill missing A rows. */
     for(unsigned i=0;i<denom_count;i++)if(denom[i].value>0)amount+=(uint64_t)denom[i].value*denom[i].pcs;
     for(unsigned i=0;i<rejects;i++)rejected+=sim->err_pcs[i];
     size+=rejects*5U;

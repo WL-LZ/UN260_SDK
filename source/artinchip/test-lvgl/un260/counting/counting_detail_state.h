@@ -13,11 +13,10 @@ typedef struct {
     uint16_t live_reject_number;
     uint8_t live_reject_codes[256];
     uint8_t live_reject_pcs[256];
-    /* Live 0B snapshots are published only at their end marker. */
+    /* Controller 0B rows publish absolute quantities immediately. */
     bool live_denom_started;
-    bool live_denom_invalid;
-    uint8_t live_denom_number;
-    denom_t live_denom[COUNTING_DENOM_MAX_ITEMS];
+    bool live_denom_count_owned;
+    uint16_t live_denom_seen;
     bool query_pending;
     bool query_deferred;
     bool query_started;  /* Valid 0x0B start marker received. */

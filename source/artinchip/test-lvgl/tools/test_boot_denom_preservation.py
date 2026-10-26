@@ -22,7 +22,6 @@ static void app_auto_qr_cancel(void){}
 static void ui_count_end_anim_cancel(void){}
 static void smart_island_notify_count_reset(void){}
 static void counting_report_reset(void){}
-void counting_report_denom_snapshot(counting_sim_t *data,bool final){assert(data==&sim);(void)final;}
 static void app_boot_runtime_cancel_prewarm(void){}
 static void boot_selftest_list_finish(void){}
 static void ui_page_08_curr_start_handoff(void){}

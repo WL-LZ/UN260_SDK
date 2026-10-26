@@ -16,8 +16,39 @@ bool usb_storage_make_unique_file_pair(const char *base,const char *a,char *pa,s
 {snprintf(pa,na,UI_HISTORY_STORE_DIR "/%s%s",base,a);snprintf(pb,nb,UI_HISTORY_STORE_DIR "/%s%s",base,b);return true;}
 bool usb_storage_commit_file_pair(const char *a,const char *fa,const char *b,const char *fb)
 {return rename(a,fa)==0 && rename(b,fb)==0;}
+static void verify_controller_a(const ui_history_record_t *rec)
+{
+    assert(rec->pcs==2 && rec->amount==20 && rec->detail_amount==20);
+    history_record_detail_t d={0};assert(ui_history_record_read_detail(rec,&d));
+    assert(d.denoms_complete && d.serials_complete && d.rejects_complete);
+    assert(d.denom_count==1 && d.denoms[0].value==10 && d.denoms[0].pcs==2);
+    assert(d.denomination_pcs==2 && d.denomination_amount==20);
+    assert(d.serial_count==2 && d.serials[0].denom==50 && d.serials[1].denom==50);
+    assert(!strcmp(d.serials[0].sn,"A-AUTH-00001") && !strcmp(d.serials[1].sn,"A-AUTH-00002"));
+    history_record_detail_release(&d);
+}
+static void controller_a_is_not_inferred(void)
+{
+    char *serials[]={"A-AUTH-00001","A-AUTH-00002"};
+    counting_sim_t sim={.denom_number=1,.denom={{10,2,20}},.sn_capacity=2,.sn_str=serials};
+    sim.denom_mix[0]=sim.denom_mix[1]=50;
+    for(unsigned reported=0;reported<=2;reported++){
+        sim.denom[0].pcs=reported;
+        history_record_snapshot_t snapshot={0};
+        assert(history_record_snapshot_capture(&sim,2,true,&snapshot));
+        history_record_detail_t detail={0};
+        assert(history_record_snapshot_decode(snapshot.bytes,snapshot.size,snapshot.hash,2,&detail));
+        assert(detail.denom_count==1 && detail.denoms[0].value==10 && detail.denoms[0].pcs==reported);
+        assert(detail.denomination_amount==(uint64_t)reported*10);
+        assert(detail.denoms_complete==(reported==2));
+        assert(detail.serials_complete && detail.serials[0].denom==50 && detail.serials[1].denom==50);
+        history_record_detail_release(&detail);history_record_snapshot_release(&snapshot);
+    }
+    puts("PASS controller A stays authoritative over conflicting complete B, including partial/missing counts");
+}
 static void verify_record(const ui_history_record_t *rec)
 {
+    if(rec->pcs==2){verify_controller_a(rec);return;}
     history_record_detail_t d={0};assert(ui_history_record_read_detail(rec,&d));
     assert(d.denomination_pcs==rec->pcs && d.denomination_amount==rec->detail_amount);
     assert(d.serial_count==rec->pcs && d.denoms_complete && d.serials_complete && d.rejects_complete);
@@ -71,8 +102,8 @@ int main(int argc,char **argv)
 {
     assert(argc==2);ui_thread=pthread_self();ui_history_data_init();assert(ui_history_data_is_available());
     if(!strcmp(argv[1],"read")){
-        assert(ui_history_data_get()->record_count==7);
-        for(unsigned i=0;i<7;i++)verify_record(&ui_history_data_get()->records[i]);
+        assert(ui_history_data_get()->record_count==8);
+        for(unsigned i=0;i<8;i++)verify_record(&ui_history_data_get()->records[i]);
         assert(storage_worker_shutdown());puts("PASS fresh process: complete ABC, async detail/query and CSV/HTML exact row counts");return 0;
     }
     const unsigned sizes[]={1,150,256,257,1000,10000};
@@ -86,24 +117,41 @@ int main(int argc,char **argv)
             sim->sn_str[i]=strdup(i==2?"":i%2?"001122334455":"000000000001");assert(sim->sn_str[i]);
             sim->denom_mix[i]=round==5?1000000:10*(i%15+1);sim->denom[i%15].pcs++;amount+=sim->denom_mix[i];
         }
-        /* Deliberately stale A: complete B must reconcile the persisted A only. */
-        if(round==5){sim->denom_number=1;sim->denom[0].value=10;sim->denom[0].pcs=3;}
+        /* The controller owns this exact large A table; B is independent. */
+        if(round==5){sim->denom_number=1;sim->denom[0].value=1000000;sim->denom[0].pcs=10000;}
         sim->err_num=300;sim->err_expected=300;
         for(unsigned i=0;i<300;i++){sim->err_code[i]=i%49+1;sim->err_pcs[i]=1;}
-        sim->total_pcs=sizes[round];sim->total_amount=(float)amount;
+        sim->total_pcs=sizes[round];sim->total_amount=(double)amount;
         counting_session_state_t session={0};counting_history_session_start(NULL,0);
         /* Saturate the optional diagnostic log before final reject details. */
         uint8_t live[]={0xFD,0xDF,13,0x0E,0,0,0,0,0,1,0,1,0x0A};
         for(unsigned i=0;i<300;i++)counting_history_append_frame("0x0E",live,sizeof(live));
         uint8_t begin[]={0xFD,0xDF,7,0x0C,0,0,0x0A},end[]={0xFD,0xDF,7,0x0C,255,255,0x0A};
         counting_history_append_frame("0x0C",begin,7);counting_history_append_frame("0x0C",end,7);
-        session.history_record.valid=true;session.history_record.end_seen=true;session.history_record.pcs=sizes[round];session.history_record.amount=(float)amount;
+        session.history_record.valid=true;session.history_record.end_seen=true;session.history_record.pcs=sizes[round];session.history_record.amount=(double)amount;
         assert(counting_history_try_commit(&session,sim,0)==COUNTING_HISTORY_COMMIT_PENDING);
         counting_data_clear_serials(sim);counting_data_clear_errors(sim);free(sim);
         storage_job_id_t id=ui_history_last_commit_id();wait_saved(id,0);
         (void)counting_history_poll_commit(&session,NULL,0);
         verify_record(&ui_history_data_get()->records[0]);
     }
+    controller_a_is_not_inferred();
+    /* Persist conflicting but equally complete A/B, then verify this same
+     * record again in the separate reader process. Never infer A from B. */
+    counting_sim_t authoritative={.denom_number=1,.denom={{10,2,20}},.total_pcs=2,.total_amount=20};
+    assert(counting_data_ensure_serial_capacity(&authoritative,2));
+    authoritative.sn_str[0]=strdup("A-AUTH-00001");authoritative.sn_str[1]=strdup("A-AUTH-00002");
+    assert(authoritative.sn_str[0] && authoritative.sn_str[1]);
+    authoritative.denom_mix[0]=authoritative.denom_mix[1]=50;
+    counting_session_state_t authoritative_session={0};counting_history_session_start(NULL,0);
+    uint8_t a_begin[]={0xFD,0xDF,7,0x0C,0,0,0x0A},a_end[]={0xFD,0xDF,7,0x0C,255,255,0x0A};
+    counting_history_append_frame("0x0C",a_begin,7);counting_history_append_frame("0x0C",a_end,7);
+    authoritative_session.history_record.valid=true;authoritative_session.history_record.end_seen=true;
+    authoritative_session.history_record.pcs=2;authoritative_session.history_record.amount=20;
+    assert(counting_history_try_commit(&authoritative_session,&authoritative,0)==COUNTING_HISTORY_COMMIT_PENDING);
+    counting_data_clear_serials(&authoritative);
+    wait_saved(ui_history_last_commit_id(),0);(void)counting_history_poll_commit(&authoritative_session,NULL,0);
+    verify_controller_a(&ui_history_data_get()->records[0]);
     /* Genuine reject-only END is history, while no-note motor spins are not. */
     counting_sim_t pure={0};counting_session_state_t session={.start_confirmed=true,.phase=COUNTING_SESSION_ACTIVE};
     uint8_t final[]={0xFD,0xDF,13,0x0E,0,0,0,0,0,0,5,2,0x0A};

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify late authoritative 0B through production runtime and real LVGL island.
+"""Verify independent 0B A rows / 0E totals through real runtime and LVGL island.
 
 Only transport/history side effects are stubbed. Reuses the existing Main
 render harness and LVGL sources; temporary files remain outside the repository.
@@ -18,7 +18,7 @@ def main():
     parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args()
     runtime = (ROOT / "un260/app_service/app_counting_runtime.c").read_text()
-    temp_root = Path(os.environ.get("TMPDIR", "/dev/shm/un260-a-accuracy/temp"))
+    temp_root = Path(os.environ.get("TMPDIR", "/dev/shm/un260-controller-denom-live/accuracy-review/temp"))
     temp_root.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="denom-result-view-", dir=temp_root) as temp:
         projection = Path(temp) / "actual_denom_runtime.c"

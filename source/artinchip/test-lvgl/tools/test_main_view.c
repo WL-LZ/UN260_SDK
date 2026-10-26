@@ -608,6 +608,52 @@ static void test_multi_expanded(void)
     tick(40);ui_detail_reveal_update(&reveal,true);assert(!reveal.active&&!reveal.orbit);
     ui_detail_reveal_cancel(&reveal);lv_obj_del(container);
 }
+static void assert_main_denom_row(unsigned row,const char *value,const char *pcs,const char *amount)
+{
+    lv_obj_t *viewport=lv_recycled_list_object(detail_view->section[0].list);
+    lv_obj_t *object=lv_obj_get_child(viewport,row);assert(object);
+    assert(!strcmp(lv_label_get_text(lv_obj_get_child(object,0)),value));
+    assert(!strcmp(lv_label_get_text(lv_obj_get_child(object,1)),pcs));
+    assert(!strcmp(lv_label_get_text(lv_obj_get_child(object,2)),amount));
+}
+static void test_live_denom_projection(void)
+{
+    ui_main_destroy();fixture(false);assert(currency_state_confirm_active_code("USD"));
+    counting_sim_t *data=counting_data_mutable();
+    data->denom_number=3;
+    data->denom[0]=(denom_t){5,0,0};data->denom[1]=(denom_t){10,0,0};
+    data->denom[2]=(denom_t){500001,0,0};
+    ui_main_create(lv_scr_act());assert(page_01_main_resume());
+    page_01_detail_section_set(PAGE_01_DETAIL_SECTION_A,true);tick(100);
+    assert_main_denom_row(0,"5","0","0");
+    /* Model publication is tested with the real parser separately. Exercise
+     * its actual page entry here, including the real recycled row objects. */
+    ui_frame_commit_begin_batch();
+    data->denom[0].pcs=1;page_01_main_detail_refresh_rows_only();
+    data->denom[0].pcs=2;page_01_main_detail_refresh_rows_only();
+    assert_main_denom_row(0,"5","0","0");
+    ui_frame_commit_end_batch();ui_frame_commit_flush();
+    assert_main_denom_row(0,"5","2","10");
+    unsigned opened=pushes;pointer(850,180,true);
+    data->denom[0].pcs=3;page_01_main_detail_refresh_rows_only();
+    pointer(850,180,false);assert(pushes==opened+1);
+    assert_main_denom_row(0,"5","3","15");
+    page_01_main_suspend();data->denom[0].pcs=4;page_01_main_detail_refresh_rows_only();
+    assert_main_denom_row(0,"5","3","15");
+    assert(page_01_main_resume());assert_main_denom_row(0,"5","4","20");
+    data->denom[2].pcs=999;data->denom[2].amount=-1;
+    page_01_main_detail_refresh_rows_only();
+    assert_main_denom_row(2,"500001","999","499500999");
+    write_bmp("main-live-0b-exact-amount");
+    for(unsigned i=0;i<data->denom_number;i++)data->denom[i].pcs=0,data->denom[i].amount=0;
+    page_01_main_detail_refresh_rows_only();
+    assert_main_denom_row(0,"5","0","0");assert_main_denom_row(1,"10","0","0");
+    assert(lv_recycled_list_window(detail_view->section[0].list)->count==3);
+    ui_frame_commit_begin_batch();data->denom[0].pcs=1;page_01_main_detail_refresh_rows_only();
+    ui_main_destroy();ui_frame_commit_end_batch();ui_frame_commit_flush();
+    puts("PASS actual Main A labels: 5x1/2 absolute state, frame merge, live touch, hidden resume, exact integer amount, retained zero rows and pending destroy");
+}
+
 static void test_no_note_motion(void)
 {
     fixture(false);ui_main_create(lv_scr_act());page_01_main_resume();
@@ -823,7 +869,7 @@ int main(void)
     lv_indev_t *indev=lv_indev_drv_register(&driver);assert(indev);
     g_pointer_indev=indev;app_touch_sound_init();
     assert(page_01_main_layout_is_enabled()==(UI_MAIN_LAYOUT_EDIT_DEFAULT_ENABLED!=0));
-    test_list_initial_font();test_main();test_no_note_motion();test_lifecycle();test_multi_expanded();
+    test_list_initial_font();test_main();test_live_denom_projection();test_no_note_motion();test_lifecycle();test_multi_expanded();
     test_main_layout();
     test_main_footer_layout();
     test_main_quick();

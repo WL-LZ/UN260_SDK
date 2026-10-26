@@ -2,8 +2,9 @@
 """Run independent production A-area accuracy cases and report every failure.
 
 No failed case hides later scenarios. Temporary output defaults outside the
-repository. These tests validate the confirmed 0x49-per-note contract, not a
-claim about hardware delivery completeness or unspecified 0x0B row retries.
+repository. These tests validate absolute controller 0x0B rows and independent 0x0E
+totals. Every START clears counts while preserving denominations, for ADD ON
+and OFF. The controller supplies all cumulative quantities.
 """
 from pathlib import Path
 import argparse
@@ -15,7 +16,7 @@ import tempfile
 from test_main_view import function
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--output", type=Path, default=Path("/dev/shm/un260-a-accuracy/denom-accuracy.json"))
+parser.add_argument("--output", type=Path, default=Path("/dev/shm/un260-controller-denom-live/accuracy-review/denom-accuracy.json"))
 parser.add_argument("--case", action="append", dest="selected")
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]

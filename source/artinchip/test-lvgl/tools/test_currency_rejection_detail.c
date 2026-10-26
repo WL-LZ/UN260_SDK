@@ -68,8 +68,9 @@ static bool counting_report_discard_stale(uint8_t command,const uint8_t *frame,u
 {(void)command;(void)frame;(void)length;return false;}
 static void counting_action_handle_reply(uint8_t command,const uint8_t *frame,uint8_t length)
 {(void)command;(void)frame;(void)length;}
-static void app_currency_runtime_handle_detected(const uint8_t *frame,uint8_t length)
-{(void)frame;(void)length;}
+static void app_currency_runtime_handle_detected(counting_detail_state_t *detail,const uint8_t *frame,uint8_t length)
+{(void)detail;(void)frame;(void)length;}
+static void counting_denom_reply_begin_count(counting_detail_state_t *detail){(void)detail;}
 static bool app_setting_runtime_handle_reply(uint8_t command,uint8_t *frame,uint8_t length)
 {(void)command;(void)frame;(void)length;return false;}
 static void app_boot_runtime_handle_reply(counting_session_state_t *s,uint8_t command,const uint8_t *frame,uint8_t length)

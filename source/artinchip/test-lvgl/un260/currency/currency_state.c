@@ -337,6 +337,13 @@ bool currency_state_confirm_detected_code(const char code[4])
     return true;
 }
 
+bool currency_state_get_detected_code(char code[4])
+{
+    if (!code) return false;
+    currency_state_copy_code(code, currency_state_auto_selected() ? g_detected_code : NULL);
+    return code[0] != '\0';
+}
+
 void currency_state_get_effective_code(char code[4])
 {
     if (currency_state_multi_selected()) {
