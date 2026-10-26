@@ -307,6 +307,9 @@ payload_bytes=$(find "$PKG_ROOT/payload" -type f -printf '%s\n' | awk '{s += $1}
 if find "$PKG_ROOT/payload" -name boot-light.bin -print -quit | grep -q .; then
     die "Host-only boot-light.bin fixture in release payload; rebuild target installation"
 fi
+if [[ -e "$PKG_ROOT/payload/usr/local/share/lvgl_data/locale_fonts/manifest.json" || -L "$PKG_ROOT/payload/usr/local/share/lvgl_data/locale_fonts/manifest.json" ]]; then
+    die "Build-only locale font manifest.json in release payload; run the normal post-build release_resources.py filter before packaging"
+fi
 # Check before publishing: UPK compression does not reduce replacement staging.
 # The explicit/pinned baseline and previous output cover supported transitions.
 BASELINE=${UN260_UPDATE_BASELINE:-""}

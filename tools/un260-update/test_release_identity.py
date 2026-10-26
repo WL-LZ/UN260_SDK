@@ -183,16 +183,18 @@ class RealBuilderIdentityTests(unittest.TestCase):
             path.write_bytes(data)
             path.chmod(mode)
 
-    def build(self, extra=None, ok=True, umask=None, legacy=False):
+    def build(self, extra=None, ok=True, umask=None, legacy=False, lvgl_data=None):
         args = ['bash', str(self.sdk / 'tools/un260-update/build_un260_update.sh'),
                 '--version', 'content-test', '--output', str(self.out)]
         if extra is not None: args += ['--extra-root', str(extra)]
         if legacy: args += ['--legacy-test']
+        if lvgl_data is not None: args += ['--lvgl-data', str(lvgl_data)]
         env = dict(os.environ, TARGET_DIR=str(self.target), PYTHONDONTWRITEBYTECODE='1')
         env.pop('UN260_UPDATE_BASELINE', None)
         before_exec = (lambda: os.umask(umask)) if umask is not None else None
         result = subprocess.run(args, env=env, capture_output=True, text=True, timeout=30, preexec_fn=before_exec)
         self.assertEqual(result.returncode == 0, ok, result.stdout + result.stderr)
+        return result
 
     def manifest(self):
         metadata, files = load(self.out)
@@ -242,6 +244,27 @@ class RealBuilderIdentityTests(unittest.TestCase):
         path.write_bytes(b'REJECTED')
         self.build(extra, ok=False)
         self.assertEqual(self.out.read_bytes(), before)
+
+    def test_build_audit_in_unfiltered_data_rejected_without_replacing_release(self):
+        self.build()
+        previous = self.out.read_bytes()
+        checksum = self.out.with_name(self.out.name + '.sha256')
+        previous_checksum = checksum.read_bytes()
+        resources = self.target/'usr/local/share/lvgl_data'
+        unfiltered = self.p/'unfiltered-lvgl-data'
+        shutil.copytree(resources, unfiltered)
+        for directory, override in ((unfiltered, unfiltered), (resources, None)):
+            with self.subTest(manual_override=override is not None):
+                audit = directory/'locale_fonts/manifest.json'
+                audit.parent.mkdir(parents=True, exist_ok=True)
+                audit.write_bytes(b'{"build_audit":"must not ship"}\n')
+                result = self.build(ok=False, lvgl_data=override)
+                self.assertIn('Build-only locale font manifest.json', result.stderr)
+                self.assertIn('release_resources.py filter', result.stderr)
+                self.assertEqual(self.out.read_bytes(), previous)
+                self.assertEqual(checksum.read_bytes(), previous_checksum)
+                self.assertEqual(audit.read_bytes(), b'{"build_audit":"must not ship"}\n')
+                self.assertFalse(self.out.with_name(self.out.name + '.tmp').exists())
 
     def test_missing_runtime_and_corrupt_frozen_contract_fail(self):
         runtime = self.target / 'usr/local/lib/un260-startup/runtime.sh'

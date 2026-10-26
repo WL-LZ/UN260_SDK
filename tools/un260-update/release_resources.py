@@ -46,19 +46,29 @@ def unique_json_object(pairs):
     return result
 
 
-def compact_locale_manifest(target):
-    # Only remove JSON formatting from the verified build copy. Font files,
-    # glyph coverage, license metadata and readable source remain unchanged.
+def publish_locale_font_audit(target):
+    # Glyph files and their compiled checksum index are runtime assets. The
+    # complete source manifest is build evidence, retained with the release.
     rel = 'usr/local/share/lvgl_data/locale_fonts/manifest.json'
     path = safe_target(target, rel)
     source = safe_target(APP, 'aic_ui/lvgl_data/locale_fonts/manifest.json')
-    if not path.is_file() or not source.is_file() or stat.S_IMODE(path.stat().st_mode) != 0o644 or stat.S_IMODE(source.stat().st_mode) not in (0o644, 0o664) or path.stat().st_size > 2 * 1024 * 1024 or source.stat().st_size > 2 * 1024 * 1024:
-        raise RuntimeError('Invalid locale font metadata path or permissions')
-    original = path.read_bytes()
-    expected = json.loads(source.read_bytes(), object_pairs_hook=unique_json_object)
-    installed = json.loads(original, object_pairs_hook=unique_json_object)
-    if installed != expected:
-        raise RuntimeError('Unknown locale font metadata retained; source differs from target')
+    if not source.is_file() or stat.S_IMODE(source.stat().st_mode) not in (0o644, 0o664) or source.stat().st_size > 2 * 1024 * 1024:
+        raise RuntimeError('Invalid locale font source metadata path or permissions')
+    source_bytes = source.read_bytes()
+    expected = json.loads(source_bytes, object_pairs_hook=unique_json_object)
+    original = None
+    if path.exists():
+        if not path.is_file() or stat.S_IMODE(path.stat().st_mode) != 0o644 or path.stat().st_size > 2 * 1024 * 1024:
+            raise RuntimeError('Invalid locale font target metadata path or permissions')
+        original = path.read_bytes()
+        installed = json.loads(original, object_pairs_hook=unique_json_object)
+        if installed != expected:
+            raise RuntimeError('Unknown locale font metadata retained; source differs from target')
+    # A previous interrupted build is evidence to inspect, not another runtime
+    # file to publish or silently discard.
+    legacy_temporary = safe_target(target, rel + '.un260-build-new')
+    if legacy_temporary.exists():
+        raise RuntimeError('Unknown locale font metadata temporary retained')
     if not isinstance(expected, dict) or set(expected) != {'status', 'sizes', 'locales'} or expected['status'] != 'candidate-not-released':
         raise RuntimeError('Unknown locale font metadata schema retained')
     sizes = expected['sizes']
@@ -95,24 +105,32 @@ def compact_locale_manifest(target):
             count += 1
         if total != locale['bytes']:
             raise RuntimeError('Locale font aggregate size differs')
-    compact = (json.dumps(expected, ensure_ascii=False, separators=(',', ':')) + '\n').encode('utf-8')
-    if json.loads(compact) != expected:
-        raise RuntimeError('Locale font metadata compaction changed meaning')
-    if original != compact:
-        temporary = safe_target(target, rel + '.un260-build-new')
-        if temporary.exists():
-            raise RuntimeError('Unknown locale font metadata temporary retained')
+    audit = safe_target(target.parent, 'images/un260-locale-font-audit.json')
+    temporary = safe_target(target.parent, 'images/un260-locale-font-audit.json.un260-build-new')
+    if temporary.exists():
+        raise RuntimeError('Unknown locale font audit temporary retained')
+    if audit.exists() and not audit.is_file():
+        raise RuntimeError('Invalid locale font audit destination')
+    # Validate the entire input before publishing evidence or excluding the
+    # target copy. Preserve source bytes, including all licence metadata.
+    if not audit.exists() or audit.read_bytes() != source_bytes or stat.S_IMODE(audit.stat().st_mode) != 0o644:
+        audit.parent.mkdir(parents=True, exist_ok=True)
         created = False
         try:
             with temporary.open('xb') as output:
                 created = True
-                output.write(compact)
+                output.write(source_bytes)
             temporary.chmod(0o644)
-            temporary.replace(path)
+            temporary.replace(audit)
         finally:
             if created and temporary.exists():
                 temporary.unlink()
-    return dict(before=len(original), after=len(compact), saved=len(original)-len(compact), fonts=count)
+    if audit.read_bytes() != source_bytes:
+        raise RuntimeError('Locale font audit publication differs from source')
+    if original is not None:
+        path.unlink()
+    return dict(saved=len(original) if original is not None else 0,
+                fonts=count, audit=str(audit), source_sha256=hashlib.sha256(source_bytes).hexdigest())
 
 
 def inventory(target):
@@ -199,8 +217,8 @@ def main():
         path = safe_target(target, entry['path'])
         if path.exists() and (not path.is_file() or digest(path) != entry['sha256']):
             raise RuntimeError('Unknown build file: ' + str(path))
-    font_metadata = compact_locale_manifest(target)
-    print('UN260 locale font metadata: %(before)d -> %(after)d bytes; saved=%(saved)d; %(fonts)d font files unchanged' % font_metadata)
+    font_metadata = publish_locale_font_audit(target)
+    print('UN260 locale font audit: %(audit)s; excluded=%(saved)d bytes; %(fonts)d font files unchanged' % font_metadata)
     script = (Path(__file__).with_name('resource_cleanup.sh.in')).read_text()
     manifest = '\n'.join('%s|%d|%s|%s' % (e['sha256'], e['bytes'], e['mode'], e['path']) for e in entries)
     args.cleanup_script.parent.mkdir(parents=True, exist_ok=True)

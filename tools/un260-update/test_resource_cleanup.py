@@ -21,7 +21,7 @@ release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
 
 
-class MetadataCompactionTests(unittest.TestCase):
+class LocaleAuditPublicationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='un260-font-metadata-')
         self.addCleanup(self.temp.cleanup)
@@ -30,6 +30,7 @@ class MetadataCompactionTests(unittest.TestCase):
         self.source = self.base / 'source'
         self.path = self.target / 'usr/local/share/lvgl_data/locale_fonts/manifest.json'
         self.original = self.source / 'aic_ui/lvgl_data/locale_fonts/manifest.json'
+        self.audit = self.base / 'images/un260-locale-font-audit.json'
         self.path.parent.mkdir(parents=True)
         self.original.parent.mkdir(parents=True)
         self.files = {}
@@ -59,77 +60,161 @@ class MetadataCompactionTests(unittest.TestCase):
         self.original.write_bytes(data)
         return data
 
-    def test_exact_json_meaning_and_all_font_bytes_preserved(self):
-        source = self.original.read_bytes()
-        before = self.path.read_bytes()
-        report = release.compact_locale_manifest(self.target)
-        self.assertEqual(json.loads(self.path.read_bytes()), json.loads(before))
+    def publish(self):
+        return release.publish_locale_font_audit(self.target)
+
+    def assert_inputs_unchanged(self, source):
         self.assertEqual(self.original.read_bytes(), source)
-        self.assertGreater(report['saved'], 0)
+        for path, data in self.files.items():
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), hashlib.sha256(data).hexdigest())
+            self.assertEqual(path.stat().st_mode & 0o777, 0o644)
+
+    def test_complete_audit_retained_without_runtime_metadata_or_font_changes(self):
+        source = self.original.read_bytes()
+        self.path.write_text(json.dumps(self.metadata, separators=(',', ':')))
+        before = self.path.read_bytes()
+        report = self.publish()
+        self.assertFalse(self.path.exists())
+        self.assertEqual(self.audit.read_bytes(), source)
+        self.assertEqual(self.audit.stat().st_mode & 0o777, 0o644)
+        self.assertEqual(report['saved'], len(before))
         self.assertEqual(report['fonts'], 2)
-        self.assertEqual(self.path.stat().st_mode & 0o777, 0o644)
-        for path, data in self.files.items(): self.assertEqual(path.read_bytes(), data)
-        self.assertEqual(release.compact_locale_manifest(self.target)['saved'], 0)
+        self.assertEqual(report['source_sha256'], hashlib.sha256(source).hexdigest())
+        self.assert_inputs_unchanged(source)
+        inode = self.audit.stat().st_ino
+        self.assertEqual(self.publish()['saved'], 0)
+        self.assertEqual(self.audit.stat().st_ino, inode)
+        self.assert_inputs_unchanged(source)
+
+    def test_missing_target_still_validates_fonts_and_publishes_complete_audit(self):
+        source = self.original.read_bytes()
+        self.path.unlink()
+        self.assertEqual(self.publish()['saved'], 0)
+        self.assertEqual(self.audit.read_bytes(), source)
+        self.assert_inputs_unchanged(source)
+        font = list(self.files)[-1]
+        font.write_bytes(b'foreign-font')
+        with self.assertRaises(RuntimeError): self.publish()
+        self.assertEqual(self.audit.read_bytes(), source)
+        self.assertFalse(self.path.exists())
 
     def test_unknown_target_metadata_retained(self):
         obj = json.loads(self.path.read_text()); obj['status'] = 'unknown'
         self.path.write_text(json.dumps(obj)); before = self.path.read_bytes()
-        with self.assertRaises(RuntimeError): release.compact_locale_manifest(self.target)
+        with self.assertRaises(RuntimeError): self.publish()
         self.assertEqual(self.path.read_bytes(), before)
+        self.assertFalse(self.audit.exists())
 
     def test_unknown_schema_or_entry_even_in_source_retained(self):
         for alter in (lambda: self.metadata.update(foreign=1),
                       lambda: self.metadata['locales']['zh-Hans']['files'][0].update(file='../foreign'),
                       lambda: self.metadata.update(sizes=[16,16])):
             alter(); before = self.write_both()
-            with self.assertRaises(RuntimeError): release.compact_locale_manifest(self.target)
+            with self.assertRaises(RuntimeError): self.publish()
             self.assertEqual(self.path.read_bytes(), before)
+            self.assertFalse(self.audit.exists())
             self.metadata.pop('foreign', None)
             self.metadata['sizes'] = [16,32]
             self.metadata['locales']['zh-Hans']['files'][0]['file'] = 'font-16.bin'
 
-    def test_duplicate_json_key_is_rejected_without_rewriting(self):
-        before = self.path.read_text().replace('{', '{"status":"duplicate",', 1).encode()
-        self.path.write_bytes(before)
-        with self.assertRaises(RuntimeError): release.compact_locale_manifest(self.target)
-        self.assertEqual(self.path.read_bytes(), before)
+    def test_duplicate_json_key_in_source_or_target_is_rejected(self):
+        for candidate in (self.path, self.original):
+            self.write_both()
+            before = candidate.read_text().replace('{', '{"status":"duplicate",', 1).encode()
+            candidate.write_bytes(before)
+            with self.assertRaises(RuntimeError): self.publish()
+            self.assertEqual(candidate.read_bytes(), before)
+            self.assertTrue(self.path.exists())
+            self.assertFalse(self.audit.exists())
 
-    def test_modified_font_or_wrong_permissions_retained(self):
+    def test_modified_last_font_wrong_permissions_or_missing_font_retains_metadata(self):
         before = self.path.read_bytes()
-        font = next(iter(self.files))
+        font = list(self.files)[-1]
         font.write_bytes(b'foreign-font')
-        with self.assertRaises(RuntimeError): release.compact_locale_manifest(self.target)
+        with self.assertRaises(RuntimeError): self.publish()
         self.assertEqual(self.path.read_bytes(), before)
         font.write_bytes(self.files[font]); font.chmod(0o755)
-        with self.assertRaises(RuntimeError): release.compact_locale_manifest(self.target)
+        with self.assertRaises(RuntimeError): self.publish()
         self.assertEqual(self.path.read_bytes(), before)
+        font.unlink()
+        with self.assertRaises(RuntimeError): self.publish()
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertFalse(self.audit.exists())
 
-    def test_manifest_symlink_and_font_ancestor_symlink_retained(self):
+    def test_manifest_source_or_font_ancestor_symlink_is_rejected(self):
         before = self.path.read_bytes()
         victim = self.base / 'manifest-victim'; victim.write_bytes(before)
-        self.path.unlink(); self.path.symlink_to(victim)
-        with self.assertRaises(RuntimeError): release.compact_locale_manifest(self.target)
-        self.assertEqual(victim.read_bytes(), before)
-        self.path.unlink(); self.path.write_bytes(before); self.path.chmod(0o644)
+        for candidate in (self.path, self.original):
+            candidate.unlink(); candidate.symlink_to(victim)
+            with self.assertRaises(RuntimeError): self.publish()
+            self.assertEqual(victim.read_bytes(), before)
+            candidate.unlink(); candidate.write_bytes(before); candidate.chmod(0o644)
         directory = self.path.parent/'zh-Hans'; directory.rename(self.base/'fonts-victim')
         directory.symlink_to(self.base/'fonts-victim', target_is_directory=True)
-        with self.assertRaises(RuntimeError): release.compact_locale_manifest(self.target)
+        with self.assertRaises(RuntimeError): self.publish()
         self.assertEqual(self.path.read_bytes(), before)
+        self.assertFalse(self.audit.exists())
 
-    def test_unknown_temporary_retained(self):
+    def test_unsafe_audit_destination_is_rejected_before_target_removal(self):
         before = self.path.read_bytes()
-        temporary = self.path.with_name(self.path.name+'.un260-build-new')
-        temporary.write_text('foreign')
-        with self.assertRaises(RuntimeError): release.compact_locale_manifest(self.target)
+        victim = self.base/'audit-victim'; victim.write_text('foreign')
+        self.audit.parent.mkdir()
+        self.audit.symlink_to(victim)
+        with self.assertRaises(RuntimeError): self.publish()
+        self.assertEqual(victim.read_text(), 'foreign')
         self.assertEqual(self.path.read_bytes(), before)
-        self.assertEqual(temporary.read_text(), 'foreign')
+        self.audit.unlink(); self.audit.parent.rmdir()
+        outside = self.base/'outside'; outside.mkdir()
+        self.audit.parent.symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(RuntimeError): self.publish()
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(list(outside.iterdir()), [])
 
-    def test_failed_atomic_replace_preserves_original(self):
+    def test_unknown_build_temporaries_are_retained(self):
         before = self.path.read_bytes()
+        for temporary in (self.path.with_name(self.path.name+'.un260-build-new'),
+                          self.audit.with_name(self.audit.name+'.un260-build-new')):
+            temporary.parent.mkdir(parents=True, exist_ok=True)
+            temporary.write_text('foreign')
+            with self.assertRaises(RuntimeError): self.publish()
+            self.assertEqual(self.path.read_bytes(), before)
+            self.assertEqual(temporary.read_text(), 'foreign')
+            temporary.unlink()
+
+    def test_failed_audit_publication_preserves_target_and_previous_audit(self):
+        before = self.path.read_bytes()
+        self.audit.parent.mkdir()
+        self.audit.write_bytes(b'previous audit')
         with patch.object(Path, 'replace', side_effect=OSError('injected rename failure')):
-            with self.assertRaises(OSError): release.compact_locale_manifest(self.target)
+            with self.assertRaises(OSError): self.publish()
         self.assertEqual(self.path.read_bytes(), before)
-        self.assertFalse(self.path.with_name(self.path.name+'.un260-build-new').exists())
+        self.assertEqual(self.audit.read_bytes(), b'previous audit')
+        self.assertFalse(self.audit.with_name(self.audit.name+'.un260-build-new').exists())
+        self.assert_inputs_unchanged(before)
+
+    def test_failed_target_removal_keeps_complete_audit_and_retries(self):
+        before = self.path.read_bytes()
+        unlink = Path.unlink
+        def fail_target(path, *args, **kwargs):
+            if path == self.path: raise OSError('injected target unlink failure')
+            return unlink(path, *args, **kwargs)
+        with patch.object(Path, 'unlink', new=fail_target):
+            with self.assertRaises(OSError): self.publish()
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(self.audit.read_bytes(), before)
+        self.assert_inputs_unchanged(before)
+        self.publish()
+        self.assertFalse(self.path.exists())
+
+    def test_failed_repeat_validation_does_not_replace_previous_audit(self):
+        self.publish()
+        before = self.audit.read_bytes()
+        self.metadata['locales']['zh-Hans']['source_sha256'] = '1'*64
+        self.original.write_text(json.dumps(self.metadata))
+        list(self.files)[-1].write_bytes(b'broken font')
+        with self.assertRaises(RuntimeError): self.publish()
+        self.assertEqual(self.audit.read_bytes(), before)
+        self.assertFalse(self.path.exists())
 
 
 class CleanupTests(unittest.TestCase):

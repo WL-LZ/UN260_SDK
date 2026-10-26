@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import unittest
-from check_storage_budget import budget, ROOT_FREE_FLOOR_KB, APP_FREE_FLOOR_KB, APP_PATH
+from release_manifest import table
+from check_storage_budget import budget, ROOT_FREE_FLOOR_KB, APP_FREE_FLOOR_KB, APP_PATH, BOOT_PREFIX, STATIC_PREFIX
 
 class StorageBudget(unittest.TestCase):
     def test_noop(self):
@@ -49,6 +50,65 @@ class StorageBudget(unittest.TestCase):
         new={**old,'resource':(b'new',0o644)}
         self.assertEqual(budget(old,new,'unified-app-volume')['app_required_kb'],2048)
         self.assertEqual(budget(old,old,'unified-app-volume')['app_required_kb'],0)
+    def test_factory_trial_matches_exact_target_table(self):
+        old={APP_PATH:(b'old',0o755)}
+        new={APP_PATH:(b'new',0o755),STATIC_PREFIX+'font.bin':(bytes(1025),0o644)}
+        r=budget(old,new,'factory-app-volume')
+        self.assertEqual(r['target_table_bytes'],len(table(new)))
+        self.assertEqual(r['trial_metadata_kb'],(len(table(new))+1023)//1024+32)
+        self.assertEqual(r['root_required_kb'],6+r['trial_metadata_kb']+2048)
+        self.assertEqual(r['app_required_kb'],5+2048)
+        self.assertFalse(budget(old,new,'unified-app-volume')['trial_enabled'])
+
+    def test_owned_static_delete_only_retains_rollback_and_reserves(self):
+        new={APP_PATH:(b'app',0o755)}
+        old={**new,STATIC_PREFIX+'retired.bin':(bytes(1025),0o644)}
+        r=budget(old,new,'factory-app-volume')
+        self.assertEqual((r['changed'],r['replaced'],r['deleted'],r['unchanged']),(1,0,1,1))
+        self.assertEqual(r['root_file_staged_kb'],0)
+        self.assertEqual(r['root_required_kb'],2048+r['trial_metadata_kb'])
+        self.assertEqual(r['app_required_kb'],2048)
+        self.assertEqual(r['usb_backup_required_kb'],4096+6)
+
+    def test_noop_factory_does_not_start_trial_or_charge_reserves(self):
+        files={APP_PATH:(b'app',0o755),BOOT_PREFIX+'old/player':(bytes(8192),0o755)}
+        r=budget(files,files,'factory-app-volume')
+        self.assertEqual(r['changed'],0)
+        self.assertEqual(r['boot_retained_kb'],8)
+        for key in ('boot_publication_kb','trial_metadata_kb','root_required_kb','app_required_kb','usb_backup_required_kb'):
+            self.assertEqual(r[key],0,key)
+
+    def test_static_delete_still_needs_boot_publication(self):
+        files={APP_PATH:(b'app',0o755),BOOT_PREFIX+'old/player':(b'player',0o755)}
+        old={**files,STATIC_PREFIX+'retired.bin':(bytes(1024),0o644)}
+        r=budget(old,files,'factory-app-volume')
+        self.assertEqual(r['root_file_staged_kb'],0)
+        self.assertEqual(r['root_staged_kb'],8)
+        self.assertEqual(r['root_peak_kb'],8)
+        self.assertEqual(r['root_required_kb'],8+r['trial_metadata_kb']+2048)
+
+    def test_boot_old_versions_are_not_static_deletions_or_free_space(self):
+        old={BOOT_PREFIX+'old/player':(bytes(8192),0o755)}
+        new={APP_PATH:(b'app',0o755),BOOT_PREFIX+'new/player':(bytes(1024),0o755)}
+        r=budget(old,new,'factory-app-volume')
+        self.assertEqual(r['deleted'],0)
+        self.assertEqual(r['boot_retained_kb'],8)
+        self.assertEqual(r['root_file_staged_kb'],5)
+        self.assertEqual(r['root_peak_kb'],13)
+        self.assertEqual(r['usb_backup_required_kb'],4096)
+
+    def test_manifest_omission_retires_only_owned_metadata(self):
+        manifest=STATIC_PREFIX+'locale_fonts/manifest.json'
+        app={APP_PATH:(b'app',0o755)}
+        old={**app,manifest:(bytes(364504),0o644),'etc/ui_state/customer':(b'user',0o644)}
+        replacement={**app,manifest:(bytes(364505),0o644)}
+        before=budget(old,replacement,'factory-app-volume')
+        after=budget(old,app,'factory-app-volume')
+        self.assertEqual(before['root_file_staged_kb']-after['root_file_staged_kb'],360)
+        self.assertEqual((after['changed'],after['deleted']),(1,1))
+        self.assertEqual(after['usb_backup_required_kb'],4096+360)
+        self.assertEqual(after['root_required_kb'],2048+after['trial_metadata_kb'])
+
     def test_unknown_route_rejected(self):
         with self.assertRaises(ValueError):budget({}, {}, 'ignore-capacity')
 

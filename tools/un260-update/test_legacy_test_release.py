@@ -36,7 +36,7 @@ def fixture_target(target):
     files = {
         APP: (b'NEW LEGACY TEST APP', 0o755),
         'usr/local/lib/liblvgl.so': (b'NEW LIBRARY', 0o755),
-        'usr/local/share/lvgl_data/locale_fonts/manifest.json': (b'{"fixture":true}', 0o644),
+        'usr/local/share/lvgl_data/locale_fonts/fixture.bin': (b'{"fixture":true}', 0o644),
         'usr/local/bin/un260_storage_sync': (native_tool().read_bytes(), 0o755),
         'usr/local/bin/un260_resource_cleanup': (b'#!/bin/sh\n# UN260_STORAGE_SYNC_1\nexit 0\n', 0o755),
         'usr/local/bin/un260_upgrade_display': (b'fixture-display', 0o755),
