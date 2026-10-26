@@ -3713,6 +3713,8 @@
     "This is the current controller result. Check the paper after printing.": "Текущий результат основной платы. После печати проверьте бумагу.",
     "Wait a moment before printing again.": "Подождите перед повторной печатью.",
     "Writing to USB": "Запись на USB",
-    "Input": "Подача"
+    "Input": "Подача",
+    "Initialization": "Инициализация",
+    "System": "Система"
   }
 }

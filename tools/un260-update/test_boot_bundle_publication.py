@@ -26,10 +26,10 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def make_bundle(root, name, player=None):
+def make_bundle(root, name, player=None, theme_magic=b'UNBTPK1\0'):
     if player is None:
         player = b'#!/bin/sh\n# isolated check-only fixture, never a shipping ELF\nexit 0\n'
-    theme = b'UNBTPK1\0' + bytes(20) + struct.pack('<I', 1) + ('fixture-theme-' + name).encode()
+    theme = theme_magic + bytes(20) + struct.pack('<I', 1) + ('fixture-theme-' + name).encode()
     ph, th = digest(player), digest(theme)
     identity = digest(('player_sha256=' + ph + '\ntheme_sha256=' + th + '\nmode=animation\n').encode())
     manifest = ('schema=un260-boot-bundle-v1\nid=' + identity + '\nprotocol=1\nplayer_sha256=' + ph +
@@ -220,6 +220,38 @@ df() {{ printf 'Filesystem 1K-blocks Used Available Use%% Mounted\\nfixture 2000
         marker.symlink_to(self.base / 'platform')
         self.run_shell('BUNDLE_PATH=$UPDATE_DIR/UN260_UPDATE.upk; install_bundle', 1)
         self.assert_active(self.old)
+
+    def test_customer_v2_publishes_and_preserves_v1_previous(self):
+        old_candidate = self.new[0]
+        shutil.rmtree(self.payload / TREE / old_candidate)
+        self.new = make_bundle(self.payload, 'customer-v2', theme_magic=b'UNBTPK2\0')
+        self.plan = self.plan.replace(old_candidate, self.new[0])
+        (self.stage / 'install.tsv').write_text(self.plan)
+        (self.stage / 'manifest.ini').write_text('boot_bundle_id=' + self.new[0] + '\nboot_manifest_sha256=' + self.new[1] + '\n')
+        validate_host(self.payload, *self.new, require_elf=False)
+        self.run_shell('execute_plan')
+        self.assert_active(self.new, self.old)
+
+    def test_original_v1_publishes_and_preserves_customer_v2_previous(self):
+        self.old = make_bundle(self.root, 'previous-customer-v2', theme_magic=b'UNBTPK2\0')
+        (self.root / ACTIVE).write_bytes(active_data(self.old))
+        validate_host(self.root, *self.old, require_elf=False)
+        validate_host(self.payload, *self.new, require_elf=False)
+        self.run_shell('execute_plan')
+        self.assert_active(self.new, self.old)
+        self.assertEqual((self.root / 'usr/local/bin/test_lvgl').read_text(), 'new-app')
+        self.assertTrue((self.root / TREE / self.old[0] / 'theme.pack').read_bytes().startswith(b'UNBTPK2\0'))
+
+    def test_original_v1_before_commit_recovers_customer_v2_and_app(self):
+        self.old = make_bundle(self.root, 'previous-customer-v2', theme_magic=b'UNBTPK2\0')
+        (self.root / ACTIVE).write_bytes(active_data(self.old))
+        self.run_shell('''local_barrier() { if [ -f "$JOURNAL/boot-publish" ] && [ ! -f "$JOURNAL/committed" ]; then exit 88; fi; }
+execute_plan''', 88)
+        self.assert_active(self.old)
+        self.run_shell('recover_transaction')
+        self.assert_active(self.old)
+        self.assertEqual((self.root / 'usr/local/bin/test_lvgl').read_text(), 'old-app')
+        self.assertFalse(self.journal.exists())
 
     def test_host_validation_checks_pack_mode_matches_manifest(self):
         validate_host(self.payload, *self.new, require_elf=False)

@@ -1,15 +1,8 @@
 #!/usr/bin/env python3
-"""Theme D through the genuine LVGL renderer, plus all four macro link checks."""
-from pathlib import Path
-s=Path(__file__).with_name('test_boot_theme_c.py').read_text()
-s=s.replace('"un260/lv_core/boot_anim/page_00_boot_anim_theme_c.c",','"un260/lv_core/boot_anim/page_00_boot_anim_theme_c.c",\n    "un260/lv_core/boot_anim/page_00_boot_anim_theme_d.c",\n    "un260/lv_core/boot_anim/page_08_boot_flow.c",')
-s=s.replace('boot_theme_c/{name}.png','boot_theme_d/{name}.png').replace('for theme in (1, 2, 3):','for theme in (1, 2, 3, 4):')
-s=s.replace('sources = [harness,','sources = [harness, root / "un260/lv_core/boot_anim/page_00_boot_anim_theme_d.c",')
-s=s.replace('metadata = write_assets(root, work)', '''metadata = write_assets(root, work)
-        with Image.open(root / "aic_ui/lvgl_data/backgrounds/boot.png") as ready:
-            (work / "boot.bgra").write_bytes(ready.convert("RGBA").tobytes("raw", "BGRA"))''')
-s=s.replace('"-DUI_BOOT_ANIM_THEME=3"','"-DUI_BOOT_ANIM_THEME=4"')
-s=s.replace('"-Wl,--wrap=lv_timer_create"', '"-Wl,--wrap=lv_timer_create", "-Wl,--wrap=lv_obj_create"')
-# Use the production theme so arc knob styles are exercised by the renderer.
-s=s.replace('#define LV_USE_THEME_DEFAULT 0', '#define LV_USE_THEME_DEFAULT 1')
-exec(compile(s,str(Path(__file__)), 'exec'))
+"""Run real LVGL tests for original A boot and self-check."""
+import sys
+sys.dont_write_bytecode = True
+from boot_native_test_support import main
+
+if __name__ == "__main__":
+    main(1)

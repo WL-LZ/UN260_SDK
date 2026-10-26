@@ -1694,6 +1694,8 @@
     "This is the current controller result. Check the paper after printing.": "这是主板当前的结果，打印后请检查出纸。",
     "Wait a moment before printing again.": "请稍候再打印。",
     "Writing to USB": "正在写入 U 盘",
-    "Input": "进钞"
+    "Input": "进钞",
+    "Initialization": "初始化",
+    "System": "系统"
   }
 }

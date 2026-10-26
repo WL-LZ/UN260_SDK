@@ -3,7 +3,7 @@
 #include "un260/lv_system/ui_lang.h"
 #include "un260/lv_core/page_00_boot_anim.h"
 
-#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D
+#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D && UI_BOOT_VARIANT == UI_BOOT_VARIANT_A
 
 #include <string.h>
 #include "un260/font/boot_fonts.h"
@@ -341,4 +341,4 @@ bool ui_page_00_boot_anim_is_active(void)
     return g_intro.root != NULL;
 }
 
-#endif /* UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D */
+#endif /* Theme D, original variant A */

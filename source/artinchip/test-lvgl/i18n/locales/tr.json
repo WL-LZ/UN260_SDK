@@ -3687,6 +3687,8 @@
     "This is the current controller result. Check the paper after printing.": "Ana kartın güncel sonucu. Yazdırma sonrası kağıdı kontrol edin.",
     "Wait a moment before printing again.": "Tekrar yazdırmadan önce biraz bekleyin.",
     "Writing to USB": "USB’ye yazılıyor",
-    "Input": "Giriş"
+    "Input": "Giriş",
+    "Initialization": "Başlatma",
+    "System": "Sistem"
   }
 }

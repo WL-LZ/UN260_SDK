@@ -1408,6 +1408,8 @@
     "This is the current controller result. Check the paper after printing.": "메인 보드의 현재 결과입니다. 인쇄 후 용지를 확인하세요.",
     "Wait a moment before printing again.": "잠시 후 다시 인쇄하세요.",
     "Writing to USB": "USB에 쓰는 중",
-    "Input": "투입"
+    "Input": "투입",
+    "Initialization": "초기화",
+    "System": "시스템"
   }
 }

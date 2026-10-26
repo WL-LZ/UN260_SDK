@@ -3687,6 +3687,8 @@
     "This is the current controller result. Check the paper after printing.": "Résultat actuel de la carte mère. Vérifiez le papier après l’impression.",
     "Wait a moment before printing again.": "Patientez avant d’imprimer à nouveau.",
     "Writing to USB": "Écriture sur USB",
-    "Input": "Entrée"
+    "Input": "Entrée",
+    "Initialization": "Initialisation",
+    "System": "Système"
   }
 }

@@ -186,9 +186,8 @@ static bool app_boot_runtime_finish(counting_session_state_t *counting_session)
 #endif
     ui_manager_switch(ui_state_pure_count_is_enabled() ? UI_PAGE_PURE : UI_PAGE_MAIN);
 #if defined(UI_BOOT_ANIM_THEME) && UI_BOOT_ANIM_THEME == 4
-    /* The bridge is still opaque and its visual clock has not started. Avoid
-     * the ordinary 180 ms preload building/capturing a whole drawer mid-fade.
-     * Snapshot failure is optional: manual opening retains its live fallback. */
+    /* Keep the established quick-panel preload before the first destination
+     * frame. Snapshot failure is optional; manual opening retains its fallback. */
     (void)page_01_main_quick_prepare_preload();
 #endif
     return true;

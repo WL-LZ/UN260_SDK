@@ -1,0 +1,1678 @@
+{
+  "schema": 1,
+  "canvas": [
+    1280,
+    400
+  ],
+  "source": "Customer-approved reconstructed boot sample, static hand revision 2",
+  "artwork_notes": [
+    "Original customer artwork reconstructed as real SVG paths; PNGs are approved offline rasterizations.",
+    "No image or video decode is required at runtime. BGRA8888 is straight alpha; A8 entries are tintable coverage masks.",
+    "English title artwork is selected only for en. Other locales must use the matching i18n title; do not silently show English.",
+    "Dynamic selfcheck row names and statuses are runtime language labels, not fixed English artwork.",
+    "The Version 2.0 source is the approved visual reference; firmware version data must be supplied by the caller, not inferred from this asset."
+  ],
+  "assets": [
+    {
+      "id": "background",
+      "png": "background-1280x400.png",
+      "format": "BGRA8888",
+      "role": "background",
+      "sha256": "6e6c6489b31363dd8c42e34d08d569d70ed51a7165396ef25a56da0c49498225",
+      "source_frame": 66,
+      "source_padding_top_bottom": 8,
+      "alpha_mode": "opaque",
+      "asset_id": 1,
+      "language": "",
+      "tag": "",
+      "language_id": null
+    },
+    {
+      "id": "logo-large",
+      "png": "logo-large.png",
+      "format": "BGRA8888",
+      "role": "brand",
+      "sha256": "0226f93244e585c02346c46f449bb637a81c0df8010dc6552a33493f9205faac",
+      "svg": "logo-large.svg",
+      "svg_sha256": "4a5a6c4cd08ab23151d7cde40f456a33a36e5c6d9e62e6734754633e4bf4cb76",
+      "source_frame": 60,
+      "source_bbox_xywh": [
+        474,
+        89,
+        343,
+        177
+      ],
+      "ink_bbox_xywh": [
+        3,
+        3,
+        337,
+        171
+      ],
+      "alpha_mode": "straight",
+      "asset_id": 2,
+      "language": "",
+      "tag": "",
+      "language_id": null
+    },
+    {
+      "id": "logo-small",
+      "png": "logo-small.png",
+      "format": "BGRA8888",
+      "role": "brand",
+      "sha256": "50ac54c1aa88474175727cf5b3a8d1aa1b438369226c5e756bf6060fd06f308e",
+      "svg": "logo-small.svg",
+      "svg_sha256": "1b1382a0e59afbe9b8773025326067e47d64c869d0f08e90620202ee597ded64",
+      "source_frame": 360,
+      "source_bbox_xywh": [
+        214,
+        31,
+        169,
+        89
+      ],
+      "ink_bbox_xywh": [
+        2,
+        3,
+        165,
+        84
+      ],
+      "alpha_mode": "straight",
+      "asset_id": 3,
+      "language": "",
+      "tag": "",
+      "language_id": null
+    },
+    {
+      "id": "hand-5",
+      "png": "hand-5.png",
+      "format": "BGRA8888",
+      "role": "gesture",
+      "sha256": "733fabc997dd7ead2e2b82b201a7015b79cd7448ee7102caae9bfba509cbc741",
+      "svg": "hand-5.svg",
+      "svg_sha256": "297e6a84b5a4c47f857d0bc07a4ad36f89e6f3749fc76d9a7a1437dd763dd842",
+      "source_frame": 225,
+      "source_bbox_xyxy": [
+        558,
+        74,
+        730,
+        266
+      ],
+      "reference_bbox_xyxy": [
+        18,
+        18,
+        190,
+        210
+      ],
+      "anchor_xy": [
+        100,
+        210
+      ],
+      "alpha_mode": "straight",
+      "silhouette_iou": 0.9898699028127732,
+      "asset_id": 8,
+      "language": "",
+      "tag": "",
+      "language_id": null
+    },
+    {
+      "id": "hand-4",
+      "png": "hand-4.png",
+      "format": "BGRA8888",
+      "role": "gesture",
+      "sha256": "7067008c333dd5812274030f2409606a647f179fe427b74e309c0d5690eb4b8d",
+      "svg": "hand-4.svg",
+      "svg_sha256": "ad5bcfaf35076c40f313b6744345c1802790340b685b50cf5be62781ed9c0705",
+      "source_frame": 510,
+      "source_bbox_xyxy": [
+        564,
+        68,
+        713,
+        264
+      ],
+      "reference_bbox_xyxy": [
+        24,
+        14,
+        173,
+        210
+      ],
+      "anchor_xy": [
+        100,
+        210
+      ],
+      "alpha_mode": "straight",
+      "silhouette_iou": 0.9920039244542556,
+      "asset_id": 7,
+      "language": "",
+      "tag": "",
+      "language_id": null
+    },
+    {
+      "id": "hand-3",
+      "png": "hand-3.png",
+      "format": "BGRA8888",
+      "role": "gesture",
+      "sha256": "b86dda6306950f6441b1dd1a5d290d7231e13e96c10d5829a982a4a605f7f04e",
+      "svg": "hand-3.svg",
+      "svg_sha256": "77b65ed418f028f8dc624f37c147a63ba0f9110e362820cfca98230b8814dcec",
+      "source_frame": 1230,
+      "source_bbox_xyxy": [
+        580,
+        62,
+        714,
+        267
+      ],
+      "reference_bbox_xyxy": [
+        40,
+        5,
+        174,
+        210
+      ],
+      "anchor_xy": [
+        100,
+        210
+      ],
+      "alpha_mode": "straight",
+      "silhouette_iou": 0.9924191211974891,
+      "asset_id": 6,
+      "language": "",
+      "tag": "",
+      "language_id": null
+    },
+    {
+      "id": "hand-2",
+      "png": "hand-2.png",
+      "format": "BGRA8888",
+      "role": "gesture",
+      "sha256": "caab1433cf43b929663aaf427de22fc9cd4e3ab4fb8518a93d02e1e7cc3a5207",
+      "svg": "hand-2.svg",
+      "svg_sha256": "560dcdb27c3a7fa0933e04c2e9f2709b5b12176958213d0a98fc84b37adca7a9",
+      "source_frame": 1800,
+      "source_bbox_xyxy": [
+        580,
+        64,
+        712,
+        263
+      ],
+      "reference_bbox_xyxy": [
+        40,
+        11,
+        172,
+        210
+      ],
+      "anchor_xy": [
+        100,
+        210
+      ],
+      "alpha_mode": "straight",
+      "silhouette_iou": 0.9898220214445109,
+      "asset_id": 5,
+      "language": "",
+      "tag": "",
+      "language_id": null
+    },
+    {
+      "id": "hand-1",
+      "png": "hand-1.png",
+      "format": "BGRA8888",
+      "role": "gesture",
+      "sha256": "11c68c7f388de199becee692a9eedda324a7d4bb2a14818d0725f34d2ab678fd",
+      "svg": "hand-1.svg",
+      "svg_sha256": "14fb08bccf5060ab91491f79a6744ffd547599a06a177bd69042d714ad195415",
+      "source_frame": 1890,
+      "source_bbox_xyxy": [
+        576,
+        66,
+        711,
+        266
+      ],
+      "reference_bbox_xyxy": [
+        36,
+        10,
+        171,
+        210
+      ],
+      "anchor_xy": [
+        100,
+        210
+      ],
+      "alpha_mode": "straight",
+      "silhouette_iou": 0.9937474671452556,
+      "asset_id": 4,
+      "language": "",
+      "tag": "",
+      "language_id": null
+    },
+    {
+      "id": "initialization",
+      "png": "initialization.png",
+      "format": "A8",
+      "role": "title",
+      "sha256": "9581b3bc07c8b1fe78169f458a29e88c9ae924de4ab9eb8c0b176d3c5e5d2542",
+      "svg": "initialization.svg",
+      "svg_sha256": "1d0acfa8d85e8e7ae46faeff5332c0cdf95eaaa9ab019bed89aede470d6f7e0a",
+      "source_frame": 360,
+      "source_bbox_xywh": [
+        112,
+        164,
+        364,
+        54
+      ],
+      "ink_bbox_xywh": [
+        3,
+        3,
+        359,
+        48
+      ],
+      "color_rgb": [
+        53,
+        55,
+        52
+      ],
+      "locale": "en",
+      "msgid": "Initialization",
+      "asset_id": 9,
+      "language": "en",
+      "tag": "en",
+      "language_id": 0
+    },
+    {
+      "id": "system",
+      "png": "system.png",
+      "format": "A8",
+      "role": "title",
+      "sha256": "e6af0c14c6a7c588ee6c50a4bb7bac7a33facb856d6cd1af8278068fdd065291",
+      "svg": "system.svg",
+      "svg_sha256": "34422fcf9e1b3b85b0248255e50d40e4164a2902713a7d4574a631694410d36e",
+      "source_frame": 1920,
+      "source_bbox_xywh": [
+        182,
+        165,
+        221,
+        65
+      ],
+      "ink_bbox_xywh": [
+        3,
+        2,
+        215,
+        60
+      ],
+      "color_rgb": [
+        57,
+        124,
+        33
+      ],
+      "locale": "en",
+      "msgid": "System",
+      "asset_id": 10,
+      "language": "en",
+      "tag": "en",
+      "language_id": 0
+    },
+    {
+      "id": "ready-large",
+      "png": "ready-large.png",
+      "format": "A8",
+      "role": "title",
+      "sha256": "922d2af640d2da1fa6565d5e4e58cbb0656a4b15dcd26a1579cab99b63fa446e",
+      "svg": "ready-large.svg",
+      "svg_sha256": "b4549aaff023fb7d9d1e5870e47361286b5a00d737db8940bc09854d6383f12c",
+      "source_frame": 1965,
+      "source_bbox_xywh": [
+        785,
+        173,
+        297,
+        94
+      ],
+      "ink_bbox_xywh": [
+        3,
+        2,
+        292,
+        90
+      ],
+      "color_rgb": [
+        232,
+        111,
+        48
+      ],
+      "locale": "en",
+      "msgid": "Ready",
+      "asset_id": 11,
+      "language": "en",
+      "tag": "en",
+      "language_id": 0,
+      "aliases": [
+        14
+      ]
+    },
+    {
+      "id": "version",
+      "asset_id": 12,
+      "png": "version-en.png",
+      "format": "A8",
+      "role": "corner",
+      "language": "en",
+      "tag": "en",
+      "language_id": 0,
+      "msgid": "Version",
+      "text": "Version V1.0.0",
+      "color_rgb": [
+        102,
+        103,
+        97
+      ],
+      "source_bbox_xywh": [
+        1083,
+        10,
+        170,
+        22
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        166,
+        18
+      ],
+      "sha256": "90bf72919b483229a6ac748ab3c29d1c84c1f96372ef4fe8be959ffc017753f7",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7",
+      "firmware_version": "V1.0.0"
+    },
+    {
+      "id": "powered-by-mechatro",
+      "png": "powered-by-mechatro.png",
+      "format": "A8",
+      "role": "corner",
+      "sha256": "70f13849fcd0e94f2dcf0699abd4a69e1509257611debc207d1b5e0c0f0e486b",
+      "svg": "powered-by-mechatro.svg",
+      "svg_sha256": "8fb94091a557631361ba2084bda45e6c8ee210bfb4289d5e7d9aaa9a75d80cc4",
+      "source_frame": 60,
+      "source_bbox_xywh": [
+        972,
+        337,
+        277,
+        28
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        273,
+        24
+      ],
+      "color_rgb": [
+        105,
+        100,
+        91
+      ],
+      "locale": "en",
+      "msgid": "Powered by",
+      "asset_id": 13,
+      "language": "",
+      "tag": "",
+      "language_id": null
+    }
+  ],
+  "locale_titles": [
+    {
+      "id": "initialization.zh-Hans",
+      "asset_id": 9,
+      "png": "title-zh-Hans-initialization.png",
+      "format": "A8",
+      "role": "title",
+      "language": "zh-Hans",
+      "tag": "zh-Hans",
+      "language_id": 1,
+      "msgid": "Initialization",
+      "text": "初始化",
+      "color_rgb": [
+        53,
+        55,
+        52
+      ],
+      "source_bbox_xywh": [
+        213,
+        164,
+        162,
+        54
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        158,
+        50
+      ],
+      "sha256": "07f3fe38d90aea3879f6608cd2901117b34cc46b54ccdcdc5eee78d3c6c47692",
+      "font_family": "Noto Sans CJK SC",
+      "font_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "font_face": 2,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "system.zh-Hans",
+      "asset_id": 10,
+      "png": "title-zh-Hans-system.png",
+      "format": "A8",
+      "role": "title",
+      "language": "zh-Hans",
+      "tag": "zh-Hans",
+      "language_id": 1,
+      "msgid": "System",
+      "text": "系统",
+      "color_rgb": [
+        57,
+        124,
+        33
+      ],
+      "source_bbox_xywh": [
+        228,
+        165,
+        129,
+        65
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        125,
+        61
+      ],
+      "sha256": "04ea56577431edeae6595f1289c0f96a9902a2c8828f80b5e3b686c45ce76933",
+      "font_family": "Noto Sans CJK SC",
+      "font_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "font_face": 2,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "ready-large.zh-Hans",
+      "asset_id": 11,
+      "png": "title-zh-Hans-ready-large.png",
+      "format": "A8",
+      "role": "title",
+      "language": "zh-Hans",
+      "tag": "zh-Hans",
+      "language_id": 1,
+      "msgid": "Ready",
+      "text": "就绪",
+      "color_rgb": [
+        232,
+        111,
+        48
+      ],
+      "source_bbox_xywh": [
+        839,
+        173,
+        189,
+        94
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        185,
+        90
+      ],
+      "sha256": "eff0f209dc6a8f363ffaffc266b2ed44a4d22f7dd4e0518737d76f1790e20163",
+      "font_family": "Noto Sans CJK SC",
+      "font_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "font_face": 2,
+      "shaper": "PangoCairo 1.44.7",
+      "aliases": [
+        14
+      ]
+    },
+    {
+      "id": "version.zh-Hans",
+      "asset_id": 12,
+      "png": "version-zh-Hans.png",
+      "format": "A8",
+      "role": "corner",
+      "language": "zh-Hans",
+      "tag": "zh-Hans",
+      "language_id": 1,
+      "msgid": "Version",
+      "text": "版本 V1.0.0",
+      "color_rgb": [
+        102,
+        103,
+        97
+      ],
+      "source_bbox_xywh": [
+        1154,
+        10,
+        99,
+        22
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        95,
+        18
+      ],
+      "sha256": "947f4db25ae28462866d2d2d91957ae94fe8e2706f70732b1a18ebf02567bf45",
+      "font_family": "Noto Sans CJK SC",
+      "font_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "font_face": 2,
+      "shaper": "PangoCairo 1.44.7",
+      "firmware_version": "V1.0.0"
+    },
+    {
+      "id": "initialization.ko",
+      "asset_id": 9,
+      "png": "title-ko-initialization.png",
+      "format": "A8",
+      "role": "title",
+      "language": "ko",
+      "tag": "ko",
+      "language_id": 2,
+      "msgid": "Initialization",
+      "text": "초기화",
+      "color_rgb": [
+        53,
+        55,
+        52
+      ],
+      "source_bbox_xywh": [
+        218,
+        164,
+        151,
+        54
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        147,
+        50
+      ],
+      "sha256": "7f9e01b0e0dbe9b1bd16847c19e8ad1eece361dddcaa1f97490d36403651fe33",
+      "font_family": "Noto Sans CJK KR",
+      "font_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "font_face": 1,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "system.ko",
+      "asset_id": 10,
+      "png": "title-ko-system.png",
+      "format": "A8",
+      "role": "title",
+      "language": "ko",
+      "tag": "ko",
+      "language_id": 2,
+      "msgid": "System",
+      "text": "시스템",
+      "color_rgb": [
+        57,
+        124,
+        33
+      ],
+      "source_bbox_xywh": [
+        203,
+        165,
+        179,
+        65
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        175,
+        61
+      ],
+      "sha256": "8d8c64a4cbab35d7fe6191777a7c92ea30076f6e092f62de8b5b9c1b610cc5b9",
+      "font_family": "Noto Sans CJK KR",
+      "font_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "font_face": 1,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "ready-large.ko",
+      "asset_id": 11,
+      "png": "title-ko-ready-large.png",
+      "format": "A8",
+      "role": "title",
+      "language": "ko",
+      "tag": "ko",
+      "language_id": 2,
+      "msgid": "Ready",
+      "text": "준비됨",
+      "color_rgb": [
+        232,
+        111,
+        48
+      ],
+      "source_bbox_xywh": [
+        804,
+        173,
+        259,
+        94
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        255,
+        90
+      ],
+      "sha256": "d43282671735738e9e4118dea3c91b77b8c59448b4da805a5f4bac51705b30af",
+      "font_family": "Noto Sans CJK KR",
+      "font_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "font_face": 1,
+      "shaper": "PangoCairo 1.44.7",
+      "aliases": [
+        14
+      ]
+    },
+    {
+      "id": "version.ko",
+      "asset_id": 12,
+      "png": "version-ko.png",
+      "format": "A8",
+      "role": "corner",
+      "language": "ko",
+      "tag": "ko",
+      "language_id": 2,
+      "msgid": "Version",
+      "text": "버전 V1.0.0",
+      "color_rgb": [
+        102,
+        103,
+        97
+      ],
+      "source_bbox_xywh": [
+        1155,
+        10,
+        98,
+        22
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        94,
+        18
+      ],
+      "sha256": "25a929b8f9b7f1abedd34c291beb4443d1ac2342a54aae02b505a8aad78737cc",
+      "font_family": "Noto Sans CJK KR",
+      "font_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "font_face": 1,
+      "shaper": "PangoCairo 1.44.7",
+      "firmware_version": "V1.0.0"
+    },
+    {
+      "id": "initialization.ja",
+      "asset_id": 9,
+      "png": "title-ja-initialization.png",
+      "format": "A8",
+      "role": "title",
+      "language": "ja",
+      "tag": "ja",
+      "language_id": 3,
+      "msgid": "Initialization",
+      "text": "初期化",
+      "color_rgb": [
+        53,
+        55,
+        52
+      ],
+      "source_bbox_xywh": [
+        213,
+        164,
+        162,
+        54
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        158,
+        50
+      ],
+      "sha256": "48e9c53cbc39cb79ed057b013dbc647048ff032031d5e6efb28191bf69f89f1b",
+      "font_family": "Noto Sans CJK JP",
+      "font_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "system.ja",
+      "asset_id": 10,
+      "png": "title-ja-system.png",
+      "format": "A8",
+      "role": "title",
+      "language": "ja",
+      "tag": "ja",
+      "language_id": 3,
+      "msgid": "System",
+      "text": "システム",
+      "color_rgb": [
+        57,
+        124,
+        33
+      ],
+      "source_bbox_xywh": [
+        150,
+        165,
+        285,
+        65
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        281,
+        61
+      ],
+      "sha256": "634af9464a14262551870b251e6d256f0e2c6fc9451cf39c906ccf129b39b190",
+      "font_family": "Noto Sans CJK JP",
+      "font_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "ready-large.ja",
+      "asset_id": 11,
+      "png": "title-ja-ready-large.png",
+      "format": "A8",
+      "role": "title",
+      "language": "ja",
+      "tag": "ja",
+      "language_id": 3,
+      "msgid": "Ready",
+      "text": "準備完了",
+      "color_rgb": [
+        232,
+        111,
+        48
+      ],
+      "source_bbox_xywh": [
+        746,
+        173,
+        375,
+        94
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        371,
+        90
+      ],
+      "sha256": "8216e04b08d16cce240b8b5d76fe881ee8f7068473ecc6c120b9ed9ab3bfca0f",
+      "font_family": "Noto Sans CJK JP",
+      "font_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7",
+      "aliases": [
+        14
+      ]
+    },
+    {
+      "id": "version.ja",
+      "asset_id": 12,
+      "png": "version-ja.png",
+      "format": "A8",
+      "role": "corner",
+      "language": "ja",
+      "tag": "ja",
+      "language_id": 3,
+      "msgid": "Version",
+      "text": "バージョン V1.0.0",
+      "color_rgb": [
+        102,
+        103,
+        97
+      ],
+      "source_bbox_xywh": [
+        1087,
+        10,
+        166,
+        22
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        162,
+        18
+      ],
+      "sha256": "acd223e86d36feeaf005a44fb3af5e61fe29fd20f7d1d78406f72c730c8a4d1d",
+      "font_family": "Noto Sans CJK JP",
+      "font_sha256": "5dcd1c336cc9344cb77c03a0cd8982ca8a7dc97d620fd6c9c434e02dcb1ceeb3",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7",
+      "firmware_version": "V1.0.0"
+    },
+    {
+      "id": "initialization.ar",
+      "asset_id": 9,
+      "png": "title-ar-initialization.png",
+      "format": "A8",
+      "role": "title",
+      "language": "ar",
+      "tag": "ar",
+      "language_id": 4,
+      "msgid": "Initialization",
+      "text": "التهيئة",
+      "color_rgb": [
+        53,
+        55,
+        52
+      ],
+      "source_bbox_xywh": [
+        234,
+        164,
+        120,
+        54
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        116,
+        50
+      ],
+      "sha256": "1a8872dc6551900f5c4e052e78f6d8363bc5d6f4c78c826c55b4a7acd58217d5",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "system.ar",
+      "asset_id": 10,
+      "png": "title-ar-system.png",
+      "format": "A8",
+      "role": "title",
+      "language": "ar",
+      "tag": "ar",
+      "language_id": 4,
+      "msgid": "System",
+      "text": "النظام",
+      "color_rgb": [
+        57,
+        124,
+        33
+      ],
+      "source_bbox_xywh": [
+        215,
+        165,
+        155,
+        65
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        151,
+        61
+      ],
+      "sha256": "5217cf9473755af5c1c15a4e718a52c8d0aac91bbc1498d4ad4ccedc90e53969",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "ready-large.ar",
+      "asset_id": 11,
+      "png": "title-ar-ready-large.png",
+      "format": "A8",
+      "role": "title",
+      "language": "ar",
+      "tag": "ar",
+      "language_id": 4,
+      "msgid": "Ready",
+      "text": "جاهز",
+      "color_rgb": [
+        232,
+        111,
+        48
+      ],
+      "source_bbox_xywh": [
+        843,
+        173,
+        181,
+        94
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        177,
+        90
+      ],
+      "sha256": "152f61396959a8c44588942eadbf9e076b682ac8a68c8d6639731fb2b999aea1",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7",
+      "aliases": [
+        14
+      ]
+    },
+    {
+      "id": "version.ar",
+      "asset_id": 12,
+      "png": "version-ar.png",
+      "format": "A8",
+      "role": "corner",
+      "language": "ar",
+      "tag": "ar",
+      "language_id": 4,
+      "msgid": "Version",
+      "text": "الإصدار V1.0.0",
+      "color_rgb": [
+        102,
+        103,
+        97
+      ],
+      "source_bbox_xywh": [
+        1134,
+        10,
+        119,
+        22
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        115,
+        18
+      ],
+      "sha256": "e467cebcd3c483c88caa41b7ad078775c9643f8c28d594edccabf0872586b9ab",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7",
+      "firmware_version": "V1.0.0"
+    },
+    {
+      "id": "initialization.tr",
+      "asset_id": 9,
+      "png": "title-tr-initialization.png",
+      "format": "A8",
+      "role": "title",
+      "language": "tr",
+      "tag": "tr",
+      "language_id": 5,
+      "msgid": "Initialization",
+      "text": "Başlatma",
+      "color_rgb": [
+        53,
+        55,
+        52
+      ],
+      "source_bbox_xywh": [
+        174,
+        164,
+        240,
+        54
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        236,
+        50
+      ],
+      "sha256": "97e3e69d93b58a9a30439479ec09178cc9b6293c5fe64a847568fe5445bf2d3f",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "system.tr",
+      "asset_id": 10,
+      "png": "title-tr-system.png",
+      "format": "A8",
+      "role": "title",
+      "language": "tr",
+      "tag": "tr",
+      "language_id": 5,
+      "msgid": "System",
+      "text": "Sistem",
+      "color_rgb": [
+        57,
+        124,
+        33
+      ],
+      "source_bbox_xywh": [
+        162,
+        165,
+        261,
+        65
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        257,
+        61
+      ],
+      "sha256": "2880434218f3e2d29a36de01b5204a72cfdc347b36b5b99d4326895ad8600d1c",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "ready-large.tr",
+      "asset_id": 11,
+      "png": "title-tr-ready-large.png",
+      "format": "A8",
+      "role": "title",
+      "language": "tr",
+      "tag": "tr",
+      "language_id": 5,
+      "msgid": "Ready",
+      "text": "Hazır",
+      "color_rgb": [
+        232,
+        111,
+        48
+      ],
+      "source_bbox_xywh": [
+        783,
+        173,
+        301,
+        94
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        297,
+        90
+      ],
+      "sha256": "2a077163af8744b47ed1d9b0d7cea4e1f9b60e6d4c27bc461527599681f4db0f",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7",
+      "aliases": [
+        14
+      ]
+    },
+    {
+      "id": "version.tr",
+      "asset_id": 12,
+      "png": "version-tr.png",
+      "format": "A8",
+      "role": "corner",
+      "language": "tr",
+      "tag": "tr",
+      "language_id": 5,
+      "msgid": "Version",
+      "text": "Sürüm V1.0.0",
+      "color_rgb": [
+        102,
+        103,
+        97
+      ],
+      "source_bbox_xywh": [
+        1094,
+        10,
+        159,
+        22
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        155,
+        18
+      ],
+      "sha256": "2ab805769d41fb2906fb0897187f5723f3d97cda6c815dbe8bfa488fcc351702",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7",
+      "firmware_version": "V1.0.0"
+    },
+    {
+      "id": "initialization.fr",
+      "asset_id": 9,
+      "png": "title-fr-initialization.png",
+      "format": "A8",
+      "role": "title",
+      "language": "fr",
+      "tag": "fr",
+      "language_id": 6,
+      "msgid": "Initialization",
+      "text": "Initialisation",
+      "color_rgb": [
+        53,
+        55,
+        52
+      ],
+      "source_bbox_xywh": [
+        102,
+        164,
+        385,
+        54
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        381,
+        50
+      ],
+      "sha256": "2cc79b83e47861ff9f15cd91548a4ef0b5ab31e675faf4225568c1b79edef4a7",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "system.fr",
+      "asset_id": 10,
+      "png": "title-fr-system.png",
+      "format": "A8",
+      "role": "title",
+      "language": "fr",
+      "tag": "fr",
+      "language_id": 6,
+      "msgid": "System",
+      "text": "Système",
+      "color_rgb": [
+        57,
+        124,
+        33
+      ],
+      "source_bbox_xywh": [
+        164,
+        165,
+        258,
+        65
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        254,
+        61
+      ],
+      "sha256": "1fc971d9668ab094aada21ff4fbcabdbca66d1909120f6f424c86a7d413664c1",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "ready-large.fr",
+      "asset_id": 11,
+      "png": "title-fr-ready-large.png",
+      "format": "A8",
+      "role": "title",
+      "language": "fr",
+      "tag": "fr",
+      "language_id": 6,
+      "msgid": "Ready",
+      "text": "Prêt",
+      "color_rgb": [
+        232,
+        111,
+        48
+      ],
+      "source_bbox_xywh": [
+        829,
+        173,
+        209,
+        94
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        205,
+        90
+      ],
+      "sha256": "a34a73a7124707bb6e41890cecfed7bf8b60a4d490fafee09093a656fafc08df",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7",
+      "aliases": [
+        14
+      ]
+    },
+    {
+      "id": "version.fr",
+      "asset_id": 12,
+      "png": "version-fr.png",
+      "format": "A8",
+      "role": "corner",
+      "language": "fr",
+      "tag": "fr",
+      "language_id": 6,
+      "msgid": "Version",
+      "text": "Version V1.0.0",
+      "color_rgb": [
+        102,
+        103,
+        97
+      ],
+      "source_bbox_xywh": [
+        1083,
+        10,
+        170,
+        22
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        166,
+        18
+      ],
+      "sha256": "90bf72919b483229a6ac748ab3c29d1c84c1f96372ef4fe8be959ffc017753f7",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7",
+      "firmware_version": "V1.0.0"
+    },
+    {
+      "id": "initialization.pl",
+      "asset_id": 9,
+      "png": "title-pl-initialization.png",
+      "format": "A8",
+      "role": "title",
+      "language": "pl",
+      "tag": "pl",
+      "language_id": 7,
+      "msgid": "Initialization",
+      "text": "Inicjalizacja",
+      "color_rgb": [
+        53,
+        55,
+        52
+      ],
+      "source_bbox_xywh": [
+        148,
+        164,
+        291,
+        54
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        287,
+        50
+      ],
+      "sha256": "1a105bdce55c27adde53e478446f0b19d7432d1642c8081b56c8dcda97facce0",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "system.pl",
+      "asset_id": 10,
+      "png": "title-pl-system.png",
+      "format": "A8",
+      "role": "title",
+      "language": "pl",
+      "tag": "pl",
+      "language_id": 7,
+      "msgid": "System",
+      "text": "System",
+      "color_rgb": [
+        57,
+        124,
+        33
+      ],
+      "source_bbox_xywh": [
+        176,
+        165,
+        232,
+        65
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        228,
+        61
+      ],
+      "sha256": "bbab51ebfeecdc68d63172c38ca5028369c1fa997fb18c9f658c921adad43243",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "ready-large.pl",
+      "asset_id": 11,
+      "png": "title-pl-ready-large.png",
+      "format": "A8",
+      "role": "title",
+      "language": "pl",
+      "tag": "pl",
+      "language_id": 7,
+      "msgid": "Ready",
+      "text": "Gotowy",
+      "color_rgb": [
+        232,
+        111,
+        48
+      ],
+      "source_bbox_xywh": [
+        757,
+        173,
+        353,
+        94
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        349,
+        90
+      ],
+      "sha256": "814be3b024bb65d3e47bf63acdc4bdc504d9477307d42f7da5bf545cde98333c",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7",
+      "aliases": [
+        14
+      ]
+    },
+    {
+      "id": "version.pl",
+      "asset_id": 12,
+      "png": "version-pl.png",
+      "format": "A8",
+      "role": "corner",
+      "language": "pl",
+      "tag": "pl",
+      "language_id": 7,
+      "msgid": "Version",
+      "text": "Wersja V1.0.0",
+      "color_rgb": [
+        102,
+        103,
+        97
+      ],
+      "source_bbox_xywh": [
+        1122,
+        10,
+        131,
+        22
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        127,
+        18
+      ],
+      "sha256": "59be7873c1ab6b568eb96b445d340f1215fc187d72e912bdb70653574a41dbe7",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7",
+      "firmware_version": "V1.0.0"
+    },
+    {
+      "id": "initialization.ru",
+      "asset_id": 9,
+      "png": "title-ru-initialization.png",
+      "format": "A8",
+      "role": "title",
+      "language": "ru",
+      "tag": "ru",
+      "language_id": 8,
+      "msgid": "Initialization",
+      "text": "Инициализация",
+      "color_rgb": [
+        53,
+        55,
+        52
+      ],
+      "source_bbox_xywh": [
+        94,
+        168,
+        400,
+        46
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        396,
+        42
+      ],
+      "sha256": "f3403fcea6192c4917beeb05d943080f231ff29ef733a2c7362999602f9a067b",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "system.ru",
+      "asset_id": 10,
+      "png": "title-ru-system.png",
+      "format": "A8",
+      "role": "title",
+      "language": "ru",
+      "tag": "ru",
+      "language_id": 8,
+      "msgid": "System",
+      "text": "Система",
+      "color_rgb": [
+        57,
+        124,
+        33
+      ],
+      "source_bbox_xywh": [
+        118,
+        165,
+        349,
+        65
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        345,
+        61
+      ],
+      "sha256": "437c23c1bebb8c007ddce8daac4e3ce44d4a176bf6e63616422f08d026013f62",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "ready-large.ru",
+      "asset_id": 11,
+      "png": "title-ru-ready-large.png",
+      "format": "A8",
+      "role": "title",
+      "language": "ru",
+      "tag": "ru",
+      "language_id": 8,
+      "msgid": "Ready",
+      "text": "Готовый",
+      "color_rgb": [
+        232,
+        111,
+        48
+      ],
+      "source_bbox_xywh": [
+        734,
+        182,
+        400,
+        76
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        396,
+        72
+      ],
+      "sha256": "a221c8f02a2e50b6fbb38fc6d8e25ff37dc5a822ffcc27e6157a91fc70e77e51",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7",
+      "aliases": [
+        14
+      ]
+    },
+    {
+      "id": "version.ru",
+      "asset_id": 12,
+      "png": "version-ru.png",
+      "format": "A8",
+      "role": "corner",
+      "language": "ru",
+      "tag": "ru",
+      "language_id": 8,
+      "msgid": "Version",
+      "text": "Версия V1.0.0",
+      "color_rgb": [
+        102,
+        103,
+        97
+      ],
+      "source_bbox_xywh": [
+        1115,
+        10,
+        138,
+        22
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        134,
+        18
+      ],
+      "sha256": "bf2abe2c65d1cc4b4979095ca7448e795a6185c04545131e15eb3662db654e59",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7",
+      "firmware_version": "V1.0.0"
+    },
+    {
+      "id": "initialization.de",
+      "asset_id": 9,
+      "png": "title-de-initialization.png",
+      "format": "A8",
+      "role": "title",
+      "language": "de",
+      "tag": "de",
+      "language_id": 9,
+      "msgid": "Initialization",
+      "text": "Initialisierung",
+      "color_rgb": [
+        53,
+        55,
+        52
+      ],
+      "source_bbox_xywh": [
+        122,
+        164,
+        345,
+        54
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        341,
+        50
+      ],
+      "sha256": "90a447baeb79447f2f439fa3ae71ad4f6e44cb79d5e36554ff4c6b19e5c8cae6",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "system.de",
+      "asset_id": 10,
+      "png": "title-de-system.png",
+      "format": "A8",
+      "role": "title",
+      "language": "de",
+      "tag": "de",
+      "language_id": 9,
+      "msgid": "System",
+      "text": "System",
+      "color_rgb": [
+        57,
+        124,
+        33
+      ],
+      "source_bbox_xywh": [
+        176,
+        165,
+        232,
+        65
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        228,
+        61
+      ],
+      "sha256": "bbab51ebfeecdc68d63172c38ca5028369c1fa997fb18c9f658c921adad43243",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7"
+    },
+    {
+      "id": "ready-large.de",
+      "asset_id": 11,
+      "png": "title-de-ready-large.png",
+      "format": "A8",
+      "role": "title",
+      "language": "de",
+      "tag": "de",
+      "language_id": 9,
+      "msgid": "Ready",
+      "text": "Bereit",
+      "color_rgb": [
+        232,
+        111,
+        48
+      ],
+      "source_bbox_xywh": [
+        766,
+        173,
+        334,
+        94
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        330,
+        90
+      ],
+      "sha256": "032475c7e3a2c9e118d29ed630eb9a82b41a08c1e72f34916480fe9a54f8e68e",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7",
+      "aliases": [
+        14
+      ]
+    },
+    {
+      "id": "version.de",
+      "asset_id": 12,
+      "png": "version-de.png",
+      "format": "A8",
+      "role": "corner",
+      "language": "de",
+      "tag": "de",
+      "language_id": 9,
+      "msgid": "Version",
+      "text": "Version V1.0.0",
+      "color_rgb": [
+        102,
+        103,
+        97
+      ],
+      "source_bbox_xywh": [
+        1083,
+        10,
+        170,
+        22
+      ],
+      "ink_bbox_xywh": [
+        2,
+        2,
+        166,
+        18
+      ],
+      "sha256": "90bf72919b483229a6ac748ab3c29d1c84c1f96372ef4fe8be959ffc017753f7",
+      "font_family": "DejaVu Sans",
+      "font_sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "font_face": 0,
+      "shaper": "PangoCairo 1.44.7",
+      "firmware_version": "V1.0.0"
+    }
+  ],
+  "version_string": "V1.0.0"
+}

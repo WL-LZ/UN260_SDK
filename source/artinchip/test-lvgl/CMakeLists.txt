@@ -78,6 +78,31 @@ execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/
 if(NOT BOOT_LIGHT_ASSET_RESULT EQUAL 0)
     message(FATAL_ERROR "boot-light asset generation failed")
 endif()
+execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/build_boot_bundle.py --print-variant
+                RESULT_VARIABLE BOOT_VARIANT_RESULT
+                OUTPUT_VARIABLE UN260_BOOT_VARIANT OUTPUT_STRIP_TRAILING_WHITESPACE)
+if(NOT BOOT_VARIANT_RESULT EQUAL 0 OR NOT UN260_BOOT_VARIANT MATCHES "^[ab]$")
+    message(FATAL_ERROR "Invalid paired boot/self-test variant")
+endif()
+set(UN260_BOOT_VARIANT_ID 1)
+set(UN260_BOOT_CUSTOMER_SOURCES)
+if(UN260_BOOT_VARIANT STREQUAL "b")
+    set(UN260_BOOT_VARIANT_ID 2)
+    execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/build_customer_boot_pack.py
+                    RESULT_VARIABLE CUSTOMER_BOOT_ASSET_RESULT)
+    if(NOT CUSTOMER_BOOT_ASSET_RESULT EQUAL 0)
+        message(FATAL_ERROR "Customer boot art generation failed")
+    endif()
+    set(UN260_BOOT_CUSTOMER_SOURCES
+        un260/lv_core/boot_anim/boot_customer_art.c
+        un260/boot/boot_customer_catalog.c
+        aic_ui/generated_assets/customer_boot/boot_customer_blob.c)
+endif()
+file(GLOB_RECURSE UN260_CUSTOMER_BOOT_INPUTS CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/assets/customer_boot/*")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${UN260_CUSTOMER_BOOT_INPUTS}
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/build_customer_boot_assets.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/build_customer_boot_pack.py")
 execute_process(COMMAND ${UN260_ASSET_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/build_boot_bundle.py --validate-config
                 RESULT_VARIABLE BOOT_BUNDLE_CONFIG_RESULT)
 if(NOT BOOT_BUNDLE_CONFIG_RESULT EQUAL 0)
@@ -147,7 +172,8 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
 # Versioned root player: its code and artwork update through UPK, while
 # initramfs only mounts root and launches an already verified immutable pair.
 add_executable(un260_boot_player un260/lv_drivers/boot_light.c
-    un260/lv_drivers/boot_theme_pack.c un260/lv_system/backlight_service.c)
+    un260/lv_drivers/boot_theme_pack.c un260/boot/boot_customer_catalog.c
+    un260/lv_system/backlight_service.c)
 target_compile_definitions(un260_boot_player PRIVATE UN260_BOOT_BUNDLE=1)
 target_compile_options(un260_boot_player PRIVATE -ffunction-sections -fdata-sections)
 set_target_properties(un260_boot_player PROPERTIES LINK_FLAGS "-static -Wl,--gc-sections")
@@ -409,6 +435,9 @@ add_executable(${PROJECT_NAME} main.c
     un260/lv_core/boot_anim/page_00_boot_anim_theme_c.c
     un260/lv_core/boot_anim/page_00_boot_anim_theme_d.c
     un260/lv_core/boot_anim/page_08_boot_flow.c
+    un260/lv_core/boot_anim/page_00_boot_anim_customer.c
+    un260/lv_core/boot_anim/page_08_boot_customer.c
+    ${UN260_BOOT_CUSTOMER_SOURCES}
     
     un260/lv_resources/lv_img_init.c
     un260/lv_system/platform_app.c
@@ -588,6 +617,7 @@ add_executable(${PROJECT_NAME} main.c
 )
 
 # Find libts for link
+target_compile_definitions(${PROJECT_NAME} PRIVATE UI_BOOT_BUILD_VARIANT=${UN260_BOOT_VARIANT_ID})
 add_dependencies(${PROJECT_NAME} un260_i18n_check)
 add_dependencies(un260_upgrade_display un260_i18n_check)
 if ( ${USE_RTP_TSLIB} STREQUAL "yes")

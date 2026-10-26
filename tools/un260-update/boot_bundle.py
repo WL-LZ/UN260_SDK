@@ -104,7 +104,7 @@ def validate(root, identity, manifest_hash, require_elf=True):
         if name == 'player' and require_elf:
             static_elf(content)
     header = paths['theme.pack'].read_bytes()[:32]
-    if len(header) != 32 or header[:8] != b'UNBTPK1\0' or struct.unpack_from('<I', header, 28)[0] != {'animation': 1, 'logo': 2}[values['mode']]:
+    if len(header) != 32 or header[:8] not in (b'UNBTPK1\0', b'UNBTPK2\0') or struct.unpack_from('<I', header, 28)[0] != {'animation': 1, 'logo': 2}[values['mode']]:
         raise ValueError('Boot theme mode/header differs from manifest')
     canonical = ('player_sha256=' + values['player_sha256'] + '\ntheme_sha256=' + values['theme_sha256'] + '\nmode=' + values['mode'] + '\n').encode()
     if sha(canonical) != identity:

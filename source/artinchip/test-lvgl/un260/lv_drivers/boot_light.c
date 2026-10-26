@@ -176,9 +176,44 @@ static float scene_ease(const boot_theme_pack_t *pack,float p)
     if(p<.5f)return 4*p*p*p;
     float q=2-2*p;return 1-q*q*q/2;
 }
+/* Compose each sprite against immutable background in cached RAM.  The
+ * framebuffer remains write-only, including the localized corner labels. */
+static void customer_sprite(uint8_t *frame,unsigned stride,const boot_customer_image_t *art,
+                            const uint8_t *background,uint8_t *canvas,unsigned opacity)
+{
+    unsigned width=art->width,height=art->height,x=(unsigned)art->x,y=(unsigned)art->y;
+    unsigned pitch=width*4U;
+    for(unsigned row=0;row<height;row++) {
+        uint8_t *dst=canvas+row*pitch;
+        memcpy(dst,background+((y+row)*W+x)*4U,pitch);
+        if(art->format==BOOT_CUSTOMER_BGRA)blend(dst,art->data+row*pitch,width,opacity);
+        else for(unsigned col=0;col<width;col++) {
+            uint8_t color[4]={(uint8_t)art->color,(uint8_t)(art->color>>8),
+                (uint8_t)(art->color>>16),art->data[row*width+col]};
+            blend(dst+col*4U,color,1U,opacity);
+        }
+        memcpy(frame+(y+row)*stride+x*4U,dst,pitch);
+    }
+}
+static void render_customer(uint8_t *frame,unsigned stride,const boot_theme_pack_t *pack,
+                            uint8_t *canvas,uint32_t elapsed,frame_state_t *state)
+{
+    const uint8_t *background=pack->customer[0].data;
+    if(!state->initialized) {
+        for(unsigned row=0;row<H;row++)memcpy(frame+row*stride,background+row*W*4U,W*4U);
+        customer_sprite(frame,stride,&pack->customer[2],background,canvas,255U);
+        customer_sprite(frame,stride,&pack->customer[3],background,canvas,255U);
+    }
+    if(!state->settled) {
+        float alpha=scene_ease(pack,progress(elapsed,pack->scene.entrance_start,pack->scene.entrance_duration));
+        customer_sprite(frame,stride,&pack->customer[1],background,canvas,(unsigned)(alpha*255U+.5f));
+    }
+    state->initialized=true;state->settled=elapsed>=pack->scene.welcome_settled;
+}
 static void render_bundle(uint8_t *frame,unsigned stride,boot_theme_pack_t *pack,
                           uint8_t *canvas,uint32_t elapsed,frame_state_t *state)
 {
+    if(pack->version==2U){render_customer(frame,stride,pack,canvas,elapsed,state);return;}
     const boot_theme_scene_t *s=&pack->scene;
     const uint8_t *assets=pack->data;
     if(pack->mode==BOOT_THEME_MODE_LOGO) {
@@ -353,7 +388,7 @@ int main(void)
 #ifndef UN260_UPDATE_DISPLAY
 #ifdef UN260_BOOT_BUNDLE
     if(bundle.mode==BOOT_THEME_MODE_ANIMATION) {
-        canvas=malloc(ACTIVE_STRIDE*bundle.scene.active_h);
+        canvas=malloc(boot_theme_pack_canvas_bytes(&bundle));
         if(!canvas)goto done;
     }
 #else
@@ -463,7 +498,8 @@ int main(void)
         if(pages[0].initialized && pages[1].initialized && bundle.mode==BOOT_THEME_MODE_LOGO) {
             quiet_pause();continue;
         }
-        if(pages[0].settled && pages[1].settled && elapsed>=bundle.scene.welcome_settled && elapsed<bundle.scene.dot_start) {
+        if(pages[0].settled && pages[1].settled &&
+           (bundle.version==2U || (elapsed>=bundle.scene.welcome_settled && elapsed<bundle.scene.dot_start))) {
             quiet_pause();continue;
         }
 #else

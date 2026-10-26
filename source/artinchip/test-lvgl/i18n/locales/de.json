@@ -3687,6 +3687,8 @@
     "This is the current controller result. Check the paper after printing.": "Aktuelles Ergebnis der Hauptplatine. Prüfen Sie das Papier nach dem Druck.",
     "Wait a moment before printing again.": "Warten Sie kurz vor dem nächsten Druck.",
     "Writing to USB": "Schreiben auf USB",
-    "Input": "Einzug"
+    "Input": "Einzug",
+    "Initialization": "Initialisierung",
+    "System": "System"
   }
 }

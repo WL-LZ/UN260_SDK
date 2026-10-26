@@ -65,11 +65,12 @@ int main(int argc,char**argv) {
  if(argc>1&&(!strcmp(argv[1],"render")||!strcmp(argv[1],"render-sequence"))) {
   assert(argc==6);boot_theme_pack_t pack={0};assert(boot_theme_pack_load_path(argv[2],&pack));
   assert(boot_theme_pack_select_language(&pack,argv[3]));
-  assert(boot_theme_pack_freeze(&pack));assert(pack.data_bytes==(pack.mode==BOOT_THEME_MODE_LOGO?BOOT_THEME_BG_BYTES:BOOT_THEME_BASE_BYTES));
+  assert(boot_theme_pack_freeze(&pack));assert(pack.version==2U?pack.data_bytes<BOOT_THEME_BASE_BYTES:pack.data_bytes==(pack.mode==BOOT_THEME_MODE_LOGO?BOOT_THEME_BG_BYTES:BOOT_THEME_BASE_BYTES));
   assert(!boot_theme_pack_select_language(&pack,"ja"));
   enum {GUARD=64,STRIDE=W*4+64,PAGE=STRIDE*H};
-  uint8_t *memory=malloc(PAGE*2+GUARD*2),*scratch=malloc(ACTIVE_STRIDE*pack.scene.active_h+GUARD*2);
-  assert(memory&&scratch);memset(memory,0xa5,PAGE*2+GUARD*2);memset(scratch,0x5a,ACTIVE_STRIDE*pack.scene.active_h+GUARD*2);
+  size_t scratch_bytes=boot_theme_pack_canvas_bytes(&pack);
+  uint8_t *memory=malloc(PAGE*2+GUARD*2),*scratch=malloc(scratch_bytes+GUARD*2);
+  assert(memory&&scratch);memset(memory,0xa5,PAGE*2+GUARD*2);memset(scratch,0x5a,scratch_bytes+GUARD*2);
   uint8_t *pixels=memory+GUARD,*canvas=scratch+GUARD;frame_state_t states[2]={{0},{0}};
   const char *cursor=argv[4];char *end=NULL;
   do {
@@ -82,7 +83,7 @@ int main(int argc,char**argv) {
    assert(!strcmp(argv[1],"render-sequence"));cursor=end+1;
   }while(1);
   assert(!memcmp(pixels,pixels+PAGE,PAGE));
-  for(unsigned i=0;i<GUARD;i++){assert(memory[i]==0xa5&&memory[GUARD+PAGE*2+i]==0xa5);assert(scratch[i]==0x5a&&scratch[GUARD+ACTIVE_STRIDE*pack.scene.active_h+i]==0x5a);}
+  for(unsigned i=0;i<GUARD;i++){assert(memory[i]==0xa5&&memory[GUARD+PAGE*2+i]==0xa5);assert(scratch[i]==0x5a&&scratch[GUARD+scratch_bytes+i]==0x5a);}
   FILE*f=fopen(argv[5],"wb");assert(f);for(unsigned row=0;row<H;row++)assert(fwrite(pixels+row*STRIDE,1,W*4,f)==W*4);fclose(f);
   free(memory);free(scratch);boot_theme_pack_free(&pack);return 0;
  }
@@ -133,12 +134,12 @@ with tempfile.TemporaryDirectory(prefix='un260-boot-bundle-player-') as director
         defines.append('-D' + key + '="' + str(value) + '"')
     executable = tmp / 'player'
     run(['cc', '-std=c11', '-O2', '-static', '-Wall', '-Wextra', '-Werror', '-I' + str(root), *defines,
-         source, root / 'un260/lv_drivers/boot_theme_pack.c', '-Wl,--wrap=open', '-Wl,--wrap=ioctl',
+         source, root / 'un260/lv_drivers/boot_theme_pack.c', root / 'un260/boot/boot_customer_catalog.c', '-Wl,--wrap=open', '-Wl,--wrap=ioctl',
          '-Wl,--wrap=clock_gettime', '-lz', '-o', executable])
     (tmp / 'legacy.c').write_text(legacy)
     packs = {}
     for theme in ['c', 'd']:
-        payload, info = builder.theme_pack(root, theme)
+        payload, info = builder.legacy_theme_pack(root, theme)
         path = tmp / (theme + '.pack')
         path.write_bytes(payload)
         packs[theme] = path
@@ -187,7 +188,7 @@ with tempfile.TemporaryDirectory(prefix='un260-boot-bundle-player-') as director
         assert (tmp / 'new.bgra').read_bytes() == frames[0], ('cycle wrap', elapsed)
     print('PASS D waits keep repeated motion at 10/20/40s; both buffers, dirty area, stagger and wrap pixels')
 
-    logo_payload, _ = builder.theme_pack(root, 'd', 'logo')
+    logo_payload, _ = builder.legacy_theme_pack(root, 'd', 'logo')
     logo_path = tmp / 'logo.pack'
     logo_path.write_bytes(logo_payload)
     logo_offset = struct.unpack_from('<I', logo_payload, 52)[0]
@@ -216,7 +217,30 @@ with tempfile.TemporaryDirectory(prefix='un260-boot-bundle-player-') as director
     configured = tmp / 'source'
     (configured / 'un260/lv_core/boot_anim').mkdir(parents=True)
     header = configured / 'un260/lv_core/boot_anim/boot_theme_config.h'
-    header.write_text('#ifndef UI_BOOT_ANIM_THEME\n#define UI_BOOT_ANIM_THEME UI_BOOT_ANIM_THEME_D\n#endif\n')
+    def configure_source(theme='D', variant='A'):
+        header.write_text('#ifndef UI_BOOT_ANIM_THEME\n#define UI_BOOT_ANIM_THEME UI_BOOT_ANIM_THEME_' + theme +
+                          '\n#endif\n#ifndef UI_BOOT_VARIANT\n#define UI_BOOT_VARIANT UI_BOOT_VARIANT_' + variant + '\n#endif\n')
+    configure_source()
+    assert builder.source_variant(configured) == 'a'
+    configure_source(variant='B')
+    assert builder.source_variant(configured) == 'b'
+    for value in ('0', '3', 'UI_BOOT_VARIANT_C', 'UI_BOOT_VARIANT_A + 1', 'UI_BOOT_VARIANT_B /* expression */'):
+        header.write_text('#ifndef UI_BOOT_VARIANT\n#define UI_BOOT_VARIANT ' + value + '\n#endif\n')
+        try:
+            builder.source_variant(configured)
+            raise AssertionError('unsupported or ambiguous paired variant accepted: ' + value)
+        except ValueError:
+            pass
+    for value, expected in (('1', 'a'), ('2', 'b')):
+        header.write_text('#ifndef UI_BOOT_VARIANT\n#define UI_BOOT_VARIANT ' + value + '\n#endif\n')
+        assert builder.source_variant(configured) == expected
+    header.write_text('#ifndef UI_BOOT_VARIANT\n#define UI_BOOT_VARIANT UI_BOOT_VARIANT_A\n#endif\n' * 2)
+    try:
+        builder.source_variant(configured)
+        raise AssertionError('duplicate paired variant accepted')
+    except ValueError:
+        pass
+    configure_source()
     configuration = tmp / 'config.json'
     def config(value):
         configuration.write_text(json.dumps(value))
@@ -240,13 +264,44 @@ with tempfile.TemporaryDirectory(prefix='un260-boot-bundle-player-') as director
         raise AssertionError('invalid logo dimensions accepted')
     except ValueError:
         pass
-    header.write_text('#ifndef UI_BOOT_ANIM_THEME\n#define UI_BOOT_ANIM_THEME UI_BOOT_ANIM_THEME_A\n#endif\n')
+    configure_source(theme='A')
     try:
         config({'schema': 1, 'mode': 'animation', 'logo_surface': None})
         raise AssertionError('unsupported source theme silently defaulted')
     except ValueError:
         pass
     print('PASS persistent mode/logo configuration, paths, dimensions and source theme ownership')
+    # Real source views keep the production header untouched while each side
+    # of the paired choice drives the actual pack builder and bounded loader.
+    configure_source()
+    for relative in ('aic_ui', 'tools', 'un260/font', 'un260/lv_system'):
+        (configured / relative).symlink_to(root / relative, target_is_directory=True)
+    for name in ('boot_welcome_registry.h', 'boot_welcome_timing.h'):
+        (header.parent / name).symlink_to(root / 'un260/lv_core/boot_anim' / name)
+    selected = {}
+    for variant, magic in (('A', b'UNBTPK1\0'), ('B', b'UNBTPK2\0'), ('A', b'UNBTPK1\0')):
+        configure_source(variant=variant)
+        payload, _ = builder.theme_pack(configured)
+        assert payload[:8] == magic, variant
+        selected[variant] = payload
+        path = tmp / ('variant-' + variant + '.pack')
+        path.write_bytes(payload)
+        run([executable, '--theme', path, '--check'])
+        for theme, mode in (('c', 'animation'), ('d', 'logo')):
+            alternate, _ = builder.theme_pack(configured, theme, mode)
+            reference, _ = builder.legacy_theme_pack(root, theme, mode)
+            assert alternate == reference, (variant, theme, mode)
+    assert selected['A'] == packs['d'].read_bytes()
+    assert selected['B'] == builder.customer_theme_pack(root)[0]
+    expected_variant = builder.source_variant(root)
+    cli = subprocess.check_output(['/usr/bin/python3', root / 'tools/build_boot_bundle.py',
+                                   '--print-variant'], text=True)
+    assert cli == expected_variant + '\n'
+    rejected = subprocess.run(['/usr/bin/python3', root / 'tools/build_boot_bundle.py',
+                               '--variant', 'b'], capture_output=True)
+    assert rejected.returncode != 0, 'product CLI must not override the application selection'
+    print('PASS source-header A/B/A selects matching v1/v2/v1; C/Logo unchanged; strict variant and CLI ownership')
+
     good = packs['d'].read_bytes()
     mutations = [('truncated', good[:-1]), ('trailing', good + b'x')]
     damaged = bytearray(good)
@@ -413,4 +468,91 @@ void backlight_service_init(void) {}
     fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
     os.close(lease)
     print('PASS termination removes owned IPC and releases display lease')
+    # New D uses the approved customer catalog; old C/D above still exercise
+    # their complete independent renderer and repeated waiting behavior.
+    customer_pack, customer_info = builder.customer_theme_pack(root)
+    customer_path = tmp / 'customer.pack'
+    customer_path.write_bytes(customer_pack)
+    assert customer_pack[:8] == b'UNBTPK2\0'
+    assert struct.unpack_from('<I', customer_pack, 68)[0] == 2200
+    run([executable, '--theme', customer_path, '--check'])
+    raw = zlib.decompress(customer_pack[builder.HEADER_BYTES:])
+    records = []
+    for i in range(struct.unpack_from('<I', raw, 12)[0]):
+        e = struct.unpack_from('<6I2i2I16s2I', raw, 32+i*64)
+        records.append((e, e[10].split(b'\0', 1)[0].decode('ascii')))
+
+    def customer_image(ident, language):
+        choices = [(e, tag) for e, tag in records if e[0] == ident]
+        e, _ = next(((e, tag) for e, tag in choices if tag in ('', language)),
+                    next(((e, tag) for e, tag in choices if tag == 'en'), choices[0]))
+        ident, fmt, w, h, off, size, x, y, color = e[:9]
+        if fmt == 1:
+            im = Image.frombytes('RGBA', (w, h), raw[off:off+size], 'raw', 'BGRA')
+        else:
+            im = Image.new('RGBA', (w, h), ((color>>16)&255, (color>>8)&255, color&255, 255))
+            im.putalpha(Image.frombytes('L', (w, h), raw[off:off+size]))
+        return im, (x, y)
+
+    def expected_customer(language, opacity=255):
+        background, _ = customer_image(1, language)
+        for ident in (12, 13, 2):
+            im, position = customer_image(ident, language)
+            if ident == 2 and opacity != 255:
+                im.putalpha(im.getchannel('A').point(lambda a: (a*opacity+127)//255))
+            background.alpha_composite(im, position)
+        return background.tobytes('raw', 'BGRA')
+
+    for language in customer_info['languages']:
+        run([executable, 'render-sequence', customer_path, language,
+             '0,450,600,2200,50000', tmp / 'customer.bgra'])
+        assert (tmp / 'customer.bgra').read_bytes() == expected_customer(language), language
+    for elapsed, opacity in ((0, 0), (450, 215), (600, 255)):
+        run([executable, 'render', customer_path, 'en', elapsed, tmp / 'customer.bgra'])
+        assert (tmp / 'customer.bgra').read_bytes() == expected_customer('en', opacity), elapsed
+    run([executable, 'render', customer_path, 'unknown', 600, tmp / 'customer.bgra'])
+    assert (tmp / 'customer.bgra').read_bytes() == expected_customer('en')
+    print('PASS v2 exact background/logo/localized corners, 600ms fade, both pages, guards, freeze and 10 locales')
+
+    for offset, value in ((8, 1), (44, 9), (48, 1), (52, 1), (68, 10001), (108, 0), (128, 601), (140, 1), (168, 401)):
+        damaged = bytearray(customer_pack)
+        struct.pack_into('<I', damaged, offset, value)
+        bad = tmp / 'bad-v2.pack'; bad.write_bytes(damaged)
+        assert subprocess.run([str(executable), '--theme', str(bad), '--check'],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0, offset
+    badraw = bytearray(raw)
+    struct.pack_into('<I', badraw, 32+16, 0xffffffff)
+    compressed = zlib.compress(badraw, 9)
+    header = bytearray(customer_pack[:builder.HEADER_BYTES])
+    struct.pack_into('<II', header, 36, len(compressed), zlib.crc32(badraw))
+    bad.write_bytes(header + compressed)
+    assert subprocess.run([str(executable), '--theme', str(bad), '--check'],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0
+    print('PASS v2 corrupt schema/scene/budget/catalog rejected without exposing unsafe pixels')
+
+    packs['d'] = customer_path
+    player = start()
+    initial, fds = exchange(b'P')
+    assert initial[2] == 1 and initial[4] == 0 and not fds
+    early, fds = exchange(b'R')
+    assert early[2] == 1 and early[5] < 2200 and not fds
+    set_clock(500)
+    time.sleep(.12)
+    settled_pans = len((tmp / 'pans').read_bytes())
+    for _ in range(5):
+        exchange(b'P'); time.sleep(.02)
+    assert len((tmp / 'pans').read_bytes()) == settled_pans, 'customer static hold kept refreshing'
+    set_clock(25000)
+    time.sleep(.08)
+    assert player.poll() is None
+    delayed, fds = exchange(b'P')
+    assert not fds and delayed[5] >= 25000 and delayed[6] == initial[6]
+    assert len((tmp / 'pans').read_bytes()) == settled_pans
+    run([executable, 'client', 'ready'], env=environment)
+    assert player.wait(timeout=2) == 0
+    assert not (tmp / 'modern').exists() and not (tmp / 'ready').exists()
+    player = start()
+    run([executable, 'client', 'error'], env=environment)
+    assert player.wait(timeout=2) == 0
+    print('PASS v2 real first-frame/2200ms minimum/static hold/delayed-ready/error handoff/FD/lease lifecycle')
 print('PASS unified boot bundle player; host tests are not board timing verification')

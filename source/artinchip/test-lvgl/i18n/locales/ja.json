@@ -47,6 +47,8 @@
     "This is the current controller result. Check the paper after printing.": "メインボードの現在の結果です。印刷後に用紙を確認してください。",
     "Wait a moment before printing again.": "少し待ってから再度印刷してください。",
     "Writing to USB": "USB に書き込み中",
-    "Input": "投入"
+    "Input": "投入",
+    "Initialization": "初期化",
+    "System": "システム"
   }
 }

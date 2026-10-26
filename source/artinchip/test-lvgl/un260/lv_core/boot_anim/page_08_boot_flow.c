@@ -1,7 +1,7 @@
 #include "un260/font/ui_message_font.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "boot_theme_config.h"
-#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D
+#if UI_BOOT_ANIM_THEME == UI_BOOT_ANIM_THEME_D && UI_BOOT_VARIANT == UI_BOOT_VARIANT_A
 #include "un260/lv_core/page_08_boot.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/boot/boot_service.h"

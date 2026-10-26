@@ -53,15 +53,18 @@ bool boot_theme_pack_load_fd(int fd, boot_theme_pack_t *pack)
     memset(pack,0,sizeof(*pack));
     if(fstat(fd,&info) || !S_ISREG(info.st_mode) ||
        info.st_size<(off_t)sizeof(h) || lseek(fd,0,SEEK_SET)<0 || !read_all(fd,h,sizeof(h)))goto done;
-    if(memcmp(h,"UNBTPK1\0",8) || word(h+8)!=1U || word(h+12)!=sizeof(h) ||
+    bool customer=!memcmp(h,"UNBTPK2\0",8) && word(h+8)==2U;
+    bool legacy=!memcmp(h,"UNBTPK1\0",8) && word(h+8)==1U;
+    if((!customer && !legacy) || word(h+12)!=sizeof(h) ||
        word(h+16)!=BOOT_THEME_WIDTH || word(h+20)!=BOOT_THEME_HEIGHT ||
-       (word(h+24)!=3U && word(h+24)!=4U) ||
+       (word(h+24)!=3U && word(h+24)!=4U) || (customer && word(h+24)!=4U) ||
        (word(h+28)!=BOOT_THEME_MODE_ANIMATION && word(h+28)!=BOOT_THEME_MODE_LOGO))goto done;
     uint32_t raw_bytes=word(h+32),packed_bytes=word(h+36),raw_crc=word(h+40);
     if(!packed_bytes || packed_bytes>BOOT_THEME_PACK_MAX_PACKED ||
-       raw_bytes>BOOT_THEME_PACK_MAX_RAW ||
-       info.st_size!=(off_t)(sizeof(h)+packed_bytes) || word(h+48)!=BOOT_THEME_BASE_BYTES)goto done;
-    pack->theme=word(h+24);pack->mode=word(h+28);pack->data_bytes=raw_bytes;
+       !raw_bytes || raw_bytes>BOOT_THEME_PACK_MAX_RAW ||
+       info.st_size!=(off_t)(sizeof(h)+packed_bytes) ||
+       (customer ? word(h+48)!=0U : word(h+48)!=BOOT_THEME_BASE_BYTES))goto done;
+    pack->version=customer?2U:1U;pack->theme=word(h+24);pack->mode=word(h+28);pack->data_bytes=raw_bytes;
     pack->language_count=word(h+44);pack->logo_offset=word(h+52);
     pack->language_table=word(h+56);pack->native_offset=word(h+60);pack->native_bytes=word(h+64);
     pack->min_show_ms=word(h+68);memcpy(pack->identity,h+72,32);
@@ -74,13 +77,22 @@ bool boot_theme_pack_load_fd(int fd, boot_theme_pack_t *pack)
         .dot_size=word(h+156),.dot_radius=word(h+160),.active_y=word(h+164),
         .active_h=word(h+168),.motion_scale=word(h+172)};
     if(word(h+176) || word(h+180) || pack->min_show_ms>10000U ||
-       pack->language_count<1U || pack->language_count>32U ||
-       pack->logo_offset!=BOOT_THEME_BASE_BYTES ||
-       pack->language_table!=pack->logo_offset+BOOT_THEME_BG_BYTES ||
-       pack->native_offset!=pack->language_table+pack->language_count*BOOT_THEME_LANGUAGE_BYTES ||
-       pack->native_offset>raw_bytes || pack->native_bytes!=raw_bytes-pack->native_offset ||
-       !valid_scene(&pack->scene))goto done;
-    if(pack->theme==3U && (pack->scene.active_y>82U || pack->scene.active_y+pack->scene.active_h<184U))goto done;
+       pack->language_count<1U || pack->language_count>32U)goto done;
+    if(customer) {
+        if(pack->mode!=BOOT_THEME_MODE_ANIMATION || pack->logo_offset || pack->language_table ||
+           pack->native_offset || pack->native_bytes || pack->min_show_ms!=2200U ||
+           pack->scene.entrance_start || pack->scene.entrance_duration!=600U ||
+           pack->scene.welcome_settled!=600U || pack->scene.active_y || pack->scene.active_h!=400U)goto done;
+        for(unsigned i=0;i<20U;i++)
+            if(i!=1U && i!=6U && i!=16U && word(h+104U+i*4U))goto done;
+    } else {
+        if(pack->logo_offset!=BOOT_THEME_BASE_BYTES ||
+           pack->language_table!=pack->logo_offset+BOOT_THEME_BG_BYTES ||
+           pack->native_offset!=pack->language_table+pack->language_count*BOOT_THEME_LANGUAGE_BYTES ||
+           pack->native_offset>raw_bytes || pack->native_bytes!=raw_bytes-pack->native_offset ||
+           !valid_scene(&pack->scene))goto done;
+        if(pack->theme==3U && (pack->scene.active_y>82U || pack->scene.active_y+pack->scene.active_h<184U))goto done;
+    }
     packed=malloc(packed_bytes);pack->data=malloc(raw_bytes);
     if(!packed || !pack->data || !read_all(fd,packed,packed_bytes))goto done;
     if(inflateInit(&stream)!=Z_OK)goto done;
@@ -88,6 +100,18 @@ bool boot_theme_pack_load_fd(int fd, boot_theme_pack_t *pack)
     stream.next_out=pack->data;stream.avail_out=raw_bytes;
     if(inflate(&stream,Z_FINISH)!=Z_STREAM_END || stream.total_out!=raw_bytes ||
        stream.total_in!=packed_bytes || crc32(0,pack->data,raw_bytes)!=raw_crc)goto done;
+    if(customer) {
+        if(!boot_customer_catalog_open(&pack->customer_catalog,pack->data,raw_bytes))goto done;
+        unsigned languages=0;
+        for(unsigned i=0;i<pack->customer_catalog.count;i++) {
+            const uint8_t *entry=pack->data+32U+i*64U;
+            if(word(entry)!=BOOT_CUSTOMER_ART_INIT)continue;
+            if(languages>=pack->language_count)goto done;
+            memcpy(pack->customer_tags[languages++],entry+40U,16U);
+        }
+        if(languages!=pack->language_count || strcmp(pack->customer_tags[0],"en"))goto done;
+        ok=true;goto done;
+    }
     for(unsigned i=0;i<pack->language_count;i++) {
         const uint8_t *entry=pack->data+pack->language_table+i*BOOT_THEME_LANGUAGE_BYTES;
         uint32_t offset=word(entry+16),w=word(entry+20),height=word(entry+24),y=word(entry+28);
@@ -113,6 +137,17 @@ bool boot_theme_pack_load_path(const char *path, boot_theme_pack_t *pack)
 bool boot_theme_pack_select_language(boot_theme_pack_t *pack,const char *tag)
 {
     if(!pack->data || pack->frozen)return false;
+    if(pack->version==2U) {
+        unsigned index=0;
+        if(tag)for(unsigned i=0;i<pack->language_count;i++)
+            if(!strcmp(tag,pack->customer_tags[i])){index=i;break;}
+        const unsigned ids[4]={BOOT_CUSTOMER_ART_BG,BOOT_CUSTOMER_ART_LOGO_LARGE,
+            BOOT_CUSTOMER_ART_VERSION,BOOT_CUSTOMER_ART_POWERED};
+        for(unsigned i=0;i<4U;i++)
+            if(!boot_customer_catalog_find(&pack->customer_catalog,ids[i],pack->customer_tags[index],&pack->customer[i]))return false;
+        pack->language=index;
+        return true;
+    }
     unsigned index=0;
     if(tag)for(unsigned i=0;i<pack->language_count;i++) {
         const char *entry=(const char*)pack->data+pack->language_table+i*BOOT_THEME_LANGUAGE_BYTES;
@@ -136,6 +171,28 @@ bool boot_theme_pack_freeze(boot_theme_pack_t *pack)
 {
     if(!pack->data)return false;
     if(pack->frozen)return true;
+    if(pack->version==2U) {
+        size_t bytes=0;
+        for(unsigned i=0;i<4U;i++) {
+            const boot_customer_image_t *art=&pack->customer[i];
+            if(!art->data)return false;
+            bytes+=(size_t)art->width*art->height*(art->format==BOOT_CUSTOMER_BGRA?4U:1U);
+        }
+        /* Keep the prepared view if compaction cannot allocate. Rendering is
+         * already valid; a memory-saving optimization must not cancel it. */
+        uint8_t *compact=malloc(bytes);
+        if(compact) {
+            size_t cursor=0;
+            for(unsigned i=0;i<4U;i++) {
+                boot_customer_image_t *art=&pack->customer[i];
+                size_t size=(size_t)art->width*art->height*(art->format==BOOT_CUSTOMER_BGRA?4U:1U);
+                memcpy(compact+cursor,art->data,size);art->data=compact+cursor;cursor+=size;
+            }
+            free(pack->data);pack->data=compact;pack->data_bytes=bytes;
+        }
+        memset(&pack->customer_catalog,0,sizeof(pack->customer_catalog));
+        pack->frozen=true;return true;
+    }
     size_t used=BOOT_THEME_BASE_BYTES;
     if(pack->mode==BOOT_THEME_MODE_LOGO) {
         memmove(pack->data,pack->data+pack->logo_offset,BOOT_THEME_BG_BYTES);
@@ -145,4 +202,18 @@ bool boot_theme_pack_freeze(boot_theme_pack_t *pack)
     if(smaller)pack->data=smaller;
     pack->data_bytes=used;pack->frozen=true;
     return true;
+}
+
+size_t boot_theme_pack_canvas_bytes(const boot_theme_pack_t *pack)
+{
+    if(!pack || !pack->data)return 0;
+    if(pack->version==2U) {
+        size_t largest=0;
+        for(unsigned i=1;i<4U;i++) {
+            size_t bytes=(size_t)pack->customer[i].width*pack->customer[i].height*4U;
+            if(bytes>largest)largest=bytes;
+        }
+        return largest;
+    }
+    return pack->mode==BOOT_THEME_MODE_ANIMATION?(size_t)500U*4U*pack->scene.active_h:0;
 }

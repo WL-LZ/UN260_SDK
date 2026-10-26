@@ -3713,6 +3713,8 @@
     "This is the current controller result. Check the paper after printing.": "Aktualny wynik płyty głównej. Po drukowaniu sprawdź papier.",
     "Wait a moment before printing again.": "Poczekaj chwilę przed kolejnym drukiem.",
     "Writing to USB": "Zapis na USB",
-    "Input": "Podawanie"
+    "Input": "Podawanie",
+    "Initialization": "Inicjalizacja",
+    "System": "System"
   }
 }

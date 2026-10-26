@@ -44,6 +44,15 @@ def source_theme(root):
     raise ValueError('the unified early boot bundle supports source theme C/D; current UI theme A/B is unsupported')
 
 
+
+def source_variant(root):
+    """Read the paired welcome/self-test default used by the application."""
+    source = (root / 'un260/lv_core/boot_anim/boot_theme_config.h').read_text()
+    matches = re.findall(r'(?m)^[ \t]*#ifndef[ \t]+UI_BOOT_VARIANT[ \t]*\r?\n[ \t]*#define[ \t]+UI_BOOT_VARIANT[ \t]+(UI_BOOT_VARIANT_[AB]|[12])[ \t]*\r?$', source)
+    if len(matches) != 1:
+        raise ValueError('cannot determine UI_BOOT_VARIANT A/B from boot_theme_config.h')
+    return 'a' if matches[0] in ('UI_BOOT_VARIANT_A', '1') else 'b'
+
 def logo_source(root, value):
     if value is None:
         return None
@@ -64,6 +73,7 @@ def logo_source(root, value):
 
 
 def read_config(root, path=None, theme_override=None):
+    source_variant(root)
     path = path or root / 'un260/boot/boot_bundle_config.json'
     if path.stat().st_size > 4096:
         raise ValueError('boot bundle configuration exceeds 4096 bytes')
@@ -112,7 +122,7 @@ def scene(root, theme):
     return result, values['BOOT_WELCOME_SETTLED']
 
 
-def theme_pack(root, theme='d', mode='animation', logo_path=None):
+def legacy_theme_pack(root, theme='d', mode='animation', logo_path=None):
     raw_path = root / ('aic_ui/generated_assets/boot_theme_' + theme + '/boot-light.bin')
     raw_file = raw_path.read_bytes()
     assert raw_file[:8] == b'UNBOOT1\0' and len(raw_file) == BASE_BYTES + 16
@@ -139,6 +149,40 @@ def theme_pack(root, theme='d', mode='animation', logo_path=None):
              logo_offset, table_offset, native_offset, len(native), settled if mode == 'animation' else 0]
     identity = hashlib.sha256(struct.pack('<20I', *timeline) + payload).digest()
     header = b'UNBTPK1\0' + struct.pack('<16I', *words) + identity + struct.pack('<20I', *timeline)
+    assert len(header) == HEADER_BYTES
+    return header + packed, {'raw_bytes': len(payload), 'packed_bytes': len(packed), 'languages': tags}
+
+
+def theme_pack(root, theme='d', mode='animation', logo_path=None):
+    # This selection shares the application header. Historical renderer D
+    # supports both product variants; static/custom Logo and C stay unchanged.
+    variant = source_variant(root)
+    if theme != 'd' or mode == 'logo' or variant == 'a':
+        return legacy_theme_pack(root, theme, mode, logo_path)
+    return customer_theme_pack(root)
+
+
+def customer_theme_pack(root):
+    """Build B artwork explicitly for compatibility tests, not a CLI override."""
+    import sys
+    sys.path.insert(0, str(root / 'tools'))
+    from build_customer_boot_pack import customer_payload
+    payload = customer_payload(root)
+    count = struct.unpack_from('<I', payload, 12)[0]
+    tags = []
+    for i in range(count):
+        entry = payload[32 + i*64:32 + (i+1)*64]
+        if struct.unpack_from('<I', entry)[0] == 9:
+            tags.append(entry[40:56].split(b'\0', 1)[0].decode('ascii'))
+    packed = zlib.compress(payload, 9)
+    assert len(payload) <= MAX_RAW and len(packed) <= MAX_PACKED
+    timeline = [0]*20
+    timeline[1] = timeline[6] = 600  # Shared welcome fade; then static Logo.
+    timeline[16] = 400
+    words = [2, HEADER_BYTES, 1280, 400, 4, 1, len(payload), len(packed),
+             zlib.crc32(payload), len(tags), 0, 0, 0, 0, 0, 2200]
+    identity = hashlib.sha256(struct.pack('<20I', *timeline) + payload).digest()
+    header = b'UNBTPK2\0' + struct.pack('<16I', *words) + identity + struct.pack('<20I', *timeline)
     assert len(header) == HEADER_BYTES
     return header + packed, {'raw_bytes': len(payload), 'packed_bytes': len(packed), 'languages': tags}
 
@@ -190,11 +234,15 @@ def main():
     parser.add_argument('--output', type=Path)
     parser.add_argument('--config', type=Path)
     parser.add_argument('--validate-config', action='store_true')
+    parser.add_argument('--print-variant', action='store_true', help='print the source-selected product variant for CMake')
     parser.add_argument('--theme', choices=['c', 'd'])
     parser.add_argument('--mode', choices=['animation', 'logo'])
     parser.add_argument('--logo', type=Path)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
+    if args.print_variant:
+        print(source_variant(root))
+        return
     theme, mode, logo = read_config(root, args.config, args.theme)
     if args.mode:
         mode = args.mode
@@ -205,7 +253,7 @@ def main():
             raise ValueError('--logo must be inside the test-lvgl source tree') from error
         logo = logo_source(root, relative.as_posix())
     if args.validate_config:
-        print('BOOT_CONFIG theme=' + theme + ' mode=' + mode + ' logo_surface=' + (str(logo) if logo else 'default'))
+        print('BOOT_CONFIG theme=' + theme + ' variant=' + source_variant(root) + ' mode=' + mode + ' logo_surface=' + (str(logo) if logo else 'default'))
         return
     if not args.player or not args.output:
         parser.error('--player and --output are required to publish a boot bundle')

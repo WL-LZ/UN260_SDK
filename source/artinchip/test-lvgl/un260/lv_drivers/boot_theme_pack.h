@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "un260/boot/boot_customer_catalog.h"
 
 /* Disk fields are little endian, explicitly decoded rather than struct-cast.
  * The versioned player and this pack are published as one immutable bundle. */
@@ -28,11 +29,14 @@ typedef struct {
 typedef struct {
     uint8_t *data;
     size_t data_bytes;
-    uint32_t theme, mode, language_count, language_table, native_offset, native_bytes;
+    uint32_t version, theme, mode, language_count, language_table, native_offset, native_bytes;
     uint32_t logo_offset, min_show_ms, language;
     bool frozen;
     uint8_t identity[32];
     boot_theme_scene_t scene;
+    boot_customer_catalog_t customer_catalog;
+    boot_customer_image_t customer[4]; /* background, logo, version, attribution */
+    char customer_tags[32][16];
 } boot_theme_pack_t;
 
 /* Neither loader owns fd. On any failure pack is reset and its memory freed.
@@ -43,5 +47,6 @@ bool boot_theme_pack_select_language(boot_theme_pack_t *pack, const char *tag);
 /* Finalize mode and locale once; release unused Logo/language pixels before
  * the full application starts. A frozen snapshot cannot switch language. */
 bool boot_theme_pack_freeze(boot_theme_pack_t *pack);
+size_t boot_theme_pack_canvas_bytes(const boot_theme_pack_t *pack);
 void boot_theme_pack_free(boot_theme_pack_t *pack);
 #endif
