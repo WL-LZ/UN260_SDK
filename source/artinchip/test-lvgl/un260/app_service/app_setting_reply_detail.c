@@ -13,6 +13,7 @@
 #include "un260/lv_core/page_26_set_aging.h"
 #include "un260/lv_core/page_27_set_cfd_level.h"
 #include "un260/lv_core/page_30_set_factory.h"
+#include "un260/lv_core/page_40_set_impeller.h"
 #include "un260/lv_drivers/lv_drivers.h"
 #include "un260/machine_state/machine_state.h"
 #include "un260/print/print_config.h"
@@ -209,6 +210,17 @@ static void setting_reply_handle_print(const uint8_t *buf, uint8_t len)
             if (!saving) app_setting_notice_result("settings.receipt", UI_N_("Receipt settings"), result.success);
 }
 
+static void setting_reply_handle_impeller(const uint8_t *buf, uint8_t len)
+{
+    setting_impeller_result_t result;
+    if (!setting_service_take_impeller_speed_reply(buf, len, &result)) return;
+    if (result.success) machine_state_confirm_impeller_speed(result.value);
+    else if (result.reading) machine_state_invalidate_impeller_speed();
+    ui_page_40_set_impeller_on_update(&result);
+    if (!result.reading)
+        app_setting_notice_result("settings.impeller", UI_N_("Impeller motor speed"), result.success);
+}
+
 bool app_setting_reply_handle_detail(uint8_t cmd,
                                      const uint8_t *buf,
                                      uint8_t len)
@@ -251,6 +263,9 @@ bool app_setting_reply_handle_detail(uint8_t cmd,
             uart_debug_printf("0x45 cfd level info: currency=%c%c%c\n", buf[4], buf[5], buf[6]);
             ui_page_27_set_cfd_level_on_info(&buf[4], (uint16_t)(len - 4));
         }
+        return true;
+    case 0x4B:
+        setting_reply_handle_impeller(buf, len);
         return true;
     case 0x46:
         if (len < 6) uart_debug_printf("0x46 invalid len=%d\n", len);

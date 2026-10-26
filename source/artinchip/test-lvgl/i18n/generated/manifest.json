@@ -1,11 +1,11 @@
 {
   "inputs": {
-    "catalog_sha256": "159c89165f870249230b0b597d7630b1c9b37a92c119bfa946d07d43c60e42ba",
+    "catalog_sha256": "5aa4a57acea0f7258a876c95ff18531611a4e2d7575b148b2ccfde7956e44af5",
     "generator_sha256": "0dd65b71d0337e6cd7a3be42421abdb07a466e8c17a535cdb6fc41eafcdd1091",
     "upstream_sha256": "e5861672ebb1a109a08444e98f11e7ba440658b29f9bebf99274fce6367b36eb"
   },
   "outputs": {
-    "lv_i18n.c": "22489f50e7fe1724b99fdf0433791f7ed12571f7b3c7a503bf433b0bd2fee703",
+    "lv_i18n.c": "ffd44f5fa5a247ecfd62a91ae05a176e3899046d8f89f3d2fc096d580b918417",
     "lv_i18n.h": "0b0285b1cbed9280f77a92812a420a7bc5f5c6cd2dff125365fece77895ac6bd",
     "ui_locale_registry.inc": "d29dd31494942b54ef6a7b9a49c4501a43a98dfd56c8ecba4e178dae6fd2fbbe",
     "ui_text_keys.inc": "f3e56956d35e432a55082be26e9cca117f35513cfebc35463ff8145481d97b74"

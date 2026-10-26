@@ -46,7 +46,7 @@ int main(void){
 '''
 with tempfile.TemporaryDirectory(prefix='un260-notice-policy-') as temp:
     temp=Path(temp);source=temp/'observer.c';source.write_text(code)
-    groups=[('observer',[source,root/'un260/app_service/setting_service.c',root/'un260/protocol/protocol_request.c',root/'un260/protocol/mode_codec.c']),
+    groups=[('observer',[source,root/'un260/app_service/setting_service.c',root/'un260/protocol/protocol_request.c',root/'un260/protocol/mode_codec.c',root/'un260/machine_state/machine_state.c']),
             ('queue',with_i18n([root/'tools/tests/test_ui_notice_state.c',root/'un260/lv_components/ui_notice_state.c'],root))]
     for name,sources in groups:
         exe=temp/name

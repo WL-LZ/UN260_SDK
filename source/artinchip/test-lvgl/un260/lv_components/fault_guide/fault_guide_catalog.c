@@ -91,6 +91,10 @@ void fault_guide_lookup(machine_fault_key_t key, mf_guide_t *g)
             body = notes ? T("Notes remain in the stacker pocket. Cannot change the batch setting.") :
                 T("Batch change rejected. Previous setting retained.");
             break;
+        case 0x4B:
+            title = T("Impeller motor speed");
+            body = T("Setting rejected. Previous value retained.");
+            break;
         default:
             title = T("Check machine");
             body = T("Setting rejected. Previous value retained.");
@@ -196,6 +200,7 @@ void fault_guide_format_code(machine_fault_key_t key, char *buffer, size_t size)
     case MACHINE_FAULT_PRESET: snprintf(buffer,size,"0x06/0x04"); break;
     case MACHINE_FAULT_SETTING:
         if (key.code == 0x3A) snprintf(buffer,size,"0x3A/0x00..03/0x02");
+        else if (key.code == 0x4B) snprintf(buffer,size,"0x4B/0x03");
         else snprintf(buffer,size,"0x%02X/0x02",key.code);
         break;
     default: snprintf(buffer,size,"0x0F/0x%02X",key.code); break;

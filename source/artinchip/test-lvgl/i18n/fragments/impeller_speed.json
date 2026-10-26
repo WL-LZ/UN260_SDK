@@ -1,0 +1,112 @@
+{
+  "en": {
+    "Impeller motor speed": "Impeller motor speed",
+    "Range: 15-50. Default: 30.": "Range: 15-50. Default: 30.",
+    "Adjust, then save to apply.": "Adjust, then save to apply.",
+    "Confirmed speed: %u": "Confirmed speed: %u",
+    "Speed not confirmed": "Speed not confirmed",
+    "Enter a value from 15 to 50.": "Enter a value from 15 to 50.",
+    "Read": "Read",
+    "Default": "Default",
+    "Could not read the setting. Try again.": "Could not read the setting. Try again."
+  },
+  "zh-Hans": {
+    "Impeller motor speed": "叶轮电机调速",
+    "Range: 15-50. Default: 30.": "范围：15-50。默认：30。",
+    "Adjust, then save to apply.": "调整后点击保存生效。",
+    "Confirmed speed: %u": "已确认速度：%u",
+    "Speed not confirmed": "速度尚未确认",
+    "Enter a value from 15 to 50.": "请输入 15 到 50 之间的数值。",
+    "Read": "读取",
+    "Default": "默认",
+    "Could not read the setting. Try again.": "读取设置失败，请重试。"
+  },
+  "ko": {
+    "Impeller motor speed": "임펠러 모터 속도",
+    "Range: 15-50. Default: 30.": "범위: 15-50. 기본값: 30.",
+    "Adjust, then save to apply.": "조정 후 저장하면 적용됩니다.",
+    "Confirmed speed: %u": "확인된 속도: %u",
+    "Speed not confirmed": "속도 미확인",
+    "Enter a value from 15 to 50.": "15에서 50 사이의 값을 입력하세요.",
+    "Read": "읽기",
+    "Default": "기본값",
+    "Could not read the setting. Try again.": "설정을 읽지 못했습니다. 다시 시도하세요."
+  },
+  "ja": {
+    "Impeller motor speed": "羽根車モーター速度",
+    "Range: 15-50. Default: 30.": "範囲：15-50。初期値：30。",
+    "Adjust, then save to apply.": "調整後、保存して適用します。",
+    "Confirmed speed: %u": "確認済み速度：%u",
+    "Speed not confirmed": "速度未確認",
+    "Enter a value from 15 to 50.": "15から50の値を入力してください。",
+    "Read": "読込",
+    "Default": "初期値",
+    "Could not read the setting. Try again.": "設定を読み取れませんでした。再試行してください。"
+  },
+  "ar": {
+    "Impeller motor speed": "سرعة محرك الدفاعة",
+    "Range: 15-50. Default: 30.": "النطاق: 15-50. الافتراضي: 30.",
+    "Adjust, then save to apply.": "عدّل ثم احفظ لتطبيق التغيير.",
+    "Confirmed speed: %u": "السرعة المؤكدة: %u",
+    "Speed not confirmed": "السرعة غير مؤكدة",
+    "Enter a value from 15 to 50.": "أدخل قيمة من 15 إلى 50.",
+    "Read": "قراءة",
+    "Default": "افتراضي",
+    "Could not read the setting. Try again.": "تعذرت قراءة الإعداد. حاول مجدداً."
+  },
+  "fr": {
+    "Impeller motor speed": "Vitesse du moteur à palettes",
+    "Range: 15-50. Default: 30.": "Plage : 15-50. Par défaut : 30.",
+    "Adjust, then save to apply.": "Réglez, puis enregistrez pour appliquer.",
+    "Confirmed speed: %u": "Vitesse confirmée : %u",
+    "Speed not confirmed": "Vitesse non confirmée",
+    "Enter a value from 15 to 50.": "Saisissez une valeur de 15 à 50.",
+    "Read": "Lire",
+    "Default": "Par défaut",
+    "Could not read the setting. Try again.": "Lecture du réglage impossible. Réessayez."
+  },
+  "de": {
+    "Impeller motor speed": "Flügelrad-Motordrehzahl",
+    "Range: 15-50. Default: 30.": "Bereich: 15-50. Standard: 30.",
+    "Adjust, then save to apply.": "Einstellen und zum Übernehmen speichern.",
+    "Confirmed speed: %u": "Bestätigte Drehzahl: %u",
+    "Speed not confirmed": "Drehzahl nicht bestätigt",
+    "Enter a value from 15 to 50.": "Geben Sie einen Wert von 15 bis 50 ein.",
+    "Read": "Lesen",
+    "Default": "Standard",
+    "Could not read the setting. Try again.": "Einstellung konnte nicht gelesen werden. Erneut versuchen."
+  },
+  "ru": {
+    "Impeller motor speed": "Скорость крыльчатки",
+    "Range: 15-50. Default: 30.": "Диапазон: 15-50. По умолчанию: 30.",
+    "Adjust, then save to apply.": "Измените и сохраните для применения.",
+    "Confirmed speed: %u": "Подтверждённая скорость: %u",
+    "Speed not confirmed": "Скорость не подтверждена",
+    "Enter a value from 15 to 50.": "Введите значение от 15 до 50.",
+    "Read": "Читать",
+    "Default": "Сброс",
+    "Could not read the setting. Try again.": "Не удалось прочитать настройку. Повторите попытку."
+  },
+  "tr": {
+    "Impeller motor speed": "Çark motoru hızı",
+    "Range: 15-50. Default: 30.": "Aralık: 15-50. Varsayılan: 30.",
+    "Adjust, then save to apply.": "Ayarlayın, sonra uygulamak için kaydedin.",
+    "Confirmed speed: %u": "Onaylanan hız: %u",
+    "Speed not confirmed": "Hız onaylanmadı",
+    "Enter a value from 15 to 50.": "15 ile 50 arasında bir değer girin.",
+    "Read": "Oku",
+    "Default": "Varsayılan",
+    "Could not read the setting. Try again.": "Ayar okunamadı. Yeniden deneyin."
+  },
+  "pl": {
+    "Impeller motor speed": "Prędkość silnika wirnika",
+    "Range: 15-50. Default: 30.": "Zakres: 15-50. Domyślnie: 30.",
+    "Adjust, then save to apply.": "Zmień i zapisz, aby zastosować.",
+    "Confirmed speed: %u": "Potwierdzona prędkość: %u",
+    "Speed not confirmed": "Prędkość niepotwierdzona",
+    "Enter a value from 15 to 50.": "Wpisz wartość od 15 do 50.",
+    "Read": "Odczyt",
+    "Default": "Domyślne",
+    "Could not read the setting. Try again.": "Nie udało się odczytać ustawienia. Spróbuj ponownie."
+  }
+}

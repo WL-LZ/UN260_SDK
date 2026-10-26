@@ -20,6 +20,8 @@ static machine_state_snapshot_t g_machine_state = {
     .double_note_level = DOUBLE_NOTE_LEVEL_MIN,
     .flap_position = FLAP_POSITION_UP,
     .reject_pocket_max = REJECT_POCKET_MIN_CAPACITY,
+    .impeller_speed = IMPELLER_SPEED_DEFAULT,
+    .impeller_speed_known = false,
 };
 
 static const char *const g_machine_start_error_desc[] = {
@@ -215,6 +217,28 @@ void machine_state_confirm_reject_pocket_max(uint8_t capacity)
 uint8_t machine_state_reject_pocket_max(void)
 {
     return g_machine_state.reject_pocket_max;
+}
+
+void machine_state_confirm_impeller_speed(uint8_t speed)
+{
+    if (speed > IMPELLER_SPEED_MAX) return;
+    g_machine_state.impeller_speed = speed;
+    g_machine_state.impeller_speed_known = true;
+}
+
+void machine_state_invalidate_impeller_speed(void)
+{
+    g_machine_state.impeller_speed_known = false;
+}
+
+uint8_t machine_state_impeller_speed(void)
+{
+    return g_machine_state.impeller_speed;
+}
+
+bool machine_state_impeller_speed_known(void)
+{
+    return g_machine_state.impeller_speed_known;
 }
 
 const char *machine_start_error_desc(uint8_t code)

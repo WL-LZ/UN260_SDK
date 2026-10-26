@@ -25,19 +25,19 @@
   },
   {
     "file": "un260/app_service/app_command_runtime.c",
-    "line": 122,
+    "line": 123,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_WARNING, \"count.add-reset\", UI_N_(\"Clear\"), UI_N_(\"Please try again.\")"
   },
   {
     "file": "un260/app_service/app_counting_runtime.c",
-    "line": 233,
+    "line": 236,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_WARNING,\"counting.report\",UI_N_(\"Counting report\"),text"
   },
   {
     "file": "un260/app_service/app_counting_runtime.c",
-    "line": 267,
+    "line": 270,
     "api": "ui_notice_post_message",
     "args": "UI_NOTICE_WARNING,\"counting.report\",UI_N_(\"Counting report\"),&message"
   },
@@ -199,103 +199,115 @@
   },
   {
     "file": "un260/app_service/app_setting_reply_detail.c",
-    "line": 73,
+    "line": 74,
     "api": "app_setting_notice_result",
     "args": "\"settings.double_note\", UI_N_(\"Double-note sensitivity\"), result.success"
   },
   {
     "file": "un260/app_service/app_setting_reply_detail.c",
-    "line": 111,
+    "line": 112,
     "api": "app_setting_notice_result",
     "args": "\"settings.serial_number\", UI_N_(\"Serial number\"), result.success"
   },
   {
     "file": "un260/app_service/app_setting_reply_detail.c",
-    "line": 127,
+    "line": 128,
     "api": "app_setting_notice_result",
     "args": "\"settings.flap\", UI_N_(\"Flap position\"), result.success"
   },
   {
     "file": "un260/app_service/app_setting_reply_detail.c",
-    "line": 161,
+    "line": 162,
     "api": "app_setting_notice_result",
     "args": "\"settings.reject_pocket\", UI_N_(\"Reject capacity\"), result.success"
   },
   {
     "file": "un260/app_service/app_setting_reply_detail.c",
-    "line": 168,
+    "line": 169,
     "api": "app_setting_notice_result",
     "args": "\"settings.reject_pocket\", UI_N_(\"Reject capacity\"), result.success"
   },
   {
     "file": "un260/app_service/app_setting_reply_detail.c",
-    "line": 183,
+    "line": 184,
     "api": "app_setting_notice_result",
     "args": "\"settings.receipt\", UI_N_(\"Receipt settings\"), result.success"
   },
   {
     "file": "un260/app_service/app_setting_reply_detail.c",
-    "line": 209,
+    "line": 210,
     "api": "app_setting_notice_result",
     "args": "\"settings.receipt\", UI_N_(\"Receipt settings\"), result.success"
+  },
+  {
+    "file": "un260/app_service/app_setting_reply_detail.c",
+    "line": 221,
+    "api": "app_setting_notice_result",
+    "args": "\"settings.impeller\", UI_N_(\"Impeller motor speed\"), result.success"
   },
   {
     "file": "un260/app_service/app_setting_runtime.c",
-    "line": 136,
+    "line": 139,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_WARNING, \"settings.work_mode\", UI_N_(\"Work mode\"), work_mode_service_status_msgid()"
   },
   {
     "file": "un260/app_service/app_setting_runtime.c",
-    "line": 163,
+    "line": 166,
     "api": "ui_notice_clear",
     "args": "\"settings.add\""
   },
   {
     "file": "un260/app_service/app_setting_runtime.c",
-    "line": 170,
+    "line": 173,
     "api": "app_setting_notice_timeout",
     "args": "notices[i].key, notices[i].title"
   },
   {
     "file": "un260/app_service/app_setting_runtime.c",
-    "line": 176,
+    "line": 179,
     "api": "app_setting_notice_timeout",
     "args": "\"settings.batch\", UI_N_(\"Batch\")"
   },
   {
     "file": "un260/app_service/app_setting_runtime.c",
-    "line": 182,
+    "line": 185,
     "api": "app_setting_notice_timeout",
     "args": "\"settings.double_note\", UI_N_(\"Double-note sensitivity\")"
   },
   {
     "file": "un260/app_service/app_setting_runtime.c",
-    "line": 188,
+    "line": 191,
     "api": "app_setting_notice_timeout",
     "args": "\"settings.flap\", UI_N_(\"Flap position\")"
   },
   {
     "file": "un260/app_service/app_setting_runtime.c",
-    "line": 194,
+    "line": 197,
     "api": "app_setting_notice_timeout",
     "args": "\"settings.reject_pocket\", UI_N_(\"Reject capacity\")"
   },
   {
     "file": "un260/app_service/app_setting_runtime.c",
-    "line": 201,
+    "line": 204,
+    "api": "app_setting_notice_timeout",
+    "args": "\"settings.impeller\", UI_N_(\"Impeller motor speed\")"
+  },
+  {
+    "file": "un260/app_service/app_setting_runtime.c",
+    "line": 211,
     "api": "app_setting_notice_timeout",
     "args": "\"settings.serial_number\", UI_N_(\"Serial number\")"
   },
   {
     "file": "un260/app_service/app_setting_runtime.c",
-    "line": 221,
+    "line": 231,
     "api": "app_setting_notice_timeout",
     "args": "\"settings.receipt\", UI_N_(\"Receipt settings\")"
   },
   {
     "file": "un260/app_service/app_setting_runtime.c",
-    "line": 238,
+    "line": 248,
     "api": "app_setting_notice_timeout",
     "args": "\"settings.data_collection\", UI_N_(\"Data collection\")"
   },
@@ -481,37 +493,37 @@
   },
   {
     "file": "un260/lv_components/lv_quick_controls.c",
-    "line": 233,
+    "line": 236,
     "api": "app_local_setting_apply",
     "args": "APP_LOCAL_LAYOUT,!page_01_main_layout_is_enabled(),0"
   },
   {
     "file": "un260/lv_components/lv_quick_controls.c",
-    "line": 234,
+    "line": 237,
     "api": "app_local_setting_apply",
     "args": "APP_LOCAL_GESTURES,!gesture_service_enabled(),0"
   },
   {
     "file": "un260/lv_components/lv_quick_controls.c",
-    "line": 237,
+    "line": 240,
     "api": "app_local_setting_apply",
     "args": "APP_LOCAL_FAULT_POPUP,!fault_popup_get_auto_enabled(),0"
   },
   {
     "file": "un260/lv_components/lv_quick_controls.c",
-    "line": 238,
+    "line": 241,
     "api": "app_local_setting_apply",
     "args": "APP_LOCAL_TOP_POPUP,!ui_notice_get_enabled(),0"
   },
   {
     "file": "un260/lv_components/lv_quick_controls.c",
-    "line": 238,
+    "line": 241,
     "api": "ui_notice_get_enabled",
     "args": ""
   },
   {
     "file": "un260/lv_components/lv_quick_controls.c",
-    "line": 239,
+    "line": 242,
     "api": "app_local_setting_apply",
     "args": "APP_LOCAL_TOUCH,!touch_feedback_enabled(),0"
   },
@@ -661,31 +673,31 @@
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 639,
+    "line": 641,
     "api": "ui_notice_post_message",
     "args": "UI_NOTICE_WARNING,\"menu.operation\",UI_N_(\"Menu\"),workspace_store_message_info()"
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 641,
+    "line": 643,
     "api": "app_ui_runtime_notice_started",
     "args": "APP_UI_NOTICE_BATCH_SAVE,UI_N_(\"Saving...\")"
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 651,
+    "line": 653,
     "api": "app_ui_runtime_notice_started",
     "args": "APP_UI_NOTICE_BATCH_APPLY,UI_N_(\"Saving...\")"
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 679,
+    "line": 681,
     "api": "app_ui_runtime_notice_started",
     "args": "APP_UI_NOTICE_WORKSPACE_STORE,UI_N_(\"Looking for USB photos...\")"
   },
   {
     "file": "un260/lv_core/page_03_menu.c",
-    "line": 774,
+    "line": 776,
     "api": "ui_notice_post_text",
     "args": "UI_NOTICE_ERROR,\"settings.batch\",UI_N_(\"Batch\"),UI_N_(\"Batch was saved, but could not be sent. Use this preset to retry.\")"
   },
@@ -1072,6 +1084,18 @@
     "line": 290,
     "api": "ui_notice_post_message",
     "args": "ok?UI_NOTICE_SUCCESS:UI_NOTICE_ERROR,\"settings.standby\",UI_N_(\"Standby settings\"),standby_store_message_info()"
+  },
+  {
+    "file": "un260/lv_core/page_40_set_impeller.c",
+    "line": 66,
+    "api": "ui_notice_post_text",
+    "args": "UI_NOTICE_WARNING, \"settings.impeller\", UI_N_(\"Impeller motor speed\"), UI_N_(\"Enter a value from 15 to 50.\")"
+  },
+  {
+    "file": "un260/lv_core/page_40_set_impeller.c",
+    "line": 85,
+    "api": "ui_notice_post_text",
+    "args": "UI_NOTICE_ERROR, \"settings.impeller\", UI_N_(\"Impeller motor speed\"), UI_N_(\"Request not sent. Try again.\")"
   },
   {
     "file": "un260/lv_core/page_calculator.c",

@@ -89,6 +89,22 @@ bool setting_service_take_reject_pocket_max_result(uint8_t status, setting_value
 bool setting_service_take_reject_pocket_max_timeout(setting_value_result_t *result);
 void setting_service_clear_reject_pocket_max_request(void);
 
+typedef struct {
+    bool reading;
+    bool success;
+    bool timeout;
+    uint8_t value; /* Valid only on success. */
+} setting_impeller_result_t;
+
+/* Read and write share one 0x4B owner; callers may edit/leave while pending.
+ * A confirmed same-value write succeeds without sending a request. */
+bool setting_service_request_impeller_speed_read(void);
+bool setting_service_request_impeller_speed(uint8_t target);
+bool setting_service_impeller_speed_is_pending(void);
+bool setting_service_take_impeller_speed_reply(const uint8_t *buf, uint8_t len,
+                                                setting_impeller_result_t *result);
+bool setting_service_take_impeller_speed_timeout(setting_impeller_result_t *result);
+
 bool setting_service_request_aging_start(void);
 bool setting_service_take_aging_result(uint8_t status,
                                        setting_action_result_t *result);

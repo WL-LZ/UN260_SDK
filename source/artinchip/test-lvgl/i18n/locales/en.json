@@ -1126,6 +1126,7 @@
     "Infrared image feature 8": "Infrared image feature 8",
     "Infrared image feature 9": "Infrared image feature 9",
     "Infrared security thread": "Infrared security thread",
+    "Initialization": "Initialization",
     "Initializing DDR controller... [  OK  ]": "Initializing DDR controller... [  OK  ]",
     "Initializing hardware interfaces... [  OK  ]": "Initializing hardware interfaces... [  OK  ]",
     "Input": "Input",
@@ -1783,6 +1784,7 @@
     "RUN": "RUN",
     "RX: %u": "RX: %u",
     "RX: 0": "RX: 0",
+    "Range: 15-50. Default: 30.": "Range: 15-50. Default: 30.",
     "Read config parameters": "Read config parameters",
     "Read config parameters ": "Read config parameters ",
     "Read config parameters failed": "Read config parameters failed",
@@ -2298,6 +2300,7 @@
     "Switching workspace...": "Switching workspace...",
     "Switzerland": "Switzerland",
     "Symbolic links are not allowed in upgrade payloads": "Symbolic links are not allowed in upgrade payloads",
+    "System": "System",
     "System OK": "System OK",
     "System upgrade completed successfully": "System upgrade completed successfully",
     "T O T A L": "T O T A L",
@@ -3448,8 +3451,6 @@
     "on": "on",
     "pcs": "pcs",
     "setting": "setting",
-    "settings": "settings",
-    "Initialization": "Initialization",
-    "System": "System"
+    "settings": "settings"
   }
 }

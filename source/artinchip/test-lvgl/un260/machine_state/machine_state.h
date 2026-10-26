@@ -20,6 +20,8 @@ typedef struct {
     uint8_t double_note_level;
     uint8_t flap_position;
     uint8_t reject_pocket_max;
+    uint8_t impeller_speed;
+    bool impeller_speed_known;
 } machine_state_snapshot_t;
 
 void machine_state_get_snapshot(machine_state_snapshot_t *snapshot);
@@ -66,6 +68,13 @@ uint8_t machine_state_flap_position(void);
 
 void machine_state_confirm_reject_pocket_max(uint8_t capacity);
 uint8_t machine_state_reject_pocket_max(void);
+
+enum { IMPELLER_SPEED_MIN = 15, IMPELLER_SPEED_MAX = 50, IMPELLER_SPEED_DEFAULT = 30 };
+/* The retained value is not controller-confirmed while known is false. */
+void machine_state_confirm_impeller_speed(uint8_t speed);
+void machine_state_invalidate_impeller_speed(void);
+uint8_t machine_state_impeller_speed(void);
+bool machine_state_impeller_speed_known(void);
 
 /* 0x0F runtime codes are a separate namespace from 0x0A start errors. */
 const char *machine_runtime_error_desc(uint8_t code);

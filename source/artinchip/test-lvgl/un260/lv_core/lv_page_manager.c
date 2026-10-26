@@ -23,6 +23,7 @@
 #include "page_37_touch_calibration.h"
 #include "page_calculator.h"
 #include "page_operators.h"
+#include "page_40_set_impeller.h"
 #include "un260/app_service/ui_factory_reset_service.h"
 #include "un260/lv_drivers/uart_io.h"
 #include "un260/lv_system/ui_lang.h"
@@ -223,6 +224,7 @@ static const char *const g_page_names[UI_PAGE_COUNT] = {
     [UI_PAGE_TOUCH_CALIBRATION] = "TOUCH_CALIBRATION",
     [UI_PAGE_CALCULATOR] = "CALCULATOR",
     [UI_PAGE_OPERATORS] = "OPERATORS",
+    [UI_PAGE_IMPELLER_SETTING] = "IMPELLER_SETTING",
     [UI_PAGE_LANGUAGE_SETTING] = "LANGUAGE",
     [UI_PAGE_DOUBLE_NOTE_SETTING] = "DOUBLE_NOTE",
     [UI_PAGE_FLAP_SETTING] = "FLAP",
@@ -335,6 +337,7 @@ static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT] = {
     [UI_PAGE_TOUCH_CALIBRATION] = { ui_page_37_touch_calibration_create, ui_page_37_touch_calibration_destroy },
     [UI_PAGE_CALCULATOR] = { ui_calculator_create, ui_calculator_destroy },
     [UI_PAGE_OPERATORS] = { ui_operators_create, ui_operators_destroy },
+    [UI_PAGE_IMPELLER_SETTING] = { ui_page_40_set_impeller_create, ui_page_40_set_impeller_destroy },
     [UI_PAGE_LANGUAGE_SETTING] = { ui_page_21_set_language_create, ui_page_21_set_language_destroy },
     [UI_PAGE_DOUBLE_NOTE_SETTING] = { ui_page_22_set_double_note_create, ui_page_22_set_double_note_destroy },
     [UI_PAGE_FLAP_SETTING] = { ui_page_23_set_flap_create, ui_page_23_set_flap_destroy },

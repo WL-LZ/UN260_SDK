@@ -24,6 +24,7 @@ static const settings_node_t nodes[]={
  {"motor","maintenance",UI_N_("Motor test"),UI_N_("Individual motor controls"),"EntryMotor",SETTINGS_DETAIL,UI_PAGE_MOTOR_TEST,"hardware"},
  {"sensors","maintenance",UI_N_("Sensors"),UI_N_("Live channel voltages"),"EntrySensor",SETTINGS_DETAIL,UI_PAGE_SENSOR,"hardware"},
  {"flap","maintenance",UI_N_("Flap position"),UI_N_("Upper or lower note path"),"EntryFlap",SETTINGS_DETAIL,UI_PAGE_FLAP_SETTING,"hardware"},
+ {"impeller","maintenance",UI_N_("Impeller motor speed"),UI_N_("Range: 15-50. Default: 30."),"EntryMotor",SETTINGS_DETAIL,UI_PAGE_IMPELLER_SETTING,"hardware"},
  {"capture","maintenance",UI_N_("Dynamic data capture"),UI_N_("Images and sensor signals"),"EntryImage",SETTINGS_DETAIL,UI_PAGE_IMAGE_GET,"inspection"},
  {"aging","maintenance",UI_N_("Aging test"),UI_N_("Continuous hardware test"),"EntryAging",SETTINGS_DETAIL,UI_PAGE_AGING_SETTING,"tests"},
  {"display","maintenance",UI_N_("Color calibration"),UI_N_("Display reference and adjustment"),"EntryDisplay",SETTINGS_DETAIL,UI_PAGE_DISPLAY_TEST,"tests"},

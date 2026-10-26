@@ -39,7 +39,7 @@ static uint8_t notice_command(const char *key)
         {"settings.speed",0x16},{"settings.sorting",0x3A},{"settings.sound",0x15},
         {"settings.batch",0x06},{"settings.add",0x39},{"settings.work_mode",0x38},
         {"settings.mode",0x04},{"settings.double_note",0x31},{"settings.flap",0x42},
-        {"settings.reject_pocket",0x08}
+        {"settings.reject_pocket",0x08},{"settings.impeller",0x4B}
     };
     for (unsigned i=0;key && i<sizeof(fields)/sizeof(fields[0]);++i)
         if (!strcmp(key,fields[i].key)) return fields[i].command;

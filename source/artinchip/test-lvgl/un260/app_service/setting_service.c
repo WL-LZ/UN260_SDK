@@ -5,6 +5,7 @@
 #include "count_mode_policy.h"
 #include "un260/currency/currency_state.h"
 #include "un260/protocol/protocol_request.h"
+#include "un260/machine_state/machine_state.h"
 #include <stddef.h>
 #include <stdio.h>
 
@@ -122,6 +123,20 @@ static setting_value_request_slot_t g_flap_request =
     SETTING_VALUE_REQUEST_SLOT_INITIALIZER;
 static setting_value_request_slot_t g_reject_pocket_request =
     SETTING_VALUE_REQUEST_SLOT_INITIALIZER;
+
+/* 0x4B failure ACKs carry no operation/value, so read and write share one owner. */
+typedef enum {
+    SETTING_IMPELLER_NONE,
+    SETTING_IMPELLER_READ,
+    SETTING_IMPELLER_WRITE,
+} setting_impeller_operation_t;
+static struct {
+    protocol_request_t request;
+    setting_impeller_operation_t operation;
+    uint8_t target;
+} g_impeller_request = {
+    .request = PROTOCOL_REQUEST_INITIALIZER(SETTING_REQUEST_TIMEOUT_MS),
+};
 
 typedef struct {
     protocol_request_t request;
@@ -589,6 +604,82 @@ void setting_service_clear_reject_pocket_max_request(void)
     setting_value_request_clear(&g_reject_pocket_request);
 }
 
+static void setting_impeller_request_clear(void)
+{
+    protocol_request_finish(&g_impeller_request.request);
+    g_impeller_request.operation = SETTING_IMPELLER_NONE;
+}
+
+static bool setting_impeller_request_begin(setting_impeller_operation_t operation,
+                                            uint8_t target)
+{
+    if (!protocol_request_begin_for_command(&g_impeller_request.request, 0x4B))
+        return false;
+    g_impeller_request.operation = operation;
+    g_impeller_request.target = target;
+    const uint8_t payload[] = {
+        operation == SETTING_IMPELLER_READ ? 0x01 : 0x02, target
+    };
+    if (protocol_send(0x4B, payload, operation == SETTING_IMPELLER_READ ? 1 : 2) < 0) {
+        setting_impeller_request_clear();
+        return false;
+    }
+    setting_request_accepted(0x4B);
+    return true;
+}
+
+bool setting_service_impeller_speed_is_pending(void)
+{
+    return protocol_request_is_pending(&g_impeller_request.request);
+}
+
+bool setting_service_request_impeller_speed_read(void)
+{
+    return setting_impeller_request_begin(SETTING_IMPELLER_READ, 0);
+}
+
+bool setting_service_request_impeller_speed(uint8_t target)
+{
+    if (target < IMPELLER_SPEED_MIN || target > IMPELLER_SPEED_MAX ||
+        setting_service_impeller_speed_is_pending())
+        return false;
+    if (machine_state_impeller_speed_known() && target == machine_state_impeller_speed())
+        return true;
+    return setting_impeller_request_begin(SETTING_IMPELLER_WRITE, target);
+}
+
+bool setting_service_take_impeller_speed_reply(const uint8_t *buf, uint8_t len,
+                                                setting_impeller_result_t *result)
+{
+    if (!buf || !result || (len != 6 && len != 7) || buf[2] != len || buf[3] != 0x4B ||
+        !setting_service_impeller_speed_is_pending()) return false;
+    const bool reading = g_impeller_request.operation == SETTING_IMPELLER_READ;
+    const bool failed = len == 6 && buf[4] == 0x03;
+    const bool read_value = reading && len == 7 && buf[4] == 0x01 &&
+                            buf[5] <= IMPELLER_SPEED_MAX;
+    const bool write_ack = !reading && len == 6 && buf[4] == 0x02;
+    if ((!failed && !read_value && !write_ack) ||
+        !protocol_request_take_result(&g_impeller_request.request)) return false;
+    *result = (setting_impeller_result_t){
+        .reading = reading, .success = !failed, .timeout = false,
+        .value = read_value ? buf[5] : g_impeller_request.target,
+    };
+    g_impeller_request.operation = SETTING_IMPELLER_NONE;
+    return true;
+}
+
+bool setting_service_take_impeller_speed_timeout(setting_impeller_result_t *result)
+{
+    if (!result || !protocol_request_take_timeout(&g_impeller_request.request))
+        return false;
+    *result = (setting_impeller_result_t){
+        .reading = g_impeller_request.operation == SETTING_IMPELLER_READ,
+        .success = false, .timeout = true, .value = g_impeller_request.target,
+    };
+    g_impeller_request.operation = SETTING_IMPELLER_NONE;
+    return true;
+}
+
 bool setting_service_request_aging_start(void)
 {
     return setting_action_request_begin(&g_aging_request, 0x46);
@@ -637,6 +728,8 @@ void setting_service_cancel_all(void)
     setting_value_request_clear(&g_double_note_request);
     setting_value_request_clear(&g_flap_request);
     setting_value_request_clear(&g_reject_pocket_request);
+    setting_impeller_request_clear();
+    machine_state_invalidate_impeller_speed();
     protocol_request_finish(&g_aging_request.request);
     protocol_request_finish(&g_factory_request.request);
 }

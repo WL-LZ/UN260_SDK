@@ -36,6 +36,7 @@
 #include "un260/lv_core/page_26_set_aging.h"
 #include "un260/lv_core/page_27_set_cfd_level.h"
 #include "un260/lv_core/page_30_set_factory.h"
+#include "un260/lv_core/page_40_set_impeller.h"
 #include "un260/machine_state/machine_state.h"
 #include "un260/print/print_config.h"
 #include "un260/serial_number/serial_number.h"
@@ -108,6 +109,7 @@ bool app_setting_runtime_handle_reply(uint8_t cmd, uint8_t *buf, uint8_t len)
     case 0x44:
     case 0x45:
     case 0x46:
+    case 0x4B:
         app_setting_reply_handle_detail(cmd, buf, len);
         return true;
 
@@ -122,6 +124,7 @@ void app_setting_runtime_poll(uint32_t now_ms)
     uint32_t basic_timeouts;
     setting_batch_result_t batch_result;
     setting_value_result_t value_result;
+    setting_impeller_result_t impeller_result;
     serial_number_setting_result_t serial_result;
     currency_switch_result_t currency_result;
     print_config_request_result_t print_result;
@@ -192,6 +195,13 @@ void app_setting_runtime_poll(uint32_t now_ms)
         machine_state_confirm_reject_pocket_max(value_result.previous);
         ui_page_24_set_reject_pocket_on_reply(&value_result);
         app_setting_notice_timeout("settings.reject_pocket", UI_N_("Reject capacity"));
+    }
+
+    if (setting_service_take_impeller_speed_timeout(&impeller_result)) {
+        machine_state_invalidate_impeller_speed();
+        ui_page_40_set_impeller_on_update(&impeller_result);
+        if (!impeller_result.reading)
+            app_setting_notice_timeout("settings.impeller", UI_N_("Impeller motor speed"));
     }
 
     if (serial_number_service_take_timeout(&serial_result)) {
