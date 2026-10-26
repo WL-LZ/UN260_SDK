@@ -36,6 +36,7 @@ code=r'''
 #include <stdio.h>
 #include <string.h>
 #include "tools/test_maintenance_state.h"
+#include "un260/lv_system/ui_interaction_trace.h"
 #define UI_PAGE_STACK_CAPACITY 10
 #define UI_PAGE_INVALID ((ui_page_t)-1)
 typedef struct { ui_page_t current,stack[10];int stack_top; } ui_page_manager_context_t;
@@ -57,7 +58,7 @@ assert set(roots)=={'UI_PAGE_MAIN','UI_PAGE_PURE'}
 code+='static const ui_page_registration_t g_page_registry[UI_PAGE_COUNT]={'+','.join('['+page+']={true}' for page in roots)+'};\n'
 # Keep diagnostic arguments evaluated in the stub build for -Werror.
 code=code.replace('#define uart_debug_printf(...) ((void)0)',
-                  'static void uart_debug_printf(const char *fmt,...){(void)fmt;}')
+                  'void uart_debug_printf(const char *fmt,...){(void)fmt;}')
 code+=function('ui_manager_canonical_page')
 code+=function('ui_manager_canonicalize_context')
 code+=function('ui_manager_navigation_is_blocked')

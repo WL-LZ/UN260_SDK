@@ -12,7 +12,7 @@
 #include "un260/lv_components/lv_fault_popup.h"
 #include "un260/lv_components/smart_island.h"
 #include "un260/lv_system/user_cfg.h"
-#include "un260/lv_drivers/uart_io.h"
+#include "un260/lv_system/ui_interaction_trace.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -119,20 +119,20 @@ static void gesture_navigate_async(void *user_data)
         if(result != LV_NAV_BACK_NONE || !gesture_page_is_safe(page)) {
             /* If a maintenance page has no usable ESC, fail closed; never
              * silently replace its safety logic with a raw stack pop. */
-            uart_debug_printf("GESTURE_NAV from=%u route=ESC result=%u wait_ms=%lu commit_ms=%lu\n",
+            ui_interaction_trace("GESTURE_NAV from=%u route=ESC result=%u wait_ms=%lu commit_ms=%lu\n",
                 (unsigned)page, (unsigned)result,
                 (unsigned long)(started-g_pending_tick), (unsigned long)lv_tick_elaps(started));
             return;
         }
         if(page == UI_PAGE_SETTING && page_06_settings_back_sub_page()) {
-            uart_debug_printf("GESTURE_NAV from=%u local_back=1 wait_ms=%lu commit_ms=%lu\n",
+            ui_interaction_trace("GESTURE_NAV from=%u local_back=1 wait_ms=%lu commit_ms=%lu\n",
                 (unsigned)page, (unsigned long)(started-g_pending_tick),
                 (unsigned long)lv_tick_elaps(started));
             return;
         }
         if(!ui_manager_pop_page()) ui_manager_switch(UI_PAGE_MAIN);
     }
-    uart_debug_printf("GESTURE_NAV from=%u to=%u wait_ms=%lu commit_ms=%lu\n",
+    ui_interaction_trace("GESTURE_NAV from=%u to=%u wait_ms=%lu commit_ms=%lu\n",
         (unsigned)page, (unsigned)ui_manager_get_current_page(),
         (unsigned long)(started-g_pending_tick), (unsigned long)lv_tick_elaps(started));
 }

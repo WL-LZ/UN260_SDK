@@ -25,7 +25,7 @@
 #include "page_operators.h"
 #include "page_40_set_impeller.h"
 #include "un260/app_service/ui_factory_reset_service.h"
-#include "un260/lv_drivers/uart_io.h"
+#include "un260/lv_system/ui_interaction_trace.h"
 #include "un260/lv_system/ui_lang.h"
 
 #define UI_PAGE_STACK_CAPACITY 10
@@ -90,7 +90,7 @@ static void ui_manager_history_on_commit(ui_page_t page)
     }
     int depth = g_page_manager.stack_top + 1;
     g_page_manager.stack_top = -1;
-    if(depth > 0) uart_debug_printf("NAV_ROOT from=%u dropped=%d\n",
+    if(depth > 0) ui_interaction_trace("NAV_ROOT from=%u dropped=%d\n",
                                     (unsigned)g_page_manager.current, depth);
 }
 static void ui_manager_navigation_on_leave(ui_page_t from,ui_page_t to)
@@ -837,7 +837,7 @@ bool ui_manager_pop_page(void)
     // 出栈
     previous_page = g_page_manager.stack[g_page_manager.stack_top--];
     ui_manager_switch(previous_page);
-    uart_debug_printf("NAV_BACK to=%u depth=%d\n",
+    ui_interaction_trace("NAV_BACK to=%u depth=%d\n",
                      (unsigned)g_page_manager.current, g_page_manager.stack_top + 1);
     return true;
 }

@@ -1,7 +1,7 @@
 #include "touch_feedback.h"
 #include "un260/lv_system/user_cfg.h"
 #include "lv_port_indev.h"
-#include "un260/lv_drivers/uart_io.h"
+#include "un260/lv_system/ui_interaction_trace.h"
 #include "lvgl/src/draw/sw/lv_draw_sw_blend.h"
 #include <string.h>
 #define FEEDBACK_CONTACTS 16
@@ -122,7 +122,7 @@ static void edge_hint_return_step(lv_timer_t *timer)
     lv_obj_add_flag(g_edge_hint, LV_OBJ_FLAG_HIDDEN);
     g_edge_returning = false;
     lv_timer_pause(timer);
-    uart_debug_printf("EDGE_RETURN mode=MASK_V3 side=%s from=%ld ms=%lu steps=%lu gap=%lu draws=%lu draw_gap=%lu\n",
+    ui_interaction_trace("EDGE_RETURN mode=MASK_V3 side=%s from=%ld ms=%lu steps=%lu gap=%lu draws=%lu draw_gap=%lu\n",
                       g_edge_side > 0 ? "L" : "R", (long)g_edge_return_extent,
                       (unsigned long)lv_tick_elaps(g_edge_return_tick),
                       (unsigned long)g_edge_steps, (unsigned long)g_edge_max_gap,
@@ -233,7 +233,7 @@ static void fade(lv_timer_t *timer)
             feedback_set_opacity(c->ring, LV_OPA_TRANSP);
             lv_obj_add_flag(c->ring, LV_OBJ_FLAG_HIDDEN);
             c->fading = false;
-            uart_debug_printf("TOUCH_FADE mode=PRIMITIVE hold=100 fade=240 actual=%lu steps=%lu gap=%lu\n",
+            ui_interaction_trace("TOUCH_FADE mode=PRIMITIVE hold=100 fade=240 actual=%lu steps=%lu gap=%lu\n",
                 (unsigned long)elapsed, (unsigned long)c->fade_steps,
                 (unsigned long)c->fade_max_gap);
         }
