@@ -232,19 +232,27 @@ static void test_motor(void) {
         motor_poll();
     }
     assert(motor_holds==14);
-    before=sends;motor_test_service_stop_all();motor_test_service_stop_all();assert(sends==before);
-    for(unsigned i=0;i<3;i++){
-        motor_poll();assert(last_cmd==0x52+i&&sends==before+i+1);
-        assert(last_payload[0]==(i==2?1:0)&&last_payload[1]==(i==2?2:0));
-        uint8_t frame[]={0xFD,0xDF,6,(uint8_t)(0x52+i),1,0};
-        auxiliary_reply_result_t r=auxiliary_reply_dispatch(frame[3],frame,6);
-        assert(r.kind==AUXILIARY_REPLY_MOTOR_ACK);
-        motor_test_service_on_reply(frame[3],r.value);
-        assert(!motor_test_service_get(i).running&&!motor_test_service_get(i).pending);
-        assert(auxiliary_reply_dispatch(frame[3],frame,5).kind==AUXILIARY_REPLY_INVALID);
-    }
+    /* Exit sends all three stops without waiting for another motor's ACK. */
+    before=sends;motor_test_service_stop_all();assert(sends==before+3);
+    assert(last_cmd==0x54&&last_payload[0]==1&&last_payload[1]==2);
+    motor_test_service_stop_all();assert(sends==before+3);
+    /* Out-of-order success cannot release another motor. */
+    uint8_t frame[]={0xFD,0xDF,6,0x54,1,0};
+    auxiliary_reply_result_t r=auxiliary_reply_dispatch(frame[3],frame,6);
+    assert(r.kind==AUXILIARY_REPLY_MOTOR_ACK);
+    assert(auxiliary_reply_dispatch(frame[3],frame,5).kind==AUXILIARY_REPLY_INVALID);
+    motor_test_service_on_reply(0x54,r.value);assert(motor_holds==6);
+    motor_test_service_on_reply(0x52,2);assert(motor_holds==6);
+    assert(motor_test_service_get(0).phase==MOTOR_REJECTED);
+    now_ms+=5001;motor_test_service_poll(now_ms);
+    assert(motor_test_service_get(1).phase==MOTOR_UNCONFIRMED);
+    assert(motor_holds==6&&sends==before+3); /* no automatic retries */
+    assert(motor_test_service_request(0,false));assert(last_cmd==0x52&&last_payload[0]==0&&last_payload[1]==0);
+    motor_test_service_on_reply(0x52,1);assert(motor_holds==4);
+    assert(motor_test_service_request(1,false));assert(last_cmd==0x53&&last_payload[0]==0&&last_payload[1]==0);
+    motor_test_service_on_reply(0x53,1);
     assert(!motor_holds&&!motor_test_service_busy());
-    motor_test_service_stop_all();motor_poll();assert(sends==before+3);
+    before=sends;motor_test_service_stop_all();motor_poll();assert(sends==before);
     /* Reject stop, timeout and retry never fabricate a stopped motor. */
     assert(motor_test_service_request(2,true));motor_poll();motor_test_service_on_reply(0x54,1);
     assert(motor_test_service_request(2,false));motor_poll();motor_test_service_on_reply(0x54,2);
@@ -253,22 +261,61 @@ static void test_motor(void) {
     assert(motor_test_service_get(2).phase==MOTOR_UNCONFIRMED&&motor_holds==8);
     assert(motor_test_service_request(2,false));assert(last_payload[1]==2);
     motor_test_service_on_reply(0x54,1);assert(!motor_holds);
-    /* Exit while Start is unconfirmed: wait its ACK before issuing Stop. */
+    /* Exit while Start is unconfirmed: Stop is sent immediately. The first
+     * ambiguous ACK alone must not claim that the motor has stopped. */
     assert(motor_test_service_request(0,true));motor_poll();before=sends;
-    motor_test_service_stop_all();motor_poll();assert(sends==before);
-    motor_test_service_on_reply(0x52,1);motor_poll();assert(sends==before+1&&last_payload[0]==0);
+    motor_test_service_stop_all();assert(sends==before+1&&last_payload[0]==0);
+    motor_test_service_on_reply(0x52,1);
+    assert(motor_test_service_get(0).pending&&motor_holds==2);
     motor_test_service_on_reply(0x52,1);assert(!motor_holds);
     /* Cancel starts still in the queue on exit. */
     assert(motor_test_service_request(1,true));before=sends;
     motor_test_service_stop_all();motor_poll();assert(sends==before&&!motor_test_service_busy());
-    /* Lost Start ACK on exit still sends physical Stop after the deadline.
-     * The first ambiguous reply cannot release the operation hold. */
-    assert(motor_test_service_request(0,true));motor_poll();motor_test_service_stop_all();
-    now_ms+=5001;motor_test_service_poll(now_ms);assert(last_cmd==0x52&&last_payload[0]==0);
+    /* A lost Start ACK does not delay Stop. One ambiguous ACK still retains
+     * the hold; a later explicit Stop retry can complete it. */
+    assert(motor_test_service_request(0,true));motor_poll();before=sends;
+    motor_test_service_stop_all();assert(sends==before+1&&last_cmd==0x52&&last_payload[0]==0);
     motor_test_service_on_reply(0x52,1);assert(motor_test_service_get(0).pending&&motor_holds==2);
     now_ms+=5001;motor_test_service_poll(now_ms);assert(motor_test_service_request(0,false));
     motor_test_service_on_reply(0x52,1);assert(!motor_test_service_busy()&&!motor_holds);
-    puts("PASS motor service: global serialization, captured payloads, hidden ACKs, failure, reject, timeout, retry, queued cancellation");
+    /* A failed immediate Stop send keeps the unconfirmed Start and hold. */
+    assert(motor_test_service_request(0,true));motor_poll();before=sends;send_result=-1;
+    assert(!motor_test_service_request(0,false));assert(sends==before+1&&motor_holds==2);
+    assert(motor_test_service_get(0).pending);
+    send_result=7;assert(motor_test_service_request(0,false));
+    motor_test_service_on_reply(0x52,1);assert(motor_test_service_get(0).pending&&motor_holds==2);
+    motor_test_service_on_reply(0x52,1);assert(!motor_test_service_busy()&&!motor_holds);
+    /* One motor running and another awaiting Start: exit sends both Stops.
+     * Replies of either motor must never release the other's owner. */
+    assert(motor_test_service_request(0,true));motor_poll();motor_test_service_on_reply(0x52,1);
+    assert(motor_test_service_request(1,true));motor_poll();before=sends;
+    motor_test_service_stop_all();assert(sends==before+2&&motor_holds==6);
+    motor_test_service_on_reply(0x53,1);assert(motor_holds==6);
+    motor_test_service_on_reply(0x52,1);assert(motor_holds==4);
+    assert(motor_test_service_get(1).pending);
+    motor_test_service_on_reply(0x53,1);assert(!motor_test_service_busy()&&!motor_holds);
+    /* Failed Stop for another motor must retain its last confirmed running state. */
+    assert(motor_test_service_request(0,true));motor_poll();motor_test_service_on_reply(0x52,1);
+    assert(motor_test_service_request(1,true));motor_poll();send_result=-1;
+    assert(!motor_test_service_request(0,false));assert(motor_test_service_get(0).running&&motor_holds==6);
+    send_result=7;assert(motor_test_service_request(0,false));assert(motor_test_service_request(1,false));
+    motor_test_service_on_reply(0x52,1);assert(motor_holds==4);
+    motor_test_service_on_reply(0x53,1);motor_test_service_on_reply(0x53,1);
+    assert(!motor_test_service_busy()&&!motor_holds);
+    /* Mixed Start/Stop results do not identify which operation failed.
+     * Both arrival orders retain uncertainty until another Stop succeeds. */
+    for(unsigned first=1;first<=2;first++){
+        assert(motor_test_service_request(0,true));motor_poll();
+        assert(motor_test_service_request(0,false));
+        motor_test_service_on_reply(0x52,first);
+        motor_test_service_on_reply(0x52,3-first);
+        assert(motor_test_service_get(0).phase==MOTOR_UNCONFIRMED);
+        assert(motor_test_service_get(0).pending&&motor_holds==2);
+        assert(motor_test_service_request(0,false));
+        motor_test_service_on_reply(0x52,1);
+        assert(!motor_test_service_busy()&&!motor_holds);
+    }
+    puts("PASS motor service: serialized starts, independent stops, ambiguous ACKs, failure, reject, timeout, retry, queued cancellation");
 }
 int main(void) { test_print();test_cfd();test_motor();return 0; }
 '''
