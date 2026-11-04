@@ -79,6 +79,24 @@ static void ui_state_save_all(void)
     (void)ui_state_store_save(&s_ui_state);
 }
 
+bool ui_state_collection_start_disabled(void)
+{
+    ui_state_ensure_loaded();
+    return s_ui_state.collection_start_disabled;
+}
+
+bool ui_state_collection_set_start_disabled(bool disabled)
+{
+    ui_state_ensure_loaded();
+    if (s_ui_state.collection_start_disabled == disabled) return true;
+    ui_state_pull_common_runtime();
+    ui_persist_state_t next = s_ui_state;
+    next.collection_start_disabled = disabled;
+    if (!ui_state_store_save(&next)) return false;
+    s_ui_state = next;
+    return true;
+}
+
 void ui_state_apply_common_runtime(void)
 {
     ui_state_ensure_loaded();

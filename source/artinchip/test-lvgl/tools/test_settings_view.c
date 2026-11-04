@@ -50,6 +50,7 @@ bool work_mode_service_diagnostic_ready(void){return diagnostic_ready;}
 const char *work_mode_service_status_text(void){return ui_tr(diagnostic_ready?"Manual mode confirmed":"Waiting for controller mode");}
 void work_mode_service_get_snapshot(work_mode_snapshot_t *s){memset(s,0,sizeof(*s));s->phase=diagnostic_ready?WORK_MODE_READY:WORK_MODE_WAITING_SYNC;}
 void work_mode_service_retry(void){}
+bool ui_state_collection_start_disabled(void){return false;}
 bool app_command_runtime_count_start_busy(void){return machine_running;}
 static ui_page_t current_page=UI_PAGE_SETTING;
 ui_page_t ui_manager_get_current_page(void){return current_page;}

@@ -9,6 +9,8 @@
 extern "C" {
 #endif
 
+bool ui_state_collection_start_disabled(void);
+bool ui_state_collection_set_start_disabled(bool disabled);
 void ui_state_apply_common_runtime(void);
 void ui_state_save_popup_auto_state(void);
 bool ui_state_popup_auto_set_enabled(bool enabled);

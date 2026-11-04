@@ -165,6 +165,8 @@ bool protocol_log_stop(void){log_state.active=false;log_state.revision++;return 
 bool protocol_log_export(uint64_t id){(void)id;return true;}
 bool protocol_log_delete(uint64_t id){(void)id;return true;}
 ui_page_t ui_manager_get_current_page(void){return UI_PAGE_MAIN;}
+static bool startup_disabled;
+bool ui_state_collection_start_disabled(void){return startup_disabled;}
 bool app_command_runtime_count_start_busy(void){return machine_running;}
 void page_06_settings_open_collection(void){collection_opens++;}
 bool settings_detail_dialog_show(const char *a,const char *b,const char *c,const char *d,settings_detail_dialog_cb_t e,settings_detail_dialog_cb_t f,void *g){return settings_detail_dialog_show_ex(SETTINGS_DIALOG_INFO,a,b,c,d,e,f,g);}
@@ -175,6 +177,7 @@ static void capture_pages(void)
   const ui_locale_t *l=ui_lang_at(lang);assert(ui_lang_prepare_resources(l->id));ui_lang_set(l->id);
   lv_settings_header_t h={.title=ui_tr("Data collection")};lv_settings_frame_t f=lv_settings_frame_create(lv_scr_act(),&h);page_collection_create(&f);
   {
+   startup_disabled=true;unsigned prior=sends;assert(app_collection_request_initial() && sends==prior && !data_collection_request_pending());startup_disabled=false;
    send_ok=false;assert(!app_collection_request_initial());assert(!data_collection_request_pending());send_ok=true;
    assert(app_collection_request_initial());assert(last_command==0xC0&&last_payload[0]==2);
    receive(3);page_collection_refresh();assert(data_collection_state_mode()==DATA_COLLECT_MODE_FALSE);

@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_state_runtime.h"
 #include "app_protocol_runtime.h"
 
 #include "un260/lv_system/app_clock.h"
@@ -158,10 +159,16 @@ bool app_protocol_runtime_handle_reply(uint8_t cmd,
 
     case 0xC0:
     {
+        const bool manual = data_collection_request_pending() && !data_collection_request_is_automatic();
         data_collection_reply_result_t result =
             data_collection_reply_handle(buf, len, app_clock_uptime_ms());
         if (result != DATA_COLLECTION_REPLY_INVALID &&
             result != DATA_COLLECTION_REPLY_IGNORED) {
+            if (manual && (result == DATA_COLLECTION_REPLY_EXITED ||
+                           result == DATA_COLLECTION_REPLY_REQUEST_CONFIRMED)) {
+                if (!ui_state_collection_set_start_disabled(result == DATA_COLLECTION_REPLY_EXITED))
+                    uart_debug_printf("Collection confirmed; startup preference not saved\n");
+            }
             page_06_data_collection_on_reply(result);
         }
         return true;

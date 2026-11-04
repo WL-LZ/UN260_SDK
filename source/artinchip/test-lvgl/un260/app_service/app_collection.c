@@ -1,3 +1,4 @@
+#include "un260/lv_system/ui_state_runtime.h"
 #include "app_collection.h"
 #include "app_command_runtime.h"
 #include "un260/protocol/protocol_send.h"
@@ -34,5 +35,6 @@ bool app_collection_request(data_collect_mode_t mode)
 
 bool app_collection_request_initial(void)
 {
+    if (ui_state_collection_start_disabled()) return true;
     return request(DATA_COLLECT_MODE_FALSE, true);
 }

@@ -55,6 +55,7 @@ typedef struct {
     ui_state_common_page_t page06;
     ui_state_page18_t page18;
     bool top_popup_enabled;
+    bool collection_start_disabled;
 } ui_persist_state_t;
 
 bool ui_state_store_load(ui_persist_state_t* state);

@@ -34,6 +34,7 @@ void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title
 {ui_notice_post(kind,key,ui_tr(title),ui_tr(detail));}
 #endif
 static bool host_top_popup_save_fails;
+bool ui_state_collection_start_disabled(void){return false;}
 bool ui_state_top_popup_set_enabled(bool enabled)
 {if(host_top_popup_save_fails)return false;ui_notice_set_enabled(enabled);return true;}
 static bool start_busy, prewarming, touch_enabled, fault_auto;

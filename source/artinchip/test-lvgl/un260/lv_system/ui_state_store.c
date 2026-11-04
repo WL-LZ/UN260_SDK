@@ -123,6 +123,10 @@ static void ui_state_store_parse_line(ui_persist_state_t* state, const char* lin
         state->page06.reserved06_enable = atoi(line + 13);
     } else if (strncmp(line, "p18_reserved=", 13) == 0) {
         state->page18.reserved18_enable = atoi(line + 13);
+    } else if (strncmp(line, "collection_start_disabled=", 26) == 0) {
+        unsigned value; char tail;
+        if (sscanf(line + 26, "%u %c", &value, &tail) == 1 && value < 2)
+            state->collection_start_disabled = value != 0;
     } else if (strncmp(line, "top_popup_enabled=", 18) == 0) {
         unsigned value;char tail;
         if(sscanf(line+18,"%u %c",&value,&tail)==1 && value<2)
@@ -139,6 +143,7 @@ bool ui_state_store_load(ui_persist_state_t* state)
 
     if (!state) return false;
     loaded_state = *state;
+    loaded_state.collection_start_disabled = false;
     loaded_state.top_popup_enabled = true;
     loaded_state.page01.quick_visible = UI_STATE_QUICK_VISIBLE_ALL;
     loaded_state.page01.main_batch_action = UI_MAIN_BATCH_SETTINGS;
@@ -276,6 +281,7 @@ bool ui_state_store_save(const ui_persist_state_t* state)
     fprintf(fp, "p05_reserved=%d\n", state->page05.reserved05_enable);
     fprintf(fp, "p06_reserved=%d\n", state->page06.reserved06_enable);
     fprintf(fp, "p18_reserved=%d\n", state->page18.reserved18_enable);
+    fprintf(fp, "collection_start_disabled=%u\n", state->collection_start_disabled ? 1U : 0U);
     fprintf(fp, "top_popup_enabled=%u\n", state->top_popup_enabled?1U:0U);
 
     if (ferror(fp)) {
