@@ -37,7 +37,7 @@ void app_fault_recovery_cancel_setting_detail(void)
 static bool setting_command(uint8_t command)
 {
     return command == 0x03 || command == 0x04 ||
-           command == 0x06 || command == 0x3A;
+           command == 0x06 || command == 0x07 || command == 0x3A;
 }
 
 void app_fault_recovery_cancel_setting_presentation(void)
@@ -65,14 +65,15 @@ static void setting_request_started(uint8_t command)
 bool app_fault_recovery_report_setting_rejection(uint8_t command)
 {
     if (!setting_command(command)) return false;
-    setting_rejection.command = command;
+    /* A VBatch refusal has no documented companion fault. Leave the next
+     * hardware event to its own handler, even when it immediately follows. */
+    setting_rejection.command = command == 0x07 ? 0 : command;
     setting_rejection.received_ms = protocol_request_result_time_ms();
-    /* These four matched controller refusal ACKs mean notes block switching
-     * on this machine. Do not apply that contract to timeouts or other ACKs. */
+    /* Only the four legacy commands define notes as their rejection reason. */
     if (app_command_runtime_count_start_busy())
         deferred_setting_rejection = command;
     else
-        fault_popup_report_setting_rejection(command, MACHINE_FAULT_SETTING_NOTES);
+        fault_popup_report_setting_rejection(command, command == 0x07 ? 0 : MACHINE_FAULT_SETTING_NOTES);
     return true;
 }
 
@@ -320,7 +321,7 @@ static void present_deferred_setting_rejection(void)
     if (deferred_setting_rejection && !app_command_runtime_count_start_busy()) {
         uint8_t command = deferred_setting_rejection;
         deferred_setting_rejection = 0;
-        fault_popup_report_setting_rejection(command, MACHINE_FAULT_SETTING_NOTES);
+        fault_popup_report_setting_rejection(command, command == 0x07 ? 0 : MACHINE_FAULT_SETTING_NOTES);
     }
 }
 

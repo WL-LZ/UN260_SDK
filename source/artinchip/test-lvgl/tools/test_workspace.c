@@ -59,6 +59,15 @@ int main(int argc,char **argv)
     workspace_profile_t p=m->users[0].profiles[0];strcpy(p.name,"Bundle");p.batch_enabled=1;p.batch=100;
     assert(workspace_add_profile(m,1,&p));assert(workspace_delete_profile(m,1,1));assert(!workspace_delete_profile(m,1,2));
     assert(m->users[0].profiles[0].id==2);assert(workspace_next_batch(&m->users[0],50)==100);
+    workspace_user_t *batch_user = &m->users[0];
+    assert(workspace_next_batch_value(batch_user,1,0)==1000);
+    assert(workspace_next_batch_value(batch_user,1,50000)==0);
+    batch_user->amount_batches[1]=UINT32_MAX;
+    assert(workspace_next_batch_value(batch_user,1,UINT32_MAX)==5000);
+    assert(workspace_model_valid(m));
+    batch_user->amount_batches[2]=UINT32_MAX;assert(!workspace_model_valid(m));batch_user->amount_batches[2]=5000;
+    p.batch_mode=1;p.batch_amount=UINT32_MAX;p.batch=0;strcpy(p.name,"Value");
+    assert(workspace_add_profile(m,1,&p));
     assert(workspace_next_batch(&m->users[0],150)==0);m->users[0].batch_count=1;assert(!workspace_model_valid(m));m->users[0].batch_count=5;
     m->users[0].batches[4]=200;assert(workspace_next_batch(&m->users[0],100)==0);m->users[0].batches[4]=150;
     m->users[0].batches[2]=10;assert(!workspace_model_valid(m));m->users[0].batches[2]=50;
@@ -82,14 +91,28 @@ int main(int argc,char **argv)
         assert(workspace_profile_has_default_name(&saved->shared.profiles[0]));
         free(m);puts("PASS seed localization identity and same-name custom profile retained after restart");return 0;
     }
+    if(argc>1&&!strcmp(argv[1],"v5-roundtrip")){
+        const workspace_model_t *saved=workspace_store_get();assert(workspace_store_ready()&&saved->version==5);
+        assert(saved->users[0].amount_batches[1]==UINT32_MAX && saved->users[0].profiles[1].batch_mode==1 &&
+               saved->users[0].profiles[1].batch_amount==UINT32_MAX && saved->shared.amount_batches[1]==1000);
+        free(m);return 0;
+    }
+    if(argc>1&&(!strcmp(argv[1],"v3")||!strcmp(argv[1],"v4"))){
+        const workspace_model_t *old=workspace_store_get();assert(workspace_store_ready()&&old->version==5);
+        assert(old->users[0].amount_batches[1]==1000 && old->users[0].profiles[0].batch_mode==0 &&
+               old->users[0].profiles[0].batch==100 && !strcmp(old->users[0].employee_id,"A-001"));
+        assert(old->shared.amount_batches[4]==50000 && old->shared.id==0);
+        if(!strcmp(argv[1],"v4"))assert(!old->operators_enabled && old->shared.batches[1]==42 && old->management_protected);
+        assert(workspace_store_save(old));wait_job();assert(workspace_store_last_success());free(m);return 0;
+    }
     if(argc>1&&!strcmp(argv[1],"v2")){
-        assert(workspace_store_ready());const workspace_model_t *old=workspace_store_get();assert(old->version==4&&old->user_count==2);
+        assert(workspace_store_ready());const workspace_model_t *old=workspace_store_get();assert(old->version==5&&old->user_count==2);
         assert(old->users[0].profiles[0].mode==1&&old->users[0].qr_after_count&&!strcmp(old->users[1].name,"Alice"));assert(!*old->users[0].employee_id&&!*old->users[0].team);
         assert(workspace_store_save(old));wait_job();assert(workspace_store_last_success());free(m);return 0;
     }
     if(argc>1&&!strcmp(argv[1],"legacy")){
         assert(workspace_store_ready());const workspace_model_t *old=workspace_store_get();
-        assert(old->version==4&&old->user_count==2&&old->users[1].id==2&&!strcmp(old->users[1].name,"Alice"));
+        assert(old->version==5&&old->user_count==2&&old->users[1].id==2&&!strcmp(old->users[1].name,"Alice"));
         assert(old->users[0].profiles[0].mode==0&&!old->users[0].qr_after_count);
         assert(workspace_store_save(old));wait_job();assert(workspace_store_last_success());
         free(m);puts("PASS v1 workspace migrated, IDs/preferences retained, old profiles keep current mode");return 0;

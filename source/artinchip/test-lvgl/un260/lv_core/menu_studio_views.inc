@@ -45,10 +45,32 @@ static void step_card(lv_obj_t *p,int x,int y,int w,int h,const char *n,const ch
     lv_obj_update_layout(t);int dy=49+lv_obj_get_height(t)+13;
     lv_obj_t *d=small(v,16,dy,w-32,detail);lv_obj_set_style_text_line_space(d,5,0);
 }
+/* Keep every digit visible in the original card; the detail uses the full larger value. */
+static lv_obj_t *batch_digits(lv_obj_t *parent,int x,int y,int width,const char *digits,
+                              const lv_font_t *preferred)
+{
+    lv_obj_t *value=label(parent,x,y,width,digits,preferred,INK);
+    lv_label_set_long_mode(value,LV_LABEL_LONG_CLIP);
+    const lv_font_t *sizes[]={&lv_font_instrument_sans_semibold_37,
+                              &lv_font_instrument_sans_semibold_29,
+                              &lv_font_instrument_sans_semibold_21,
+                              &lv_font_instrument_sans_semibold_17};
+    for(unsigned i=0;i<sizeof(sizes)/sizeof(sizes[0]) && menu_label_width(value,NULL)>width;i++)
+        lv_obj_set_style_text_font(value,ui_message_font(sizes[i]),0);
+    return value;
+}
+
 static void batch_view(lv_obj_t *b)
 {
-    if(!menu.batch_dirty&&menu.owner!=(user()?user()->id:0))reset_batch();
-    heading(b,ui_tr("Batch presets"));char line[64];snprintf(line,sizeof(line),ui_tr("%u / 10 slots"),menu.batch_count);
+    if(!batch_has_edits()&&menu.owner!=(user()?user()->id:0))reset_batch();
+    if(!menu.batch_mode_selected && !batch_has_edits() && !menu.saving &&
+       menu.batch_mode!=machine_state_batch_mode()){
+        menu.batch_mode=machine_state_batch_mode();
+        load_batch_slots(user(),menu.batch_mode);
+    }
+    menu_batch_draft_t *draft=batch_draft();
+    bool amount=menu.batch_mode==AMOUNT_BATCH_MODE;
+    heading(b,ui_tr("Batch presets"));char line[64];snprintf(line,sizeof(line),ui_tr("%u / 10 slots"),draft->count);
     lv_obj_t *title=lv_obj_get_child(b,0),*slots=small(b,0,14,LV_SIZE_CONTENT,line);
     lv_obj_update_layout(b);
     int title_width=menu_label_width(title,NULL),slots_width=menu_label_width(slots,NULL);
@@ -59,40 +81,48 @@ static void batch_view(lv_obj_t *b)
     /* Follow the painted heading in its reading direction, leaving the fixed
        Cancel/Save/Add action positions available when a draft is present. */
     lv_obj_set_x(slots,align==LV_TEXT_ALIGN_RIGHT?title_left-slots_width-20:title_left+title_width+20);
-    if(menu.batch_dirty){button(b,689,0,92,36,ui_tr("Cancel"),500,false);button(b,789,0,92,36,ui_tr("Save"),A_SAVE_BATCH,true);}
+    if(draft->dirty){button(b,689,0,92,36,ui_tr("Cancel"),500,false);button(b,789,0,92,36,ui_tr("Save"),A_SAVE_BATCH,true);}
     int add_width=LV_MAX(112,menu_text_width(ui_tr("Add slot"))+46);
-    lv_obj_t *add=button(b,1028-add_width,0,add_width,36,ui_tr("Add slot"),A_ADD_BATCH,false);if(menu.batch_count>=WORKSPACE_BATCHES)lv_obj_add_state(add,LV_STATE_DISABLED);button_icon(add,MICON("plus",22),lv_color_to32(lv_obj_get_style_text_color(add,0))&0xFFFFFF);
+    lv_obj_t *add=button(b,1028-add_width,0,add_width,36,ui_tr("Add slot"),A_ADD_BATCH,false);if(draft->count>=WORKSPACE_BATCHES)lv_obj_add_state(add,LV_STATE_DISABLED);button_icon(add,MICON("plus",22),lv_color_to32(lv_obj_get_style_text_color(add,0))&0xFFFFFF);
+    const char *modes[]={ui_tr("Notes"),ui_tr("Amount")};
+    lv_obj_t *mode_switch=segments(b,0,35,260,40,modes,2,menu.batch_mode,A_BATCH_NOTES);
+    lv_obj_t *mode_hint=small(b,0,0,438,ui_tr("Switching applies the saved preset."));
+    lv_obj_align_to(mode_hint,mode_switch,LV_ALIGN_OUT_RIGHT_MID,16,0);
     for(unsigned j=0;j<5;j++){
-        unsigned i=menu.batch_page*5+j;if(i>=menu.batch_count)break;
+        unsigned i=draft->page*5+j;if(i>=draft->count)break;
         lv_obj_t *v=lv_settings_button(b,j*145,77,j==4?134:135,128,"",false,pick_event,(void *)(uintptr_t)i);
-        bool selected=i==menu.selected_batch;palette(v,selected?LV_SETTINGS_CHOICE_SELECTED_SURFACE:PANEL);lv_obj_set_style_radius(v,14,0);lv_obj_set_style_border_width(v,0,0);
-        label(v,14,14,107,i?ui_tr("Notes"):ui_tr("Fixed slot"),&lv_font_instrument_sans_medium_13,selected?BLUE:MUTED);
-        snprintf(line,sizeof(line),i?"%u":ui_tr("OFF"),menu.batches[i]);label(v,14,43,107,line,&lv_font_instrument_sans_semibold_37,INK);
-        bool active=machine_state_batch_enabled()?i&&menu.batches[i]==machine_state_batch_num():i==0;
+        bool selected=i==draft->selected;palette(v,selected?LV_SETTINGS_CHOICE_SELECTED_SURFACE:PANEL);lv_obj_set_style_radius(v,14,0);lv_obj_set_style_border_width(v,0,0);
+        label(v,14,14,107,i?modes[menu.batch_mode]:ui_tr("Fixed slot"),&lv_font_instrument_sans_medium_13,selected?BLUE:MUTED);
+        snprintf(line,sizeof(line),i?"%u":ui_tr("OFF"),draft->values[i]);batch_digits(v,14,43,107,line,&lv_font_instrument_sans_semibold_37);
+        bool active=batch_value_in_use(draft->values[i]);
         if(active){label(v,14,100,90,ui_tr("In use"),&lv_font_instrument_sans_medium_13,selected?BLUE:MUTED);icon(v,MICON("check",16),107,100,BLUE);}
     }
-    small(b,0,231,470,ui_tr("1–199 notes · OFF is fixed"));
+    small(b,0,231,470,amount?ui_tr("OFF is a fixed slot."):ui_tr("1–199 notes · OFF is fixed"));
     lv_obj_t *prev=button(b,612,219,46,36,"",510,false),*next=button(b,668,219,46,36,"",511,false);
-    if(!menu.batch_page)lv_obj_add_state(prev,LV_STATE_DISABLED);
-    if((menu.batch_page+1)*5>=menu.batch_count)lv_obj_add_state(next,LV_STATE_DISABLED);
+    if(!draft->page)lv_obj_add_state(prev,LV_STATE_DISABLED);
+    if((draft->page+1)*5>=draft->count)lv_obj_add_state(next,LV_STATE_DISABLED);
     icon(prev,MICON("back",22),12,7,lv_color_to32(lv_obj_get_style_text_color(prev,0))&0xFFFFFF);icon(next,MICON("next",22),12,7,lv_color_to32(lv_obj_get_style_text_color(next,0))&0xFFFFFF);
     lv_obj_t *d=box(b,734,48,294,248,PANEL,20);
-    label(d,20,18,222,menu.selected_batch?ui_tr("Selected preset"):ui_tr("No batch limit"),&lv_font_instrument_sans_semibold_21,INK);icon(d,MICON("layers",22),252,19,ORANGE);
-    snprintf(line,sizeof(line),menu.selected_batch?"%u":ui_tr("OFF"),menu.batches[menu.selected_batch]);lv_obj_t *value=label(d,20,58,254,line,&lv_font_instrument_sans_semibold_50,INK);lv_obj_set_style_text_letter_space(value,-1,0);lv_obj_set_width(value,LV_SIZE_CONTENT);lv_obj_update_layout(value);
-    if(menu.selected_batch)label(d,26+lv_obj_get_width(value),58+lv_font_instrument_sans_semibold_50.line_height-lv_font_instrument_sans_semibold_50.base_line-lv_font_instrument_sans_medium_16.line_height+lv_font_instrument_sans_medium_16.base_line,90,ui_tr("notes"),&lv_font_instrument_sans_medium_16,MUTED);
-    small(d,20,122,254,menu.selected_batch?ui_tr("Stops when the batch is complete."):ui_tr("Count continuously without a preset."));
-    if(menu.selected_batch){int edit_width=LV_MAX(83,menu_text_width(ui_tr("Edit"))+46);lv_obj_t *edit=button(d,20,146,edit_width,36,ui_tr("Edit"),A_EDIT_BATCH,false);button_icon(edit,MICON("edit",22),lv_color_to32(lv_obj_get_style_text_color(edit,0))&0xFFFFFF);lv_obj_t *remove=button(d,28+edit_width,146,137,36,ui_tr("Remove"),A_DELETE_BATCH,false);if(menu.batch_count<=2)lv_obj_add_state(remove,LV_STATE_DISABLED);icon(remove,MICON("trash",22),9,7,lv_color_to32(lv_obj_get_style_text_color(remove,0))&0xFFFFFF);lv_obj_align(lv_obj_get_child(remove,0),LV_ALIGN_LEFT_MID,40,0);}
-    bool active=!menu.batch_dirty&&(machine_state_batch_enabled()?menu.selected_batch&&menu.batches[menu.selected_batch]==machine_state_batch_num():!menu.selected_batch);
+    label(d,20,18,222,draft->selected?ui_tr("Selected preset"):ui_tr("No batch limit"),&lv_font_instrument_sans_semibold_21,INK);icon(d,MICON("layers",22),252,19,ORANGE);
+    snprintf(line,sizeof(line),draft->selected?"%u":ui_tr("OFF"),draft->values[draft->selected]);lv_obj_t *value=batch_digits(d,20,58,254,line,&lv_font_instrument_sans_semibold_50);lv_obj_set_style_text_letter_space(value,-1,0);lv_obj_set_width(value,LV_SIZE_CONTENT);lv_obj_update_layout(value);
+    if(draft->selected&&!amount)label(d,26+lv_obj_get_width(value),58+lv_font_instrument_sans_semibold_50.line_height-lv_font_instrument_sans_semibold_50.base_line-lv_font_instrument_sans_medium_16.line_height+lv_font_instrument_sans_medium_16.base_line,90,ui_tr("notes"),&lv_font_instrument_sans_medium_16,MUTED);
+    small(d,20,122,254,draft->selected?(amount?ui_tr("Stops at the preset amount."):ui_tr("Stops when the batch is complete.")):ui_tr("Count continuously without a preset."));
+    if(draft->selected){int edit_width=LV_MAX(83,menu_text_width(ui_tr("Edit"))+46);lv_obj_t *edit=button(d,20,146,edit_width,36,ui_tr("Edit"),A_EDIT_BATCH,false);button_icon(edit,MICON("edit",22),lv_color_to32(lv_obj_get_style_text_color(edit,0))&0xFFFFFF);lv_obj_t *remove=button(d,28+edit_width,146,137,36,ui_tr("Remove"),A_DELETE_BATCH,false);if(draft->count<=2)lv_obj_add_state(remove,LV_STATE_DISABLED);icon(remove,MICON("trash",22),9,7,lv_color_to32(lv_obj_get_style_text_color(remove,0))&0xFFFFFF);lv_obj_align(lv_obj_get_child(remove,0),LV_ALIGN_LEFT_MID,40,0);}
+    bool active=!draft->dirty&&batch_value_in_use(draft->values[draft->selected]);
     lv_obj_t *apply=button(d,20,186,254,44,active?ui_tr("In use"):ui_tr("Use this preset"),A_APPLY_BATCH,true);if(active){lv_obj_add_state(apply,LV_STATE_DISABLED);button_icon(apply,MICON("check",22),lv_color_to32(lv_obj_get_style_text_color(apply,0))&0xFFFFFF);}
     lv_obj_t *main_batch=button(b,0,256,470,40,
-        ui_tr(ui_state_main_batch_action_get()==UI_MAIN_BATCH_CYCLE?UI_N_("Main Batch: Cycle"):UI_N_("Main Batch: Settings")),
+        ui_tr(ui_state_main_batch_action_get()==UI_MAIN_BATCH_CYCLE?
+            (amount?UI_N_("Main VBatch: Cycle"):UI_N_("Main Batch: Cycle")):
+            (amount?UI_N_("Main VBatch: Settings"):UI_N_("Main Batch: Settings"))),
         A_BATCH_BEHAVIOR,true);
     lv_label_set_long_mode(lv_obj_get_child(main_batch,0),LV_LABEL_LONG_CLIP);
 }
 static bool profile_matches(const workspace_profile_t *p)
 {
     workspace_profile_t c=current_profile();
-    return p->speed==c.speed&&p->work==c.work&&p->add==c.add&&p->sort==c.sort&&p->beep==c.beep&&(workspace_service_profile_mode(p)==c.mode&&count_mode_service_confirmed())&&p->batch_enabled==c.batch_enabled&&(!p->batch_enabled||p->batch==c.batch);
+    return p->speed==c.speed&&p->work==c.work&&p->add==c.add&&p->sort==c.sort&&p->beep==c.beep&&(workspace_service_profile_mode(p)==c.mode&&count_mode_service_confirmed())&&machine_state_batch_confirmed(p->batch_mode)&&p->batch_mode==c.batch_mode&&
+        p->batch_enabled==c.batch_enabled&&(!p->batch_enabled||
+        (p->batch_mode==AMOUNT_BATCH_MODE?p->batch_amount==c.batch_amount:p->batch==c.batch));
 }
 static const char *profile_display_name(const workspace_profile_t *profile)
 {
@@ -110,7 +140,7 @@ static void profiles_view(lv_obj_t *b)
         if(selected)box(v,0,9,3,54,BLUE,2);
         icon(v,p->batch_enabled?MICON("layers",22):p->work&&p->speed==0?MICON("shield",22):MICON("note",22),16,25,MUTED);
         lv_obj_t *name=label(v,52,13,item_width-95,profile_display_name(p),&lv_font_instrument_sans_semibold_18,INK);lv_label_set_long_mode(name,LV_LABEL_LONG_DOT);
-        char hint[96];snprintf(hint,sizeof(hint),"%s / %s",p->mode==2?ui_tr("Single denomination"):p->mode==3?ui_tr("Piece counting"):ui_tr("Mixed notes"),p->batch_enabled?ui_tr("Batch counting"):p->work?ui_tr("Manual start"):ui_tr("Continuous counting"));
+        char hint[96];snprintf(hint,sizeof(hint),"%s / %s",p->mode==2?ui_tr("Single denomination"):p->mode==3?ui_tr("Piece counting"):ui_tr("Mixed notes"),p->batch_enabled?(p->batch_mode==AMOUNT_BATCH_MODE?ui_tr("VBatch"):ui_tr("Batch counting")):p->work?ui_tr("Manual start"):ui_tr("Continuous counting"));
         small(v,52,41,item_width-95,hint);icon(v,MICON("next",22),item_width-38,25,BLUE);
     }
     const workspace_profile_t *p=&u->profiles[menu.selected_profile];lv_obj_t *d=box(b,606,48,422,248,PANEL,20);
@@ -149,7 +179,13 @@ static void options_view(lv_obj_t *b)
     lv_obj_t *capacity=field_button(right,346,72,140,value,A_CAPACITY);
     int capacity_width=menu_button_fit_right(capacity,486,140,52);
     lv_obj_align(lv_obj_get_child(capacity,0),LV_ALIGN_LEFT_MID,13,0);lv_obj_set_x(lv_obj_get_child(capacity,1),capacity_width-31);
-    option_label(right,2,ui_tr("Current batch"));snprintf(value,sizeof(value),machine_state_batch_enabled()?ui_trn("%u notes", (machine_state_batch_num())):ui_tr("Off"),machine_state_batch_num());
+    option_label(right,2,ui_tr("Current batch"));
+    uint8_t batch_mode=machine_state_batch_mode();
+    uint32_t current_batch=machine_state_batch_saved_value(batch_mode);
+    if(batch_mode==AMOUNT_BATCH_MODE){
+        if(current_batch)snprintf(value,sizeof(value),ui_tr("VBatch %u"),current_batch);
+        else snprintf(value,sizeof(value),"%s",ui_tr("VBatch OFF"));
+    }else snprintf(value,sizeof(value),current_batch?ui_trn("%u notes",current_batch):ui_tr("Off"),current_batch);
     lv_obj_t *batch=link_button(right,366,131,120,value,301);
     int batch_width=menu_button_fit_right(batch,486,120,30);
     lv_obj_align(lv_obj_get_child(batch,0),LV_ALIGN_LEFT_MID,3,0);lv_obj_set_x(lv_obj_get_child(batch,1),batch_width-21);

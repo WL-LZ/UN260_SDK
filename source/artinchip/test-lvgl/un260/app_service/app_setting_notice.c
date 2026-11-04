@@ -28,8 +28,9 @@ static void request_started(uint8_t command)
         work_mode_service_get_snapshot(&mode);
         if (!mode.pending) return; /* Confirmed same-value selection sent nothing. */
     }
-    if (command == 0x06) {
+    if (command == 0x06 || command == 0x07) {
         ui_notice_clear("settings.batch");
+        ui_notice_clear("settings.value_batch");
         ui_notice_clear("workspace.batch");
     }
     fault_popup_resolve_setting_rejection(command);
@@ -52,7 +53,7 @@ static uint8_t notice_command(const char *key)
 {
     static const struct {const char *key;uint8_t command;} fields[] = {
         {"settings.speed",0x16},{"settings.sorting",0x3A},{"settings.sound",0x15},
-        {"settings.batch",0x06},{"settings.add",0x39},{"settings.work_mode",0x38},
+        {"settings.batch",0x06},{"settings.value_batch",0x07},{"settings.add",0x39},{"settings.work_mode",0x38},
         {"settings.mode",0x04},{"settings.double_note",0x31},{"settings.flap",0x42},
         {"settings.reject_pocket",0x08},{"settings.impeller",0x4B}
     };

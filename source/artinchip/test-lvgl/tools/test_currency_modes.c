@@ -341,9 +341,9 @@ int main(int argc,char **argv)
     assert(!setting_service_request_batch_number(200,false,200));
     assert(!setting_service_request_batch_number(0,false,200));assert(sends==before);
     assert(setting_service_request_batch_number(199,false,200));assert(last_cmd==6&&last_payload[0]==199);
-    assert(setting_service_batch_take_result(1,&batch)&&batch.target.enable&&batch.target.num==199);
+    assert(setting_service_batch_take_result(6,1,&batch)&&batch.target.enable&&batch.target.num==199);
     assert(setting_service_request_batch_switch(false,200,true,199));assert(last_payload[0]==200);
-    assert(setting_service_batch_take_result(1,&batch)&&!batch.target.enable);
+    assert(setting_service_batch_take_result(6,1,&batch)&&!batch.target.enable);
     puts("PASS Batch wire boundary: 200 reserved for OFF, invalid enabled values send nothing, 199 and OFF round trip");
     puts("PASS AUT/MUL ordinary 0x03, ACK/failure/timeout/send failure, boot sync, independent work mode, lifecycle");
     return 0;

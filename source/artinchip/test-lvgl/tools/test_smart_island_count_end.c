@@ -231,7 +231,7 @@ static void test_reparent_animation_settlement(void)
     assert(lv_obj_has_flag(g_si_ctx.objects.time,LV_OBJ_FLAG_HIDDEN)==time_hidden);
     smart_island_close();tick(300);
 
-    smart_island_notify_preset_full((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4});
+    smart_island_notify_preset_full((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4},"Batch full");
     tick(300);reparent_round_trip();
     assert(g_si_ctx.warning.fault.valid&&g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING);
     assert(g_si_ctx.warning.marquee_running&&!g_si_ctx.warning.resume_animation_pending);

@@ -16,6 +16,9 @@ typedef struct {
     uint8_t batch_num;
     uint8_t batch_mode;
     uint32_t batch_amount;
+    bool batch_mode_known;
+    bool batch_num_known;
+    bool batch_amount_known;
     bool aging_running;
     uint8_t double_note_level;
     uint8_t flap_position;
@@ -56,6 +59,10 @@ void machine_state_confirm_batch_amount(uint32_t amount);
 uint32_t machine_state_batch_amount(void);
 void machine_state_confirm_batch_mode(uint8_t mode);
 uint8_t machine_state_batch_mode(void);
+/* Cached last-confirmed value for either mode; zero represents Off. */
+uint32_t machine_state_batch_saved_value(uint8_t mode);
+bool machine_state_batch_confirmed(uint8_t mode);
+void machine_state_invalidate_batch(uint8_t mode);
 
 void machine_state_confirm_aging_running(bool running);
 bool machine_state_aging_running(void);

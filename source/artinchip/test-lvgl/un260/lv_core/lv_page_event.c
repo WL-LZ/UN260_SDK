@@ -208,17 +208,11 @@ void page_03_batch_set_result(bool success, const setting_batch_result_t *result
     if (result == NULL) return;
     page_03_menu_clear_batch_tip();
 
-    if (success) {
-        if (result->target.num > 0) {
-            machine_state_confirm_batch(result->target.enable, result->target.num);
-            page_01_bottom_c_refresh_batch(true);
-            if (page_03_menu_is_visible()) {
-                page_03_menu_refresh_batch_number();
-                page_03_menu_show_batch_saved_tip();
-            }
-        }
+    if (success) page_01_bottom_c_refresh_batch(true);
+    if (page_03_menu_is_visible()) {
+        page_03_menu_refresh_batch_number();
+        if (success) page_03_menu_show_batch_saved_tip();
     }
-
 }
 void page_03_update_menu_button_states_refresh(void)
 {

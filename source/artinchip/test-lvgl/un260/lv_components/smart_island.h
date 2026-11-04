@@ -63,7 +63,7 @@ typedef void (*smart_island_fault_phase_cb_t)(machine_fault_key_t key, smart_isl
 void smart_island_register_fault_phase_cb(smart_island_fault_phase_cb_t callback);
 void smart_island_notify_fault(const char *text, machine_fault_key_t key);
 void smart_island_notify_no_note(machine_fault_key_t key);
-void smart_island_notify_preset_full(machine_fault_key_t key);
+void smart_island_notify_preset_full(machine_fault_key_t key, const char *title_key);
 void smart_island_show_qr_popup(void);
 void smart_island_faults_changed(void);
 /* Cancel only the displayed notice belonging to this key. */

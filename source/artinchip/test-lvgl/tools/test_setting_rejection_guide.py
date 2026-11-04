@@ -12,7 +12,7 @@ def main():
     parts += [without_includes((ROOT/'un260/app_service/app_setting_notice.c').read_text())]
     source=(ROOT/'un260/app_service/app_setting_reply_basic.c').read_text()
     cases=[]
-    for command in ['0x04','0x06','0x3A']:
+    for command in ['0x04','0x06','0x07','0x3A']:
         start=source.index('case '+command+':')
         cases.append('case '+command+':'+block(source,source.index('{',start))+' break;')
     parts.append('app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,const uint8_t *buf,uint8_t len) { app_setting_reply_action_t actions=APP_SETTING_REPLY_ACTION_NONE; switch(cmd) {'+''.join(cases)+' default: break;}return actions;}')

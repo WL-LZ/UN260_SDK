@@ -83,7 +83,7 @@ static workspace_model_t *read_model(void)
     FILE *file = fopen(path, "rb"); assert(file);
     unsigned header[4]; assert(fread(header, sizeof(header), 1, file) == 1);
     workspace_model_t *model = malloc(sizeof(*model)); assert(model);
-    assert(header[0] == 0x31535755U && header[1] == 4 && header[2] == sizeof(*model));
+    assert(header[0] == 0x31535755U && header[1] == WORKSPACE_MODEL_VERSION && header[2] == sizeof(*model));
     assert(fread(model, sizeof(*model), 1, file) == 1 && fgetc(file) == EOF);
     assert(!fclose(file)); assert(workspace_model_valid(model)); return model;
 }
@@ -129,6 +129,8 @@ int main(void)
     model->users[1].quick_enabled = 0; model->users[1].qr_after_count = 1;
     model->users[1].batches[1] = 13; strcpy(model->users[1].profiles[0].name, "Special count");
     model->users[1].profiles[0].mode = 2;
+    model->users[1].amount_batches[1] = UINT32_MAX;
+    model->shared.amount_batches[2] = 72145;
     assert(workspace_store_save(model)); wait_workspace();
     file_write("cashbook.v1", "business ledger\n"); file_write("standby_1.bin", "personal photograph\n");
     file_write("standby_1.bin.source", "photo source\n"); file_write("unrelated.cfg", "unowned file\n");
@@ -169,6 +171,8 @@ int main(void)
            reset->users[1].qr_after_count == defaults->users[0].qr_after_count);
     assert(!memcmp(reset->users[1].profiles, defaults->users[0].profiles, sizeof(reset->users[1].profiles)));
     assert(!memcmp(reset->users[1].batches, defaults->users[0].batches, sizeof(reset->users[1].batches)));
+    assert(!memcmp(reset->users[1].amount_batches, defaults->users[0].amount_batches, sizeof(reset->users[1].amount_batches)));
+    assert(!memcmp(reset->shared.amount_batches, defaults->shared.amount_batches, sizeof(reset->shared.amount_batches)));
     /* Runtime caches stay usable for Restart; startup journal defeats an old writer. */
     assert(!workspace_store_get()->users[1].quick_enabled);
     file_write("touch_calibration.cfg", "old cached calibration\n");

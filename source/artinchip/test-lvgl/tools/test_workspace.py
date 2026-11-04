@@ -30,18 +30,35 @@ with tempfile.TemporaryDirectory(prefix='un260-workspace-') as directory:
     file.write_bytes(original[:-1]+bytes([original[-1]^1]))
     corrupted=file.read_bytes();subprocess.run([str(binary),'corrupt'],check=True);assert file.read_bytes()==corrupted
     import struct,zlib
-    # Explicit v1 ABI fixture from the v2 saved model; 36-byte profiles preceded
-    # the identical 16388-byte avatar. No production struct cast is assumed.
+    file.write_bytes(original)
+    subprocess.run([str(binary),'v5-roundtrip'],check=True)
     payload=original[16:]
+    # Build legacy files with their original sizes and offsets, including separate shared/user settings.
+    def legacy_user(index):
+        offset=16+index*16876 if index<8 else 16+8*16876+12
+        user=payload[offset:offset+16876]
+        profiles=b''.join(user[44+i*44:44+i*44+37]+bytes(3) for i in range(8))
+        # A value profile has no v1-v4 equivalent. Use a genuine pieces record for that slot.
+        profiles=bytearray(profiles);profiles[40+34]=1;profiles[40+35]=75
+        return user[:44]+profiles+user[396:396+16388+50]+bytes(2)
+    def install(version,blob):
+        file.write_bytes(struct.pack('<4I',0x31535755,version,len(blob),zlib.crc32(blob))+blob)
+    users=b''.join(legacy_user(i) for i in range(8))
+    assert len(users)==8*16804
+    v3=struct.pack('<4I',3,3,1,2)+users
+    install(3,v3);subprocess.run([str(binary),'v3'],check=True)
+    shared=bytearray(legacy_user(8));shared[33]=42
+    install(4,struct.pack('<4I',4,3,1,2)+users+bytes([0,1])+bytes(10)+shared)
+    subprocess.run([str(binary),'v4'],check=True)
     v2=bytearray(struct.pack('<4I',2,3,1,2))
-    for i in range(8):v2+=payload[16+i*16804:16+i*16804+16752]
+    for i in range(8):v2+=legacy_user(i)[:16752]
     v2[16+42]=1  # Existing automatic QR preference must survive migration.
     file.write_bytes(struct.pack('<4I',0x31535755,2,len(v2),zlib.crc32(v2))+v2)
     subprocess.run([str(binary),'v2'],check=True)
     old=bytearray(struct.pack('<4I',1,3,1,2))
     payload=original[16:]
     for i in range(8):
-        user=payload[16+i*16804:16+i*16804+16752]
+        user=legacy_user(i)[:16752]
         # v2 user: 44-byte header, 8 * 40-byte profile, 16388-byte avatar
         assert len(user)==16752
         old+=user[:42]+b'\x00\x00'
@@ -49,4 +66,4 @@ with tempfile.TemporaryDirectory(prefix='un260-workspace-') as directory:
         old+=user[44+8*40:]
     file.write_bytes(struct.pack('<4I',0x31535755,1,len(old),zlib.crc32(old))+old)
     subprocess.run([str(binary),'legacy'],check=True)
-    assert struct.unpack('<4I',file.read_bytes()[:16])[1]==4
+    assert struct.unpack('<4I',file.read_bytes()[:16])[1]==5

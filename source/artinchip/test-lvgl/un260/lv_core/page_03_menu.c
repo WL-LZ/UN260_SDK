@@ -62,7 +62,7 @@ enum {A_BACK=1,A_QUICK,A_SETTINGS,A_HISTORY,A_PRINT_SETUP,A_PRINT,A_QR,A_STANDBY
       A_QUICK_TOGGLE,A_NEW_PROFILE,A_APPLY_PROFILE,
       A_DELETE_PROFILE,A_SAVE_BATCH,A_ADD_BATCH,A_EDIT_BATCH,A_DELETE_BATCH,A_APPLY_BATCH,
       A_NEW_USER,A_EDIT_NAME,A_USB_SCAN,A_USER_SAVE,A_USER_CANCEL,A_USER_SWITCH,A_USB_CLOSE,A_QUICK_CLOSE,
-      A_AUTO_QR,A_CAPACITY,A_LANGUAGE,A_TIMEOUT,A_DIAGNOSTICS,A_EDIT_USER,A_EMPLOYEE_ID,A_TEAM,A_REMOVE_PHOTO,A_DELETE_USER,A_INTERACTION_CONTROLS,A_SHORTCUT_VISIBILITY,A_BATCH_BEHAVIOR,A_TOUCH_SOUND,A_QUICK_ORDER_BASE=900};
+      A_AUTO_QR,A_CAPACITY,A_LANGUAGE,A_TIMEOUT,A_DIAGNOSTICS,A_EDIT_USER,A_EMPLOYEE_ID,A_TEAM,A_REMOVE_PHOTO,A_DELETE_USER,A_INTERACTION_CONTROLS,A_SHORTCUT_VISIBILITY,A_BATCH_BEHAVIOR,A_TOUCH_SOUND,A_BATCH_NOTES,A_BATCH_AMOUNT,A_QUICK_ORDER_BASE=900};
 static const char *const tabs[]={NULL,UI_N_("Count"),NULL,UI_N_("Output"),UI_N_("Preferences"),UI_N_("Help")};
 static const char *const tab_icons[]={MICON("overview",19),MICON("layers",19),MICON("history",19),MICON("output",19),MICON("settings",19),MICON("help",19)};
 static const uint32_t accents[]={BLUE,ORANGE,TEAL,BLUE,PURPLE,TEAL};
@@ -72,21 +72,28 @@ static const char *const sublabels[][5]={{NULL},{UI_N_("Batch presets"),UI_N_("P
     {NULL},{UI_N_("Print"),UI_N_("QR export")},
     {UI_N_("Operators"),UI_N_("Interaction"),UI_N_("Display & sound")},{UI_N_("Reject guide"),UI_N_("Care"),UI_N_("Device")}};
 static const unsigned subcounts[]={0,3,0,2,3,3};
+typedef struct {
+    uint32_t values[WORKSPACE_BATCHES], original_active, edited_active;
+    unsigned count, selected, page;
+    bool dirty;
+} menu_batch_draft_t;
+
 static struct {
     lv_obj_t *root,*body,*quick,*quick_context,*photo_sheet,*user_sheet,*nav[6],*task_scroll;
     lv_timer_t *timer;
-    unsigned tab,sub,selected_batch,selected_profile,selected_user,batch_page;
+    unsigned tab,sub,selected_profile,selected_user;
     bool reject_all;
-    bool dirty,batch_dirty,user_edit,scan_wait,photo_wait,photo_ready;
+    bool dirty,user_edit,scan_wait,photo_wait,photo_ready;
     unsigned saving;
-    uint8_t batch_apply_target;
+    uint8_t batch_mode;
+    bool batch_mode_selected;
+    uint32_t batch_apply_target;
+    menu_batch_draft_t batch_drafts[2];
     uint32_t qr_generation;
     unsigned reject_code;
     lv_quick_controls_t quick_controls,interaction_controls;
     uint8_t interaction_page;
     bool interaction_created,shortcut_visibility;
-    uint8_t batches[WORKSPACE_BATCHES],batch_count;
-    uint8_t batch_active_original,batch_active_edited;
     uint32_t owner,editing_user;
     unsigned rendered_tab,rendered_sub;
     lv_coord_t scroll_y[6][5];
@@ -220,21 +227,63 @@ static bool save(workspace_model_t *m)
     bool ok=m&&workspace_store_save(m);free(m);
     if(ok)app_ui_runtime_notice_started(APP_UI_NOTICE_WORKSPACE_STORE,UI_N_("Saving..."));else notify(UI_NOTICE_ERROR,UI_N_("Could not save. Wait for the current task or check device storage."));return ok;
 }
+static menu_batch_draft_t *batch_draft(void)
+{
+    return &menu.batch_drafts[menu.batch_mode];
+}
+
+static bool batch_has_edits(void)
+{
+    return menu.batch_drafts[PCS_BATCH_MODE].dirty || menu.batch_drafts[AMOUNT_BATCH_MODE].dirty;
+}
+
+static bool batch_value_in_use(uint32_t value)
+{
+    return machine_state_batch_confirmed(menu.batch_mode) &&
+           machine_state_batch_saved_value(menu.batch_mode) == value;
+}
+
 static void capture_batch_active(void)
 {
-    menu.batch_active_original=menu.batch_active_edited=0;
-    if(machine_state_batch_enabled())for(unsigned i=1;i<menu.batch_count;i++)
-        if(menu.batches[i]==machine_state_batch_num()) {
-            menu.batch_active_original=menu.batch_active_edited=menu.batches[i];break;
+    menu_batch_draft_t *d = batch_draft();
+    d->original_active = d->edited_active = 0;
+    for (unsigned i = 1; i < d->count; i++) {
+        if (batch_value_in_use(d->values[i])) {
+            d->original_active = d->edited_active = d->values[i];
+            break;
         }
+    }
 }
+
+static void load_batch_slots(const workspace_user_t *u, uint8_t mode)
+{
+    menu_batch_draft_t *d = &menu.batch_drafts[mode];
+    *d = (menu_batch_draft_t){0};
+    if (!u) return;
+    d->count = workspace_batch_slot_count(u, mode);
+    uint32_t current = machine_state_batch_saved_value(mode);
+    for (unsigned i = 0; i < d->count; ++i) {
+        d->values[i] = workspace_batch_slot_value(u, mode, i);
+        if (d->values[i] == current) {
+            d->selected = i;
+            d->page = i / 5;
+        }
+    }
+}
+
 static void reset_batch(void)
-{const workspace_user_t *u=user();if(u){memcpy(menu.batches,u->batches,sizeof(menu.batches));menu.batch_count=u->batch_count;menu.owner=u->id;}menu.batch_dirty=false;menu.selected_batch=0;menu.batch_page=0;
-    menu.batch_active_original=menu.batch_active_edited=0;
-    if(u&&machine_state_batch_enabled())for(unsigned i=1;i<u->batch_count;i++)if(u->batches[i]==machine_state_batch_num()){menu.selected_batch=i;menu.batch_page=i/5;menu.batch_active_original=menu.batch_active_edited=u->batches[i];break;}}
+{
+    const workspace_user_t *u = user();
+    menu.owner = u ? u->id : 0;
+    menu.batch_mode = machine_state_batch_mode();
+    menu.batch_mode_selected = false;
+    load_batch_slots(u, PCS_BATCH_MODE);
+    load_batch_slots(u, AMOUNT_BATCH_MODE);
+}
+
 static void tab_event(lv_event_t *e)
 {
-    if(menu.saving||menu.batch_dirty||menu.user_edit){explain(UI_N_("Save or cancel your changes before switching sections."));return;}
+    if(menu.saving||batch_has_edits()||menu.user_edit){explain(UI_N_("Save or cancel your changes before switching sections."));return;}
     if(workspace_service_applying()){notify(UI_NOTICE_WARNING,UI_N_("Wait for the profile to finish applying."));return;}
     clear_notice();
     menu.tab=(uintptr_t)lv_event_get_user_data(e);menu.sub=0;menu.dirty=true;
@@ -242,7 +291,7 @@ static void tab_event(lv_event_t *e)
 static void sub_event(lv_event_t *e)
 {
     if(workspace_service_applying()){notify(UI_NOTICE_WARNING,UI_N_("Wait for the profile to finish applying."));return;}
-    if(menu.saving||menu.batch_dirty||menu.user_edit){explain(UI_N_("Save or cancel your changes first."));return;}
+    if(menu.saving||batch_has_edits()||menu.user_edit){explain(UI_N_("Save or cancel your changes first."));return;}
     clear_notice();
     unsigned sub=(uintptr_t)lv_event_get_user_data(e);
     menu.sub=sub;menu.dirty=true;
@@ -250,7 +299,7 @@ static void sub_event(lv_event_t *e)
 static void pick_event(lv_event_t *e)
 {
     unsigned n=(uintptr_t)lv_event_get_user_data(e);
-    if(menu.tab==1&&menu.sub==0)menu.selected_batch=n;
+    if(menu.tab==1&&menu.sub==0)batch_draft()->selected=n;
     else if(menu.tab==1)menu.selected_profile=n;else menu.selected_user=n;
     menu.dirty=true;
 }
@@ -287,8 +336,11 @@ static void toggle(lv_obj_t *p,int y,int w,const char *title,const char *hint,bo
 static void profile_summary(lv_obj_t *p,const workspace_profile_t *v,int y)
 {
     const char *speed[]={ui_tr("Low"),ui_tr("Standard"),ui_tr("High")},*sort[]={ui_tr("Off"),ui_tr("Face"),ui_tr("Orientation"),ui_tr("Both")};
-    char batch[64];snprintf(batch,sizeof(batch),v->batch_enabled?ui_trn("%u notes", (v->batch)):ui_tr("Off"),v->batch);
-    const char *titles[]={ui_tr("Speed"),ui_tr("Start"),ui_tr("Counting"),ui_tr("Sorting"),ui_tr("ADD"),ui_tr("Batch")};
+    char batch[64];
+    if (!v->batch_enabled) snprintf(batch,sizeof(batch),"%s",ui_tr("Off"));
+    else if (v->batch_mode == AMOUNT_BATCH_MODE) snprintf(batch,sizeof(batch),"%u",v->batch_amount);
+    else snprintf(batch,sizeof(batch),ui_trn("%u notes",v->batch),v->batch);
+    const char *titles[]={ui_tr("Speed"),ui_tr("Start"),ui_tr("Counting"),ui_tr("Sorting"),ui_tr("ADD"),v->batch_mode == AMOUNT_BATCH_MODE ? ui_tr("Amount") : ui_tr("Batch")};
     const char *values[]={speed[v->speed],v->work?ui_tr("Manual"):ui_tr("Auto"),v->mode==1?ui_text_get(UI_TEXT_PAGE01_BOTTOM_MODE_MDC):v->mode==2?ui_text_get(UI_TEXT_PAGE01_BOTTOM_MODE_SDC):v->mode==3?ui_text_get(UI_TEXT_PAGE01_BOTTOM_MODE_CNT):ui_tr("Keep current"),sort[v->sort],v->add?ui_tr("On"):ui_tr("Off"),batch};
     for(unsigned i=0;i<6;i++){
         int x=20+(i%3)*132,top=y+(i/3)*51;
@@ -299,7 +351,8 @@ static void profile_summary(lv_obj_t *p,const workspace_profile_t *v,int y)
 }
 static workspace_profile_t current_profile(void)
 {
-    return (workspace_profile_t){.mode=machine_state_mode()==MODE_SDC?2:machine_state_mode()==MODE_CNT?3:1,.speed=machine_state_speed(),.work=machine_state_work_mode(),.add=machine_state_add_enabled(),.sort=machine_state_fo_mode(),.beep=machine_state_buzzer_enabled(),.batch_enabled=machine_state_batch_enabled(),.batch=machine_state_batch_num()};
+    return (workspace_profile_t){.mode=machine_state_mode()==MODE_SDC?2:machine_state_mode()==MODE_CNT?3:1,.speed=machine_state_speed(),.work=machine_state_work_mode(),.add=machine_state_add_enabled(),.sort=machine_state_fo_mode(),.beep=machine_state_buzzer_enabled(),.batch_mode=machine_state_batch_mode(),.batch_enabled=machine_state_batch_saved_value(machine_state_batch_mode())!=0,
+        .batch=machine_state_batch_num(),.batch_amount=machine_state_batch_amount()};
 }
 #include "menu_studio_views.inc"
 #include "menu_output_help.inc"
@@ -347,7 +400,7 @@ static void render(void)
     menu.rendered_tab=menu.tab;menu.rendered_sub=menu.sub;menu.dirty=false;
 }
 static void confirmed_back(void *unused)
-{(void)unused;menu.batch_dirty=menu.user_edit=false;workspace_service_cancel_apply();reset_batch();if(!ui_manager_pop_page())ui_manager_switch(UI_PAGE_MAIN);}
+{(void)unused;batch_draft()->dirty=menu.user_edit=false;workspace_service_cancel_apply();reset_batch();if(!ui_manager_pop_page())ui_manager_switch(UI_PAGE_MAIN);}
 static void delete_profile(void *unused)
 {
     (void)unused;const workspace_user_t *u=user();if(!u||menu.selected_profile>=u->profile_count)return;workspace_model_t *m=draft();if(!m)return;
@@ -357,7 +410,7 @@ static void apply_profile(void *unused)
 {
     (void)unused;const workspace_user_t *u=user();if(!u||menu.selected_profile>=u->profile_count)return;
     const workspace_profile_t *profile=&u->profiles[menu.selected_profile];
-    if(profile->batch_enabled&&profile->batch==200){explain(UI_N_("Batch 200 means OFF. Save a replacement profile with 1-199."));return;}
+    if(profile->batch_mode==PCS_BATCH_MODE&&profile->batch_enabled&&profile->batch==200){explain(UI_N_("Batch 200 means OFF. Save a replacement profile with 1-199."));return;}
     if(!workspace_service_apply(&u->profiles[menu.selected_profile],app_clock_uptime_ms()))explain(UI_N_("Finish counting, then apply the profile again."));
     else app_ui_runtime_notice_started(APP_UI_NOTICE_PROFILE_APPLY,UI_N_("Applying profile..."));
 }
@@ -388,19 +441,34 @@ static void confirm_operator_switch(void *context)
 }
 static void batch_submit(const char *value,void *unused)
 {
-    (void)unused;char *end;unsigned long v=strtoul(value,&end,10);
-    if(!*value||*end||v<1||v>=200){explain(UI_N_("Enter 1-199, within the pocket capacity. 200 means OFF."));return;}
-    for(unsigned i=1;i<menu.batch_count;i++)if(i!=menu.selected_batch&&menu.batches[i]==v){explain(UI_N_("This slot already exists."));return;}
-    if(!menu.batch_dirty)capture_batch_active();
-    if(menu.batch_active_edited&&menu.batches[menu.selected_batch]==menu.batch_active_edited)
-        menu.batch_active_edited=v;
-    menu.batches[menu.selected_batch]=v;menu.batch_dirty=menu.dirty=true;
+    (void)unused;
+    bool amount = menu.batch_mode == AMOUNT_BATCH_MODE;
+    char *end;
+    unsigned long long parsed = strtoull(value, &end, 10);
+    if (!*value || value[0] < '0' || value[0] > '9' || *end ||
+        !parsed || parsed > (amount ? UINT32_MAX : 199u)) {
+        explain(amount ? UI_N_("Enter an amount from 1 to 4294967295.") :
+                         UI_N_("Enter 1-199, within the pocket capacity. 200 means OFF."));
+        return;
+    }
+    menu_batch_draft_t *d = batch_draft();
+    uint32_t target = (uint32_t)parsed;
+    for (unsigned i = 1; i < d->count; i++) {
+        if (i != d->selected && d->values[i] == target) {
+            explain(UI_N_("This slot already exists."));
+            return;
+        }
+    }
+    if (!d->dirty) capture_batch_active();
+    if (d->edited_active && d->values[d->selected] == d->edited_active) d->edited_active = target;
+    d->values[d->selected] = target;
+    d->dirty = menu.dirty = true;
     if(app_command_runtime_count_start_busy()||workspace_service_applying()){
         notify(UI_NOTICE_WARNING,UI_N_("Finish the current operation, then use this preset."));return;
     }
     /* Persist first; the storage completion callback sends the controller command. */
-    if(workspace_service_save_batches(menu.owner,menu.batches,menu.batch_count,0,0)){
-        menu.batch_apply_target=(uint8_t)v;menu.saving=4;
+    if(workspace_service_save_batch_slots(menu.owner,menu.batch_mode,d->values,d->count,0,0)){
+        menu.batch_apply_target=target;menu.saving=4;
         app_ui_runtime_notice_started(APP_UI_NOTICE_BATCH_APPLY,UI_N_("Saving..."));
     }else notify(UI_NOTICE_ERROR,UI_N_("Save failed. Finish the current task and check storage."));
 }
@@ -481,7 +549,7 @@ static void quick_tile(lv_event_t *event)
     if(!controls)return;
     bool leaves_or_operates=id==QUICK_PURE || id==QUICK_EXPORT || id==QUICK_QR || id==QUICK_STANDBY ||
         (id>=QUICK_CALCULATOR && id<QUICK_CONTROL_COUNT);
-    if((menu.batch_dirty || menu.user_edit) && leaves_or_operates){
+    if((batch_has_edits() || menu.user_edit) && leaves_or_operates){
         explain(UI_N_("Save or cancel your changes before leaving this task."));return;
     }
     if(workspace_service_applying() || menu.saving){
@@ -587,11 +655,11 @@ static void action(lv_event_t *event)
                 ui_tr("OK"),NULL,NULL,NULL,NULL);
         menu.dirty=true;return;
     }
-    if(id==A_BACK){if(menu.saving){explain(UI_N_("The workspace is being saved. Please wait a moment."));return;}if(menu.batch_dirty||menu.user_edit||workspace_service_applying())settings_detail_dialog_show(ui_tr("Leave Menu?"),ui_tr("Unsaved edits will be discarded. Remaining profile steps will stop."),ui_tr("Leave"),ui_tr("Stay"),confirmed_back,NULL,NULL);else confirmed_back(NULL);return;}
+    if(id==A_BACK){if(menu.saving){explain(UI_N_("The workspace is being saved. Please wait a moment."));return;}if(batch_has_edits()||menu.user_edit||workspace_service_applying())settings_detail_dialog_show(ui_tr("Leave Menu?"),ui_tr("Unsaved edits will be discarded. Remaining profile steps will stop."),ui_tr("Leave"),ui_tr("Stay"),confirmed_back,NULL,NULL);else confirmed_back(NULL);return;}
     bool independent=id==A_QUICK_CLOSE||id==A_USB_CLOSE||id==813||(id>=440&&id<450)||(id>=301&&id<=308);
     if(!independent&&workspace_service_applying()){explain(UI_N_("Wait for the profile, or use Back to stop remaining steps."));return;}
     if(!independent&&menu.saving){explain(UI_N_("The workspace is being saved. Please wait a moment."));return;}
-    if((menu.batch_dirty||menu.user_edit)&&(id==A_SETTINGS||id==A_LANGUAGE||id==A_QUICK||id==A_HISTORY||id==A_PRINT_SETUP||id==601||id==600||id==A_STANDBY)){
+    if((batch_has_edits()||menu.user_edit)&&(id==A_SETTINGS||id==A_LANGUAGE||id==A_QUICK||id==A_HISTORY||id==A_PRINT_SETUP||id==601||id==600||id==A_STANDBY)){
         explain(UI_N_("Save or cancel your changes before leaving this task."));return;
     }
     if(id==A_SETTINGS||id==A_LANGUAGE){ui_page_05_set_password_open();return;}if(id==A_QUICK){open_quick();return;}
@@ -616,7 +684,7 @@ static void action(lv_event_t *event)
     if(id==601){ui_manager_push_page(UI_PAGE_STANDBY_SETTING);return;}if(id==600){ui_manager_push_page(UI_PAGE_LIST);return;}
     if(id==A_STANDBY){const char*reason=app_standby_runtime_blocker();if(reason&&!app_standby_runtime_needs_fault_review())explain(reason);else (void)app_standby_runtime_request();return;}
     if(id==307||id==308){menu.tab=id==307?3:5;menu.sub=0;menu.dirty=true;return;}
-    if(id==510||id==511){if(id==510&&menu.batch_page)menu.batch_page--;if(id==511&&(menu.batch_page+1)*5<menu.batch_count)menu.batch_page++;menu.dirty=true;return;}
+    if(id==510||id==511){if(id==510&&batch_draft()->page)batch_draft()->page--;if(id==511&&(batch_draft()->page+1)*5<batch_draft()->count)batch_draft()->page++;menu.dirty=true;return;}
     if(id>=301&&id<=305){
         menu.tab=id<=303?1:4;
         menu.sub=id==302?1:id==303?2:id==304?1:0;menu.dirty=true;return;
@@ -640,24 +708,72 @@ static void action(lv_event_t *event)
     if(id>=450&&id<=452){static const uint8_t modes[]={MODE_MDC,MODE_SDC,MODE_CNT};mode_confirm((void *)(uintptr_t)modes[id-450]);return;}
     if(id==A_CAPACITY){char value[8];snprintf(value,sizeof(value),"%u",machine_state_reject_pocket_max());settings_detail_keyboard_show(ui_tr("Reject pocket / 30-100 notes"),value,3,SETTINGS_DETAIL_KEYBOARD_UINT,capacity_done,NULL);return;}
     if(id==A_TIMEOUT){char value[8];snprintf(value,sizeof(value),"%u",standby_config()->minutes);settings_detail_keyboard_show(ui_tr("Standby / 0-60 minutes"),value,2,SETTINGS_DETAIL_KEYBOARD_UINT,timeout_done,NULL);return;}
+    if(id==A_BATCH_NOTES || id==A_BATCH_AMOUNT){
+        uint8_t mode = id==A_BATCH_AMOUNT ? AMOUNT_BATCH_MODE : PCS_BATCH_MODE;
+        menu.batch_mode = mode;
+        menu.batch_mode_selected = true;
+        menu.dirty = true;
+        if(!workspace_service_select_batch(mode,machine_state_batch_saved_value(mode)))
+            ui_notice_post_text(UI_NOTICE_WARNING,mode==AMOUNT_BATCH_MODE?"settings.value_batch":"settings.batch",
+                                mode==AMOUNT_BATCH_MODE?UI_N_("VBatch"):UI_N_("Batch"),
+                                UI_N_("Setting not sent. Finish the current operation and try again."));
+        else clear_notice();
+        return;
+    }
     if(!workspace_store_ready()||workspace_store_busy()){ui_notice_post_message(UI_NOTICE_WARNING,"menu.operation",UI_N_("Menu"),workspace_store_message_info());return;}
-    if(id==500){reset_batch();menu.dirty=true;return;}
-    if(id==A_SAVE_BATCH){if(workspace_service_save_batches(menu.owner,menu.batches,menu.batch_count,menu.batch_active_original,menu.batch_active_edited)){menu.saving=1;app_ui_runtime_notice_started(APP_UI_NOTICE_BATCH_SAVE,UI_N_("Saving..."));}else notify(UI_NOTICE_ERROR,UI_N_("Save failed. Finish the current task and check storage."));return;}
-    if(id==A_ADD_BATCH){if(menu.batch_count>=WORKSPACE_BATCHES){explain(UI_N_("Up to 10 slots, including OFF."));return;}if(!menu.batch_dirty)capture_batch_active();unsigned v=1;for(;;v++){bool used=false;for(unsigned i=1;i<menu.batch_count;i++)if(menu.batches[i]==v)used=true;if(!used)break;}menu.selected_batch=menu.batch_count;menu.batches[menu.batch_count++]=v;menu.batch_page=menu.selected_batch/5;menu.batch_dirty=menu.dirty=true;return;}
-    if(id==A_EDIT_BATCH){if(!menu.selected_batch){explain(UI_N_("OFF is a fixed slot."));return;}char v[8];snprintf(v,sizeof(v),"%u",menu.batches[menu.selected_batch]);settings_detail_keyboard_show(ui_tr("Notes per batch (1-199)"),v,3,SETTINGS_DETAIL_KEYBOARD_UINT,batch_submit,NULL);return;}
-    if(id==A_DELETE_BATCH){if(!menu.selected_batch||menu.batch_count<=2){explain(UI_N_("Keep OFF and at least one numeric slot."));return;}if(!menu.batch_dirty)capture_batch_active();if(menu.batches[menu.selected_batch]==menu.batch_active_edited)menu.batch_active_original=menu.batch_active_edited=0;memmove(menu.batches+menu.selected_batch,menu.batches+menu.selected_batch+1,menu.batch_count-menu.selected_batch-1);menu.batch_count--;if(menu.selected_batch>=menu.batch_count)menu.selected_batch=menu.batch_count-1;menu.batch_page=menu.selected_batch/5;menu.batch_dirty=menu.dirty=true;return;}
+    if(id==500){load_batch_slots(u,menu.batch_mode);menu.dirty=true;return;}
+    menu_batch_draft_t *slots = batch_draft();
+    if(id==A_SAVE_BATCH){
+        if(workspace_service_save_batch_slots(menu.owner,menu.batch_mode,slots->values,slots->count,
+                                             slots->original_active,slots->edited_active)){
+            menu.saving=1;
+            app_ui_runtime_notice_started(APP_UI_NOTICE_BATCH_SAVE,UI_N_("Saving..."));
+        }else notify(UI_NOTICE_ERROR,UI_N_("Save failed. Finish the current task and check storage."));
+        return;
+    }
+    if(id==A_ADD_BATCH){
+        if(slots->count>=WORKSPACE_BATCHES){explain(UI_N_("Up to 10 slots, including OFF."));return;}
+        if(!slots->dirty)capture_batch_active();
+        uint32_t value=1;
+        for(unsigned i=1;i<slots->count;i++) {
+            if(slots->values[i]==value){++value;i=0;}
+        }
+        slots->selected=slots->count;slots->values[slots->count++]=value;
+        slots->page=slots->selected/5;slots->dirty=menu.dirty=true;return;
+    }
+    if(id==A_EDIT_BATCH){
+        if(!slots->selected){explain(UI_N_("OFF is a fixed slot."));return;}
+        char value[16];snprintf(value,sizeof(value),"%u",slots->values[slots->selected]);
+        bool amount=menu.batch_mode==AMOUNT_BATCH_MODE;
+        settings_detail_keyboard_show(amount?ui_tr("Save and apply amount"):ui_tr("Notes per batch (1-199)"),
+                                      value,amount?10:3,SETTINGS_DETAIL_KEYBOARD_UINT,batch_submit,NULL);
+        return;
+    }
+    if(id==A_DELETE_BATCH){
+        if(!slots->selected||slots->count<=2){explain(UI_N_("Keep OFF and at least one numeric slot."));return;}
+        if(!slots->dirty)capture_batch_active();
+        if(slots->values[slots->selected]==slots->edited_active)slots->original_active=slots->edited_active=0;
+        memmove(&slots->values[slots->selected],&slots->values[slots->selected+1],
+                (slots->count-slots->selected-1)*sizeof(slots->values[0]));
+        if(slots->selected>=--slots->count)slots->selected=slots->count-1;
+        slots->page=slots->selected/5;slots->dirty=menu.dirty=true;return;
+    }
     if(id==A_APPLY_BATCH){
-        if((app_command_runtime_count_start_busy()||app_add_runtime_busy())||workspace_service_applying()){notify(UI_NOTICE_WARNING,UI_N_("Finish the current operation first."));return;}
-        unsigned n=menu.batches[menu.selected_batch];
-        if(menu.batch_dirty){
-            if(workspace_service_save_batches(menu.owner,menu.batches,menu.batch_count,0,0)){
-                menu.batch_apply_target=(uint8_t)n;menu.saving=4;
+        if(app_command_runtime_count_start_busy()||app_add_runtime_busy()||workspace_service_applying()){
+            notify(UI_NOTICE_WARNING,UI_N_("Finish the current operation first."));return;
+        }
+        uint32_t value=slots->values[slots->selected];
+        if(slots->dirty){
+            if(workspace_service_save_batch_slots(menu.owner,menu.batch_mode,slots->values,slots->count,0,0)){
+                menu.batch_apply_target=value;menu.saving=4;
                 app_ui_runtime_notice_started(APP_UI_NOTICE_BATCH_APPLY,UI_N_("Saving..."));
             }else notify(UI_NOTICE_ERROR,UI_N_("Save failed. Finish the current task and check storage."));
             return;
         }
-        if(!setting_service_request_batch_switch(n!=0,n?n:200,machine_state_batch_enabled(),machine_state_batch_num()))
-            notify(UI_NOTICE_ERROR,UI_N_("Batch could not be sent. Check the controller."));
+        if(!workspace_service_select_batch(menu.batch_mode,value))
+            ui_notice_post_text(UI_NOTICE_ERROR,menu.batch_mode==AMOUNT_BATCH_MODE?"settings.value_batch":"settings.batch",
+                                menu.batch_mode==AMOUNT_BATCH_MODE?UI_N_("VBatch"):UI_N_("Batch"),
+                                UI_N_("Setting not sent. Finish the current operation and try again."));
         else clear_notice();
         return;
     }
@@ -768,14 +884,19 @@ void ui_page_03_menu_refresh_data(uint32_t topics)
     (void)topics;menu.dirty=true;if(!menu.root)return;
     if(menu.saving&&!workspace_store_busy()) {
         if((menu.saving==1||menu.saving==4)&&workspace_store_last_success()) {
-            menu.batch_dirty=false;
+            batch_draft()->dirty=false;
             /* The next save starts from the persisted edit; only ACK updates Main. */
-            menu.batch_active_original=menu.batch_active_edited;
+            batch_draft()->original_active=batch_draft()->edited_active;
             if(menu.saving==4){
-                uint8_t target=menu.batch_apply_target;
-                if(!setting_service_request_batch_switch(target!=0,target?target:200,
-                        machine_state_batch_enabled(),machine_state_batch_num()))
-                    ui_notice_post_text(UI_NOTICE_ERROR,"settings.batch",UI_N_("Batch"),UI_N_("Batch was saved, but could not be sent. Use this preset to retry."));
+                bool already_applied=batch_value_in_use(menu.batch_apply_target);
+                if(!workspace_service_select_batch(menu.batch_mode,menu.batch_apply_target))
+                    ui_notice_post_text(UI_NOTICE_ERROR,menu.batch_mode==AMOUNT_BATCH_MODE?"settings.value_batch":"settings.batch",
+                        menu.batch_mode==AMOUNT_BATCH_MODE?UI_N_("VBatch"):UI_N_("Batch"),
+                        UI_N_("Batch was saved, but could not be sent. Use this preset to retry."));
+                else if(already_applied)
+                    ui_notice_post_text(UI_NOTICE_SUCCESS,menu.batch_mode==AMOUNT_BATCH_MODE?"settings.value_batch":"settings.batch",
+                        menu.batch_mode==AMOUNT_BATCH_MODE?UI_N_("VBatch"):UI_N_("Batch"),
+                        menu.batch_mode==AMOUNT_BATCH_MODE?UI_N_("VBatch presets saved."):UI_N_("Batch cycle saved."));
             }
         }else if(workspace_store_last_success())menu.user_edit=false;
         menu.batch_apply_target=0;
@@ -788,7 +909,7 @@ void page_03_menu_show_batch_saved_tip(void){menu.dirty=true;}
 void page_03_menu_refresh_batch_number(void){menu.dirty=true;}
 void page_03_menu_refresh_batch_mode(void){menu.dirty=true;}
 bool ui_page_03_menu_resume(void)
-{if(!menu.root)return false;if(!menu.batch_dirty&&!menu.saving)reset_batch();lv_obj_clear_flag(menu.root,LV_OBJ_FLAG_HIDDEN);lv_obj_move_foreground(menu.root);lv_timer_resume(menu.timer);menu.dirty=true;render();return true;}
+{if(!menu.root)return false;if(!batch_has_edits()&&!menu.saving)reset_batch();lv_obj_clear_flag(menu.root,LV_OBJ_FLAG_HIDDEN);lv_obj_move_foreground(menu.root);lv_timer_resume(menu.timer);menu.dirty=true;render();return true;}
 void ui_page_03_menu_suspend(void)
 {if(!menu.root)return;if(menu.qr_generation&&menu.qr_generation==lv_qr_popup_generation())lv_qr_popup_hide();menu.qr_generation=0;workspace_service_cancel_apply();settings_detail_keyboard_hide();settings_detail_dialog_hide();destroy_quick();if(menu.photo_sheet)lv_obj_del(menu.photo_sheet);if(menu.user_sheet)lv_obj_del(menu.user_sheet);menu.user_sheet=NULL;menu.photo_sheet=NULL;menu.scan_wait=menu.photo_wait=menu.photo_ready=false;clear_notice();if(menu.interaction_created)lv_quick_controls_reset(&menu.interaction_controls);gesture_service_clear_pointer_policy(UI_PAGE_MENU);lv_timer_pause(menu.timer);lv_obj_add_flag(menu.root,LV_OBJ_FLAG_HIDDEN);}
 void ui_page_03_menu_destroy(void)

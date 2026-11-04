@@ -1,4 +1,5 @@
 #include "workspace_model.h"
+#include "un260/lv_system/user_cfg.h"
 #include <string.h>
 #include <stdlib.h>
 #include <strings.h>
@@ -48,8 +49,16 @@ bool workspace_profile_has_default_name(const workspace_profile_t *profile)
 {
     return profile && profile->id == 1 && !strcmp(profile->name, "Everyday count");
 }
+void workspace_seed_amount_batches(workspace_user_t *u)
+{
+    static const uint32_t initial[] = {0, 1000, 5000, 10000, 50000};
+    memset(u->amount_batches, 0, sizeof(u->amount_batches));
+    memcpy(u->amount_batches, initial, sizeof(initial));
+    u->amount_batch_count = sizeof(initial) / sizeof(initial[0]);
+}
 static void seed(workspace_user_t *u)
 {
+    workspace_seed_amount_batches(u);
     u->quick_enabled=1;u->batch_count=5;
     const uint8_t batches[]={0,10,50,100,150};memcpy(u->batches,batches,sizeof(batches));
     u->profile_count=1;
@@ -57,7 +66,7 @@ static void seed(workspace_user_t *u)
 }
 void workspace_defaults(workspace_model_t *m)
 {
-    memset(m,0,sizeof(*m));m->version=4;m->next_id=2;m->active_id=1;m->user_count=1;
+    memset(m,0,sizeof(*m));m->version=WORKSPACE_MODEL_VERSION;m->next_id=2;m->active_id=1;m->user_count=1;
     m->users[0].id=1;strcpy(m->users[0].name,"Local operator");seed(&m->users[0]);
     m->shared=m->users[0];m->shared.id=0;strcpy(m->shared.name,"Device workspace");
 }
@@ -72,6 +81,7 @@ bool workspace_restore_preferences(workspace_model_t *m)
         workspace_user_t *u = i==m->user_count?&m->shared:&m->users[i];
         u->quick_enabled = initial->quick_enabled;
         u->qr_after_count = initial->qr_after_count;
+        workspace_seed_amount_batches(u);
         u->batch_count = initial->batch_count;
         memcpy(u->batches, initial->batches, sizeof(u->batches));
         u->profile_count = initial->profile_count;
@@ -82,7 +92,7 @@ bool workspace_restore_preferences(workspace_model_t *m)
 }
 bool workspace_model_valid(const workspace_model_t *m)
 {
-    if (!m || m->operators_enabled>1 || m->management_protected>1 || m->version!=4 || m->shared.id!=0 || !m->next_id || !m->user_count || m->user_count>WORKSPACE_USERS || !workspace_active(m))return false;
+    if (!m || m->operators_enabled>1 || m->management_protected>1 || m->version!=WORKSPACE_MODEL_VERSION || m->shared.id!=0 || !m->next_id || !m->user_count || m->user_count>WORKSPACE_USERS || !workspace_active(m))return false;
     for(unsigned i=0;i<=m->user_count;i++) {
         const workspace_user_t *u=i==m->user_count?&m->shared:&m->users[i];
         if((i<m->user_count&&(!u->id||m->disabled[i]>1))||u->id>=m->next_id||!workspace_name_valid(u->name)||!employee_valid(u->employee_id)||!optional_valid(u->team,WORKSPACE_TEAM)||u->quick_enabled>1||u->qr_after_count>1||u->avatar.present>1||
@@ -92,9 +102,16 @@ bool workspace_model_valid(const workspace_model_t *m)
             if(!u->batches[j]||u->batches[j]>200)return false;
             for(unsigned k=0;k<j;k++)if(u->batches[j]==u->batches[k])return false;
         }
+        if (u->amount_batch_count < 2 || u->amount_batch_count > WORKSPACE_BATCHES ||
+            u->amount_batches[0] != 0) return false;
+        for (unsigned j = 1; j < u->amount_batch_count; j++) {
+            if (u->amount_batches[j] == 0) return false;
+            for (unsigned k = 1; k < j; k++)
+                if (u->amount_batches[k] == u->amount_batches[j]) return false;
+        }
         for(unsigned j=0;j<u->profile_count;j++) {
             const workspace_profile_t *p=&u->profiles[j];
-            if(!p->id||!workspace_name_valid(p->name)||p->mode>3||p->speed>2||p->work>1||p->add>1||p->sort>3||p->beep>1||p->batch_enabled>1||p->batch>200||(p->batch_enabled&&!p->batch))return false;
+            if(!p->id||!workspace_name_valid(p->name)||p->mode>3||p->speed>2||p->work>1||p->add>1||p->sort>3||p->beep>1||p->batch_enabled>1||p->batch>200||p->batch_mode>AMOUNT_BATCH_MODE||(p->batch_enabled&&!(p->batch_mode==AMOUNT_BATCH_MODE?p->batch_amount:p->batch)))return false;
             for(unsigned k=0;k<j;k++)if(u->profiles[k].id==p->id||!strcasecmp(u->profiles[k].name,p->name))return false;
         }
     }return true;
@@ -162,13 +179,33 @@ bool workspace_delete_profile(workspace_model_t *m,uint32_t user,uint32_t profil
         memset(&u->profiles[--u->profile_count],0,sizeof(u->profiles[0]));return true;
     }return false;
 }
-uint8_t workspace_next_batch(const workspace_user_t *u,uint8_t current)
+unsigned workspace_batch_slot_count(const workspace_user_t *u, uint8_t mode)
 {
-    if(!u||u->batch_count<2||u->batch_count>WORKSPACE_BATCHES)return 0;
-    unsigned start=1;
-    for(unsigned i=0;i<u->batch_count;i++)if(u->batches[i]==current){start=i+1;break;}
-    /* Legacy drafts may contain 200. Preserve them for editing, but never
-     * send that OFF sentinel as an enabled preset or strand Main's cycle. */
-    for(unsigned i=0;i<u->batch_count;i++){uint8_t value=u->batches[(start+i)%u->batch_count];if(value<200)return value;}
+    if (!u) return 0;
+    if (mode == PCS_BATCH_MODE) return u->batch_count;
+    if (mode == AMOUNT_BATCH_MODE) return u->amount_batch_count;
     return 0;
+}
+uint32_t workspace_batch_slot_value(const workspace_user_t *u, uint8_t mode, unsigned index)
+{
+    if (index >= WORKSPACE_BATCHES || index >= workspace_batch_slot_count(u, mode)) return 0;
+    return mode == AMOUNT_BATCH_MODE ? u->amount_batches[index] : u->batches[index];
+}
+uint32_t workspace_next_batch_value(const workspace_user_t *u, uint8_t mode, uint32_t current)
+{
+    unsigned count = workspace_batch_slot_count(u, mode);
+    if (count < 2 || count > WORKSPACE_BATCHES) return 0;
+    unsigned start = 1;
+    for (unsigned i = 0; i < count; i++)
+        if (workspace_batch_slot_value(u, mode, i) == current) { start = i + 1; break; }
+    /* Old piece-count lists may contain the controller's OFF sentinel. */
+    for (unsigned i = 0; i < count; i++) {
+        uint32_t value = workspace_batch_slot_value(u, mode, (start + i) % count);
+        if (mode == AMOUNT_BATCH_MODE || value < 200) return value;
+    }
+    return 0;
+}
+uint8_t workspace_next_batch(const workspace_user_t *u, uint8_t current)
+{
+    return (uint8_t)workspace_next_batch_value(u, PCS_BATCH_MODE, current);
 }

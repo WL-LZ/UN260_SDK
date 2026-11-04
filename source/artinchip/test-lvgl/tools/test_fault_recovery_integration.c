@@ -893,8 +893,8 @@ static void test_batch_pause_other_warning_resume(void)
         }else if(kind==2)assert(app_fault_recovery_report_setting_rejection(4));
         else if(kind==3)smart_island_notify_warning("Batch full"); /* Text alone never owns the pause. */
         else if(kind==4)smart_island_notify_fault("Batch full",(machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,4});
-        else if(kind==5)smart_island_notify_preset_full((machine_fault_key_t){MACHINE_FAULT_PRESET,1,4});
-        else smart_island_notify_preset_full((machine_fault_key_t){MACHINE_FAULT_PRESET,0,3});
+        else if(kind==5)smart_island_notify_preset_full((machine_fault_key_t){MACHINE_FAULT_PRESET,1,4},"Batch full");
+        else smart_island_notify_preset_full((machine_fault_key_t){MACHINE_FAULT_PRESET,0,3},"Batch full");
         assert(!g_si_ctx.lifecycle.batch_counting_paused);
         assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING&&g_si_ctx.lifecycle.count_session_active);
         batch_test_tick(18000);

@@ -9,6 +9,7 @@
 #include "un260/lv_components/lv_settings.h"
 #include "un260/lv_system/ui_lang.h"
 #include "un260/lv_system/ui_i18n.h"
+#include "un260/lv_system/user_cfg.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/font/manrope_fonts.h"
 #include "un260/font/ui_message_font.h"
@@ -27,6 +28,14 @@ typedef struct {
 } fault_popup_t;
 static fault_popup_t popup;
 static bool auto_enabled=true;
+/* A preset stop keeps the mode it was reported in until that record clears. */
+static bool value_preset_stop;
+static void lookup_guide(machine_fault_key_t key, mf_guide_t *guide)
+{
+    fault_guide_lookup(key, guide);
+    if (key.source == MACHINE_FAULT_PRESET && value_preset_stop)
+        guide->title.key = UI_N_("VBatch reached");
+}
 static bool setting_notice_active;
 static machine_fault_key_t setting_notice_key;
 static fault_popup_confirm_handler_t confirm_handler;
@@ -39,13 +48,13 @@ static void render_step(bool restart_animation);
 static const char *text(mf_text_t value) {return fault_guide_text(value);}
 static void post_island_notice(machine_fault_key_t key)
 {
-    mf_guide_t guide;fault_guide_lookup(key,&guide);
+    mf_guide_t guide;lookup_guide(key,&guide);
     const char *description = key.source == MACHINE_FAULT_START && key.type == 2 ? machine_start_error_desc(key.code) :
         key.source == MACHINE_FAULT_RUNTIME ? machine_runtime_error_desc(key.code) : NULL;
     if (key.source == MACHINE_FAULT_SETTING)
-        smart_island_notify_fault(ui_tr("Stacker full"), key);
+        smart_island_notify_fault(key.code == 0x07 ? text(guide.title) : ui_tr("Stacker full"), key);
     else if (key.source == MACHINE_FAULT_PRESET)
-        smart_island_notify_preset_full(key);
+        smart_island_notify_preset_full(key, guide.title.key);
     else if (key.source == MACHINE_FAULT_START && key.type == 1 && key.code == 2)
         smart_island_notify_no_note(key);
     else
@@ -160,7 +169,7 @@ static void render_step(bool restart_animation)
 static void present(machine_fault_key_t key)
 {
     if(popup.overlay && machine_fault_key_equal(popup.key,key))return;
-    hide_fault_popup();popup.key=key;fault_guide_lookup(key,&popup.guide);
+    hide_fault_popup();popup.key=key;lookup_guide(key,&popup.guide);
     ui_notice_set_suspended(UI_NOTICE_SUSPEND_FAULT,true);
     popup.overlay=box(lv_layer_top(),0,0,lv_disp_get_hor_res(NULL),lv_disp_get_ver_res(NULL),0x243C52,0);
     lv_obj_set_style_bg_opa(popup.overlay,97,0);lv_obj_add_flag(popup.overlay,LV_OBJ_FLAG_CLICKABLE);
@@ -243,7 +252,10 @@ void fault_popup_report_start_no_note(void)
 }
 void fault_popup_report_preset_full(void)
 {
-    report((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4},true);
+    const machine_fault_key_t key = {MACHINE_FAULT_PRESET,0,4};
+    if (!machine_fault_find(key,NULL))
+        value_preset_stop = machine_state_batch_confirmed(AMOUNT_BATCH_MODE);
+    report(key,true);
 }
 void fault_popup_clear_preset(void)
 {

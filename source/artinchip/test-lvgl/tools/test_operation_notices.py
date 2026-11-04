@@ -27,6 +27,9 @@ fixture = r'''
 #include "un260/app_service/workspace_service.h"
 #include "un260/lv_components/ui_notice.h"
 #include "un260/lv_system/ui_i18n.h"
+#include "un260/lv_system/user_cfg.h"
+static uint8_t saved_batch_mode;
+uint8_t workspace_service_batch_save_mode(void){return saved_batch_mode;}
 static workspace_model_t operator_model;
 const workspace_model_t *workspace_store_get(void){return &operator_model;}
 static bool notices_allowed=true;
@@ -157,6 +160,12 @@ int main(void){
  notices_allowed=false;ws_busy=false;app_ui_runtime_poll_operation_notices();
  batch_posts=posts;notices_allowed=true;app_ui_runtime_poll_operation_notices();
  assert(posts==batch_posts&&!queue.has_active);
+ saved_batch_mode=AMOUNT_BATCH_MODE;ws_busy=true;ws_ok=true;
+ app_ui_runtime_notice_started(APP_UI_NOTICE_BATCH_APPLY,"Saving...");
+ assert(queue.active.kind==UI_NOTICE_PROGRESS&&!strcmp(queue.active.key,"settings.value_batch"));
+ ws_busy=false;ws_ok=false;app_ui_runtime_poll_operation_notices();
+ assert(queue.active.kind==UI_NOTICE_ERROR&&!strcmp(queue.active.key,"settings.value_batch"));
+ saved_batch_mode=PCS_BATCH_MODE;
  /* A 6-byte frame contains only type then checksum, never a result byte. */
  uint8_t truncated[]={0xfd,0xdf,6,0x3a,1,1};route_fo(truncated,6);
  assert(fo_pending&&!fo_consumed&&!fo_confirmed&&!fo_notice);

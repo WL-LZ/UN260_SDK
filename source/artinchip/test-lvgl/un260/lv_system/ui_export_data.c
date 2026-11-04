@@ -254,7 +254,8 @@ static bool ui_export_data_write_html_file(const char *file_path)
     char sort_buf[16] = "SORT:OFF";
     char add_buf[16] = "ADD:OFF";
     char work_buf[16] = "AUTO";
-    char batch_buf[24] = "BAT:OFF";
+    int piece_badge = -1;
+    char batch_buf[96] = "BAT:OFF";
     char speed_buf[16] = "SPD:HIGH";
     char curr_buf[8] = "CUR";
     char reason_buf[96];
@@ -277,7 +278,12 @@ static bool ui_export_data_write_html_file(const char *file_path)
     ui_export_data_get_add_text(add_buf, sizeof(add_buf));
     ui_export_data_get_work_text(work_buf, sizeof(work_buf));
     ui_export_data_get_speed_text(speed_buf, sizeof(speed_buf));
-    if (machine_state_batch_enabled()) {
+    if (machine_state_batch_mode() == AMOUNT_BATCH_MODE) {
+        uint32_t amount = machine_state_batch_saved_value(AMOUNT_BATCH_MODE);
+        if (amount) lv_snprintf(batch_buf, sizeof(batch_buf), ui_tr_for(report_language,"VBatch %u"), (unsigned)amount);
+        else lv_snprintf(batch_buf, sizeof(batch_buf), "%s", ui_tr_for(report_language,"VBatch OFF"));
+    } else if (machine_state_batch_enabled()) {
+        piece_badge = machine_state_batch_num();
         lv_snprintf(batch_buf, sizeof(batch_buf), "BAT:%d", (int)machine_state_batch_num());
     } else {
         lv_snprintf(batch_buf, sizeof(batch_buf), "%s", "BAT:OFF");
@@ -332,7 +338,7 @@ static bool ui_export_data_write_html_file(const char *file_path)
         (unsigned)now.hour, (unsigned)now.minute, (unsigned)now.second,
         curr_buf, total_amount, total_pcs, reject_total,
         mode_key, sort_buf, work_buf, add_buf,
-        machine_state_batch_enabled()?(int)machine_state_batch_num():-1, batch_buf, speed_buf);
+        piece_badge, batch_buf, speed_buf);
 
     for (i = 0; i < counting_data_current()->denom_number && i < (int)(sizeof(counting_data_current()->denom) / sizeof(counting_data_current()->denom[0])); i++) {
         if (counting_data_current()->denom[i].value <= 0) {

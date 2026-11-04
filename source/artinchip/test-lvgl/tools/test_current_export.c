@@ -60,11 +60,19 @@ int main(int argc,char **argv)
             machine_state_confirm_add(scenario!=0);
             machine_state_confirm_speed(scenario);
             machine_state_confirm_batch(scenario!=1,7);
+            machine_state_confirm_batch_mode(scenario>=2?AMOUNT_BATCH_MODE:PCS_BATCH_MODE);
+            machine_state_confirm_batch_amount(scenario==2?UINT32_MAX:0);
             snprintf(path,sizeof(path),"%s/%s-%u.html",argv[1],locale->tag,scenario);
             assert(ui_export_data_write_html_file(path));
             if(comma)fputc(',',manifest);
             comma=true;
             fputs("{\"path\":",manifest);json_value(manifest,path);
+            if (scenario >= 2) {
+                char badge[128];
+                if (scenario==2) snprintf(badge,sizeof(badge),ui_tr("VBatch %u"),(unsigned)UINT32_MAX);
+                else snprintf(badge,sizeof(badge),"%s",ui_tr("VBatch OFF"));
+                fputs(",\"valueBadge\":",manifest);json_value(manifest,badge);
+            }
             fputs(",\"tag\":",manifest);json_value(manifest,locale->tag);
             fprintf(manifest,",\"scenario\":%u,\"rejectCount\":%d,\"expected\":{",scenario,counting_data_reject_pcs_count(data));
             expected(manifest,scenario==0?"Mixed denominations":scenario==1?"Single denomination":scenario==2?"Piece counting":"None");

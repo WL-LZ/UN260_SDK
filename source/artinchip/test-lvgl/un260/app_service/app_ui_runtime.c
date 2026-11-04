@@ -56,7 +56,7 @@ static const char *operation_key(app_ui_notice_operation_t operation)
     case APP_UI_NOTICE_WORKSPACE_STORE: return "workspace.store";
     case APP_UI_NOTICE_OPERATOR_SWITCH: return "workspace.operator";
     case APP_UI_NOTICE_BATCH_SAVE: return "workspace.batch";
-    case APP_UI_NOTICE_BATCH_APPLY: return "settings.batch";
+    case APP_UI_NOTICE_BATCH_APPLY: return workspace_service_batch_save_mode()==AMOUNT_BATCH_MODE ? "settings.value_batch" : "settings.batch";
     case APP_UI_NOTICE_PROFILE_APPLY: return "workspace.apply";
     default: return NULL;
     }
@@ -65,8 +65,8 @@ static const char *operation_key(app_ui_notice_operation_t operation)
 static const char *operation_title(app_ui_notice_operation_t operation)
 {
     switch (operation) {
-    case APP_UI_NOTICE_BATCH_SAVE: return UI_N_("Batch cycle");
-    case APP_UI_NOTICE_BATCH_APPLY: return UI_N_("Batch");
+    case APP_UI_NOTICE_BATCH_SAVE: return workspace_service_batch_save_mode()==AMOUNT_BATCH_MODE ? UI_N_("VBatch") : UI_N_("Batch cycle");
+    case APP_UI_NOTICE_BATCH_APPLY: return workspace_service_batch_save_mode()==AMOUNT_BATCH_MODE ? UI_N_("VBatch") : UI_N_("Batch");
     case APP_UI_NOTICE_OPERATOR_SWITCH: return UI_N_("Current operator");
     case APP_UI_NOTICE_PROFILE_APPLY: return UI_N_("Counting profile");
     default: return UI_N_("Workspace");
@@ -93,6 +93,7 @@ void app_ui_runtime_notice_started(app_ui_notice_operation_t operation, const ch
     }
     if (operation == APP_UI_NOTICE_BATCH_SAVE || operation == APP_UI_NOTICE_BATCH_APPLY) {
         ui_notice_clear("settings.batch");
+        ui_notice_clear("settings.value_batch");
         ui_notice_clear("workspace.batch");
     }
     /* A new accepted request is a new acknowledgement lifetime. */

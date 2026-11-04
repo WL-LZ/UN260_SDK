@@ -91,6 +91,10 @@ void fault_guide_lookup(machine_fault_key_t key, mf_guide_t *g)
             body = notes ? T("Notes remain in the stacker pocket. Cannot change the batch setting.") :
                 T("Batch change rejected. Previous setting retained.");
             break;
+        case 0x07:
+            title = T("VBatch change rejected");
+            body = T("The controller rejected the value preset. Check the setting and retry.");
+            break;
         case 0x4B:
             title = T("Impeller motor speed");
             body = T("Setting rejected. Previous value retained.");

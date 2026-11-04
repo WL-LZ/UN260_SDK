@@ -6,6 +6,7 @@
 #include "un260/currency/currency_state.h"
 #include "un260/protocol/protocol_request.h"
 #include "un260/machine_state/machine_state.h"
+#include "un260/lv_system/user_cfg.h"
 #include <stddef.h>
 #include <stdio.h>
 
@@ -94,6 +95,7 @@ typedef struct {
     setting_batch_request_type_t type;
     setting_batch_snapshot_t target;
     setting_batch_snapshot_t previous;
+    uint32_t amount;
 #if SETTING_BATCH_TRACE_ENABLE
     uint32_t trace_next_seq;
     uint32_t trace_active_seq;
@@ -254,6 +256,7 @@ static void setting_value_request_clear(setting_value_request_slot_t *slot)
 #if SETTING_BATCH_TRACE_ENABLE
 static const char *setting_batch_trace_source(setting_batch_request_type_t type)
 {
+    if (type == SETTING_BATCH_REQUEST_AMOUNT) return "AMOUNT";
     if (type == SETTING_BATCH_REQUEST_NUMBER) return "NUMBER";
     if (type == SETTING_BATCH_REQUEST_SWITCH) return "SWITCH";
     return "NONE";
@@ -272,14 +275,14 @@ static void setting_batch_trace_tx(void)
            g_batch_request.trace_active_seq,
            (unsigned long long)g_batch_request.trace_tx_ms,
            setting_batch_trace_source(g_batch_request.type),
-           (unsigned)g_batch_request.target.num,
+           (unsigned)(g_batch_request.type == SETTING_BATCH_REQUEST_AMOUNT ? g_batch_request.amount : g_batch_request.target.num),
            (unsigned)g_batch_request.target.enable,
-           (unsigned)g_batch_request.target.num,
+           (unsigned)(g_batch_request.type == SETTING_BATCH_REQUEST_AMOUNT ? g_batch_request.amount : g_batch_request.target.num),
            (unsigned)g_batch_request.previous.enable,
            (unsigned)g_batch_request.previous.num);
 }
 
-static void setting_batch_trace_reject(setting_batch_request_type_t source, uint8_t payload)
+static void setting_batch_trace_reject(setting_batch_request_type_t source, uint32_t payload)
 {
     uint64_t now_ms = protocol_request_now_ms();
 
@@ -301,9 +304,9 @@ static void setting_batch_trace_rx(uint8_t status)
            (unsigned long long)latency_ms,
            setting_batch_trace_status(status),
            setting_batch_trace_source(g_batch_request.type),
-           (unsigned)g_batch_request.target.num,
+           (unsigned)(g_batch_request.type == SETTING_BATCH_REQUEST_AMOUNT ? g_batch_request.amount : g_batch_request.target.num),
            (unsigned)g_batch_request.target.enable,
-           (unsigned)g_batch_request.target.num,
+           (unsigned)(g_batch_request.type == SETTING_BATCH_REQUEST_AMOUNT ? g_batch_request.amount : g_batch_request.target.num),
            (unsigned)g_batch_request.previous.enable,
            (unsigned)g_batch_request.previous.num);
 }
@@ -311,36 +314,42 @@ static void setting_batch_trace_rx(uint8_t status)
 
 static bool setting_batch_request_begin(setting_batch_request_type_t type,
                                         bool target_enable,
-                                        uint8_t sent_num,
+                                        uint32_t value,
                                         bool previous_enable,
                                         uint8_t previous_num)
 {
-    /* 200 is the existing wire-level OFF sentinel, not an enabled batch size. */
-    if(target_enable&&(!sent_num||sent_num>=200))return false;
+    const bool amount = type == SETTING_BATCH_REQUEST_AMOUNT;
+    const uint8_t command = amount ? 0x07 : 0x06;
+    if (!amount && (target_enable ? (value == 0 || value >= 200) : (value != 0 && value != 200)))
+        return false;
     if (protocol_request_is_pending(&g_batch_request.request)) {
 #if SETTING_BATCH_TRACE_ENABLE
-        setting_batch_trace_reject(type, sent_num);
+        setting_batch_trace_reject(type, value);
 #endif
         return false;
     }
 
+    if (!protocol_request_begin_for_command(&g_batch_request.request, command)) return false;
     g_batch_request.type = type;
     g_batch_request.target.enable = target_enable;
-    g_batch_request.target.num = sent_num;
+    g_batch_request.target.num = amount ? 0 : (uint8_t)value;
+    g_batch_request.amount = amount ? value : 0;
     g_batch_request.previous.enable = previous_enable;
     g_batch_request.previous.num = previous_num;
-    if (!protocol_request_begin_for_command(&g_batch_request.request, 0x06)) return false;
 
 #if SETTING_BATCH_TRACE_ENABLE
     setting_batch_trace_tx();
 #endif
-    if (protocol_send(0x06, &sent_num, 1) < 0) {
+    uint8_t payload[4] = {
+        (uint8_t)(value >> 24), (uint8_t)(value >> 16), (uint8_t)(value >> 8), (uint8_t)value
+    };
+    if (protocol_send(command, amount ? payload : payload + 3, amount ? 4 : 1) < 0) {
         protocol_request_finish(&g_batch_request.request);
         g_batch_request.type = SETTING_BATCH_REQUEST_NONE;
         return false;
     }
 
-    setting_request_accepted(0x06);
+    setting_request_accepted(command);
     return true;
 }
 
@@ -486,8 +495,25 @@ bool setting_service_request_batch_switch(bool target_enable, uint8_t sent_num, 
                                        previous_enable, previous_num);
 }
 
-bool setting_service_batch_take_result(uint8_t status, setting_batch_result_t *result)
+bool setting_service_request_batch_value(uint8_t mode, uint32_t value)
 {
+    if (mode != AMOUNT_BATCH_MODE && mode != PCS_BATCH_MODE) return false;
+    if (protocol_request_is_pending(&g_batch_request.request)) return false;
+    if (machine_state_batch_confirmed(mode) && machine_state_batch_saved_value(mode) == value)
+        return true;
+    if (mode == AMOUNT_BATCH_MODE)
+        return setting_batch_request_begin(SETTING_BATCH_REQUEST_AMOUNT, value != 0, value, false, 0);
+
+    if (value >= 200) return false;
+    /* A mode change uses zero for Off; the established PCS cycle uses 200. */
+    const uint8_t wire = value == 0 && machine_state_batch_mode() == PCS_BATCH_MODE ? 200 : (uint8_t)value;
+    return setting_service_request_batch_switch(value != 0, wire,
+                                               machine_state_batch_enabled(), machine_state_batch_num());
+}
+
+bool setting_service_batch_take_result(uint8_t command, uint8_t status, setting_batch_result_t *result)
+{
+    if (g_batch_request.request.command != command) return false;
     if (status != 0x01 && status != 0x02) {
 #if SETTING_BATCH_TRACE_ENABLE
         if (protocol_request_can_take_result(&g_batch_request.request)) {
@@ -521,6 +547,7 @@ bool setting_service_batch_take_result(uint8_t status, setting_batch_result_t *r
     result->type = g_batch_request.type;
     result->target = g_batch_request.target;
     result->previous = g_batch_request.previous;
+    result->amount = g_batch_request.amount;
     g_batch_request.type = SETTING_BATCH_REQUEST_NONE;
     return true;
 }
@@ -533,6 +560,7 @@ bool setting_service_batch_take_timeout(setting_batch_result_t *result)
     result->type = g_batch_request.type;
     result->target = g_batch_request.target;
     result->previous = g_batch_request.previous;
+    result->amount = g_batch_request.amount;
     g_batch_request.type = SETTING_BATCH_REQUEST_NONE;
     return true;
 }

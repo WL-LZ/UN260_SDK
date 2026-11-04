@@ -3,6 +3,7 @@
 #include "workspace_store.h"
 #include "usb_storage.h"
 #include <pthread.h>
+#include <stddef.h>
 #include <png.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -43,19 +44,75 @@ static bool full_io(int fd,void *data,size_t bytes,bool writing)
     while(bytes) {ssize_t n=writing?write(fd,p,bytes):read(fd,p,bytes);if(n<0&&errno==EINTR)continue;if(n<=0)return false;p+=n;bytes-=(size_t)n;}
     return true;
 }
-typedef struct {uint32_t version,next_id,active_id,user_count;workspace_user_t users[WORKSPACE_USERS];} model_v3_t;
+/* Frozen v2-v4 wire layouts. New runtime fields never participate in decoding an older file. */
+typedef struct {
+    uint32_t id; char name[25];
+    uint8_t speed, work, add, sort, beep, batch_enabled, batch, mode;
+} profile_v4_t;
+typedef struct {
+    uint32_t id; char name[25]; uint8_t quick_enabled, profile_count, batch_count;
+    uint8_t batches[10], qr_after_count;
+    profile_v4_t profiles[8]; workspace_avatar_t avatar;
+} user_v2_t;
+typedef struct { user_v2_t base; char employee_id[17], team[33]; } user_v4_t;
+typedef struct {uint32_t version,next_id,active_id,user_count; user_v2_t users[8];} model_v2_t;
+typedef struct {uint32_t version,next_id,active_id,user_count; user_v4_t users[8];} model_v3_t;
+typedef struct {
+    model_v3_t base; uint8_t operators_enabled, management_protected, disabled[8];
+    user_v4_t shared;
+} model_v4_t;
+_Static_assert(sizeof(profile_v4_t)==40 && sizeof(user_v2_t)==16752 && sizeof(user_v4_t)==16804, "workspace legacy ABI");
+_Static_assert(offsetof(workspace_profile_t,batch_mode)==offsetof(profile_v4_t,mode)+1, "legacy profile prefix");
+_Static_assert(offsetof(workspace_user_t,profiles)==offsetof(user_v2_t,profiles), "legacy user header");
+static void migrate_user(workspace_user_t *to, const user_v2_t *from)
+{
+    memcpy(to, from, offsetof(user_v2_t,profiles));
+    for (unsigned i = 0; i < WORKSPACE_PROFILES; i++)
+        memcpy(&to->profiles[i], &from->profiles[i], offsetof(workspace_profile_t,batch_mode));
+    to->avatar = from->avatar;
+    workspace_seed_amount_batches(to);
+}
+static void migrate_identity(workspace_user_t *to, const user_v4_t *from)
+{
+    migrate_user(to, &from->base);
+    memcpy(to->employee_id, from->employee_id, sizeof(to->employee_id));
+    memcpy(to->team, from->team, sizeof(to->team));
+}
 static void upgrade_policy(void)
 {
-    transaction.version=4;transaction.operators_enabled=1;transaction.management_protected=0;memset(transaction.disabled,0,sizeof(transaction.disabled));
+    transaction.version=WORKSPACE_MODEL_VERSION;transaction.operators_enabled=1;transaction.management_protected=0;memset(transaction.disabled,0,sizeof(transaction.disabled));
     const workspace_user_t *u=NULL;for(unsigned i=0;i<transaction.user_count;++i)if(transaction.users[i].id==transaction.active_id)u=&transaction.users[i];
     if(u)transaction.shared=*u;else memset(&transaction.shared,0,sizeof(transaction.shared));
     transaction.shared.id=0;transaction.shared.employee_id[0]=0;transaction.shared.team[0]=0;memset(&transaction.shared.avatar,0,sizeof(transaction.shared.avatar));snprintf(transaction.shared.name,sizeof(transaction.shared.name),"Device workspace");
 }
-static bool load_v3(int fd,const uint32_t *header)
+static bool load_v3_v4(int fd, const uint32_t *header)
 {
-    model_v3_t *old=malloc(sizeof(*old));if(!old)return false;
-    bool ok=full_io(fd,old,sizeof(*old),false)&&header[3]==checksum(old,sizeof(*old))&&old->version==3&&old->user_count<=WORKSPACE_USERS;
-    if(ok){memset(&transaction,0,sizeof(transaction));memcpy(&transaction,old,sizeof(*old));upgrade_policy();ok=workspace_model_valid(&transaction);}free(old);return ok;
+    model_v4_t *old = calloc(1, sizeof(*old));
+    if (!old) return false;
+    const model_v3_t *base = &old->base;
+    size_t bytes = header[1] == 3 ? sizeof(*base) : sizeof(*old);
+    bool ok = full_io(fd, old, bytes, false) && header[3] == checksum(old, bytes) &&
+              base->version == header[1] && base->user_count <= WORKSPACE_USERS;
+    if (ok) {
+        memset(&transaction, 0, sizeof(transaction));
+        transaction.version = WORKSPACE_MODEL_VERSION;
+        transaction.next_id = base->next_id;
+        transaction.active_id = base->active_id;
+        transaction.user_count = base->user_count;
+        for (unsigned i = 0; i < base->user_count; i++)
+            migrate_identity(&transaction.users[i], &base->users[i]);
+        if (header[1] == 3) {
+            upgrade_policy();
+        } else {
+            transaction.operators_enabled = old->operators_enabled;
+            transaction.management_protected = old->management_protected;
+            memcpy(transaction.disabled, old->disabled, sizeof(transaction.disabled));
+            migrate_identity(&transaction.shared, &old->shared);
+        }
+        ok = workspace_model_valid(&transaction);
+    }
+    free(old);
+    return ok;
 }
 /* v1 is decoded explicitly; existing operator IDs, photos and rules are retained. */
 typedef struct {uint32_t id;char name[25];uint8_t speed,work,add,sort,beep,batch_enabled,batch;} profile_v1_t;
@@ -66,9 +123,10 @@ static bool load_v1(int fd,const uint32_t *header)
     model_v1_t *old=malloc(sizeof(*old));if(!old)return false;
     bool ok=full_io(fd,old,sizeof(*old),false)&&header[3]==checksum(old,sizeof(*old))&&old->version==1&&old->user_count<=WORKSPACE_USERS;
     if(ok){
-        memset(&transaction,0,sizeof(transaction));transaction.version=4;transaction.next_id=old->next_id;transaction.active_id=old->active_id;transaction.user_count=old->user_count;
+        memset(&transaction,0,sizeof(transaction));transaction.version=WORKSPACE_MODEL_VERSION;transaction.next_id=old->next_id;transaction.active_id=old->active_id;transaction.user_count=old->user_count;
         for(unsigned i=0;i<old->user_count;i++){
             const user_v1_t *v=&old->users[i];workspace_user_t *u=&transaction.users[i];
+            workspace_seed_amount_batches(u);
             u->id=v->id;memcpy(u->name,v->name,sizeof(u->name));u->quick_enabled=v->quick_enabled;u->profile_count=v->profile_count;u->batch_count=v->batch_count;
             memcpy(u->batches,v->batches,sizeof(u->batches));u->avatar=v->avatar;
             for(unsigned j=0;j<WORKSPACE_PROFILES;j++){
@@ -80,17 +138,13 @@ static bool load_v1(int fd,const uint32_t *header)
     }
     free(old);return ok;
 }
-/* v2 adds count mode and automatic QR; v3 appends optional operator metadata. */
-typedef struct {uint32_t id;char name[25];uint8_t quick_enabled,profile_count,batch_count;uint8_t batches[10];uint8_t qr_after_count;workspace_profile_t profiles[8];workspace_avatar_t avatar;} user_v2_t;
-typedef struct {uint32_t version,next_id,active_id,user_count;user_v2_t users[8];} model_v2_t;
-_Static_assert(sizeof(user_v2_t)==16752,"v2 storage layout");
 static bool load_v2(int fd,const uint32_t *header)
 {
     model_v2_t *old=malloc(sizeof(*old));if(!old)return false;
     bool valid=full_io(fd,old,sizeof(*old),false)&&header[3]==checksum(old,sizeof(*old))&&old->version==2&&old->user_count<=WORKSPACE_USERS;
     if(valid){
-        memset(&transaction,0,sizeof(transaction));transaction.version=4;transaction.next_id=old->next_id;transaction.active_id=old->active_id;transaction.user_count=old->user_count;
-        for(unsigned i=0;i<old->user_count;i++)memcpy(&transaction.users[i],&old->users[i],sizeof(user_v2_t));
+        memset(&transaction,0,sizeof(transaction));transaction.version=WORKSPACE_MODEL_VERSION;transaction.next_id=old->next_id;transaction.active_id=old->active_id;transaction.user_count=old->user_count;
+        for(unsigned i=0;i<old->user_count;i++)migrate_user(&transaction.users[i],&old->users[i]);
         upgrade_policy();valid=workspace_model_valid(&transaction);
     }
     free(old);return valid;
@@ -103,8 +157,9 @@ static bool load_model(void)
     bool valid=!fstat(fd,&st)&&S_ISREG(st.st_mode)&&full_io(fd,header,sizeof(header),false)&&header[0]==0x31535755U;
     if(valid&&header[1]==1&&header[2]==sizeof(model_v1_t)&&st.st_size==(off_t)(sizeof(header)+sizeof(model_v1_t)))valid=load_v1(fd,header);
     else if(valid&&header[1]==2&&header[2]==sizeof(model_v2_t)&&st.st_size==(off_t)(sizeof(header)+sizeof(model_v2_t)))valid=load_v2(fd,header);
-    else if(valid&&header[1]==3&&header[2]==sizeof(model_v3_t)&&st.st_size==(off_t)(sizeof(header)+sizeof(model_v3_t)))valid=load_v3(fd,header);
-    else if(valid&&header[1]==4&&header[2]==sizeof(transaction)&&st.st_size==(off_t)(sizeof(header)+sizeof(transaction)))
+    else if(valid&&header[1]==3&&header[2]==sizeof(model_v3_t)&&st.st_size==(off_t)(sizeof(header)+sizeof(model_v3_t)))valid=load_v3_v4(fd,header);
+    else if(valid&&header[1]==4&&header[2]==sizeof(model_v4_t)&&st.st_size==(off_t)(sizeof(header)+sizeof(model_v4_t)))valid=load_v3_v4(fd,header);
+    else if(valid&&header[1]==WORKSPACE_MODEL_VERSION&&header[2]==sizeof(transaction)&&st.st_size==(off_t)(sizeof(header)+sizeof(transaction)))
         valid=full_io(fd,&transaction,sizeof(transaction),false)&&header[3]==checksum(&transaction,sizeof(transaction))&&workspace_model_valid(&transaction);
     else valid=false;
     close(fd);return valid;
@@ -113,7 +168,7 @@ static bool save_model(void)
 {
     uncertain_save=false;
     if(mkdir(WORKSPACE_DIRECTORY,0755)&&errno!=EEXIST)return false;
-    uint32_t header[]={0x31535755U,4,sizeof(transaction),checksum(&transaction,sizeof(transaction))};
+    uint32_t header[]={0x31535755U,WORKSPACE_MODEL_VERSION,sizeof(transaction),checksum(&transaction,sizeof(transaction))};
     int dir=open(WORKSPACE_DIRECTORY,O_RDONLY|O_DIRECTORY|O_NOFOLLOW);if(dir<0)return false;
     int fd=open(STORE ".tmp",O_WRONLY|O_CREAT|O_TRUNC|O_NOFOLLOW,0600);
     if(fd<0){close(dir);return false;}

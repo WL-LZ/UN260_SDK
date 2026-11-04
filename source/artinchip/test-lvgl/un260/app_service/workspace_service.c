@@ -24,24 +24,25 @@ static ui_message_t apply_message_info,batch_message_info;
 static struct {
     bool pending;
     uint32_t owner;
-    uint8_t previous, target;
+    uint8_t mode;
+    uint32_t previous, target;
     char message[160];
 } batch_save;
 static const char *const steps[]={UI_N_("Speed"),UI_N_("Sorting"),UI_N_("Sound"),UI_N_("Batch"),UI_N_("ADD"),UI_N_("Start method"),UI_N_("Count mode")};
 static unsigned value(unsigned step,const workspace_profile_t *p)
 {
     switch(step){case 0:return p->speed;case 1:return p->sort;case 2:return machine_state_buzzer_enabled();
-        case 3:return p->batch_enabled?p->batch:0;case 4:return p->add;case 5:return p->work;default:return p->mode;}
+        case 3:return p->batch_enabled?(p->batch_mode==AMOUNT_BATCH_MODE?p->batch_amount:p->batch):0;case 4:return p->add;case 5:return p->work;default:return p->mode;}
 }
 static unsigned actual(unsigned step)
 {
     switch(step){case 0:return machine_state_speed();case 1:return machine_state_fo_mode();case 2:return machine_state_buzzer_enabled();
-        case 3:return machine_state_batch_enabled()?machine_state_batch_num():0;case 4:return machine_state_add_enabled();case 5:return machine_state_work_mode();default:return machine_state_mode()==MODE_SDC?2:machine_state_mode()==MODE_CNT?3:1;}
+        case 3:return machine_state_batch_saved_value(machine_state_batch_mode());case 4:return machine_state_add_enabled();case 5:return machine_state_work_mode();default:return machine_state_mode()==MODE_SDC?2:machine_state_mode()==MODE_CNT?3:1;}
 }
 static bool request(unsigned step,unsigned target)
 {
     switch(step){case 0:return setting_service_request_speed(target);case 1:return setting_service_request_fo_mode(target);
-        case 2:return setting_service_request_beep(target);case 3:return setting_service_request_batch_switch(target!=0,target?target:200,machine_state_batch_enabled(),machine_state_batch_num());
+        case 2:return setting_service_request_beep(target);case 3:return setting_service_request_batch_value(apply.target.batch_mode,target);
         case 4:return setting_service_request_add(target);case 5:return setting_service_request_work_mode(target);default:return count_mode_service_request(target==2?MODE_SDC:target==3?MODE_CNT:MODE_MDC);}
 }
 void workspace_service_init(void){workspace_store_init();}
@@ -92,10 +93,17 @@ uint8_t workspace_service_profile_mode(const workspace_profile_t *p)
 bool workspace_service_apply(const workspace_profile_t *p,uint32_t now)
 {
     if(!p||count_mode_service_busy()||workspace_service_switch_blocker()||!protocol_send_is_ready()||boot_service_get_stage()!=BOOT_STAGE_DONE)return false;
-    if(p->mode>3||p->speed>2||p->sort>3||p->beep>1||p->add>1||p->work>1||p->batch>200||(p->batch_enabled&&(!p->batch||p->batch==200)))return false;
+    if(p->mode>3||p->speed>2||p->sort>3||p->beep>1||p->add>1||p->work>1||p->batch_mode>AMOUNT_BATCH_MODE||p->batch>200||
+       (p->batch_enabled&&(p->batch_mode==AMOUNT_BATCH_MODE?!p->batch_amount:(!p->batch||p->batch==200))))return false;
     apply.target=*p;apply.target.mode=workspace_service_profile_mode(p);apply.active=true;apply.waiting=false;apply.step=apply.confirmed=0;apply.since=now;
     apply_result=WORKSPACE_APPLY_PENDING;
     ui_message_key(&apply_message_info,UI_N_("Applying profile..."));return true;
+}
+static const char *batch_saved_only(uint8_t mode)
+{
+    return mode == AMOUNT_BATCH_MODE ?
+        UI_N_("VBatch presets saved. Select the preset to apply it when idle.") :
+        UI_N_("Cycle saved; active Batch was not changed. Select the preset to apply it when idle.");
 }
 static void finish_batch_save(void)
 {
@@ -104,18 +112,26 @@ static void finish_batch_save(void)
     if(!workspace_store_last_success())return;
     const workspace_user_t *u=workspace_active(workspace_store_get());
     bool target_saved=false;
-    if(u&&u->id==batch_save.owner)
-        for(unsigned i=1;i<u->batch_count;i++)
-            if(u->batches[i]==batch_save.target)target_saved=true;
-    /* Never replace a newer controller choice or apply later during a run. */
-    if(!target_saved||!machine_state_batch_enabled()||
-       machine_state_batch_num()!=batch_save.previous||machine_operation_blocker()||
-       !protocol_send_is_ready()||boot_service_get_stage()!=BOOT_STAGE_DONE||
-       !setting_service_request_batch_switch(true,batch_save.target,true,batch_save.previous)) {
-        ui_message_key(&batch_message_info,UI_N_("Cycle saved; active Batch was not changed. Select the preset to apply it when idle."));
+    if (u && u->id == batch_save.owner) {
+        for (unsigned i = 1; i < workspace_batch_slot_count(u, batch_save.mode); i++)
+            if (workspace_batch_slot_value(u, batch_save.mode, i) == batch_save.target) target_saved = true;
+    }
+    /* Do not overwrite a new controller choice while a local save was in flight. */
+    if (!target_saved || !machine_state_batch_confirmed(batch_save.mode) ||
+        machine_state_batch_saved_value(batch_save.mode) != batch_save.previous || machine_operation_blocker() ||
+        !protocol_send_is_ready() || boot_service_get_stage()!=BOOT_STAGE_DONE ||
+        !setting_service_request_batch_value(batch_save.mode,batch_save.target)) {
+        ui_message_key(&batch_message_info, batch_saved_only(batch_save.mode));
         return;
     }
-    ui_message_key(&batch_message_info,UI_N_("Cycle saved. Active Batch sent for controller confirmation."));
+    ui_message_key(&batch_message_info,batch_save.mode == AMOUNT_BATCH_MODE ? UI_N_("VBatch presets saved. Waiting for controller confirmation.") :
+        UI_N_("Cycle saved. Active Batch sent for controller confirmation."));
+}
+static bool profile_step_matches(void)
+{
+    if (apply.step == 3 && !machine_state_batch_confirmed(apply.target.batch_mode)) return false;
+    if (apply.step == 6 && !count_mode_service_confirmed()) return false;
+    return actual(apply.step) == value(apply.step, &apply.target);
 }
 bool workspace_service_poll(uint32_t now)
 {
@@ -123,10 +139,10 @@ bool workspace_service_poll(uint32_t now)
     finish_batch_save();
     if(!apply.active)return changed;
     /* A matching confirmed value is evidence; sending a command is not. */
-    if(apply.waiting&&actual(apply.step)==value(apply.step,&apply.target)&&(apply.step!=6||count_mode_service_confirmed())) {
+    if(apply.waiting&&profile_step_matches()) {
         apply.waiting=false;apply.confirmed++;apply.step++;changed=true;
     }
-    while(!apply.waiting&&apply.step<7&&actual(apply.step)==value(apply.step,&apply.target)&&(apply.step!=6||count_mode_service_confirmed()))apply.step++;
+    while(!apply.waiting&&apply.step<7&&profile_step_matches())apply.step++;
     if(apply.step==7) {apply.active=false;apply_result=WORKSPACE_APPLY_SUCCEEDED;ui_message_key(&apply_message_info,UI_N_("Profile applied. Device values confirmed."));return true;}
     const char *blocked=machine_blocker();
     if(blocked||(apply.waiting&&(uint32_t)(now-apply.since)>1800)) {
@@ -163,30 +179,37 @@ bool workspace_service_set_quick_enabled(bool enabled)
     *next=*workspace_store_get();workspace_user_t *u=workspace_find(next,next->operators_enabled?next->active_id:0);
     bool ok=u!=NULL;if(ok){u->quick_enabled=enabled;ok=workspace_store_save(next);}free(next);return ok;
 }
+bool workspace_service_select_batch(uint8_t mode, uint32_t value)
+{
+    /* Idle ADD sessions and pending history writes do not own the Batch setting. */
+    if (apply.active || batch_save.pending || machine_operation_blocker() || !protocol_send_is_ready()) return false;
+    return setting_service_request_batch_value(mode, value);
+}
 bool workspace_service_batch_next(void)
 {
-    /* Changing the Batch cycle during an idle ADD session does not change
-     * ownership or clear totals. Do not inherit the operator-switch blocker. */
-    if(!workspace_store_ready()||workspace_store_busy()||batch_save.pending||apply.active||machine_operation_blocker()||!protocol_send_is_ready())return false;
-    const workspace_user_t *u=workspace_active(workspace_store_get());
-    uint8_t target=workspace_next_batch(u,machine_state_batch_enabled()?machine_state_batch_num():0);
-    return setting_service_request_batch_switch(target!=0,target?target:200,machine_state_batch_enabled(),machine_state_batch_num());
+    if (!workspace_store_ready() || workspace_store_busy()) return false;
+    const workspace_user_t *u = workspace_active(workspace_store_get());
+    uint8_t mode = machine_state_batch_mode();
+    uint32_t current = machine_state_batch_saved_value(mode);
+    return workspace_service_select_batch(mode, workspace_next_batch_value(u, mode, current));
 }
-bool workspace_service_save_batches(uint32_t owner,const uint8_t *values,
-                                    unsigned count,uint8_t previous_active,
-                                    uint8_t edited_active)
+bool workspace_service_save_batch_slots(uint32_t owner, uint8_t mode, const uint32_t *values,
+                                        unsigned count, uint32_t previous_active, uint32_t edited_active)
 {
-    if(!values||count<2||count>WORKSPACE_BATCHES||!workspace_store_ready()||
-       workspace_store_busy()||batch_save.pending||apply.active)return false;
-    if(values[0])return false;
-    for(unsigned i=1;i<count;i++)if(!values[i]||values[i]>=200)return false;
-    const workspace_user_t *u=workspace_active(workspace_store_get());
-    if(!u||u->id!=owner)return false;
-    bool previous_found=false,target_found=false;
-    for(unsigned i=1;i<u->batch_count;i++)if(u->batches[i]==previous_active)previous_found=true;
-    for(unsigned i=1;i<count;i++)if(values[i]==edited_active)target_found=true;
-    bool sync=previous_found&&target_found&&previous_active!=edited_active&&
-              machine_state_batch_enabled()&&machine_state_batch_num()==previous_active;
+    if (!values || count < 2 || count > WORKSPACE_BATCHES || values[0] ||
+        (mode != PCS_BATCH_MODE && mode != AMOUNT_BATCH_MODE) || !workspace_store_ready() ||
+        workspace_store_busy() || batch_save.pending || apply.active) return false;
+    const workspace_user_t *u = workspace_active(workspace_store_get());
+    if (!u || u->id != owner) return false;
+    bool previous_found = false, target_found = false;
+    for (unsigned i = 1; i < workspace_batch_slot_count(u, mode); i++)
+        if (workspace_batch_slot_value(u, mode, i) == previous_active) previous_found = true;
+    for (unsigned i = 1; i < count; i++) {
+        if (!values[i] || (mode == PCS_BATCH_MODE && values[i] >= 200)) return false;
+        if (values[i] == edited_active) target_found = true;
+    }
+    bool sync = previous_found && target_found && previous_active != edited_active &&
+                machine_state_batch_confirmed(mode) && machine_state_batch_saved_value(mode) == previous_active;
     /* Saving a local preset does not change the running machine. If applying
      * it is unavailable now, leave the current Batch alone, without retrying
      * that old choice later when the machine becomes idle. */
@@ -194,16 +217,33 @@ bool workspace_service_save_batches(uint32_t owner,const uint8_t *values,
                           protocol_send_is_ready()&&boot_service_get_stage()==BOOT_STAGE_DONE;
     workspace_model_t *next=malloc(sizeof(*next));if(!next)return false;
     *next=*workspace_store_get();workspace_user_t *v=workspace_find(next,owner);
-    v->batch_count=count;memset(v->batches,0,sizeof(v->batches));memcpy(v->batches,values,count);
+    if (mode == AMOUNT_BATCH_MODE) {
+        v->amount_batch_count = count;
+        memset(v->amount_batches, 0, sizeof(v->amount_batches));
+        memcpy(v->amount_batches, values, count * sizeof(*values));
+    } else {
+        v->batch_count = count;
+        memset(v->batches, 0, sizeof(v->batches));
+        for (unsigned i = 0; i < count; i++) v->batches[i] = (uint8_t)values[i];
+    }
     bool ok=workspace_store_save(next);free(next);
     if(!ok)return false;
-    batch_save.pending=apply_after_save;batch_save.owner=owner;
+    batch_save.pending=apply_after_save;batch_save.owner=owner;batch_save.mode=mode;
     batch_save.previous=previous_active;batch_save.target=edited_active;
-    ui_message_key(&batch_message_info,sync&&!apply_after_save?
-        UI_N_("Cycle saved; active Batch was not changed. Select the preset to apply it when idle."):
-        UI_N_("Batch cycle saved."));
+    const char *message = mode == AMOUNT_BATCH_MODE ? UI_N_("VBatch presets saved.") : UI_N_("Batch cycle saved.");
+    if (sync && !apply_after_save) message = batch_saved_only(mode);
+    ui_message_key(&batch_message_info, message);
     return true;
 }
+bool workspace_service_save_batches(uint32_t owner, const uint8_t *values, unsigned count,
+                                    uint8_t previous_active, uint8_t edited_active)
+{
+    if (!values || count > WORKSPACE_BATCHES) return false;
+    uint32_t slots[WORKSPACE_BATCHES];
+    for (unsigned i = 0; i < count; i++) slots[i] = values[i];
+    return workspace_service_save_batch_slots(owner, PCS_BATCH_MODE, slots, count, previous_active, edited_active);
+}
+uint8_t workspace_service_batch_save_mode(void) { return batch_save.mode; }
 const char *workspace_service_batch_save_message(void){ui_message_render(&batch_message_info,batch_save.message,sizeof(batch_save.message));return batch_save.message;}
 
 const ui_message_t *workspace_service_batch_save_message_info(void){return &batch_message_info;}
@@ -211,7 +251,9 @@ const ui_message_t *workspace_service_batch_save_message_info(void){return &batc
 bool workspace_service_owns_command(uint8_t command)
 {
     static const uint8_t commands[] = {0x16, 0x3A, 0x15, 0x06, 0x39, 0x38, 0x04};
-    return apply.active && apply.waiting && apply.step < sizeof(commands) && commands[apply.step] == command;
+    if (!apply.active || !apply.waiting || apply.step >= sizeof(commands)) return false;
+    if (apply.step == 3 && apply.target.batch_mode == AMOUNT_BATCH_MODE) return command == 0x07;
+    return commands[apply.step] == command;
 }
 
 bool workspace_service_reject_command(uint8_t command)

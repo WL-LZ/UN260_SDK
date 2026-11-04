@@ -1,3 +1,4 @@
+#include "un260/lv_system/user_cfg.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "app_setting_runtime.h"
 #include "count_mode_service.h"
@@ -93,6 +94,7 @@ bool app_setting_runtime_handle_reply(uint8_t cmd, uint8_t *buf, uint8_t len)
     switch (cmd) {
     case 0x04:
     case 0x06:
+    case 0x07:
     case 0x15:
     case 0x16:
     case 0x38:
@@ -175,8 +177,11 @@ void app_setting_runtime_poll(uint32_t now_ms)
     }
 
     if (setting_service_batch_take_timeout(&batch_result)) {
+        const bool amount = batch_result.type == SETTING_BATCH_REQUEST_AMOUNT;
+        machine_state_invalidate_batch(amount ? AMOUNT_BATCH_MODE : PCS_BATCH_MODE);
         page_03_batch_set_result(false, &batch_result);
-        app_setting_notice_timeout("settings.batch", UI_N_("Batch"));
+        app_setting_notice_timeout(amount ? "settings.value_batch" : "settings.batch",
+                                   amount ? UI_N_("VBatch") : UI_N_("Batch"));
     }
 
     if (setting_service_take_double_note_level_timeout(&value_result)) {

@@ -91,19 +91,48 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
         break;
     }
 
+    case 0x07:
+    {
+        if (len < 6 || buf[2] != len || buf[3] != cmd) break;
+        const uint8_t status = buf[4];
+        if (status == 0x03 && len == 10) {
+            const uint32_t amount = ((uint32_t)buf[5] << 24) | ((uint32_t)buf[6] << 16) |
+                                    ((uint32_t)buf[7] << 8) | buf[8];
+            machine_state_confirm_batch_amount(amount);
+            if (page_03_menu_is_visible()) page_03_menu_refresh_batch_number();
+            page_01_batch_refre();
+            smart_island_refresh_summary();
+        } else if ((status == 0x01 || status == 0x02) && len == 6) {
+            setting_batch_result_t result;
+            if (!setting_service_batch_take_result(cmd, status, &result)) break;
+            const bool success = status == 0x01;
+            if (success) {
+                machine_state_confirm_batch_amount(result.amount);
+                machine_state_confirm_batch_mode(AMOUNT_BATCH_MODE);
+            }
+            page_03_batch_set_result(success, &result);
+            app_setting_notice_result("settings.value_batch", UI_N_("VBatch"), success);
+            if (success) smart_island_refresh_summary();
+        }
+        break;
+    }
+
     case 0x06:
     {
-        if (len < 6) break;
+        if (len < 6 || buf[2] != len || buf[3] != cmd) break;
 
         uint8_t status = buf[4];
+        if ((status == 0x01 || status == 0x02) && len != 6) break;
 
         if (status == 0x01)
         {
             setting_batch_result_t result;
-            if (!setting_service_batch_take_result(status, &result)) {
+            if (!setting_service_batch_take_result(cmd, status, &result)) {
                 uart_debug_printf("Set batch num success ignored: no pending request\n");
                 break;
             }
+            machine_state_confirm_batch(result.target.enable, result.target.num);
+            machine_state_confirm_batch_mode(PCS_BATCH_MODE);
             page_03_batch_set_result(true, &result);
             app_setting_notice_result("settings.batch", UI_N_("Batch"), true);
             uart_debug_printf("Set batch num success\n");
@@ -111,9 +140,8 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
         }
         else if (status == 0x02)
         {
-            if (len != 6 || buf[2] != len || buf[3] != cmd) break;
             setting_batch_result_t result;
-            if (!setting_service_batch_take_result(status, &result)) {
+            if (!setting_service_batch_take_result(cmd, status, &result)) {
                 uart_debug_printf("Set batch num fail ignored: no pending request\n");
                 break;
             }
@@ -129,8 +157,8 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
         }
         else if (status == 0x03)
         {
-            if (len < 7) break;
-            machine_state_confirm_batch(buf[5] != 200, buf[5]);
+            if (len != 7 || buf[5] > 200) break;
+            machine_state_sync_batch_num(buf[5]);
             if (page_03_menu_is_visible()) {
                 page_03_menu_refresh_batch_number();
             }

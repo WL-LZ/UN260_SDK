@@ -28,7 +28,7 @@ static void test_readable_warning(const char *message)
 static void test_preset_title_glyphs(void)
 {
     ui_lang_set(LANGUAGE_CN);
-    smart_island_notify_preset_full((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4});
+    smart_island_notify_preset_full((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4},"Batch full");
     tick(300);render();
     const char *title=lv_label_get_text(g_si_ctx.objects.title);
     assert(!strcmp(title,"预置数已满"));

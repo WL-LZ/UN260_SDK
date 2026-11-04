@@ -4,6 +4,7 @@
 #include "un260/counting/counting_data_store.h"
 #include "un260/counting/counting_reject_reason.h"
 #include "un260/lv_system/machine_time.h"
+#include "un260/lv_system/user_cfg.h"
 #include <stdio.h>
 #include <stdarg.h>
 static bool add(char *out,size_t capacity,size_t *used,const char *format,...)
@@ -22,8 +23,14 @@ bool support_report_build(char *out,size_t capacity)
     bool remote=device_info_is_valid();
     if(!add(out,capacity,&used,"UN260 SUPPORT REPORT v1\nDevice clock: %04u-%02u-%02u %02u:%02u:%02u\nRemote versions verified: %s\nDisplay: %.80s\nMainboard: %.80s\nImage: %.80s\nFPGA: %.80s\nMainboard boot: %.80s\nImage boot: %.80s\n\n",
         now.year,now.month,now.day,now.hour,now.minute,now.second,remote?"yes":"no",device_info_display_app(),remote?device_info_main_app():"Unavailable",remote?device_info_image_app():"Unavailable",remote?device_info_fpga():"Unavailable",remote?device_info_main_boot():"Unavailable",remote?device_info_image_boot():"Unavailable"))return false;
-    if(!add(out,capacity,&used,"Confirmed settings\nMode: %u\nSpeed: %u\nStart: %u\nADD: %u\nSort: %u\nSound: %u\nBatch enabled: %u\nBatch size: %u\nReject capacity: %u\n\nCurrent reject reasons (not historical fault logs)\n",
-        machine_state_mode(),machine_state_speed(),machine_state_work_mode(),machine_state_add_enabled(),machine_state_fo_mode(),machine_state_buzzer_enabled(),machine_state_batch_enabled(),machine_state_batch_num(),machine_state_reject_pocket_max()))return false;
+    const uint8_t batch_mode = machine_state_batch_mode();
+    char batch_setting[64];
+    if (batch_mode == AMOUNT_BATCH_MODE)
+        snprintf(batch_setting,sizeof(batch_setting),"VBatch enabled: %u",machine_state_batch_saved_value(batch_mode)!=0);
+    else
+        snprintf(batch_setting,sizeof(batch_setting),"Batch size: %u",(unsigned)machine_state_batch_saved_value(batch_mode));
+    if(!add(out,capacity,&used,"Confirmed settings\nMode: %u\nSpeed: %u\nStart: %u\nADD: %u\nSort: %u\nSound: %u\n%s\nBatch confirmed: %u\nReject capacity: %u\n\nCurrent reject reasons (not historical fault logs)\n",
+        machine_state_mode(),machine_state_speed(),machine_state_work_mode(),machine_state_add_enabled(),machine_state_fo_mode(),machine_state_buzzer_enabled(),batch_setting,machine_state_batch_confirmed(batch_mode),machine_state_reject_pocket_max()))return false;
     const counting_sim_t *sim=counting_data_current();unsigned counts[256]={0};int count=counting_data_error_detail_count(sim);
     if(sim&&sim->err_code&&sim->err_pcs)for(int i=0;i<count;i++)counts[sim->err_code[i]]+=sim->err_pcs[i];
     for(unsigned i=0;i<256;i++)if(counts[i]&&!add(out,capacity,&used,"0x%02X / %.40s / %u\n",i,counting_reject_reason_get(i),counts[i]))return false;

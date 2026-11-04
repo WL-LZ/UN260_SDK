@@ -71,6 +71,7 @@ for(const item of [...manifest,...historyManifest]) {
         assert.equal((rendered.match(/<tr>/g)||[]).length,1,'only header, no fabricated detail rows');
     }
     vm.runInNewContext(scripts[1][1],context);
+    if(item.valueBadge) assert.equal(batches[0].textContent,item.valueBadge);
     assert.equal(context.document.documentElement.lang,item.tag);
     assert.equal(context.document.documentElement.dir,item.tag==='ar'?'rtl':'ltr');
     for(const [key,value] of Object.entries(item.expected)) {

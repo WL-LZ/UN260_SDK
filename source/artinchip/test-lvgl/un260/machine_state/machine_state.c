@@ -15,6 +15,7 @@ static machine_state_snapshot_t g_machine_state = {
     .batch_enabled = true,
     .batch_num = 0,
     .batch_mode = PCS_BATCH_MODE,
+    .batch_mode_known = true, /* Legacy controllers only report the count. */
     .batch_amount = 0,
     .aging_running = false,
     .double_note_level = DOUBLE_NOTE_LEVEL_MIN,
@@ -130,11 +131,12 @@ void machine_state_confirm_batch(bool enabled, uint8_t num)
 {
     g_machine_state.batch_enabled = enabled;
     g_machine_state.batch_num = num;
+    g_machine_state.batch_num_known = true;
 }
 
 void machine_state_sync_batch_num(uint8_t num)
 {
-    g_machine_state.batch_num = num;
+    if (num <= 200) machine_state_confirm_batch(num != 0 && num != 200, num);
 }
 
 void machine_state_confirm_batch_enable(bool enabled)
@@ -155,6 +157,7 @@ uint8_t machine_state_batch_num(void)
 void machine_state_confirm_batch_amount(uint32_t amount)
 {
     g_machine_state.batch_amount = amount;
+    g_machine_state.batch_amount_known = true;
 }
 
 uint32_t machine_state_batch_amount(void)
@@ -166,12 +169,36 @@ void machine_state_confirm_batch_mode(uint8_t mode)
 {
     if (mode == PCS_BATCH_MODE || mode == AMOUNT_BATCH_MODE) {
         g_machine_state.batch_mode = mode;
+        g_machine_state.batch_mode_known = true;
     }
 }
 
 uint8_t machine_state_batch_mode(void)
 {
     return g_machine_state.batch_mode;
+}
+
+uint32_t machine_state_batch_saved_value(uint8_t mode)
+{
+    if (mode == AMOUNT_BATCH_MODE) return g_machine_state.batch_amount;
+    if (mode == PCS_BATCH_MODE && g_machine_state.batch_enabled)
+        return g_machine_state.batch_num;
+    return 0;
+}
+
+bool machine_state_batch_confirmed(uint8_t mode)
+{
+    if (!g_machine_state.batch_mode_known || mode != g_machine_state.batch_mode) return false;
+    return mode == AMOUNT_BATCH_MODE ? g_machine_state.batch_amount_known :
+           mode == PCS_BATCH_MODE && g_machine_state.batch_num_known;
+}
+
+void machine_state_invalidate_batch(uint8_t mode)
+{
+    if (mode == AMOUNT_BATCH_MODE) g_machine_state.batch_amount_known = false;
+    else if (mode == PCS_BATCH_MODE) g_machine_state.batch_num_known = false;
+    else return;
+    if (g_machine_state.batch_mode != mode) g_machine_state.batch_mode_known = false;
 }
 
 void machine_state_confirm_aging_running(bool running)

@@ -183,7 +183,8 @@ bool app_protocol_runtime_handle_reply(uint8_t cmd,
          * into the visible page's next frame and retains hidden-page dirtiness. */
         if (cmd == 0x56 && result == STARTUP_SYNC_REPLY_END)
             ui_manager_publish_data_changed(UI_DATA_TOPIC_CURRENCY_CATALOG);
-        if (cmd == 0x58 && result == STARTUP_SYNC_REPLY_DATA && buf[4] == 0x01)
+        if (cmd == 0x58 && result == STARTUP_SYNC_REPLY_DATA &&
+            (buf[4] == 0x01 || buf[4] == 0x02 || buf[4] == 0x03 || buf[4] == 0x09))
             ui_manager_publish_data_changed(UI_DATA_TOPIC_MACHINE_SETTINGS);
         return true;
     }

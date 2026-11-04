@@ -918,7 +918,11 @@ void page_01_bottom_c_refresh_batch(bool anim_en) //刷新主界面底部C区Bat
 
     if (page_01_main_defer_bottom_refresh(PAGE_01_MAIN_DIRTY_BATCH, &anim_en)) return;
 
-    if (machine_state_batch_enabled()) {
+    if (machine_state_batch_mode() == AMOUNT_BATCH_MODE) {
+        uint32_t amount = machine_state_batch_saved_value(AMOUNT_BATCH_MODE);
+        if (amount) lv_snprintf(text_buf, sizeof(text_buf), ui_tr("VBatch %u"), amount);
+        else lv_snprintf(text_buf, sizeof(text_buf), "%s", ui_tr("VBatch OFF"));
+    } else if (machine_state_batch_enabled()) {
         lv_snprintf(text_buf, sizeof(text_buf), ui_text_get(UI_TEXT_PAGE01_BOTTOM_BATCH_VALUE_FMT),
             machine_state_batch_num());
     } else {

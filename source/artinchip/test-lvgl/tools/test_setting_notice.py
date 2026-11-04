@@ -30,7 +30,8 @@ static setting_request_observer_t observer;
 ui_page_t ui_manager_get_current_page(void){return page;}
 void setting_service_set_request_observer(setting_request_observer_t value){observer=value;}
 #include "un260/app_service/workspace_service.h"
-static struct { bool active,waiting; unsigned step,confirmed; char message[160]; } apply;
+#include "un260/lv_system/user_cfg.h"
+static struct { bool active,waiting; unsigned step,confirmed; workspace_profile_t target; char message[160]; } apply;
 static workspace_apply_result_t apply_result;
 static ui_message_t apply_message_info;
 static const char *const steps[]={"Speed","Sorting","Sound","Batch","ADD","Start method","Count mode"};
@@ -120,7 +121,7 @@ int main(void) {
     const struct { const char *key; uint8_t command; } settings[]={
         {"settings.mode",0x04},{"settings.speed",0x16},{"settings.work_mode",0x38},
         {"settings.add",0x39},{"settings.sorting",0x3A},{"settings.sound",0x15},
-        {"settings.batch",0x06},{"settings.reject_pocket",0x08}};
+        {"settings.batch",0x06},{"settings.value_batch",0x07},{"settings.reject_pocket",0x08}};
     for(unsigned i=0;i<sizeof(settings)/sizeof(settings[0]);++i){
         unsigned before=notices;observer(settings[i].command);
         app_setting_notice_result(settings[i].key,"Setting",true);

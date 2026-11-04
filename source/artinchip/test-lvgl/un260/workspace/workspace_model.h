@@ -2,6 +2,7 @@
 #define UN260_WORKSPACE_MODEL_H
 #include <stdbool.h>
 #include <stdint.h>
+#define WORKSPACE_MODEL_VERSION 5U
 #define WORKSPACE_USERS 8
 #define WORKSPACE_PROFILES 8
 #define WORKSPACE_BATCHES 10
@@ -19,6 +20,8 @@ typedef struct {
     char name[WORKSPACE_NAME + 1];
     uint8_t speed, work, add, sort, beep, batch_enabled, batch;
     uint8_t mode; /* 0 keep current (migrated profiles), 1 mixed, 2 single, 3 count. */
+    uint8_t batch_mode;
+    uint32_t batch_amount;
 } workspace_profile_t;
 typedef struct {
     uint32_t id;
@@ -30,6 +33,8 @@ typedef struct {
     workspace_avatar_t avatar;
     char employee_id[WORKSPACE_EMPLOYEE_ID+1];
     char team[WORKSPACE_TEAM+1];
+    uint8_t amount_batch_count;
+    uint32_t amount_batches[WORKSPACE_BATCHES];
 } workspace_user_t;
 typedef struct {
     uint32_t version, next_id, active_id, user_count;
@@ -37,6 +42,10 @@ typedef struct {
     uint8_t operators_enabled, management_protected, disabled[WORKSPACE_USERS];
     workspace_user_t shared;
 } workspace_model_t;
+void workspace_seed_amount_batches(workspace_user_t *user);
+unsigned workspace_batch_slot_count(const workspace_user_t *user, uint8_t mode);
+uint32_t workspace_batch_slot_value(const workspace_user_t *user, uint8_t mode, unsigned index);
+uint32_t workspace_next_batch_value(const workspace_user_t *user, uint8_t mode, uint32_t current);
 void workspace_defaults(workspace_model_t *model);
 /* Restore per-operator controls without reusing IDs or deleting identity data. */
 bool workspace_restore_preferences(workspace_model_t *model);

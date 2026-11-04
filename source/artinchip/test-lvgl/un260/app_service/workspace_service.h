@@ -23,11 +23,16 @@ const char *workspace_service_apply_message(void);
 bool workspace_service_quick_enabled(void);
 bool workspace_service_set_quick_enabled(bool enabled);
 bool workspace_service_batch_next(void);
+bool workspace_service_select_batch(uint8_t mode, uint32_t value);
+bool workspace_service_save_batch_slots(uint32_t owner, uint8_t mode,
+                                        const uint32_t *values, unsigned count,
+                                        uint32_t previous_active, uint32_t edited_active);
 /* Save the cycle; only an edited in-use slot is applied after durable save.
  * Pass zero/zero when no active slot survives the edit. ACK owns actual state. */
 bool workspace_service_save_batches(uint32_t owner, const uint8_t *values,
                                     unsigned count, uint8_t previous_active,
                                     uint8_t edited_active);
+uint8_t workspace_service_batch_save_mode(void);
 const char *workspace_service_batch_save_message(void);
 const ui_message_t *workspace_service_apply_message_info(void);
 const ui_message_t *workspace_service_batch_save_message_info(void);

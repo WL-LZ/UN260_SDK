@@ -34,8 +34,8 @@ void smart_island_notify_fault(const char *text,machine_fault_key_t key)
 {(void)key;smart_island_notify_warning_level(text,SMART_ISLAND_WARNING_LEVEL_ERROR);}
 void smart_island_notify_no_note(machine_fault_key_t key)
 {(void)key;smart_island_notify_warning_level("No banknotes detected",SMART_ISLAND_WARNING_LEVEL_WARNING);}
-void smart_island_notify_preset_full(machine_fault_key_t key)
-{(void)key;smart_island_notify_warning_level("Batch full",SMART_ISLAND_WARNING_LEVEL_PRESET);}
+void smart_island_notify_preset_full(machine_fault_key_t key, const char *title_key)
+{(void)key;smart_island_notify_warning_level(ui_tr(title_key),SMART_ISLAND_WARNING_LEVEL_PRESET);}
 void app_fault_recovery_report(machine_fault_key_t key){(void)key;}
 bool app_fault_recovery_request_clear(machine_fault_key_t key){(void)key;return true;}
 void ui_notice_set_suspended(uint32_t reason,bool value) {if(value)suspended|=reason;else suspended&=~reason;}
@@ -294,6 +294,21 @@ int main(void)
     }
     fault_popup_report_runtime_fault(2);advance(3200);capture("upper-open-zh");hide_fault_popup();
     ui_lang_set(LANGUAGE_EN);
+    machine_fault_clear();
+    machine_state_confirm_batch_mode(AMOUNT_BATCH_MODE);
+    machine_state_confirm_batch_amount(50000);
+    fault_popup_report_preset_full();
+    assert(!strcmp(island_title,ui_tr("VBatch reached")));
+    assert(!strcmp(lv_label_get_text(popup.title),ui_tr("VBatch reached")));
+    verify_layout();capture("vbatch-reached-en");hide_fault_popup();
+    machine_state_confirm_batch_mode(PCS_BATCH_MODE);
+    assert(fault_popup_show_key((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4}));
+    assert(!strcmp(lv_label_get_text(popup.title),ui_tr("VBatch reached")));
+    hide_fault_popup();fault_popup_clear_preset();
+    fault_popup_report_preset_full();hide_fault_popup();fault_popup_clear_preset();
+    fault_popup_report_setting_rejection(0x07,0);
+    assert(!strcmp(island_title,ui_tr("VBatch change rejected")));
+    verify_layout();capture("vbatch-rejected-en");hide_fault_popup();
     present((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4});
     assert(!strcmp(lv_label_get_text(popup.title),"Batch full"));
     assert(!strcmp(popup.guide.location.key,"Lower front · Stacker pocket ST"));

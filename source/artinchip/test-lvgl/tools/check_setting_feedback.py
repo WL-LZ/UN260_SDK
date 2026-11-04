@@ -12,7 +12,7 @@ reviewed={
  'page_03_menu_show_batch_saved_tip':'legacy notification adapter',
  'print_config_request_field':'print_config result/timeout + app_setting_reply_detail',
  'app_add_runtime_request':'app_add_runtime: settings.add confirmation then count.add-reset outcome/retry',
- 'setting_service_request_batch_switch':'settings.batch',
+ 'workspace_service_select_batch':'settings.batch settings.value_batch',
  'setting_service_request_beep':'settings.sound',
  'setting_service_request_fo_mode':'settings.sorting',
  'count_mode_service_request':'settings.mode',
@@ -23,10 +23,12 @@ reviewed={
  'top_popup_save_failed':'disabled-notice failure dialog',
  'ui_export_data_request':'export owner',
  'user_cfg_qr_option_save':'QR selection: confirmed persisted value + failure dialog',
- 'workspace_service_save_batches':'APP_UI_NOTICE_BATCH_SAVE',
+ 'workspace_service_save_batch_slots':'APP_UI_NOTICE_BATCH_SAVE',
  'workspace_store_save':'APP_UI_NOTICE_WORKSPACE_STORE'
 }
-mutations=set(re.findall(r'\b([a-zA-Z_]\w*(?:_request\w*|_save\w*|_set_enabled|_swap))\s*\(',text))
+mutations=set(re.findall(r'\b([a-zA-Z_]\w*(?:_request\w*|_save\w*|_set_enabled|_select_batch|_swap))\s*\(',text))
+# This getter reads the confirmed preset snapshot; only select_batch writes the controller.
+mutations.discard('machine_state_batch_saved_value')
 assert mutations==set(reviewed), 'Review setting feedback ownership: '+str(mutations^set(reviewed))
 local=(root/'un260/app_service/app_local_setting.c').read_text()
 header=(root/'un260/app_service/app_local_setting.h').read_text()
@@ -36,8 +38,8 @@ assert ids==entries, 'Every local setting needs execution and feedback metadata'
 assert ids <= set(re.findall(r'APP_LOCAL_[A-Z_]+',text)), 'Unused local setting policy'
 reply=(root/'un260/app_service/app_setting_reply_basic.c').read_text()+(root/'un260/app_service/app_setting_reply_detail.c').read_text()
 runtime=(root/'un260/app_service/app_setting_runtime.c').read_text()
-for key in reviewed.values():
- if key.startswith('settings.'):
+protocol_keys={key for owner in reviewed.values() if owner.startswith('settings.') for key in owner.split()}
+for key in protocol_keys:
   assert re.search(r'app_setting_notice_result\("'+re.escape(key)+r'"',reply), 'Missing completion: '+key
   assert key in runtime, 'Missing timeout/failure owner: '+key
 assert 'app_add_runtime_setting_result' in reply, 'ADD must hand matched confirmation to its transaction owner'
@@ -45,4 +47,4 @@ assert 'app_add_runtime_setting_timeout' in runtime, 'ADD timeout must settle it
 quick=(root/'un260/lv_components/lv_quick_controls.h').read_text().split('typedef enum {',1)[1].split('}',1)[0]
 quick_ids=set(re.findall(r'QUICK_[A-Z_]+',quick))
 assert quick_ids=={'QUICK_LAYOUT','QUICK_GESTURES','QUICK_PURE','QUICK_POPUP','QUICK_TOUCH','QUICK_EXPORT','QUICK_QR','QUICK_STANDBY','QUICK_TOP_POPUP','QUICK_CALCULATOR','QUICK_RESERVED','QUICK_HISTORY','QUICK_OPERATORS'}, 'Classify new shortcut as setting or action'
-print(f'PASS setting feedback contract: {len(reviewed)} Menu mutation boundaries, {len(ids)} local policies, {sum(key.startswith("settings.") for key in reviewed.values())} protocol settings, {len(quick_ids)} shortcut classifications (four navigation actions)')
+print(f'PASS setting feedback contract: {len(reviewed)} Menu mutation boundaries, {len(ids)} local policies, {len(protocol_keys)} protocol settings, {len(quick_ids)} shortcut classifications (four navigation actions)')

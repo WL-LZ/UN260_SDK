@@ -121,11 +121,19 @@ bool workspace_store_busy(void){return busy;}
 bool workspace_store_last_success(void){return true;}
 const char *workspace_store_message(void){return "Saved on this device.";}
 bool workspace_store_save(const workspace_model_t *m){if(busy||!workspace_model_valid(m))return false;model=*m;revision++;return true;}
-static uint8_t batch_edit_previous,batch_edit_target;
-static unsigned batch_edit_saves;
-bool workspace_service_save_batches(uint32_t owner,const uint8_t *values,unsigned count,uint8_t previous,uint8_t target){
+static uint32_t batch_edit_previous,batch_edit_target;
+static unsigned batch_edit_saves,batch_sends;
+static bool batch_unknown,delay_batch_ack;
+bool workspace_service_save_batch_slots(uint32_t owner,uint8_t mode,const uint32_t *values,unsigned count,
+                                       uint32_t previous,uint32_t target){
     workspace_model_t next=model;workspace_user_t *u=workspace_find(&next,owner);if(!u)return false;
-    u->batch_count=count;memset(u->batches,0,sizeof(u->batches));memcpy(u->batches,values,count);
+    if(mode==AMOUNT_BATCH_MODE){
+        u->amount_batch_count=count;
+        memcpy(u->amount_batches,values,count*sizeof(*values));
+    }else{
+        u->batch_count=count;
+        for(unsigned i=0;i<count;i++)u->batches[i]=(uint8_t)values[i];
+    }
     if(!workspace_store_save(&next))return false;
     batch_edit_previous=previous;batch_edit_target=target;batch_edit_saves++;return true;
 }
@@ -150,6 +158,21 @@ bool machine_state_add_enabled(void){return actual_state.add_enabled;}
 bool machine_state_buzzer_enabled(void){return actual_state.buzzer_enabled;}
 bool machine_state_batch_enabled(void){return actual_state.batch_enabled;}
 uint8_t machine_state_batch_num(void){return actual_state.batch_num;}
+uint8_t machine_state_batch_mode(void){return actual_state.batch_mode;}
+uint32_t machine_state_batch_amount(void){return actual_state.batch_amount;}
+uint32_t machine_state_batch_saved_value(uint8_t mode){
+    return mode==AMOUNT_BATCH_MODE?actual_state.batch_amount:actual_state.batch_enabled?actual_state.batch_num:0;
+}
+bool machine_state_batch_confirmed(uint8_t mode){return !batch_unknown&&mode==actual_state.batch_mode;}
+bool workspace_service_select_batch(uint8_t mode,uint32_t value){
+    if(machine_state_batch_confirmed(mode)&&machine_state_batch_saved_value(mode)==value)return true;
+    batch_sends++;
+    if(delay_batch_ack)return true;
+    batch_unknown=false;actual_state.batch_mode=mode;
+    if(mode==AMOUNT_BATCH_MODE)actual_state.batch_amount=value;
+    else {actual_state.batch_enabled=value!=0;actual_state.batch_num=(uint8_t)value;}
+    return true;
+}
 bool setting_service_request_speed(uint8_t n){actual_state.speed=n;return true;}
 bool setting_service_request_work_mode(uint8_t n){actual_state.work_mode=n;return true;}
 bool setting_service_request_fo_mode(uint8_t n){actual_state.fo_mode=n;return true;}
@@ -547,9 +570,9 @@ static void check_batch_header(void)
   left=LV_MIN(left,at.x);right=LV_MAX(right,at.x+lv_font_get_glyph_width(font,letter,next));
  }
  assert(slot_area.x2+12<=title_area.x1+left||slot_area.x1>=title_area.x1+right+12);
- lv_obj_t *first_action=menu.batch_dirty?find_action(content,500):add;
+ lv_obj_t *first_action=batch_draft()->dirty?find_action(content,500):add;
  check_menu_gap(slots,first_action,12,"Batch slot status/actions");
- if(menu.batch_dirty){
+ if(batch_draft()->dirty){
   assert(lv_obj_get_x(first_action)==689&&lv_obj_get_width(first_action)==92&&lv_obj_get_height(first_action)==36);
   lv_obj_t *save=find_action(content,A_SAVE_BATCH);assert(lv_obj_get_x(save)==789&&lv_obj_get_width(save)==92&&lv_obj_get_height(save)==36);
  }
@@ -631,7 +654,7 @@ static void test_operator_identity_and_language_access(void)
     assert(lv_obj_get_width(language)==464&&lv_obj_get_height(language)==60);
     unsigned navigations=nav_count;lv_event_send(language,LV_EVENT_CLICKED,NULL);
     assert(nav_count==navigations+1); /* Opens the existing PIN page, never the language page directly. */
-    menu.batch_dirty=true;lv_event_send(language,LV_EVENT_CLICKED,NULL);assert(nav_count==navigations+1);menu.batch_dirty=false;
+    batch_draft()->dirty=true;lv_event_send(language,LV_EVENT_CLICKED,NULL);assert(nav_count==navigations+1);batch_draft()->dirty=false;
     menu.saving=1;lv_event_send(language,LV_EVENT_CLICKED,NULL);assert(nav_count==navigations+1);menu.saving=0;
     model.active_id=original;menu.tab=tab;menu.sub=sub;menu.selected_user=0;clear_notice();render();
     puts("PASS operator selection/cancel/confirm/stable target/busy/disabled/suspend; language reuses guarded PIN entry with original layout");
@@ -680,18 +703,18 @@ static void check_action_feedback(lv_obj_t *button,uint32_t fill,uint32_t ink,
 }
 static void test_menu_action_feedback(void)
 {
-    unsigned navigation=nav_count,batches=menu.batch_count;
+    unsigned navigation=nav_count,batches=batch_draft()->count;
     ui_main_batch_action_t batch_action=main_batch_action;
     check_action_feedback(find(menu.root,"Back"),0xF0F7FA,0x2E687E,0xDCECF2,0x24576B,0);
     check_action_feedback(find(menu.root,"Quick"),0xE8F0FC,0x205795,0xD2E2F8,0x205795,0);
     check_action_feedback(find(menu.body,"Add slot"),0xE8F0FC,0x205795,0xD2E2F8,0x205795,0);
     check_action_feedback(find(menu.body,"Remove"),0xFBECEE,0xAD3342,0xF3D8DD,0xAD3342,0);
     check_action_feedback(find_action(menu.body,A_BATCH_BEHAVIOR),0x185BC2,0xFFFFFF,0x12489F,0xFFFFFF,0);
-    assert(nav_count==navigation&&menu.batch_count==batches&&main_batch_action==batch_action);
-    assert(!menu.quick&&!menu.batch_dirty&&!settings_detail_overlay_is_open());
+    assert(nav_count==navigation&&batch_draft()->count==batches&&main_batch_action==batch_action);
+    assert(!menu.quick&&!batch_draft()->dirty&&!settings_detail_overlay_is_open());
     /* A sixth slot makes one paging direction available. Disabled arrows keep
      * their muted fill and icon; the available action follows secondary. */
-    click("Add slot");assert(menu.batch_count==batches+1&&menu.batch_page==1);
+    click("Add slot");assert(batch_draft()->count==batches+1&&batch_draft()->page==1);
     lv_obj_t *previous=find_action(menu.body,510),*next=find_action(menu.body,511);
     assert(!lv_obj_has_state(previous,LV_STATE_DISABLED)&&lv_obj_has_state(next,LV_STATE_DISABLED));
     assert(lv_obj_get_style_bg_color(previous,0).full==lv_color_hex(0xE8F0FC).full);
@@ -704,7 +727,7 @@ static void test_menu_action_feedback(void)
     assert(lv_obj_has_state(previous,LV_STATE_DISABLED)&&!lv_obj_has_state(next,LV_STATE_DISABLED));
     assert(lv_obj_get_style_bg_color(next,0).full==lv_color_hex(0xE8F0FC).full);
     raster("menu-paging-next-enabled");
-    click("Cancel");assert(menu.batch_count==batches&&!menu.batch_dirty);
+    click("Cancel");assert(batch_draft()->count==batches&&!batch_draft()->dirty);
     puts("PASS real Menu action roles: Back/Quick/Add/Remove/main action press/release, disabled touch, inherited text and unchanged geometry");
 }
 
@@ -732,6 +755,32 @@ static void test_busy_feedback_lifetime(void)
     puts("PASS busy Menu/profile/Quick feedback is finite; no extra task, setting, navigation or cancellation");
 }
 
+static void check_value_batch_locales(void)
+{
+    machine_state_snapshot_t old=actual_state;
+    ui_main_batch_action_t old_action=main_batch_action;
+    for(size_t language=0;language<ui_lang_count();++language){
+        const ui_locale_t *locale=ui_lang_at(language);
+        assert(ui_lang_prepare_resources(locale->id));ui_lang_set(locale->id);
+        actual_state.batch_mode=AMOUNT_BATCH_MODE;actual_state.batch_amount=10000;
+        main_batch_action=UI_MAIN_BATCH_SETTINGS;
+        ui_page_03_menu_create(lv_scr_act());tick(120);
+        lv_obj_t *notes=find_action(menu.body,A_BATCH_NOTES),*amount=find_action(menu.body,A_BATCH_AMOUNT);
+        assert(notes&&amount&&batch_value_in_use(10000));
+        check_menu_role_line(lv_obj_get_child(notes,0),"notes segment",false);
+        check_menu_role_line(lv_obj_get_child(amount,0),"amount segment",false);
+        lv_obj_t *mode_switch=lv_obj_get_parent(amount);
+        lv_obj_t *hint=lv_obj_get_child(lv_obj_get_parent(mode_switch),lv_obj_get_index(mode_switch)+1);
+        assert(hint);lv_area_t area;lv_obj_get_coords(hint,&area);
+        assert(lv_obj_get_height(mode_switch)==40 && area.y1>=110 && area.y2<153 && area.x2<962);
+        lv_obj_t *toggle=find_action(menu.body,A_BATCH_BEHAVIOR);
+        check_menu_role_line(lv_obj_get_child(toggle,0),"VBatch shortcut",false);
+        char name[80];snprintf(name,sizeof(name),"vbatch-%s",locale->tag);raster(name);
+        ui_page_03_menu_destroy();
+    }
+    actual_state=old;main_batch_action=old_action;ui_lang_set(LANGUAGE_EN);
+    puts("PASS VBatch menus: ten real locales, mode selectors, aligned guidance and shortcut label.");
+}
 int main(void)
 {
     test_local_feedback_contract();
@@ -750,6 +799,8 @@ int main(void)
     lv_indev_drv_t in;lv_indev_drv_init(&in);in.type=LV_INDEV_TYPE_POINTER;in.read_cb=read_pointer;in.feedback_cb=sound_feedback;assert(lv_indev_drv_register(&in));
     lv_img_decoder_t *decoder=lv_img_decoder_create();lv_img_decoder_set_info_cb(decoder,asset_info);lv_img_decoder_set_open_cb(decoder,asset_open);lv_img_decoder_set_close_cb(decoder,asset_close);
 #ifdef MENU_REAL_FONTS
+    check_value_batch_locales();
+    if(getenv("UN260_MENU_BATCH_RENDER_ONLY"))return 0;
     check_profile_summary_locales();
 #endif
     ui_page_03_menu_create(lv_scr_act());tick(200);
@@ -762,9 +813,9 @@ int main(void)
     click("Main Batch: Settings");assert(main_batch_action==UI_MAIN_BATCH_CYCLE);
     raster("menu-main-batch-cycle");
     click("Main Batch: Cycle");assert(main_batch_action==UI_MAIN_BATCH_SETTINGS);
-    menu.batch_dirty=true;menu.saving=1;
-    click("Main Batch: Settings");assert(main_batch_action==UI_MAIN_BATCH_CYCLE&&menu.batch_dirty&&menu.saving==1);
-    menu.batch_dirty=false;menu.saving=0;
+    batch_draft()->dirty=true;menu.saving=1;
+    click("Main Batch: Settings");assert(main_batch_action==UI_MAIN_BATCH_CYCLE&&batch_draft()->dirty&&menu.saving==1);
+    batch_draft()->dirty=false;menu.saving=0;
     click("Main Batch: Cycle");assert(main_batch_action==UI_MAIN_BATCH_SETTINGS);
     ui_notice_set_enabled(false);local_save_fails=true;
     click("Main Batch: Settings");assert(main_batch_action==UI_MAIN_BATCH_SETTINGS&&settings_detail_overlay_is_open());
@@ -776,20 +827,48 @@ int main(void)
     unsigned nav_before=nav_count;point=(lv_point_t){1233,37};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);assert(nav_count==nav_before+1);
     nav_before=nav_count;point=(lv_point_t){47,37};down=LV_INDEV_STATE_PRESSED;tick(60);down=LV_INDEV_STATE_RELEASED;tick(180);assert(nav_count==nav_before+1&&current==UI_PAGE_MAIN);current=UI_PAGE_MENU;
     nav_before=nav_count;assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);assert(nav_count==nav_before+1);current=UI_PAGE_MENU;
-    click("Count");assert(menu.tab==1);assert(find(menu.body,"Edit")&&find(menu.body,"Remove"));raster("menu-batch");click("Add slot");assert(menu.batch_dirty);assert(!lv_obj_has_state(find(menu.body,"Use this preset"),LV_STATE_DISABLED));assert(find(menu.body,"Save"));click("Cancel");assert(!menu.batch_dirty);
-    menu.selected_batch=1;menu.dirty=true;tick(120);click("Edit");assert(settings_detail_overlay_is_open());check_numeric_keypad();raster("menu-batch-keypad");settings_detail_keyboard_hide();
-    ui_page_03_menu_suspend();actual_state.batch_num=10;assert(ui_page_03_menu_resume());assert(menu.selected_batch==1);
+    click("Count");assert(menu.tab==1);assert(find(menu.body,"Edit")&&find(menu.body,"Remove"));raster("menu-batch");click("Add slot");assert(batch_draft()->dirty);assert(!lv_obj_has_state(find(menu.body,"Use this preset"),LV_STATE_DISABLED));assert(find(menu.body,"Save"));click("Cancel");assert(!batch_draft()->dirty);
+    batch_draft()->selected=1;menu.dirty=true;tick(120);click("Edit");assert(settings_detail_overlay_is_open());check_numeric_keypad();raster("menu-batch-keypad");settings_detail_keyboard_hide();
+    ui_page_03_menu_suspend();actual_state.batch_num=10;assert(ui_page_03_menu_resume());assert(batch_draft()->selected==1);
     batch_submit("13",NULL);assert(menu.saving==4&&menu.batch_apply_target==13);
     assert(operation_started==APP_UI_NOTICE_BATCH_APPLY);
     assert(batch_edit_saves==1&&batch_edit_previous==0&&batch_edit_target==0);
     ui_page_03_menu_refresh_data(0);tick(120);
-    assert(!menu.batch_dirty&&actual_state.batch_num==13);
-    menu.selected_batch=2;batch_submit("60",NULL);ui_page_03_menu_refresh_data(0);tick(120);
-    assert(batch_edit_saves==2&&!menu.batch_dirty&&actual_state.batch_num==60);
+    assert(!batch_draft()->dirty&&actual_state.batch_num==13);
+    batch_draft()->selected=2;batch_submit("60",NULL);ui_page_03_menu_refresh_data(0);tick(120);
+    assert(batch_edit_saves==2&&!batch_draft()->dirty&&actual_state.batch_num==60);
     reset_batch();
-    click("Add slot");assert(menu.batch_count>=4);menu.selected_batch=2;menu.dirty=true;tick(120);
-    click("Remove");assert(menu.selected_batch==2&&menu.batch_page==0);click("Cancel");
+    click("Add slot");assert(batch_draft()->count>=4);batch_draft()->selected=2;menu.dirty=true;tick(120);
+    click("Remove");assert(batch_draft()->selected==2&&batch_draft()->page==0);click("Cancel");
     model.users[0].batches[1]=10;actual_state.batch_num=50;reset_batch();menu.dirty=true;tick(120);
+    /* A tab tap writes the remembered value; navigation, rendering and card selection do not. */
+    unsigned sends_before=batch_sends;
+    delay_batch_ack=true;
+    lv_event_send(find_action(menu.body,A_BATCH_AMOUNT),LV_EVENT_CLICKED,NULL);tick(120);
+    assert(batch_sends==sends_before+1&&menu.batch_mode==AMOUNT_BATCH_MODE&&actual_state.batch_mode==PCS_BATCH_MODE);
+    assert(!lv_obj_has_state(find(menu.body,"Use this preset"),LV_STATE_DISABLED));
+    batch_unknown=true;delay_batch_ack=false;
+    lv_event_send(find_action(menu.body,A_BATCH_AMOUNT),LV_EVENT_CLICKED,NULL);tick(120);
+    assert(batch_sends==sends_before+2&&actual_state.batch_mode==AMOUNT_BATCH_MODE&&actual_state.batch_amount==0);
+    lv_event_send(find_action(menu.body,A_BATCH_AMOUNT),LV_EVENT_CLICKED,NULL);tick(120);
+    assert(batch_sends==sends_before+2);
+    batch_draft()->selected=1;menu.dirty=true;tick(120);click("Edit");
+    assert(settings_detail_overlay_is_open());settings_detail_keyboard_hide();
+    batch_submit("4294967296",NULL);assert(!menu.saving&&!batch_draft()->dirty);
+    batch_submit("4294967295",NULL);assert(menu.saving==4&&batch_sends==sends_before+2);
+    ui_page_03_menu_refresh_data(0);tick(120);
+    assert(actual_state.batch_amount==UINT32_MAX&&batch_sends==sends_before+3);
+    assert(find(menu.body,"4294967295"));raster("menu-vbatch-maximum");
+    click("Add slot");assert(batch_draft()->dirty);
+    lv_event_send(find_action(menu.body,A_BATCH_NOTES),LV_EVENT_CLICKED,NULL);tick(120);
+    assert(machine_state_batch_mode()==PCS_BATCH_MODE&&actual_state.batch_num==50&&!batch_draft()->dirty);
+    lv_event_send(find_action(menu.body,A_BATCH_AMOUNT),LV_EVENT_CLICKED,NULL);tick(120);
+    assert(batch_draft()->dirty&&actual_state.batch_amount==UINT32_MAX);click("Cancel");
+    assert(!batch_draft()->dirty);
+    lv_event_send(find_action(menu.body,A_BATCH_NOTES),LV_EVENT_CLICKED,NULL);tick(120);
+    reset_batch();
+    puts("PASS VBatch mode/value actions: Off and numeric, remembered targets, delayed ACK, retry, overflow, saved slots and independent drafts.");
+    if(getenv("UN260_MENU_BATCH_ACTIONS_ONLY"))return 0;
     click("Profiles");check_action_paint(find(menu.body,"Save current"),0x185BC2,0xFFFFFF,0);raster("menu-profiles");click("Delete");assert(settings_detail_overlay_is_open());check_action_paint(find(lv_scr_act(),"Cancel"),0xF0F7FA,0x2E687E,0);check_action_paint(find(lv_scr_act(),"Delete"),0xAD3342,0xFFFFFF,0);raster("menu-delete-confirm");click("Cancel");assert(model.users[0].profile_count==2);
     click("Delete");click("Delete");assert(model.users[0].profile_count==1);ui_page_03_menu_refresh_data(0);tick(100);assert(model.users[0].profile_count==1);assert(lv_obj_has_state(find(menu.body,"Delete"),LV_STATE_DISABLED));
     click("Options");
@@ -858,9 +937,9 @@ int main(void)
     point.x-=400;tick(40);down=LV_INDEV_STATE_RELEASED;tick(400);
     assert(lv_quick_controls_page(&menu.interaction_controls)==1 && layout==swipe_layout && gestures==swipe_gestures);
     lv_content_pager_set_active(menu.interaction_controls.pager,0,false);
-    menu.batch_dirty=true;unsigned blocked_nav=nav_count;
+    batch_draft()->dirty=true;unsigned blocked_nav=nav_count;
     lv_event_send(menu.interaction_controls.tiles[QUICK_HISTORY],LV_EVENT_CLICKED,NULL);assert(nav_count==blocked_nav);
-    menu.batch_dirty=false;ui_notice_dismiss(NULL);
+    batch_draft()->dirty=false;ui_notice_dismiss(NULL);
     lv_content_pager_set_active(menu.interaction_controls.pager,1,false);raster("menu-controls-page-2");
     lv_obj_t *top_toggle=menu.interaction_controls.tiles[QUICK_TOP_POPUP];
     top_popup_save_fails=true;lv_event_send(top_toggle,LV_EVENT_CLICKED,NULL);tick(120);
@@ -1091,9 +1170,9 @@ int main(void)
             check_batch_header();
             char batch_name[80];snprintf(batch_name,sizeof(batch_name),"batch-%s-mode-%u",locale->tag,mode);raster(batch_name);
         }
-        menu.batch_dirty=true;menu.dirty=true;tick(120);check_batch_header();
+        batch_draft()->dirty=true;menu.dirty=true;tick(120);check_batch_header();
         char draft_name[80];snprintf(draft_name,sizeof(draft_name),"batch-%s-draft",locale->tag);raster(draft_name);
-        menu.batch_dirty=false;menu.dirty=true;tick(120);
+        batch_draft()->dirty=false;menu.dirty=true;tick(120);
         main_batch_action=UI_MAIN_BATCH_SETTINGS;
         menu.tab=4;menu.sub=1;menu.shortcut_visibility=true;menu.dirty=true;tick(100);
         char name[80];snprintf(name,sizeof(name),"shortcuts-%s",locale->tag);raster(name);

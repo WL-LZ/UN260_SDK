@@ -8,6 +8,7 @@ typedef enum {
     SETTING_BATCH_REQUEST_NONE = 0,
     SETTING_BATCH_REQUEST_NUMBER,
     SETTING_BATCH_REQUEST_SWITCH,
+    SETTING_BATCH_REQUEST_AMOUNT,
 } setting_batch_request_type_t;
 
 typedef struct {
@@ -19,6 +20,7 @@ typedef struct {
     setting_batch_request_type_t type;
     setting_batch_snapshot_t target;
     setting_batch_snapshot_t previous;
+    uint32_t amount;
 } setting_batch_result_t;
 
 typedef struct {
@@ -70,7 +72,10 @@ uint32_t setting_service_take_basic_timeouts(void);
 
 bool setting_service_request_batch_number(uint8_t num, bool previous_enable, uint8_t previous_num);
 bool setting_service_request_batch_switch(bool target_enable, uint8_t sent_num, bool previous_enable, uint8_t previous_num);
-bool setting_service_batch_take_result(uint8_t status, setting_batch_result_t *result);
+/* The UI uses zero for Off in either mode. A pending Batch write owns both
+ * modes because the accepted command also selects the machine's active mode. */
+bool setting_service_request_batch_value(uint8_t mode, uint32_t value);
+bool setting_service_batch_take_result(uint8_t command, uint8_t status, setting_batch_result_t *result);
 bool setting_service_batch_take_timeout(setting_batch_result_t *result);
 
 bool setting_service_request_double_note_level(uint8_t target, uint8_t previous);

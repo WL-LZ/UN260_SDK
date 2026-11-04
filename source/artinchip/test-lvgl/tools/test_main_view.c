@@ -219,6 +219,14 @@ static void test_main(void)
     assert(lv_obj_get_style_text_font(s_curr_label,0)==&lv_font_main_currency_56);
     assert(lv_obj_get_child_cnt(s_detail_card)==0); /* No redundant section title. */
     write_bmp("main-empty-usd");
+    machine_state_confirm_batch_amount(4294967295u);
+    machine_state_confirm_batch_mode(AMOUNT_BATCH_MODE);
+    page_01_bottom_c_refresh_batch(false);render();
+    assert(strstr(lv_label_get_text(s_bottom_c_label_batch),"4294967295"));
+    check_single_line(s_bottom_c_label_batch);write_bmp("main-vbatch-maximum");
+    machine_state_confirm_batch_amount(0);page_01_bottom_c_refresh_batch(false);render();
+    assert(!strcmp(lv_label_get_text(s_bottom_c_label_batch),ui_tr("VBatch OFF")));
+    machine_state_confirm_batch_mode(PCS_BATCH_MODE);page_01_bottom_c_refresh_batch(false);
     const char *buttons[]={"mode_btn","setting_btn","list_btn","print_btn","menu_btn","start_btn","esc_btn"};
     for(unsigned i=0;i<7;++i) {
         lv_obj_t *b=page_01_main_find_obj(buttons[i]);

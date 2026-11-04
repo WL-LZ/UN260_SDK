@@ -13,6 +13,7 @@ bool count_mode_service_result_may_clear(void){return true;}
 #include "un260/app_service/work_mode_service.h"
 #include "un260/app_service/app_setting_reply.h"
 #include "un260/machine_state/machine_state.h"
+#include "un260/lv_system/user_cfg.h"
 #include "un260/machine_state/machine_fault.h"
 #include "un260/counting/counting_session_state.h"
 #include "un260/currency/currency_service.h"
@@ -44,7 +45,7 @@ static bool app_command_runtime_count_start_busy(void){return busy || start_pend
 static bool automatic_popup;
 static bool fault_popup_get_auto_enabled(void){return automatic_popup;}
 static void fault_popup_report_setting_rejection(uint8_t command,uint8_t reason)
-{assert(((command==3||command==4||command==6||command==0x3A)&&reason==0x80)||(command==0x15&&reason==0));++guide_posts;assert(!machine_fault_find((machine_fault_key_t){MACHINE_FAULT_SETTING,reason,command},NULL));}
+{assert(((command==3||command==4||command==6||command==0x3A)&&reason==0x80)||((command==0x15||command==7)&&reason==0));++guide_posts;assert(!machine_fault_find((machine_fault_key_t){MACHINE_FAULT_SETTING,reason,command},NULL));}
 static void fault_popup_resolve_setting_rejection(uint8_t command)
 {machine_fault_clear_code(MACHINE_FAULT_SETTING,command);}
 static void page_01_mode_switch_refre(void){}
@@ -80,7 +81,8 @@ static void fixture(void)
 static void request(uint8_t command)
 {
     bool sent=command==4?setting_service_request_mode(MODE_SDC):command==6?
-        setting_service_request_batch_number(30,true,20):setting_service_request_fo_mode(3);
+        setting_service_request_batch_number(30,true,20):command==7?
+        setting_service_request_batch_value(AMOUNT_BATCH_MODE,1234):setting_service_request_fo_mode(3);
     assert(sent&&sends==1);
 }
 static void reply(uint8_t command,uint8_t status,uint8_t response_mode,uint64_t received,bool malformed)
@@ -100,7 +102,7 @@ static void preserved(void)
 }
 static void test_matched_failures_and_profile(void)
 {
-    const uint8_t commands[]={4,6,0x3A};
+    const uint8_t commands[]={4,6,7,0x3A};
     for(unsigned origin=0;origin<2;++origin)for(unsigned i=0;i<sizeof(commands);++i){
         fixture();page=origin?4:UI_PAGE_MAIN;request(commands[i]);now=9000;
         reply(commands[i],2,3,1050,false);preserved();
@@ -116,7 +118,7 @@ static void test_matched_failures_and_profile(void)
 }
 static void test_wrong_shape_timeout_invalid_type(void)
 {
-    const uint8_t commands[]={4,6,0x3A};
+    const uint8_t commands[]={4,6,7,0x3A};
     for(unsigned i=0;i<sizeof(commands);++i){
         fixture();reply(commands[i],2,3,1050,false);assert(!guide_posts);preserved();
         fixture();request(commands[i]);reply(commands[i],2,3,1050,true);assert(!guide_posts);preserved();
@@ -128,6 +130,13 @@ static void test_wrong_shape_timeout_invalid_type(void)
 }
 static void test_companion_boundaries(void)
 {
+    fixture();request(7);reply(7,2,0,1050,false);
+    counting_session_state_t idle={0};
+    const uint8_t stacker[]={0xFD,0xDF,6,0x0F,7,0};
+    protocol_request_result_context_begin(1051);
+    assert(!app_fault_recovery_observe_setting_detail(0x0F,stacker,6,&idle));
+    protocol_request_result_context_end();
+    assert(guide_posts==1 && !setting_rejection.command);
     const uint8_t commands[]={4,6,0x3A};
     for(unsigned i=0;i<sizeof(commands);++i)for(unsigned outcome=0;outcome<6;++outcome){
         fixture();request(commands[i]);reply(commands[i],2,3,1050,false);
@@ -188,10 +197,10 @@ static void test_setting_to_currency_generation(void)
 }
 static void test_busy_replies_defer_and_cancel(void)
 {
-    const uint8_t commands[]={4,6,0x3A};
+    const uint8_t commands[]={4,6,7,0x3A};
     for(unsigned i=0;i<sizeof(commands);++i)for(unsigned outcome=0;outcome<5;++outcome) {
         fixture();request(commands[i]);busy=true;
-        ui_notice_post(UI_NOTICE_PROGRESS,commands[i]==4?"settings.mode":commands[i]==6?"settings.batch":"settings.sorting","Changing",NULL);
+        ui_notice_post(UI_NOTICE_PROGRESS,commands[i]==4?"settings.mode":commands[i]==6?"settings.batch":commands[i]==7?"settings.value_batch":"settings.sorting","Changing",NULL);
         reply(commands[i],2,3,1050,false);preserved();
         assert(!guide_posts&&!test_notice_visible&&deferred_setting_rejection==commands[i]);
         present_deferred_setting_rejection();assert(!guide_posts);

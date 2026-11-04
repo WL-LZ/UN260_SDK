@@ -41,6 +41,13 @@ bool machine_state_batch_enabled(void){return actuals[3]!=0;}
 bool machine_state_add_enabled(void){return actuals[4];}
 uint8_t machine_state_work_mode(void){return actuals[5];}
 static bool send(unsigned step,unsigned target){commands++;last_step=step;last_value=target;return !fail_send;}
+static uint8_t batch_mode, requested_batch_mode;
+static uint32_t amount_target;
+static bool batch_confirmed=true;
+uint8_t machine_state_batch_mode(void){return batch_mode;}
+uint32_t machine_state_batch_saved_value(uint8_t mode){return mode==AMOUNT_BATCH_MODE?amount_target:actuals[3];}
+bool machine_state_batch_confirmed(uint8_t mode){return batch_confirmed && mode==batch_mode;}
+bool setting_service_request_batch_value(uint8_t mode, uint32_t n){requested_batch_mode=mode;return send(3,n);}
 bool count_mode_service_request(uint8_t n){return send(6,n==MODE_SDC?2:n==MODE_CNT?3:1);}
 bool setting_service_request_speed(uint8_t n){return send(0,n);}
 bool setting_service_request_fo_mode(uint8_t n){return send(1,n);}
@@ -180,5 +187,20 @@ int main(void)
     assert(!workspace_service_save_batches(999,slots,5,10,13));
     assert(!workspace_service_save_batches(1,slots,1,10,13));
     slots[1]=200;assert(!workspace_service_save_batches(1,slots,5,10,200));
+    batch_mode=AMOUNT_BATCH_MODE;amount_target=10000;
+    workspace_defaults(&model);model.operators_enabled=1;
+    assert(workspace_service_batch_next()&&requested_batch_mode==AMOUNT_BATCH_MODE&&last_value==50000);
+    amount_target=50000;assert(workspace_service_batch_next()&&last_value==0);
+    uint32_t amount_slots[]={0,1000,5000,10000,UINT32_MAX};
+    assert(workspace_service_save_batch_slots(1,AMOUNT_BATCH_MODE,amount_slots,5,50000,UINT32_MAX));
+    before=commands;save_done=true;workspace_service_poll(10000);assert(commands==before+1&&last_value==UINT32_MAX);
+    assert(amount_target==50000 && model.users[0].amount_batches[4]==UINT32_MAX && model.users[0].batches[4]==150);
+    p=(workspace_profile_t){.speed=actuals[0],.sort=actuals[1],.add=actuals[4],.work=actuals[5],
+                           .batch_enabled=1,.batch_mode=AMOUNT_BATCH_MODE,.batch_amount=10};
+    actuals[3]=10;batch_mode=PCS_BATCH_MODE;before=commands;count.total_pcs=0;
+    assert(workspace_service_apply(&p,11000));workspace_service_poll(11001);
+    assert(commands==before+1 && last_value==10 && requested_batch_mode==AMOUNT_BATCH_MODE);
+    assert(!workspace_service_owns_command(0x06)&&workspace_service_owns_command(0x07));
+    assert(workspace_service_reject_command(0x07));
     puts("PASS workspace service: profile apply + active Batch edit save/send/ACK boundaries, non-active/OFF/delete, ADD, storage/send failure, changed state, lifecycle and no delayed retry");
 }
