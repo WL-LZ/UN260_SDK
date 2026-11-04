@@ -1,6 +1,7 @@
 #include "un260/lv_system/ui_i18n.h"
 #include "lv_nav_button.h"
 #include "lv_damped_button.h"
+#include "lv_settings_palette.h"
 #include "un260/lv_resources/ui_icons.h"
 #include "un260/lv_system/user_cfg.h"
 /* Lifetime-bound marker: no registry of pointers to deleted/cached pages. */
@@ -36,19 +37,31 @@ lv_obj_t *lv_nav_button_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
     lv_coord_t w, lv_coord_t h, lv_event_cb_t cb, void *user_data)
 {
     const lv_damped_button_style_t style = {
-        .normal_color=0xE9EDF0, .pressed_color=0xD6DADE,
-        .disabled_color=0xF0F1F2, .text_color=0x293B44,
-        .disabled_text_color=0xADB7BD, .radius=10
+        .normal_color=LV_SETTINGS_RETURN_SURFACE, .pressed_color=LV_SETTINGS_RETURN_PRESSED,
+        .disabled_color=LV_SETTINGS_DISABLED_SURFACE, .text_color=LV_SETTINGS_RETURN_TEXT,
+        .disabled_text_color=LV_SETTINGS_DISABLED_TEXT, .radius=10
     };
     lv_obj_t *button = lv_damped_button_create(parent, &style, ui_tr("Back"),
         &lv_font_instrument_sans_medium_16);
     if(!button) return NULL;
+    lv_damped_button_set_exact_palette(button,lv_color_hex(style.normal_color),lv_color_hex(style.pressed_color));
+    lv_obj_set_style_text_color(button,lv_color_hex(LV_SETTINGS_RETURN_TEXT),0);
+    lv_obj_set_style_text_color(button,lv_color_hex(LV_SETTINGS_RETURN_PRESSED_TEXT),LV_STATE_PRESSED);
+    lv_obj_set_style_text_color(button,lv_color_hex(LV_SETTINGS_DISABLED_TEXT),LV_STATE_DISABLED);
+    lv_obj_t *label=lv_damped_button_get_label(button);
+    lv_obj_remove_local_style_prop(label,LV_STYLE_TEXT_COLOR,0);
+    lv_obj_remove_local_style_prop(label,LV_STYLE_TEXT_COLOR,LV_STATE_DISABLED);
     lv_obj_set_pos(button, x, y);
     lv_obj_set_size(button, w, h);
     lv_obj_set_style_border_width(button, 0, 0);
     lv_obj_set_style_border_color(button, lv_color_hex(0xE1E6E9), 0);
     lv_obj_set_style_shadow_width(button, 0, 0);
-    if(h < 60 && w >= 90) ui_button_icon(button, UI_ICON("back_18"), false);
+    if(h < 60 && w >= 90){
+        ui_button_icon(button, UI_ICON("back_18"), false);
+        lv_obj_t *icon=lv_obj_get_child(button,1);
+        if(icon){lv_obj_set_style_img_recolor(icon,lv_color_hex(LV_SETTINGS_RETURN_TEXT),0);
+            lv_obj_set_style_img_recolor_opa(icon,LV_OPA_COVER,0);}
+    }
     if(cb) {
         lv_obj_add_event_cb(button, cb, LV_EVENT_CLICKED, user_data);
         lv_nav_button_mark_back(button);
@@ -70,15 +83,21 @@ lv_obj_t *lv_nav_back_text_button_create(lv_obj_t *parent,lv_coord_t x,lv_coord_
     const lv_font_t *font,lv_event_cb_t cb,void *user_data)
 {
     const lv_damped_button_style_t style={
-        .normal_color=0xE9EEF4,.pressed_color=0xDDE4EB,
-        .disabled_color=0xF0F2F5,.text_color=0x20313B,
-        .disabled_text_color=0xADB7BD,.radius=12
+        .normal_color=LV_SETTINGS_RETURN_SURFACE,.pressed_color=LV_SETTINGS_RETURN_PRESSED,
+        .disabled_color=LV_SETTINGS_DISABLED_SURFACE,.text_color=LV_SETTINGS_RETURN_TEXT,
+        .disabled_text_color=LV_SETTINGS_DISABLED_TEXT,.radius=12
     };
     lv_obj_t *button=lv_damped_button_create(parent,&style,ui_tr("Back"),font);
     if(!button)return NULL;
     lv_obj_set_pos(button,x,y);lv_obj_set_size(button,76,42);
     lv_obj_set_style_border_width(button,0,0);lv_obj_set_style_shadow_width(button,0,0);
     lv_obj_t *label=lv_damped_button_get_label(button);
+    lv_damped_button_set_exact_palette(button,lv_color_hex(style.normal_color),lv_color_hex(style.pressed_color));
+    lv_obj_set_style_text_color(button,lv_color_hex(LV_SETTINGS_RETURN_TEXT),0);
+    lv_obj_set_style_text_color(button,lv_color_hex(LV_SETTINGS_RETURN_PRESSED_TEXT),LV_STATE_PRESSED);
+    lv_obj_set_style_text_color(button,lv_color_hex(LV_SETTINGS_DISABLED_TEXT),LV_STATE_DISABLED);
+    lv_obj_remove_local_style_prop(label,LV_STYLE_TEXT_COLOR,0);
+    lv_obj_remove_local_style_prop(label,LV_STYLE_TEXT_COLOR,LV_STATE_DISABLED);
     const lv_font_t *resolved=lv_obj_get_style_text_font(label,LV_PART_MAIN);
     lv_obj_set_size(label,60,resolved->line_height);
     lv_label_set_long_mode(label,LV_LABEL_LONG_DOT);

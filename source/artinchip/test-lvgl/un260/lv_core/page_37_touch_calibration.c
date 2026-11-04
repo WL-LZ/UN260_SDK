@@ -129,7 +129,7 @@ static void show_sampling(const touch_calibration_snapshot_t *s)
             &lv_font_instrument_sans_medium_14, 0x586B78);
         lv_obj_set_width(sample_hint, 1040);
         lv_label_set_long_mode(sample_hint, LV_LABEL_LONG_DOT);
-        lv_settings_button(overlay, 1110, 348, 146, 44, ui_tr("Cancel"), false, cancel, NULL);
+        lv_settings_action_button(overlay, 1110, 348, 146, 44, ui_tr("Cancel"), LV_SETTINGS_ACTION_RETURN, cancel, NULL);
     }
     if (lv_obj_get_x(target) != s->target_x - 25 || lv_obj_get_y(target) != s->target_y - 25)
         lv_obj_set_pos(target, s->target_x - 25, s->target_y - 25);
@@ -237,7 +237,7 @@ void ui_page_37_touch_calibration_create(lv_obj_t *parent)
         lv_obj_set_width(line, 548);
         lv_label_set_long_mode(line, LV_LABEL_LONG_WRAP);
     }
-    start_button = lv_settings_button(frame.footer, 0, 0, 172, 46, ui_tr("Calibrate"), false, begin, NULL);
+    start_button = lv_settings_action_button(frame.footer, 0, 0, 172, 46, ui_tr("Calibrate"), LV_SETTINGS_ACTION_PRIMARY, begin, NULL);
     save_button = lv_settings_button(frame.footer, 0, 0, 132, 46, ui_tr("Save"), true, save, NULL);
     gesture_service_set_page_policy(UI_PAGE_TOUCH_CALIBRATION, NULL, gesture);
     shown_valid = false;

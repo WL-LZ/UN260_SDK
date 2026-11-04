@@ -365,6 +365,15 @@ static void debug_switch_card(lv_obj_t *parent,int x,int y,const char *title,con
     if(enabled)lv_obj_add_state(sw,LV_STATE_CHECKED);
     lv_obj_add_event_cb(sw,callback,LV_EVENT_VALUE_CHANGED,NULL);
 }
+static void debug_tab_style(lv_obj_t *button,bool selected)
+{
+    lv_damped_button_set_exact_palette(button,lv_color_hex(selected?0xFFFFFF:LV_SETTINGS_SEGMENT_SURFACE),
+        lv_color_hex(LV_SETTINGS_CONTROL_PRESSED));
+    lv_obj_set_style_border_width(button,0,0);
+    lv_obj_set_style_border_width(button,0,LV_STATE_PRESSED);
+    lv_obj_set_style_text_color(button,lv_color_hex(selected?LV_SETTINGS_PRIMARY:LV_SETTINGS_SEGMENT_TEXT),0);
+    lv_obj_set_style_text_color(button,lv_color_hex(selected?LV_SETTINGS_PRIMARY:LV_SETTINGS_SEGMENT_TEXT),LV_STATE_PRESSED);
+}
 static void debug_tab(lv_event_t *e)
 {
     if(lv_event_get_code(e)!=LV_EVENT_CLICKED)return;
@@ -379,7 +388,7 @@ static void debug_tab(lv_event_t *e)
         lv_obj_clear_flag(export_button,LV_OBJ_FLAG_HIDDEN);
     }
     for(unsigned i=0;i<2;i++)
-        lv_obj_set_style_bg_color(debug_tabs[i],lv_color_hex((i==1)==tools?0xFFFFFF:LV_SETTINGS_CONTROL_SURFACE),0);
+        debug_tab_style(debug_tabs[i],(i==1)==tools);
 }
 static void debug_tick(lv_timer_t *timer)
 {
@@ -404,12 +413,12 @@ void ui_page_10_debug_create(void)
     settings_detail_add_run(page_debug);
     lv_obj_set_style_bg_opa(debug_frame.body,LV_OPA_TRANSP,0);
     lv_obj_set_style_border_width(debug_frame.body,0,0);
-    lv_obj_t *tabs=lv_settings_box(page_debug,230,15,390,46,LV_SETTINGS_CONTROL_SURFACE);
+    lv_obj_t *tabs=lv_settings_box(page_debug,230,15,390,46,LV_SETTINGS_SEGMENT_SURFACE);
     lv_obj_set_style_radius(tabs,12,0);
     debug_tabs[0]=lv_settings_button(tabs,3,3,226,40,ui_tr("Communication"),false,debug_tab,(void *)0);
     debug_tabs[1]=lv_settings_button(tabs,229,3,158,40,ui_tr("Tools"),false,debug_tab,(void *)1);
-    lv_obj_set_style_bg_color(debug_tabs[0],lv_color_white(),0);
-    lv_obj_set_style_bg_color(debug_tabs[1],lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),0);
+    debug_tab_style(debug_tabs[0],true);
+    debug_tab_style(debug_tabs[1],false);
 
     communication_view=lv_settings_box(debug_frame.body,0,0,1232,242,0);
     lv_obj_set_style_bg_opa(communication_view,LV_OPA_TRANSP,0);

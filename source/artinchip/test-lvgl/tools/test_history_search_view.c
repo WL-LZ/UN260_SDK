@@ -79,7 +79,7 @@ static void search_test_editors(void)
     strcpy(input.currency,"USD");
     test.owner=page_19_history_search_create(lv_scr_act(),&input,NULL,0,search_test_closed,&test);
     page_19_history_search_t *s=test.owner;assert(s);
-    history_test_control_feedback(s->tabs[0],LV_SETTINGS_CHOICE_SURFACE,LV_SETTINGS_CONTROL_PRESSED,LV_SETTINGS_PRIMARY);
+    history_test_control_feedback(s->tabs[0],LV_SETTINGS_CHOICE_SELECTED_SURFACE,LV_SETTINGS_CHOICE_PRESSED,LV_SETTINGS_CHOICE_SELECTED_TEXT);
     history_test_control_feedback(history_test_button(s->root,ui_text_get(UI_TEXT_HISTORY_APPLY)),
         LV_SETTINGS_PRIMARY,LV_SETTINGS_PRIMARY_PRESSED,0xFFFFFF);
     lv_obj_t *fields[]={s->mode,s->currency,s->rejects};
@@ -89,7 +89,7 @@ static void search_test_editors(void)
         assert(lv_obj_get_child_cnt(fields[i])==0); /* Arrow cannot cause overflow. */
     }
     history_test_click(s->mode);assert(lv_dropdown_is_open(s->mode));
-    assert(lv_obj_get_style_bg_color(s->mode,0).full==lv_color_hex(UI_SELECTION_SURFACE).full);
+    assert(lv_obj_get_style_bg_color(s->mode,0).full==lv_color_hex(LV_SETTINGS_INPUT_SURFACE).full);
     assert(lv_obj_get_style_bg_color(lv_dropdown_get_list(s->mode),LV_PART_SELECTED).full==lv_color_hex(UI_SELECTION_SURFACE).full);
     history_test_bmp("history-mode-options");
     assert(lv_nav_button_request_back()==LV_NAV_BACK_HANDLED);

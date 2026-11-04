@@ -78,19 +78,41 @@ lv_obj_t *lv_settings_icon(lv_obj_t *p,const char *name,int x,int y)
 }
 void lv_settings_action_style(lv_obj_t *o,lv_settings_action_role_t role)
 {
-    bool solid=role!=LV_SETTINGS_ACTION_SECONDARY;
-    uint32_t normal=role==LV_SETTINGS_ACTION_PRIMARY?LV_SETTINGS_PRIMARY:
-                    role==LV_SETTINGS_ACTION_DESTRUCTIVE?LV_SETTINGS_DESTRUCTIVE:LV_SETTINGS_CONTROL_SURFACE;
-    uint32_t pressed=role==LV_SETTINGS_ACTION_PRIMARY?LV_SETTINGS_PRIMARY_PRESSED:
-                     role==LV_SETTINGS_ACTION_DESTRUCTIVE?LV_SETTINGS_DESTRUCTIVE_PRESSED:LV_SETTINGS_CONTROL_PRESSED;
+    if(!o)return;
+    uint32_t normal=LV_SETTINGS_SECONDARY_SURFACE,pressed=LV_SETTINGS_SECONDARY_PRESSED;
+    uint32_t text=LV_SETTINGS_SECONDARY_TEXT,pressed_text=text;
+    switch(role){
+    case LV_SETTINGS_ACTION_PRIMARY:
+        normal=LV_SETTINGS_PRIMARY;pressed=LV_SETTINGS_PRIMARY_PRESSED;text=0xFFFFFF;break;
+    case LV_SETTINGS_ACTION_DESTRUCTIVE:
+        normal=LV_SETTINGS_DESTRUCTIVE;pressed=LV_SETTINGS_DESTRUCTIVE_PRESSED;text=0xFFFFFF;break;
+    case LV_SETTINGS_ACTION_RETURN:
+        normal=LV_SETTINGS_RETURN_SURFACE;pressed=LV_SETTINGS_RETURN_PRESSED;text=LV_SETTINGS_RETURN_TEXT;break;
+    case LV_SETTINGS_ACTION_INPUT:
+        normal=LV_SETTINGS_INPUT_SURFACE;pressed=LV_SETTINGS_INPUT_PRESSED;text=LV_SETTINGS_INPUT_TEXT;break;
+    case LV_SETTINGS_ACTION_DESTRUCTIVE_ENTRY:
+        normal=LV_SETTINGS_DESTRUCTIVE_ENTRY_SURFACE;pressed=LV_SETTINGS_DESTRUCTIVE_ENTRY_PRESSED;
+        text=LV_SETTINGS_DESTRUCTIVE_ENTRY_TEXT;break;
+    default:break;
+    }
+    pressed_text=role==LV_SETTINGS_ACTION_RETURN?LV_SETTINGS_RETURN_PRESSED_TEXT:text;
+    /* CHECKED may track a draft/focus independently of the action's role.
+     * Clear the old generic choice paint without changing that business state. */
+    const lv_style_prop_t props[]={LV_STYLE_BG_COLOR,LV_STYLE_TEXT_COLOR,LV_STYLE_BORDER_WIDTH,LV_STYLE_BORDER_COLOR};
+    for(unsigned i=0;i<sizeof(props)/sizeof(props[0]);i++){
+        lv_obj_remove_local_style_prop(o,props[i],LV_STATE_CHECKED);
+        lv_obj_remove_local_style_prop(o,props[i],LV_STATE_CHECKED|LV_STATE_PRESSED);
+    }
     lv_damped_button_set_exact_palette(o,lv_color_hex(normal),lv_color_hex(pressed));
-    lv_obj_set_style_text_color(o,lv_color_hex(solid?0xFFFFFF:LV_SETTINGS_ACTION_TEXT),0);
-    lv_obj_set_style_border_width(o,solid?0:1,0);
-    lv_obj_set_style_border_color(o,lv_color_hex(0xD4DBE1),0);
+    lv_obj_set_style_text_color(o,lv_color_hex(text),0);
+    lv_obj_set_style_text_color(o,lv_color_hex(pressed_text),LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(o,0,0);
+    lv_obj_set_style_border_width(o,0,LV_STATE_PRESSED);
+    lv_obj_set_style_border_color(o,lv_color_hex(LV_SETTINGS_INPUT_BORDER),0);
+    lv_obj_set_style_border_color(o,lv_color_hex(LV_SETTINGS_INPUT_PRESSED_BORDER),LV_STATE_PRESSED);
     lv_obj_set_style_bg_color(o,lv_color_hex(LV_SETTINGS_DISABLED_SURFACE),LV_STATE_DISABLED);
     lv_obj_set_style_text_color(o,lv_color_hex(LV_SETTINGS_DISABLED_TEXT),LV_STATE_DISABLED);
-    lv_obj_set_style_border_width(o,1,LV_STATE_DISABLED);
-    lv_obj_set_style_border_color(o,lv_color_hex(0xD7DEE3),LV_STATE_DISABLED);
+    lv_obj_set_style_border_width(o,0,LV_STATE_DISABLED);
     lv_obj_set_style_opa(o,LV_OPA_COVER,LV_STATE_DISABLED);
 }
 void lv_settings_damped_action_style(lv_obj_t *o,lv_settings_action_role_t role)
@@ -99,7 +121,6 @@ void lv_settings_damped_action_style(lv_obj_t *o,lv_settings_action_role_t role)
     lv_settings_action_style(o,role);
     /* Legacy damped labels had their own colors and a white pressed border;
      * let them inherit the same semantic states as Settings controls. */
-    lv_obj_remove_local_style_prop(o,LV_STYLE_BORDER_COLOR,LV_STATE_PRESSED);
     lv_obj_remove_local_style_prop(o,LV_STYLE_BORDER_OPA,LV_STATE_PRESSED);
     lv_obj_set_style_border_opa(o,LV_OPA_COVER,0);
     lv_obj_t *text=lv_damped_button_get_label(o);
@@ -115,23 +136,27 @@ void lv_settings_damped_choice_style(lv_obj_t *o,bool selected)
     if(selected)lv_obj_add_state(o,LV_STATE_CHECKED);
     else lv_obj_clear_state(o,LV_STATE_CHECKED);
     lv_damped_button_set_exact_palette(o,
-        lv_color_hex(selected?LV_SETTINGS_CHOICE_SURFACE:LV_SETTINGS_CONTROL_SURFACE),
-        lv_color_hex(LV_SETTINGS_CONTROL_PRESSED));
-    lv_obj_set_style_text_color(o,lv_color_hex(selected?LV_SETTINGS_PRIMARY:LV_SETTINGS_ACTION_TEXT),0);
+        lv_color_hex(selected?LV_SETTINGS_CHOICE_SELECTED_SURFACE:LV_SETTINGS_CHOICE_IDLE_SURFACE),
+        lv_color_hex(LV_SETTINGS_CHOICE_PRESSED));
+    lv_obj_set_style_text_color(o,lv_color_hex(selected?LV_SETTINGS_CHOICE_SELECTED_TEXT:LV_SETTINGS_CHOICE_TEXT),0);
+    lv_obj_set_style_text_color(o,lv_color_hex(selected?LV_SETTINGS_CHOICE_SELECTED_TEXT:LV_SETTINGS_CHOICE_TEXT),LV_STATE_PRESSED);
     lv_obj_set_style_border_color(o,lv_color_hex(LV_SETTINGS_CHOICE_BORDER),0);
-    lv_obj_set_style_border_width(o,selected?1:0,0);
+    lv_obj_set_style_border_color(o,lv_color_hex(LV_SETTINGS_CHOICE_BORDER),LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(o,0,0);
 }
-lv_obj_t *lv_settings_button(lv_obj_t *p,int x,int y,int w,int h,const char *s,
-                            bool primary,lv_event_cb_t cb,void *data)
+lv_obj_t *lv_settings_action_button(lv_obj_t *p,int x,int y,int w,int h,const char *s,
+                            lv_settings_action_role_t role,lv_event_cb_t cb,void *data)
 {
-    lv_obj_t *o=lv_settings_box(p,x,y,w,h,primary?0x1462CC:LV_SETTINGS_CONTROL_SURFACE);
+    lv_obj_t *o=lv_settings_box(p,x,y,w,h,LV_SETTINGS_SECONDARY_SURFACE);
     lv_obj_set_style_radius(o,11,0);lv_obj_add_flag(o,LV_OBJ_FLAG_CLICKABLE);
-    lv_settings_action_style(o,primary?LV_SETTINGS_ACTION_PRIMARY:LV_SETTINGS_ACTION_SECONDARY);
-    lv_obj_set_style_bg_color(o,lv_color_hex(0xEDF4FF),LV_STATE_CHECKED);
-    lv_obj_set_style_text_color(o,lv_color_hex(0x1462CC),LV_STATE_CHECKED);
-    lv_obj_set_style_border_width(o,1,LV_STATE_CHECKED);
-    lv_obj_set_style_border_color(o,lv_color_hex(0x8CACDA),LV_STATE_CHECKED);
-    lv_obj_set_style_bg_color(o,lv_color_hex(0xE2E9EE),LV_STATE_CHECKED|LV_STATE_PRESSED);
+    lv_settings_action_style(o,role);
+    if(role==LV_SETTINGS_ACTION_SECONDARY){
+    lv_obj_set_style_bg_color(o,lv_color_hex(LV_SETTINGS_CHOICE_SELECTED_SURFACE),LV_STATE_CHECKED);
+    lv_obj_set_style_text_color(o,lv_color_hex(LV_SETTINGS_CHOICE_SELECTED_TEXT),LV_STATE_CHECKED);
+    lv_obj_set_style_border_width(o,0,LV_STATE_CHECKED);
+    lv_obj_set_style_border_color(o,lv_color_hex(LV_SETTINGS_CHOICE_BORDER),LV_STATE_CHECKED);
+    lv_obj_set_style_bg_color(o,lv_color_hex(LV_SETTINGS_CHOICE_PRESSED),LV_STATE_CHECKED|LV_STATE_PRESSED);
+    }
     lv_obj_t *l=lv_label_create(o);lv_label_set_text(l,s);
     lv_obj_set_style_text_font(l,ui_message_font(&lv_font_instrument_sans_medium_16),0);
     lv_obj_set_style_base_dir(l,LV_BASE_DIR_AUTO,0);lv_obj_center(l);
@@ -146,13 +171,19 @@ lv_obj_t *lv_settings_button(lv_obj_t *p,int x,int y,int w,int h,const char *s,
     }
     return o;
 }
+lv_obj_t *lv_settings_button(lv_obj_t *p,int x,int y,int w,int h,const char *s,
+                            bool primary,lv_event_cb_t cb,void *data)
+{
+    return lv_settings_action_button(p,x,y,w,h,s,
+        primary?LV_SETTINGS_ACTION_PRIMARY:LV_SETTINGS_ACTION_SECONDARY,cb,data);
+}
 static void toggle_knob_x(void *knob,int32_t x){lv_obj_set_x(knob,(lv_coord_t)x);}
 void lv_settings_toggle_set(lv_obj_t *toggle, bool on, bool animate)
 {
     if(!toggle)return;
     lv_obj_t *knob=lv_obj_get_child(toggle,0);
-    lv_damped_button_set_exact_palette(toggle,lv_color_hex(on?0x2369C7:0xCDD7DD),
-        lv_color_hex(on?0x1957AC:0xB9C7CF));
+    lv_damped_button_set_exact_palette(toggle,lv_color_hex(on?LV_SETTINGS_PRIMARY:0xB8C7D3),
+        lv_color_hex(on?LV_SETTINGS_PRIMARY_PRESSED:0xA5B7C5));
     if(on)lv_obj_add_state(toggle,LV_STATE_CHECKED);else lv_obj_clear_state(toggle,LV_STATE_CHECKED);
     lv_anim_del(knob,NULL);
     int target=on?lv_obj_get_style_width(toggle,0)-lv_obj_get_style_width(knob,0)-3:3;
@@ -185,7 +216,7 @@ void lv_settings_align_row(lv_obj_t *title,lv_obj_t *description,lv_obj_t *contr
 }
 lv_obj_t *lv_settings_segment_base(lv_obj_t *p,int x,int y,int w,int h)
 {
-    lv_obj_t *o=lv_settings_box(p,x,y,w,h,LV_SETTINGS_CONTROL_SURFACE);
+    lv_obj_t *o=lv_settings_box(p,x,y,w,h,LV_SETTINGS_SEGMENT_SURFACE);
     lv_obj_set_style_radius(o,12,0);return o;
 }
 lv_obj_t *lv_settings_segment(lv_obj_t *p,unsigned index,unsigned count,const char *text,lv_event_cb_t cb,void *data)
@@ -197,13 +228,15 @@ lv_obj_t *lv_settings_segment(lv_obj_t *p,unsigned index,unsigned count,const ch
     lv_obj_set_style_radius(o,8,0);
     lv_obj_set_style_border_width(o,0,0);
     lv_obj_set_style_border_width(o,0,LV_STATE_DISABLED);
-    lv_obj_set_style_bg_color(o,lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),0);
-    lv_obj_set_style_bg_color(o,lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),LV_STATE_DISABLED);
+    lv_obj_set_style_bg_color(o,lv_color_hex(LV_SETTINGS_SEGMENT_SURFACE),0);
+    lv_obj_set_style_bg_color(o,lv_color_hex(LV_SETTINGS_SEGMENT_SURFACE),LV_STATE_DISABLED);
     lv_obj_set_style_bg_color(o,lv_color_hex(0xFFFFFF),LV_STATE_CHECKED);
     lv_obj_set_style_bg_color(o,lv_color_hex(0xFFFFFF),LV_STATE_CHECKED|LV_STATE_DISABLED);
-    lv_obj_set_style_border_width(o,1,LV_STATE_CHECKED);
-    lv_obj_set_style_border_color(o,lv_color_hex(0xD4DEE9),LV_STATE_CHECKED);
+    lv_obj_set_style_border_width(o,0,LV_STATE_CHECKED);
+    lv_obj_set_style_text_color(o,lv_color_hex(LV_SETTINGS_SEGMENT_TEXT),0);
+    lv_obj_set_style_text_color(o,lv_color_hex(LV_SETTINGS_SEGMENT_TEXT),LV_STATE_PRESSED);
     lv_obj_set_style_text_color(o,lv_color_hex(LV_SETTINGS_PRIMARY),LV_STATE_CHECKED);
+    lv_obj_set_style_text_color(o,lv_color_hex(LV_SETTINGS_PRIMARY),LV_STATE_CHECKED|LV_STATE_PRESSED);
     lv_obj_set_style_text_color(o,lv_color_hex(LV_SETTINGS_DISABLED_TEXT),LV_STATE_CHECKED|LV_STATE_DISABLED);
     lv_obj_t *label=lv_obj_get_child(o,0);
     lv_obj_set_width(label,width-12);lv_label_set_long_mode(label,LV_LABEL_LONG_DOT);
@@ -215,7 +248,7 @@ lv_obj_t *lv_settings_back(lv_obj_t *p,int x,int y,int w,int h,lv_event_cb_t cb,
     lv_obj_t *o=lv_nav_button_create(p,x,y,w,h,NULL,NULL);
     lv_settings_action_guard_init(o);
     if(cb){lv_nav_button_mark_back(o);lv_obj_add_event_cb(o,cb,LV_EVENT_CLICKED,data);}
-    lv_settings_action_style(o,LV_SETTINGS_ACTION_SECONDARY);
+    lv_settings_damped_action_style(o,LV_SETTINGS_ACTION_RETURN);
     return o;
 }
 lv_obj_t *lv_settings_panel(lv_obj_t *p,int x,int y,int w,int h)

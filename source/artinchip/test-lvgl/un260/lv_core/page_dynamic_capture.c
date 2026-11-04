@@ -319,8 +319,9 @@ static void image_refresh_sources(uint32_t now)
         bool selected = selected_source == i + 1;
         if (!source_items[i].card) continue;
         if (selection_changed) {
-            lv_obj_set_style_bg_color(source_items[i].card,
-                lv_color_hex(selected ? 0xFFFFFF : IMAGE_SOURCE_SURFACE), 0);
+            lv_obj_t *card = source_items[i].card;
+            lv_settings_damped_choice_style(card, selected);
+
         }
         if (completion_changed) {
             lv_obj_set_style_text_color(source_items[i].label,

@@ -1,10 +1,14 @@
 """Exercise the actual receipt service and Print callback with isolated IO."""
 from pathlib import Path
-import os,subprocess,tempfile
+import os,re,subprocess,tempfile
 from test_multi_result_safety import function
 from test_i18n_support import with_i18n
 root=Path(__file__).resolve().parents[1]
-actual=function((root/'un260/lv_core/lv_page_event.c').read_text(),'page_01_print_btn_event_cb')
+events=(root/'un260/lv_core/lv_page_event.c').read_text()
+action_type=re.search(r'typedef enum \{[^}]+\} page_01_action_t;',
+                      (root/'un260/lv_core/lv_page_event.h').read_text())
+assert action_type
+actual=action_type[0]+'\n'+function(events,'page_01_action_run')+'\n'+function(events,'page_01_print_btn_event_cb')
 harness=r'''
 #include <assert.h>
 #include <stdio.h>
@@ -19,6 +23,28 @@ static bool busy,pending,multi,unsupported,fail,idle=true,available=true;
 static uint32_t clock_ms,record_id=8;
 static storage_job_status_t storage_status=STORAGE_JOB_SUCCEEDED;
 static unsigned sent;
+static bool add_busy;
+bool app_add_runtime_busy(void){return add_busy;}
+/* The real dispatcher is included below. Unrelated actions must not execute. */
+enum {UI_PAGE_LIST,UI_PAGE_MENU,UI_PAGE_SET_PASSAGE,UI_PAGE_CURR,UI_MAIN_BATCH_SETTINGS};
+#define unexpected_action() assert(!"non-print action reached")
+#define page_01_mode_cycle() unexpected_action()
+#define ui_manager_push_page(page) unexpected_action()
+#define ui_manager_switch(page) unexpected_action()
+#define app_command_runtime_request_count_start() unexpected_action()
+#define app_command_runtime_clear_counting_data(reason) unexpected_action()
+#define app_add_runtime_request(value) (unexpected_action(),false)
+#define machine_state_add_enabled() (unexpected_action(),false)
+#define page_01_main_refresh_start_state() unexpected_action()
+#define setting_service_request_work_mode(value) (unexpected_action(),false)
+#define machine_state_work_mode() (unexpected_action(),0)
+#define setting_service_request_fo_mode(value) (unexpected_action(),false)
+#define machine_state_fo_mode() (unexpected_action(),0)
+#define ui_state_main_batch_action_get() (unexpected_action(),0)
+#define page_03_menu_open_batch() unexpected_action()
+#define workspace_service_batch_next() (unexpected_action(),false)
+#define setting_service_request_speed(value) (unexpected_action(),false)
+#define machine_state_speed() (unexpected_action(),0)
 bool app_command_runtime_count_start_busy(void){return busy;}
 bool print_config_pending(void){return pending;}
 uint32_t app_clock_uptime_ms(void){return clock_ms;}
@@ -60,6 +86,7 @@ int main(void){
  saved.multi.enabled=true;assert(!receipt_print_request(8));saved.multi.enabled=false;
  assert(sent==2);assert(receipt_print_request(8));assert(sent==3&&receipt_print_status()->record_no==8);
  e.code=0;page_01_print_btn_event_cb(&e);assert(sent==3);
+ e.code=LV_EVENT_CLICKED;add_busy=true;page_01_print_btn_event_cb(&e);assert(sent==3);add_busy=false;
  sent_at=UINT32_MAX-999;clock_ms=500;assert(!receipt_print_request(8));
  clock_ms=1000;assert(receipt_print_request(8));assert(sent==4);
  puts("PASS receipt Print: stable identity, mismatch/busy/failure guards, payload, notices, debounce and clock wrap; no paper-success claim");

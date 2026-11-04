@@ -57,6 +57,7 @@ bool ui_manager_pop_page(void){if(capture_nav_locks)return false;pops++;return t
 static ui_page_t current_page=UI_PAGE_IMAGE_GET;
 ui_page_t ui_manager_get_current_page(void){return current_page;}
 void ui_manager_switch(ui_page_t p){current_page=p;}
+void page_protocol_log_open(void){}
 void ui_manager_clear_stack(void){}
 uint32_t app_clock_uptime_ms(void){return lv_tick_get();}
 uint64_t app_clock_monotonic_ms(void){return lv_tick_get();}
@@ -500,12 +501,12 @@ static void image_transfer_regression_test(void){
  protocol_frame_parser_init(&image_parser);unsigned before=sends;
  ui_page_dynamic_capture_create(lv_scr_act());assert(sends==before);
  assert(!label_find(lv_scr_act(),"RUN")&&!label_find(lv_scr_act(),"Capture"));
- for(unsigned id=0;id<16;id++)assert(lv_obj_get_style_bg_color(capture_source_button(id),0).full==lv_color_hex(0xF4F6F7).full);
+ for(unsigned id=0;id<16;id++)assert(lv_obj_get_style_bg_color(capture_source_button(id),0).full==lv_color_hex(LV_SETTINGS_CHOICE_IDLE_SURFACE).full);
  lv_obj_update_layout(lv_scr_act());if(!label_find(lv_scr_act(),"Place one note in the hopper."))labels_dump(lv_scr_act());assert(label_find(lv_scr_act(),"Place one note in the hopper."));snapshot("image-ready");
  capture_prepare_note();
  assert(!label_find(lv_scr_act(),"Place one note in the hopper."));
  for(uint8_t source=1;source<=6;source++){
-  image_capture(source);assert(lv_obj_get_style_bg_color(image_button(source),0).full==lv_color_hex(0xFFFFFF).full);
+  image_capture(source);assert(lv_obj_get_style_bg_color(image_button(source),0).full==lv_color_hex(LV_SETTINGS_CHOICE_SELECTED_SURFACE).full);
   unsigned locked_sends=sends;
   for(unsigned id=0;id<16;id++)lv_event_send(capture_source_button(id),LV_EVENT_CLICKED,NULL);
   assert(sends==locked_sends);image_header(source,400,200);
@@ -713,7 +714,7 @@ static void wave_transfer_regression_test(void){
  uint8_t no_data[]={0},unknown[]={11,0xdb,0xda},empty[]={4},bad_end[]={0xff,1};
  lv_tick_inc(3001);ui_page_dynamic_capture_create(lv_scr_act());
  assert(!label_find(lv_scr_act(),"RUN")&&!label_find(lv_scr_act(),"Capture"));
- for(unsigned i=0;i<16;i++)assert(lv_obj_get_style_bg_color(capture_source_button(i),0).full==lv_color_hex(0xF4F6F7).full);
+ for(unsigned i=0;i<16;i++)assert(lv_obj_get_style_bg_color(capture_source_button(i),0).full==lv_color_hex(LV_SETTINGS_CHOICE_IDLE_SURFACE).full);
  wave_capture(1);unsigned before=sends,blocked_pops=pops;
  for(unsigned i=0;i<16;i++)lv_event_send(capture_source_button(i),LV_EVENT_CLICKED,NULL);
  assert(sends==before);click("Back");assert(pops==blocked_pops);
@@ -856,7 +857,7 @@ static void debug_test(void){
 static void failure_retry_test(void){
  gate=true;send_ok=false;
  ui_page_cis_calib_select(false);ui_page_cis_calib_create(lv_scr_act());click("Start");tick(220);assert(label_find(lv_scr_act(),"Could not start"));gate=false;tick(220);click("Retry");snapshot("cis-mode-retry");ui_page_cis_calib_destroy();
- gate=true;ui_page_12_sensor_create(lv_scr_act());snapshot("sensors-send-failed");assert(label_find(lv_scr_act(),"Could not send query. Retrying the controller connection."));gate=false;tick(320);assert(!label_find(lv_scr_act(),"Retry"));ui_page_12_sensor_destroy();
+ gate=true;ui_page_12_sensor_create(lv_scr_act());snapshot("sensors-send-failed");assert(label_find(lv_scr_act(),"Could not send query. Retrying the mainboard connection."));gate=false;tick(320);assert(!label_find(lv_scr_act(),"Retry"));ui_page_12_sensor_destroy();
  ui_page_17_motor_test_create(lv_scr_act());click("Retry mode");ui_page_17_motor_test_destroy();
  gate=true;ui_page_26_set_aging_create(lv_scr_act());click("Start test");settings_detail_dialog_close(true);assert(label_find(lv_scr_act(),"Could not send"));gate=false;tick(220);click("Retry");ui_page_26_set_aging_destroy();
  gate=true;lv_tick_inc(3001);ui_page_dynamic_capture_create(lv_scr_act());image_select(3);snapshot("image-send-failed");assert(test_notice_kind==UI_NOTICE_ERROR&&!strcmp(test_notice_detail,"Capture failed. Run one note again."));gate=false;ui_page_dynamic_capture_poll(lv_tick_get());click("Retry");gate=true;ui_page_dynamic_capture_poll(lv_tick_get());assert(test_notice_kind==UI_NOTICE_ERROR&&!strcmp(test_notice_detail,"Capture failed. Run one note again."));ui_page_dynamic_capture_destroy();

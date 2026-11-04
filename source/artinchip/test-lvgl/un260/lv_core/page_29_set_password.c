@@ -67,7 +67,7 @@ static void password_setting_refresh_fields(void)
             if(active)lv_obj_clear_flag(field_cards[i],LV_OBJ_FLAG_HIDDEN);
             else lv_obj_add_flag(field_cards[i],LV_OBJ_FLAG_HIDDEN);
             lv_obj_set_style_bg_color(field_cards[i],
-                                      active ? lv_color_hex(0xEDF4FF) : lv_color_hex(0xFFFFFF),
+                                      lv_color_hex(0xFFFFFF),
                                       0);
             lv_obj_set_style_border_color(field_cards[i],
                                           active ? lv_color_hex(0x1462CC) : lv_color_hex(0xE3E9ED),
@@ -269,11 +269,8 @@ static void password_setting_outside(lv_event_t *event)
 
 static void password_setting_create_field(lv_obj_t *parent, password_field_t field)
 {
-    lv_obj_t *item = lv_settings_button(parent, 420, 22, 788, 188,
-        "", false, password_setting_field_cb, (void *)(uintptr_t)field);
-    lv_obj_set_style_bg_color(item, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_border_width(item, 1, 0);
-    lv_obj_set_style_border_color(item, lv_color_hex(0xE3E9ED), 0);
+    lv_obj_t *item = lv_settings_action_button(parent, 420, 22, 788, 188,
+        "", LV_SETTINGS_ACTION_INPUT, password_setting_field_cb, (void *)(uintptr_t)field);
     lv_settings_label(item, ui_tr(field_titles[field]), 24, 24,
         &lv_font_instrument_sans_medium_18, 0x1D2B34);
     field_values[field] = lv_settings_label(item, ui_tr("Tap to enter PIN"), 24, 90,
@@ -304,7 +301,7 @@ void ui_page_29_set_password_create(lv_obj_t *parent)
     for (unsigned field = 0; field < PASSWORD_FIELD_COUNT; ++field)
         password_setting_create_field(password_setting_form, (password_field_t)field);
     lv_label_set_text(password_frame.message, ui_tr("Enter your current PIN, then enter and confirm a new PIN."));
-    lv_settings_button(password_frame.footer, 964, 0, 124, 46, ui_tr("Cancel"), false, password_setting_cancel, NULL);
+    lv_settings_action_button(password_frame.footer, 964, 0, 124, 46, ui_tr("Cancel"), LV_SETTINGS_ACTION_RETURN, password_setting_cancel, NULL);
     password_save_button=lv_settings_button(password_frame.footer, 1100, 0, 132, 46, ui_tr("Save"), true, password_setting_save_cb, NULL);
     active_field = PASSWORD_FIELD_CURRENT;
     password_leave_home = false;

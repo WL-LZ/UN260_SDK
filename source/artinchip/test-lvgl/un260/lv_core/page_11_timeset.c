@@ -122,7 +122,7 @@ void ui_page_11_timeset_create(lv_obj_t *parent){
  time_preview=lv_settings_label(preview,"",18,43,&lv_font_instrument_sans_semibold_40,0x1D2B34);
  date_preview=lv_settings_label(preview,"",18,104,&lv_font_instrument_sans_medium_18,0x536B79);
  lv_settings_label(body,ui_tr("Scroll to adjust. Save to apply."),834,207,&lv_font_instrument_sans_medium_12,0x536B79);
- lv_settings_button(time_frame.footer,976,0,116,44,ui_tr("Cancel"),false,time_cancel,NULL);
+ lv_settings_action_button(time_frame.footer,976,0,116,44,ui_tr("Cancel"),LV_SETTINGS_ACTION_RETURN,time_cancel,NULL);
  time_save=lv_settings_button(time_frame.footer,1102,0,130,44,ui_tr("Save"),true,time_apply,NULL);
  wheel_days=field_limit(2,true);time_refresh();gesture_service_set_page_policy(UI_PAGE_TIMESET,NULL,time_gesture);
 }

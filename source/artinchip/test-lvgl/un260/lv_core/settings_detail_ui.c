@@ -301,24 +301,20 @@ lv_obj_t* settings_detail_create_card(lv_obj_t* parent, lv_coord_t x, lv_coord_t
 
 lv_obj_t* settings_detail_create_button(lv_obj_t* parent, lv_coord_t x, lv_coord_t y,
                                         lv_coord_t w, lv_coord_t h,
-                                        const char* text, lv_color_t bg,
+                                        const char* text, lv_settings_action_role_t role,
                                         lv_event_cb_t cb, void* user_data)
 {
     lv_obj_t* btn = lv_obj_create(parent);
     detail_style_plain(btn);
     lv_obj_set_pos(btn, x, y);
     lv_obj_set_size(btn, w, h);
-    lv_obj_set_style_bg_color(btn, bg, 0);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(btn, 0, 0);
     lv_obj_set_style_radius(btn, 11, 0);
     lv_obj_set_style_shadow_width(btn, 0, 0);
     lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
-    /* Legacy detail callers still provide a color. Preserve its action class,
-       then share the same high-contrast states as new settings components. */
-    bool neutral=lv_color_brightness(bg)>200;
-    lv_damped_button_register(btn,bg,lv_color_darken(bg,20));
-    lv_settings_action_style(btn,neutral?LV_SETTINGS_ACTION_SECONDARY:LV_SETTINGS_ACTION_PRIMARY);
+    lv_damped_button_register(btn,lv_color_white(),lv_color_white());
+    lv_settings_action_style(btn,role);
 
     lv_settings_action_guard_init(btn);
     if (cb) {
@@ -345,7 +341,7 @@ lv_obj_t* settings_detail_create_select_box(lv_obj_t* parent,
     lv_obj_set_size(box, size, size);
     lv_obj_set_style_bg_color(box, lv_color_hex(0xF8F9FB), 0);
     lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(box, 2, 0);
+    lv_obj_set_style_border_width(box, 0, 0);
     lv_obj_set_style_border_color(box, detail_primary(), 0);
     lv_obj_set_style_radius(box, 4, 0);
     lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);
@@ -387,7 +383,7 @@ void settings_detail_set_focus_box_active(lv_obj_t* box, bool active)
 
     lv_obj_set_style_bg_color(box, active ? detail_primary_2() : lv_color_hex(0xF8F9FB), 0);
     lv_obj_set_style_border_color(box, active ? detail_select_border() : lv_color_hex(0xDDE6EF), 0);
-    lv_obj_set_style_border_width(box, active ? 2 : 1, 0);
+    lv_obj_set_style_border_width(box, 0, 0);
 }
 
 bool settings_detail_send_command(uint8_t cmd_g, const uint8_t* cmd_s,
@@ -508,18 +504,15 @@ bool settings_detail_dialog_show_ex(settings_detail_dialog_kind_t kind,
 
     if (cancel_text) {
         lv_obj_t *cancel = settings_detail_create_button(card, 282, 208, 140, 46, cancel_text,
-                                      lv_color_hex(0xF1F4F5), settings_detail_dialog_cancel_cb, NULL);
-        lv_obj_set_style_text_color(lv_obj_get_child(cancel,0), lv_color_hex(0x1D2B34), 0);
+                                      LV_SETTINGS_ACTION_RETURN, settings_detail_dialog_cancel_cb, NULL);
         lv_obj_set_style_radius(cancel,12,0);
         lv_obj_set_style_shadow_width(cancel,0,0);
     }
 
     lv_obj_t *confirm = settings_detail_create_button(card, confirm_x, 208, 154, 46,
                                   confirm_text ? confirm_text : "",
-                                  lv_color_hex(kind==SETTINGS_DIALOG_DESTRUCTIVE ? 0xB03838 : 0x1462CC),
+                                  kind==SETTINGS_DIALOG_DESTRUCTIVE ? LV_SETTINGS_ACTION_DESTRUCTIVE : LV_SETTINGS_ACTION_PRIMARY,
                                   settings_detail_dialog_confirm_cb, NULL);
-    lv_settings_action_style(confirm,kind==SETTINGS_DIALOG_DESTRUCTIVE ?
-        LV_SETTINGS_ACTION_DESTRUCTIVE : LV_SETTINGS_ACTION_PRIMARY);
     lv_obj_set_style_radius(confirm,12,0);
     lv_obj_set_style_shadow_width(confirm,0,0);
 
@@ -738,7 +731,10 @@ static lv_obj_t* settings_keyboard_create_key(lv_obj_t* parent, int x, int y, in
     }
     lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
     detail_add_press_style(btn, lv_color_hex(0xE2E9EE));
-    lv_settings_action_style(btn,LV_SETTINGS_ACTION_SECONDARY);
+    /* Character keys keep a neutral input surface, independent of action colors. */
+    lv_damped_button_set_exact_palette(btn,lv_color_hex(LV_SETTINGS_CONTROL_SURFACE),
+        lv_color_hex(LV_SETTINGS_CONTROL_PRESSED));
+    lv_obj_set_style_bg_color(btn,lv_color_hex(LV_SETTINGS_DISABLED_SURFACE),LV_STATE_DISABLED);
     lv_obj_set_style_border_width(btn,0,0);lv_obj_set_style_border_width(btn,0,LV_STATE_DISABLED);
     lv_obj_add_event_cb(btn, settings_keyboard_key_cb, LV_EVENT_CLICKED, (void*)key);
 
@@ -781,7 +777,7 @@ static void settings_keyboard_create_action(lv_obj_t* parent, int x, int y, int 
     lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
     detail_add_press_style(btn, lv_color_darken(bg, 28));
     lv_settings_action_style(btn,cb==settings_keyboard_cancel_cb ?
-        LV_SETTINGS_ACTION_SECONDARY : LV_SETTINGS_ACTION_PRIMARY);
+        LV_SETTINGS_ACTION_RETURN : LV_SETTINGS_ACTION_PRIMARY);
     lv_obj_set_style_border_width(btn,0,0);lv_obj_set_style_border_width(btn,0,LV_STATE_DISABLED);
     lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
 
@@ -791,6 +787,7 @@ static void settings_keyboard_create_action(lv_obj_t* parent, int x, int y, int 
             : &lv_font_instrument_sans_medium_16;
     lv_obj_t* label = settings_detail_create_label(btn, text, action_font,
                                                    cb == settings_keyboard_cancel_cb ? lv_color_hex(0x1D2B34) : detail_panel(), 0, 0);
+    lv_obj_remove_local_style_prop(label,LV_STYLE_TEXT_COLOR,0);
     lv_obj_center(label);
 }
 
@@ -813,10 +810,12 @@ static void settings_keyboard_create_number_keys(lv_obj_t *parent, settings_deta
     if(mode!=SETTINGS_DETAIL_KEYBOARD_UINT)settings_keyboard_create_key(card,34,224,107,48,".",".",lv_color_hex(0xF0F3F5));
     if(mode==SETTINGS_DETAIL_KEYBOARD_NUM)settings_keyboard_create_key(card,149,224,107,48,"-","-",lv_color_hex(0xF0F3F5));
     settings_keyboard_create_action(card,34,285,360,48,ui_tr("Apply"),lv_color_hex(0x1462CC),settings_keyboard_commit_cb);
-    lv_obj_t *close=settings_detail_create_button(card,792,14,36,36,"",lv_color_hex(0xFBFCFD),settings_keyboard_cancel_cb,NULL);
+    lv_obj_t *close=settings_detail_create_button(card,792,14,36,36,"",LV_SETTINGS_ACTION_RETURN,settings_keyboard_cancel_cb,NULL);
     lv_obj_set_style_border_width(close,0,0);
     lv_obj_set_style_outline_width(close,0,0);
     lv_obj_t *icon=lv_img_create(close);lv_img_set_src(icon,LVGL_DIR "pin_icons/close.png");lv_obj_center(icon);
+    lv_obj_set_style_img_recolor(icon,lv_color_hex(LV_SETTINGS_RETURN_TEXT),0);
+    lv_obj_set_style_img_recolor_opa(icon,LV_OPA_COVER,0);
 }
 
 static void settings_keyboard_create_text_keys(lv_obj_t* parent)

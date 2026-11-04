@@ -3,6 +3,7 @@
 #include "un260/font/ui_message_font.h"
 #include "un260/lv_components/lv_damped_button.h"
 #include "un260/lv_components/lv_nav_button.h"
+#include "un260/lv_components/lv_settings.h"
 #include "un260/lv_components/lv_recycled_list.h"
 #include "un260/lv_resources/ui_page_background.h"
 #include "un260/lv_system/ui_lang.h"
@@ -315,7 +316,7 @@ static void serials_icon_draw(lv_event_t *event)
     lv_area_t area;lv_obj_get_coords(button,&area);
     int x=area.x1+lv_obj_get_width(button)/2,y=area.y1+lv_obj_get_height(button)/2;
     lv_draw_line_dsc_t line;lv_draw_line_dsc_init(&line);
-    line.color=lv_color_hex(lv_obj_has_state(button,LV_STATE_DISABLED)?0xAAB5BE:0x657F90);
+    line.color=lv_obj_get_style_text_color(button,0);
     line.width=2;line.round_start=line.round_end=1;
     lv_point_t a,b,c;
     a=(lv_point_t){x+(kind==0?3:-3),y-6};
@@ -325,10 +326,11 @@ static void serials_icon_draw(lv_event_t *event)
 }
 static lv_obj_t *serials_footer_button(page_02_list_serials_t *v,int x,unsigned kind)
 {
-    const lv_damped_button_style_t style={0xFFFFFF,0xEBEBEB,0xF6F7F8,
-        SERIALS_BODY,0xAAB5BE,12};
+    const lv_damped_button_style_t style={LV_SETTINGS_CONTROL_SURFACE,LV_SETTINGS_CONTROL_PRESSED,
+        LV_SETTINGS_DISABLED_SURFACE,LV_SETTINGS_ACTION_TEXT,LV_SETTINGS_DISABLED_TEXT,12};
     lv_obj_t *button=lv_damped_button_create(v->panel,&style,"",&lv_font_instrument_sans_semibold_12);
     if(!button)return NULL;
+    lv_settings_damped_action_style(button,LV_SETTINGS_ACTION_SECONDARY);
     lv_obj_set_pos(button,x,342+(384-342-38)/2);lv_obj_set_size(button,38,38);
     if(!lv_obj_add_event_cb(button,serials_page,LV_EVENT_CLICKED,v)||
        !lv_obj_add_event_cb(button,serials_icon_draw,LV_EVENT_DRAW_MAIN,
@@ -453,8 +455,6 @@ page_02_list_serials_t *page_02_list_serials_create(lv_obj_t *parent,
         &lv_font_instrument_sans_medium_16,NULL,NULL);
     if(!v->badge_text||!v->title||!v->back||!v->main_button||
        !lv_obj_add_event_cb(v->main_button,serials_main,LV_EVENT_CLICKED,v))goto failed;
-    lv_damped_button_set_exact_palette(v->back,lv_color_hex(0xF5F6F7),lv_color_hex(0xE8ECEF));
-    lv_damped_button_set_exact_palette(v->main_button,lv_color_hex(0xF5F6F7),lv_color_hex(0xE8ECEF));
     lv_obj_center(v->badge_text);
     for(unsigned group=0;group<3;group++)for(unsigned col=0;col<3;col++){
         v->headers[group][col]=serials_label(v->panel,"",0,0,1,

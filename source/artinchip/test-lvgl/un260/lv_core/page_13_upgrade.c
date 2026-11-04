@@ -40,15 +40,15 @@ void ui_page_13_upgrade_create(lv_obj_t* parent)
     lv_obj_t* card = settings_detail_create_card(content, 380, 42, 520, 260);
     settings_detail_create_button(card, 80, 42, 360, 56,
                                   ui_text_get(UI_TEXT_SETTINGS_MAIN_BOARD_UPGRADE),
-                                  lv_color_hex(0x08C5D6),
+                                  LV_SETTINGS_ACTION_SECONDARY,
                                   main_upgrade_enter_cb, NULL);
     settings_detail_create_button(card, 80, 110, 360, 56,
                                   ui_text_get(UI_TEXT_SETTINGS_IMAGE_BOARD_UPGRADE),
-                                  lv_color_hex(0x08C5D6),
+                                  LV_SETTINGS_ACTION_SECONDARY,
                                   image_upgrade_enter_cb, NULL);
     settings_detail_create_button(card, 80, 178, 360, 56,
                                   ui_text_get(UI_TEXT_SETTINGS_UI_UPGRADE),
-                                  lv_color_hex(0x08C5D6),
+                                  LV_SETTINGS_ACTION_SECONDARY,
                                   ui_upgrade_enter_cb, NULL);
 }
 

@@ -21,7 +21,7 @@ static void back(lv_event_t *e){(void)e;page_protocol_log_close();}
 static void switch_click(lv_event_t *e){(void)e;protocol_log_snapshot_t s;protocol_log_snapshot(&s);if(!(s.active?protocol_log_stop():protocol_log_start()))notice();}
 static void export_click(lv_event_t *e){unsigned i=(uintptr_t)lv_event_get_user_data(e);protocol_log_snapshot_t s;protocol_log_snapshot(&s);if(!protocol_log_export(i<5?ids[i]:s.current))notice();}
 static void remove_confirmed(void *context){(void)context;if(!protocol_log_delete(delete_id))notice();}
-static void remove_click(lv_event_t *e){unsigned i=(uintptr_t)lv_event_get_user_data(e);if(i>=5)return;delete_id=ids[i];settings_detail_dialog_show_ex(SETTINGS_DIALOG_WARNING,ui_tr("Delete log"),ui_tr("Delete this saved recording?"),ui_tr("Delete"),ui_tr("Cancel"),remove_confirmed,NULL,NULL);}
+static void remove_click(lv_event_t *e){unsigned i=(uintptr_t)lv_event_get_user_data(e);if(i>=5)return;delete_id=ids[i];settings_detail_dialog_show_ex(SETTINGS_DIALOG_DESTRUCTIVE,ui_tr("Delete log"),ui_tr("Delete this saved recording?"),ui_tr("Delete"),ui_tr("Cancel"),remove_confirmed,NULL,NULL);}
 static const char *state_text(const protocol_log_snapshot_t *s){return s->busy?UI_N_("Saving or exporting. Please wait."):s->active?UI_N_("Recording serial traffic in the background."):s->state==PLOG_ERROR?UI_N_("Log operation failed or recording limit reached. Local logs are retained."):s->state==PLOG_EXPORTED?UI_N_("Log exported to USB. Recording is off."):UI_N_("Recording is off. Saved logs remain available.");}
 static void render(void)
 {
@@ -43,7 +43,7 @@ static void render(void)
    names[i]=lv_settings_label(rows[i],"",12,8,&lv_font_instrument_sans_medium_16,0x1D2B34);
    sizes[i]=lv_settings_label(rows[i],"",12,32,&lv_font_instrument_sans_medium_12,0x586B78);
    exports[i]=lv_settings_button(rows[i],416,6,146,44,ui_tr("Export"),false,export_click,(void*)(uintptr_t)i);
-   deletes[i]=lv_settings_button(rows[i],578,6,146,44,ui_tr("Delete"),false,remove_click,(void*)(uintptr_t)i);
+   deletes[i]=lv_settings_action_button(rows[i],578,6,146,44,ui_tr("Delete"),LV_SETTINGS_ACTION_DESTRUCTIVE_ENTRY,remove_click,(void*)(uintptr_t)i);
    if(i<4)lv_settings_box(rows[i],12,55,714,1,0xE3E9ED);
  }
  if(indicator)lv_obj_move_foreground(indicator);

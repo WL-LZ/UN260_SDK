@@ -2,6 +2,7 @@
 #define SETTINGS_DETAIL_UI_H
 
 #include "lvgl/lvgl.h"
+#include "un260/lv_components/lv_settings.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -34,7 +35,7 @@ lv_obj_t* settings_detail_create_card(lv_obj_t* parent, lv_coord_t x, lv_coord_t
                                       lv_coord_t w, lv_coord_t h);
 lv_obj_t* settings_detail_create_button(lv_obj_t* parent, lv_coord_t x, lv_coord_t y,
                                         lv_coord_t w, lv_coord_t h,
-                                        const char* text, lv_color_t bg,
+                                        const char* text, lv_settings_action_role_t role,
                                         lv_event_cb_t cb, void* user_data);
 lv_obj_t* settings_detail_create_label(lv_obj_t* parent, const char* text,
                                        const lv_font_t* font, lv_color_t color,

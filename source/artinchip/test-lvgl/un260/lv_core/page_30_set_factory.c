@@ -32,7 +32,8 @@ static void update_controls(void)
         phase == UI_FACTORY_RESET_RESTART_REQUIRED ? ui_tr("Restart") :
         ui_text_get(UI_TEXT_SETTINGS_FACTORY_START));
     lv_settings_action_style(reset_button, phase == UI_FACTORY_RESET_RESTART_REQUIRED ?
-        LV_SETTINGS_ACTION_PRIMARY : LV_SETTINGS_ACTION_DESTRUCTIVE);
+        LV_SETTINGS_ACTION_PRIMARY : phase == UI_FACTORY_RESET_LOCAL_FAILED ?
+        LV_SETTINGS_ACTION_SECONDARY : LV_SETTINGS_ACTION_DESTRUCTIVE_ENTRY);
     const char *message = "";
     if (phase == UI_FACTORY_RESET_WAIT_CONTROLLER) message = ui_tr("Waiting for controller...");
     else if (phase == UI_FACTORY_RESET_SAVING) message = ui_tr("Saving UI factory defaults. Keep power connected.");
@@ -177,9 +178,8 @@ void ui_page_30_set_factory_create(lv_obj_t *parent)
         &lv_font_instrument_sans_medium_16, 0x586B78);
     lv_obj_set_width(description, 436);
     lv_label_set_long_mode(description, LV_LABEL_LONG_WRAP);
-    reset_button = lv_settings_button(action, 24, 172, 436, 46,
-        ui_text_get(UI_TEXT_SETTINGS_FACTORY_START), true, start, NULL);
-    lv_settings_action_style(reset_button, LV_SETTINGS_ACTION_DESTRUCTIVE);
+    reset_button = lv_settings_action_button(action, 24, 172, 436, 46,
+        ui_text_get(UI_TEXT_SETTINGS_FACTORY_START), LV_SETTINGS_ACTION_DESTRUCTIVE_ENTRY, start, NULL);
     lv_obj_set_width(frame.message, 1120);
     update_controls();
     gesture_service_set_page_policy(UI_PAGE_FACTORY_SETTING, NULL, gesture);

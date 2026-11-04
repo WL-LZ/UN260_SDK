@@ -74,10 +74,10 @@ static void test_list_modes(void)
     }
     assert(lv_obj_get_scroll_bottom(s->grid)<=0); /* Six common values fit fully. */
     assert_pair(s->modes,false,0);
-    assert(lv_obj_get_style_bg_color(s->contains,0).full==lv_color_hex(LV_SETTINGS_CHOICE_SURFACE).full);
+    assert(lv_obj_get_style_bg_color(s->contains,0).full==lv_color_hex(LV_SETTINGS_CHOICE_SELECTED_SURFACE).full);
     assert(lv_obj_get_style_border_opa(s->contains,0)==LV_OPA_COVER);
-    history_test_control_feedback(s->contains,LV_SETTINGS_CHOICE_SURFACE,LV_SETTINGS_CONTROL_PRESSED,LV_SETTINGS_PRIMARY);
-    history_test_control_feedback(s->exact,LV_SETTINGS_CONTROL_SURFACE,LV_SETTINGS_CONTROL_PRESSED,LV_SETTINGS_ACTION_TEXT);
+    history_test_control_feedback(s->contains,LV_SETTINGS_CHOICE_SELECTED_SURFACE,LV_SETTINGS_CHOICE_PRESSED,LV_SETTINGS_CHOICE_SELECTED_TEXT);
+    history_test_control_feedback(s->exact,LV_SETTINGS_CHOICE_IDLE_SURFACE,LV_SETTINGS_CHOICE_PRESSED,LV_SETTINGS_CHOICE_TEXT);
     click(s->input);assert(lv_alnum_keyboard_set_text(s->keyboard,"SN0001"));apply();
     assert(s->result.matched_count==1&&s->slots[0]==0);
     click(s->exclude);assert(s->query.exclude_text);

@@ -67,8 +67,7 @@ static void language_refresh(void)
     for (size_t i = 0; i < language_row_count; ++i) {
         language_row_t *row = &language_rows[i];
         bool selected = language_draft == row->locale->id;
-        lv_obj_set_style_bg_color(row->row, lv_color_hex(selected ? 0xEDF4FF : 0xF3F6F8), 0);
-        lv_obj_set_style_border_color(row->row, lv_color_hex(selected ? 0x8CACDA : 0xE3E9ED), 0);
+        lv_settings_damped_choice_style(row->row, selected);
         if (selected) { lv_obj_clear_flag(row->check, LV_OBJ_FLAG_HIDDEN); name = row->locale->name; selected_row=row->row; }
         else lv_obj_add_flag(row->check, LV_OBJ_FLAG_HIDDEN);
     }
@@ -143,7 +142,7 @@ void ui_page_21_set_language_create(lv_obj_t *parent)
     if (!language_rows) {
         language_row_count = 0;
         lv_settings_label(body, ui_tr("Language settings unavailable"), 24, 36, &lv_font_instrument_sans_medium_18, 0x536B79);
-        lv_settings_button(language_frame.footer, 1102, 0, 130, 44, ui_tr("Back"), false, language_cancel, NULL);
+        lv_settings_action_button(language_frame.footer, 1102, 0, 130, 44, ui_tr("Back"), LV_SETTINGS_ACTION_RETURN, language_cancel, NULL);
         ui_notice_post_text(UI_NOTICE_ERROR, "settings.language", UI_N_("Language settings unavailable"), UI_N_("Try again."));
         return;
     }
@@ -157,13 +156,14 @@ void ui_page_21_set_language_create(lv_obj_t *parent)
         language_row_t *row = &language_rows[row_index++]; row->locale = locale;
         lv_obj_t *button = lv_settings_button(list, 0, 0, 590, 76, "", false, language_choice, (void *)(uintptr_t)locale->id);
         row->row = button;
-        lv_obj_set_style_bg_color(button, lv_color_hex(0xEDF4FF), 0); lv_obj_set_style_border_width(button, 1, 0);
-        lv_obj_set_style_border_color(button, lv_color_hex(0x8CACDA), 0); lv_obj_set_style_radius(button, 13, 0);
+        lv_settings_damped_choice_style(button, false);
+        lv_obj_set_style_radius(button, 13, 0);
         lv_obj_t *code = lv_settings_box(button, 18, 16, 44, 44, 0xFFFFFF); lv_obj_set_style_radius(code, 10, 0);
         lv_obj_t *label = lv_settings_label(code, locale->code, 0, 0, &lv_font_instrument_sans_semibold_18, 0x155CBA); lv_obj_center(label);
         bool prepared=ui_locale_font_prepare_size(locale->id,22);
         lv_obj_t *native=lv_settings_label(button, prepared?locale->name:locale->code, 78, 25,
             ui_message_font_for(&lv_font_instrument_sans_semibold_22,locale->id),0x174F9D);
+        lv_obj_remove_local_style_prop(native, LV_STYLE_TEXT_COLOR, 0);
         lv_obj_set_width(native,450);lv_label_set_long_mode(native,LV_LABEL_LONG_CLIP);
         lv_obj_set_style_base_dir(native,locale->direction==UI_LANG_RTL?LV_BASE_DIR_RTL:LV_BASE_DIR_LTR,0);
         /* Keep every autonym beside its code; RTL controls letter order, not
@@ -189,7 +189,7 @@ void ui_page_21_set_language_create(lv_obj_t *parent)
     lv_obj_set_style_text_align(language_sample_format, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_long_mode(language_sample_format, LV_LABEL_LONG_CLIP);
     lv_settings_label(body, ui_tr("The interface changes after Save."), 666, 207, &lv_font_instrument_sans_medium_12, 0x536B79);
-    lv_settings_button(language_frame.footer, 976, 0, 116, 44, ui_tr("Cancel"), false, language_cancel, NULL);
+    lv_settings_action_button(language_frame.footer, 976, 0, 116, 44, ui_tr("Cancel"), LV_SETTINGS_ACTION_RETURN, language_cancel, NULL);
     language_save = lv_settings_button(language_frame.footer, 1102, 0, 130, 44, ui_tr("Save"), true, language_apply, NULL);
     language_refresh();
     gesture_service_set_page_policy(UI_PAGE_LANGUAGE_SETTING, NULL, language_gesture);

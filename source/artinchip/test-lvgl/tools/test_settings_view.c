@@ -179,7 +179,7 @@ static void grid_test(void){
  lv_obj_t *plain=lv_settings_button(lv_scr_act(),20,20,100,50,"Action",false,card_clicked,NULL);
  pointer_feed(60,45,LV_INDEV_STATE_PRESSED);pointer_feed(180,45,LV_INDEV_STATE_PRESSED);
  assert(!lv_obj_has_state(plain,LV_STATE_PRESSED));
- assert(lv_obj_get_style_bg_color(plain,0).full==lv_color_hex(LV_SETTINGS_CONTROL_SURFACE).full);
+ assert(lv_obj_get_style_bg_color(plain,0).full==lv_color_hex(LV_SETTINGS_SECONDARY_SURFACE).full);
  pointer_feed(180,45,LV_INDEV_STATE_RELEASED);
  assert(card_clicks==1);lv_obj_del(plain);
  puts("PASS flex: delete/hide reflow, centred rows, actual driver feedback slow/fast drag matrix, ordinary slide-out cancellation");}
@@ -239,7 +239,7 @@ static void details_test(void){
  machine_time_value_t before={2024,1,31,23,59,58},now;
  ui_page_11_timeset_create(lv_scr_act());assert(!machine_time_is_confirmed());unsigned date_revision=machine_time_confirmation_revision();time_apply(NULL);assert(machine_time_is_confirmed()&&machine_time_confirmation_revision()==date_revision+1);ui_page_11_timeset_destroy();
  machine_time_confirm(&before);
- ui_page_11_timeset_create(lv_scr_act());snapshot("date-time");lv_obj_update_layout(time_frame.root);assert(lv_obj_get_x(lv_obj_get_parent(time_frame.back))+lv_obj_get_x(time_frame.back)>1100);assert(lv_obj_get_height(time_frame.back)>=44);
+ ui_page_11_timeset_create(lv_scr_act());snapshot("date-time");lv_obj_update_layout(time_frame.root);assert(lv_obj_get_x(lv_obj_get_parent(time_frame.back))+lv_obj_get_x(time_frame.back)>1100);assert(lv_obj_get_width(time_frame.back)==76&&lv_obj_get_height(time_frame.back)==42);
  pointer_feed(640,208,LV_INDEV_STATE_PRESSED);
  for(int y=218;y<=268;y+=10)pointer_feed(640,y,LV_INDEV_STATE_PRESSED);
  pointer_feed(640,268,LV_INDEV_STATE_RELEASED);
@@ -342,6 +342,17 @@ static void directory_locales_test(void){
   for(size_t i=0;i<catalog_count;++i){
    if(catalog[i].kind==SETTINGS_DETAIL&&strcmp(catalog[i].id,"versions")&&strcmp(catalog[i].id,"collection"))continue;
    scope=&catalog[i];render();lv_obj_update_layout(settings_page);check_single_line(settings_page);
+   if(grid){
+    assert(lv_obj_get_x(grid)==253&&lv_obj_get_y(grid)==84&&lv_obj_get_width(grid)==1013&&lv_obj_get_height(grid)==274);
+    for(unsigned child=0;child<lv_obj_get_child_cnt(grid);child++){
+     lv_area_t card;lv_obj_get_coords(lv_obj_get_child(grid,child),&card);
+     assert(card.x1==256&&lv_area_get_width(&card)==991);
+    }
+    if(lv_obj_get_scroll_top(grid)>0||lv_obj_get_scroll_bottom(grid)>0){
+     lv_area_t horizontal,vertical;lv_obj_get_scrollbar_area(grid,&horizontal,&vertical);
+     assert(vertical.x1==1261&&vertical.x2==1265);
+    }
+   }
    char file[96];snprintf(file,sizeof(file),"settings-%s-%s",locale->tag,scope->id);snapshot(file);
    if(grid){lv_obj_scroll_to_y(grid,9999,LV_ANIM_OFF);lv_obj_update_layout(grid);check_single_line(settings_page);}
   }

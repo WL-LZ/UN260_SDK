@@ -87,8 +87,6 @@ static lv_obj_t *search_button(lv_obj_t *parent,int x,int y,int w,int h,
 }
 static void search_selected(lv_obj_t *button,bool selected)
 {
-    if(lv_obj_has_state(button,LV_STATE_CHECKED)==selected &&
-       lv_obj_get_style_border_width(button,0)==(selected?1:0))return;
     lv_settings_damped_choice_style(button,selected);
 }
 static int selected_denom(const counting_serial_query_t *query,int denomination)
@@ -368,7 +366,6 @@ page_02_list_search_t *page_02_list_search_create(lv_obj_t *parent,
                           SEARCH_MUTED,"");
     lv_obj_t *back=lv_nav_button_create(s->root,1152,16,108,42,search_close_event,s);
     if (!s->scope || !back) goto failed;
-    lv_settings_damped_action_style(back,LV_SETTINGS_ACTION_SECONDARY);
     lv_label_set_long_mode(s->scope,LV_LABEL_LONG_WRAP);
     lv_damped_button_set_text(back,ui_text_get(UI_TEXT_HISTORY_BACK));
     if(!search_surface(s->root,1136,24,1,26,0,LV_SETTINGS_ACTION_DIVIDER) ||
@@ -411,6 +408,7 @@ page_02_list_search_t *page_02_list_search_create(lv_obj_t *parent,
     }
     s->input=search_button(filters,18,12,374,42,ui_text_get(UI_TEXT_SERIAL_INPUT_HINT),search_input_event,s);
     if (!s->input) goto failed;
+    lv_settings_damped_action_style(s->input,LV_SETTINGS_ACTION_INPUT);
     lv_obj_t *input_text=lv_damped_button_get_label(s->input);
     lv_obj_set_width(input_text,346);lv_label_set_long_mode(input_text,LV_LABEL_LONG_DOT);lv_obj_set_style_text_align(input_text,LV_TEXT_ALIGN_LEFT,0);
     if (!search_label(results,26,12,74,22,&lv_font_instrument_sans_medium_12,

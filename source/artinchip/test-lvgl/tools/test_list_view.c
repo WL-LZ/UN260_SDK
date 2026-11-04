@@ -500,14 +500,14 @@ static void assert_action_rail(bool page_visible)
         lv_obj_t *icon=lv_obj_get_child(button,1);
         assert(lv_obj_get_width(icon)==27 && lv_obj_get_height(icon)==27);
         assert(lv_obj_get_x(icon)==35 && lv_obj_get_y(icon)==17);
-        assert_icon(icon,lv_obj_check_type(icon,&lv_img_class) ? 0x496574 : 0x657F90,21,page_visible);
+        assert_icon(icon,i==3?0x496574:0x657F90,21,page_visible);
         lv_obj_get_coords(button,&rail[i]);
         if(i) assert(rail[i].y1-rail[i-1].y2-1==8);
     }
     for(unsigned i=0;i<PAGE_02_SECTION_COUNT;++i) {
         lv_obj_t *panel=view->section[i].panel;
         lv_area_t area;lv_obj_get_coords(panel,&area);
-        assert(area.y1==12 && rail[0].y1==52 && area.y2==rail[3].y2);
+        assert(area.y1==12 && rail[0].y1==12 && area.y2==rail[3].y2);
         for(unsigned j=0;j<lv_obj_get_child_cnt(panel);++j) {
             lv_obj_t *child=lv_obj_get_child(panel,j);
             /* The new Details entry belongs only to B; Search stays in the rail. */
@@ -594,7 +594,7 @@ static void test_handdrawn_icons(void)
         lv_obj_get_child(view->section[2].mode,1)};
     render_page();
     for(unsigned i=0;i<sizeof(icons)/sizeof(icons[0]);++i)
-        assert_icon(icons[i],i==3 ? 0x496574 : 0x657F90,i>=4 ? 12 : 21,true);
+        assert_icon(icons[i],i==3?0x496574:0x657F90,i>=4 ? 12 : 21,true);
     test_home_glyph();test_search_glyph();
 }
 static void test_button_feedback(void)
@@ -609,8 +609,9 @@ static void test_button_feedback(void)
         lv_obj_add_state(button,LV_STATE_PRESSED);lv_event_send(button,LV_EVENT_PRESSED,NULL);tick(140);
         render_page();lv_obj_get_coords(button,&after);
         assert(before.x1==after.x1 && before.y1==after.y1 && before.x2==after.x2 && before.y2==after.y2);
-        lv_color_t pressed=lv_color_darken(lv_color_hex(normal),(lv_opa_t)20);
+        lv_color_t pressed=lv_damped_button_pressed_color(lv_color_hex(0xFFFFFF));
         assert(lv_obj_get_style_bg_color(button,0).full==pressed.full);
+        assert(lv_obj_get_style_border_width(button,0)==0);
         assert(framebuffer[(before.y1+4)*1280+(before.x1+before.x2)/2].full==pressed.full);
         assert(lv_obj_get_style_translate_y(button,0)==0 && lv_obj_get_style_opa(button,0)==LV_OPA_COVER);
         for(unsigned j=0;j<lv_obj_get_child_cnt(button);++j)
@@ -621,6 +622,7 @@ static void test_button_feedback(void)
         lv_obj_clear_state(button,LV_STATE_PRESSED);
         lv_event_send(button,i%2 ? LV_EVENT_PRESS_LOST : LV_EVENT_RELEASED,NULL);tick(300);render_page();
         assert_background(button,normal,true);
+        assert(lv_obj_get_style_border_width(button,0)==0);
         for(unsigned j=0;j<lv_obj_get_child_cnt(button);++j)
             assert(lv_obj_get_style_translate_y(lv_obj_get_child(button,j),0)==0);
         assert_caption_contained(button);
@@ -629,6 +631,7 @@ static void test_button_feedback(void)
         assert(!lv_obj_has_flag(button,LV_OBJ_FLAG_CLICKABLE));
         assert(lv_obj_get_style_text_color(label,0).full==lv_color_hex(0xAAB5BE).full);
         lv_damped_button_set_enabled(button,true);render_page();assert_background(button,normal,true);
+        assert(lv_obj_get_style_border_width(button,0)==0);
     }
     assert(history_clicks==0 && print_clicks==0 && home_clicks==0 && !view->search);
     assert(!lv_recycled_list_window(view->section[1].list)->paged);

@@ -785,15 +785,10 @@ static void refresh_header(void)
             (history->selecting ? history->selected_count>0 : displayed_count()>0));
     }
     for(unsigned i=0;i<3;++i) {
-        bool primary=!history->detail_mode && !history->selecting && i==0;
         bool destructive=history->selecting && i==2;
-        lv_settings_damped_action_style(history->actions[i],primary?LV_SETTINGS_ACTION_PRIMARY:
-            destructive?LV_SETTINGS_ACTION_DESTRUCTIVE:LV_SETTINGS_ACTION_SECONDARY);
+        lv_settings_damped_action_style(history->actions[i],
+            destructive?LV_SETTINGS_ACTION_DESTRUCTIVE_ENTRY:LV_SETTINGS_ACTION_SECONDARY);
     }
-    /* Search stays a filled action with its usual press feedback. */
-    lv_obj_set_style_border_width(history->actions[0],0,0);
-    lv_obj_set_style_border_width(history->actions[0],0,LV_STATE_PRESSED);
-    lv_obj_set_style_border_width(history->actions[0],0,LV_STATE_DISABLED);
     show(history->capacity,!history->detail_mode && !history->selecting);
     char capacity_text[64];snprintf(capacity_text,sizeof(capacity_text),ui_tr("Capacity: %u"),(unsigned)ui_history_capacity_get());
     lv_damped_button_set_text(history->capacity,capacity_text);
@@ -1240,6 +1235,8 @@ void ui_page_19_history_create(lv_obj_t *parent)
     history->reset_total=button(history->metadata,1130,3,108,32,tr(UI_TEXT_HISTORY_CLEAR_TOTAL),reset_event,NULL);
     if (!history->title || !history->subtitle || !history->summary ||
         !history->lifetime_title || !history->lifetime || !history->reset_total || !history->capacity) goto failed;
+    lv_settings_damped_action_style(history->capacity,LV_SETTINGS_ACTION_INPUT);
+    lv_settings_damped_action_style(history->reset_total,LV_SETTINGS_ACTION_DESTRUCTIVE_ENTRY);
     lv_obj_set_style_text_font(lv_damped_button_get_label(history->reset_total),ui_message_font(&lv_font_instrument_sans_semibold_12),0);
     for (unsigned i=0;i<4;++i) {
         const int x[]={736,868,992,1184},w[]={120,112,128,76};
@@ -1264,8 +1261,6 @@ void ui_page_19_history_create(lv_obj_t *parent)
     }
     history->sort=button(history->list_panel,1080,3,152,30,"",sort_event,NULL);
     if (!history->sort || !surface(history->list_panel,12,35,1220,1,0,HISTORY_LINE)) goto failed;
-    lv_settings_damped_action_style(history->sort,LV_SETTINGS_ACTION_PRIMARY);
-    lv_obj_set_style_border_width(history->sort,0,0);
     lv_obj_t *sort_label=lv_damped_button_get_label(history->sort);
     lv_obj_set_style_text_align(sort_label,LV_TEXT_ALIGN_CENTER,0);lv_obj_center(sort_label);
     history->range=label(history->list_panel,22,256,300,14,&lv_font_instrument_sans_medium_10,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);

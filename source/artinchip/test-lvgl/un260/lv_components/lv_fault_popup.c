@@ -70,6 +70,7 @@ static lv_obj_t *button(lv_obj_t *parent,int x,int y,int w,int h,const char *val
     lv_obj_set_style_bg_opa(o,LV_OPA_COVER,0);
     lv_obj_set_style_radius(o,12,0);lv_obj_set_style_pad_all(o,0,0);
     lv_obj_t *l=label(o,value,0,0,w,&lv_font_instrument_sans_medium_18,primary?0xFFFFFF:0x586B78);
+    lv_obj_remove_local_style_prop(l,LV_STYLE_TEXT_COLOR,0);
     lv_obj_set_style_text_align(l,LV_TEXT_ALIGN_CENTER,0);lv_obj_center(l);
     if(cb)lv_obj_add_event_cb(o,cb,LV_EVENT_CLICKED,data);
     if(copy)*copy=l;

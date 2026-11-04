@@ -10,7 +10,8 @@ void lv_settings_action_block(lv_obj_t *button, const char *reason,
 const char *lv_settings_action_block_reason(lv_obj_t *button);
 typedef enum {
     LV_SETTINGS_ACTION_SECONDARY, LV_SETTINGS_ACTION_PRIMARY,
-    LV_SETTINGS_ACTION_DESTRUCTIVE
+    LV_SETTINGS_ACTION_DESTRUCTIVE, LV_SETTINGS_ACTION_RETURN,
+    LV_SETTINGS_ACTION_INPUT, LV_SETTINGS_ACTION_DESTRUCTIVE_ENTRY
 } lv_settings_action_role_t;
 /* Semantic action colors, including pressed/disabled states. */
 void lv_settings_action_style(lv_obj_t *button, lv_settings_action_role_t role);
@@ -45,6 +46,8 @@ lv_obj_t *lv_settings_label(lv_obj_t *, const char *, int x, int y,
 lv_obj_t *lv_settings_icon(lv_obj_t *, const char *name, int x, int y);
 lv_obj_t *lv_settings_button(lv_obj_t *, int x, int y, int w, int h,
                              const char *, bool primary, lv_event_cb_t, void *);
+lv_obj_t *lv_settings_action_button(lv_obj_t *, int x, int y, int w, int h,
+                             const char *, lv_settings_action_role_t, lv_event_cb_t, void *);
 /* Controlled switch: paint confirmed state; activating never changes it implicitly. */
 lv_obj_t *lv_settings_toggle(lv_obj_t *, int x, int y, bool on, lv_event_cb_t, void *);
 /* Align a title/optional description block and its control by measured height.

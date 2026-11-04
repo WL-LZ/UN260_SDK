@@ -7,6 +7,7 @@
 #include "un260/lv_resources/ui_page_background.h"
 #include "un260/gesture/gesture_service.h"
 #include "settings_detail_ui.h"
+#include "un260/lv_components/lv_damped_button.h"
 #include "lv_page_manager.h"
 #include "un260/storage/standby_store.h"
 #include "un260/app_service/app_standby_runtime.h"
@@ -167,29 +168,38 @@ static void scene_create(scene_t*s,lv_obj_t*parent,int x,int y,bool small,bool e
  scene_update(s,c,true);
 }
 static void action(lv_event_t*e);
-/* Own every state: the shared settings button intentionally has a different theme. */
-static lv_obj_t* control(lv_obj_t*p,int x,int y,int w,int h,int id,uint32_t bg,uint32_t border){
+/* Swatches and photo choices retain their page-owned preview colors. */
+static lv_obj_t* control(lv_obj_t*p,int x,int y,int w,int h,int id,uint32_t bg){
  lv_obj_t*b=box(p,x,y,w,h,bg);lv_obj_add_flag(b,LV_OBJ_FLAG_CLICKABLE);lv_obj_set_style_radius(b,12,0);
- lv_obj_set_style_border_width(b,border?1:0,0);lv_obj_set_style_border_color(b,lv_color_hex(border),0);
+ lv_obj_set_style_border_width(b,0,0);
  lv_obj_set_style_bg_color(b,lv_color_mix(lv_color_hex(0x7096B3),lv_color_hex(bg),28),LV_STATE_PRESSED);
  lv_obj_add_event_cb(b,action,LV_EVENT_CLICKED,(void*)(intptr_t)id);return b;
 }
 static lv_obj_t*button(lv_obj_t*p,int x,int y,int w,const char*t,int id,bool active){
- bool neutral=!active&&(id==1||id==64);
+ lv_settings_action_role_t role=id==1?LV_SETTINGS_ACTION_RETURN:
+     id==67||id==80?LV_SETTINGS_ACTION_DESTRUCTIVE_ENTRY:
+     id==63?LV_SETTINGS_ACTION_INPUT:active?LV_SETTINGS_ACTION_PRIMARY:LV_SETTINGS_ACTION_SECONDARY;
  bool has_arrow=id==1||id==3||(id>=11&&id<=14);
- lv_obj_t*b=control(p,x,y,w,44,id,active?0x176FE8:neutral?0xE9EDF0:0xF0F5F9,0);
- lv_obj_t*l=label(b,t,0,0,&lv_font_instrument_sans_medium_14,active?0xFFFFFF:neutral?0x293B44:0x4682B8);
+ lv_obj_t*b=control(p,x,y,w,44,id,LV_SETTINGS_CONTROL_SURFACE);
+ lv_settings_action_style(b,role);
+ lv_obj_t*l=label(b,t,0,0,&lv_font_instrument_sans_medium_14,0x293B44);
+ lv_obj_remove_local_style_prop(l,LV_STYLE_TEXT_COLOR,0);
  lv_obj_align(l,LV_ALIGN_CENTER,has_arrow?(id==1?4:-7):0,0);
  if(has_arrow){
   lv_obj_t*im=ui_icon_create(b,id==1?UI_ICON("back_18"):(id==3||id==14)?UI_ICON("expand_18"):UI_ICON("chevron_18"));
   if(im){lv_obj_align(im,id==1?LV_ALIGN_LEFT_MID:LV_ALIGN_RIGHT_MID,id==1?6:-6,0);
-   lv_obj_set_style_img_recolor(im,lv_color_hex(active?0xFFFFFF:0x4682B8),0);lv_obj_set_style_img_recolor_opa(im,LV_OPA_COVER,0);}
+   lv_obj_set_style_img_recolor(im,lv_obj_get_style_text_color(b,0),0);lv_obj_set_style_img_recolor_opa(im,LV_OPA_COVER,0);}
  }
  return b;
 }
-static void link_button(lv_obj_t*p,int x,int y,int w,const char*t,int id){lv_obj_t*b=button(p,x,y,w,t,id,false);lv_obj_set_style_bg_opa(b,0,0);lv_obj_set_style_bg_opa(b,255,LV_STATE_PRESSED);lv_obj_set_style_text_font(lv_obj_get_child(b,0),ui_message_font(&lv_font_instrument_sans_medium_12),0);}
-static lv_obj_t* choice(lv_obj_t*p,int x,int y,int w,int h,const char*t,int id,bool selected,uint32_t bg){lv_obj_t*b=control(p,x,y,w,h,id,bg,selected?0x3B87E7:0xDCE4E9);lv_obj_t*l=label(b,t,0,0,&lv_font_instrument_sans_medium_14,0x293B44);lv_obj_center(l);return b;}
-static void toggle(lv_obj_t*p,int x,int y,int w,const char*t,int id,bool on){lv_obj_t*b=control(p,x,y,w,48,id,0xFFFFFF,0xE4EBEF);label(b,t,15,15,&lv_font_instrument_sans_medium_14,0x293B44);lv_obj_t*s=box(b,w-59,11,43,25,on?0x287CE5:0xDCE4E9);lv_obj_clear_flag(s,LV_OBJ_FLAG_CLICKABLE);lv_obj_set_style_radius(s,13,0);lv_obj_t*k=box(s,on?20:2,2,21,21,0xFFFFFF);lv_obj_clear_flag(k,LV_OBJ_FLAG_CLICKABLE);lv_obj_set_style_radius(k,11,0);}
+static void link_button(lv_obj_t*p,int x,int y,int w,const char*t,int id){lv_obj_t*b=button(p,x,y,w,t,id,false);lv_obj_set_style_text_font(lv_obj_get_child(b,0),ui_message_font(&lv_font_instrument_sans_medium_12),0);}
+static lv_obj_t* choice(lv_obj_t*p,int x,int y,int w,int h,const char*t,int id,bool selected,uint32_t bg){lv_obj_t*b=control(p,x,y,w,h,id,bg);lv_obj_t*l=label(b,t,0,0,&lv_font_instrument_sans_medium_14,0x293B44);lv_obj_center(l);if(selected){lv_obj_t*mark=label(b,LV_SYMBOL_OK,0,0,LV_FONT_DEFAULT,ink(bg));lv_obj_align(mark,LV_ALIGN_RIGHT_MID,-10,0);}return b;}
+static lv_obj_t* segment_choice(lv_obj_t*p,int x,int y,int w,int h,const char*t,int id,bool selected){
+ lv_obj_t*b=control(p,x,y,w,h,id,selected?0xFFFFFF:LV_SETTINGS_SEGMENT_SURFACE);
+ lv_damped_button_set_exact_palette(b,lv_color_hex(selected?0xFFFFFF:LV_SETTINGS_SEGMENT_SURFACE),lv_color_hex(LV_SETTINGS_CONTROL_PRESSED));
+ lv_obj_t*l=label(b,t,0,0,&lv_font_instrument_sans_medium_14,selected?LV_SETTINGS_PRIMARY:LV_SETTINGS_SEGMENT_TEXT);lv_obj_center(l);return b;
+}
+static void toggle(lv_obj_t*p,int x,int y,int w,const char*t,int id,bool on){lv_obj_t*b=control(p,x,y,w,48,id,0xFFFFFF);label(b,t,15,15,&lv_font_instrument_sans_medium_14,0x293B44);lv_obj_t*s=box(b,w-59,11,43,25,on?0x287CE5:0xDCE4E9);lv_obj_clear_flag(s,LV_OBJ_FLAG_CLICKABLE);lv_obj_set_style_radius(s,13,0);lv_obj_t*k=box(s,on?20:2,2,21,21,0xFFFFFF);lv_obj_clear_flag(k,LV_OBJ_FLAG_CLICKABLE);lv_obj_set_style_radius(k,11,0);}
 static void queue_save(void){if(standby_store_save(&draft)){saving=true;redraw=true;ui_notice_post_text(UI_NOTICE_PROGRESS,"settings.standby",UI_N_("Standby settings"),UI_N_("Saving..."));}else ui_notice_post_text(UI_NOTICE_ERROR,"settings.standby",UI_N_("Standby settings not saved"),UI_N_("Try again."));}
 static void discard(void*u){(void)u;draft=*standby_config();tab=0;redraw=true;}
 static bool owns_single_drag(void){return tab==4||standby_store_busy()||settings_detail_overlay_is_open();}
@@ -250,16 +260,16 @@ static void render(void){lv_obj_clean(page);memset(&preview,0,sizeof(preview));m
  body=box(page,574,76,676,296,0xF6F8FA);lv_obj_set_style_bg_opa(body,LV_OPA_TRANSP,0);
  standby_layout_t*p=layout();
  if(!tab){
-  lv_obj_t*seg=box(body,0,0,676,48,0xE7ECF0);lv_obj_set_style_radius(seg,13,0);
-  for(int i=0;i<2;i++){lv_obj_t*b=choice(seg,4+i*336,4,332,40,i?ui_tr("Aa  Typographic"):ui_tr("Photo"),20+i,draft.mode==i,draft.mode==i?0xFFFFFF:0xE7ECF0);lv_obj_set_style_border_width(b,0,0);if(!i)label(b,LV_SYMBOL_IMAGE,119,13,LV_FONT_DEFAULT,0x7595AA);}
+  lv_obj_t*seg=box(body,0,0,676,48,LV_SETTINGS_SEGMENT_SURFACE);lv_obj_set_style_radius(seg,13,0);
+  for(int i=0;i<2;i++){lv_obj_t*b=segment_choice(seg,4+i*336,4,332,40,i?ui_tr("Aa  Typographic"):ui_tr("Photo"),20+i,draft.mode==i);if(!i)label(b,LV_SYMBOL_IMAGE,119,13,LV_FONT_DEFAULT,0x7595AA);}
   lv_obj_t*rows=box(body,0,83,676,198,0xFFFFFF);lv_obj_set_style_radius(rows,16,0);lv_obj_set_style_border_width(rows,1,0);lv_obj_set_style_border_color(rows,lv_color_hex(0xE6ECF0),0);
   const char*rt[]={ui_tr("Start after"),ui_tr("Clock & date"),draft.mode?ui_tr("Colour palette"):ui_tr("Photo collection")};const char*rs[]={ui_tr("When the device is not in use"),ui_tr("Date details, format and greeting"),draft.mode?ui_tr("Three colours. No background images."):ui_tr("Daily rotation and your own photos.")};
   char duration[32];snprintf(duration,sizeof(duration),ui_trn("%u minutes", (draft.minutes)),draft.minutes);if(!draft.minutes)snprintf(duration,sizeof(duration),"%s",ui_tr("Never"));
   for(int i=0;i<3;i++){if(i){lv_obj_t*d=box(rows,18,i*66,640,1,0xEEF1F6);lv_obj_clear_flag(d,LV_OBJ_FLAG_CLICKABLE);}label(rows,rt[i],18,17+i*66,&lv_font_instrument_sans_medium_14,0x293B44);label(rows,rs[i],18,39+i*66,&lv_font_instrument_sans_medium_10,0x667F90);button(rows,528,11+i*66,130,i==0?duration:i==1?ui_tr("Customize"):ui_tr("Choose"),11+i,false);}
-  const char*presets[]={ui_tr("Signature"),ui_tr("Balance"),ui_tr("Offset")};for(int i=0;i<3;i++){bool selected=draft.active[draft.mode]==i;lv_obj_t*b=control(page,30+i*177,253,166,69,30+i,selected?0xF5FAFF:0xFFFFFF,selected?0x3B87E7:0xDCE4E9);label(b,presets[i],14,18,&lv_font_instrument_sans_medium_14,0x293B44);label(b,i?ui_tr("Personal layout"):ui_tr("Default layout"),14,41,&lv_font_instrument_sans_medium_10,0x8395A1);if(selected)label(b,LV_SYMBOL_OK,140,12,LV_FONT_DEFAULT,0x227AE1);}
+  const char*presets[]={ui_tr("Signature"),ui_tr("Balance"),ui_tr("Offset")};for(int i=0;i<3;i++){bool selected=draft.active[draft.mode]==i;lv_obj_t*b=control(page,30+i*177,253,166,69,30+i,LV_SETTINGS_CHOICE_IDLE_SURFACE);lv_settings_damped_choice_style(b,selected);label(b,presets[i],14,18,&lv_font_instrument_sans_medium_14,selected?LV_SETTINGS_CHOICE_SELECTED_TEXT:LV_SETTINGS_CHOICE_TEXT);label(b,i?ui_tr("Personal layout"):ui_tr("Default layout"),14,41,&lv_font_instrument_sans_medium_10,0x8395A1);if(selected)label(b,LV_SYMBOL_OK,140,12,LV_FONT_DEFAULT,0x227AE1);}
   label(page,ui_tr("3 layouts - saved separately for each mode"),30,340,&lv_font_instrument_sans_medium_10,0x8395A1);link_button(page,428,327,122,ui_tr("Edit position"),14);link_button(page,574,357,208,ui_tr("Restore this mode to defaults"),80);
- }else if(tab==1){const char*opts[]={"1","5","10","30",ui_tr("Never"),ui_tr("Custom")};const int values[]={1,5,10,30,0,-1};bool custom=draft.minutes!=0&&draft.minutes!=1&&draft.minutes!=5&&draft.minutes!=10&&draft.minutes!=30;for(int i=0;i<6;i++){bool selected=i==5?custom:draft.minutes==values[i];lv_obj_t*b=control(body,(i%3)*228,(i/3)*88,218,78,40+i,selected?0xF2F8FF:0xFFFFFF,selected?0x3786E4:0xE0E8EE);label(b,opts[i],16,12,&lv_font_instrument_sans_medium_24,selected?0x2B79CF:0x293B44);label(b,i<4?ui_tr("minutes"):i==4?ui_tr("Stay awake"):ui_tr("1-1440 minutes"),16,48,&lv_font_instrument_sans_medium_12,0x8395A1);}label(body,ui_tr("Applies to both modes. Counting and active tasks prevent standby."),0,192,&lv_font_instrument_sans_medium_12,0x667F90);char s[60];snprintf(s,sizeof(s),ui_trn("Selected: %u minutes", (draft.minutes)),draft.minutes);label(body,draft.minutes?s:ui_tr("Selected: Never"),0,224,&lv_font_instrument_sans_medium_16,0x287BE4);
- }else if(tab==2){const char*fields[]={ui_tr("Year"),ui_tr("Month"),ui_tr("Day"),ui_tr("Weekday")};for(int i=0;i<4;i++)toggle(body,(i%2)*343,(i/2)*58,333,fields[i],50+i,p->date_bits&(1<<i));label(body,ui_tr("DATE STYLE"),0,124,&lv_font_instrument_sans_medium_10,0x8597A3);lv_obj_t*seg=box(body,0,142,676,44,0xE8EDF1);lv_obj_set_style_radius(seg,11,0);const char*styles[]={ui_tr("Editorial"),ui_tr("Spaced"),ui_tr("Numeric")};for(int i=0;i<3;i++){lv_obj_t*b=choice(seg,3+i*224,3,222,38,styles[i],54+i,false,p->date_style==i?0xFFFFFF:0xE8EDF1);lv_obj_set_style_border_width(b,0,0);}toggle(body,0,202,333,ui_tr("12-hour time"),57,p->hour12);toggle(body,343,202,333,ui_tr("Greeting"),58,p->greeting);link_button(page,30,255,200,ui_tr("Edit clock position"),14);button(page,30,310,200,ui_tr("Text colour"),66,false);
+ }else if(tab==1){const char*opts[]={"1","5","10","30",ui_tr("Never"),ui_tr("Custom")};const int values[]={1,5,10,30,0,-1};bool custom=draft.minutes!=0&&draft.minutes!=1&&draft.minutes!=5&&draft.minutes!=10&&draft.minutes!=30;for(int i=0;i<6;i++){bool selected=i==5?custom:draft.minutes==values[i];lv_obj_t*b=control(body,(i%3)*228,(i/3)*88,218,78,40+i,LV_SETTINGS_CHOICE_IDLE_SURFACE);lv_settings_damped_choice_style(b,selected);label(b,opts[i],16,12,&lv_font_instrument_sans_medium_24,selected?LV_SETTINGS_CHOICE_SELECTED_TEXT:LV_SETTINGS_CHOICE_TEXT);label(b,i<4?ui_tr("minutes"):i==4?ui_tr("Stay awake"):ui_tr("1-1440 minutes"),16,48,&lv_font_instrument_sans_medium_12,0x8395A1);}label(body,ui_tr("Applies to both modes. Counting and active tasks prevent standby."),0,192,&lv_font_instrument_sans_medium_12,0x667F90);char s[60];snprintf(s,sizeof(s),ui_trn("Selected: %u minutes", (draft.minutes)),draft.minutes);label(body,draft.minutes?s:ui_tr("Selected: Never"),0,224,&lv_font_instrument_sans_medium_16,0x287BE4);
+ }else if(tab==2){const char*fields[]={ui_tr("Year"),ui_tr("Month"),ui_tr("Day"),ui_tr("Weekday")};for(int i=0;i<4;i++)toggle(body,(i%2)*343,(i/2)*58,333,fields[i],50+i,p->date_bits&(1<<i));label(body,ui_tr("DATE STYLE"),0,124,&lv_font_instrument_sans_medium_10,0x8597A3);lv_obj_t*seg=box(body,0,142,676,44,LV_SETTINGS_SEGMENT_SURFACE);lv_obj_set_style_radius(seg,11,0);const char*styles[]={ui_tr("Editorial"),ui_tr("Spaced"),ui_tr("Numeric")};for(int i=0;i<3;i++){segment_choice(seg,3+i*224,3,222,38,styles[i],54+i,p->date_style==i);}toggle(body,0,202,333,ui_tr("12-hour time"),57,p->hour12);toggle(body,343,202,333,ui_tr("Greeting"),58,p->greeting);link_button(page,30,255,200,ui_tr("Edit clock position"),14);button(page,30,310,200,ui_tr("Text colour"),66,false);
  }else if(tab==5){
   bool locked=draft.mode&&p->auto_text;uint32_t color=locked?text_ink(&draft,p):p->text_color;
   if(draft.mode)toggle(body,0,0,676,ui_tr("Automatic black / white"),94,p->auto_text);else label(body,ui_tr("CUSTOM TEXT COLOUR"),0,12,&lv_font_instrument_sans_medium_14,0x293B44);
@@ -272,11 +282,11 @@ static void render(void){lv_obj_clean(page);memset(&preview,0,sizeof(preview));m
   rgb_controls(body,132,p->color,false);button(page,30,278,220,ui_tr("Text colour"),66,false);
  }else{
 
-  lv_obj_t*seg=box(body,0,0,662,44,0xE7ECF0);lv_obj_set_style_radius(seg,12,0);for(int i=0;i<2;i++){lv_obj_t*b=choice(seg,4+i*329,4,325,36,i?ui_tr("Single photo"):ui_tr("Follow the day"),68+i,false,p->scheduled==!i?0xFFFFFF:0xE7ECF0);lv_obj_set_style_border_width(b,0,0);}
+  lv_obj_t*seg=box(body,0,0,662,44,LV_SETTINGS_SEGMENT_SURFACE);lv_obj_set_style_radius(seg,12,0);for(int i=0;i<2;i++){segment_choice(seg,4+i*329,4,325,36,i?ui_tr("Single photo"):ui_tr("Follow the day"),68+i,p->scheduled==!i);}
   lv_obj_t*schedule=box(body,0,58,662,51,0xFFFFFF);lv_obj_set_style_radius(schedule,12,0);const char*periods[]={"00:00 - 08:00","08:00 - 16:00","16:00 - 24:00"};for(int i=0;i<3;i++){label(schedule,ui_tr(names[i]),12+i*220,8,&lv_font_instrument_sans_medium_12,0x293B44);label(schedule,periods[i],12+i*220,29,&lv_font_instrument_sans_medium_10,0x667F90);}
   label(body,ui_tr("CHOOSE A PHOTO"),0,121,&lv_font_instrument_sans_medium_10,0x8395A1);
 gallery=box(body,0,140,676,156,0xF6F8FA);lv_obj_set_style_bg_opa(gallery,LV_OPA_TRANSP,0);lv_obj_add_flag(gallery,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE|LV_OBJ_FLAG_SCROLL_ELASTIC);lv_obj_clear_flag(gallery,LV_OBJ_FLAG_SCROLL_CHAIN_VER);lv_obj_set_scroll_dir(gallery,LV_DIR_VER);lv_obj_set_scrollbar_mode(gallery,LV_SCROLLBAR_MODE_AUTO);lv_obj_set_style_width(gallery,4,LV_PART_SCROLLBAR);lv_obj_set_style_pad_right(gallery,1,LV_PART_SCROLLBAR);lv_obj_set_style_radius(gallery,2,LV_PART_SCROLLBAR);lv_obj_set_style_bg_opa(gallery,170,LV_PART_SCROLLBAR);lv_obj_set_style_bg_color(gallery,lv_color_hex(0x8395A1),LV_PART_SCROLLBAR);int count=0;
-  for(int order=0;order<STANDBY_PHOTO_COUNT;order++){int i=order<3?order:order==3?STANDBY_PHOTO_MIST:order-1;if(standby_photo_is_imported(i)&&!standby_photo_exists(i-3))continue;char text[32];if(i<3)snprintf(text,sizeof(text),"%s",ui_tr(names[i]));else if(i==STANDBY_PHOTO_MIST)snprintf(text,sizeof(text),"%s",ui_tr("Mist"));else snprintf(text,sizeof(text),ui_tr("USB photo %d"),i-2);lv_obj_t*b=control(gallery,(count%3)*224,(count/3)*101,214,91,70+i,0xE6ECEE,!p->scheduled&&p->photo==i?0x3485E6:0xDCE4E9);count++;lv_obj_set_style_border_post(b,true,0);lv_obj_set_style_clip_corner(b,true,0);lv_obj_t*im=lv_img_create(b);lv_img_set_src(im,standby_photo_path(i));lv_img_set_pivot(im,0,0);lv_img_set_zoom(im,44);lv_obj_clear_flag(im,LV_OBJ_FLAG_CLICKABLE);lv_obj_t*caption=box(b,1,62,212,28,0xFFFFFF);lv_obj_clear_flag(caption,LV_OBJ_FLAG_CLICKABLE);label(caption,text,9,7,&lv_font_instrument_sans_medium_12,0x293B44);if(!p->scheduled&&p->photo==i)label(caption,LV_SYMBOL_OK,190,6,LV_FONT_DEFAULT,0x227AE1);}
+  for(int order=0;order<STANDBY_PHOTO_COUNT;order++){int i=order<3?order:order==3?STANDBY_PHOTO_MIST:order-1;if(standby_photo_is_imported(i)&&!standby_photo_exists(i-3))continue;char text[32];if(i<3)snprintf(text,sizeof(text),"%s",ui_tr(names[i]));else if(i==STANDBY_PHOTO_MIST)snprintf(text,sizeof(text),"%s",ui_tr("Mist"));else snprintf(text,sizeof(text),ui_tr("USB photo %d"),i-2);lv_obj_t*b=control(gallery,(count%3)*224,(count/3)*101,214,91,70+i,0xE6ECEE);count++;lv_obj_set_style_border_post(b,true,0);lv_obj_set_style_clip_corner(b,true,0);lv_obj_t*im=lv_img_create(b);lv_img_set_src(im,standby_photo_path(i));lv_img_set_pivot(im,0,0);lv_img_set_zoom(im,44);lv_obj_clear_flag(im,LV_OBJ_FLAG_CLICKABLE);lv_obj_t*caption=box(b,1,62,212,28,0xFFFFFF);lv_obj_clear_flag(caption,LV_OBJ_FLAG_CLICKABLE);label(caption,text,9,7,&lv_font_instrument_sans_medium_12,0x293B44);if(!p->scheduled&&p->photo==i)label(caption,LV_SYMBOL_OK,190,6,LV_FONT_DEFAULT,0x227AE1);}
   button(page,30,284,190,ui_tr("Import from USB"),64,false);button(page,232,284,318,ui_tr("Text colour"),66,false);if(standby_photo_is_imported(p->photo))link_button(page,30,346,190,ui_tr("Delete selected photo"),67);
   label(page,ui_tr("Changes apply only to this layout. Other layouts stay unchanged."),30,253,&lv_font_instrument_sans_medium_12,0x8395A1);label(page,ui_tr("USB root: un260_delay_01.png ... 99.png\nPNG up to 5 MB. Max 6 photos."),232,338,&lv_font_instrument_sans_medium_12,0x667F90);
  }

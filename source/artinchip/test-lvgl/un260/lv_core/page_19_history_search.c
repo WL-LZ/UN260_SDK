@@ -190,7 +190,7 @@ static void activate_tab(page_19_history_search_t *s, unsigned tab)
     for (unsigned i = 0; i < 3; ++i) {
         selected(s->tabs[i], i == tab);
         lv_obj_set_style_border_side(s->tabs[i],LV_BORDER_SIDE_LEFT,0);
-        lv_obj_set_style_border_width(s->tabs[i],i==tab?3:0,0);
+        lv_obj_set_style_border_width(s->tabs[i],0,0);
         lv_obj_set_style_border_color(s->tabs[i],lv_color_hex(LV_SETTINGS_PRIMARY),0);
         if (i == tab) lv_obj_clear_flag(s->panels[i], LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(s->panels[i], LV_OBJ_FLAG_HIDDEN);
@@ -581,6 +581,7 @@ static void open_editor(page_19_history_search_t *s, unsigned field)
             char year[16];snprintf(year,sizeof(year),"%04u",s->year_value);
             s->year_button=button(card,100,72,220,34,year,editor_numeric_open,s);
             if(!s->year_button) goto failed;
+            lv_settings_damped_action_style(s->year_button,LV_SETTINGS_ACTION_INPUT);
         }
     } else {
         history_query_t query;history_query_number_range_t range={0};
@@ -593,13 +594,13 @@ static void open_editor(page_19_history_search_t *s, unsigned field)
                 SEARCH_BODY,ui_text_get(i ? UI_TEXT_HISTORY_MAXIMUM : UI_TEXT_HISTORY_MINIMUM));
             s->number[i]=button(card,100+i*400,140,360,68,s->number_text[i],editor_numeric_open,s);
             if(!s->number[i] || !s->number_title[i]) goto failed;
+            lv_settings_damped_action_style(s->number[i],LV_SETTINGS_ACTION_INPUT);
             lv_obj_set_style_text_font(lv_damped_button_get_label(s->number[i]),ui_message_font(&lv_font_instrument_sans_semibold_22),0);
         }
     }
     lv_dropdown_set_selected(s->precision,(uint16_t)precision);
     s->editor_error=label(card,28,250,904,32,&lv_font_instrument_sans_medium_16,0xF85820,"");
     lv_obj_t *back=lv_nav_button_create(card,28,306,180,44,editor_cancel,s);
-    if(back)lv_settings_damped_action_style(back,LV_SETTINGS_ACTION_SECONDARY);
     if(!s->editor_error || !back ||
         !button(card,226,306,180,44,ui_text_get(UI_TEXT_SERIAL_ALL),editor_clear,s)) goto failed;
     lv_obj_t *apply=button(card,680,306,250,44,ui_text_get(UI_TEXT_HISTORY_APPLY),editor_apply,s);
@@ -728,7 +729,9 @@ static void refresh_controls(page_19_history_search_t *s)
         const char *display=(field==FIELD_AMOUNT || field==FIELD_PCS) ?
             number_caption(value,caption,sizeof(caption)) : value;
         lv_damped_button_set_text(s->fields[field], value[0] ? display : ui_text_get(UI_TEXT_SERIAL_ALL));
-        selected(s->fields[field],value[0]!=0);
+        if(value[0])lv_obj_add_state(s->fields[field],LV_STATE_CHECKED);
+        else lv_obj_clear_state(s->fields[field],LV_STATE_CHECKED);
+        lv_settings_damped_action_style(s->fields[field],LV_SETTINGS_ACTION_INPUT);
     }
     lv_damped_button_set_enabled(s->fields[FIELD_AMOUNT], s->input.currency[0] != '\0');
     if (!s->input.currency[0]) lv_damped_button_set_text(s->fields[FIELD_AMOUNT], ui_text_get(UI_TEXT_HISTORY_CURRENCY_REQUIRED));
@@ -795,7 +798,6 @@ page_19_history_search_t *page_19_history_search_create(lv_obj_t *parent,
     if(!s->mode)goto failed;
     lv_obj_set_height(s->mode,42);
     lv_dropdown_set_options(s->mode,ui_text_get(UI_TEXT_HISTORY_MODE_OPTIONS));
-    lv_settings_damped_action_style(esc,LV_SETTINGS_ACTION_SECONDARY);
     if(!surface(s->root,1136,24,1,26,LV_SETTINGS_ACTION_DIVIDER,0) ||
        !surface(s->root,16,74,220,310,0xF7F9FB,16))goto failed;
     static const ui_text_id_t tab_names[] = { UI_TEXT_HISTORY_DATE, UI_TEXT_HISTORY_VALUES, UI_TEXT_HISTORY_SERIALS };

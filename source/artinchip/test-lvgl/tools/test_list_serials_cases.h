@@ -69,8 +69,8 @@ static void serials_cases_header(page_02_list_serials_t *s)
     assert(lv_obj_get_width(s->back)==76 && lv_obj_get_height(s->back)==42);
     assert(lv_obj_get_width(s->main_button)>=76 && lv_obj_get_height(s->main_button)==42);
     assert(lv_obj_get_child_cnt(s->back)==1 && lv_obj_get_child_cnt(s->main_button)==1);
-    assert(lv_obj_get_style_bg_color(s->back,0).full==lv_color_hex(0xF5F6F7).full);
-    assert(lv_obj_get_style_bg_color(s->main_button,0).full==lv_color_hex(0xF5F6F7).full);
+    assert(lv_obj_get_style_bg_color(s->back,0).full==lv_color_hex(0xF0F7FA).full);
+    assert(lv_obj_get_style_bg_color(s->main_button,0).full==lv_color_hex(0xF0F7FA).full);
     lv_area_t prev,next,panel;
     lv_obj_get_coords(s->previous,&prev);lv_obj_get_coords(s->next,&next);lv_obj_get_coords(s->panel,&panel);
     assert(lv_area_get_width(&prev)==38 && lv_area_get_width(&next)==38);

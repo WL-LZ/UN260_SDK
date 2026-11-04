@@ -341,8 +341,8 @@ static void print_create_field(lv_obj_t *parent, int y, const char *title,
         &lv_font_instrument_sans_medium_16, 0x1D2B34);
     bool numeric=field==PRINT_FIELD_SPACE_TOP||field==PRINT_FIELD_SPACE_BOTTOM;
     lv_settings_label(parent,numeric?ui_tr("Blank lines / tap value for keyboard"):ui_tr("Tap to edit with keyboard"),20,y+29,&lv_font_instrument_sans_medium_12,0x586B78);
-    lv_obj_t *button = lv_settings_button(parent, numeric?646:350, y, numeric?92:388, 44,
-        "", false, print_input_cb, (void *)(uintptr_t)field);
+    lv_obj_t *button = lv_settings_action_button(parent, numeric?646:350, y, numeric?92:388, 44,
+        "", LV_SETTINGS_ACTION_INPUT, print_input_cb, (void *)(uintptr_t)field);
     field_boxes[field] = button;
     *value = lv_settings_label(button, "", 18, 13,
         &lv_font_instrument_sans_medium_16, 0x1D2B34);
@@ -407,7 +407,7 @@ void ui_page_20_set_print_create(lv_obj_t *parent)
     print_create_field(rows, 122, ui_text_get(UI_TEXT_SETTINGS_PRINT_HEAD2), &value_head2, PRINT_FIELD_HEAD2);
     print_create_field(rows, 183, ui_text_get(UI_TEXT_SETTINGS_PRINT_SPACE_TOP), &value_space_top, PRINT_FIELD_SPACE_TOP);
     print_create_field(rows, 244, ui_text_get(UI_TEXT_SETTINGS_PRINT_SPACE_BOTTOM), &value_space_bottom, PRINT_FIELD_SPACE_BOTTOM);
-    print_cancel_button=lv_settings_button(print_frame.footer,964,0,124,46,ui_tr("Cancel"),false,print_cancel,NULL);
+    print_cancel_button=lv_settings_action_button(print_frame.footer,964,0,124,46,ui_tr("Cancel"),LV_SETTINGS_ACTION_RETURN,print_cancel,NULL);
     print_save_button=lv_settings_button(print_frame.footer,1100,0,132,46,ui_tr("Save"),true,print_save,NULL);
     gesture_service_set_page_policy(UI_PAGE_PRINT_SETTING,NULL,print_gesture);
     lv_label_set_text(print_frame.message, "");

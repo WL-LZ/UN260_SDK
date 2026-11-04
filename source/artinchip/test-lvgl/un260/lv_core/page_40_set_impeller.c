@@ -151,7 +151,7 @@ void ui_page_40_set_impeller_create(lv_obj_t *parent)
         &lv_font_instrument_sans_medium_18, 0x1D2B34);
     lv_obj_t *range = lv_settings_label(panel, ui_tr("Range: 15-50. Default: 30."), 24, 0,
         &lv_font_instrument_sans_medium_14, 0x586B78);
-    value = lv_settings_button(panel, 1060, 0, 144, 58, "", false, keyboard_open, NULL);
+    value = lv_settings_action_button(panel, 1060, 0, 144, 58, "", LV_SETTINGS_ACTION_INPUT, keyboard_open, NULL);
     lv_obj_set_style_text_font(lv_obj_get_child(value, 0),
         &lv_font_instrument_sans_semibold_28, 0);
     lv_settings_align_row(heading, range, value, 18, 70, 8);

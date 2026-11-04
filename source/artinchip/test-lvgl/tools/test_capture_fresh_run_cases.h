@@ -21,7 +21,7 @@ static void capture_fresh_run_regression(void){
  assert(capture_pointer_policy(NULL,LV_EVENT_RELEASED,&tap,0));assert(sends==before&&settings_detail_overlay_is_open());
  assert(test_notice_dialog_holds==1);unsigned roots=lv_obj_get_child_cnt(lv_scr_act());
  for(unsigned i=0;i<16;i++){capture_click_source(i);assert(sends==before&&lv_obj_get_child_cnt(lv_scr_act())==roots);}
- for(unsigned i=0;i<16;i++)assert(lv_obj_get_style_bg_color(capture_source_button(i),0).full==lv_color_hex(0xF4F6F7).full);
+ for(unsigned i=0;i<16;i++)assert(lv_obj_get_style_bg_color(capture_source_button(i),0).full==lv_color_hex(LV_SETTINGS_CHOICE_IDLE_SURFACE).full);
  snapshot("capture-before-run-popup");lv_point_t popup={600,200};
  assert(!capture_pointer_policy(NULL,LV_EVENT_PRESSED,&popup,1));click("OK");
  assert(!settings_detail_overlay_is_open()&&!test_notice_dialog_holds);test_notice_enabled=true;

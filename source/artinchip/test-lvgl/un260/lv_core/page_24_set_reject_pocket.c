@@ -98,7 +98,7 @@ void ui_page_24_set_reject_pocket_create(lv_obj_t *parent)
     lv_settings_label(row,ui_tr("Select a preset or enter a custom capacity."),24,54,&lv_font_instrument_sans_medium_14,0x586B78);
     confirmed = lv_settings_label(row, "", 776, 26,
         &lv_font_instrument_sans_semibold_22, 0x1D2B34);
-    value_button = lv_settings_button(row, 976, 19, 228, 52, ui_tr("Enter capacity"), false, edit, NULL);
+    value_button = lv_settings_action_button(row, 976, 19, 228, 52, ui_tr("Enter capacity"), LV_SETTINGS_ACTION_INPUT, edit, NULL);
     lv_settings_box(row,24,90,1180,1,0xE8EDF0);
     lv_settings_label(row,ui_tr("Quick selection"),24,128,&lv_font_instrument_sans_medium_16,0x536B79);
     lv_obj_t *base=lv_settings_segment_base(row,270,114,934,52);

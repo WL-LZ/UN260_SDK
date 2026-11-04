@@ -436,8 +436,8 @@ void history_test_control_feedback(lv_obj_t *o,uint32_t normal,uint32_t pressed,
         assert(lv_obj_get_style_bg_color(o,0).full==lv_color_hex(normal).full);
     }
     lv_damped_button_set_enabled(o,false);
-    assert(lv_obj_get_style_bg_color(o,0).full==lv_color_hex(history && o==history->actions[3]?0xF0F2F5:LV_SETTINGS_DISABLED_SURFACE).full);
-    assert(lv_obj_get_style_text_color(text,0).full==lv_color_hex(history && o==history->actions[3]?0xADB7BD:LV_SETTINGS_DISABLED_TEXT).full);
+    assert(lv_obj_get_style_bg_color(o,0).full==lv_color_hex(LV_SETTINGS_DISABLED_SURFACE).full);
+    assert(lv_obj_get_style_text_color(text,0).full==lv_color_hex(LV_SETTINGS_DISABLED_TEXT).full);
     lv_damped_button_set_enabled(o,true);
     assert(lv_obj_get_style_bg_color(o,0).full==lv_color_hex(normal).full);
 }
@@ -466,7 +466,7 @@ static void history_test_selection_and_delete(void)
     assert(history_test_click_record(0) == 1000);
     assert(history_test_click_record(1) == 998);
     assert(history->selected_count == 2 && !history->detail_mode);
-    history_test_control_feedback(history->actions[2],LV_SETTINGS_DESTRUCTIVE,LV_SETTINGS_DESTRUCTIVE_PRESSED,0xFFFFFF);
+    history_test_control_feedback(history->actions[2],0xFBECEE,0xF3D8DD,0xAD3342);
     history_test_bmp("history-selected");
     history_test_click(history->actions[1]);
     assert(test_exported_count == 2 && test_exported_ids[0] == 1000 && test_exported_ids[1] == 998);
@@ -696,7 +696,7 @@ static void history_test_capacity_setting(unsigned baseline_timers)
     history_test_bmp("history-capacity-input-keyboard");
     ui_page_19_history_suspend();assert(!history->capacity_keyboard && !settings_detail_overlay_is_open());
     ui_page_19_history_destroy();history_test_tick(300);assert(history_test_timers()==baseline_timers);
-    puts("PASS: capacity input bounds, newest retention confirmation/cancel, custom 337, keyboard suspend/destroy cleanup, blue centered sort and borderless Search");
+    puts("PASS: capacity input bounds, newest retention confirmation/cancel, custom 337, keyboard suspend/destroy cleanup, secondary centered sort and borderless Search");
 }
 
 static void history_test_capacity_and_missing_detail(unsigned baseline_timers)
@@ -1166,7 +1166,7 @@ int main(void)
         assert(lv_obj_get_y(history->actions[i])==16);
         assert(lv_obj_get_height(history->actions[i])==42);
         if(!lv_obj_has_state(history->actions[i],LV_STATE_DISABLED))
-            assert(lv_obj_get_style_text_color(label,0).full==lv_color_hex(i==0?0xFFFFFF:i==3?0x20313B:LV_SETTINGS_ACTION_TEXT).full);
+            assert(lv_obj_get_style_text_color(label,0).full==lv_color_hex(i==3?0x2E687E:0x205795).full);
     }
     assert(lv_obj_is_visible(history->empty));
     history_test_bmp("history-empty");
@@ -1174,8 +1174,8 @@ int main(void)
     assert(history_test_timers() == baseline_timers);
     history_test_fixtures(20);
     ui_page_19_history_create(lv_scr_act()); history_test_tick(100);
-    history_test_control_feedback(history->actions[0],LV_SETTINGS_PRIMARY,LV_SETTINGS_PRIMARY_PRESSED,0xFFFFFF);
-    history_test_control_feedback(history->actions[3],0xE9EEF4,lv_damped_button_pressed_color(lv_color_hex(0xE9EEF4)).full&0xFFFFFF,0x20313B);
+    history_test_control_feedback(history->actions[0],0xE8F0FC,0xD2E2F8,0x205795);
+    history_test_control_feedback(history->actions[3],0xF0F7FA,0xDCECF2,0x2E687E);
     history_test_bmp("history-full");
     history_test_list_and_detail();
     history_test_selection_and_delete();

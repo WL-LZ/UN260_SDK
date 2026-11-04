@@ -48,7 +48,7 @@ void settings_detail_dialog_hide(void){}
 bool settings_detail_overlay_is_open(void){return overlay;}
 bool settings_detail_keyboard_show(const char*a,const char*b,uint16_t c,settings_detail_keyboard_mode_t d,settings_detail_keyboard_cb_t e,void*f){(void)a;(void)b;(void)c;(void)d;(void)e;(void)f;return true;}
 void settings_detail_keyboard_hide(void){}
-lv_obj_t*settings_detail_create_button(lv_obj_t*p,lv_coord_t x,lv_coord_t y,lv_coord_t w,lv_coord_t h,const char*t,lv_color_t c,lv_event_cb_t cb,void*u){lv_obj_t*b=lv_btn_create(p);lv_obj_set_pos(b,x,y);lv_obj_set_size(b,w,h);lv_obj_set_style_bg_color(b,c,0);lv_obj_set_style_bg_opa(b,255,0);lv_obj_t*l=lv_label_create(b);lv_label_set_text(l,t);lv_obj_set_style_text_font(l,&lv_font_instrument_sans_medium_16,0);lv_obj_center(l);lv_obj_add_event_cb(b,cb,LV_EVENT_CLICKED,u);return b;}
+lv_obj_t*settings_detail_create_button(lv_obj_t*p,lv_coord_t x,lv_coord_t y,lv_coord_t w,lv_coord_t h,const char*t,lv_settings_action_role_t role,lv_event_cb_t cb,void*u){return lv_settings_action_button(p,x,y,w,h,t,role,cb,u);}
 #include "un260/app_service/app_standby_runtime.c"
 #include "un260/machine_state/machine_fault.c"
 static bool counting_block, fault_block, aging_block, upgrade_block, qr_block;

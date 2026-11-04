@@ -24,6 +24,7 @@ typedef uint8_t lv_opa_t;
 #define LV_OBJ_FLAG_HIDDEN 4
 #define LV_STATE_PRESSED 1
 #define LV_STATE_DISABLED 2
+#define LV_STYLE_TEXT_COLOR 1
 #define LV_SYMBOL_BACKSPACE "BACKSPACE"
 #define LV_SYMBOL_EYE_OPEN "EYE_OPEN"
 #define LV_SYMBOL_EYE_CLOSE "EYE_CLOSE"
@@ -128,6 +129,10 @@ PIN_STYLE_STUB(lv_obj_set_style_border_width, int)
 PIN_STYLE_STUB(lv_obj_set_style_border_color, uint32_t)
 PIN_STYLE_STUB(lv_obj_set_style_text_font, const lv_font_t *)
 PIN_STYLE_STUB(lv_obj_set_style_text_color, uint32_t)
+PIN_STYLE_STUB(lv_obj_set_style_img_recolor, uint32_t)
+PIN_STYLE_STUB(lv_obj_set_style_img_recolor_opa, int)
+static inline bool lv_obj_remove_local_style_prop(lv_obj_t *o,int prop,int selector)
+{assert(lv_obj_is_valid(o));LV_UNUSED(prop);LV_UNUSED(selector);return true;}
 PIN_STYLE_STUB(lv_obj_set_style_text_letter_space, int)
 PIN_STYLE_STUB(lv_obj_set_style_text_align, int)
 PIN_STYLE_STUB(lv_obj_set_style_base_dir, int)
@@ -248,12 +253,16 @@ static inline lv_obj_t *settings_detail_create_button(lv_obj_t *parent,int x,int
 
 typedef struct { const char *title, *subtitle, *icon; lv_event_cb_t back; void *user_data; } lv_settings_header_t;
 typedef struct { lv_obj_t *root, *body, *footer, *back, *message; } lv_settings_frame_t;
+typedef enum {LV_SETTINGS_ACTION_SECONDARY,LV_SETTINGS_ACTION_PRIMARY,LV_SETTINGS_ACTION_DESTRUCTIVE,
+ LV_SETTINGS_ACTION_RETURN,LV_SETTINGS_ACTION_INPUT,LV_SETTINGS_ACTION_DESTRUCTIVE_ENTRY} lv_settings_action_role_t;
 static inline lv_obj_t *lv_settings_label(lv_obj_t *parent,const char *text,int x,int y,const lv_font_t *font,uint32_t color)
 { return settings_detail_create_label(parent,text,font,color,x,y); }
 static inline lv_obj_t *lv_settings_box(lv_obj_t *p,int x,int y,int w,int h,uint32_t color)
 {lv_obj_t *o=settings_detail_create_card(p,x,y,w,h);o->color=color;return o;}
 static inline lv_obj_t *lv_settings_button(lv_obj_t *parent,int x,int y,int w,int h,const char *text,bool primary,lv_event_cb_t cb,void *data)
 { LV_UNUSED(primary); return settings_detail_create_button(parent,x,y,w,h,text,0,cb,data); }
+static inline lv_obj_t *lv_settings_action_button(lv_obj_t *parent,int x,int y,int w,int h,const char *text,lv_settings_action_role_t role,lv_event_cb_t cb,void *data)
+{ LV_UNUSED(role); return settings_detail_create_button(parent,x,y,w,h,text,0,cb,data); }
 static inline lv_settings_frame_t lv_settings_frame_create(lv_obj_t *parent,const lv_settings_header_t *header)
 {
     lv_settings_frame_t frame={0};

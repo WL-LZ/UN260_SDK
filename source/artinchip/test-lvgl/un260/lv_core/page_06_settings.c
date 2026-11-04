@@ -210,7 +210,9 @@ static void render(void){
  const char *subtitle=scope->kind==SETTINGS_CATEGORY?ui_tr(scope->hint):ui_tr(cat->title);
  lv_settings_header_t h={.title=ui_tr(scope->title),.subtitle=subtitle,.back=back_event_cb};
  lv_settings_header(view,256,18,1000,&h);
- grid=lv_settings_list(view,253,84,1006,274);
+ grid=lv_settings_list(view,253,84,1013,274);
+ /* Move only the scroll rail; the extra right padding preserves card geometry. */
+ lv_obj_set_style_pad_right(grid,19,0);
  lv_obj_t *groups[SETTINGS_NODE_MAX]={0};
  for(size_t i=0;i<catalog_count;i++)if(catalog[i].parent&&!strcmp(catalog[i].parent,scope->id)){
   const settings_node_t *n=catalog+i;char value[48];value_for(n,value,sizeof(value));

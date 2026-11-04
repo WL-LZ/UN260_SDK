@@ -277,8 +277,9 @@ static lv_obj_t *button_create(lv_obj_t *parent,int x,int y,int w,int h,
         return NULL;
     }
     lv_obj_set_pos(o,x,y); lv_obj_set_size(o,w,h);
-    lv_obj_set_style_border_width(o,1,0);
-    lv_obj_set_style_border_color(o,lv_color_hex(LINE),0);
+    lv_obj_set_style_border_width(o,0,0);
+    lv_obj_set_style_border_width(o,0,LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(o,0,LV_STATE_DISABLED);
     if (!lv_obj_add_event_cb(o,cb,LV_EVENT_CLICKED,data)) {
         lv_obj_del(o);
         return NULL;
@@ -679,11 +680,6 @@ void ui_page_02_list_create(lv_obj_t *parent)
         view->actions[i]=button_create(view->page,1168,PANEL_Y+i*(ACTION_HEIGHT+ACTION_GAP),96,ACTION_HEIGHT,
             &lv_font_instrument_sans_semibold_12,action_layouts[i].clicked,NULL);
         if (!view->actions[i]) goto creation_failed;
-        if(i==LIST_ACTION_HISTORY || i==LIST_ACTION_SEARCH) {
-            lv_obj_set_style_border_width(view->actions[i],0,0);
-            lv_obj_set_style_border_width(view->actions[i],0,LV_STATE_PRESSED);
-            lv_obj_set_style_border_width(view->actions[i],0,LV_STATE_DISABLED);
-        }
         lv_obj_t *label=lv_damped_button_get_label(view->actions[i]);
         if (!label) goto creation_failed;
         lv_obj_set_size(label,90,23); lv_obj_align(label,LV_ALIGN_BOTTOM_MID,0,-6);

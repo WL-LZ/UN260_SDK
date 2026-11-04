@@ -57,18 +57,19 @@ static void output_view(lv_obj_t *b)
         lv_obj_t *graphic=box(b,716,52,312,76,PANEL,18);icon(graphic,MICON("qr",38),137,19,BLUE);
         label(b,716,142,312,ui_tr("Take your result with you"),&lv_font_instrument_sans_semibold_21,INK);
         lv_obj_t *hint=small(b,716,182,312,ui_tr("Summary is always included. Extra content follows your selections."));lv_obj_set_style_text_line_space(hint,5,0);
-        lv_obj_t *show=button(b,716,248,312,44,ui_tr("Preview QR export"),A_QR,true);
+        lv_obj_t *show=button(b,716,248,312,44,ui_tr("Preview QR export"),A_QR,false);
         char payload[3072];if(!available||!ui_qr_data_build_summary(payload,sizeof(payload)))lv_obj_add_state(show,LV_STATE_DISABLED);
         return;
     }
     print_config_value_t config;print_config_get(&config);output_observed=config;
     if(output_layout){
-        button(b,867,0,161,36,ui_tr("Back to receipt"),807,false);
+        lv_obj_t *back=button(b,867,0,161,36,ui_tr("Back to receipt"),807,false);
+        lv_settings_action_style(back,LV_SETTINGS_ACTION_RETURN);
         lv_obj_t *fields=box(b,0,48,1028,248,PANEL,18);
         const char *titles[]={ui_tr("Second heading"),ui_tr("Top blank lines"),ui_tr("Bottom blank lines")};
         for(unsigned i=0;i<3;i++){
             text(fields,20,25+i*69,570,titles[i]);
-            if(!i)white_button(fields,618,15,390,44,*config.head2?config.head2:ui_tr("Not set"),804);
+            if(!i)input_button(fields,618,15,390,44,*config.head2?config.head2:ui_tr("Not set"),804);
             else{
                 unsigned value=i==1?config.space_top:config.space_bottom;
                 char custom[24];snprintf(custom,sizeof(custom),value>2?ui_tr("Custom: %u"):ui_tr("Custom"),value);
@@ -164,6 +165,6 @@ static void help_view(lv_obj_t *b)
         label(report,55,21,283,ui_tr("Support report"),&lv_font_instrument_sans_semibold_21,INK);
         small(report,20,63,318,ui_tr("Versions, configuration and current fault codes in one report."));
         small(report,20,122,318,ui_tr("Serials, note images and operator photos are excluded."));
-        white_button(report,20,187,318,44,ui_tr("Review report contents"),A_DIAGNOSTICS);
+        button(report,20,187,318,44,ui_tr("Review report contents"),A_DIAGNOSTICS,false);
     }
 }

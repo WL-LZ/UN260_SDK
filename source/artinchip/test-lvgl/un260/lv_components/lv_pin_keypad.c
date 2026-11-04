@@ -265,8 +265,8 @@ static void pin_apply_layout(lv_pin_keypad_t *keypad, bool compact)
     lv_obj_set_size(keypad->cancel,compact?40:368,compact?36:44);
     lv_damped_button_set_text(keypad->cancel,compact?"":ui_tr("Cancel"));
     lv_damped_button_set_exact_palette(keypad->cancel,
-        lv_color_hex(compact?0xFBFCFD:LV_SETTINGS_CONTROL_SURFACE),
-        lv_color_hex(compact?0xE2E9EE:LV_SETTINGS_CONTROL_PRESSED));
+        lv_color_hex(LV_SETTINGS_RETURN_SURFACE),
+        lv_color_hex(LV_SETTINGS_RETURN_PRESSED));
     lv_obj_center(keypad->close_icon);
     lv_img_set_src(keypad->backspace_icon,compact?
         LVGL_DIR "pin_icons/erase.png":LVGL_DIR "popup_icons/backspace.png");
@@ -342,8 +342,8 @@ bool lv_pin_keypad_create(lv_pin_keypad_t *keypad, lv_obj_t *parent,
         lv_obj_add_flag(keypad->digits[i], LV_OBJ_FLAG_HIDDEN);
     }
     const lv_damped_button_style_t eye_style = {
-        .normal_color = LV_SETTINGS_CONTROL_SURFACE, .pressed_color = LV_SETTINGS_CONTROL_PRESSED,
-        .text_color = LV_SETTINGS_ACTION_TEXT, .disabled_color = LV_SETTINGS_DISABLED_SURFACE,
+        .normal_color = LV_SETTINGS_SECONDARY_SURFACE, .pressed_color = LV_SETTINGS_SECONDARY_PRESSED,
+        .text_color = LV_SETTINGS_SECONDARY_TEXT, .disabled_color = LV_SETTINGS_DISABLED_SURFACE,
         .disabled_text_color = LV_SETTINGS_DISABLED_TEXT, .radius = 10
     };
     keypad->eye = lv_damped_button_create(card, &eye_style, ui_tr("Show"),
@@ -352,14 +352,15 @@ bool lv_pin_keypad_create(lv_pin_keypad_t *keypad, lv_obj_t *parent,
     lv_obj_set_pos(keypad->eye, 288, 148);
     lv_obj_set_size(keypad->eye, 104, 48);
     lv_obj_set_style_shadow_width(keypad->eye, 0, 0);
+    lv_obj_set_style_border_width(keypad->eye, 0, 0);
     lv_obj_add_event_cb(keypad->eye, pin_visibility_event, LV_EVENT_CLICKED, keypad);
     keypad->cursor = pin_shape(card, 44, 196, 20, 2, 0x1462CC, 0);
     keypad->status = pin_label(card, PIN_IDLE_STATUS,
         &lv_font_instrument_sans_medium_14, 0x586B78, 24, 220);
     lv_obj_set_width(keypad->status, 368);
     const lv_damped_button_style_t cancel_style = {
-        .normal_color = LV_SETTINGS_CONTROL_SURFACE, .pressed_color = LV_SETTINGS_CONTROL_PRESSED,
-        .text_color = LV_SETTINGS_ACTION_TEXT, .disabled_color = LV_SETTINGS_DISABLED_SURFACE,
+        .normal_color = LV_SETTINGS_RETURN_SURFACE, .pressed_color = LV_SETTINGS_RETURN_PRESSED,
+        .text_color = LV_SETTINGS_RETURN_TEXT, .disabled_color = LV_SETTINGS_DISABLED_SURFACE,
         .disabled_text_color = LV_SETTINGS_DISABLED_TEXT, .radius = 10
     };
     keypad->cancel = lv_damped_button_create(card, &cancel_style, ui_tr("Cancel"),
@@ -368,9 +369,17 @@ bool lv_pin_keypad_create(lv_pin_keypad_t *keypad, lv_obj_t *parent,
     lv_obj_set_pos(keypad->cancel, 24, 260);
     lv_obj_set_size(keypad->cancel, 368, 44);
     lv_obj_set_style_shadow_width(keypad->cancel, 0, 0);
+    lv_obj_set_style_border_width(keypad->cancel, 0, 0);
+    lv_obj_set_style_text_color(keypad->cancel,lv_color_hex(LV_SETTINGS_RETURN_TEXT),0);
+    lv_obj_set_style_text_color(keypad->cancel,lv_color_hex(LV_SETTINGS_RETURN_PRESSED_TEXT),LV_STATE_PRESSED);
+    lv_obj_set_style_text_color(keypad->cancel,lv_color_hex(LV_SETTINGS_DISABLED_TEXT),LV_STATE_DISABLED);
+    lv_obj_remove_local_style_prop(lv_damped_button_get_label(keypad->cancel),LV_STYLE_TEXT_COLOR,0);
+    lv_obj_remove_local_style_prop(lv_damped_button_get_label(keypad->cancel),LV_STYLE_TEXT_COLOR,LV_STATE_DISABLED);
     lv_obj_add_event_cb(keypad->cancel, pin_cancel_event, LV_EVENT_CLICKED, keypad);
     keypad->close_icon=lv_img_create(keypad->cancel);
     lv_img_set_src(keypad->close_icon,LVGL_DIR "pin_icons/close.png");
+    lv_obj_set_style_img_recolor(keypad->close_icon,lv_color_hex(LV_SETTINGS_RETURN_TEXT),0);
+    lv_obj_set_style_img_recolor_opa(keypad->close_icon,LV_OPA_COVER,0);
     lv_obj_clear_flag(keypad->close_icon,LV_OBJ_FLAG_CLICKABLE|LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(keypad->close_icon,LV_OBJ_FLAG_HIDDEN);
     for (unsigned i = 0; i < 12; ++i) {
