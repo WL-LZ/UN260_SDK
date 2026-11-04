@@ -11,6 +11,7 @@
 #include "page_collection.h"
 #include "un260/lv_components/lv_loading_orbit.h"
 #include "un260/app_service/app_command_runtime.h"
+#include "un260/app_service/app_collection.h"
 #include "un260/currency/currency_metadata.h"
 #include "un260/font/main_fonts.h"
 #include "un260/lv_core/lv_page_manager.h"
@@ -429,12 +430,10 @@ static void main_time_timer_cb(lv_timer_t* t)
 
 static void page_01_main_send_init_protocol(void) //主界面首次进入时发送初始化协议
 {
-    uint8_t sub = 0x02;
-
     if (s_main_init_protocol_sent) return;
     if (!protocol_send_is_ready()) return;
 
-    protocol_send(0xC0, &sub, 1); //FD DF 06 C0 02：通知下位机进入采集误报数据模式
+    (void)app_collection_request_initial(); // Preserve the initial C0 02 request and track its reply.
 
     /* 预留：后续新增主界面首次进入协议时，继续在这里统一发送。 */
 

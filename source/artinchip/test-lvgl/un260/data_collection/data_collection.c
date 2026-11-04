@@ -8,6 +8,8 @@
 
 typedef struct {
     bool pending;
+    bool automatic;
+    bool automatic_late;
     data_collect_mode_t target_mode;
     uint32_t started_ms;
     data_collect_mode_t late_target_mode;
@@ -16,6 +18,7 @@ typedef struct {
 } data_collection_request_t;
 
 static data_collect_mode_t g_mode = DATA_COLLECT_MODE_NONE;
+static bool g_uncertain;
 static uint16_t g_pcs;
 static char g_status[320];
 static ui_message_t g_status_info={.key=UI_N_("Please select a collection mode.")};
@@ -38,6 +41,7 @@ static uint8_t data_collection_mode_reply_status(data_collect_mode_t mode)
 static void data_collection_request_finish(void)
 {
     g_request.pending = false;
+    g_request.automatic = false;
     g_request.target_mode = DATA_COLLECT_MODE_NONE;
     g_request.started_ms = 0;
     g_request.previous_status.key[0] = '\0';
@@ -46,6 +50,11 @@ static void data_collection_request_finish(void)
 data_collect_mode_t data_collection_state_mode(void)
 {
     return g_mode;
+}
+
+bool data_collection_state_uncertain(void)
+{
+    return g_uncertain;
 }
 
 uint16_t data_collection_state_pcs(void)
@@ -70,6 +79,7 @@ void data_collection_state_select_mode(data_collect_mode_t mode, const char *sta
 {
     if (mode != DATA_COLLECT_MODE_ALL && mode != DATA_COLLECT_MODE_FALSE) return;
     g_mode = mode;
+    g_uncertain = false;
     g_pcs = 0;
     data_collection_state_set_status(status);
 }
@@ -82,6 +92,10 @@ void data_collection_state_reset_pcs(void)
 void data_collection_state_exit(const char *status)
 {
     g_mode = DATA_COLLECT_MODE_NONE;
+    g_uncertain = false;
+    g_request.automatic_late = false;
+    g_request.late_target_mode = DATA_COLLECT_MODE_NONE;
+    g_request.late_guard_started_ms = 0;
     g_pcs = 0;
     data_collection_state_set_status(status);
 }
@@ -97,12 +111,27 @@ bool data_collection_request_begin(data_collect_mode_t target_mode,
 
     g_request.previous_status=g_status_info;
     g_request.pending = true;
+    g_request.automatic = false;
+    g_request.automatic_late = false;
     g_request.target_mode = target_mode;
     g_request.started_ms = now_ms;
     g_request.late_target_mode = DATA_COLLECT_MODE_NONE;
     g_request.late_guard_started_ms = 0;
     data_collection_state_set_status(status);
     return true;
+}
+
+bool data_collection_request_begin_automatic(data_collect_mode_t target_mode,
+                                             const char *status, uint32_t now_ms)
+{
+    if (!data_collection_request_begin(target_mode, status, now_ms)) return false;
+    g_request.automatic = true;
+    return true;
+}
+
+bool data_collection_request_is_automatic(void)
+{
+    return g_request.pending && g_request.automatic;
 }
 
 void data_collection_request_cancel(void)
@@ -129,9 +158,12 @@ bool data_collection_request_take_timeout(uint32_t now_ms)
     }
 
     target_mode = g_request.target_mode;
+    const bool automatic = g_request.automatic;
     data_collection_request_finish();
+    g_request.automatic_late = automatic;
+    if (automatic) g_uncertain = true;
     g_request.late_target_mode = target_mode;
-    g_request.late_guard_started_ms = now_ms;
+    g_request.late_guard_started_ms = automatic ? 0 : now_ms;
     data_collection_state_set_status(UI_N_("Collection mode request timed out."));
     return true;
 }
@@ -166,6 +198,27 @@ data_collection_reply_result_t data_collection_reply_handle(
     if (buf == NULL || len < 6) return DATA_COLLECTION_REPLY_INVALID;
 
     reply_status = buf[4];
+    /* Keep the automatic request as a late-reply owner until a newer user
+     * request takes over. The wire has no transaction ID, so same-command
+     * duplicate replies cannot be distinguished from this confirmation. */
+    if (g_request.automatic_late && !g_request.pending &&
+        reply_status == data_collection_mode_reply_status(g_request.late_target_mode)) {
+        data_collect_mode_t target_mode = g_request.late_target_mode;
+        g_request.automatic_late = false;
+        g_request.late_target_mode = DATA_COLLECT_MODE_NONE;
+        g_request.late_guard_started_ms = 0;
+        if (target_mode == DATA_COLLECT_MODE_NONE) {
+            data_collection_state_exit(UI_N_("Collection mode exited."));
+            return DATA_COLLECTION_REPLY_EXITED;
+        }
+        data_collection_state_select_mode(target_mode,
+            target_mode == DATA_COLLECT_MODE_ALL ?
+                UI_N_("ALL DATA collection mode ready.") :
+                UI_N_("FALSE REPORT collection mode ready."));
+        return DATA_COLLECTION_REPLY_REQUEST_CONFIRMED;
+    }
+    if (g_request.automatic_late && !g_request.pending && reply_status == 0x06)
+        g_request.automatic_late = false;
     if (data_collection_reply_is_guarded(reply_status, now_ms)) {
         return DATA_COLLECTION_REPLY_IGNORED;
     }
@@ -187,21 +240,16 @@ data_collection_reply_result_t data_collection_reply_handle(
                 UI_N_("FALSE REPORT collection mode ready."));
         return DATA_COLLECTION_REPLY_REQUEST_CONFIRMED;
     }
-    if (g_request.pending &&
-        (reply_status == 0x01 || reply_status == 0x03 ||
-         reply_status == 0xFF)) {
+    if (reply_status == 0x01 || reply_status == 0x03 ||
+        (g_request.pending && reply_status == 0xFF)) {
+        /* Ready replies confirm a mode request. Without an owner they may be
+         * stale and must not contradict a later confirmed exit. */
         return DATA_COLLECTION_REPLY_IGNORED;
     }
 
     switch (reply_status) {
-    case 0x01:
-        status = UI_N_("ALL DATA collection mode ready.");
-        break;
     case 0x02:
         status = UI_N_("Collection completed. Data can be copied from USB.");
-        break;
-    case 0x03:
-        status = UI_N_("FALSE REPORT collection mode ready.");
         break;
     case 0x05:
         status = UI_N_("USB ready. You can start counting.");
@@ -209,6 +257,7 @@ data_collection_reply_result_t data_collection_reply_handle(
     case 0x06:
         status = UI_N_("USB not ready. Collection mode error.");
         if (g_request.pending) {
+            if (g_request.automatic) g_uncertain = true;
             data_collection_request_finish();
             data_collection_state_set_status(status);
             return DATA_COLLECTION_REPLY_REQUEST_FAILED;

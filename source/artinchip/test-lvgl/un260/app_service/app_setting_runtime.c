@@ -242,10 +242,12 @@ void app_setting_runtime_poll(uint32_t now_ms)
         ui_page_30_set_factory_on_timeout();
     }
 
+    const bool collection_automatic = data_collection_request_is_automatic();
     if (data_collection_request_take_timeout(now_ms)) {
         uart_debug_printf("data collection mode request timeout\n");
         page_06_data_collection_refresh();
-        app_setting_notice_timeout("settings.data_collection", UI_N_("Data collection"));
+        if (!collection_automatic)
+            app_setting_notice_timeout("settings.data_collection", UI_N_("Data collection"));
     }
 
 }

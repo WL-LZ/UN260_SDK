@@ -17,6 +17,7 @@
 static lv_obj_t *body, *badge, *badge_all, *badge_reject;
 static bool data_collection_dirty=true,data_collection_snapshot_valid;
 static data_collect_mode_t data_collection_last_mode;
+static bool data_collection_last_uncertain;
 static int data_collection_last_pcs;
 static char data_collection_last_status[128];
 static lv_obj_t *dc_btn_all,*dc_btn_false,*dc_btn_start,*dc_btn_disable,*dc_btn_retry;
@@ -102,6 +103,7 @@ void page_collection_refresh(void)
 {
     data_collect_mode_t mode;
     bool request_pending;
+    bool uncertain;
     int pcs;
     const char *status;
     bool mode_changed;
@@ -115,11 +117,13 @@ void page_collection_refresh(void)
 
     mode = data_collection_state_mode();
     request_pending = data_collection_request_pending();
+    uncertain = data_collection_state_uncertain();
     pcs = data_collection_state_pcs();
     status = data_collection_state_status();
     if (status == NULL) status = "";
     mode_changed = data_collection_dirty || !data_collection_snapshot_valid ||
-                   mode != data_collection_last_mode;
+                   mode != data_collection_last_mode ||
+                   uncertain != data_collection_last_uncertain;
     pcs_changed = data_collection_dirty || !data_collection_snapshot_valid ||
                   pcs != data_collection_last_pcs;
     status_changed = data_collection_dirty || !data_collection_snapshot_valid ||
@@ -130,7 +134,7 @@ void page_collection_refresh(void)
     lv_obj_t *actions[]={dc_btn_all,dc_btn_false,dc_btn_start,dc_btn_disable};
     for(unsigned i=0;i<4;i++){
         bool enabled=!request_pending&&!busy&&(i!=2||ready)&&
-                     (i<2||mode!=DATA_COLLECT_MODE_NONE);
+                     (i<2||mode!=DATA_COLLECT_MODE_NONE||(i==3&&uncertain));
         if(enabled)settings_detail_action_wait(actions[i], NULL);
         else settings_detail_action_wait(actions[i], request_pending ? UI_N_("Wait for the current collection request to finish.") : busy ? UI_N_("Stop counting before changing collection.") : !ready ? work_mode_service_status_msgid() : UI_N_("Select All notes or Rejected notes first."));
     }
@@ -149,7 +153,9 @@ void page_collection_refresh(void)
         update_data_collect_btn_style(dc_btn_false, dc_label_false, dc_check_false,
                                       mode == DATA_COLLECT_MODE_FALSE);
         if (dc_mode_value_label) {
-            lv_label_set_text(dc_mode_value_label, get_data_collect_mode_name(mode));
+            lv_label_set_text(dc_mode_value_label,
+                uncertain && mode == DATA_COLLECT_MODE_NONE ? ui_tr("Unknown") :
+                get_data_collect_mode_name(mode));
         }
     }
 
@@ -162,6 +168,7 @@ void page_collection_refresh(void)
     }
 
     data_collection_last_mode = mode;
+    data_collection_last_uncertain = uncertain;
     data_collection_last_pcs = pcs;
     snprintf(data_collection_last_status, sizeof(data_collection_last_status),
              "%s", status);
@@ -202,7 +209,8 @@ static void data_collect_disable_btn_event_cb(lv_event_t *event)
 {
     (void)event;
     if (app_command_runtime_count_start_busy() ||
-        data_collection_state_mode() == DATA_COLLECT_MODE_NONE) return;
+        (data_collection_state_mode() == DATA_COLLECT_MODE_NONE &&
+         !data_collection_state_uncertain())) return;
     (void)app_collection_request(DATA_COLLECT_MODE_NONE);
     page_collection_refresh();
 }

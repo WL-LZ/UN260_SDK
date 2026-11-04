@@ -4,9 +4,9 @@
 #include "un260/lv_system/app_clock.h"
 #include "un260/lv_system/ui_i18n.h"
 
-bool app_collection_request(data_collect_mode_t mode)
+static bool request(data_collect_mode_t mode, bool automatic)
 {
-    if (app_command_runtime_count_start_busy()) return false;
+    if (!automatic && app_command_runtime_count_start_busy()) return false;
     const char *status;
     switch (mode) {
     case DATA_COLLECT_MODE_ALL: status=UI_N_("Requesting all-note collection"); break;
@@ -14,7 +14,10 @@ bool app_collection_request(data_collect_mode_t mode)
     case DATA_COLLECT_MODE_NONE: status=UI_N_("Exiting collection mode..."); break;
     default: return false;
     }
-    if (!data_collection_request_begin(mode,status,app_clock_uptime_ms())) return false;
+    bool begun = automatic ?
+        data_collection_request_begin_automatic(mode,status,app_clock_uptime_ms()) :
+        data_collection_request_begin(mode,status,app_clock_uptime_ms());
+    if (!begun) return false;
     uint8_t command=mode==DATA_COLLECT_MODE_NONE ? 0xFF : (uint8_t)mode;
     if (protocol_send(0xC0,&command,1)!=6) {
         data_collection_request_cancel();
@@ -22,4 +25,14 @@ bool app_collection_request(data_collect_mode_t mode)
         return false;
     }
     return true;
+}
+
+bool app_collection_request(data_collect_mode_t mode)
+{
+    return request(mode, false);
+}
+
+bool app_collection_request_initial(void)
+{
+    return request(DATA_COLLECT_MODE_FALSE, true);
 }

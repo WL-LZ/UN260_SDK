@@ -24,6 +24,7 @@ typedef enum {
 } data_collection_reply_result_t;
 
 data_collect_mode_t data_collection_state_mode(void);
+bool data_collection_state_uncertain(void);
 uint16_t data_collection_state_pcs(void);
 const char *data_collection_state_status(void);
 void data_collection_state_select_mode(data_collect_mode_t mode, const char *status);
@@ -35,6 +36,9 @@ void data_collection_state_exit(const char *status);
 bool data_collection_request_begin(data_collect_mode_t target_mode,
                                    const char *status,
                                    uint32_t now_ms);
+bool data_collection_request_begin_automatic(data_collect_mode_t target_mode,
+                                             const char *status, uint32_t now_ms);
+bool data_collection_request_is_automatic(void);
 void data_collection_request_cancel(void);
 bool data_collection_request_pending(void);
 bool data_collection_request_take_timeout(uint32_t now_ms);

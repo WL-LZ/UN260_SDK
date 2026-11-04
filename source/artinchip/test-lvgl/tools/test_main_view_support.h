@@ -142,7 +142,7 @@ void work_mode_service_retry(void){}
 bool app_command_runtime_request_diagnostic_run(void){return !start_busy;}
 bool protocol_send_is_ready(void) { return true; }
 int protocol_send(uint8_t cmd,const uint8_t *data,uint16_t count)
-{ last_protocol_command=cmd;last_protocol_sub=count?data[0]:0;++protocol_calls;return 0; }
+{ last_protocol_command=cmd;last_protocol_sub=count?data[0]:0;++protocol_calls;return count+5; }
 void pause_counting_sim(void) {}
 void resume_counting_sim(void) {}
 void start_counting_sim(void) {}

@@ -191,7 +191,13 @@ static void test_main(void)
     prewarming=true;ui_main_create(lv_scr_act());assert(protocol_calls==0);
     prewarming=false;assert(page_01_main_resume());assert(protocol_calls==1);
     assert(last_protocol_command==0xC0 && last_protocol_sub==0x02);
+    assert(data_collection_request_pending() && data_collection_request_is_automatic());
+    assert(data_collection_state_mode()==DATA_COLLECT_MODE_NONE);
+    const uint8_t startup_ack[]={0xFD,0xDF,6,0xC0,3,0xFF};
+    assert(data_collection_reply_handle(startup_ack,sizeof(startup_ack),lv_tick_get())==DATA_COLLECTION_REPLY_REQUEST_CONFIRMED);
+    assert(data_collection_state_mode()==DATA_COLLECT_MODE_FALSE);
     assert(page_01_main_resume());assert(protocol_calls==1);
+    data_collection_state_exit("test reset");
     render();assert(asset_opens>0 && page_01_main_is_created());assert_labels(main_page);
     lv_obj_t *bordered_cards[]={s_summary_card,s_detail_card};
     for(unsigned i=0;i<2;++i) {

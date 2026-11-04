@@ -50,9 +50,9 @@ int main(void)
     const uint8_t short_frame[] = {0xFD, 0xDF, 6, 0xC0, 1};
     assert(data_collection_reply_handle(short_frame, sizeof(short_frame), 2) == DATA_COLLECTION_REPLY_INVALID);
     assert(!data_collection_request_begin((data_collect_mode_t)99, "invalid", 3));
-    assert(rx(3, 4) == DATA_COLLECTION_REPLY_STATUS_UPDATED);
-    mode(DATA_COLLECT_MODE_NONE); /* Unsolicited startup ACK only reports status. */
-    status("FALSE REPORT collection mode ready.");
+    assert(rx(3, 4) == DATA_COLLECTION_REPLY_IGNORED);
+    mode(DATA_COLLECT_MODE_NONE); /* An unowned ready ACK cannot imply a mode. */
+    status("Please select a collection mode.");
 
     assert(data_collection_request_begin(DATA_COLLECT_MODE_ALL, "Waiting", 10));
     assert(!data_collection_request_begin(DATA_COLLECT_MODE_FALSE, "Waiting", 11));
@@ -78,7 +78,7 @@ int main(void)
     assert(!data_collection_request_pending());
     mode(DATA_COLLECT_MODE_FALSE);
     status("FALSE REPORT collection mode ready.");
-    assert(rx(1, 41) == DATA_COLLECTION_REPLY_STATUS_UPDATED);
+    assert(rx(1, 41) == DATA_COLLECTION_REPLY_IGNORED);
     mode(DATA_COLLECT_MODE_FALSE);
 
     assert(data_collection_request_begin(DATA_COLLECT_MODE_NONE, "Closing", 50));
@@ -109,7 +109,7 @@ int main(void)
     confirm(DATA_COLLECT_MODE_FALSE, 2000);
     assert(data_collection_request_begin(DATA_COLLECT_MODE_ALL, "Waiting", 2100));
     assert(data_collection_request_take_timeout(3600));
-    assert(rx(1, 6600) == DATA_COLLECTION_REPLY_STATUS_UPDATED); /* Expired late-ACK guard. */
+    assert(rx(1, 6600) == DATA_COLLECTION_REPLY_IGNORED); /* Unowned late ACK. */
     mode(DATA_COLLECT_MODE_FALSE);
     assert(data_collection_request_begin(DATA_COLLECT_MODE_ALL, "Waiting", UINT32_MAX - 500U));
     assert(!data_collection_request_take_timeout(998));
@@ -118,6 +118,45 @@ int main(void)
     confirm(DATA_COLLECT_MODE_NONE, 7000);
     data_collection_request_cancel();
     assert(!data_collection_request_pending() && data_collection_state_pcs() == 0);
+    /* Main startup sends C0/02. An ACK confirms the real selected mode. */
+    assert(data_collection_request_begin_automatic(DATA_COLLECT_MODE_FALSE,"startup",8000));
+    assert(data_collection_request_is_automatic());
+    mode(DATA_COLLECT_MODE_NONE);
+    assert(rx(3,8001)==DATA_COLLECTION_REPLY_REQUEST_CONFIRMED);
+    mode(DATA_COLLECT_MODE_FALSE);
+    assert(!data_collection_request_is_automatic()&&!data_collection_state_uncertain());
+    confirm(DATA_COLLECT_MODE_NONE,8100);
+    /* Timeout releases the request but preserves ownership of a late startup ACK. */
+    assert(data_collection_request_begin_automatic(DATA_COLLECT_MODE_FALSE,"startup",9000));
+    assert(data_collection_request_take_timeout(10500));
+    assert(!data_collection_request_pending()&&data_collection_state_uncertain());
+    assert(rx(5,11000)==DATA_COLLECTION_REPLY_STATUS_UPDATED);
+    assert(rx(3,15000)==DATA_COLLECTION_REPLY_REQUEST_CONFIRMED);
+    mode(DATA_COLLECT_MODE_FALSE);
+    assert(!data_collection_state_uncertain());
+    confirm(DATA_COLLECT_MODE_NONE,15100);
+    /* User exit supersedes a timed-out startup; its late ACK cannot re-enable it. */
+    assert(data_collection_request_begin_automatic(DATA_COLLECT_MODE_FALSE,"startup",16000));
+    assert(data_collection_request_take_timeout(17500));
+    assert(data_collection_state_uncertain());
+    assert(data_collection_request_begin(DATA_COLLECT_MODE_NONE,"exit",17510));
+    assert(rx(3,17511)==DATA_COLLECTION_REPLY_IGNORED);
+    assert(rx(0xFF,17512)==DATA_COLLECTION_REPLY_EXITED);
+    assert(!data_collection_state_uncertain());mode(DATA_COLLECT_MODE_NONE);
+    assert(rx(3,17513)==DATA_COLLECTION_REPLY_IGNORED);mode(DATA_COLLECT_MODE_NONE);
+    status("Collection mode exited.");
+    assert(data_collection_request_begin_automatic(DATA_COLLECT_MODE_FALSE,"startup",18000));
+    assert(rx(6,18001)==DATA_COLLECTION_REPLY_REQUEST_FAILED);
+    assert(!data_collection_request_pending()&&data_collection_state_uncertain());
+    confirm(DATA_COLLECT_MODE_NONE,18100);
+    assert(!data_collection_state_uncertain());
+    /* No protocol deadline exists: accept a much later ACK while no newer
+     * request has claimed the untagged reply. */
+    assert(data_collection_request_begin_automatic(DATA_COLLECT_MODE_FALSE,"startup",19000));
+    assert(data_collection_request_take_timeout(20500));
+    assert(rx(3,320000)==DATA_COLLECTION_REPLY_REQUEST_CONFIRMED);
+    mode(DATA_COLLECT_MODE_FALSE);assert(!data_collection_state_uncertain());
+    confirm(DATA_COLLECT_MODE_NONE,320100);
     puts("PASS legacy capture: ACK matching, C0/02 completion, no C0/07 dependency, mode switch, cancellation, USB error, timeout, late ACK and clock wrap");
     return 0;
 }

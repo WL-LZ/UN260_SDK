@@ -90,6 +90,7 @@ static bool pending_reply(uint8_t command,uint64_t started,uint64_t deadline)
 #define ui_page_26_set_aging_on_timeout() ((void)0)
 #define ui_factory_reset_on_controller_timeout() ((void)0)
 #define ui_page_30_set_factory_on_timeout() ((void)0)
+#define data_collection_request_is_automatic() false
 #define data_collection_request_take_timeout(t) ((void)(t),false)
 #define page_06_data_collection_refresh() ((void)0)
 bool serial_number_service_take_timeout(serial_number_setting_result_t *p){(void)p;return false;}

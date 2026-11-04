@@ -174,6 +174,27 @@ static void capture_pages(void)
  for(size_t lang=0;lang<ui_lang_count();lang++){
   const ui_locale_t *l=ui_lang_at(lang);assert(ui_lang_prepare_resources(l->id));ui_lang_set(l->id);
   lv_settings_header_t h={.title=ui_tr("Data collection")};lv_settings_frame_t f=lv_settings_frame_create(lv_scr_act(),&h);page_collection_create(&f);
+  {
+   send_ok=false;assert(!app_collection_request_initial());assert(!data_collection_request_pending());send_ok=true;
+   assert(app_collection_request_initial());assert(last_command==0xC0&&last_payload[0]==2);
+   receive(3);page_collection_refresh();assert(data_collection_state_mode()==DATA_COLLECT_MODE_FALSE);
+   assert(!lv_obj_has_state(button(ui_tr("End collection")),LV_STATE_DISABLED));
+   click(ui_tr("End collection"));receive(0xFF);page_collection_refresh();
+   assert(data_collection_state_mode()==DATA_COLLECT_MODE_NONE);
+   lv_obj_del(f.root); /* Automatic timeout occurs while the page is absent. */
+   assert(app_collection_request_initial());advance(DATA_COLLECTION_REQUEST_TIMEOUT_MS+1);
+   assert(data_collection_request_take_timeout(lv_tick_get()));page_collection_refresh();
+   f=lv_settings_frame_create(lv_scr_act(),&h);page_collection_create(&f);
+   assert(data_collection_state_uncertain());
+   assert(find_label(f.root,ui_tr("Unknown")));
+   char unknown_name[100];snprintf(unknown_name,sizeof(unknown_name),"capture-%s-startup-unknown",l->tag);snapshot(unknown_name);
+   assert(!lv_obj_has_state(button(ui_tr("End collection")),LV_STATE_DISABLED));
+   click(ui_tr("End collection"));assert(last_payload[0]==0xFF);receive(0xFF);page_collection_refresh();
+   assert(!data_collection_state_uncertain()&&data_collection_state_mode()==DATA_COLLECT_MODE_NONE);
+   receive(3);page_collection_refresh();
+   assert(data_collection_state_mode()==DATA_COLLECT_MODE_NONE);
+   assert(!strcmp(data_collection_state_status(),ui_tr("Collection mode exited.")));
+  }
   lv_obj_update_layout(lv_scr_act());char name[100];snprintf(name,sizeof(name),"capture-%s-off",l->tag);snapshot(name);
   lv_obj_t *all=button(ui_tr("All notes")),*rejected=button(ui_tr("Rejected notes")),*run=button(ui_tr("RUN"));
   assert(lv_obj_get_width(all)==380&&lv_obj_get_height(all)==62&&lv_obj_get_x(all)==22&&lv_obj_get_y(all)==52);
