@@ -21,8 +21,8 @@ static struct {
     uint32_t operations, guard_tick;
     protocol_request_t lifecycle;
     uint64_t late_started_ms;
-    bool guard_active, late_request;
-    request_kind_t request;
+    bool guard_active, failure_user_origin;
+    request_kind_t request, late_request;
     failure_t failure;
     work_mode_phase_t phase;
     work_mode_record_t record, durable;
@@ -34,11 +34,12 @@ static bool records_equal(const work_mode_record_t *a, const work_mode_record_t 
            a->preferred == b->preferred && a->restore_pending == b->restore_pending;
 }
 
-static void fail(failure_t reason)
+static void fail(failure_t reason, request_kind_t owner)
 {
     state.user_confirmation = false;
     state.failure = reason;
     state.failure_event = true;
+    state.failure_user_origin = owner == REQUEST_USER;
     state.phase = WORK_MODE_FAILED;
     state.retry_temporary = false;
 }
@@ -52,16 +53,19 @@ static bool guard_active(uint32_t now)
 
 static bool send_mode(uint8_t target, request_kind_t kind, uint32_t now)
 {
-    if (state.request != REQUEST_NONE || guard_active(now)) return false;
+    if (state.request != REQUEST_NONE ||
+        (kind != REQUEST_USER && guard_active(now))) return false;
     const uint8_t wire = target == WORK_MODE_MANUAL ? 0x00 : 0x01;
     if (!protocol_request_begin_for_command(&state.lifecycle, 0x38)) return false;
     if (protocol_send(0x38, &wire, 1) < 0) {
         protocol_request_finish(&state.lifecycle);
-        fail(FAILURE_SEND);
+        fail(FAILURE_SEND, kind);
+        /* The caller receives false synchronously and owns immediate feedback. */
+        if (kind == REQUEST_USER) state.failure_event = false;
         return false;
     }
     state.target = target;
-    state.late_request = false;
+    state.late_request = REQUEST_NONE;
     state.request = kind;
     state.retry_temporary = false;
     state.phase = kind == REQUEST_RESTORE ? WORK_MODE_RESTORING : WORK_MODE_SWITCHING;
@@ -100,7 +104,7 @@ static void synchronize(uint8_t mode)
     if (state.failure != FAILURE_LOAD && state.failure != FAILURE_SAVE) {
         state.failure = FAILURE_NONE;
         state.failure_event = false;
-        state.late_request = false;
+        state.late_request = REQUEST_NONE;
     }
 }
 
@@ -111,7 +115,7 @@ void work_mode_service_init(void)
     state.lifecycle.timeout_ms = REQUEST_TIMEOUT_MS;
     state.diagnostic_mode = WORK_MODE_MANUAL;
     state.phase = WORK_MODE_WAITING_SYNC;
-    if (!work_mode_store_begin_load()) fail(FAILURE_LOAD);
+    if (!work_mode_store_begin_load()) fail(FAILURE_LOAD, REQUEST_NONE);
 }
 
 void work_mode_service_set_diagnostic(bool active)
@@ -169,6 +173,7 @@ bool work_mode_service_request(uint8_t mode)
     if (state.operations || state.busy) {
         state.phase = WORK_MODE_WAITING_IDLE;
         state.failure_event = true;
+        state.failure_user_origin = false;
         return false;
     }
     bool explicit_retry = state.failure == FAILURE_SEND ||
@@ -179,7 +184,8 @@ bool work_mode_service_request(uint8_t mode)
         (state.record.restore_pending && !explicit_retry) ||
         (state.failure != FAILURE_NONE && !explicit_retry)) return false;
     uint32_t now = app_clock_uptime_ms();
-    if (guard_active(now)) return false;
+    /* Explicit selections are not discarded during the late-echo guard.
+     * Same-target duplicate echoes cannot be distinguished without a wire ID. */
     /* Menu remains a reachable, explicit recovery path after a restore timeout.
      * Do not infer an AUTO retry or erase the journal: only a matching USER
      * acknowledgement may replace the saved preference and resolve recovery. */
@@ -187,6 +193,8 @@ bool work_mode_service_request(uint8_t mode)
         state.failure = FAILURE_NONE;
         state.failure_event = false;
     }
+    if (!explicit_retry && state.actual_valid && !state.record.restore_pending &&
+        state.actual == mode) return true;
     state.user_confirmation = false;
     return send_mode(mode, REQUEST_USER, now);
 }
@@ -207,31 +215,38 @@ bool work_mode_service_handle_reply(const uint8_t *frame, uint8_t length)
         return true;
     }
     if (state.request == REQUEST_NONE) {
-        /* A late matching echo still establishes the actual mode. No new
-         * request is inferred and the saved user preference is retained. */
+        /* Only the last timed-out request can own this matching late echo. */
         uint8_t actual = frame[4] == 0 ? WORK_MODE_MANUAL : WORK_MODE_AUTO;
+        uint64_t received = protocol_request_result_time_ms();
         if (!state.late_request || state.failure != FAILURE_TIMEOUT ||
             frame[4] > 1 || actual != state.target ||
-            protocol_request_result_time_ms() < state.late_started_ms) return false;
+            received < state.late_started_ms) return false;
+        request_kind_t completed = state.late_request;
         confirm_actual(actual);
         state.failure = FAILURE_NONE;
         state.failure_event = false;
-        state.late_request = false;
+        state.late_request = REQUEST_NONE;
+        if (completed == REQUEST_USER) {
+            state.record.preferred_valid = true;
+            state.record.preferred = actual;
+            state.user_confirmation = true;
+        }
         return true;
     }
     uint32_t now = app_clock_uptime_ms();
     /* UART arrival owns the acknowledgement deadline. A queued echo may be
      * dispatched after unrelated UI or history work has consumed that time. */
-    if (protocol_request_result_time_ms() < state.lifecycle.started_ms ||
-        (!protocol_request_can_take_result(&state.lifecycle) &&
-         state.request != REQUEST_TEMPORARY)) return false;
+    uint64_t received = protocol_request_result_time_ms();
+    if (!protocol_request_is_pending(&state.lifecycle) ||
+        received < state.lifecycle.started_ms) return false;
     if (frame[4] > 1) {
+        request_kind_t owner = state.request;
         protocol_request_finish(&state.lifecycle);
         state.request = REQUEST_NONE;
         state.actual_valid = false;
         state.guard_active = true;
         state.guard_tick = now;
-        fail(FAILURE_REPLY);
+        fail(FAILURE_REPLY, owner);
         return false;
     }
     uint8_t actual = frame[4] == 0x00 ? WORK_MODE_MANUAL : WORK_MODE_AUTO;
@@ -257,7 +272,7 @@ static void poll_store(void)
     work_mode_record_t record;
     bool load, ok;
     if (!work_mode_store_poll(&record, &load, &ok)) return;
-    if (!ok) { fail(load ? FAILURE_LOAD : FAILURE_SAVE); return; }
+    if (!ok) { fail(load ? FAILURE_LOAD : FAILURE_SAVE, REQUEST_NONE); return; }
     state.durable = record;
     if (load) {
         state.record = record;
@@ -282,13 +297,13 @@ void work_mode_service_poll(uint32_t now, bool machine_busy)
         const uint8_t latest_mode = state.diagnostic ? state.diagnostic_mode : state.record.preferred;
         const bool converge_changed_requirement = state.request == REQUEST_TEMPORARY &&
             state.record.preferred_valid && state.target != latest_mode;
-        state.late_request = state.request == REQUEST_TEMPORARY;
+        state.late_request = state.request;
         state.late_started_ms = started_ms;
         state.request = REQUEST_NONE;
         state.actual_valid = false;
         state.guard_active = true;
         state.guard_tick = now;
-        fail(FAILURE_TIMEOUT);
+        fail(FAILURE_TIMEOUT, state.late_request);
         /* An abandoned temporary target must not block the latest requirement.
          * Retain the failure event and quarantine, without retrying that target. */
         if (converge_changed_requirement) {
@@ -315,7 +330,7 @@ void work_mode_service_poll(uint32_t now, bool machine_busy)
     }
 
     if (!work_mode_store_busy() && !records_equal(&state.record, &state.durable)) {
-        if (!work_mode_store_begin_save(&state.record)) { fail(FAILURE_SAVE); return; }
+        if (!work_mode_store_begin_save(&state.record)) { fail(FAILURE_SAVE, REQUEST_NONE); return; }
     }
     if (state.request != REQUEST_NONE) {
         state.phase = state.request == REQUEST_RESTORE ? WORK_MODE_RESTORING : WORK_MODE_SWITCHING;
@@ -355,7 +370,7 @@ void work_mode_service_retry(void)
     state.failure = FAILURE_NONE;
     state.failure_event = false;
     if (!state.loaded) {
-        if (!work_mode_store_begin_load()) fail(FAILURE_LOAD);
+        if (!work_mode_store_begin_load()) fail(FAILURE_LOAD, REQUEST_NONE);
     } else if (previous == FAILURE_SEND || previous == FAILURE_TIMEOUT || previous == FAILURE_REPLY) {
         /* Retry only the currently owned temporary mode under its recovery journal;
          * an unknown original preference still requires a controller sync. */
@@ -388,18 +403,22 @@ bool work_mode_service_take_failure(void)
     return result;
 }
 
+bool work_mode_service_take_user_failure(void)
+{
+    bool result = state.failure_event && state.failure_user_origin;
+    state.failure_event = false;
+    return result;
+}
+
 const char *work_mode_service_status_msgid(void)
 {
     if (state.failure == FAILURE_LOAD) return state.diagnostic ?
         UI_N_("Mode preference unavailable. Retry.") : UI_N_("Mode storage unavailable. Open a diagnostic page to retry.");
     if (state.failure == FAILURE_SAVE) return state.diagnostic ?
         UI_N_("Could not save mode preference. Retry.") : UI_N_("Mode could not be saved. Open a diagnostic page to retry.");
-    if (state.failure == FAILURE_SEND) return state.diagnostic ?
-        UI_N_("Mode request not sent. Retry.") : UI_N_("Mode request not sent. Retry Start mode in Menu.");
-    if (state.failure == FAILURE_REPLY) return state.diagnostic ?
-        UI_N_("Mode change not confirmed. Retry.") : UI_N_("Mode not confirmed. Retry Start mode in Menu.");
-    if (state.failure == FAILURE_TIMEOUT) return state.diagnostic ?
-        UI_N_("Mode confirmation timed out. Retry.") : UI_N_("Mode timed out. Retry Start mode in Menu.");
+    if (state.failure == FAILURE_SEND) return UI_N_("Mode request not sent. Retry.");
+    if (state.failure == FAILURE_REPLY) return UI_N_("Mode change not confirmed. Retry.");
+    if (state.failure == FAILURE_TIMEOUT) return UI_N_("Mode confirmation timed out. Retry.");
     switch (state.phase) {
     case WORK_MODE_WAITING_SYNC: return UI_N_("Waiting for controller mode");
     case WORK_MODE_SAVING: return UI_N_("Saving mode preference");

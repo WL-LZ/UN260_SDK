@@ -32,6 +32,8 @@ static bool test_legacy_pin_fail;
 static bool test_pin_keypad_create(lv_pin_keypad_t *keypad,lv_obj_t *parent,lv_coord_t x,lv_coord_t y)
 {return !test_legacy_pin_fail&&lv_pin_keypad_create(keypad,parent,x,y);}
 #define lv_pin_keypad_create test_pin_keypad_create
+static unsigned mode_notice_page_leaves;
+void app_setting_notice_page_leave(void){++mode_notice_page_leaves;}
 #include "../un260/lv_core/page_05_set_password.c"
 #undef lv_pin_keypad_create
 #include "../un260/lv_core/page_29_set_password.c"
@@ -447,10 +449,14 @@ static void test_password_destination(void)
 {
     {
         switched_page=UI_PAGE_MAIN;
+        unsigned initial_leaves=mode_notice_page_leaves;
         assert(!ui_page_05_set_password_open_for(UI_PAGE_PASSWORD_CHANGE));
+        assert(mode_notice_page_leaves==initial_leaves);
         assert(!ui_page_05_set_password_is_open());
         assert(ui_page_05_set_password_open_for(UI_PAGE_CFD_LEVEL_SETTING));
+        assert(mode_notice_page_leaves==initial_leaves+1);
         assert(!ui_page_05_set_password_open_for(UI_PAGE_SETTING));
+        assert(mode_notice_page_leaves==initial_leaves+1);
         ui_page_05_set_password_open(); /* A second entry cannot replace target. */
         assert(g_password_page.destination==UI_PAGE_CFD_LEVEL_SETTING);
         type_pin(&g_password_page.keypad,"9999");
@@ -466,7 +472,9 @@ static void test_password_destination(void)
         ui_page_05_set_password_destroy();assert(g_password_page.destination==UI_PAGE_SETTING);
     }
     test_legacy_pin_fail=true;switched_page=UI_PAGE_MAIN;
+    unsigned before_failed_open=mode_notice_page_leaves;
     assert(!ui_page_05_set_password_open_for(UI_PAGE_CFD_LEVEL_SETTING));
+    assert(mode_notice_page_leaves==before_failed_open);
     assert(!ui_page_05_set_password_is_open()&&!g_password_page.page&&switched_page==UI_PAGE_MAIN);
     assert(g_password_page.destination==UI_PAGE_SETTING);
     test_legacy_pin_fail=false;

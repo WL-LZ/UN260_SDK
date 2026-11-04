@@ -19,9 +19,12 @@ code = r'''
 #include "un260/lv_system/ui_i18n.h"
 #include "un260/app_service/app_setting_notice.h"
 #include "un260/app_service/setting_service.h"
+#include "un260/app_service/work_mode_service.h"
 #include "un260/lv_core/lv_page_manager.h"
 static ui_page_t page=UI_PAGE_MENU;
 static bool currency_mode;
+static bool mode_pending=true;
+void work_mode_service_get_snapshot(work_mode_snapshot_t *s){*s=(work_mode_snapshot_t){.pending=mode_pending};}
 bool count_mode_service_currency_mode(void){return currency_mode;}
 static setting_request_observer_t observer;
 ui_page_t ui_manager_get_current_page(void){return page;}
@@ -67,6 +70,18 @@ int main(void) {
     assert(notices==3&&last==UI_NOTICE_SUCCESS);notices=0;
 
     apply.active=apply.waiting=true;apply.step=0;
+    /* Failure belongs only to its originating page, including Main. */
+    page=UI_PAGE_MAIN; observer(0x38);
+    assert(app_setting_notice_work_mode_failure_allowed());
+    page=UI_PAGE_MENU; assert(!app_setting_notice_work_mode_failure_allowed());
+    observer(0x38); assert(app_setting_notice_work_mode_failure_allowed());
+    app_setting_notice_page_leave(); page=UI_PAGE_DETAIL;
+    assert(!app_setting_notice_work_mode_failure_allowed());
+    page=UI_PAGE_MENU; assert(!app_setting_notice_work_mode_failure_allowed());
+    mode_pending=false; observer(0x38);
+    assert(!app_setting_notice_work_mode_failure_allowed());
+    mode_pending=true; observer(0x38);
+    assert(app_setting_notice_work_mode_failure_allowed());
     apply.confirmed=2;apply_result=WORKSPACE_APPLY_PENDING;
     app_setting_notice_result("settings.speed","Speed",true);assert(!notices);
     app_setting_notice_result("settings.receipt","Receipt settings",true);

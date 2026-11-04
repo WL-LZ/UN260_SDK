@@ -2,6 +2,7 @@
 #include "app_setting_notice.h"
 #include "workspace_service.h"
 #include "setting_service.h"
+#include "work_mode_service.h"
 #include "count_mode_service.h"
 #include "app_fault_recovery.h"
 #include "un260/lv_core/lv_page_manager.h"
@@ -12,6 +13,8 @@
  * including rejected profile steps, whether or not a banner is permitted. */
 /* 1: secondary page, 2: Main, 3: automatic mode follow-on after currency ACK. */
 static uint8_t request_origin[256];
+static ui_page_t work_mode_request_page;
+static bool work_mode_notice_owned;
 bool app_setting_notice_page_allowed(void)
 {
     ui_page_t page = ui_manager_get_current_page();
@@ -20,17 +23,29 @@ bool app_setting_notice_page_allowed(void)
 }
 static void request_started(uint8_t command)
 {
+    if (command == 0x38) {
+        work_mode_snapshot_t mode;
+        work_mode_service_get_snapshot(&mode);
+        if (!mode.pending) return; /* Confirmed same-value selection sent nothing. */
+    }
     if (command == 0x06) {
         ui_notice_clear("settings.batch");
         ui_notice_clear("workspace.batch");
     }
     fault_popup_resolve_setting_rejection(command);
+    if (command == 0x38) {
+        work_mode_request_page = ui_manager_get_current_page();
+        work_mode_notice_owned = true;
+        ui_notice_clear("settings.work_mode");
+    }
     request_origin[command] = command == 0x04 && count_mode_service_currency_mode() ? 3 :
         app_setting_notice_page_allowed() ? 1 : 2;
 }
 void app_setting_notice_init(void)
 {
     memset(request_origin,0,sizeof(request_origin));
+    work_mode_request_page = UI_PAGE_MAIN;
+    work_mode_notice_owned = false;
     setting_service_set_request_observer(request_started);
 }
 static uint8_t notice_command(const char *key)
@@ -45,8 +60,23 @@ static uint8_t notice_command(const char *key)
         if (!strcmp(key,fields[i].key)) return fields[i].command;
     return 0;
 }
+void app_setting_notice_page_leave(void)
+{
+    if (work_mode_notice_owned && work_mode_request_page == ui_manager_get_current_page()) {
+        work_mode_notice_owned = false;
+        ui_notice_clear("settings.work_mode");
+    }
+}
+bool app_setting_notice_work_mode_failure_allowed(void)
+{
+    ui_page_t page = ui_manager_get_current_page();
+    return work_mode_notice_owned && page == work_mode_request_page && page < UI_PAGE_COUNT &&
+        page != UI_PAGE_PURE && page != UI_PAGE_BOOT && page != UI_PAGE_STANDBY;
+}
 bool app_setting_notice_allowed(const char *key)
 {
+    if (key && !strcmp(key,"settings.work_mode") &&
+        (!work_mode_notice_owned || work_mode_request_page != ui_manager_get_current_page())) return false;
     if (key && !strcmp(key,"settings.mode") && request_origin[0x04] == 3) return true;
     return app_setting_notice_page_allowed() && request_origin[notice_command(key)] != 2;
 }

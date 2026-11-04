@@ -25,6 +25,7 @@
 #include "un260/lv_core/page_02_list.h"
 #include "un260/app_service/app_command_runtime.h"
 #include "un260/app_service/setting_service.h"
+#include "un260/app_service/work_mode_service.h"
 #include "un260/app_service/workspace_service.h"
 #include "un260/lv_core/settings_detail_ui.h"
 #include "un260/machine_state/machine_state.h"
@@ -258,7 +259,13 @@ void page_01_action_run(page_01_action_t action)
         page_01_main_refresh_start_state();
         break;
     case PAGE_01_ACTION_WORK:
-        (void)setting_service_request_work_mode(machine_state_work_mode() ? 0 : 1);
+        if (!setting_service_request_work_mode(machine_state_work_mode() ? 0 : 1)) {
+            work_mode_snapshot_t mode;
+            work_mode_service_get_snapshot(&mode);
+            if (!mode.pending)
+                ui_notice_post_text(UI_NOTICE_WARNING, "settings.work_mode", UI_N_("Start"),
+                                    work_mode_service_status_msgid());
+        }
         break;
     case PAGE_01_ACTION_SORT:
         (void)setting_service_request_fo_mode((uint8_t)((machine_state_fo_mode() + 1) % 4));

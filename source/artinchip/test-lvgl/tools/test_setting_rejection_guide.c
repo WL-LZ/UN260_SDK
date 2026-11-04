@@ -10,6 +10,7 @@ bool count_mode_service_result_may_clear(void){return true;}
 #include <stdio.h>
 #include <string.h>
 #include "un260/app_service/setting_service.h"
+#include "un260/app_service/work_mode_service.h"
 #include "un260/app_service/app_setting_reply.h"
 #include "un260/machine_state/machine_state.h"
 #include "un260/machine_state/machine_fault.h"
@@ -31,6 +32,8 @@ uint64_t app_clock_monotonic_ms(void){return now;}
 uint32_t app_clock_uptime_ms(void){return (uint32_t)now;}
 void uart_debug_printf(const char *format,...){(void)format;}
 bool work_mode_service_request(uint8_t mode){(void)mode;assert(!"unrelated automatic/manual setting");return false;}
+static bool work_mode_pending;
+void work_mode_service_get_snapshot(work_mode_snapshot_t *mode){*mode=(work_mode_snapshot_t){.pending=work_mode_pending};}
 int protocol_send(uint8_t command,const uint8_t *payload,uint16_t length)
 {assert(payload&&length&&command!=0x3D&&command!=0x0A);++sends;sent_command=command;sent_value=payload[0];return send_failed?-1:length;}
 static ui_page_t ui_manager_get_current_page(void){return page;}
@@ -309,8 +312,27 @@ static void test_sort_success_and_boot_query_owner(void)
     fixture();reply(0x3A,2,5,1050,false);assert(!guide_posts&&machine_state_fo_mode()==2);
 }
 
+static void test_work_mode_notice_owner(void)
+{
+    fixture();
+    page = 4; work_mode_pending = false;
+    request_started(0x38); /* same value: no request and no change of owner */
+    assert(!app_setting_notice_allowed("settings.work_mode"));
+    work_mode_pending = true;
+    request_started(0x38);
+    assert(app_setting_notice_allowed("settings.work_mode"));
+    page = 5;
+    assert(!app_setting_notice_allowed("settings.work_mode"));
+    page = 4;
+    assert(app_setting_notice_allowed("settings.work_mode"));
+    page = UI_PAGE_MAIN;
+    assert(!app_setting_notice_allowed("settings.work_mode"));
+    work_mode_pending = false;
+}
+
 int main(void)
 {
+    test_work_mode_notice_owner();
     test_matched_failures_and_profile();test_wrong_shape_timeout_invalid_type();test_companion_boundaries();test_setting_to_currency_generation();test_busy_replies_defer_and_cancel();test_begin_observer_contract();test_sort_all_four_wire_targets();test_sort_zero_nak_and_owner_lifecycle();test_sort_success_and_boot_query_owner();
     puts("PASS setting refusals: real matched 04/02, 06/02, 3A/valid-mode/02 use transient guides on Main/menu without physical blockers; setting-to-currency begin/sendfail/timeout/cancel invalidate old association; busy refusal defers to idle; profile ownership preserved; invalid type/shape/stale/unrequested retain state; generic 3A/00/02 bound to current owner; Boot query never consumes set owner; companion coalescing one-shot, new request/cancel/count-active/time bound; sound remains ordinary notice; no 3D/CLEAR/START");
 }

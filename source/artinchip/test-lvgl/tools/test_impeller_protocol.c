@@ -68,6 +68,7 @@ static bool pending_reply(uint8_t command,uint64_t started,uint64_t deadline)
 #define work_mode_service_poll(t,b) ((void)(t),(void)(b))
 #define app_command_runtime_count_start_busy() false
 #define work_mode_service_take_failure() false
+#define work_mode_service_take_user_failure() false
 #define work_mode_service_status_msgid() ""
 #define count_mode_service_mode_result(a,b) ((void)(a),(void)(b))
 #define app_add_runtime_waiting_setting() false

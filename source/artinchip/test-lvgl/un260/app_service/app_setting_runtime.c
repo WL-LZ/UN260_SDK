@@ -135,7 +135,7 @@ void app_setting_runtime_poll(uint32_t now_ms)
     work_mode_service_poll(now_ms, app_command_runtime_count_start_busy() ||
         machine_state_aging_running() || calibration.session_active ||
         (boot_stage != BOOT_STAGE_DONE && boot_stage != BOOT_STAGE_FAIL));
-    if (work_mode_service_take_failure() && app_setting_notice_allowed("settings.work_mode")) {
+    if (work_mode_service_take_user_failure() && app_setting_notice_work_mode_failure_allowed()) {
         ui_notice_post_text(UI_NOTICE_WARNING, "settings.work_mode", UI_N_("Work mode"), work_mode_service_status_msgid());
     }
 

@@ -80,6 +80,11 @@ static int test_unlink(const char *path)
 #define rename test_rename
 #define unlink test_unlink
 #include "un260/lv_system/user_cfg.c"
+/* Locale startup is outside this isolated password-visibility fixture. */
+bool ui_locale_store_read(char tag[UI_LOCALE_TAG_CAPACITY])
+{(void)tag;assert(!"unexpected locale read");return false;}
+void ui_lang_restore(const char *tag){(void)tag;assert(!"unexpected locale restore");}
+
 
 static bool boolean(const char *value)
 {

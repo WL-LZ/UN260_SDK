@@ -11,6 +11,7 @@
 #include "un260/counting/counting_data_store_internal.h"
 #include "un260/protocol/protocol_send.h"
 #include "un260/app_service/work_mode_service.h"
+#include "un260/app_service/app_setting_notice.h"
 #include "un260/lv_core/page_01_main.h"
 #include "un260/innovation/page_32_innovation.h"
 #include "un260/lv_core/page_01_main_quick.h"
@@ -568,6 +569,7 @@ static void ui_manager_update_diagnostic_scope(ui_page_t page)
 
 static void ui_manager_notify_page_switch(ui_page_t from, ui_page_t to)
 {
+    app_setting_notice_page_leave();
     ui_page_05_set_password_suspend();
     ui_manager_navigation_on_leave(from,to);
     static const page_switch_notify_rule_t rules[] = {

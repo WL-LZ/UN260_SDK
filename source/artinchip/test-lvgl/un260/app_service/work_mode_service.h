@@ -61,5 +61,7 @@ bool work_mode_service_handle_reply(const uint8_t *frame, uint8_t length);
  * Confirms the controller value; storage still follows its normal lifecycle. */
 bool work_mode_service_take_user_confirmation(void);
 bool work_mode_service_take_failure(void);
+/* Consume a failure event; report only an explicit user operation. */
+bool work_mode_service_take_user_failure(void);
 
 #endif

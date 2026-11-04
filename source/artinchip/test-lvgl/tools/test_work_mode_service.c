@@ -54,6 +54,25 @@ static bool pending_reply(uint8_t command, uint64_t started_ms, uint64_t deadlin
 }
 #include "un260/protocol/protocol_request.c"
 #include "un260/app_service/work_mode_service.c"
+#include "un260/lv_components/ui_notice.h"
+static unsigned main_mode_notices;
+static const char *main_mode_detail;
+uint8_t machine_state_work_mode(void) { return confirmed; }
+bool setting_service_request_work_mode(uint8_t mode) { return work_mode_service_request(mode); }
+void ui_notice_post_text(ui_notice_kind_t kind, const char *key, const char *title, const char *detail)
+{
+    assert(kind == UI_NOTICE_WARNING && !strcmp(key, "settings.work_mode") && !strcmp(title, "Start"));
+    ++main_mode_notices; main_mode_detail = detail;
+}
+enum { PAGE_01_ACTION_WORK = 1 };
+static void actual_main_mode_action(void)
+{
+    switch (PAGE_01_ACTION_WORK) {
+#include "work_mode_main_action.inc"
+    default: break;
+    }
+}
+
 
 static void reset(work_mode_record_t disk)
 {
@@ -287,10 +306,7 @@ static void test_menu_recovery_after_restore_timeout(void)
         fake_now += REQUEST_TIMEOUT_MS; poll(false);
         assert(state.failure == FAILURE_TIMEOUT && !state.actual_valid);
         assert(disk_record.restore_pending && disk_record.preferred == WORK_MODE_AUTO);
-        assert(strstr(work_mode_service_status_text(), "Menu"));
-        assert(!work_mode_service_request(chosen)); /* Late ACK quarantine. */
-        assert(!ack(WORK_MODE_AUTO));
-        fake_now += LATE_REPLY_GUARD_MS;
+        assert(strstr(work_mode_service_status_text(), "timed out"));
         work_mode_service_hold_operation(WORK_MODE_OPERATION_MOTOR_MAIN, true);
         assert(!work_mode_service_request(chosen));
         work_mode_service_hold_operation(WORK_MODE_OPERATION_MOTOR_MAIN, false);
@@ -327,7 +343,8 @@ static void test_user_confirmation_event(void)
     assert(work_mode_service_request(WORK_MODE_AUTO));
     fake_now += REQUEST_TIMEOUT_MS; poll(false);
     assert(!work_mode_service_take_user_confirmation());
-    assert(!ack(WORK_MODE_AUTO));
+    assert(ack(WORK_MODE_AUTO));
+    assert(work_mode_service_take_user_confirmation());
     assert(!work_mode_service_take_user_confirmation());
     begin_auto_diagnostic();
     assert(!work_mode_service_take_user_confirmation());
@@ -388,15 +405,16 @@ static void test_uart_arrival_deadline(void)
     assert(confirmed == WORK_MODE_AUTO && !disk_record.restore_pending);
     assert(!work_mode_service_take_user_confirmation());
 
-    /* A truly late RESTORE echo keeps the prior explicit-retry policy. */
+    /* A matching late RESTORE echo confirms the old preference, without retry. */
     begin_auto_diagnostic(); work_mode_service_set_diagnostic(false); poll(false);
     started = state.lifecycle.started_ms;
     queue_echo(started + REQUEST_TIMEOUT_MS);
     fake_now += REQUEST_TIMEOUT_MS + 20; poll(false);
     assert(state.failure == FAILURE_TIMEOUT && state.request == REQUEST_NONE);
     queued_reply = false;
-    assert(!ack_received(WORK_MODE_AUTO, started + REQUEST_TIMEOUT_MS));
-    assert(disk_record.restore_pending);
+    assert(ack_received(WORK_MODE_AUTO, started + REQUEST_TIMEOUT_MS));
+    flush();
+    assert(confirmed == WORK_MODE_AUTO && !disk_record.restore_pending);
 
     /* A matching pre-request frame cannot postpone timeout or acknowledge a retry. */
     reset((work_mode_record_t){0}); sync_mode(WORK_MODE_AUTO); flush();
@@ -517,8 +535,112 @@ static void test_automatic_lease_failures_and_arrival(void)
     assert(ack(WORK_MODE_AUTO));flush();assert(work_mode_service_diagnostic_ready());
     assert(disk_record.preferred==WORK_MODE_MANUAL);
 }
+static void test_main_mode_action(void)
+{
+    reset((work_mode_record_t){0}); assert(sync_mode(WORK_MODE_MANUAL)); flush();
+    main_mode_notices = 0; main_mode_detail = NULL;
+    tx_ok = false; actual_main_mode_action();
+    assert(main_mode_notices == 1 && strstr(main_mode_detail, "not sent") && sent == 0);
+    assert(!work_mode_service_take_user_failure());
+    tx_ok = true; actual_main_mode_action();
+    assert(sent == 1 && wire_sent[0] == 1 && main_mode_notices == 1);
+    actual_main_mode_action();
+    assert(sent == 1 && main_mode_notices == 1); /* In-flight double tap is quiet. */
+    assert(ack(WORK_MODE_AUTO)); flush();
+    actual_main_mode_action(); assert(sent == 2 && wire_sent[1] == 0);
+    assert(ack(WORK_MODE_MANUAL)); flush(); assert(main_mode_notices == 1);
+    puts("PASS actual Main mode action: send failure, retry, pending double tap, confirmed switch");
+}
+
+static void test_late_ack_dispatch_order(void)
+{
+    reset((work_mode_record_t){0}); assert(sync_mode(WORK_MODE_MANUAL)); flush();
+    assert(work_mode_service_request(WORK_MODE_AUTO));
+    uint64_t started = state.lifecycle.started_ms;
+    fake_now += REQUEST_TIMEOUT_MS + 20;
+    assert(ack_received(WORK_MODE_AUTO, started + REQUEST_TIMEOUT_MS + 20));
+    flush(); assert(confirmed == WORK_MODE_AUTO && work_mode_service_take_user_confirmation());
+    assert(!work_mode_service_take_user_failure());
+
+    assert(work_mode_service_request(WORK_MODE_MANUAL));
+    started = state.lifecycle.started_ms; fake_now += REQUEST_TIMEOUT_MS;
+    poll(false); assert(work_mode_service_take_user_failure());
+    assert(!ack_received(WORK_MODE_AUTO, started + REQUEST_TIMEOUT_MS + LATE_REPLY_GUARD_MS + 1));
+    assert(!state.actual_valid && confirmed == WORK_MODE_AUTO);
+    assert(ack_received(WORK_MODE_MANUAL, started + REQUEST_TIMEOUT_MS + LATE_REPLY_GUARD_MS + 1)); flush();
+    assert(confirmed == WORK_MODE_MANUAL && work_mode_service_take_user_confirmation());
+    puts("PASS late mode ACK: both dispatch orders and matching ownership");
+}
+
+static void test_customer_timeout_recovery_and_notice_owner(void)
+{
+    /* Selecting the already confirmed value is side-effect free. */
+    reset((work_mode_record_t){0}); assert(sync_mode(WORK_MODE_MANUAL)); flush();
+    assert(work_mode_service_request(WORK_MODE_MANUAL));
+    assert(sent == 0 && !work_mode_service_take_user_confirmation());
+
+    /* A failed user send is returned synchronously with the right owner,
+     * rather than posting a second asynchronous warning. */
+    tx_ok = false; assert(!work_mode_service_request(WORK_MODE_AUTO));
+    assert(state.failure == FAILURE_SEND && state.failure_user_origin);
+    assert(!work_mode_service_take_user_failure() && sent == 0);
+    tx_ok = true; assert(work_mode_service_request(WORK_MODE_AUTO));
+    assert(ack(WORK_MODE_AUTO)); flush();
+    assert(work_mode_service_request(WORK_MODE_MANUAL));
+    assert(ack(WORK_MODE_MANUAL)); flush();
+
+    /* A temporary diagnostic timeout is local, including after page exit. */
+    begin_manual_auto_lease();
+    fake_now += REQUEST_TIMEOUT_MS; poll(false);
+    assert(state.failure == FAILURE_TIMEOUT && !work_mode_service_take_user_failure());
+    work_mode_service_set_diagnostic(false);
+    fake_now += LATE_REPLY_GUARD_MS; flush();
+    assert(state.request == REQUEST_RESTORE && wire_sent[sent - 1] == 0);
+    fake_now += REQUEST_TIMEOUT_MS; poll(false);
+    assert(state.failure == FAILURE_TIMEOUT && !work_mode_service_take_user_failure());
+    assert(!state.actual_valid && disk_record.restore_pending);
+
+    /* First deliberate retry is accepted immediately and no timeout is
+     * presented as success. An opposite old echo cannot complete it. */
+    unsigned before = sent;
+    assert(work_mode_service_request(WORK_MODE_AUTO));
+    assert(sent == before + 1 && wire_sent[sent - 1] == 1);
+    assert(!ack(WORK_MODE_MANUAL));
+    assert(!work_mode_service_take_user_confirmation());
+    assert(ack(WORK_MODE_AUTO)); flush();
+    assert(confirmed == WORK_MODE_AUTO && disk_record.preferred == WORK_MODE_AUTO);
+    assert(!disk_record.restore_pending && work_mode_service_take_user_confirmation());
+
+    /* User timeout owns its warning; a matching late reply resolves only
+     * that request and does not cause another transmission. */
+    assert(work_mode_service_request(WORK_MODE_MANUAL));
+    uint64_t started = state.lifecycle.started_ms;
+    before = sent; fake_now += REQUEST_TIMEOUT_MS; poll(false);
+    assert(work_mode_service_take_user_failure());
+    assert(!work_mode_service_take_user_failure());
+    assert(!state.actual_valid && confirmed == WORK_MODE_AUTO && sent == before);
+    assert(!ack_received(WORK_MODE_MANUAL, started - 1));
+    assert(!ack(WORK_MODE_AUTO));
+    assert(ack(WORK_MODE_MANUAL)); flush();
+    assert(confirmed == WORK_MODE_MANUAL && disk_record.preferred == WORK_MODE_MANUAL);
+    assert(sent == before && work_mode_service_take_user_confirmation());
+
+    /* A new request owns its own confirmation; an old opposite echo is ignored. */
+    assert(work_mode_service_request(WORK_MODE_AUTO));
+    fake_now += REQUEST_TIMEOUT_MS; poll(false);
+    assert(work_mode_service_take_user_failure());
+    assert(work_mode_service_request(WORK_MODE_MANUAL));
+    assert(!ack(WORK_MODE_AUTO));
+    assert(ack(WORK_MODE_MANUAL)); flush();
+    assert(confirmed == WORK_MODE_MANUAL);
+    puts("PASS customer mode recovery: no extra click, local auto failure, late echo, explicit retry and ownership");
+}
+
 int main(void)
 {
+    test_main_mode_action();
+    test_late_ack_dispatch_order();
+    test_customer_timeout_recovery_and_notice_owner();
     test_automatic_diagnostic_requirement();
     test_automatic_lease_navigation_convergence();
     test_automatic_lease_failures_and_arrival();

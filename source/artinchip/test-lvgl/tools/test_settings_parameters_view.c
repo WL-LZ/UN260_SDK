@@ -79,6 +79,7 @@ bool ui_manager_pop_page(void) { pops++; return true; }
 void ui_manager_push_page(ui_page_t page) { pushed_page=page; }
 void ui_manager_switch(ui_page_t page) { (void)page; pops++; }
 void ui_manager_clear_stack(void) {}
+void app_setting_notice_page_leave(void) {} /* Application notice routing is outside this view harness. */
 void ui_upgrade_service_reboot(void) { reboots++; }
 bool backlight_service_probe(void) { return backlight_ok; }
 int backlight_service_level(void) { return brightness; }

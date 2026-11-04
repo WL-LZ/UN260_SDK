@@ -1,6 +1,7 @@
 #include "un260/lv_system/ui_i18n.h"
 #include "page_05_set_password.h"
 #include "un260/lv_core/lv_page_manager.h"
+#include "un260/app_service/app_setting_notice.h"
 #include "un260/lv_components/lv_pin_keypad.h"
 #include "un260/lv_components/lv_nav_button.h"
 #include "un260/lv_components/lv_settings.h"
@@ -120,7 +121,8 @@ bool ui_page_05_set_password_open_for(ui_page_t destination)
     g_password_page.destination=destination;
     if(!ui_page_05_set_password_resume())ui_page_05_set_password_create(lv_layer_top());
     bool opened=ui_page_05_set_password_is_open();
-    if(!opened)g_password_page.destination=UI_PAGE_SETTING;
+    if(opened)app_setting_notice_page_leave();
+    else g_password_page.destination=UI_PAGE_SETTING;
     return opened;
 }
 void ui_page_05_set_password_open(void)

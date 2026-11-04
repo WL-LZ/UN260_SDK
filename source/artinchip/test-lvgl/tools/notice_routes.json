@@ -108,6 +108,18 @@
     "args": "UI_NOTICE_WARNING, key, title, UI_N_(\"No response received. Check device status.\")"
   },
   {
+    "file": "un260/app_service/app_setting_notice.c",
+    "line": 39,
+    "api": "ui_notice_clear",
+    "args": "\"settings.work_mode\""
+  },
+  {
+    "file": "un260/app_service/app_setting_notice.c",
+    "line": 67,
+    "api": "ui_notice_clear",
+    "args": "\"settings.work_mode\""
+  },
+  {
     "file": "un260/app_service/app_setting_reply_basic.c",
     "line": 49,
     "api": "app_setting_notice_result",
@@ -562,6 +574,12 @@
     "line": 282,
     "api": "ui_notice_post_text",
     "args": "sent ? UI_NOTICE_INFO : UI_NOTICE_ERROR, \"print.request\", sent ? UI_N_(\"Print request sent\") : UI_N_(\"Print request not sent\"), sent ? UI_N_(\"Print sent; paper output unverified\") : UI_N_(\"Check controller connection.\")"
+  },
+  {
+    "file": "un260/lv_core/lv_page_event.c",
+    "line": 266,
+    "api": "ui_notice_post_text",
+    "args": "UI_NOTICE_WARNING, \"settings.work_mode\", UI_N_(\"Start\"), work_mode_service_status_msgid()"
   },
   {
     "file": "un260/lv_core/menu_output_help.inc",
