@@ -21,7 +21,7 @@ void fault_popup_set_auto_enabled(bool enabled);
 bool fault_popup_get_auto_enabled(void);
 void fault_popup_report_start_fault(uint8_t type, uint8_t code);
 void fault_popup_report_start_no_note(void);
-void fault_popup_report_preset_full(void);
+void fault_popup_report_preset_full(machine_fault_key_t key);
 void fault_popup_clear_preset(void);
 void fault_popup_resolve_key(machine_fault_key_t key);
 void fault_popup_repeat_notice(machine_fault_key_t key);

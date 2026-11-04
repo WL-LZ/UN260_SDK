@@ -344,8 +344,7 @@ static void notify_warning(const char *warn_text,
                     ui_text_get(UI_TEXT_WIDGET_SMART_ISLAND_COUNT_ERROR));
     }
 
-    if (key && key->source == MACHINE_FAULT_PRESET &&
-        key->type == 0 && key->code == 4) {
+    if (key && machine_fault_is_preset_full(*key)) {
         /* A missing final 0x0E must not revive the pre-Batch running view. */
         g_si_ctx.lifecycle.batch_counting_paused = true;
         g_si_ctx.warning.resume_counting = false;

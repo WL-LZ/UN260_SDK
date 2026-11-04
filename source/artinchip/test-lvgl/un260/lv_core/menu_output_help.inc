@@ -119,12 +119,12 @@ static void help_view(lv_obj_t *b)
         int item_width=ui_scrollbar_content_width(list);
         unsigned row=0,first=256;
         for(unsigned code=0;code<256;code++){
-            if(menu.reject_all?code>=0x32:!counts[code])continue;
+            if(menu.reject_all?!counting_reject_reason_known((uint8_t)code):!counts[code])continue;
             if(first==256)first=code;
         }
-        if((!menu.reject_all&&!counts[menu.reject_code])||(menu.reject_all&&menu.reject_code>=0x32))menu.reject_code=first==256?0:first;
+        if((!menu.reject_all&&!counts[menu.reject_code])||(menu.reject_all&&!counting_reject_reason_known(menu.reject_code)))menu.reject_code=first==256?0:first;
         for(unsigned code=0;code<256;code++){
-            if(menu.reject_all?code>=0x32:!counts[code])continue;
+            if(menu.reject_all?!counting_reject_reason_known((uint8_t)code):!counts[code])continue;
             bool selected=menu.reject_code==code;
             lv_obj_t *v=lv_settings_button(list,0,row++*58,item_width,52,"",false,reject_pick,(void *)(uintptr_t)code);
             palette(v,selected?HEADER_SURFACE:PANEL);lv_obj_set_style_border_width(v,0,0);lv_obj_set_style_radius(v,12,0);

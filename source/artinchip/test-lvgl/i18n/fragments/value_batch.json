@@ -14,7 +14,8 @@
     "VBatch presets saved. Waiting for controller confirmation.": "VBatch presets saved. Waiting for controller confirmation.",
     "VBatch presets saved. Select the preset to apply it when idle.": "VBatch presets saved. Select the preset to apply it when idle.",
     "Main VBatch: Cycle": "Main VBatch: Cycle",
-    "Main VBatch: Settings": "Main VBatch: Settings"
+    "Main VBatch: Settings": "Main VBatch: Settings",
+    "The note did not meet the active VBatch amount rule.": "The note did not meet the active VBatch amount rule."
   },
   "zh-Hans": {
     "VBatch": "金额预置",
@@ -24,14 +25,15 @@
     "Stops at the preset amount.": "达到预置金额后停止。",
     "Enter an amount from 1 to 4294967295.": "请输入 1 至 4294967295 的金额。",
     "Switching applies the saved preset.": "切换时应用该模式的预置值。",
-    "VBatch reached": "金额预置已达标",
+    "VBatch reached": "金额预置已满",
     "VBatch change rejected": "金额预置设置被拒绝",
     "The controller rejected the value preset. Check the setting and retry.": "主控拒绝了金额预置，请检查设置后重试。",
     "VBatch presets saved.": "金额预置档位已保存。",
     "VBatch presets saved. Waiting for controller confirmation.": "金额预置档位已保存，等待主控确认。",
     "VBatch presets saved. Select the preset to apply it when idle.": "金额预置档位已保存。待机器空闲时选中档位即可应用。",
     "Main VBatch: Cycle": "主页金额预置：轮换",
-    "Main VBatch: Settings": "主页金额预置：设置"
+    "Main VBatch: Settings": "主页金额预置：设置",
+    "The note did not meet the active VBatch amount rule.": "该张钞票不符合当前预置金额。"
   },
   "ko": {
     "VBatch": "금액 설정",
@@ -48,7 +50,8 @@
     "VBatch presets saved. Waiting for controller confirmation.": "금액 설정값을 저장했습니다. 제어기 확인을 기다립니다.",
     "VBatch presets saved. Select the preset to apply it when idle.": "금액 설정값을 저장했습니다. 유휴 상태에서 설정값을 선택해 적용하세요.",
     "Main VBatch: Cycle": "메인 금액 설정: 순환",
-    "Main VBatch: Settings": "메인 금액 설정: 설정"
+    "Main VBatch: Settings": "메인 금액 설정: 설정",
+    "The note did not meet the active VBatch amount rule.": "이 지폐는 현재 설정된 금액 조건에 맞지 않습니다."
   },
   "ja": {
     "VBatch": "金額設定",
@@ -65,7 +68,8 @@
     "VBatch presets saved. Waiting for controller confirmation.": "金額プリセットを保存しました。制御装置の確認待ちです。",
     "VBatch presets saved. Select the preset to apply it when idle.": "金額プリセットを保存しました。待機時に選択して適用してください。",
     "Main VBatch: Cycle": "ホーム金額設定：切替",
-    "Main VBatch: Settings": "ホーム金額設定：設定"
+    "Main VBatch: Settings": "ホーム金額設定：設定",
+    "The note did not meet the active VBatch amount rule.": "この紙幣は現在の金額プリセットの条件に合いません。"
   },
   "ar": {
     "VBatch": "ضبط المبلغ",
@@ -82,7 +86,8 @@
     "VBatch presets saved. Waiting for controller confirmation.": "حُفظت إعدادات المبلغ. في انتظار تأكيد وحدة التحكم.",
     "VBatch presets saved. Select the preset to apply it when idle.": "حُفظت إعدادات المبلغ. اختر الإعداد لتطبيقه عند خمول الجهاز.",
     "Main VBatch: Cycle": "إعداد المبلغ الرئيسي: تنقّل",
-    "Main VBatch: Settings": "إعداد المبلغ الرئيسي: إعدادات"
+    "Main VBatch: Settings": "إعداد المبلغ الرئيسي: إعدادات",
+    "The note did not meet the active VBatch amount rule.": "لم تستوفِ هذه الورقة النقدية شرط المبلغ المحدد للدفعة الحالية."
   },
   "tr": {
     "VBatch": "Tutar ayarı",
@@ -99,7 +104,8 @@
     "VBatch presets saved. Waiting for controller confirmation.": "Tutar ön ayarları kaydedildi. Denetleyici onayı bekleniyor.",
     "VBatch presets saved. Select the preset to apply it when idle.": "Tutar ön ayarları kaydedildi. Makine boştayken uygulamak için ön ayarı seçin.",
     "Main VBatch: Cycle": "Ana VBatch: Döngü",
-    "Main VBatch: Settings": "Ana VBatch: Ayarlar"
+    "Main VBatch: Settings": "Ana VBatch: Ayarlar",
+    "The note did not meet the active VBatch amount rule.": "Bu banknot ayarlanan deste tutarına uymuyor."
   },
   "fr": {
     "VBatch": "Lot en valeur",
@@ -116,7 +122,8 @@
     "VBatch presets saved. Waiting for controller confirmation.": "Préréglages de montant enregistrés. En attente de confirmation du contrôleur.",
     "VBatch presets saved. Select the preset to apply it when idle.": "Préréglages de montant enregistrés. Sélectionnez le préréglage à appliquer une fois la machine au repos.",
     "Main VBatch: Cycle": "VBatch principal : cycle",
-    "Main VBatch: Settings": "VBatch principal : réglages"
+    "Main VBatch: Settings": "VBatch principal : réglages",
+    "The note did not meet the active VBatch amount rule.": "Ce billet ne correspond pas au montant préréglé du lot."
   },
   "pl": {
     "VBatch": "Limit kwoty",
@@ -133,7 +140,8 @@
     "VBatch presets saved. Waiting for controller confirmation.": "Zapisano limity kwoty. Oczekiwanie na potwierdzenie sterownika.",
     "VBatch presets saved. Select the preset to apply it when idle.": "Zapisano limity kwoty. Wybierz limit, gdy urządzenie będzie bezczynne.",
     "Main VBatch: Cycle": "VBatch na głównej: cykl",
-    "Main VBatch: Settings": "VBatch na głównej: ustawienia"
+    "Main VBatch: Settings": "VBatch na głównej: ustawienia",
+    "The note did not meet the active VBatch amount rule.": "Ten banknot nie spełnia warunku kwoty ustawionej dla partii."
   },
   "ru": {
     "VBatch": "Лимит суммы",
@@ -150,7 +158,8 @@
     "VBatch presets saved. Waiting for controller confirmation.": "Предустановки суммы сохранены. Ожидается подтверждение контроллера.",
     "VBatch presets saved. Select the preset to apply it when idle.": "Предустановки суммы сохранены. Выберите значение, когда устройство будет свободно.",
     "Main VBatch: Cycle": "VBatch на главной: цикл",
-    "Main VBatch: Settings": "VBatch на главной: настройки"
+    "Main VBatch: Settings": "VBatch на главной: настройки",
+    "The note did not meet the active VBatch amount rule.": "Эта банкнота не соответствует условию заданной суммы пачки."
   },
   "de": {
     "VBatch": "Wertvorgabe",
@@ -167,6 +176,7 @@
     "VBatch presets saved. Waiting for controller confirmation.": "Wertvorgaben gespeichert. Bestätigung der Steuerung ausstehend.",
     "VBatch presets saved. Select the preset to apply it when idle.": "Wertvorgaben gespeichert. Beim Stillstand die gewünschte Vorgabe auswählen.",
     "Main VBatch: Cycle": "VBatch auf Hauptseite: Wechsel",
-    "Main VBatch: Settings": "VBatch auf Hauptseite: Einstellungen"
+    "Main VBatch: Settings": "VBatch auf Hauptseite: Einstellungen",
+    "The note did not meet the active VBatch amount rule.": "Diese Banknote erfüllt die Vorgabe für den eingestellten Bündelbetrag nicht."
   }
 }

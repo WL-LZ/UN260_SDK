@@ -30,7 +30,8 @@ void ui_report_i18n_write(FILE *file,language_t locale)
     fputs("<script>(function(){'use strict';const text=",file);
     fputc('{',file);bool comma=false;
     for(size_t i=0;i<sizeof(report_keys)/sizeof(report_keys[0]);++i)entry(file,report_keys[i],ui_tr_for(locale,report_keys[i]),&comma);
-    for(unsigned i=0;i<0x32;++i){
+    for(unsigned i=0;i<=UINT8_MAX;++i){
+        if(!counting_reject_reason_known((uint8_t)i))continue;
         const char *name=counting_reject_reason_get((uint8_t)i);
         entry(file,name,name,&comma);
     }

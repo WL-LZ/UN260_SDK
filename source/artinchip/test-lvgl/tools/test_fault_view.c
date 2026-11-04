@@ -5,6 +5,8 @@
 #include "lvgl/lvgl.h"
 #include "un260/lv_components/lv_fault_popup.c"
 #include "un260/app_service/app_boot_runtime.h"
+#include "un260/machine_state/machine_state.h"
+#include "un260/lv_system/user_cfg.h"
 #include "un260/lv_core/lv_page_manager.h"
 #ifdef UN260_FAULT_TEST_LOCALE_BANK
 #include "un260/font/ui_locale_font_bank.h"
@@ -50,7 +52,7 @@ void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title
 {ui_notice_post(kind,key,ui_tr(title),ui_tr(detail));}
 void ui_notice_post_message(ui_notice_kind_t kind,const char *key,const char *title,const ui_message_t *value)
 {char detail[320];ui_message_render(value,detail,sizeof(detail));ui_notice_post(kind,key,ui_tr(title),detail);}
-void ui_notice_clear(const char *key) {if(!strcmp(key,"settings.rejection"))return;assert(!strcmp(key,"machine.fault"));++notice_clears;}
+void ui_notice_clear(const char *key) {if(!strcmp(key,"settings.rejection")||!strcmp(key,"count.vbatch-full"))return;assert(!strcmp(key,"machine.fault"));++notice_clears;}
 void lv_settings_action_style(lv_obj_t *obj,lv_settings_action_role_t role)
 {
     lv_obj_set_style_bg_color(obj,lv_color_hex(role==LV_SETTINGS_ACTION_PRIMARY?0x1559B7:0xF4F6F7),0);
@@ -295,17 +297,23 @@ int main(void)
     fault_popup_report_runtime_fault(2);advance(3200);capture("upper-open-zh");hide_fault_popup();
     ui_lang_set(LANGUAGE_EN);
     machine_fault_clear();
-    machine_state_confirm_batch_mode(AMOUNT_BATCH_MODE);
-    machine_state_confirm_batch_amount(50000);
-    fault_popup_report_preset_full();
+    const machine_fault_key_t amount_full={MACHINE_FAULT_PRESET,MACHINE_PRESET_AMOUNT,4};
+    const machine_fault_key_t notes_full={MACHINE_FAULT_PRESET,MACHINE_PRESET_NOTES,4};
+    machine_state_confirm_batch_mode(PCS_BATCH_MODE);
+    fault_popup_report_preset_full(amount_full);
+    assert(!strcmp(lv_label_get_text(popup.code),"0x07/0x04"));
+    assert(popup.guide.steps[0].zone==MF_STACKER);
     assert(!strcmp(island_title,ui_tr("VBatch reached")));
     assert(!strcmp(lv_label_get_text(popup.title),ui_tr("VBatch reached")));
     verify_layout();capture("vbatch-reached-en");hide_fault_popup();
-    machine_state_confirm_batch_mode(PCS_BATCH_MODE);
-    assert(fault_popup_show_key((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4}));
+    machine_state_confirm_batch_mode(AMOUNT_BATCH_MODE);
+    assert(fault_popup_show_key(amount_full));
     assert(!strcmp(lv_label_get_text(popup.title),ui_tr("VBatch reached")));
     hide_fault_popup();fault_popup_clear_preset();
-    fault_popup_report_preset_full();hide_fault_popup();fault_popup_clear_preset();
+    fault_popup_report_preset_full(notes_full);
+    assert(!strcmp(island_title,ui_tr("Batch full")));
+    assert(!strcmp(lv_label_get_text(popup.code),"0x06/0x04"));
+    hide_fault_popup();fault_popup_clear_preset();
     fault_popup_report_setting_rejection(0x07,0);
     assert(!strcmp(island_title,ui_tr("VBatch change rejected")));
     verify_layout();capture("vbatch-rejected-en");hide_fault_popup();
@@ -317,7 +325,11 @@ int main(void)
     assert(popup.guide.steps[0].zone==MF_STACKER && popup.guide.steps[0].action==MF_REMOVE);
     advance(1500);verify_layout();capture("batch-full-en");hide_fault_popup();
     ui_lang_set(LANGUAGE_CN);
-    present((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4});
+    fault_popup_report_preset_full(amount_full);
+    assert(!strcmp(lv_label_get_text(popup.title),ui_tr("VBatch reached")));
+    assert(!strcmp(lv_label_get_text(popup.step_title),"取出接钞口钞票"));
+    advance(1500);verify_layout();capture("vbatch-reached-zh");hide_fault_popup();fault_popup_clear_preset();
+    present(notes_full);
     assert(!strcmp(lv_label_get_text(popup.title),ui_tr("Batch full")));
     assert(!strcmp(lv_label_get_text(popup.step_title),"取出接钞口钞票"));
     advance(1500);verify_layout();capture("batch-full-zh");hide_fault_popup();
@@ -336,7 +348,14 @@ int main(void)
         advance(1500);verify_layout();
         assert(lv_obj_get_height(popup.title)==lv_obj_get_style_text_font(popup.title,0)->line_height);
         char name[64];snprintf(name,sizeof(name),"batch-full-%s",locale->tag);capture(name);
-        printf("Batch locale PASS: %s | %s\n",locale->tag,ui_tr("Batch full"));
+        hide_fault_popup();
+        present(amount_full);
+        assert(!strcmp(fault_guide_text(popup.guide.title),ui_tr("VBatch reached")));
+        assert(!strcmp(lv_label_get_text(popup.code),"0x07/0x04"));
+        assert(popup.guide.steps[0].zone==MF_STACKER);
+        advance(1500);verify_layout();
+        snprintf(name,sizeof(name),"vbatch-reached-%s",locale->tag);capture(name);
+        printf("Batch & VBatch locale PASS: %s\n",locale->tag);
         hide_fault_popup();
     }
     ui_lang_set(LANGUAGE_CN);

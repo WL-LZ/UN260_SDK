@@ -1062,7 +1062,7 @@ static void history_test_protocol_text(const lv_font_t *font,const char *text,in
 }
 static lv_obj_t *history_test_reject_dropdown(lv_obj_t *parent)
 {
-    if(lv_obj_check_type(parent,&lv_dropdown_class)&&lv_dropdown_get_option_cnt(parent)==51)return parent;
+    if(lv_obj_check_type(parent,&lv_dropdown_class)&&lv_dropdown_get_option_cnt(parent)==53)return parent;
     for(uint32_t i=0;i<lv_obj_get_child_cnt(parent);++i){
         lv_obj_t *found=history_test_reject_dropdown(lv_obj_get_child(parent,i));if(found)return found;
     }
@@ -1077,7 +1077,7 @@ static void test_protocol_reject_names(void)
         ui_history_record_t *record=&test_store.records[0];record->session_log[0]=0;record->error_frame_text[0]=0;
         size_t used=0;
         /* 0x00 means no rejected note; the real history parser excludes it. */
-        for(unsigned code=1;code<0x32;++code){
+        for(unsigned code=1;code<=0x33;++code){
             int written=snprintf(record->session_log+used,sizeof(record->session_log)-used,"0x0C FD DF 07 0C %02X 01 0A\n",code);
             assert(written>0&&(size_t)written<sizeof(record->session_log)-used);used+=(size_t)written;
         }
@@ -1086,9 +1086,9 @@ static void test_protocol_reject_names(void)
             assert(lv_obj_get_x(history->actions[i])==original_x[i]&&lv_obj_get_y(history->actions[i])==16);
             assert(lv_obj_get_width(history->actions[i])==original_w[i]&&lv_obj_get_height(history->actions[i])==42);
         }
-        show_record(record->record_no);history_test_tick(60);assert(section_count(2)==49);
+        show_record(record->record_no);history_test_tick(60);assert(section_count(2)==51);
         lv_recycled_list_t *list=history->sections[2].list;lv_obj_t *viewport=lv_recycled_list_object(list);
-        for(unsigned code=1;code<0x32;++code){
+        for(unsigned code=1;code<=0x33;++code){
             assert(lv_recycled_list_scroll_to_index(list,code-1));history_test_render();
             const char *expected=ui_text_counting_reject_reason((uint8_t)code);lv_obj_t *matched=NULL;
             for(uint32_t row_index=0;row_index<lv_obj_get_child_cnt(viewport);++row_index){
@@ -1117,7 +1117,7 @@ static void test_protocol_reject_names(void)
         const lv_font_t *selected_font=lv_obj_get_style_text_font(options,LV_PART_SELECTED);
         int field_width=lv_obj_get_width(dropdown)-57;
         int list_width=lv_obj_get_width(options)-2-lv_obj_get_style_pad_left(options,0)-lv_obj_get_style_pad_right(options,0);
-        for(unsigned code=1;code<0x32;++code){
+        for(unsigned code=1;code<=0x33;++code){
             char expected[128],actual[128];snprintf(expected,sizeof(expected),"%02X  %s",code,ui_text_counting_reject_reason((uint8_t)code));
             lv_dropdown_set_selected(dropdown,(uint16_t)(code+1));lv_dropdown_get_selected_str(dropdown,actual,sizeof(actual));assert(!strcmp(actual,expected));
             history_test_protocol_text(field_font,actual,field_width,"History reject selector");
@@ -1125,7 +1125,7 @@ static void test_protocol_reject_names(void)
             history_test_protocol_text(selected_font,actual,list_width,"History selected reject option");
         }
         lv_dropdown_set_selected(dropdown,11);snprintf(raster,sizeof(raster),"history-protocol-options-%s",locale->tag);history_test_bmp(raster);
-        printf("PASS History protocol names %s: 49 actual rejects and No Error font, fixed C 112/174 and selector 672/66/312/46; options width %d\n",locale->tag,list_width);
+        printf("PASS History protocol names %s: 51 saved reject codes and No Error font, fixed C 112/174 and selector 672/66/312/46; options width %d\n",locale->tag,list_width);
         ui_page_19_history_destroy();history_test_tick(60);assert(history_test_timers()==timers);
     }
     ui_lang_set(LANGUAGE_EN);

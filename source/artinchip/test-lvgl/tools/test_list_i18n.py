@@ -28,7 +28,7 @@ EXPECTED_NAMES = [
     "IMG Version Unknow", "IMG Face Error", "IMG Ort Error", "ANGLE", "IR-OVD",
     "IR –MT", "Hole", "DogEar", "DIRT", "Tape", "Tears", "Crumples", "De_ink",
     "Soiling", "eError_Limpness", "IMG Face&Ort Error", "OCR1 Error", "OCR2 Error",
-    "OCR3 Error", "0x31",
+    "OCR3 Error", "0x31", "Unknown Error", "Amount doesn't match",
 ]
 EXPECTED_LOCALES = {"en", "zh-Hans", "ko", "ja", "ar", "tr", "fr", "pl", "ru", "de"}
 
@@ -56,11 +56,11 @@ def verify_reports(directory):
                 f"{locale}: ordinary report labels must still be translated"
             )
     assert locales == EXPECTED_LOCALES, f"Unexpected report locales: {locales}"
-    print("report i18n: 10 captured locales, 50 protocol-name identities and ordinary translations passed")
+    print("report i18n: 10 captured locales, 51 protocol-name identities and ordinary translations passed")
 
 
 def main():
-    assert len(EXPECTED_NAMES) == 0x32
+    assert len(EXPECTED_NAMES) == 0x34
     compiler = os.environ.get("CC") or shutil.which("cc") or shutil.which("gcc")
     if not compiler:
         raise SystemExit("Host C compiler required")

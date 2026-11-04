@@ -95,7 +95,10 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
     {
         if (len < 6 || buf[2] != len || buf[3] != cmd) break;
         const uint8_t status = buf[4];
-        if (status == 0x03 && len == 10) {
+        if (status == 0x04 && len == 6) {
+            /* Amount reached carries no latch-clear transaction. */
+            fault_popup_report_preset_full((machine_fault_key_t){MACHINE_FAULT_PRESET, MACHINE_PRESET_AMOUNT, 4});
+        } else if (status == 0x03 && len == 10) {
             const uint32_t amount = ((uint32_t)buf[5] << 24) | ((uint32_t)buf[6] << 16) |
                                     ((uint32_t)buf[7] << 8) | buf[8];
             machine_state_confirm_batch_amount(amount);
@@ -152,8 +155,9 @@ app_setting_reply_action_t app_setting_reply_handle_basic(uint8_t cmd,
         else if (status == 0x04)
         {
             if (len != 6) break;
-            app_fault_recovery_report((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4});
-            fault_popup_report_preset_full();
+            const machine_fault_key_t key = {MACHINE_FAULT_PRESET, MACHINE_PRESET_NOTES, 4};
+            app_fault_recovery_report(key);
+            fault_popup_report_preset_full(key);
         }
         else if (status == 0x03)
         {

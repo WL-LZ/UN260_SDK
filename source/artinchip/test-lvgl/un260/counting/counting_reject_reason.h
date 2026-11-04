@@ -1,8 +1,11 @@
 #ifndef UN260_COUNTING_COUNTING_REJECT_REASON_H
 #define UN260_COUNTING_COUNTING_REJECT_REASON_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
+/* Reserved or unassigned values have no entry in the published code list. */
+bool counting_reject_reason_known(uint8_t code);
 /* Exact protocol name; do not pass it through a translation lookup. */
 const char *counting_reject_reason_get(uint8_t code);
 typedef struct { const char *title, *meaning, *causes, *action; } counting_reject_guide_t;

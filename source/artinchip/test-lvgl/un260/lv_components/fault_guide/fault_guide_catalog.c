@@ -116,6 +116,7 @@ void fault_guide_lookup(machine_fault_key_t key, mf_guide_t *g)
     entry_t e = runtime[0];
     if (key.source == MACHINE_FAULT_PRESET) {
         e = (entry_t)E("Batch full","Lower front · Stacker pocket ST",MF_FRONT,MF_STACKER,GUIDE_REMOVE);
+        if (key.type == MACHINE_PRESET_AMOUNT) e.title=T("VBatch reached");
     }
     else if (key.source == MACHINE_FAULT_START && key.type == 1 && key.code == 2) {
         e = (entry_t)E("No banknotes detected","Feeder · No jam location",MF_FRONT,MF_HOPPER,GUIDE_FOCUS);
@@ -201,7 +202,7 @@ void fault_guide_format_code(machine_fault_key_t key, char *buffer, size_t size)
     case MACHINE_FAULT_BOOT: snprintf(buffer,size,"0x37/0x%02X/0x%02X",key.code,key.type); break;
     case MACHINE_FAULT_START: snprintf(buffer,size,"0x0A/0x%02X/0x%02X",key.type,key.code); break;
     case MACHINE_FAULT_SENSOR: snprintf(buffer,size,"0x02/bit%u",key.code); break;
-    case MACHINE_FAULT_PRESET: snprintf(buffer,size,"0x06/0x04"); break;
+    case MACHINE_FAULT_PRESET: snprintf(buffer,size,"0x%02X/0x04",key.type==MACHINE_PRESET_AMOUNT?0x07:0x06); break;
     case MACHINE_FAULT_SETTING:
         if (key.code == 0x3A) snprintf(buffer,size,"0x3A/0x00..03/0x02");
         else if (key.code == 0x4B) snprintf(buffer,size,"0x4B/0x03");

@@ -23,6 +23,14 @@ typedef struct {
     uint8_t code;
 } machine_fault_key_t;
 
+/* Preset-stop reports keep their own kind until the stacker is emptied. */
+enum { MACHINE_PRESET_NOTES, MACHINE_PRESET_AMOUNT };
+static inline bool machine_fault_is_preset_full(machine_fault_key_t key)
+{
+    return key.source == MACHINE_FAULT_PRESET && key.code == 4 &&
+        (key.type == MACHINE_PRESET_NOTES || key.type == MACHINE_PRESET_AMOUNT);
+}
+
 typedef struct {
     machine_fault_key_t key;
     bool acknowledged;

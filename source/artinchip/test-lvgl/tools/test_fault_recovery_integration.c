@@ -21,8 +21,6 @@
 #include "un260/app_service/app_fault_recovery.h"
 #include "un260/counting/counting_info_reply.c"
 #include "un260/protocol/protocol_request.h"
-static protocol_request_start_observer_t observed_begin;
-void protocol_request_set_start_observer(protocol_request_start_observer_t observer){observed_begin=observer;}
 bool ui_factory_reset_blocks_navigation(void){return false;}
 bool touch_calibration_busy(void){return false;}
 bool lv_upgrade_popup_is_showing(void){return false;}
@@ -36,6 +34,8 @@ static bool recovery_send_failed;
 static unsigned recovery_command_calls;
 int protocol_send(uint8_t cmd,const uint8_t *data,uint16_t size)
 {
+    /* Main initialises the collection mode when the page is created. */
+    if(cmd==0xC0&&size==1&&data&&*data==2)return host_protocol_send(cmd,data,size);
     assert(cmd==0x3D&&size==1&&data&&*data==1);
     ++recovery_command_calls;
     int sent=host_protocol_send(cmd,data,size);
@@ -44,7 +44,7 @@ int protocol_send(uint8_t cmd,const uint8_t *data,uint16_t size)
 
 /* Offset separates the recovery deadline from animation time in ordering tests. */
 bool counting_action_start_pending(void){return false;}
-uint64_t protocol_request_result_time_ms(void){return lv_tick_get();}
+uint64_t __wrap_app_clock_monotonic_ms(void){return lv_tick_get();}
 bool currency_service_take_switch_rejection_detail(uint8_t command,uint8_t code)
 {(void)command;(void)code;return false;}
 
@@ -130,7 +130,7 @@ static void test_sort_feedback_language_and_navigation(void)
         if(automatic) {
             assert(!strcmp(lv_label_get_text(popup.title),ui_tr("Sorting change blocked")));
             assert(!strcmp(lv_label_get_text(popup.step_body),ui_tr(body)));
-            if(language)assert(!strcmp(lv_label_get_text(popup.step_body),"接钞口有钞票，无法切换分钞方式（SOT）。"));
+            if(language)assert(!strcmp(lv_label_get_text(popup.step_body),"接钞口有钞票，无法切换分钞方式。"));
             lv_obj_update_layout(popup.overlay);
             assert(popup.model.playing&&popup.model.timer&&!popup.model.timer->paused);
             confirm(NULL);assert(!fault_popup_is_showing()&&protocol_calls==tx);
@@ -176,7 +176,7 @@ static void test_operation_notice_lifecycle_and_consumers(void)
         if(outcome==0)app_fault_recovery_resolve_setting_rejection(6);
         if(outcome==1)app_fault_recovery_stacker_cleared();
         if(outcome==2)app_fault_recovery_cancel_setting_presentation();
-        if(outcome==3){assert(observed_begin);observed_begin(3);}
+        if(outcome==3){protocol_request_t request={0};assert(protocol_request_begin_for_command(&request,3));}
         smart_island_set_suspended(false);
         assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_IDLE);
         operation_consumers_released();
@@ -640,7 +640,7 @@ static void batch_test_reset(bool automatic)
 }
 static void batch_test_report(void)
 {
-    app_fault_recovery_report(batch_full_key);fault_popup_report_preset_full();
+    app_fault_recovery_report(batch_full_key);fault_popup_report_preset_full(batch_full_key);
 }
 static void batch_test_tick(uint32_t milliseconds)
 {
@@ -696,6 +696,63 @@ static void test_batch_real_popup_and_island(void)
     assert(protocol_calls==tx+1);app_fault_recovery_stacker_cleared();tx=protocol_calls;
     assert(page_01_main_resume());batch_test_tick(10000);assert(protocol_calls==tx);
     batch_test_reset(false);
+}
+static void test_value_batch_real_popup_and_island(void)
+{
+    const machine_fault_key_t amount={MACHINE_FAULT_PRESET,MACHINE_PRESET_AMOUNT,4};
+    language_t saved_lang=ui_lang_current()->id;
+    bool saved_top=ui_notice_get_enabled(),saved_auto=fault_popup_get_auto_enabled();
+    const uint8_t saved_mode=machine_state_batch_mode();
+    const uint32_t saved_amount=machine_state_batch_amount();
+    machine_state_confirm_batch_amount(5000);machine_state_confirm_batch_mode(AMOUNT_BATCH_MODE);
+    ui_lang_set(LANGUAGE_CN);page_01_update_language_texts();page_01_batch_refre();
+    for(unsigned top=0;top<2;++top)for(unsigned automatic=0;automatic<2;++automatic){
+        batch_test_reset(automatic!=0);
+        ui_notice_deinit();ui_notice_set_enabled(top!=0);
+        unsigned tx=protocol_calls;
+        fault_popup_report_preset_full(amount);
+        assert(fault_popup_is_showing()==(automatic!=0));
+        assert(g_si_ctx.warning.fault.valid&&g_si_ctx.warning.fault.fault_type==amount.type);
+        assert(!strcmp(g_si_ctx.warning.text,ui_tr("VBatch reached")));
+        assert(g_si_ctx.lifecycle.batch_counting_paused);
+        tick(1050);lv_obj_t *overlay=popup.overlay;uint32_t elapsed=popup.model.elapsed_ms;
+        assert(ui_notice_is_visible()==(top&&!automatic));
+        if(ui_notice_is_visible()){
+            assert(!strcmp(notice.state.active.key,"count.vbatch-full"));
+            write_bmp("vbatch-full-top-island-cn");
+        }
+        if(!top&&!automatic)write_bmp("vbatch-full-island-cn");
+        if(top&&automatic)write_bmp("vbatch-full-popup-cn");
+        uint32_t revision=notice.state.active.revision;
+        fault_popup_report_preset_full(amount);
+        assert(popup.overlay==overlay&&popup.model.elapsed_ms==elapsed);
+        assert(notice.state.active.revision==revision);
+        if(automatic)confirm(NULL);
+        batch_test_tick(20000);
+        assert(protocol_calls==tx&&machine_fault_find(amount,NULL)&&!popup.overlay);
+        fault_popup_report_preset_full(amount);
+        assert(!popup.overlay&&!ui_notice_is_visible()&&!notice.pending);
+        app_fault_recovery_stacker_cleared();app_fault_recovery_stacker_cleared();
+        assert(!machine_fault_find(amount,NULL)&&!g_si_ctx.warning.fault.valid);
+        fault_popup_report_preset_full(amount);
+        assert(machine_fault_find(amount,NULL)&&fault_popup_is_showing()==(automatic!=0));
+        app_fault_recovery_stacker_cleared();tick(500);
+        assert(!ui_notice_is_visible()&&!notice.pending&&!popup.overlay);
+        batch_test_tick(5000);assert(protocol_calls==tx);
+    }
+    /* Only notes own a 3D transaction. An interleaved amount stop preserves it. */
+    batch_test_reset(false);batch_test_report();
+    unsigned tx=protocol_calls;
+    assert(app_fault_recovery_request_clear(batch_full_key)&&protocol_calls==tx+1);
+    fault_popup_report_preset_full(amount);fault_popup_report_preset_full(amount);
+    assert(protocol_calls==tx+1&&machine_fault_find(amount,NULL)&&machine_fault_find(batch_full_key,NULL));
+    app_fault_recovery_handle_clear_result(1);batch_test_tick(3000);
+    assert(protocol_calls==tx+2&&machine_fault_find(amount,NULL)&&machine_fault_find(batch_full_key,NULL));
+    app_fault_recovery_stacker_cleared();batch_test_tick(6000);
+    assert(protocol_calls==tx+2&&!machine_fault_find(amount,NULL)&&!machine_fault_find(batch_full_key,NULL));
+    batch_test_reset(saved_auto);ui_notice_deinit();ui_notice_set_enabled(saved_top);
+    machine_state_confirm_batch_amount(saved_amount);machine_state_confirm_batch_mode(saved_mode);
+    ui_lang_set(saved_lang);page_01_update_language_texts();page_01_batch_refre();
 }
 static void test_batch_real_generation_and_failure(void)
 {
@@ -893,7 +950,7 @@ static void test_batch_pause_other_warning_resume(void)
         }else if(kind==2)assert(app_fault_recovery_report_setting_rejection(4));
         else if(kind==3)smart_island_notify_warning("Batch full"); /* Text alone never owns the pause. */
         else if(kind==4)smart_island_notify_fault("Batch full",(machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,4});
-        else if(kind==5)smart_island_notify_preset_full((machine_fault_key_t){MACHINE_FAULT_PRESET,1,4},"Batch full");
+        else if(kind==5)smart_island_notify_preset_full((machine_fault_key_t){MACHINE_FAULT_PRESET,2,4},"Batch full");
         else smart_island_notify_preset_full((machine_fault_key_t){MACHINE_FAULT_PRESET,0,3},"Batch full");
         assert(!g_si_ctx.lifecycle.batch_counting_paused);
         assert(g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING&&g_si_ctx.lifecycle.count_session_active);
@@ -958,7 +1015,7 @@ int main(void)
     fault_test_progress("Batch isolation from fresh sensor / boot guides");
     test_batch_real_sensor_boot_isolation();
     fault_test_progress("Batch real Popup / island replay and bounded controller recovery");
-    test_batch_real_visuals();test_batch_real_popup_and_island();test_batch_real_generation_and_failure();
+    test_batch_real_visuals();test_batch_real_popup_and_island();test_value_batch_real_popup_and_island();test_batch_real_generation_and_failure();
     fault_test_progress("Confirm without new START or controller reply");
     test_confirmed_pockets_without_new_start();
     test_confirm_send_failure_retry();

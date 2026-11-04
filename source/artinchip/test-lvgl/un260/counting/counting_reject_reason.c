@@ -3,11 +3,11 @@
 
 #include <stddef.h>
 
-/* UN260 protocol section 10 / command 0x0C, codes 0x00-0x31.
+/* UN260 protocol section 10 / command 0x0C, 0x32 is unassigned.
  * Titles are protocol identifiers, identical in every display/report language.
  * The reserved 0x31 has no English name in the protocol; show its code.
  * Guidance remains localized and does not establish a note's authenticity. */
-static const counting_reject_guide_t guides[0x32]={
+static const counting_reject_guide_t guides[]={
     [0x00]={"No Error",UI_N_("The controller reports no notes in the reject pocket."),UI_N_("No rejected note was reported for this list."),UI_N_("No reject handling is needed. This is not an authenticity verdict.")},
     [0x01]={"IMG Feature1 Suspect",UI_N_("An infrared image feature did not match the expected pattern."),UI_N_("A worn, folded or obscured note, an incorrect currency selection, or an abnormal security feature."),UI_N_("Check the currency and note condition. Recount separately; if repeated, follow your verification procedure.")},
     [0x02]={"IMG Feature2 Suspect",UI_N_("An infrared image feature did not match the expected pattern."),UI_N_("A worn, folded or obscured note, an incorrect currency selection, or an abnormal security feature."),UI_N_("Check the currency and note condition. Recount separately; if repeated, follow your verification procedure.")},
@@ -58,11 +58,18 @@ static const counting_reject_guide_t guides[0x32]={
     [0x2f]={"OCR2 Error",UI_N_("The controller could not obtain a required serial number."),UI_N_("The serial area may be folded, obscured, damaged or unreadable."),UI_N_("Check the serial area and recount at low speed. Missing data alone does not prove a counterfeit.")},
     [0x30]={"OCR3 Error",UI_N_("The controller reported a serial matching its blacklist."),UI_N_("The read serial matched an entry in the configured blacklist."),UI_N_("Check the serial manually and follow your organisation's escalation procedure.")},
     [0x31]={"0x31",UI_N_("The controller reported a reserved double-note code."),UI_N_("The protocol does not define the detailed trigger."),UI_N_("Separate the notes and recount. Retain the code for service if repeated.")},
+    [0x33]={"Amount doesn't match",UI_N_("The note did not meet the active VBatch amount rule."),UI_N_("The protocol does not define the detailed trigger."),UI_N_("Keep the note separate for manual review.")},
 };
+
+bool counting_reject_reason_known(uint8_t code)
+{
+    return code < sizeof(guides)/sizeof(guides[0]) && guides[code].title != NULL;
+}
+
 const counting_reject_guide_t *counting_reject_guide_get(uint8_t code)
 {
     static const counting_reject_guide_t unknown={"Unknown Error",UI_N_("This code is not defined in the available protocol."),UI_N_("The cause cannot be determined from this code."),UI_N_("Keep the code and contact service. Do not infer an authenticity result.")};
-    return code<0x32?&guides[code]:&unknown;
+    return counting_reject_reason_known(code)?&guides[code]:&unknown;
 }
 
 const char *counting_reject_reason_get(uint8_t code)

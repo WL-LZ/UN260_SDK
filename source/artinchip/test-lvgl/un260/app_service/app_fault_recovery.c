@@ -112,7 +112,8 @@ static bool pocket_full(machine_fault_key_t key)
 
 static bool batch_full(machine_fault_key_t key)
 {
-    return key.source == MACHINE_FAULT_PRESET && key.type == 0 && key.code == 4;
+    /* 0x3D latch clears and timed retries are specified for the notes preset. */
+    return machine_fault_is_preset_full(key) && key.type == MACHINE_PRESET_NOTES;
 }
 
 /* Full pockets need the established controller latch handshake in either
@@ -205,7 +206,6 @@ void app_fault_recovery_clear(void)
 void app_fault_recovery_stacker_cleared(void)
 {
     app_fault_recovery_cancel_setting_presentation();
-    const machine_fault_key_t batch = {MACHINE_FAULT_PRESET, 0, 4};
     recovery.batch_retry_armed = false;
     if (recovery.waiting_clear && batch_full(recovery.waiting_key)) recovery.waiting_clear = false;
     if (recovery.valid && batch_full(recovery.key)) {
@@ -213,7 +213,7 @@ void app_fault_recovery_stacker_cleared(void)
         recovery.needs_clear = false;
         recovery.notice_end_pending = false;
     }
-    if (machine_fault_find(batch, NULL)) fault_popup_resolve_key(batch);
+    machine_fault_clear_source(MACHINE_FAULT_PRESET);
     if (recovery.valid && recovery.key.source == MACHINE_FAULT_START &&
         recovery.key.type == 2 && recovery.key.code == 7)
         recovery.valid = false;

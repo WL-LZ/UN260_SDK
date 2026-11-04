@@ -1,4 +1,4 @@
-"""Actual 0x06 dispatch branch + actual page result handler, no legacy widget."""
+"""Actual 0x06 / 0x07 dispatch branches + actual page result handler, no legacy widget."""
 from pathlib import Path
 import os,subprocess,tempfile
 from test_multi_result_safety import function
@@ -22,11 +22,12 @@ harness=r'''
 static bool visible,pending,enabled;
 static unsigned animations,refreshes,failures,successes,confirmed,preset_reports,preset_popups;
 static uint8_t number,active_mode;
+static machine_fault_key_t displayed;
 static uint32_t value;
 static setting_batch_result_t wanted;
 void uart_debug_printf(const char *fmt,...){(void)fmt;}
-void app_fault_recovery_report(machine_fault_key_t key){assert(key.source==MACHINE_FAULT_PRESET&&key.type==0&&key.code==4);preset_reports++;}
-void fault_popup_report_preset_full(void){preset_popups++;}
+void app_fault_recovery_report(machine_fault_key_t key){assert(key.source==MACHINE_FAULT_PRESET&&key.type==MACHINE_PRESET_NOTES&&key.code==4);preset_reports++;}
+void fault_popup_report_preset_full(machine_fault_key_t key){assert(key.source==MACHINE_FAULT_PRESET&&key.code==4);displayed=key;preset_popups++;}
 void page_03_menu_clear_batch_tip(void){}
 void page_03_menu_refresh_batch_number(void){assert(visible);refreshes++;}
 void page_03_menu_show_batch_saved_tip(void){assert(visible);}
@@ -52,6 +53,7 @@ int main(void){
    unsigned old=confirmed,notices=successes,reports=preset_reports;
    frame[4]=4;dispatch(frame,5);assert(preset_reports==reports&&pending);
    dispatch(frame,sizeof(frame));assert(preset_reports==reports+1&&preset_popups==preset_reports&&pending&&confirmed==old&&successes==notices);
+   assert(displayed.type==MACHINE_PRESET_NOTES);
    /* Unsolicited Batch full never consumes the outstanding setting ACK. */
    frame[4]=1;dispatch(frame,sizeof(frame));assert(confirmed==old+1&&enabled&&number==50&&!pending&&successes==notices+1);
    old=confirmed;notices=successes;dispatch(frame,sizeof(frame));assert(confirmed==old&&successes==notices); /* duplicate ACK */
@@ -69,10 +71,24 @@ int main(void){
  dispatch(boot,sizeof(boot));assert(value==0xF0123456&&active_mode==PCS_BATCH_MODE);
  uint8_t ack[]={0xFD,0xDF,6,7,1,0};
  unsigned old=successes;wanted=(setting_batch_result_t){.type=SETTING_BATCH_REQUEST_AMOUNT,.amount=0};pending=true;
+ /* A stop may arrive before its setting ACK or after the operator changes mode. */
+ unsigned reports=preset_reports, popups=preset_popups;
+ ack[4]=4;ack[2]=7;dispatch(ack,sizeof(ack));assert(preset_reports==reports&&pending);
+ ack[2]=6;dispatch(ack,sizeof(ack)-1);assert(preset_reports==reports&&pending);
+ dispatch(ack,sizeof(ack));assert(preset_reports==reports&&preset_popups==popups+1);
+ assert(displayed.type==MACHINE_PRESET_AMOUNT&&pending&&active_mode==PCS_BATCH_MODE&&value==0xF0123456&&successes==old);
+ uint8_t reject_code[]={0xFD,0xDF,6,0x0C,0x33,0};dispatch(reject_code,sizeof(reject_code));
+ assert(preset_reports==reports&&preset_popups==popups+1&&pending);
+ ack[4]=1;
  dispatch(frame,sizeof(frame));assert(pending&&successes==old);
  ack[2]=7;dispatch(ack,sizeof(ack));assert(pending&&successes==old);ack[2]=6;
  dispatch(ack,sizeof(ack));assert(!pending&&successes==old+1&&value==0&&active_mode==AMOUNT_BATCH_MODE);
  dispatch(ack,sizeof(ack));assert(successes==old+1);
+ frame[4]=4;dispatch(frame,sizeof(frame));
+ assert(displayed.type==MACHINE_PRESET_NOTES&&active_mode==AMOUNT_BATCH_MODE&&preset_reports==reports+1&&preset_popups==popups+2);
+ unsigned rejected=failures;
+ wanted=(setting_batch_result_t){.type=SETTING_BATCH_REQUEST_AMOUNT,.amount=1000};pending=true;
+ ack[4]=2;dispatch(ack,sizeof(ack));assert(!pending&&failures==rejected+1&&preset_reports==reports+1&&preset_popups==popups+2&&value==0);
  uint8_t count_boot[]={0xFD,0xDF,7,6,3,25,0};
  dispatch(count_boot,sizeof(count_boot));assert(number==25&&active_mode==AMOUNT_BATCH_MODE);
  puts("PASS actual Batch ACK: both request types, never-created/visible/hidden/destroyed Menu, Batch full separate from ACK, malformed/truncated report, failure and duplicate reply");

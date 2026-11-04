@@ -1,8 +1,8 @@
 #include "machine_fault.h"
 #include <string.h>
 
-/* 32 sensor bits + five boot checks + latest start/runtime/preset reports. */
-#define MACHINE_FAULT_CAPACITY 40U
+/* 32 sensors, five boot checks, latest start/runtime and two preset stops. */
+#define MACHINE_FAULT_CAPACITY 41U
 static machine_fault_record_t records[MACHINE_FAULT_CAPACITY];
 static size_t count;
 
@@ -51,8 +51,7 @@ bool machine_fault_report(machine_fault_key_t key)
     /* Operation refusals reuse guide visuals, never physical recovery state. */
     if (key.source == MACHINE_FAULT_SETTING) return false;
     if (machine_fault_find(key, NULL)) return false;
-    if (key.source == MACHINE_FAULT_START || key.source == MACHINE_FAULT_RUNTIME ||
-        key.source == MACHINE_FAULT_PRESET)
+    if (key.source == MACHINE_FAULT_START || key.source == MACHINE_FAULT_RUNTIME)
         machine_fault_clear_source(key.source);
     if (count == MACHINE_FAULT_CAPACITY) return false;
     records[count++] = (machine_fault_record_t){ key, false };

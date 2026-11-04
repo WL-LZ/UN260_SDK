@@ -9,13 +9,14 @@
 #include "un260/lv_system/ui_text.h"
 #include "protocol_error_names.inc"
 
-_Static_assert(sizeof(expected_names) / sizeof(expected_names[0]) == 0x32,
+_Static_assert(sizeof(expected_names) / sizeof(expected_names[0]) == 0x34,
                "The protocol fixture must cover every defined reject code");
 
 static void verify_names(void)
 {
     for (unsigned code = 0; code <= 0xFF; ++code) {
-        const char *expected = code < 0x32 ? expected_names[code] : "Unknown Error";
+        const char *expected = code < 0x34 ? expected_names[code] : "Unknown Error";
+        assert(counting_reject_reason_known((uint8_t)code) == (code <= 0x31 || code == 0x33));
         assert(strcmp(counting_reject_reason_get((uint8_t)code), expected) == 0);
         assert(strcmp(ui_text_counting_reject_reason((uint8_t)code), expected) == 0);
         const counting_reject_guide_t *guide = counting_reject_guide_get((uint8_t)code);
@@ -60,6 +61,6 @@ int main(int argc, char **argv)
     assert(ui_lang_get() == LANGUAGE_EN);
     verify_names();
     assert(strcmp(ui_text_get(UI_TEXT_LIST_DENOMINATIONS), "Denominations") == 0);
-    puts("list i18n: 10 real locales, 50 protocol names, 206 unknown codes, guide titles and locale fallback passed");
+    puts("list i18n: 10 real locales, 51 protocol names, 205 unknown codes, guide titles and locale fallback passed");
     return 0;
 }

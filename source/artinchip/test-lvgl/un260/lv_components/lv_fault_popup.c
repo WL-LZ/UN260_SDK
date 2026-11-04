@@ -9,7 +9,6 @@
 #include "un260/lv_components/lv_settings.h"
 #include "un260/lv_system/ui_lang.h"
 #include "un260/lv_system/ui_i18n.h"
-#include "un260/lv_system/user_cfg.h"
 #include "un260/lv_core/lv_page_manager.h"
 #include "un260/font/manrope_fonts.h"
 #include "un260/font/ui_message_font.h"
@@ -28,14 +27,6 @@ typedef struct {
 } fault_popup_t;
 static fault_popup_t popup;
 static bool auto_enabled=true;
-/* A preset stop keeps the mode it was reported in until that record clears. */
-static bool value_preset_stop;
-static void lookup_guide(machine_fault_key_t key, mf_guide_t *guide)
-{
-    fault_guide_lookup(key, guide);
-    if (key.source == MACHINE_FAULT_PRESET && value_preset_stop)
-        guide->title.key = UI_N_("VBatch reached");
-}
 static bool setting_notice_active;
 static machine_fault_key_t setting_notice_key;
 static fault_popup_confirm_handler_t confirm_handler;
@@ -48,7 +39,7 @@ static void render_step(bool restart_animation);
 static const char *text(mf_text_t value) {return fault_guide_text(value);}
 static void post_island_notice(machine_fault_key_t key)
 {
-    mf_guide_t guide;lookup_guide(key,&guide);
+    mf_guide_t guide;fault_guide_lookup(key,&guide);
     const char *description = key.source == MACHINE_FAULT_START && key.type == 2 ? machine_start_error_desc(key.code) :
         key.source == MACHINE_FAULT_RUNTIME ? machine_runtime_error_desc(key.code) : NULL;
     if (key.source == MACHINE_FAULT_SETTING)
@@ -169,7 +160,9 @@ static void render_step(bool restart_animation)
 static void present(machine_fault_key_t key)
 {
     if(popup.overlay && machine_fault_key_equal(popup.key,key))return;
-    hide_fault_popup();popup.key=key;lookup_guide(key,&popup.guide);
+    hide_fault_popup();popup.key=key;fault_guide_lookup(key,&popup.guide);
+    if (key.source==MACHINE_FAULT_PRESET && key.type==MACHINE_PRESET_AMOUNT)
+        ui_notice_clear("count.vbatch-full");
     ui_notice_set_suspended(UI_NOTICE_SUSPEND_FAULT,true);
     popup.overlay=box(lv_layer_top(),0,0,lv_disp_get_hor_res(NULL),lv_disp_get_ver_res(NULL),0x243C52,0);
     lv_obj_set_style_bg_opa(popup.overlay,97,0);lv_obj_add_flag(popup.overlay,LV_OBJ_FLAG_CLICKABLE);
@@ -215,7 +208,7 @@ void fault_popup_language_changed(void)
 static void report(machine_fault_key_t key,bool allow_auto)
 {
     fault_popup_resolve_setting_rejection(0);
-    bool batch=key.source==MACHINE_FAULT_PRESET && key.type==0 && key.code==4;
+    bool batch=machine_fault_is_preset_full(key);
     bool event=key.source==MACHINE_FAULT_START || batch;
     bool changed=event?machine_fault_report_event(key):machine_fault_report(key);
     if(changed){
@@ -250,20 +243,26 @@ void fault_popup_report_start_no_note(void)
 {
     report((machine_fault_key_t){MACHINE_FAULT_START,1,2},true);
 }
-void fault_popup_report_preset_full(void)
+void fault_popup_report_preset_full(machine_fault_key_t key)
 {
-    const machine_fault_key_t key = {MACHINE_FAULT_PRESET,0,4};
-    if (!machine_fault_find(key,NULL))
-        value_preset_stop = machine_state_batch_confirmed(AMOUNT_BATCH_MODE);
+    if (key.type == MACHINE_PRESET_AMOUNT) {
+        /* 07/04 reports a reached target; duplicate frames are the same stop. */
+        if (machine_fault_find(key,NULL)) return;
+        if (!auto_enabled && !fault_popup_is_showing())
+            ui_notice_post_text(UI_NOTICE_INFO,"count.vbatch-full",UI_N_("VBatch reached"),UI_N_("Empty the stacker pocket"));
+    }
     report(key,true);
 }
 void fault_popup_clear_preset(void)
 {
+    ui_notice_clear("count.vbatch-full");
     machine_fault_clear_source(MACHINE_FAULT_PRESET);
     refresh_after_clear();
 }
 void fault_popup_resolve_key(machine_fault_key_t key)
 {
+    if (key.source==MACHINE_FAULT_PRESET && key.type==MACHINE_PRESET_AMOUNT)
+        ui_notice_clear("count.vbatch-full");
     machine_fault_clear_key(key);
     refresh_after_clear();
 }
@@ -374,6 +373,7 @@ void fault_popup_clear_runtime(void)
 }
 void fault_popup_stacker_cleared(void)
 {
+    ui_notice_clear("count.vbatch-full");
     /* 0x51/01 confirms only the genuine-note pocket, not both pockets or a jam. */
     machine_fault_key_t key={MACHINE_FAULT_START,2,7};
     if(machine_fault_find(key,NULL))machine_fault_clear_code(MACHINE_FAULT_START,7);

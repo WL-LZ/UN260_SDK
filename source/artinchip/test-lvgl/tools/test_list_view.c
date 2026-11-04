@@ -830,7 +830,7 @@ static void test_protocol_reject_names(counting_sim_t *data,const ui_locale_t *l
     assert(counting_data_ensure_error_capacity(data,7));
     data->err_num=1;data->err_expected=1;data->err_pcs[0]=1;
     lv_obj_t *reused=NULL;
-    for(unsigned code=0;code<0x32;++code){
+    for(unsigned code=0;code<=0x33;++code){
         data->err_code[0]=code;
         page_02_list_section_data_ready(PAGE_02_SECTION_C);ui_frame_commit_flush();lv_obj_update_layout(view->page);
         lv_obj_t *row=protocol_reject_row();
@@ -861,7 +861,7 @@ static void test_protocol_reject_names(counting_sim_t *data,const ui_locale_t *l
     char name[96];snprintf(name,sizeof(name),"list-protocol-errors-locale-%s",locale->tag);write_bmp(name);
     counting_data_clear_errors(data);data->err_expected=0;
     page_02_list_section_data_ready(PAGE_02_SECTION_C);ui_frame_commit_flush();lv_obj_update_layout(view->page);
-    printf("PASS List protocol errors: %s; all 50 names fit 170px with complete glyphs, centered rows, unchanged geometry and restored short-name font\n",locale->tag);
+    printf("PASS List protocol errors: %s; all tested names fit 170px with complete glyphs, centered rows, unchanged geometry and restored short-name font\n",locale->tag);
 }
 #endif
 

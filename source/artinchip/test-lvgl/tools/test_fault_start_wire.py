@@ -148,9 +148,10 @@ static void clear_before_start(machine_fault_key_t key){
  else assert(resolved==1&&!machine_fault_find(key,NULL));
  assert(app_command_runtime_request_count_start()&&tx==4&&cmds[3]==0x0A);
  if(batch){
-  app_fault_recovery_stacker_cleared();assert(resolved==1&&!machine_fault_find(key,NULL));
-  unsigned before=tx;app_fault_recovery_stacker_cleared();now+=30000;app_fault_recovery_poll();
-  assert(tx==before&&resolved==1); /* Physical recovery stops Batch retries; duplicate 51 is inert. */
+  unsigned before=tx;app_fault_recovery_stacker_cleared();
+  assert(!machine_fault_find(key,NULL)&&tx==before);
+  app_fault_recovery_stacker_cleared();now+=30000;app_fault_recovery_poll();
+  assert(!machine_fault_find(key,NULL)&&tx==before); /* Physical recovery stops Batch retries; duplicate 51 is inert. */
  }
 }
 static void start_gates(void){

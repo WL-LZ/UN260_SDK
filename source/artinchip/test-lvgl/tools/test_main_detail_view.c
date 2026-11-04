@@ -323,7 +323,7 @@ static const char *const protocol_reject_names[] = {
     "IMG Version Unknow", "IMG Face Error", "IMG Ort Error", "ANGLE", "IR-OVD",
     "IR –MT", "Hole", "DogEar", "DIRT", "Tape", "Tears", "Crumples", "De_ink",
     "Soiling", "eError_Limpness", "IMG Face&Ort Error", "OCR1 Error", "OCR2 Error",
-    "OCR3 Error", "0x31"
+    "OCR3 Error", "0x31", "Unknown Error", "Amount doesn't match"
 };
 
 static unsigned protocol_glyph_failures;
@@ -377,13 +377,13 @@ static void assert_protocol_label(lv_obj_t *label, const char *expected,
 
 static void test_protocol_reject_rendering(void)
 {
-    assert(sizeof(protocol_reject_names) / sizeof(protocol_reject_names[0]) == 50);
+    const unsigned entries=sizeof(protocol_reject_names)/sizeof(protocol_reject_names[0]);
     assert(ui_lang_count() == 10);
     counting_sim_t *data = counting_data_mutable();
     counting_data_clear_errors(data);
-    assert(counting_data_ensure_error_capacity(data, 50));
-    data->err_num = 50;
-    for (unsigned code = 0; code < 50; ++code) {
+    assert(counting_data_ensure_error_capacity(data, entries));
+    data->err_num = entries;
+    for (unsigned code = 0; code < entries; ++code) {
         data->err_code[code] = code;
         data->err_pcs[code] = code + 1;
     }
@@ -409,16 +409,16 @@ static void test_protocol_reject_rendering(void)
         assert(lv_obj_get_y(detail_view->root) == 76);
         assert(lv_obj_get_width(detail_view->root) == 536);
         assert(lv_obj_get_height(detail_view->root) == 244);
-        assert(window()->count == 50);
+        assert(window()->count == entries);
         assert(window()->rows == 6 && window()->row_height == 34);
         assert(lv_obj_get_child_cnt(page_01_main_detail_scroll_obj()) == 8);
         /* Original coordinates are the baseline, not derived from new labels. */
         static const lv_coord_t original_x[] = {10, 70, 148};
         static const lv_coord_t original_width[] = {48, 60, 336};
-        for (unsigned first = 0; first < 50; first += 5) {
+        for (unsigned first = 0; first < entries; first += 5) {
             assert(lv_recycled_list_scroll_to_index(active()->list, first));
             render();
-            for (unsigned code = first; code < first + 5; ++code) {
+            for (unsigned code = first; code < entries && code < first + 5; ++code) {
                 lv_obj_t *row = row_at(code);
                 assert(lv_obj_get_y(row) >= 0 && lv_obj_get_y(row) <= 170);
                 assert(lv_obj_get_height(row) == 34);
@@ -436,14 +436,14 @@ static void test_protocol_reject_rendering(void)
                 assert_protocol_label(lv_obj_get_child(row, 2), protocol_reject_names[code], locale->tag, code);
             }
             char name[128];
-            snprintf(name, sizeof(name), "main-protocol-%s-%02X-%02X", locale->tag, first, first + 4);
+            snprintf(name, sizeof(name), "main-protocol-%s-%02X-%02X", locale->tag, first, LV_MIN(first + 4, entries - 1));
             write_bmp(name);
         }
         page_01_main_detail_destroy();
     }
     ui_lang_set(LANGUAGE_EN);
     assert(protocol_glyph_failures == 0);
-    printf("PASS real Main C protocol rendering: %zu locales x 50 codes, exact names, glyph coverage, original geometry, single-line and no clipping\n", languages);
+    printf("PASS real Main C protocol rendering: %zu locales x 52 codes, exact names, glyph coverage, original geometry, single-line and no clipping\n", languages);
 }
 
 static void test_reject_live_projection(void)

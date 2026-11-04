@@ -59,7 +59,7 @@ static void page_03_menu_refresh_batch_number(void){}
 static void smart_island_refresh_summary(void){}
 static void ui_manager_publish_data_changed(uint32_t topic){(void)topic;}
 static void app_fault_recovery_report(machine_fault_key_t key){(void)key;assert(!"not a preset stop");}
-static void fault_popup_report_preset_full(void){assert(!"not a preset stop");}
+static void fault_popup_report_preset_full(machine_fault_key_t key){(void)key;assert(!"not a preset stop");}
 static void page_03_batch_set_result(bool success,const setting_batch_result_t *result)
 {assert(!success&&result);++batch_failures;}
 #include "setting_rejection_under_test.inc"
