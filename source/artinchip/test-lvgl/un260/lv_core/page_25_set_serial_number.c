@@ -13,7 +13,9 @@
 
 static lv_settings_frame_t frame;
 static lv_obj_t *options[4], *confirmed;
-static bool pending;
+static bool pending, edited, unconfirmed;
+static uint8_t draft, submitted;
+static lv_obj_t *save_button;
 static const ui_text_id_t names[] = {
     UI_TEXT_SETTINGS_SERIAL_LEVEL_OFF, UI_TEXT_SETTINGS_SERIAL_LEVEL_1,
     UI_TEXT_SETTINGS_SERIAL_LEVEL_2, UI_TEXT_SETTINGS_SERIAL_LEVEL_3
@@ -25,12 +27,15 @@ static void refresh(void)
     uint8_t level = serial_number_state_level();
     lv_label_set_text_fmt(confirmed, ui_tr("Confirmed: %s"), level <= SERIAL_NUMBER_LEVEL_MAX ? ui_text_get(names[level]) : ui_tr("Unknown"));
     for (unsigned i = 0; i < 4; ++i) {
-        bool selected = level == i;
+        bool selected = draft == i;
         if (selected) lv_obj_add_state(options[i], LV_STATE_CHECKED);
         else lv_obj_clear_state(options[i], LV_STATE_CHECKED);
-        if (pending) settings_detail_action_wait(options[i], UI_N_("Wait for the controller to confirm the current setting."));
-        else settings_detail_action_wait(options[i], NULL);
     }
+    settings_detail_action_wait(save_button, pending ? UI_N_("Waiting for controller...") :
+        draft == serial_number_state_level() && !unconfirmed ? UI_N_("No changes to save.") : NULL);
+    lv_label_set_text(frame.message, pending ? ui_tr("Waiting for controller...") :
+        unconfirmed ? ui_tr("Your changes are kept. Try again.") :
+        draft != serial_number_state_level() ? ui_tr("Unsaved changes") : ui_tr("No changes"));
 }
 
 static void back(lv_event_t *event)
@@ -38,11 +43,11 @@ static void back(lv_event_t *event)
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) ui_manager_pop_page();
 }
 
-static void choose(lv_event_t *event)
+static void save(lv_event_t *event)
 {
     if (lv_event_get_code(event) != LV_EVENT_CLICKED || pending) return;
-    uint8_t level = (uint8_t)(uintptr_t)lv_event_get_user_data(event);
-    if (level == serial_number_state_level()) return;
+    uint8_t level = draft;
+    if (level == serial_number_state_level() && !unconfirmed) return;
     if (!serial_number_service_request(level != SERIAL_NUMBER_LEVEL_OFF, level)) {
         ui_notice_post_text(UI_NOTICE_WARNING,"settings.serial_number",UI_N_("Serial number"),UI_N_("Wait for the current setting result."));
         return;
@@ -52,14 +57,26 @@ static void choose(lv_event_t *event)
         ui_notice_post_text(UI_NOTICE_ERROR,"settings.serial_number",UI_N_("Serial number"),UI_N_("Request not sent. Try again."));
         return;
     }
+    submitted = draft;
+    edited = false;
     pending = true;
     ui_notice_post_text(UI_NOTICE_PROGRESS,"settings.serial_number",UI_N_("Serial number"),UI_N_("Waiting for controller..."));
+    refresh();
+}
+
+static void choose(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    draft = (uint8_t)(uintptr_t)lv_event_get_user_data(event);
+    edited = true;
     refresh();
 }
 
 void ui_page_25_set_serial_number_create(lv_obj_t *parent)
 {
     if (frame.root) return;
+    draft = pending ? submitted : serial_number_state_level();
+    edited = false;
     lv_settings_header_t header = {
         .title = ui_text_get(UI_TEXT_SETTINGS_SERIAL_LEVEL_TITLE), .icon = "ShieldCheck", .back = back
     };
@@ -73,7 +90,8 @@ void ui_page_25_set_serial_number_create(lv_obj_t *parent)
     confirmed=lv_settings_label(frame.body,"",24,136,&lv_font_instrument_sans_medium_16,0x586B78);
     for(unsigned i=0;i<4;i++)
         options[i]=lv_settings_segment(base,i,4,ui_text_get(names[i]),choose,(void*)(uintptr_t)i);
-    lv_label_set_text(frame.message, "");
+    lv_settings_action_button(frame.footer, 0, 0, 132, 46, ui_tr("Cancel"), LV_SETTINGS_ACTION_RETURN, back, NULL);
+    save_button = lv_settings_button(frame.footer, 0, 0, 132, 46, ui_tr("Save"), true, save, NULL);
     refresh();
 }
 
@@ -82,20 +100,23 @@ void ui_page_25_set_serial_number_destroy(void)
     if (frame.root) lv_obj_del(frame.root);
     memset(&frame, 0, sizeof(frame));
     memset(options, 0, sizeof(options));
-    confirmed = NULL;
+    confirmed = save_button = NULL;
 }
 
 void ui_page_25_set_serial_number_on_boot_setting(uint8_t level)
 {
     (void)level;
     pending = false;
+    unconfirmed = false;
+    if (!edited) draft = serial_number_state_level();
     refresh();
-    if (frame.message) lv_label_set_text(frame.message, "");
 }
 
 void ui_page_25_set_serial_number_on_reply(uint8_t level, uint8_t res)
 {
-    (void)level;(void)res;
+    (void)level;
+    unconfirmed = res != 0x01;
+    if (!unconfirmed && !edited) draft = serial_number_state_level();
     pending = false;
     refresh();
 

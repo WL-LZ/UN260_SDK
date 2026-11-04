@@ -205,6 +205,18 @@ int main(void){standby_defaults(&saved);lv_init();mist=load("mist.bgra",1280*400
  assert(lv_obj_get_style_bg_opa(body,LV_PART_MAIN)==LV_OPA_TRANSP);
  assert(lv_obj_get_child_cnt(body)==2); /* mode selector and settings card only */
  assert(lv_obj_get_y(lv_obj_get_child(body,0))==0);
+
+ /* Ordinary choices and reset only edit draft, including the root page. */
+ standby_config_t initial=saved;
+ lv_obj_t *mode=lv_obj_get_child(lv_obj_get_child(body,0),1);
+ lv_event_send(mode,LV_EVENT_CLICKED,NULL);settings_tick(NULL);
+ assert(draft.mode==1&&!saving&&!memcmp(&saved,&initial,sizeof(saved)));
+ lv_obj_t *choose_layout=control(page,0,0,10,10,31,0xFFFFFF);
+ lv_event_send(choose_layout,LV_EVENT_CLICKED,NULL);settings_tick(NULL);
+ assert(draft.active[1]==1&&!saving&&!memcmp(&saved,&initial,sizeof(saved)));
+ reset_mode(NULL);assert(!saving&&!memcmp(&saved,&initial,sizeof(saved)));
+ queue_save();assert(saving&&saved.mode==1);store_complete=true;settings_tick(NULL);
+ draft=initial;saved=initial;render();
  current_page=UI_PAGE_STANDBY_SETTING;assert(ui_page_34_standby_request_back());assert(current_page==UI_PAGE_MAIN);
  queue_save();assert(saving&&test_notice_kind==UI_NOTICE_PROGRESS);ui_notice_dismiss(NULL);assert(saving);store_complete=true;settings_tick(NULL);assert(!saving&&test_notice_kind==UI_NOTICE_SUCCESS);
  tab=2;render();assert(ui_page_34_standby_request_back());assert(tab==0);tab=4;assert(owns_single_drag());tab=0;draft.mode=1;render();snapshot("settings-type");assert_flat(page);

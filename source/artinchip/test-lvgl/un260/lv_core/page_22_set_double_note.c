@@ -13,7 +13,9 @@
 
 static lv_settings_frame_t frame;
 static lv_obj_t *options[3], *confirmed;
-static bool pending;
+static bool pending, edited, unconfirmed;
+static uint8_t draft, submitted;
+static lv_obj_t *save_button;
 static const ui_text_id_t names[] = {
     UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_1, UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_2,
     UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3
@@ -25,12 +27,15 @@ static void refresh(void)
     uint8_t level = machine_state_double_note_level();
     lv_label_set_text_fmt(confirmed, ui_tr("Confirmed level: %u"), (unsigned)level);
     for (unsigned i = 0; i < 3; ++i) {
-        bool selected = level == i + 1;
+        bool selected = draft == i + 1;
         if (selected) lv_obj_add_state(options[i], LV_STATE_CHECKED);
         else lv_obj_clear_state(options[i], LV_STATE_CHECKED);
-        if (pending) settings_detail_action_wait(options[i], UI_N_("Wait for the controller to confirm the current setting."));
-        else settings_detail_action_wait(options[i], NULL);
     }
+    settings_detail_action_wait(save_button, pending ? UI_N_("Waiting for controller...") :
+        draft == machine_state_double_note_level() && !unconfirmed ? UI_N_("No changes to save.") : NULL);
+    lv_label_set_text(frame.message, pending ? ui_tr("Waiting for controller...") :
+        unconfirmed ? ui_tr("No response received. Check device status.") :
+        draft != machine_state_double_note_level() ? ui_tr("Unsaved changes") : ui_tr("No changes"));
 }
 
 static void back(lv_event_t *event)
@@ -38,24 +43,36 @@ static void back(lv_event_t *event)
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) ui_manager_pop_page();
 }
 
-static void choose(lv_event_t *event)
+static void save(lv_event_t *event)
 {
     if (lv_event_get_code(event) != LV_EVENT_CLICKED || pending) return;
-    uint8_t target = (uint8_t)(uintptr_t)lv_event_get_user_data(event);
+    uint8_t target = draft;
     uint8_t previous = machine_state_double_note_level();
-    if (target == previous) return;
+    if (target == previous && !unconfirmed) return;
     if (!setting_service_request_double_note_level(target, previous)) {
         ui_notice_post_text(UI_NOTICE_ERROR,"settings.double_note",UI_N_("Double-note detection"),UI_N_("Request not sent. Try again."));
         return;
     }
+    submitted = draft;
+    edited = false;
     pending = true;
     ui_notice_post_text(UI_NOTICE_PROGRESS,"settings.double_note",UI_N_("Double-note detection"),UI_N_("Waiting for controller..."));
+    refresh();
+}
+
+static void choose(lv_event_t *event)
+{
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    draft = (uint8_t)(uintptr_t)lv_event_get_user_data(event);
+    edited = true;
     refresh();
 }
 
 void ui_page_22_set_double_note_create(lv_obj_t *parent)
 {
     if (frame.root) return;
+    draft = pending ? submitted : machine_state_double_note_level();
+    edited = false;
     lv_settings_header_t header = {
         .title = ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_TITLE), .icon = "Layers", .back = back
     };
@@ -71,7 +88,8 @@ void ui_page_22_set_double_note_create(lv_obj_t *parent)
     for (unsigned i = 0; i < 3; ++i) {
         options[i] = lv_settings_segment(base,i,3,ui_text_get(names[i]),choose,(void *)(uintptr_t)(i+1));
     }
-    lv_label_set_text(frame.message, "");
+    lv_settings_action_button(frame.footer, 0, 0, 132, 46, ui_tr("Cancel"), LV_SETTINGS_ACTION_RETURN, back, NULL);
+    save_button = lv_settings_button(frame.footer, 0, 0, 132, 46, ui_tr("Save"), true, save, NULL);
     refresh();
 }
 
@@ -80,20 +98,23 @@ void ui_page_22_set_double_note_destroy(void)
     if (frame.root) lv_obj_del(frame.root);
     memset(&frame, 0, sizeof(frame));
     memset(options, 0, sizeof(options));
-    confirmed = NULL;
+    confirmed = save_button = NULL;
 }
 
 void ui_page_22_set_double_note_on_boot_setting(void)
 {
     setting_service_clear_double_note_level_request();
     pending = false;
+    unconfirmed = false;
+    if (!edited) draft = machine_state_double_note_level();
     refresh();
-    if (frame.message) lv_label_set_text(frame.message, "");
 }
 
 void ui_page_22_set_double_note_on_reply(const setting_value_result_t *result)
 {
     if (!result) return;
+    unconfirmed = result->timeout;
+    if (result->success && !edited) draft = machine_state_double_note_level();
     pending = false;
     refresh();
 

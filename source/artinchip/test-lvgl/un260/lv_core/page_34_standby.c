@@ -212,8 +212,8 @@ static bool handle_gesture(gesture_action_t action){
  }
  return false;
 }
-bool ui_page_34_standby_request_back(void){if(!page)return false;if(standby_store_busy()||settings_detail_overlay_is_open())return true;if(tab){if(memcmp(&draft,standby_config(),sizeof(draft)))settings_detail_dialog_show(ui_tr("Discard changes?"),ui_tr("Your saved layout will not change."),ui_tr("Discard"),ui_tr("Keep editing"),discard,NULL,NULL);else{tab=0;redraw=true;}}else ui_manager_pop_page();return true;}
-static void reset_mode(void*u){(void)u;standby_config_t d;standby_defaults(&d);memcpy(draft.layout[draft.mode],d.layout[draft.mode],sizeof(d.layout[0]));draft.active[draft.mode]=0;queue_save();}
+bool ui_page_34_standby_request_back(void){if(!page)return false;if(standby_store_busy()||settings_detail_overlay_is_open())return true;if(tab){if(memcmp(&draft,standby_config(),sizeof(draft)))settings_detail_dialog_show(ui_tr("Discard changes?"),ui_tr("Your saved layout will not change."),ui_tr("Discard"),ui_tr("Keep editing"),discard,NULL,NULL);else{tab=0;redraw=true;}}else {draft=*standby_config();ui_manager_pop_page();}return true;}
+static void reset_mode(void*u){(void)u;standby_config_t d;standby_defaults(&d);memcpy(draft.layout[draft.mode],d.layout[draft.mode],sizeof(d.layout[0]));draft.active[draft.mode]=0;redraw=true;}
 static void delete_photo(void*u){(void)u;unsigned photo=layout()->photo;if(standby_store_delete(photo)){for(unsigned m=0;m<2;m++)for(unsigned i=0;i<3;i++)if(draft.layout[m][i].photo==photo){draft.layout[m][i].photo=1;draft.layout[m][i].scheduled=1;}redraw=true;}}
 static void timeout_input(const char*s,void*u){(void)u;char*end;long v=strtol(s,&end,10);if(!*s||*end||v<1||v>1440){ui_notice_post_text(UI_NOTICE_WARNING,"settings.standby",UI_N_("Invalid duration"),UI_N_("Enter 1-1440 minutes, or select Never."));return;}draft.minutes=v;redraw=true;}
 static void hex_input(const char*s,void*u){(void)u;if(*s=='#')s++;bool digits=true;for(const char*t=s;*t;t++)if(!isxdigit((unsigned char)*t))digits=false;char*end;unsigned long v=strtoul(s,&end,16);if(!digits||strlen(s)!=6||*end||v>0xFFFFFF){ui_notice_post_text(UI_NOTICE_WARNING,"settings.standby",UI_N_("Invalid colour"),UI_N_("Enter six hexadecimal digits, e.g. EAF0F3."));return;}if(tab==5){if(draft.mode&&layout()->auto_text)return;layout()->text_color=v;}else layout()->color=v;redraw=true;}
@@ -222,8 +222,8 @@ static void action(lv_event_t*e){int id=(int)(intptr_t)lv_event_get_user_data(e)
  else if(id==2)queue_save();
  else if(id==3){const char*reason=app_standby_runtime_blocker();if(reason&&!app_standby_runtime_needs_fault_review())ui_notice_post_text(UI_NOTICE_WARNING,"settings.standby",UI_N_("Standby"),reason);else (void)app_standby_runtime_request();}
  else if(id>=10&&id<=14){tab=id-10;if(tab==4)selected=0;redraw=true;}
- else if(id==20||id==21){draft.mode=id-20;queue_save();}
- else if(id>=30&&id<=32){draft.active[draft.mode]=id-30;queue_save();}
+ else if(id==20||id==21){draft.mode=id-20;redraw=true;}
+ else if(id>=30&&id<=32){draft.active[draft.mode]=id-30;redraw=true;}
  else if(id>=40&&id<=45){const int values[]={1,5,10,30,0,-1};if(id==45)settings_detail_keyboard_show(ui_tr("Custom duration (1-1440 min)"),"",4,SETTINGS_DETAIL_KEYBOARD_UINT,timeout_input,NULL);else draft.minutes=values[id-40];redraw=true;}
  else if(id>=50&&id<54){layout()->date_bits^=1<<(id-50);redraw=true;}
  else if(id>=54&&id<=56){layout()->date_style=id-54;redraw=true;}
@@ -250,9 +250,10 @@ static void rgb_controls(lv_obj_t*parent,int top,uint32_t value,bool locked){
  for(int i=0;i<3;i++){label(parent,(const char*[]){"R","G","B"}[i],5,top-9+i*48,&lv_font_instrument_sans_medium_18,0x52758A);lv_obj_t*s=lv_slider_create(parent);lv_obj_set_pos(s,55,top+i*48);lv_obj_set_size(s,588,10);lv_obj_set_style_bg_color(s,lv_color_hex(0xDAE4EC),LV_PART_MAIN);lv_obj_set_style_bg_opa(s,255,LV_PART_MAIN);lv_obj_set_style_radius(s,5,LV_PART_MAIN);lv_obj_set_style_bg_color(s,lv_color_hex(locked?0xA8B6C2:0x287BE4),LV_PART_INDICATOR);lv_obj_set_style_bg_opa(s,255,LV_PART_INDICATOR);lv_obj_set_style_bg_color(s,lv_color_hex(0xFFFFFF),LV_PART_KNOB);lv_obj_set_style_bg_opa(s,255,LV_PART_KNOB);lv_obj_set_style_radius(s,LV_RADIUS_CIRCLE,LV_PART_KNOB);lv_obj_set_style_pad_all(s,9,LV_PART_KNOB);lv_obj_set_style_border_width(s,2,LV_PART_KNOB);lv_obj_set_style_border_color(s,lv_color_hex(locked?0xA8B6C2:0x287BE4),LV_PART_KNOB);lv_obj_set_ext_click_area(s,16);lv_slider_set_range(s,0,255);lv_slider_set_value(s,(value>>(16-i*8))&255,LV_ANIM_OFF);lv_obj_add_event_cb(s,color_changed,LV_EVENT_VALUE_CHANGED,(void*)(intptr_t)(16-i*8));if(locked)lv_obj_add_state(s,LV_STATE_DISABLED);}
 }
 static void render(void){lv_obj_clean(page);memset(&preview,0,sizeof(preview));moving.active=false;hex_label=NULL;gallery=NULL;edit_hint=NULL;
- if(tab==4){if((selected==2&&!draft.mode)||(selected==1&&!layout()->date_bits))selected=0;scene_create(&preview,page,0,0,false,true,&draft);button(page,390,345,100,ui_tr("Left"),90,false);button(page,500,345,100,ui_tr("Centre"),91,false);button(page,610,345,100,ui_tr("Right"),92,false);button(page,870,345,120,ui_tr("Cancel"),1,false);button(page,1000,345,190,ui_tr("Save layout"),2,true);editor_apply();return;}
+ if(tab==4){if((selected==2&&!draft.mode)||(selected==1&&!layout()->date_bits))selected=0;scene_create(&preview,page,0,0,false,true,&draft);button(page,390,345,100,ui_tr("Left"),90,false);button(page,500,345,100,ui_tr("Centre"),91,false);button(page,610,345,100,ui_tr("Right"),92,false);button(page,870,345,120,ui_tr("Cancel"),1,false);button(page,1000,345,190,ui_tr("Save"),2,true);editor_apply();return;}
  const char*titles[]={ui_tr("Standby"),ui_tr("Start after"),ui_tr("Clock & date"),draft.mode?ui_tr("Colour palette"):ui_tr("Photo collection"),ui_tr("Edit position"),ui_tr("Text colour")};label(page,titles[tab],30,22,&lv_font_instrument_sans_medium_24,0x20303A);if(tab){char crumb[64];snprintf(crumb,sizeof(crumb),ui_tr("%s / Layout %u"),draft.mode?ui_tr("Typographic"):ui_tr("Photo"),draft.active[draft.mode]+1);label(page,crumb,305,31,&lv_font_instrument_sans_medium_12,0x627C8D);}
- button(page,986,16,132,tab?ui_tr("Save"):ui_tr("Preview"),tab?2:3,true);
+ button(page,986,16,132,ui_tr("Save"),2,true);
+ if(!tab)button(page,840,16,132,ui_tr("Preview"),3,false);
  lv_obj_t*divider=box(page,1130,25,1,26,0xC7D1D9);lv_obj_clear_flag(divider,LV_OBJ_FLAG_CLICKABLE);
  button(page,1144,16,106,ui_tr("Back"),1,false);
  scene_create(&preview,page,30,76,true,false,&draft);lv_obj_set_size(preview.root,520,163);lv_obj_set_style_radius(preview.root,16,0);lv_obj_set_style_clip_corner(preview.root,true,0);

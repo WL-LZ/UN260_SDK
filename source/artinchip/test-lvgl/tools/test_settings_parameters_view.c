@@ -136,36 +136,61 @@ static lv_obj_t *find_label(lv_obj_t *o,const char *text)
 static lv_obj_t *find_type(lv_obj_t *o,const lv_obj_class_t *type)
 { if(lv_obj_check_type(o,type))return o;for(unsigned i=0;i<lv_obj_get_child_cnt(o);i++){lv_obj_t *r=find_type(lv_obj_get_child(o,i),type);if(r)return r;}return NULL; }
 static lv_obj_t *button(const char *text)
-{ lv_obj_t *o=find_label(lv_scr_act(),text);assert(o);while(o&&!lv_obj_has_flag(o,LV_OBJ_FLAG_CLICKABLE))o=lv_obj_get_parent(o);assert(o);return o; }
+{ lv_obj_update_layout(lv_scr_act());lv_obj_t *o=find_label(lv_scr_act(),text);if(!o)fprintf(stderr,"Missing button: %s\n",text);assert(o);while(o&&!lv_obj_has_flag(o,LV_OBJ_FLAG_CLICKABLE))o=lv_obj_get_parent(o);assert(o);return o; }
 static void click(const char *text) { lv_event_send(button(text),LV_EVENT_CLICKED,NULL); }
 static void accept(void) { assert(confirm_dialog);settings_detail_dialog_cb_t cb=confirm_dialog;void *data=dialog_data;settings_detail_dialog_hide();cb(data); }
 static void advance(unsigned ms) { lv_tick_inc(ms);lv_timer_handler(); }
 
-static void immediate_pages(void)
+static void staged_pages(void)
 {
+    unsigned before=sends;
     setting_value_result_t result={.target=3,.previous=2,.success=false};
     ui_page_22_set_double_note_create(lv_scr_act());snapshot("double");
-    lv_color_t checked=lv_obj_get_style_bg_color(button(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_2)),0);
-    click(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3));assert(lv_obj_get_style_bg_color(button(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_2)),0).full==checked.full);assert(last_command==0x31&&last_payload[0]==3);
-    assert(find_label(lv_scr_act(),"Confirmed level: 2"));snapshot("double-pending");
-    unsigned sent_before=sends,notice_before=action_notices;
-    assert(lv_obj_has_state(button(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3)),LV_STATE_DISABLED));
-    assert(action_blocked(button(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3))));
     click(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3));
-    assert(sends==sent_before&&action_notices==notice_before);
-    ui_page_22_set_double_note_on_reply(&result);assert(find_label(lv_scr_act(),"Confirmed level: 2"));
-    click(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3));double_level=3;result.success=true;
-    ui_page_22_set_double_note_on_reply(&result);assert(find_label(lv_scr_act(),"Confirmed level: 3"));ui_page_22_set_double_note_destroy();
+    assert(sends==before&&double_level==2);
+    assert(lv_obj_has_state(button(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3)),LV_STATE_CHECKED));
+    click("Save");assert(sends==before+1&&last_command==0x31&&last_payload[0]==3);
+    assert(find_label(lv_scr_act(),"Confirmed level: 2"));snapshot("double-pending");
+    assert(action_blocked(button("Save"))&&!action_blocked(button("Back")));
+    assert(!action_blocked(button(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_1))));
+    click(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_1));click("Save");assert(sends==before+1);
+    double_level=3;result.success=true;ui_page_22_set_double_note_on_reply(&result);
+    assert(lv_obj_has_state(button(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_1)),LV_STATE_CHECKED));
+    click("Save");assert(last_payload[0]==1);result.success=false;result.timeout=true;
+    ui_page_22_set_double_note_on_reply(&result);assert(!action_blocked(button("Save")));
+    /* A timeout permits retry even when selecting the last confirmed value. */
+    click(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3));before=sends;click("Save");assert(sends==before+1);
+    result.success=true;result.timeout=false;ui_page_22_set_double_note_on_reply(&result);
+    assert(action_blocked(button("Save")));before=sends;click(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_1));click("Cancel");
+    ui_page_22_set_double_note_destroy();ui_page_22_set_double_note_create(lv_scr_act());
+    assert(lv_obj_has_state(button(ui_text_get(UI_TEXT_SETTINGS_DOUBLE_NOTE_LEVEL_3)),LV_STATE_CHECKED)&&sends==before);
+    ui_page_22_set_double_note_destroy();
+    /* Flap is a physical action, deliberately outside staged configuration. */
     ui_page_23_set_flap_create(lv_scr_act());snapshot("flap");click(ui_text_get(UI_TEXT_SETTINGS_FLAP_DOWN));
     assert(last_command==0x42&&last_payload[0]==2);flap=2;ui_page_23_set_flap_on_reply(&result);ui_page_23_set_flap_destroy();
     ui_page_24_set_reject_pocket_create(lv_scr_act());snapshot("reject");click("Enter capacity");assert(keyboard_confirm);
-    unsigned before=sends;keyboard_confirm("0",keyboard_data);assert(sends==before);keyboard_confirm("75",keyboard_data);
-    assert(last_payload[0]==75);reject_capacity=75;ui_page_24_set_reject_pocket_on_reply(&result);ui_page_24_set_reject_pocket_destroy();
+    before=sends;keyboard_confirm("0",keyboard_data);assert(sends==before);keyboard_confirm("75",keyboard_data);
+    assert(sends==before&&reject_capacity==50);snapshot("reject-draft");click("Save");
+    assert(last_command==0x33&&last_payload[0]==75);click("80");reject_capacity=75;
+    ui_page_24_set_reject_pocket_on_reply(&result);assert(lv_obj_has_state(button("80"),LV_STATE_CHECKED));
+    before=sends;click("Back");ui_page_24_set_reject_pocket_destroy();ui_page_24_set_reject_pocket_create(lv_scr_act());
+    assert(sends==before&&action_blocked(button("Save")));click("90");click("Save");
+    ui_page_24_set_reject_pocket_destroy();ui_page_24_set_reject_pocket_create(lv_scr_act());
+    assert(action_blocked(button("Save"))&&!action_blocked(button("Back")));
+    result.success=false;result.timeout=true;ui_page_24_set_reject_pocket_on_reply(&result);
+    assert(lv_obj_has_state(button("90"),LV_STATE_CHECKED)&&!action_blocked(button("Save")));
+    click("Save");result.success=true;result.timeout=false;reject_capacity=90;
+    ui_page_24_set_reject_pocket_on_reply(&result);ui_page_24_set_reject_pocket_destroy();
     serial_number_state_confirm(false,0);ui_page_25_set_serial_number_create(lv_scr_act());snapshot("serial-off");
-    click(ui_text_get(UI_TEXT_SETTINGS_SERIAL_LEVEL_2));assert(last_command==0x32&&last_payload[0]==2);
-    serial_number_setting_result_t serial_result;assert(serial_number_service_take_reply(2,1,&serial_result));
-    serial_number_state_confirm(true,2);ui_page_25_set_serial_number_on_reply(2,1);snapshot("serial-confirmed");ui_page_25_set_serial_number_destroy();
-    puts("PASS immediate parameters: confirmed values, pending locks, reject range, ACK refresh and serial OFF=0");
+    before=sends;click(ui_text_get(UI_TEXT_SETTINGS_SERIAL_LEVEL_2));assert(sends==before&&!serial_number_state_enabled());
+    click("Save");assert(last_command==0x32&&last_payload[0]==2);
+    serial_number_setting_result_t serial_result;assert(serial_number_service_take_reply(2,2,&serial_result));
+    ui_page_25_set_serial_number_on_reply(2,2);assert(!serial_number_state_enabled());
+    assert(lv_obj_has_state(button(ui_text_get(UI_TEXT_SETTINGS_SERIAL_LEVEL_2)),LV_STATE_CHECKED));
+    click("Save");assert(serial_number_service_take_reply(2,1,&serial_result));
+    serial_number_state_confirm(true,2);ui_page_25_set_serial_number_on_reply(2,1);snapshot("serial-confirmed");
+    assert(action_blocked(button("Save")));ui_page_25_set_serial_number_destroy();
+    puts("PASS staged parameters: edit isolation, Save-only send, ACK, rejection, timeout/same-value retry, pending edits, cancel and reopen");
 }
 
 static void print_page_test(void)
@@ -261,16 +286,16 @@ static void cfd_page_test(void)
     lv_obj_scroll_to_y(rows,999,LV_ANIM_OFF);snapshot("cfd-bottom");
     lv_obj_scroll_to_y(rows,0,LV_ANIM_OFF);
     click("4");assert(lv_obj_has_state(button("4"),LV_STATE_CHECKED));assert(gesture_policy&&gesture_policy(GESTURE_ACTION_HOME)&&overlay);
-    settings_detail_dialog_hide();click(ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE));assert(last_payload[0]==2);
+    settings_detail_dialog_hide();click("Save");assert(last_payload[0]==2);
     unsigned notices_before=action_notices,pops_before=pops;
     assert(lv_nav_button_request_back()==LV_NAV_BACK_BLOCKED);
     assert(action_notices==notices_before&&pops==pops_before);assert(gesture_policy(GESTURE_ACTION_HOME));
     advance(800);assert(cfd_service_take_update_timeout());ui_page_27_set_cfd_level_on_request_failed();
     assert(test_notice_kind==UI_NOTICE_WARNING&&!overlay);
-    assert(find_label(lv_scr_act(),"4"));snapshot("cfd-save-failed");click(ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE));
+    assert(find_label(lv_scr_act(),"4"));snapshot("cfd-save-failed");click("Save");
     reply[4]=4;reply[3]=2;ui_page_27_set_cfd_level_on_info(reply,sizeof(reply));assert(cfd_service_busy());
     reply[3]=1;ui_page_27_set_cfd_level_on_info(reply,sizeof(reply));assert(!cfd_service_busy());
-    assert(action_blocked(button(ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE))));
+    assert(action_blocked(button("Save")));
     ui_page_27_set_cfd_level_destroy();assert(!gesture_policy);ui_page_27_set_cfd_level_on_info(reply,sizeof(reply));
     puts("PASS CFD query gate, draft retention, Home/Back guard, timeout retry, wrong profile rejection and valid echo");
 }
@@ -349,8 +374,8 @@ static void brightness_test(void)
 {
     ui_page_33_set_brightness_create(lv_scr_act());snapshot("brightness");lv_obj_t *slider=find_type(lv_scr_act(),&lv_slider_class);assert(slider);
     lv_slider_set_value(slider,80,LV_ANIM_OFF);lv_event_send(slider,LV_EVENT_VALUE_CHANGED,NULL);assert(brightness==80);snapshot("brightness-preview");
-    persist_ok=false;click("Keep");advance(8001);assert(brightness==50);persist_ok=true;
-    lv_slider_set_value(slider,70,LV_ANIM_OFF);lv_event_send(slider,LV_EVENT_VALUE_CHANGED,NULL);click("Keep");ui_page_33_set_brightness_destroy();assert(brightness==70);
+    persist_ok=false;click("Save");advance(8001);assert(brightness==50);persist_ok=true;
+    lv_slider_set_value(slider,70,LV_ANIM_OFF);lv_event_send(slider,LV_EVENT_VALUE_CHANGED,NULL);click("Save");ui_page_33_set_brightness_destroy();assert(brightness==70);
     ui_page_33_set_brightness_create(lv_scr_act());slider=find_type(lv_scr_act(),&lv_slider_class);
     lv_slider_set_value(slider,90,LV_ANIM_OFF);lv_event_send(slider,LV_EVENT_VALUE_CHANGED,NULL);ui_page_33_set_brightness_destroy();assert(brightness==70);
     backlight_ok=false;ui_page_33_set_brightness_create(lv_scr_act());snapshot("brightness-unavailable");
@@ -513,7 +538,7 @@ int main(void)
     lv_obj_add_state(palette,LV_STATE_PRESSED);
     assert(lv_color_to32(lv_obj_get_style_bg_color(palette,0))==lv_color_to32(lv_color_hex(LV_SETTINGS_SECONDARY_PRESSED)));
     lv_obj_del(palette);
-    immediate_pages();print_page_test();cfd_page_test();password_page_test();brightness_test();
+    staged_pages();print_page_test();cfd_page_test();password_page_test();brightness_test();
     color_calibration_test();factory_test();locale_parameters_test();locale_pin_keypad_test();
     puts("PASS 10 ordinary settings actual-LVGL host renders and state transitions (not board verification)");return 0;
 }

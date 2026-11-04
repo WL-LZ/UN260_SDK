@@ -162,8 +162,8 @@ void ui_page_33_set_brightness_create(lv_obj_t *parent)
     lv_obj_add_event_cb(preview.slider, slider_event, LV_EVENT_ALL, NULL);
     lv_settings_label(track, ui_tr("Minimum"), 28, 140, &lv_font_instrument_sans_medium_14, 0x586B78);
     lv_settings_label(track, ui_tr("Maximum"), 826, 140, &lv_font_instrument_sans_medium_14, 0x586B78);
-    preview.revert = lv_settings_action_button(frame.footer, 964, 0, 124, 46, ui_tr("Revert"), LV_SETTINGS_ACTION_RETURN, revert, NULL);
-    preview.keep = lv_settings_button(frame.footer, 1100, 0, 132, 46, ui_tr("Keep"), true, keep, NULL);
+    preview.revert = lv_settings_action_button(frame.footer, 964, 0, 124, 46, ui_tr("Cancel"), LV_SETTINGS_ACTION_RETURN, revert, NULL);
+    preview.keep = lv_settings_button(frame.footer, 1100, 0, 132, 46, ui_tr("Save"), true, keep, NULL);
     preview.timer = lv_timer_create(tick, 100, NULL);
     if (preview.timer) lv_timer_pause(preview.timer);
     bool available = backlight_service_probe() && backlight_service_max() > 0 && preview.timer;

@@ -194,7 +194,7 @@ void ui_page_27_set_cfd_level_create(lv_obj_t *parent)
     }
     retry_button = lv_settings_button(frame.footer, 964, 0, 124, 46, ui_tr("Retry"), false, retry, NULL);
     save_button = lv_settings_button(frame.footer, 1100, 0, 132, 46,
-        ui_text_get(UI_TEXT_SETTINGS_CFD_LEVEL_UPDATE), true, save, NULL);
+        ui_tr("Save"), true, save, NULL);
     gesture_service_set_page_policy(UI_PAGE_CFD_LEVEL_SETTING, NULL, gesture);
     if (saving) {
         lv_label_set_text(frame.message, "");
