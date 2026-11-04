@@ -342,7 +342,7 @@ static void print_create_field(lv_obj_t *parent, int y, const char *title,
     bool numeric=field==PRINT_FIELD_SPACE_TOP||field==PRINT_FIELD_SPACE_BOTTOM;
     lv_settings_label(parent,numeric?ui_tr("Blank lines / tap value for keyboard"):ui_tr("Tap to edit with keyboard"),20,y+29,&lv_font_instrument_sans_medium_12,0x586B78);
     lv_obj_t *button = lv_settings_action_button(parent, numeric?646:350, y, numeric?92:388, 44,
-        "", LV_SETTINGS_ACTION_INPUT, print_input_cb, (void *)(uintptr_t)field);
+        "", LV_SETTINGS_ACTION_INPUT_TINTED, print_input_cb, (void *)(uintptr_t)field);
     field_boxes[field] = button;
     *value = lv_settings_label(button, "", 18, 13,
         &lv_font_instrument_sans_medium_16, 0x1D2B34);

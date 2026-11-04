@@ -239,7 +239,7 @@ static void details_test(void){
  machine_time_value_t before={2024,1,31,23,59,58},now;
  ui_page_11_timeset_create(lv_scr_act());assert(!machine_time_is_confirmed());unsigned date_revision=machine_time_confirmation_revision();time_apply(NULL);assert(machine_time_is_confirmed()&&machine_time_confirmation_revision()==date_revision+1);ui_page_11_timeset_destroy();
  machine_time_confirm(&before);
- ui_page_11_timeset_create(lv_scr_act());snapshot("date-time");lv_obj_update_layout(time_frame.root);assert(lv_obj_get_x(lv_obj_get_parent(time_frame.back))+lv_obj_get_x(time_frame.back)>1100);assert(lv_obj_get_width(time_frame.back)==76&&lv_obj_get_height(time_frame.back)==42);
+ ui_page_11_timeset_create(lv_scr_act());snapshot("date-time");lv_obj_update_layout(time_frame.root);assert(lv_obj_get_x(lv_obj_get_parent(time_frame.back))+lv_obj_get_x(time_frame.back)>1100);assert(lv_obj_get_width(time_frame.back)==132&&lv_obj_get_height(time_frame.back)==46);
  pointer_feed(640,208,LV_INDEV_STATE_PRESSED);
  for(int y=218;y<=268;y+=10)pointer_feed(640,y,LV_INDEV_STATE_PRESSED);
  pointer_feed(640,268,LV_INDEV_STATE_RELEASED);

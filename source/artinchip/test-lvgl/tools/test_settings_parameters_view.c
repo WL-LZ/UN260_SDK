@@ -197,6 +197,17 @@ static void print_page_test(void)
     assert(find_label(lv_scr_act(),"Example / blank spacing scaled"));
     snapshot("print-large-spacing");click("Cancel");lv_obj_update_layout(lv_scr_act());
     assert(lv_obj_get_height(paper)==176&&lv_obj_get_y(receipt_body)==0&&sends==before);
+    const char *actions[]={"Cancel","Save","Back"};
+    for(unsigned i=0;i<3;i++){
+        lv_obj_t *b=button(actions[i]);
+        assert(lv_obj_get_width(b)==132&&lv_obj_get_height(b)==46);
+    }
+    lv_obj_t *inputs[]={bottom_input,button("Not set")};
+    for(unsigned i=0;i<2;i++){
+        assert(lv_obj_get_style_bg_color(inputs[i],0).full==lv_color_hex(0xEFF2F4).full);
+        assert(lv_obj_get_style_border_width(inputs[i],0)==0);
+    }
+
     puts("PASS receipt top/bottom preset and keyboard preview, bounded large margins, Cancel rollback, no draft sends");
     click("Serial");
     click("Not set");assert(keyboard_confirm);keyboard_confirm("UNION",keyboard_data);settings_detail_keyboard_hide();
@@ -319,7 +330,7 @@ static void password_page_test(void)
     }
     ui_page_05_set_password_destroy();ui_page_20_set_print_destroy();
     puts("PASS real LVGL login: first-concept geometry/colors/labels, opaque surface, 4s stable pixels, Clear/backspace/x/outside dismissal and repeated lifecycle");
-    ui_page_29_set_password_create(lv_scr_act());snapshot("password");click("Current password");
+    ui_page_29_set_password_create(lv_scr_act());snapshot("password");assert(lv_obj_get_style_bg_color(button("Current password"),0).full==lv_color_hex(0xEFF2F4).full);click("Current password");
     snapshot("password-keypad");
     click("9");click("9");click("9");click("9");
     assert(find_label(lv_scr_act(),"Incorrect current PIN. Try again."));

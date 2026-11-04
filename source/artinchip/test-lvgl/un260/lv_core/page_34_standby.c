@@ -178,7 +178,7 @@ static lv_obj_t* control(lv_obj_t*p,int x,int y,int w,int h,int id,uint32_t bg){
 static lv_obj_t*button(lv_obj_t*p,int x,int y,int w,const char*t,int id,bool active){
  lv_settings_action_role_t role=id==1?LV_SETTINGS_ACTION_RETURN:
      id==67||id==80?LV_SETTINGS_ACTION_DESTRUCTIVE_ENTRY:
-     id==63?LV_SETTINGS_ACTION_INPUT:active?LV_SETTINGS_ACTION_PRIMARY:LV_SETTINGS_ACTION_SECONDARY;
+     id==63?LV_SETTINGS_ACTION_INPUT_TINTED:active?LV_SETTINGS_ACTION_PRIMARY:LV_SETTINGS_ACTION_SECONDARY;
  bool has_arrow=id==1||id==3||(id>=11&&id<=14);
  lv_obj_t*b=control(p,x,y,w,44,id,LV_SETTINGS_CONTROL_SURFACE);
  lv_settings_action_style(b,role);

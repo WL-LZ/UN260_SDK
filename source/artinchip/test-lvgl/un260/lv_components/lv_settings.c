@@ -88,6 +88,8 @@ void lv_settings_action_style(lv_obj_t *o,lv_settings_action_role_t role)
         normal=LV_SETTINGS_DESTRUCTIVE;pressed=LV_SETTINGS_DESTRUCTIVE_PRESSED;text=0xFFFFFF;break;
     case LV_SETTINGS_ACTION_RETURN:
         normal=LV_SETTINGS_RETURN_SURFACE;pressed=LV_SETTINGS_RETURN_PRESSED;text=LV_SETTINGS_RETURN_TEXT;break;
+    case LV_SETTINGS_ACTION_INPUT_TINTED:
+        normal=LV_SETTINGS_INPUT_TINTED_SURFACE;pressed=LV_SETTINGS_INPUT_TINTED_PRESSED;text=LV_SETTINGS_INPUT_TEXT;break;
     case LV_SETTINGS_ACTION_INPUT:
         normal=LV_SETTINGS_INPUT_SURFACE;pressed=LV_SETTINGS_INPUT_PRESSED;text=LV_SETTINGS_INPUT_TEXT;break;
     case LV_SETTINGS_ACTION_DESTRUCTIVE_ENTRY:
@@ -147,6 +149,7 @@ void lv_settings_damped_choice_style(lv_obj_t *o,bool selected)
 lv_obj_t *lv_settings_action_button(lv_obj_t *p,int x,int y,int w,int h,const char *s,
                             lv_settings_action_role_t role,lv_event_cb_t cb,void *data)
 {
+    if(lv_obj_has_flag(p,LV_OBJ_FLAG_USER_3)){w=132;h=46;}
     lv_obj_t *o=lv_settings_box(p,x,y,w,h,LV_SETTINGS_SECONDARY_SURFACE);
     lv_obj_set_style_radius(o,11,0);lv_obj_add_flag(o,LV_OBJ_FLAG_CLICKABLE);
     lv_settings_action_style(o,role);
@@ -280,6 +283,8 @@ lv_settings_frame_t lv_settings_frame_create(lv_obj_t *parent,const lv_settings_
     ui_page_background_apply(f.root,UI_BACKGROUND_SETTINGS);
     lv_settings_header_t header=*cfg;header.subtitle=NULL;
     f.back=lv_settings_header(f.root,24,10,1232,&header);
+    lv_obj_set_size(f.back,132,46);
+    lv_obj_set_x(f.back,1082);
     lv_obj_t *heading=lv_obj_get_parent(f.back);
     for(uint32_t i=0;i<lv_obj_get_child_cnt(heading);i++){
         lv_obj_t *child=lv_obj_get_child(heading,i);
@@ -288,12 +293,12 @@ lv_settings_frame_t lv_settings_frame_create(lv_obj_t *parent,const lv_settings_
     f.body=lv_settings_panel(f.root,24,84,1232,300);
     /* Keep footer as the action owner for existing page lifecycles (PIN overlay).
      * Flex ignores historical absolute button positions and reflows hidden actions. */
-    f.footer=lv_settings_box(f.root,640,15,494,46,0);lv_obj_set_style_bg_opa(f.footer,0,0);
+    f.footer=lv_settings_box(f.root,640,15,438,46,0);lv_obj_set_style_bg_opa(f.footer,0,0);
     lv_obj_add_flag(f.footer,LV_OBJ_FLAG_USER_3);
     lv_obj_set_flex_flow(f.footer,LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(f.footer,LV_FLEX_ALIGN_END,LV_FLEX_ALIGN_CENTER,LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(f.footer,10,0);
-    lv_settings_box(f.root,1147,23,1,30,LV_SETTINGS_ACTION_DIVIDER);
+    lv_settings_box(f.root,1091,23,1,30,LV_SETTINGS_ACTION_DIVIDER);
     f.message=lv_settings_label(f.root,cfg->subtitle?cfg->subtitle:"",24,65,&lv_font_instrument_sans_medium_12,0x586B78);
     lv_obj_set_width(f.message,1232);lv_label_set_long_mode(f.message,LV_LABEL_LONG_DOT);
     return f;

@@ -223,7 +223,7 @@ static void header_guard_tests(void) {
         lv_event_send(frame.back,LV_EVENT_CLICKED,NULL);
         assert(header_back_calls==before+1);
         lv_obj_update_layout(frame.root);
-        assert(lv_obj_get_width(frame.back)==76 && lv_obj_get_height(frame.back)==42);
+        assert(lv_obj_get_width(frame.back)==132 && lv_obj_get_height(frame.back)==46);
         lv_obj_del(frame.root);
     }
     puts("PASS common header guard precedes navigation, unblock and recreate");

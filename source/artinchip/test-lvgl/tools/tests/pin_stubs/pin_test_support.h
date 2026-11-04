@@ -254,7 +254,7 @@ static inline lv_obj_t *settings_detail_create_button(lv_obj_t *parent,int x,int
 typedef struct { const char *title, *subtitle, *icon; lv_event_cb_t back; void *user_data; } lv_settings_header_t;
 typedef struct { lv_obj_t *root, *body, *footer, *back, *message; } lv_settings_frame_t;
 typedef enum {LV_SETTINGS_ACTION_SECONDARY,LV_SETTINGS_ACTION_PRIMARY,LV_SETTINGS_ACTION_DESTRUCTIVE,
- LV_SETTINGS_ACTION_RETURN,LV_SETTINGS_ACTION_INPUT,LV_SETTINGS_ACTION_DESTRUCTIVE_ENTRY} lv_settings_action_role_t;
+ LV_SETTINGS_ACTION_RETURN,LV_SETTINGS_ACTION_INPUT,LV_SETTINGS_ACTION_INPUT_TINTED,LV_SETTINGS_ACTION_DESTRUCTIVE_ENTRY} lv_settings_action_role_t;
 static inline lv_obj_t *lv_settings_label(lv_obj_t *parent,const char *text,int x,int y,const lv_font_t *font,uint32_t color)
 { return settings_detail_create_label(parent,text,font,color,x,y); }
 static inline lv_obj_t *lv_settings_box(lv_obj_t *p,int x,int y,int w,int h,uint32_t color)

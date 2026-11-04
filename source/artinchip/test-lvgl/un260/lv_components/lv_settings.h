@@ -11,7 +11,8 @@ const char *lv_settings_action_block_reason(lv_obj_t *button);
 typedef enum {
     LV_SETTINGS_ACTION_SECONDARY, LV_SETTINGS_ACTION_PRIMARY,
     LV_SETTINGS_ACTION_DESTRUCTIVE, LV_SETTINGS_ACTION_RETURN,
-    LV_SETTINGS_ACTION_INPUT, LV_SETTINGS_ACTION_DESTRUCTIVE_ENTRY
+    LV_SETTINGS_ACTION_INPUT, LV_SETTINGS_ACTION_DESTRUCTIVE_ENTRY,
+    LV_SETTINGS_ACTION_INPUT_TINTED
 } lv_settings_action_role_t;
 /* Semantic action colors, including pressed/disabled states. */
 void lv_settings_action_style(lv_obj_t *button, lv_settings_action_role_t role);

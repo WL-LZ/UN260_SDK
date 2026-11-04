@@ -66,12 +66,7 @@ static void password_setting_refresh_fields(void)
         if (field_cards[i]) {
             if(active)lv_obj_clear_flag(field_cards[i],LV_OBJ_FLAG_HIDDEN);
             else lv_obj_add_flag(field_cards[i],LV_OBJ_FLAG_HIDDEN);
-            lv_obj_set_style_bg_color(field_cards[i],
-                                      lv_color_hex(0xFFFFFF),
-                                      0);
-            lv_obj_set_style_border_color(field_cards[i],
-                                          active ? lv_color_hex(0x1462CC) : lv_color_hex(0xE3E9ED),
-                                          0);
+
         }
         if (field_values[i]) {
             lv_label_set_text(field_values[i],
@@ -270,7 +265,7 @@ static void password_setting_outside(lv_event_t *event)
 static void password_setting_create_field(lv_obj_t *parent, password_field_t field)
 {
     lv_obj_t *item = lv_settings_action_button(parent, 420, 22, 788, 188,
-        "", LV_SETTINGS_ACTION_INPUT, password_setting_field_cb, (void *)(uintptr_t)field);
+        "", LV_SETTINGS_ACTION_INPUT_TINTED, password_setting_field_cb, (void *)(uintptr_t)field);
     lv_settings_label(item, ui_tr(field_titles[field]), 24, 24,
         &lv_font_instrument_sans_medium_18, 0x1D2B34);
     field_values[field] = lv_settings_label(item, ui_tr("Tap to enter PIN"), 24, 90,
