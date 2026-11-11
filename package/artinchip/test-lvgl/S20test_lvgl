@@ -2,8 +2,6 @@
 #
 # Start test_lvgl....
 #
-# UN260_STORAGE_POLICY_V2: failed migration may return to a verified legacy app.
-# UN260_STORAGE_POLICY_V3: backup-bound enrollment and older journal recovery.
 # UN260_BOOT_BUNDLE_1: verified root player and single-owner UI handoff.
 # UN260_STARTUP_RECOVERY_V1: first-paint trial health and independent USB rescue.
 # UN260_TRIAL_VISUAL_CLEANUP_V1
@@ -33,6 +31,8 @@ RECOVERY_TOKENFILE=/run/test_lvgl.recovery.token
 RESCUE_DISPLAY_PIDFILE=/run/test_lvgl.rescue-display.pid
 RESCUE_DISPLAY=/usr/local/lib/un260-updater/rescue/display
 UI_HEALTH=/tmp/un260-ui.health
+TRIAL_DISPLAY=/usr/local/lib/un260-startup/trial-display
+TRIAL_DISPLAY_SHA256=@TRIAL_DISPLAY_SHA256@
 BOOT_LIVE_RECORD=/dev/.un260-boot-bundle
 RECOVERY_HEARTBEAT=/tmp/un260-recovery.heartbeat
 RECOVERY_STATUS=/tmp/ui_update.status
@@ -92,27 +92,14 @@ poll_pause() {
       esac
 }
 
-stop_upgrade_visual() {
-      # Only this invocation's child is ours; a changed ready marker may
-      # already name another renderer and is never used as the kill target.
-      [ -n "${upgrade_visual:-}" ] || return 0
-      select_poll_method
-      kill -TERM "$upgrade_visual" 2>/dev/null || true
-      visual_wait=0
-      while kill -0 "$upgrade_visual" 2>/dev/null; do
-          if [ "$visual_wait" -ge "$POLL_LIMIT" ]; then
-              echo 'Upgrade display did not stop; UI startup deferred'
-              return 1
-          fi
-          poll_pause
-          visual_wait=$((visual_wait + 1))
-      done
-      wait "$upgrade_visual" 2>/dev/null || true
-      upgrade_visual=""
-      light_pid=""
-      unset UN260_BOOT_LIGHT_ACTIVE
-      boot_trace upgrade_visual_released
-}
+# Open once so a concurrent rename cannot switch the helper after verification.
+show_trial_display() (
+      [ -f "$TRIAL_DISPLAY" ] && [ ! -L "$TRIAL_DISPLAY" ] && [ -x "$TRIAL_DISPLAY" ] || exit 1
+      exec 8< "$TRIAL_DISPLAY" || exit 1
+      sum=$(sha256sum /proc/self/fd/8) || exit 1
+      [ "${sum%% *}" = "$TRIAL_DISPLAY_SHA256" ] || exit 1
+      exec /proc/self/fd/8 --trial-display
+)
 
 live_pidfile() {
       [ -r "$1" ] || return 1
@@ -732,15 +719,16 @@ start_ready_impl() {
       if modern_platform; then
           prepare_app_launch || return 1
           cpu_performance_enter
-          # Older factory kernels defer any transaction visual. The updated
-          # root launcher admits only a bound, committed cold-boot trial, under
-          # the updater lock. This never publishes UI health or confirms it.
+          # The factory kernel may have deferred branding. Only the trial helper
+          # can decide whether this transaction permits an early frame.
           if early_display_ready && ! boot_light_owner &&
-             [ -d /var/lib/un260-updater/transaction ] &&
-             [ -x /usr/local/bin/un260_boot_launch ]; then
+             [ -d /var/lib/un260-updater/transaction ]; then
               boot_trace trial_visual_begin
-              /usr/local/bin/un260_boot_launch >> "$STARTUP_LOG" 2>&1 || true
-              boot_trace trial_visual_complete
+              if show_trial_display >> "$STARTUP_LOG" 2>&1; then
+                  boot_trace trial_visual_complete
+              else
+                  boot_trace trial_visual_deferred
+              fi
           fi
           boot_trace app_launch_check_begin
           # app-check prepares storage and completes journal recovery under
@@ -772,43 +760,6 @@ start_ready_impl() {
               return 1
           fi
       boot_trace recovery_complete
-      fi
-
-      # UN260_UNIFIED_1: only an installed, unfinished opt-in request can
-      # resume a package. Ordinary boot never initializes a partition.
-      if [ -f /etc/un260/unified-request ] &&
-         grep -q UN260_UNIFIED_1 /usr/bin/ui_update.sh &&
-         /usr/bin/ui_update.sh --unified-pending; then
-          select_poll_method
-          if boot_light_owner; then
-              kill -TERM "$light_pid" 2>/dev/null || true
-          fi
-          # Native maintenance display owns the same lease/handoff as boot.
-          /usr/local/bin/un260_upgrade_display >> "$STARTUP_LOG" 2>&1 &
-          upgrade_visual=$!
-          visual_wait=0
-          while ! boot_light_owner || [ "$light_pid" != "$upgrade_visual" ]; do
-              if ! kill -0 "$upgrade_visual" 2>/dev/null || [ "$visual_wait" -ge "$POLL_LIMIT" ]; then
-                  echo 'Upgrade display unavailable; no storage migration attempted'
-                  return 1
-              fi
-              poll_pause
-              visual_wait=$((visual_wait + 1))
-          done
-          if ! /usr/bin/ui_update.sh --continue-unified >> "$STARTUP_LOG" 2>&1; then
-              echo 'Unified upgrade paused; keep the same USB and inspect ui_update.log'
-              # Return only to a stable, verified installed application. This
-              # does not complete the request or discard recovery evidence.
-              if ! /usr/local/bin/un260_app_storage --can-launch-current >> "$STARTUP_LOG" 2>&1; then
-                  echo 'Starting test_lvgl: Fail (upgrade recovery required)'
-                  return 1
-              fi
-              echo 'Unified upgrade incomplete; returning to installed UI for maintenance; USB retry remains pending'
-              boot_trace unified_current_fallback
-          fi
-          # Recovery is complete, or the installed app has been verified.
-          # Release maintenance before selecting the current brand bundle.
-          stop_upgrade_visual || return 1
       fi
 
       fi

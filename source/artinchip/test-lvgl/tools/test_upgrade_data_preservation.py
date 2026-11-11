@@ -52,6 +52,7 @@ static storage_job_status_t mock_history=STORAGE_JOB_SUCCEEDED, mock_writes=STOR
 #define workspace_store_last_success() saved
 #define counting_data_mutable() (&data)
 #define counting_history_poll_commit(...) 0
+#define ui_history_data_return_space(now,request) true
 #define ui_history_data_status() mock_history
 #define storage_worker_pending_status() mock_writes
 #define counting_history_is_idle() idle

@@ -289,12 +289,9 @@ trial_runtime_file()
     [ "$(LC_ALL=C ls -ln "$trial_file" | awk '{print $1 ":" $3}')" = "$trial_permissions:$TRIAL_EXPECTED_UID" ]
 }
 
-trial_runtime_valid()
+# The caller holds the updater lock and has already validated the pending trial.
+trial_runtime_files_valid()
 {
-    trial_is_committed
-    trial_rc=$?
-    [ "$trial_rc" != 1 ] || return 0
-    [ "$trial_rc" = 0 ] || return "$trial_rc"
     for trial_runtime in usr/local/bin/test_lvgl usr/local/lib/liblvgl.so \
         usr/local/lib/un260-startup/runtime.sh etc/un260/update-core.manifest etc/un260/startup-runtime.sha256; do
         trial_runtime_file "$trial_runtime" || return 2
@@ -370,6 +367,15 @@ trial_cleanup_files()
         rm -f "$JOURNAL/trial" "$JOURNAL/trial.rollback" "$JOURNAL/trial.confirmed" && local_barrier
 }
 
+trial_active_boot_valid()
+{
+    [ "$trial_boot_id" != none ] || return 0
+    boot_safe_file "${ROOT_PREFIX:-/}" "$BOOT_ACTIVE" && boot_read_descriptor "$ROOT_PREFIX/$BOOT_ACTIVE" &&
+        [ "$(LC_ALL=C ls -ln "$ROOT_PREFIX/$BOOT_ACTIVE" | awk '{print $1 ":" $3}')" = "-rw-r--r--:$TRIAL_EXPECTED_UID" ] &&
+        [ "$boot_current" = "$trial_boot_id" ] && [ "$boot_current_hash" = "$trial_boot_sha" ] &&
+        boot_validate_bundle "${ROOT_PREFIX:-/}" "$trial_boot_id" "$trial_boot_sha"
+}
+
 trial_confirm()
 {
     trial_boot_eligible || return $?
@@ -381,15 +387,9 @@ trial_confirm()
     trial_exe=$TRIAL_PROC/$1/exe
     [ -f "$trial_exe" ] &&
         [ "$(dd if="$trial_exe" bs=4 count=1 2>/dev/null)" = "$(printf '\177ELF')" ] &&
-        [ "$(checked_digest "$trial_exe")" = "$trial_app_sha" ] && trial_runtime_valid || return 2
-    if [ "$trial_boot_id" != none ]; then
-        boot_safe_file "${ROOT_PREFIX:-/}" "$BOOT_ACTIVE" && boot_read_descriptor "$ROOT_PREFIX/$BOOT_ACTIVE" &&
-            [ "$(LC_ALL=C ls -ln "$ROOT_PREFIX/$BOOT_ACTIVE" | awk '{print $1 ":" $3}')" = "-rw-r--r--:$TRIAL_EXPECTED_UID" ] &&
-            [ "$boot_current" = "$trial_boot_id" ] && [ "$boot_current_hash" = "$trial_boot_sha" ] &&
-            boot_validate_bundle "${ROOT_PREFIX:-/}" "$trial_boot_id" "$trial_boot_sha" || return 2
-    fi
+        [ "$(checked_digest "$trial_exe")" = "$trial_app_sha" ] && trial_runtime_files_valid || return 2
+    trial_active_boot_valid || return 2
     kill -0 "$1" 2>/dev/null && mv "$JOURNAL/trial" "$JOURNAL/trial.confirmed" && local_barrier || return 2
-    if [ "$trial_boot_id" != none ]; then boot_collect_versions || return 2; fi
     recover_transaction
 }
 

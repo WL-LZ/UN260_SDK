@@ -57,6 +57,9 @@ int __wrap_ioctl(int fd,unsigned long request,...) {
  (void)fd;va_list ap;va_start(ap,request);void *p=va_arg(ap,void*);va_end(ap);
  if(request==FBIOGET_FSCREENINFO){struct fb_fix_screeninfo*f=p;memset(f,0,sizeof(*f));f->line_length=W*4;f->smem_len=BG_BYTES*2;return 0;}
  if(request==FBIOGET_VSCREENINFO){struct fb_var_screeninfo*v=p;memset(v,0,sizeof(*v));v->xres=W;v->yres=H;v->yres_virtual=H*2;v->bits_per_pixel=32;v->red.offset=16;v->green.offset=8;return 0;}
+ const char *failure=getenv("TEST_PREVIEW_FAIL");
+ if(failure&&((request==FBIOPAN_DISPLAY&&!strcmp(failure,"pan"))||
+    (request==AICFB_WAIT_FOR_VSYNC&&!strcmp(failure,"vsync")))){errno=EIO;return -1;}
  if(request==FBIOPAN_DISPLAY){int n=__real_open(getenv("TEST_PANS"),O_WRONLY|O_CREAT|O_APPEND,0600);assert(n>=0);assert(write(n,"p",1)==1);close(n);return 0;}
  if(request==AICFB_WAIT_FOR_VSYNC){usleep(16000);return 0;}
  return -1;
@@ -74,7 +77,10 @@ int main(int argc,char**argv) {
   uint8_t *pixels=memory+GUARD,*canvas=scratch+GUARD;frame_state_t states[2]={{0},{0}};
   const char *cursor=argv[4];char *end=NULL;
   do {
-   unsigned elapsed=(unsigned)strtoul(cursor,&end,10);assert(end!=cursor&&(!*end||*end==','));
+   unsigned elapsed;
+   if(!strcmp(cursor,"settled")){elapsed=pack.scene.welcome_settled;end=(char*)cursor+7;}
+   else elapsed=(unsigned)strtoul(cursor,&end,10);
+   assert(end!=cursor&&(!*end||*end==','));
    for(unsigned page=0;page<2;page++) {
     render_bundle(pixels+PAGE*page,STRIDE,&pack,canvas,elapsed,&states[page]);
     for(unsigned row=0;row<H;row++)for(unsigned col=W*4;col<STRIDE;col++)assert(pixels[PAGE*page+row*STRIDE+col]==0xa5);
@@ -342,6 +348,34 @@ with tempfile.TemporaryDirectory(prefix='un260-boot-bundle-player-') as director
         temporary_clock = tmp / 'clock.new'
         temporary_clock.write_text(str(milliseconds) + '\n')
         temporary_clock.replace(tmp / 'clock')
+
+    # One-shot draws the same settled frame as the continuous renderer and owns
+    # neither the early player's IPC nor a living child after the helper exits.
+    (tmp / 'language').write_text('en\\n')
+    set_clock(0)
+    page_bytes = 1280 * 400 * 4
+    for name in ('ready','modern','socket'):
+        (tmp / name).write_text('existing')
+    for theme_path in (packs['d'], tmp/'variant-B.pack', logo_path):
+        (tmp/'fb').write_bytes(bytes(page_bytes * 2))
+        (tmp/'pans').write_bytes(b'')
+        run([executable, '--theme', theme_path, '--preview'], env=environment,timeout=3)
+        assert (tmp/'pans').read_bytes()==b'p'
+        run([executable,'render',theme_path,'en','settled',tmp/'expected-preview.bgra'])
+        assert (tmp/'fb').read_bytes()==bytes(page_bytes)+(tmp/'expected-preview.bgra').read_bytes()
+        assert all((tmp/name).read_text()=='existing' for name in ('ready','modern','socket'))
+    for failure in ('pan','vsync'):
+        result=subprocess.run([str(executable),'--theme',str(packs['d']),'--preview'],
+                              env=dict(environment,TEST_PREVIEW_FAIL=failure),timeout=3)
+        assert result.returncode!=0
+        assert all((tmp/name).read_text()=='existing' for name in ('ready','modern','socket'))
+    with (tmp/'lock').open() as lease:
+        import fcntl
+        fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        before=(tmp/'fb').read_bytes()
+        assert subprocess.run([str(executable),'--theme',str(packs['d']),'--preview'],env=environment,timeout=3).returncode!=0
+        assert (tmp/'fb').read_bytes()==before
+    print('PASS one-shot settled preview across A/B/logo, no handoff IPC, display contention')
 
     def start(mode='animation'):
         set_clock(0)

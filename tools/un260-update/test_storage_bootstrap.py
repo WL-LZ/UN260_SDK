@@ -38,6 +38,8 @@ def archive(path, files, corrupt=False, metadata_extra=''):
             out.addfile(info, io.BytesIO(data))
 
 
+@unittest.skipUnless(b'UN260_STORAGE_POLICY_V3' in (SDK / UPDATER_REL).read_bytes(),
+                     "Historical expansion profile; production rejection is covered by test_app_volume_updater.")
 class BootstrapTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='un260-bootstrap-')

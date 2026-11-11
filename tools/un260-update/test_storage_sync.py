@@ -4,6 +4,7 @@ import functools
 import hashlib
 import os
 from pathlib import Path
+from storage_test_sources import storage_test_sources
 import subprocess
 import tempfile
 import time
@@ -21,7 +22,7 @@ def native_tool():
         return binary
     binary = Path(_build.name) / 'un260_storage_sync'
     subprocess.run(['gcc', '-std=gnu11', '-Wall', '-Wextra', '-Werror', '-O2',
-        str(SDK / 'source/artinchip/test-lvgl/tools/un260_storage_sync.c'), '-o', str(binary)], check=True)
+        str(SDK / 'source/artinchip/test-lvgl/tools/un260_storage_sync.c'), *storage_test_sources(SDK / 'source/artinchip/test-lvgl/tools/un260_storage_sync.c'), '-o', str(binary)], check=True)
     return binary
 
 def ui_fingerprint(data):

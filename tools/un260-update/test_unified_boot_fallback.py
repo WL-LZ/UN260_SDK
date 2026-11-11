@@ -52,6 +52,8 @@ int main(int argc, char **argv) {
 '''
 
 
+@unittest.skipUnless(b'UN260_STORAGE_POLICY_V3' in HELPER.read_bytes(),
+                     "Historical expansion profile; production rejection is covered by test_app_volume_updater.")
 class UnifiedBootFallbackTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

@@ -123,6 +123,7 @@ int boot_trial_visual_read(const char *journal,const char *boot_id,
 {
     memset(visual,0,sizeof(*visual));
     struct stat st;
+    visual->defer_reason="trial_display_journal_path";
     if(lstat(journal,&st)<0)return errno==ENOENT?0:-1;
     int dir=open_journal(journal),fd=-1,result=-1;
     if(dir<0)return -1;
@@ -130,7 +131,10 @@ int boot_trial_visual_read(const char *journal,const char *boot_id,
     static const char *keys[]={"boot_id=","app_sha256=","target_id=","boot_bundle_id=",
         "boot_manifest_sha256=","old_active_sha256=","old_previous_sha256=",
         "old_installed_fnv64_sha256=","old_unified_completed_sha256=","targets_count="};
-    if(!members(dir)||!read_named(dir,"trial",record,sizeof(record)))goto done;
+    visual->defer_reason="trial_display_journal_members";
+    if(!members(dir))goto done;
+    visual->defer_reason="trial_display_trial_record";
+    if(!read_named(dir,"trial",record,sizeof(record)))goto done;
     for(unsigned i=0;i<11;i++) {
         fields[i]=cursor;char *end=strchr(cursor,'\n');if(!end)goto done;
         *end=0;cursor=end+1;
@@ -150,20 +154,25 @@ int boot_trial_visual_read(const char *journal,const char *boot_id,
         count=count*10+(unsigned)(*p-'0');
     }
     if(count>8192)goto done;
+    visual->defer_reason="trial_display_commit_state";
     fd=file(dir,"committed",0,false);if(fd<0)goto done;
     close(fd);fd=file(dir,"state",3145728,true);if(fd<0)goto done;
     close(fd);fd=-1;
+    visual->defer_reason="trial_display_target_or_snapshot_invalid";
     if(!hash_named(dir,"trial.targets",fields[3],3145728)||
        !hash_named(dir,"trial.boot-active",fields[6],400)||
        !hash_named(dir,"trial.boot-active.previous",fields[7],400)||
        !hash_named(dir,"trial.installed.fnv64",fields[8],400)||
        !hash_named(dir,"trial.unified.completed",fields[9],400))goto done;
     /* A same-boot service restart cannot turn installation into a trial boot. */
+    visual->defer_reason="trial_display_boot_id_invalid";
     fd=open(boot_id,O_RDONLY|O_NONBLOCK|O_NOFOLLOW|O_CLOEXEC);
     char now[38]={0};
     ssize_t n=fd>=0?read(fd,now,sizeof(now)):-1;
     if(n!=37||now[36]!='\n')goto done;
-    now[36]=0;if(!uuid(now)||!strcmp(now,fields[1]))goto done;
+    now[36]=0;if(!uuid(now))goto done;
+    if(!strcmp(now,fields[1])){visual->defer_reason="trial_display_install_boot";goto done;}
+    visual->defer_reason=NULL;
     visual->pending=true;
     strcpy(visual->bundle_id,fields[4]);strcpy(visual->manifest_sha256,fields[5]);
     result=1;

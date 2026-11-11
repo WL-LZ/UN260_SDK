@@ -44,6 +44,7 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
                         str(ROOT / "tools/test_history_storage.c"),
                         str(ROOT / "un260/storage/storage_worker.c"),
                         str(ROOT / "un260/history/history_record_snapshot.c"),
+                        str(ROOT / "un260/history/history_object_store.c"),
                         str(ROOT / "un260/history/history_record_reader.c"),
                         str(ROOT / "un260/history/history_read_task.c"),
                         str(ROOT / "un260/history/history_query.c"),
@@ -121,8 +122,7 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
             prefix = f"record{i:02d}_"
             if key.startswith(prefix):
                 assert expanded[f"record{capacity - 20 + i:02d}_" + key[len(prefix):]] == value
-    assert (state / "1000.rec").is_file()
-    assert "slot1000_slot_no=1000\n" in (state / "1000.rec").read_text()
+    assert not (state / "1000.rec").exists()
     oldest_id = expanded[f"record{capacity - 1:02d}_record_no"]
     oldest_slot = expanded[f"record{capacity - 1:02d}_slot_no"]
     subprocess.run([str(binary), "append-one"], check=True)
@@ -215,10 +215,11 @@ with tempfile.TemporaryDirectory(prefix="un260-history-worker-") as directory:
     subprocess.run([str(binary), "benchmark"], check=True)
     assert max(map(len, maximum_index.splitlines())) < 8191
     mirrors = sum(path.stat().st_size for path in state.glob("*.rec"))
-    metadata = (state / "meta.cfg").stat().st_size
+    metadata = (state / "meta.cfg").stat().st_size if (state / "meta.cfg").exists() else 0
     # Every escaped character is at most two bytes. 16 KiB per record safely
     # covers all fixed text fields plus maximum-width v2 scalar keys/values.
     assert len(maximum_index) <= capacity * 16384 + 1024
-    assert mirrors <= capacity * 16384 and metadata <= 1024
+    assert (state / "01.rec").read_bytes() == b"corrupt mirror\n" and (state / "meta.cfg").read_bytes() == b"corrupt metadata mirror\n"
+    assert mirrors == len(b"corrupt mirror\n") and metadata == len(b"corrupt metadata mirror\n")
     print(f"Maximum-text disk fixture: index={len(maximum_index)}, mirrors={mirrors}, "
           f"meta={metadata}, persisted={len(maximum_index) + mirrors + metadata} bytes", flush=True)

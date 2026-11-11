@@ -5,6 +5,7 @@
  * USB readback uses O_DIRECT, never silently falls back to the page cache.
  * Local regular files and MTD use bounded read(), not mmap. Their explicit
  * APIs must not silently weaken USB's uncached readback requirement. */
+#include "un260_storage_io.h"
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <sys/wait.h>
@@ -72,7 +73,7 @@ static int barrier(const char *number, const char *path)
     return rc ? 1 : 0;
 }
 
-static int write_all(int fd, const void *data, size_t len)
+int storage_write_all(int fd, const void *data, size_t len)
 {
     const char *p = data;
     while (len) {
@@ -128,7 +129,7 @@ static int hash_file(const char *path, enum hash_mode mode, off_t stream_bytes)
         size_t request = !direct && expected - total < 65536 ? (size_t)(expected - total) : 65536;
         ssize_t n = read(fd, buffer, request);
         if (n < 0 && errno == EINTR) continue;
-        if (n <= 0 || n > expected - total || write_all(input[1], buffer, (size_t)n)) {
+        if (n <= 0 || n > expected - total || storage_write_all(input[1], buffer, (size_t)n)) {
             failed = 1; break;
         }
         total += n;
@@ -291,7 +292,7 @@ struct inventory_anchor {
     struct stat before;
 };
 
-static int inventory_hex(const char *s, size_t n)
+int storage_is_lower_hex(const char *s, size_t n)
 {
     for (size_t i = 0; i < n; ++i)
         if (!((s[i] >= '0' && s[i] <= '9') || (s[i] >= 'a' && s[i] <= 'f')))
@@ -364,7 +365,7 @@ static int inventory_openat(int anchor, const char *relative, int directory)
     return result;
 }
 
-static int inventory_absolute(const char *path, int directory)
+int storage_open_absolute(const char *path, int directory)
 {
     if (!path || path[0] != '/' || strnlen(path, PATH_MAX) >= PATH_MAX) {
         errno = EINVAL; return -1;
@@ -382,7 +383,7 @@ static int inventory_absolute(const char *path, int directory)
     return fd;
 }
 
-static int inventory_same(const struct stat *a, const struct stat *b)
+int storage_same_regular_file(const struct stat *a, const struct stat *b)
 {
     return S_ISREG(b->st_mode) && a->st_dev == b->st_dev && a->st_ino == b->st_ino &&
         a->st_size == b->st_size && a->st_mode == b->st_mode && a->st_uid == b->st_uid &&
@@ -394,7 +395,7 @@ static int inventory_same(const struct stat *a, const struct stat *b)
 static int inventory_anchor_open(struct inventory_anchor *anchor, const char *path)
 {
     anchor->path = path;
-    anchor->fd = inventory_absolute(path, 1);
+    anchor->fd = storage_open_absolute(path, 1);
     if (anchor->fd < 0) return -1;
     if (fstat(anchor->fd, &anchor->before) || !S_ISDIR(anchor->before.st_mode)) {
         close(anchor->fd); anchor->fd = -1; return -1;
@@ -405,7 +406,7 @@ static int inventory_anchor_open(struct inventory_anchor *anchor, const char *pa
 static int inventory_anchor_valid(const struct inventory_anchor *anchor)
 {
     struct stat held, current;
-    int fd = inventory_absolute(anchor->path, 1);
+    int fd = storage_open_absolute(anchor->path, 1);
     if (fd < 0) return 0;
     int valid = !fstat(anchor->fd, &held) && !fstat(fd, &current) &&
         S_ISDIR(current.st_mode) && S_ISDIR(held.st_mode) &&
@@ -431,7 +432,7 @@ static int inventory_row_valid(const struct inventory_anchor *root,
     int fd = inventory_member_open(root, app, row->path);
     if (fd < 0) return row->missing && errno == ENOENT;
     struct stat current;
-    int valid = !row->missing && !fstat(fd, &current) && inventory_same(&row->before, &current);
+    int valid = !row->missing && !fstat(fd, &current) && storage_same_regular_file(&row->before, &current);
     if (close(fd)) valid = 0;
     return valid;
 }
@@ -481,7 +482,7 @@ static int inventory_hash_batch(int *fds, struct inventory_row **rows, size_t co
     size_t offset = 0;
     for (size_t i = 0; !failed && i < count; ++i) {
         size_t len = 64 + 2 + strlen(names[i]) + 1;
-        if (used - offset < len || !inventory_hex(data + offset, 64) ||
+        if (used - offset < len || !storage_is_lower_hex(data + offset, 64) ||
             memcmp(data + offset + 64, "  ", 2) ||
             memcmp(data + offset + 66, names[i], strlen(names[i])) ||
             data[offset + len - 1] != '\n') { failed = 1; break; }
@@ -502,7 +503,7 @@ static int inventory_batch_check(const struct inventory_anchor *root,
     int failed = inventory_hash_batch(fds, rows, count);
     for (size_t i = 0; i < count; ++i) {
         struct stat after;
-        if (fstat(fds[i], &after) || !inventory_same(&rows[i]->before, &after) ||
+        if (fstat(fds[i], &after) || !storage_same_regular_file(&rows[i]->before, &after) ||
             !inventory_row_valid(root, app, rows[i])) failed = -1;
         if (mode != INV_INSPECT &&
             (strcmp(rows[i]->actual, rows[i]->expected) ||
@@ -545,7 +546,7 @@ static int inventory_run(const char *root_path, const char *app_path,
         }
     }
     if (!table_absolute) goto done;
-    table_fd = inventory_absolute(table_absolute, 0);
+    table_fd = storage_open_absolute(table_absolute, 0);
     if (table_fd < 0 || fstat(table_fd, &table_before) || !S_ISREG(table_before.st_mode) ||
         table_before.st_size <= 0 || table_before.st_size > INV_TABLE_MAX) goto done;
     size_t size = (size_t)table_before.st_size, used = 0;
@@ -571,7 +572,7 @@ static int inventory_run(const char *root_path, const char *app_path,
         if (!newline) goto done;
         *newline = 0;
         char *mode_text = strchr(line, '|');
-        if (!mode_text || mode_text - line != 64 || !inventory_hex(line, 64)) goto done;
+        if (!mode_text || mode_text - line != 64 || !storage_is_lower_hex(line, 64)) goto done;
         *mode_text++ = 0;
         char *bytes_text = strchr(mode_text, '|');
         if (!bytes_text) goto done;
@@ -591,7 +592,7 @@ static int inventory_run(const char *root_path, const char *app_path,
         ++count;
         line = newline + 1;
     }
-    if (!count || fstat(table_fd, &table_after) || !inventory_same(&table_before, &table_after))
+    if (!count || fstat(table_fd, &table_after) || !storage_same_regular_file(&table_before, &table_after))
         goto done;
     for (size_t i = 0; i < count; ++i) {
         int fd = inventory_member_open(&root, &app, rows[i].path);
@@ -621,13 +622,13 @@ static int inventory_run(const char *root_path, const char *app_path,
      * inode replacement, metadata/content change or missing-path creation. */
     for (size_t i = 0; i < count; ++i)
         if (!inventory_row_valid(&root, &app, &rows[i])) { errno = ESTALE; goto done; }
-    int current_table = inventory_absolute(table_absolute, 0);
+    int current_table = storage_open_absolute(table_absolute, 0);
     if (current_table < 0) goto done;
     int table_valid = !fstat(current_table, &table_after) &&
-        inventory_same(&table_before, &table_after);
+        storage_same_regular_file(&table_before, &table_after);
     if (close(current_table)) table_valid = 0;
     if (!table_valid || fstat(table_fd, &table_after) ||
-        !inventory_same(&table_before, &table_after) ||
+        !storage_same_regular_file(&table_before, &table_after) ||
         !inventory_anchor_valid(&root) || (app.fd >= 0 && !inventory_anchor_valid(&app))) {
         errno = ESTALE; goto done;
     }
@@ -655,6 +656,7 @@ done:
     return rc;
 }
 
+#include "un260_history_space.h"
 int main(int argc, char **argv)
 {
     if (argc == 2 && !strcmp(argv[1], "--probe")) { puts("UN260_STORAGE_SYNC_1"); return 0; }
@@ -662,7 +664,8 @@ int main(int argc, char **argv)
     if (argc == 2 && !strcmp(argv[1], "--probe-file")) { puts("UN260_STORAGE_FILE_1"); return 0; }
     if (argc == 2 && !strcmp(argv[1], "--probe-inventory")) { puts("UN260_STORAGE_INVENTORY_1"); return 0; }
     int rc = 2;
-    if (argc == 5 && !strcmp(argv[1], "--inspect-inventory")) rc = inventory_run(argv[2],argv[3],argv[4],INV_INSPECT);
+    if (argc == 6 && !strcmp(argv[1], "--prepare-history-space")) rc = prepare_history_space(argv[2],argv[3],argv[4],argv[5]);
+    else if (argc == 5 && !strcmp(argv[1], "--inspect-inventory")) rc = inventory_run(argv[2],argv[3],argv[4],INV_INSPECT);
     else if (argc == 5 && !strcmp(argv[1], "--verify-inventory")) rc = inventory_run(argv[2],argv[3],argv[4],INV_VERIFY);
     else if (argc == 4 && !strcmp(argv[1], "--verify-payload")) rc = inventory_run(argv[2],"-",argv[3],INV_PAYLOAD);
     else if (argc >= 4 && !strcmp(argv[1], "--lock-run")) rc = lock_run(argc,argv);

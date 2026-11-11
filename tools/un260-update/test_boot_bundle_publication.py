@@ -11,7 +11,7 @@ import tarfile
 import struct
 import shutil
 from boot_bundle import validate as validate_host, asset_python
-from build_delta import build as build_delta
+from update_test_fixture import native_unpack
 from test_storage_sync import native_tool
 import unittest
 
@@ -121,6 +121,8 @@ df() {{ printf 'Filesystem 1K-blocks Used Available Use%% Mounted\\nfixture 2000
         if platform:
             (self.root / 'dev').mkdir(exist_ok=True)
             (self.root / 'dev/.un260-boot-platform').write_bytes(b'UN260_BOOT_PLATFORM_V1\n')
+        unpack = self.root / 'usr/local/bin/un260_unpack'
+        shutil.copy2(native_unpack(), unpack)
         # A fingerprint fixture isolates boot compatibility from storage I/O.
         sync = self.root / 'usr/local/bin/un260_storage_sync'
         sync.write_text('#!/bin/sh\nprintf "0123456789abcdef\\n"\n')
@@ -134,9 +136,22 @@ df() {{ printf 'Filesystem 1K-blocks Used Available Use%% Mounted\\nfixture 2000
                 self.plan += 'file|0755|' + rel + '\n'
         files = {str(path.relative_to(self.payload)): (path.read_bytes(), path.stat().st_mode & 0o777)
                  for path in self.payload.rglob('*') if path.is_file()}
+        for rel in ('usr/bin/ui_update.sh', 'etc/init.d/S00lvgl', 'usr/local/bin/un260_app_storage'):
+            if rel == 'usr/local/bin/un260_app_storage':
+                data = b'#!/bin/sh\n# UN260_APP_VOLUME_V1\n'
+                (self.payload / rel).parent.mkdir(parents=True, exist_ok=True)
+                (self.payload / rel).write_bytes(data)
+                if rel not in self.plan:
+                    self.plan += 'file|0755|' + rel + '\n'
+            else:
+                data, mode = files[rel]
+                if b'UN260_APP_VOLUME_V1' not in data:
+                    data += b'\n# UN260_APP_VOLUME_V1\n'
+                    (self.payload / rel).write_bytes(data)
+            files[rel] = (data, 0o755)
         checks = ''.join(digest(data) + '  payload/' + rel + '\n' for rel, (data, mode) in sorted(files.items())).encode()
         meta = ('format=UN260_UPGRADE\nschema=1\nproduct=UN260\npackage_type=' + kind + '\nversion=boot-guard-test\npackage_id=' + digest(checks) +
-                '\nstorage_guard=' + guard + '\n')
+                '\nstorage_layout=app-volume-v1\nstorage_guard=' + guard + '\n')
         if declared:
             meta += 'boot_bundle_id=' + self.new[0] + '\nboot_manifest_sha256=' + self.new[1] + '\n'
         entries = {'manifest.ini': (meta.encode(), 0o644), 'checksums.sha256': (checks, 0o644), 'install.tsv': (self.plan.encode(), 0o644)}
@@ -182,7 +197,7 @@ df() {{ printf 'Filesystem 1K-blocks Used Available Use%% Mounted\\nfixture 2000
 
     def test_new_bundle_with_matching_platform_passes(self):
         self.prepare_archive()
-        self.run_shell('BUNDLE_PATH=$UPDATE_DIR/UN260_UPDATE.upk; install_bundle')
+        self.run_shell('APP_VOLUME=1; APP_VOLUME_DIR=$ROOT_PREFIX/usr/local/bin; BUNDLE_PATH=$UPDATE_DIR/UN260_UPDATE.upk; install_bundle')
         self.assert_active(self.new, self.old)
 
     def test_legacy_guard_on_new_boot_device_rejected(self):
@@ -267,36 +282,6 @@ execute_plan''', 88)
         directory.rename(directory.parent / identity)
         with self.assertRaisesRegex(ValueError, 'mode/header'):
             validate_host(self.payload, identity, digest(raw.encode()), require_elf=False)
-
-    def test_theme_delta_retains_old_version_and_repeat_publishes_once(self):
-        self.prepare_archive()
-        newfull = self.usb / 'update/UN260_UPDATE.upk'
-        # Build the baseline with only old bundle, same matching scripts.
-        saved_payload = self.base / 'saved-new-payload'
-        self.payload.rename(saved_payload)
-        self.payload.mkdir()
-        shutil.copytree(self.root / TREE / self.old[0], self.payload / TREE / self.old[0])
-        for rel in ('usr/local/bin/test_lvgl', 'usr/bin/ui_update.sh', 'etc/init.d/S00lvgl'):
-            path = self.payload / rel; path.parent.mkdir(parents=True, exist_ok=True)
-            if rel == 'usr/local/bin/test_lvgl': path.write_text('old-app'); path.chmod(0o755)
-            else: shutil.copy2(saved_payload / rel, path)
-        actual_new, actual_plan = self.new, self.plan
-        self.new = self.old
-        self.plan = actual_plan.replace(actual_new[0], self.old[0])
-        shutil.copy2(newfull, self.base / 'newfull.upk')
-        baseline = self.prepare_archive()
-        shutil.copy2(baseline, self.base / 'base.upk')
-        self.new, self.plan = actual_new, actual_plan
-        shutil.rmtree(self.payload); saved_payload.rename(self.payload)
-        # Full package replacement in fixture is irrelevant: use generated delta.
-        build_delta(self.base / 'base.upk', self.base / 'newfull.upk', newfull)
-        for rel in ('usr/bin/ui_update.sh', 'etc/init.d/S00lvgl'):
-            path = self.root / rel; path.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(self.payload / rel, path)
-        self.run_shell('BUNDLE_PATH=$UPDATE_DIR/UN260_UPDATE.upk; install_bundle')
-        self.assert_active(self.new, self.old)
-        self.assertTrue((self.root / TREE / self.old[0] / 'player').is_file())
-        self.run_shell('BUNDLE_PATH=$UPDATE_DIR/UN260_UPDATE.upk; install_bundle')
-        self.assert_active(self.new, self.old)
 
     def assert_active(self, current, previous=('none', 'none')):
         self.assertEqual((self.root / ACTIVE).read_bytes(), active_data(current, previous))

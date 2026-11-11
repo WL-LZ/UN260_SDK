@@ -9,15 +9,13 @@ TARGET_ROOT=${TARGET_DIR:-"$SDK_ROOT/output/d211_d213_devkitf/target"}
 APP_PATH="$TARGET_ROOT/usr/local/bin/test_lvgl"
 LVGL_LIB_PATH="$TARGET_ROOT/usr/local/lib/liblvgl.so"
 LVGL_DATA_PATH="$TARGET_ROOT/usr/local/share/lvgl_data"
-UPDATER_PATH="$SDK_ROOT/target/d211/d213_devkitf/rootfs_overlay/usr/bin/ui_update.sh"
-APP_STORAGE_PATH="$SDK_ROOT/target/d211/d213_devkitf/rootfs_overlay/usr/local/bin/un260_app_storage"
-STARTUP_PATH="$SDK_ROOT/package/artinchip/test-lvgl/S20test_lvgl"
+UPDATER_PATH="$TARGET_ROOT/usr/bin/ui_update.sh"
+APP_STORAGE_PATH="$TARGET_ROOT/usr/local/bin/un260_app_storage"
+STARTUP_PATH="$TARGET_ROOT/etc/init.d/S00lvgl"
 
 VERSION=""
 OUTPUT_PATH=""
 EXTRA_ROOT=""
-STORAGE_ROUTE=factory-app-volume
-LEGACY_TEST=0
 
 usage()
 {
@@ -34,9 +32,6 @@ Optional:
   --app FILE              Override built test_lvgl path
   --lvgl-lib FILE         Override built liblvgl.so path
   --lvgl-data DIR         Override built lvgl_data directory
-  --legacy-test          Application-only test for old factory firmware; excludes native boot files
-  --unified-route        Qualify the internal application for the verified unified migration route
-  --legacy-root          Explicitly qualify an old root-only layout
   --help                  Show this help
 
 The fixed core payload is always included. Extra files are restricted to the
@@ -82,8 +77,8 @@ is_fixed_target()
     local rel=$1
 
     case "$rel" in
-        usr/local/bin/test_lvgl|usr/local/lib/liblvgl.so|usr/local/share/lvgl_data/*|\
-        usr/bin/ui_update.sh|etc/init.d/S00lvgl|etc/un260/package-version|etc/un260/update-core.manifest|etc/un260/startup-runtime.sha256|usr/local/lib/un260-boot/*|etc/un260/boot-active|etc/un260/boot-active.*|usr/local/lib/un260-startup/runtime.sh|usr/local/bin/un260_unpack|usr/local/bin/un260_storage_sync|usr/local/bin/un260_upgrade_display|usr/local/bin/un260_runtime_recover|usr/local/bin/un260_resource_cleanup|usr/local/bin/un260_app_storage)
+        usr/local/bin/test_lvgl|usr/local/bin/un260_boot_*|usr/local/bin/early_init|etc/un260/boot-mode|etc/un260/updater-platform|usr/local/lib/un260-updater/*|usr/local/lib/liblvgl.so|usr/local/share/lvgl_data/*|\
+        usr/bin/ui_update.sh|etc/init.d/S00lvgl|etc/un260/package-version|etc/un260/update-core.manifest|etc/un260/startup-runtime.sha256|usr/local/lib/un260-boot/*|etc/un260/boot-active|etc/un260/boot-active.*|usr/local/lib/un260-startup/runtime.sh|usr/local/lib/un260-startup/trial-display|usr/local/bin/un260_unpack|usr/local/bin/un260_storage_sync|usr/local/bin/un260_upgrade_display|usr/local/bin/un260_runtime_recover|usr/local/bin/un260_resource_cleanup|usr/local/bin/un260_app_storage)
             return 0
             ;;
     esac
@@ -139,29 +134,12 @@ while [[ $# -gt 0 ]]; do
             usage
             exit 0
             ;;
-        --legacy-test)
-            LEGACY_TEST=1
-            shift
-            ;;
-        --unified-route)
-            STORAGE_ROUTE=unified-app-volume
-            shift
-            ;;
-        --legacy-root)
-            STORAGE_ROUTE=legacy-root
-            shift
-            ;;
         *)
             die "Unknown option: $1"
             ;;
     esac
 done
 
-if [[ "$LEGACY_TEST" = 0 ]]; then
-    STARTUP_PATH="$TARGET_ROOT/etc/init.d/S00lvgl"
-    UPDATER_PATH="$TARGET_ROOT/usr/bin/ui_update.sh"
-    APP_STORAGE_PATH="$TARGET_ROOT/usr/local/bin/un260_app_storage"
-fi
 [[ "$VERSION" =~ ^[A-Za-z0-9._-]{1,48}$ ]] ||
     die "A valid --version is required"
 [[ -n "$OUTPUT_PATH" ]] || die "--output is required"
@@ -173,16 +151,10 @@ fi
 
 # Shipping budget, deliberately based on uncompressed bytes. Compression of the
 # UPK is not a promise that a board can stage its replacement executable.
-PAYLOAD_BUDGET_BYTES=$((24 * 1024 * 1024))
-PAYLOAD_BUDGET_MIB=24
-if [[ "$LEGACY_TEST" = 0 ]]; then
-    PAYLOAD_BUDGET_BYTES=$((32 * 1024 * 1024))
-    PAYLOAD_BUDGET_MIB=32
-fi
+PAYLOAD_BUDGET_MIB=32
+PAYLOAD_BUDGET_BYTES=$((PAYLOAD_BUDGET_MIB * 1024 * 1024))
 app_bytes=$(stat -c %s "$APP_PATH")
-APP_BUDGET_ARGS=()
-if [[ "$LEGACY_TEST" = 1 ]]; then APP_BUDGET_ARGS+=(--legacy-test); fi
-APP_BUDGET_BYTES=$(python3 "$SCRIPT_DIR/factory_layout.py" --check-app-size "$app_bytes" "${APP_BUDGET_ARGS[@]}") ||
+APP_BUDGET_BYTES=$(python3 "$SCRIPT_DIR/factory_layout.py" --check-app-size "$app_bytes") ||
     die "test_lvgl cannot retain both application generations safely; review embedded assets, do not bypass device preflight"
 
 if [[ -n "$EXTRA_ROOT" ]]; then
@@ -228,25 +200,16 @@ UNPACKER_PATH="$TARGET_ROOT/usr/local/bin/un260_unpack"
 if [[ -f "$UNPACKER_PATH" ]]; then
     copy_payload_file "$UNPACKER_PATH" "usr/local/bin/un260_unpack" 0755
 fi
-if [[ "$LEGACY_TEST" = 0 ]]; then
-    copy_payload_file "$TARGET_ROOT/usr/local/lib/un260-startup/runtime.sh" "usr/local/lib/un260-startup/runtime.sh" 0755
-    copy_payload_file "$TARGET_ROOT/etc/un260/update-core.manifest" "etc/un260/update-core.manifest" 0644
-    copy_payload_file "$TARGET_ROOT/etc/un260/startup-runtime.sha256" "etc/un260/startup-runtime.sha256" 0644
-fi
+copy_payload_file "$TARGET_ROOT/usr/local/lib/un260-startup/trial-display" "usr/local/lib/un260-startup/trial-display" 0755
+copy_payload_file "$TARGET_ROOT/usr/local/lib/un260-startup/runtime.sh" "usr/local/lib/un260-startup/runtime.sh" 0755
+copy_payload_file "$TARGET_ROOT/etc/un260/update-core.manifest" "etc/un260/update-core.manifest" 0644
+copy_payload_file "$TARGET_ROOT/etc/un260/startup-runtime.sha256" "etc/un260/startup-runtime.sha256" 0644
 
-# The explicit old-base test uses the same compiled app/resources without
-# changing the factory target or the device installer's platform protection.
-BOOT_PACKAGE_ID=""
-BOOT_MANIFEST_HASH=""
-if [[ "$LEGACY_TEST" = 1 ]]; then
-    python3 "$SCRIPT_DIR/release_profile.py" --payload "$PKG_ROOT/payload"
-else
-    # The factory descriptor is metadata, not an ordinary replaceable payload.
-    python3 "$SCRIPT_DIR/boot_bundle.py" metadata --target "$TARGET_ROOT" \
-        --copy-to "$PKG_ROOT/payload" > "$WORK_DIR/boot-metadata"
-    BOOT_PACKAGE_ID=$(sed -n '1p' "$WORK_DIR/boot-metadata")
-    BOOT_MANIFEST_HASH=$(sed -n '2p' "$WORK_DIR/boot-metadata")
-fi
+# Publish the active versioned player, artwork and manifest together.
+python3 "$SCRIPT_DIR/boot_bundle.py" metadata --target "$TARGET_ROOT" \
+    --copy-to "$PKG_ROOT/payload" > "$WORK_DIR/boot-metadata"
+BOOT_PACKAGE_ID=$(sed -n '1p' "$WORK_DIR/boot-metadata")
+BOOT_MANIFEST_HASH=$(sed -n '2p' "$WORK_DIR/boot-metadata")
 
 mkdir -p "$PKG_ROOT/payload/etc/un260"
 printf '%s\n' "$VERSION" > "$PKG_ROOT/payload/etc/un260/package-version"
@@ -288,10 +251,9 @@ printf 'file|0755|usr/local/bin/test_lvgl\n' >> "$INSTALL_MANIFEST"
 if [[ -f "$PKG_ROOT/payload/usr/local/bin/un260_unpack" ]]; then
     printf 'file|0755|usr/local/bin/un260_unpack\n' >> "$INSTALL_MANIFEST"
 fi
-if [[ "$LEGACY_TEST" = 0 ]]; then
-    printf 'file|0755|usr/local/lib/un260-startup/runtime.sh\n' >> "$INSTALL_MANIFEST"
-    printf 'file|0644|etc/un260/update-core.manifest\nfile|0644|etc/un260/startup-runtime.sha256\n' >> "$INSTALL_MANIFEST"
-fi
+printf 'file|0755|usr/local/lib/un260-startup/trial-display\n' >> "$INSTALL_MANIFEST"
+printf 'file|0755|usr/local/lib/un260-startup/runtime.sh\n' >> "$INSTALL_MANIFEST"
+printf 'file|0644|etc/un260/update-core.manifest\nfile|0644|etc/un260/startup-runtime.sha256\n' >> "$INSTALL_MANIFEST"
 
 (
     cd "$PKG_ROOT"
@@ -319,17 +281,15 @@ fi
 if [[ -n "$BASELINE" && "$(readlink -m "$BASELINE")" = "$(readlink -m "$OUTPUT_PATH")" ]]; then
     die "Baseline must be a separate read-only input, not the package output"
 fi
-for reference in "$BASELINE" "$OUTPUT_PATH"; do
+for reference in "$BASELINE" "${UN260_UPDATE_PREVIOUS:-}" "$OUTPUT_PATH"; do
     if [[ -f "$reference" ]]; then
         python3 "$SCRIPT_DIR/check_storage_budget.py" --base "$reference" \
-            --payload "$PKG_ROOT/payload" --route "$STORAGE_ROUTE"
+            --payload "$PKG_ROOT/payload" --route factory-app-volume
     fi
 done
 PACKAGE_STORAGE_GUARD=syncfs-v1
 if [[ -n "$BOOT_PACKAGE_ID" ]]; then PACKAGE_STORAGE_GUARD=syncfs-boot-bundle-v1; fi
-CONTRACT_ARGS=()
-if [[ "$LEGACY_TEST" = 0 ]]; then CONTRACT_ARGS+=(--require-updater-contract); fi
-TARGET_ID=$(python3 "$SCRIPT_DIR/release_manifest.py" --payload "$PKG_ROOT/payload" --table "$PKG_ROOT/target.tsv" "${CONTRACT_ARGS[@]}")
+TARGET_ID=$(python3 "$SCRIPT_DIR/release_manifest.py" --payload "$PKG_ROOT/payload" --table "$PKG_ROOT/target.tsv" --require-updater-contract)
 cat > "$PKG_ROOT/manifest.ini" <<EOF
 format=UN260_UPGRADE
 schema=1
@@ -337,7 +297,7 @@ product=UN260
 package_type=ui
 storage_layout=app-volume-v1
 storage_guard=$PACKAGE_STORAGE_GUARD
-qualification_route=$STORAGE_ROUTE
+qualification_route=factory-app-volume
 version=$VERSION
 package_id=$PACKAGE_ID
 target_id=$TARGET_ID
@@ -348,9 +308,6 @@ requires_reboot=1
 EOF
 if [[ -n "$BOOT_PACKAGE_ID" ]]; then
     printf 'boot_bundle_id=%s\nboot_manifest_sha256=%s\n' "$BOOT_PACKAGE_ID" "$BOOT_MANIFEST_HASH" >> "$PKG_ROOT/manifest.ini"
-fi
-if [[ "$LEGACY_TEST" = 1 ]]; then
-    printf 'release_profile=legacy-test\n' >> "$PKG_ROOT/manifest.ini"
 fi
 
 mkdir -p "$(dirname "$OUTPUT_PATH")"

@@ -63,6 +63,7 @@ class PlatformTests(unittest.TestCase):
             path.chmod(0o755)
         display = self.target / "usr/local/bin/un260_upgrade_display"
         display.write_bytes(data); display.chmod(0o755)
+        (self.target / "usr/local/bin/un260_boot_launch").write_bytes(data)
 
     def prepare(self):
         output = io.StringIO()
@@ -95,12 +96,15 @@ class PlatformTests(unittest.TestCase):
         })
         expected_engine = self.expected_engine()
         runtime = (self.repo / "package/artinchip/test-lvgl/S20test_lvgl").read_bytes()
+        launcher = (self.target / "usr/local/bin/un260_boot_launch").read_bytes()
+        runtime = runtime.replace(b"@TRIAL_DISPLAY_SHA256@", sha(launcher).encode())
         entry = (self.repo / "tools/un260-update/startup_entry.sh").read_bytes()
         watch = (self.repo / "tools/un260-update/startup_watch.sh").read_bytes()
         dispatcher = (self.repo / "tools/un260-update/un260_update_dispatch.sh").read_bytes()
         self.prepare()
         self.assert_file("usr/bin/ui_update.sh", expected_engine, 0o755)
         self.assert_file("usr/local/lib/un260-startup/runtime.sh", runtime, 0o755)
+        self.assert_file("usr/local/lib/un260-startup/trial-display", launcher, 0o755)
         self.assert_file("etc/init.d/S00lvgl", entry, 0o755)
         self.assertNotEqual(entry, runtime)
         self.assert_file("usr/local/bin/un260_update_dispatch", dispatcher, 0o755)

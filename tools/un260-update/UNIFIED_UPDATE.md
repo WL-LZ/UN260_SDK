@@ -1,3 +1,5 @@
+历史记录。以下迁移或增量命令属于原有工程与对应旧版测试。当前 V1 设备的正式完整 UPK 流程见 [FACTORY_FLEET.md](FACTORY_FLEET.md)。
+
 # UN260 R8 历史嵌套迁移流程
 
 本文件记录旧 IMG 的 R8 桥接与迁移机制，默认生产构建已停止发布此嵌套包。当前生产基座与直接完整 UPK 交付规则见 [FACTORY_FLEET.md](FACTORY_FLEET.md)。所有支持的在用设备使用同一 `update/UN260_UPDATE.upk`；默认完整 make 发布统一包，不再要求现场区分首次迁移与日常完整应用包。

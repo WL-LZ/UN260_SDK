@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <stdarg.h>
 
 #include "un260/lv_system/ui_history_data.h"
 #include "un260/counting/counting_history_service.h"
@@ -45,17 +47,23 @@ static bool test_worker_init(void)
     return !fail_worker_init && storage_worker_init();
 }
 
-static FILE *test_fopen(const char *path, const char *mode)
+static int test_open(const char *path,int flags,...)
 {
-    assert(!pthread_equal(pthread_self(), ui_thread));
-    pthread_mutex_lock(&gate_lock);
-    entered = true;
-    pthread_cond_broadcast(&gate_changed);
-    while (held) pthread_cond_wait(&gate_changed, &gate_lock);
-    pthread_mutex_unlock(&gate_lock);
-    read_calls++;
-    if (read_error) { errno = read_error; return NULL; }
-    return fopen(path, mode);
+    mode_t mode=0;
+    if (flags&O_CREAT) {
+        va_list args;va_start(args,flags);mode=va_arg(args,int);va_end(args);
+    }
+    if (!strcmp(path,UI_HISTORY_STORE_DIR "/index.cfg") && (flags&O_ACCMODE)==O_RDONLY) {
+        assert(!pthread_equal(pthread_self(),ui_thread));
+        pthread_mutex_lock(&gate_lock);
+        entered=true;
+        pthread_cond_broadcast(&gate_changed);
+        while (held) pthread_cond_wait(&gate_changed,&gate_lock);
+        pthread_mutex_unlock(&gate_lock);
+        read_calls++;
+        if (read_error) {errno=read_error;return -1;}
+    }
+    return open(path,flags,mode);
 }
 
 static void *test_malloc(size_t size)
@@ -77,12 +85,12 @@ static void test_free(void *pointer)
 }
 
 #define storage_worker_init test_worker_init
-#define fopen test_fopen
+#define open test_open
 #define malloc test_malloc
 #define free test_free
 #include "un260/lv_system/ui_history_data_fs.c"
 #undef storage_worker_init
-#undef fopen
+#undef open
 #undef malloc
 #undef free
 

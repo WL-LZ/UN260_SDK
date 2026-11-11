@@ -8,6 +8,7 @@ physical NAND power loss, application scanout and GUI are separate tests.
 import hashlib
 import os
 from pathlib import Path
+from storage_test_sources import storage_test_sources
 import shlex
 import shutil
 import struct
@@ -38,8 +39,9 @@ def descriptor(current, previous=('none', 'none')):
     return ('\n'.join(('UN260_BOOT_ACTIVE_V1', *current, *previous)) + '\n').encode()
 
 
-def bundle(root, name):
-    player = b'#!/bin/sh\n# check-only host fixture; no display/codec claim\nexit 0\n'
+def bundle(root, name, player=None):
+    if player is None:
+        player = b'#!/bin/sh\n# check-only host fixture; no display/codec claim\nexit 0\n'
     theme = b'UNBTPK1\0' + bytes(20) + struct.pack('<I', 1) + name.encode()
     ph, th = sha(player), sha(theme)
     identity = sha(('player_sha256=%s\ntheme_sha256=%s\nmode=animation\n' % (ph, th)).encode())
@@ -61,7 +63,7 @@ class TrialTests(unittest.TestCase):
         cls.native_temp = tempfile.TemporaryDirectory(prefix='un260-trial-native-')
         cls.native = Path(cls.native_temp.name)
         subprocess.run(['gcc', '-std=gnu11', '-O2', '-Wall', '-Wextra', '-Werror',
-            str(SDK / 'source/artinchip/test-lvgl/tools/un260_storage_sync.c'), '-o', str(cls.native / 'sync')],
+            str(SDK / 'source/artinchip/test-lvgl/tools/un260_storage_sync.c'), *storage_test_sources(SDK / 'source/artinchip/test-lvgl/tools/un260_storage_sync.c'), '-o', str(cls.native / 'sync')],
             check=True, capture_output=True)
         cfile = cls.native / 'app.c'
         cfile.write_text('#include <unistd.h>\nint main(void) { for(;;) pause(); }\n')
@@ -236,11 +238,53 @@ BODY
         self.run_shell('trial_boot_eligible', 1)
         self.run_shell('trial_rollback', 1)
         self.boot_id.write_text(NEW_BOOT + '\n')
-        self.run_shell('trial_boot_eligible && trial_runtime_valid')
+        self.run_shell('trial_boot_eligible && recover_transaction && app_launch_after_recovery')
         lines = (self.journal / 'trial').read_text().splitlines()
         self.assertEqual(len(lines), 11)
         self.assertEqual(lines[0], 'UN260_UPDATE_TRIAL_V1')
         self.assertEqual((self.journal / 'trial.targets').read_bytes(), self.table_data)
+
+    def test_app_check_uses_one_recovery_and_one_runtime_check(self):
+        self.prepare()
+        inode = (self.root / ACTIVE).stat().st_ino
+        result = self.run_shell('DISPATCH_MODE=app-check; UN260_BOOT_TRACE=1; set -x; '
+                                'recover_transaction && app_launch_after_recovery')
+        self.assertEqual(result.stdout.strip(), str(self.destination(APP)))
+        for function in ('trial_journal_valid', 'trial_pending_valid', 'trial_runtime_files_valid'):
+            self.assertEqual(sum(line.rstrip().endswith(' ' + function)
+                                 for line in result.stderr.splitlines()), 1, function)
+        checks = [line for line in result.stderr.splitlines() if ' boot_validate_bundle ' in line]
+        self.assertEqual(len(checks), 1, checks)
+        self.assertIn(self.new_c[0], checks[0])
+        stages = [line.split('stage=')[1] for line in result.stderr.splitlines()
+                  if line.startswith('BOOT_TIME ')]
+        self.assertEqual(stages, ['app_check_journal_begin', 'app_check_journal_complete',
+                                  'app_check_boot_publish_begin', 'app_check_boot_publish_complete',
+                                  'app_check_runtime_files_begin', 'app_check_runtime_files_complete'])
+        self.assertEqual((self.root / ACTIVE).stat().st_ino, inode)
+        for settings in ('DISPATCH_MODE=app-check; UN260_BOOT_TRACE=0',
+                         'DISPATCH_MODE=trial-confirm; UN260_BOOT_TRACE=1'):
+            result = self.run_shell(settings + '; recover_transaction && app_launch_after_recovery')
+            self.assertNotIn('BOOT_TIME', result.stderr)
+        (self.journal / 'trial.targets').write_bytes(b'corrupt')
+        self.run_shell('recover_transaction && app_launch_after_recovery', 1)
+
+    def test_matching_published_descriptor_requires_durable_replay_and_repairs_metadata(self):
+        self.prepare()
+        active = self.root / ACTIVE
+        inode = active.stat().st_ino
+        self.run_shell('local_barrier() { return 1; }; recover_transaction && app_launch_after_recovery', 1)
+        self.assertEqual(active.stat().st_ino, inode)
+        self.assertTrue((self.journal / 'trial').exists())
+        self.run_shell('recover_transaction && app_launch_after_recovery')
+        self.assertEqual(active.stat().st_ino, inode)
+        active.chmod(0o600)
+        self.run_shell('recover_transaction && app_launch_after_recovery')
+        self.assertEqual(active.stat().st_mode & 0o777, 0o644)
+        self.assertNotEqual(active.stat().st_ino, inode)
+        (self.root / TREE / self.new_c[0] / 'theme.pack').write_bytes(b'corrupt')
+        self.run_shell('recover_transaction && app_launch_after_recovery', 1)
+        self.assertTrue((self.journal / 'trial').exists())
 
     def test_real_pid_confirm_and_gc(self):
         self.prepare()
@@ -253,6 +297,125 @@ BODY
             self.assertFalse(Path(str(self.destination(rel)) + '.un260-old').exists())
         self.assertFalse((self.root / TREE / self.old_a[0]).exists())
         self.assertTrue((self.root / TREE / self.old_b[0]).exists())
+
+    def test_confirmed_replay_preserves_foreign_entry_in_an_existing_gc_plan(self):
+        self.prepare()
+        process = self.app_process()
+        # Simulate power loss after confirmation was persisted, before retirement started.
+        self.run_shell('boot_collect_versions() { exit 87; }; trial_confirm %d' % process.pid, 87)
+        self.assertTrue((self.journal / 'trial.confirmed').is_file())
+        protected = self.root / TREE / self.old_a[0]
+        remaining = (protected / 'theme.pack').read_bytes()
+        other, _ = bundle(self.root, 'second-retired')
+        plan = 'UN260_BOOT_GC_V1\n' + self.old_a[0] + '\n' + other + '\n'
+        self.put(self.journal / 'boot-gc', plan.encode(), 0o600)
+        # The inherited V1 plan had already removed one member when power failed.
+        (protected / 'manifest').unlink()
+        foreign = protected / 'foreign-data'
+        self.put(foreign, b'KEEP THIS FILE', 0o600)
+        result = self.run_shell('DISPATCH_MODE=app-check; recover_transaction && app_launch_after_recovery')
+        self.assertEqual(result.stdout.strip(), str(self.destination(APP)))
+        self.assertEqual(foreign.read_bytes(), b'KEEP THIS FILE')
+        self.assertEqual((protected / 'theme.pack').read_bytes(), remaining)
+        self.assertFalse((self.root / TREE / other).exists())
+        self.assertFalse(self.journal.exists())
+
+    def test_confirmed_recovery_preserves_unsafe_old_members_and_never_runs_retired_player(self):
+        self.prepare()
+        process = self.app_process()
+        self.run_shell('boot_collect_versions() { exit 87; }; trial_confirm %d' % process.pid, 87)
+        marker = self.base / 'executed-retired-player'
+        script = ('#!/bin/sh\necho retired > %s\nexit 23\n' % shlex.quote(str(marker))).encode()
+        runnable, _ = bundle(self.root, 'retired-native-check', player=script)
+        protected = {}
+        too_large = []
+        for role, kind in [('manifest', 'fifo'), ('player', 'fifo'), ('theme.pack', 'fifo'),
+                           ('manifest', 'oversized'), ('player', 'oversized'), ('theme.pack', 'oversized'),
+                           ('manifest', 'symlink'), ('player', 'hardlink')]:
+            identity, _ = bundle(self.root, role + '-' + kind)
+            path = self.root / TREE / identity / role
+            if kind == 'oversized':
+                with path.open('r+b') as stream:
+                    stream.truncate((2048 if role == 'manifest' else 2097152) + 1)
+                too_large.append(path)
+            elif kind == 'hardlink':
+                os.link(path, self.base / 'foreign-link')
+            else:
+                path.unlink()
+                if kind == 'fifo':
+                    os.mkfifo(path)
+                else:
+                    path.symlink_to(self.root / TREE / self.old_b[0] / role)
+            protected[path] = path.lstat()
+        hash_log = self.base / 'read-oversized-member'
+        guard = ('sha256sum() { case "${1:-}" in %s) echo "$1" >> %s; return 1;; esac; command sha256sum "$@"; }\n'
+                 % ('|'.join(shlex.quote(str(path)) for path in too_large), shlex.quote(str(hash_log))))
+        result = self.run_shell(guard + 'DISPATCH_MODE=app-check; recover_transaction && app_launch_after_recovery')
+        self.assertEqual(result.stdout.strip(), str(self.destination(APP)))
+        self.assertFalse(self.journal.exists())
+        self.assertFalse(marker.exists())
+        self.assertFalse(hash_log.exists())
+        self.assertFalse((self.root / TREE / runnable).exists())
+        for path, before in protected.items():
+            after = path.lstat()
+            self.assertEqual((after.st_ino, after.st_mode, after.st_size),
+                             (before.st_ino, before.st_mode, before.st_size))
+
+    def test_gc_replay_rechecks_remaining_bytes_and_keeps_unprovable_legacy_member(self):
+        self.prepare()
+        process = self.app_process()
+        self.run_shell('boot_collect_versions() { exit 87; }; trial_confirm %d' % process.pid, 87)
+        ids = {}
+        for label in ('replaced-member', 'intact-partial', 'legacy-pair', 'legacy-single'):
+            ids[label] = bundle(self.root, label)[0]
+        def member(label, name):
+            return self.root / TREE / ids[label] / name
+        replaced = member('replaced-member', 'player')
+        content = b'X' * replaced.stat().st_size
+        replaced.write_bytes(content)
+        member('intact-partial', 'player').unlink()
+        member('legacy-pair', 'manifest').unlink()
+        member('legacy-single', 'manifest').unlink()
+        member('legacy-single', 'player').unlink()
+        single = member('legacy-single', 'theme.pack')
+        original = single.read_bytes()
+        plan = 'UN260_BOOT_GC_V1\n' + ''.join(identity + '\n' for identity in ids.values())
+        self.put(self.journal / 'boot-gc', plan.encode(), 0o600)
+        result = self.run_shell('DISPATCH_MODE=app-check; recover_transaction && app_launch_after_recovery')
+        self.assertEqual(result.stdout.strip(), str(self.destination(APP)))
+        self.assertFalse(self.journal.exists())
+        self.assertEqual(replaced.read_bytes(), content)
+        self.assertEqual(single.read_bytes(), original)
+        self.assertFalse(member('intact-partial', 'manifest').parent.exists())
+        self.assertFalse(member('legacy-pair', 'manifest').parent.exists())
+
+    def test_retirement_failure_does_not_revoke_a_confirmed_app(self):
+        self.prepare()
+        process = self.app_process()
+        command = ('rm() { case "$*" in *"/%s/manifest"*) return 1 ;; esac; command rm "$@"; }\n'
+                   'trial_confirm %d' % (self.old_a[0], process.pid))
+        self.run_shell(command)
+        self.assertIn('Old boot version cleanup incomplete', (self.base / 'log').read_text())
+        self.assertTrue((self.root / TREE / self.old_a[0] / 'manifest').is_file())
+        self.assertFalse(self.journal.exists())
+        self.run_shell('recover_transaction && app_launch_after_recovery')
+
+    def test_confirmed_replay_still_rejects_a_broken_active_bundle(self):
+        self.prepare()
+        process = self.app_process()
+        self.run_shell('boot_collect_versions() { exit 87; }; trial_confirm %d' % process.pid, 87)
+        theme = self.root / TREE / self.new_c[0] / 'theme.pack'
+        original = theme.read_bytes()
+        theme.write_bytes(b'broken active theme')
+        self.run_shell('recover_transaction && app_launch_after_recovery', 1)
+        self.assertTrue((self.journal / 'trial.confirmed').is_file())
+        # A prior cleanup may already have retired boot-publish, but the confirmed
+        # record still binds the active bundle.
+        (self.journal / 'boot-publish').unlink()
+        self.run_shell('recover_transaction && app_launch_after_recovery', 1)
+        theme.write_bytes(original)
+        self.run_shell('recover_transaction && app_launch_after_recovery')
+        self.assertFalse(self.journal.exists())
 
     def test_real_pid_confirm_without_od(self):
         self.prepare()
@@ -349,7 +512,7 @@ BODY
         self.run_shell('trial_is_committed', 2)
         (self.journal / 'trial').chmod(0o600)
         self.destination(LIB).chmod(0o644)
-        self.run_shell('trial_runtime_valid', 2)
+        self.run_shell('recover_transaction && app_launch_after_recovery', 1)
 
     def test_confirmed_cleanup_cut_missing_snapshots_resumes(self):
         self.prepare()
@@ -405,7 +568,7 @@ BODY
     def test_no_trial_fast_path_never_hashes_resources(self):
         shutil.rmtree(self.journal)
         self.run_shell('checked_digest() { echo unexpected >&2; return 9; }\n'
-                       'trial_runtime_valid && trial_is_committed', 1)
+                       'recover_transaction && app_launch_after_recovery && trial_is_committed', 1)
 
     def test_pending_missing_snapshots_and_commit_flags_rejected(self):
         self.prepare()

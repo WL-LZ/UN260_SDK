@@ -25,17 +25,17 @@ class DirectReleaseTests(volume.VolumeUpdaterTests):
         old_id=hashlib.sha256(request.read_bytes()).hexdigest()+'\n'
         completed.write_text(old_id)
         # Call the exact pending predicate used by S00lvgl after the transaction.
-        self.run_update(action='install_bundle\nif unified_pending; then exit 72; fi',
+        self.run_update(action='install_bundle\nif legacy_request_pending; then exit 72; fi',
                         extra='continue_unified() { echo UNEXPECTED_CONTINUATION >&2; exit 73; }')
         self.assertEqual((self.vol/'test_lvgl').read_bytes(),self.files[volume.APP][0])
         self.assertEqual(completed.read_text(),old_id)
         self.assertIn('success=1',(self.root/'status').read_text())
         self.assertNotIn('Bridge ready',(self.root/'status').read_text())
-        self.run_update(action='install_bundle\nif unified_pending; then exit 72; fi')
+        self.run_update(action='install_bundle\nif legacy_request_pending; then exit 72; fi')
         self.assertEqual(completed.read_text(),old_id)
 
     def test_factory_board_without_request_installs_before_reboot(self):
-        self.run_update(action='install_bundle\nif unified_pending; then exit 72; fi')
+        self.run_update(action='install_bundle\nif legacy_request_pending; then exit 72; fi')
         self.assertEqual((self.vol/'test_lvgl').read_bytes(),self.files[volume.APP][0])
         self.assertFalse((self.root/'etc/un260/unified-request').exists())
         self.assertIn('reboot is required',(self.root/'status').read_text())
@@ -46,18 +46,18 @@ class DirectReleaseTests(volume.VolumeUpdaterTests):
         self.run_update(ok=False)
         self.assertEqual(pending.read_text(),'KEEP')
         self.assertEqual((self.vol/'test_lvgl').read_bytes(),b'old app')
-        self.assertIn('Finish the pending storage migration',(self.root/'status').read_text())
+        self.assertIn('Existing storage migration requires service',(self.root/'status').read_text())
 
 class DirectQualificationTests(unittest.TestCase):
     def setUp(self):
-        from test_legacy_test_release import fixture_target, package
+        from test_release_package import fixture_target, package
         self.temp = tempfile.TemporaryDirectory(prefix='un260-direct-qualification-')
         self.addCleanup(self.temp.cleanup)
         self.p = Path(self.temp.name)
         self.target = self.p / 'target'
         fixture_target(self.target)
         self.full = self.p / 'full.upk'
-        result = package(self.target, self.full, legacy=False)
+        result = package(self.target, self.full)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def rewrite(self, name, data):
@@ -81,13 +81,13 @@ class DirectQualificationTests(unittest.TestCase):
         with self.assertRaises(ValueError): verify(self.full, self.target)
 
     def test_qualification_rejects_continuation_request(self):
-        from test_legacy_test_release import package
+        from test_release_package import package
         extra = self.p / 'extra'
         path = extra / 'etc/un260/unified-request'
         path.parent.mkdir(parents=True)
         path.write_bytes(b'UNWANTED REQUEST\n')
         path.chmod(0o644)
-        result = package(self.target, self.full, legacy=False, extra=extra)
+        result = package(self.target, self.full, extra=extra)
         self.assertEqual(result.returncode, 0, result.stderr)
         with self.assertRaises(AssertionError): verify(self.full, self.target)
 

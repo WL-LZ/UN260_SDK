@@ -12,6 +12,7 @@ with tempfile.TemporaryDirectory(prefix='un260-history-add-') as temp:
     parts=['tools/test_history_add_group.c','un260/storage/storage_worker.c',
         'un260/counting/counting_history_service.c',
         'un260/counting/counting_data_store.c',
+        'un260/history/history_object_store.c',
         'un260/history/history_record_snapshot.c','un260/history/history_record_reader.c',
         'un260/history/history_read_task.c','un260/history/history_record_detail.c',
         'un260/history/history_export_sn_parser.c','un260/history/history_query.c',

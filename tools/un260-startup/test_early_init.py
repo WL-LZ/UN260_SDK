@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Production PID 1 paths with mocked syscalls; never mount or boot the host."""
 from pathlib import Path
-import hashlib
-import os
 import subprocess
 import tempfile
 
@@ -31,7 +29,6 @@ static const char *scenario;
 static int roots,moves,root_moves,chroots,forks,execs,kills,opens,closes,marker_reads;
 static int phase,waits,attempt,theme_flags,unlinks,pin_opens,pin_writes,pin_renames,pinned;
 static int platform_opens,platform_written,platform_renamed;
-static int request_opens,request_closes;
 static size_t pin_length;
 static char pin_record[256];
 static char commands[4096];
@@ -45,7 +42,7 @@ pid_t fake_fork(void){
 #endif
  forks++;attempt++;
  if(!strcmp(scenario,"fork-fail")){errno=EAGAIN;return -1;}
- if(!strcmp(scenario,"child-exec-fail"))return 0;
+ if(!strcmp(scenario,"child-exec-fail")||!strcmp(scenario,"display-snapshot-exec"))return 0;
  return 123+attempt;
 }
 int fake_mount(const char *a,const char *b,const char *c,unsigned long flags,const void *options){
@@ -63,15 +60,6 @@ int fake_mount(const char *a,const char *b,const char *c,unsigned long flags,con
  return 0;
 }
 int fake_open(const char *p,int flags,...){
- if(!strcmp(p,"/etc/un260/unified-request")||!strcmp(p,"/var/lib/un260-updater/unified.completed")) {
-  assert(phase==4&&forks==0&&flags==(O_RDONLY|O_NOFOLLOW|O_CLOEXEC));
-  bool receipt=strstr(p,"unified.completed")!=NULL;
-  if(strncmp(scenario,"request-",8)||!strcmp(scenario,"request-absent")||
-     (receipt&&!strcmp(scenario,"request-receipt-missing"))){errno=ENOENT;return -1;}
-  if((!receipt&&!strcmp(scenario,"request-symlink"))||(receipt&&!strcmp(scenario,"request-receipt-symlink"))){errno=ELOOP;return -1;}
-  if(!receipt&&!strcmp(scenario,"request-open-error")){errno=EIO;return -1;}
-  request_opens++;return receipt?18:17;
- }
  if(!strcmp(p,"/proc/cmdline"))return 10;
  if(!strcmp(p,BOOT_BUNDLE_READY_PATH)) {
   marker_reads++;
@@ -102,36 +90,6 @@ int fake_open(const char *p,int flags,...){
   return 14;
  }
  assert(!strcmp(p,"/dev/console"));return 13;
-}
-int fake_fstat(int fd,struct stat *st){
- assert(fd==17||fd==18);memset(st,0,sizeof(*st));st->st_mode=S_IFREG|0644;st->st_uid=0;st->st_size=fd==17?130:65;
- const char *prefix=fd==17?"request-":"request-receipt-";
- const char *issue=!strncmp(scenario,prefix,strlen(prefix))?scenario+strlen(prefix):"";
- if(!strcmp(issue,"not-regular"))st->st_mode=S_IFDIR|0755;
- if(!strcmp(issue,"foreign-owner"))st->st_uid=1;
- if(!strcmp(issue,"group-write"))st->st_mode|=0020;
- if(!strcmp(issue,"setuid"))st->st_mode|=S_ISUID;
- if(!strcmp(issue,"setgid"))st->st_mode|=S_ISGID;
- if(!strcmp(issue,"truncated"))st->st_size--;
- if(!strcmp(issue,"extra-byte"))st->st_size++;
- if(!strcmp(issue,"stat-error")){errno=EIO;return -1;}
- return 0;
-}
-ssize_t fake_pread(int fd,void *output,size_t size,off_t offset){
- assert((fd==17||fd==18)&&offset==0);char text[130];
- if(fd==17){assert(size==130);memset(text,'a',64);text[64]='\n';memset(text+65,'b',64);text[129]='\n';}
- else {assert(size==65);memset(text,!strcmp(scenario,"request-pending")?'d':'c',64);text[64]='\n';}
- if((fd==17&&!strcmp(scenario,"request-invalid-hex"))||(fd==18&&!strcmp(scenario,"request-receipt-invalid-hex")))text[2]='z';
- if(fd==17&&!strcmp(scenario,"request-uppercase"))text[70]='B';
- if((fd==17&&!strcmp(scenario,"request-no-lf"))||(fd==18&&!strcmp(scenario,"request-receipt-no-lf")))text[size-1]='x';
- if(fd==17&&!strcmp(scenario,"request-first-line-no-lf"))text[64]='x';
- if((fd==17&&!strcmp(scenario,"request-read-error"))||(fd==18&&!strcmp(scenario,"request-receipt-read-error"))){errno=EIO;return -1;}
- if((fd==17&&!strcmp(scenario,"request-read-short"))||(fd==18&&!strcmp(scenario,"request-receipt-read-short")))size--;
- memcpy(output,text,size);return size;
-}
-bool boot_bundle_sha256_fd(int fd,char digest[65]){
- assert(fd==17);if(!strcmp(scenario,"request-sha-fail"))return false;
- memset(digest,'c',64);digest[64]=0;return true;
 }
 ssize_t fake_read(int fd,void *p,size_t size){
  if(fd==10){size_t n=strlen(commands);assert(n<size);memcpy(p,commands,n);return n;}
@@ -184,7 +142,6 @@ int fake_rename(const char *from,const char *to){
 }
 int fake_close(int fd){
  assert(fd>=10&&fd<=22);closes++;
- if(fd==17||fd==18)request_closes++;
  if(fd==14&&(!strcmp(scenario,"pin-close-fail")||(!strcmp(scenario,"active-pin-close-fail")&&attempt==1))) {
   errno=EIO;return -1;
  }
@@ -205,14 +162,19 @@ int fake_access(const char *p,int flags){
  if(!strncmp(p,"/newroot/",9))return !strcmp(scenario,"missing-mountpoints")?-1:0;
  assert(phase==4);
  if(strstr(p,"transaction"))return (is_case("transaction")||is_case("trial")||is_case("trial-mismatch")||(is_case("trial-old-rescue")||is_case("trial-old-primary")))?0:-1;
- if(strstr(p,"pointercal"))return is_case("calibration")?-1:0;
- if(strstr(p,"boot-light.disabled"))return is_case("disabled")?0:-1;
+ if(strstr(p,"pointercal"))return (is_case("calibration")||!strcmp(scenario,"display-calibration"))?-1:0;
+ if(strstr(p,"boot-light.disabled"))return (is_case("disabled")||!strcmp(scenario,"display-disabled"))?0:-1;
  if(strstr(p,"early-display.disabled"))return is_case("early-disabled")?0:-1;
  assert(0);return -1;
 }
 pid_t fake_waitpid(pid_t child,int *status,int options){
  (void)status;assert(child==123+attempt);waits++;
  if(options==0)return child;
+ if(!strncmp(scenario,"display-",8)&&strstr(scenario,"snapshot")) {
+  if(strstr(scenario,"timeout"))return 0;
+  if(waits==1 && strstr(scenario,"eintr")){errno=EINTR;return -1;}
+  assert(status);*status=strstr(scenario,"failed")?(1<<8):0;return child;
+ }
  assert(options==WNOHANG);
  if(is_case("visual-dead")||(is_case("active-dead")&&attempt==1))return child;
  return 0;
@@ -231,7 +193,9 @@ int fake_fcntl(int fd,int command,...){
 int fake_fexecve(int fd,char *const args[],char *const env[]){
  (void)env;assert(fd==21&&!strcmp(args[0],"un260_boot_player")&&!strcmp(args[1],"--theme-fd"));
  assert(!strcmp(args[2],"22")&&!strcmp(args[3],"--bundle-id")&&strlen(args[4])==64);
- assert(!strcmp(args[5],"--mode")&&!strcmp(args[6],"animation")&&!args[7]);assert(theme_flags==0);
+ assert(!strcmp(args[5],"--mode")&&!strcmp(args[6],"animation"));
+ if(!strcmp(scenario,"display-snapshot-exec")){assert(!strcmp(args[7],"--preview")&&!args[8]);}
+ else assert(!args[7]);assert(theme_flags==0);
  errno=ENOEXEC;return -1;
 }
 void fake_exit(int code){assert(code==127);longjmp(finish,3);}
@@ -242,36 +206,36 @@ int fake_execv(const char *p,char *const args[]){
 int boot_trial_visual_read(const char *j,const char *boot,boot_trial_visual_t *v) {
  assert(!strcmp(j,"/var/lib/un260-updater/transaction")&&!strcmp(boot,"/proc/sys/kernel/random/boot_id"));
  memset(v,0,sizeof(*v));
- if(is_case("transaction"))return -1;
+ if(is_case("transaction")||!strcmp(scenario,"display-invalid"))return -1;
+ if(!strncmp(scenario,"display-",8)){if(!strcmp(scenario,"display-absent"))return 0;v->pending=true;return 1;}
  if(is_case("trial")||is_case("trial-mismatch")||(is_case("trial-old-rescue")||is_case("trial-old-primary"))){v->pending=true;return 1;}
  return 0;
 }
 bool boot_trial_visual_matches(const boot_trial_visual_t *v,const boot_bundle_t *b) {
- (void)v;(void)b;return !is_case("trial-mismatch");
+ (void)v;(void)b;return !is_case("trial-mismatch")&&strcmp(scenario,"display-snapshot-mismatch")&&(!v->pending||!b->previous);
 }
-int boot_trial_visual_lock(void){return is_case("lock-busy")?-1:20;}
+int boot_trial_visual_lock(void){return (is_case("lock-busy")||!strcmp(scenario,"display-locked"))?-1:20;}
 bool boot_trial_visual_recovery_ready(const char *s,const char *h){
  (void)h;
- if(strstr(s,"/un260-startup/"))return !is_case("trial-old-primary");
- assert(strstr(s,"/rescue/"));return !is_case("trial-old-rescue");
+ if(strstr(s,"/un260-startup/"))return !is_case("trial-old-primary")&&strcmp(scenario,"display-bad-primary");
+ assert(strstr(s,"/rescue/"));return !is_case("trial-old-rescue")&&!strstr(scenario,"snapshot");
 }
 bool boot_bundle_open(const char *a,const char *v,bool previous_only,boot_bundle_t *b){
  assert(phase==4&&!strcmp(a,BOOT_BUNDLE_ACTIVE_PATH)&&!strcmp(v,BOOT_BUNDLE_VERSIONS_PATH));opens++;
  memset(b,0,sizeof(*b));b->player_fd=b->theme_fd=-1;
  if(is_case("bundle-missing")||!strcmp(scenario,"cli-check-missing"))return false;
  if(opens==2)assert(previous_only);
- b->previous=previous_only||!strcmp(scenario,"selected-previous");
+ b->previous=previous_only||!strcmp(scenario,"selected-previous")||!strcmp(scenario,"display-snapshot-previous");
  memset(b->id,'a',64);memset(b->manifest_sha256,'b',64);strcpy(b->mode,"animation");b->player_fd=21;b->theme_fd=22;return true;
 }
 void boot_bundle_close(boot_bundle_t *b){assert(b->player_fd==21&&b->theme_fd==22);b->player_fd=b->theme_fd=-1;}
 #define main init_main
 #define getpid fake_getpid
+#define getppid fake_getpid
 #define fork fake_fork
 #define mount fake_mount
 #define open fake_open
 #define read fake_read
-#define pread fake_pread
-#define fstat fake_fstat
 #define write fake_write
 #define rename fake_rename
 #define close fake_close
@@ -296,6 +260,21 @@ void boot_bundle_close(boot_bundle_t *b){assert(b->player_fd==21&&b->theme_fd==2
 int main(int argc,char **argv){
  assert(argc==2);scenario=argv[1];phase=4;
  char *args[]={"un260_boot_launch",NULL,NULL};int count=1;
+ if(!strncmp(scenario,"display-",8)) {
+  args[1]="--trial-display";count=2;
+  if(!strcmp(scenario,"display-snapshot-exec")) {
+   int jumped=setjmp(finish);if(!jumped)init_main(count,args);
+   assert(jumped==3&&theme_flags==0);return 0;
+  }
+  int result=init_main(count,args);
+  if(!strcmp(scenario,"display-live")){assert(!result&&forks==1&&pinned==1);return 0;}
+  assert(pinned==0&&pin_opens==0&&marker_reads==0);
+  if(!strcmp(scenario,"display-snapshot")||!strcmp(scenario,"display-snapshot-eintr"))assert(!result&&forks==1&&!kills);
+  else if(!strcmp(scenario,"display-snapshot-failed"))assert(result&&forks==1&&!kills);
+  else if(!strcmp(scenario,"display-snapshot-timeout"))assert(result&&forks==1&&kills==1&&waits==151);
+  else assert(result&&forks==0);
+  return 0;
+ }
  if(!strncmp(scenario,"cli-check",9)){args[1]="--check";count=2;}
  if(!strcmp(scenario,"cli-invalid-option")){args[1]="--unknown";count=2;}
  int result=init_main(count,args);
@@ -303,7 +282,6 @@ int main(int argc,char **argv){
  bool check=!strncmp(scenario,"cli-check",9),owner=!strncmp(scenario,"cli-owner-",10);
  int expected=!strcmp(scenario,"cli-invalid-option")?2:off||is_case("trial-mismatch")||(is_case("trial-old-rescue")||is_case("trial-old-primary"))||is_case("lock-busy")||is_case("bundle-missing")||is_case("visual-timeout")||!strcmp(scenario,"cli-check-missing")?1:0;
  assert(result==expected&&platform_opens==0&&platform_written==0&&platform_renamed==0&&roots==0&&moves==0&&chroots==0);
- assert(request_opens==0); /* CLI ignores pending requests after verified-current recovery. */
  if(off||owner||check||is_case("trial-mismatch")||(is_case("trial-old-rescue")||is_case("trial-old-primary"))||is_case("lock-busy")||!strcmp(scenario,"cli-invalid-option"))assert(forks==0&&pinned==0);
  else if(!is_case("bundle-missing"))assert(forks==((is_case("active-timeout")||is_case("active-dead")||is_case("visual-timeout"))?2:1)&&pinned==(expected?0:1));
  if(owner)assert(opens==0);
@@ -326,9 +304,6 @@ int main(int argc,char **argv){
  assert(execs==(fatal_path||outcome==3?0:1));
  if(!fatal_path){assert(moves==3&&root_moves==1&&chroots==1&&unlinks==1);}
  assert(platform_opens==(fatal_path?0:1));
- assert(request_opens==request_closes);
- if(!strncmp(scenario,"request-",8)&&strcmp(scenario,"request-absent")&&strcmp(scenario,"request-completed"))assert(forks==0&&opens==0&&pinned==0);
- if(!strcmp(scenario,"request-completed")||!strcmp(scenario,"request-absent"))assert(forks==1&&pinned==1);
  if(!fatal_path&&!strncmp(scenario,"platform-",9))assert(platform_renamed==0&&execs==1&&pinned==1);
  if(!strcmp(scenario,"root-retry"))assert(roots==3);
  if(!strcmp(scenario,"root-fail"))assert(roots==300);
@@ -360,19 +335,12 @@ cases = ['normal','not-pid1','root-retry','root-fail','rootflags','move-fail',
          'selected-previous','child-exec-fail','frame-off','frame-on',
          'active-pin-open-fail','active-pin-write-fail','active-pin-close-fail','active-pin-rename-fail',
          'pin-open-fail','pin-write-fail','pin-zero-write','pin-close-fail','pin-rename-fail',
-         'pin-short-write','pin-eintr','platform-open-fail','platform-write-fail','platform-rename-fail',
-         'request-absent','request-completed','request-pending','request-receipt-missing',
-         'request-symlink','request-open-error','request-invalid-hex','request-uppercase',
-         'request-no-lf','request-first-line-no-lf','request-read-short','request-read-error','request-sha-fail',
-         'request-receipt-symlink','request-receipt-invalid-hex','request-receipt-no-lf',
-         'request-receipt-read-short','request-receipt-read-error']
-for prefix in ('request-','request-receipt-'):
-    cases += [prefix+issue for issue in ('not-regular','foreign-owner','group-write','setuid','setgid','truncated','extra-byte','stat-error')]
-cli_cases=['cli-normal','cli-check','cli-check-missing','cli-invalid-option',
+         'pin-short-write','pin-eintr','platform-open-fail','platform-write-fail','platform-rename-fail']
+cli_cases=['display-'+name for name in ('live','snapshot','snapshot-eintr','snapshot-failed','snapshot-timeout','snapshot-mismatch','snapshot-previous','snapshot-exec','bad-primary','invalid','absent','locked','disabled','calibration')]+['cli-normal','cli-check','cli-check-missing','cli-invalid-option',
            'cli-disabled','cli-early-disabled','cli-calibration','cli-transaction','cli-trial','cli-trial-mismatch','cli-trial-old-rescue','cli-trial-old-primary','cli-lock-busy','cli-bundle-missing',
            'cli-owner-valid','cli-active-timeout','cli-active-dead','cli-visual-timeout',
            'cli-stale-dead','cli-stale-comm','cli-stale-junk',
-           'cli-stale-negative','cli-stale-overflow','cli-stale-one','cli-request-pending']
+           'cli-stale-negative','cli-stale-overflow','cli-stale-one']
 with tempfile.TemporaryDirectory(prefix='un260-pid1-isolated-') as directory:
     tmp=Path(directory)
     (tmp/'test.c').write_text(fixture)
@@ -389,67 +357,3 @@ with tempfile.TemporaryDirectory(prefix='un260-pid1-isolated-') as directory:
     for case in cli_cases:
         subprocess.run([str(tmp/'launch-test'),case],check=True)
 print(f'PASS {len(cases)} production PID1 and {len(cli_cases)} root CLI paths; every mount/exec/device operation mocked')
-
-# Also run the actual private pending predicate against real temporary files
-# and the production SHA implementation. Only paths and fstat UID are adapted
-# for the unprivileged build host; no PID1 entry point is invoked.
-request_fixture=r'''
-#define _GNU_SOURCE
-#include <assert.h>
-#include <dirent.h>
-#include <fcntl.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
-static int fixture_open(const char *path,int flags,...) {
- const char *name=NULL;
- if(!strcmp(path,"/etc/un260/unified-request"))name="request";
- if(!strcmp(path,"/var/lib/un260-updater/unified.completed"))name="receipt";
- assert(name);char mapped[4096];snprintf(mapped,sizeof(mapped),"%s/%s",getenv("REQUEST_ROOT"),name);
- return open(mapped,flags);
-}
-static int fixture_root_stat(int fd,struct stat *st){int rc=fstat(fd,st);if(!rc)st->st_uid=0;return rc;}
-#define open fixture_open
-#define fstat fixture_root_stat
-#define main unused_pid1_entry
-#include "tools/un260-startup/early_init.c"
-#undef main
-static unsigned fds(void){
- DIR*d=opendir("/proc/self/fd");assert(d);unsigned n=0;struct dirent*e;
- while((e=readdir(d)))if(strcmp(e->d_name,".")&&strcmp(e->d_name,".."))n++;
- closedir(d);return n;
-}
-int main(int argc,char**argv){assert(argc==2);unsigned before=fds();
- assert(unified_request_pending()==!strcmp(argv[1],"pending"));assert(fds()==before);return 0;}
-'''
-with tempfile.TemporaryDirectory(prefix='un260-request-readonly-') as directory:
-    tmp=Path(directory);source=tmp/'request.c';source.write_text(request_fixture);exe=tmp/'request-check'
-    subprocess.run(['cc','-O1','-Wall','-Wextra','-Werror','-fsanitize=undefined',
-                    '-fno-sanitize-recover=all','-I'+str(root),'-I'+str(root/'source/artinchip/test-lvgl'),
-                    str(source),str(root/'source/artinchip/test-lvgl/un260/boot/boot_bundle.c'),str(root/'tools/un260-startup/boot_trial.c'),'-o',str(exe)],check=True)
-    request=b'a'*64+b'\n'+b'b'*64+b'\n'
-    receipt=hashlib.sha256(request).hexdigest().encode()+b'\n'
-    real_cases=[('absent',False),('completed',False),('missing-receipt',True),
-                ('changed-request',True),('request-symlink',True),('receipt-symlink',True),
-                ('request-no-lf',True),('receipt-no-lf',True),('request-extra-byte',True),
-                ('request-group-write',True),('receipt-group-write',True),('receipt-wrong-sha',True)]
-    for name,pending in real_cases:
-        case=tmp/name;case.mkdir()
-        if name!='absent':
-            (case/'request').write_bytes(request);(case/'request').chmod(0o644)
-        if name not in ('absent','missing-receipt'):
-            (case/'receipt').write_bytes(receipt);(case/'receipt').chmod(0o644)
-        if name=='changed-request':(case/'request').write_bytes(b'c'*64+b'\n'+b'b'*64+b'\n')
-        if name.endswith('symlink'):
-            kind=name.split('-')[0];(case/kind).rename(case/'saved');(case/kind).symlink_to(case/'saved')
-        if name.endswith('no-lf'):
-            kind=name.split('-')[0];path=case/kind;path.write_bytes(path.read_bytes()[:-1]+b'x')
-        if name=='request-extra-byte':(case/'request').write_bytes(request+b'\n')
-        if name.endswith('group-write'):(case/name.split('-')[0]).chmod(0o664)
-        if name=='receipt-wrong-sha':(case/'receipt').write_bytes(b'd'*64+b'\n')
-        subprocess.run([str(exe),'pending' if pending else 'completed'],
-                       env=dict(os.environ,REQUEST_ROOT=str(case)),check=True)
-    print(f'PASS {len(real_cases)} real temporary request/receipt/SHA/FD cases; no PID1 entry/mount/exec invoked')

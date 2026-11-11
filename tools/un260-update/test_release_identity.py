@@ -13,7 +13,7 @@ from unittest import mock
 from build_delta import load
 from release_manifest import ENVELOPE, PLATFORM, CORE, CORE_DESCRIPTOR, RUNTIME_DESCRIPTOR, RESCUE, RESCUE_NAMES, table, verify, sha, factory_contract, validate_table_limits, MAX_TABLE_ROWS, MAX_TABLE_BYTES, MAX_PATH_BYTES
 from release_version import input_identity, version, image_version
-from test_legacy_test_release import fixture_target
+from test_release_package import fixture_target
 
 SDK = Path(__file__).resolve().parents[2]
 
@@ -337,10 +337,8 @@ class RealBuilderIdentityTests(unittest.TestCase):
         app.write_bytes(app.read_bytes() + b'X')
         self.build(ok=False)
         self.assertEqual(self.out.read_bytes(), before)
-        self.build(legacy=True)
-        metadata, payload = load(self.out)
-        self.assertEqual(metadata['release_profile'], 'legacy-test')
-        self.assertEqual(len(payload[APP][0]), APP_RELEASE_MAX_BYTES + 1)
+        self.build(ok=False, legacy=True)
+        self.assertEqual(self.out.read_bytes(), before)
 
 
 if __name__ == '__main__': unittest.main()

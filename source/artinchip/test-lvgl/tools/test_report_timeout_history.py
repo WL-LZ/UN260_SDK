@@ -47,6 +47,7 @@ static void begin(bool add)
 }
 ''')
     parts=['un260/storage/storage_worker.c','un260/counting/counting_history_service.c','un260/counting/counting_data_store.c',
+      'un260/history/history_object_store.c',
       'un260/history/history_record_snapshot.c','un260/history/history_record_reader.c','un260/history/history_read_task.c',
       'un260/history/history_record_detail.c','un260/history/history_export_sn_parser.c','un260/history/history_query.c',
       'un260/counting/counting_serial_text.c','un260/counting/counting_info_reply.c','un260/protocol/protocol_frame.c',

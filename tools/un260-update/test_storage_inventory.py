@@ -6,6 +6,7 @@ import json
 import os
 import shlex
 from pathlib import Path
+from storage_test_sources import storage_test_sources
 import subprocess
 import tempfile
 import unittest
@@ -97,7 +98,10 @@ sys.exit(19 if action == 'nonzero' else real.returncode)
 def native_tools():
     root = Path(_build.name)
     native = root / 'un260_storage_sync'
-    subprocess.run(BUILD_FLAGS + [str(SOURCE), '-o', str(native)], check=True)
+    def compile_sync(source, output):
+        subprocess.run(BUILD_FLAGS + ['-I'+str(SOURCE.parent), str(source), *storage_test_sources(SOURCE),
+                                      '-o', str(output)], check=True)
+    compile_sync(SOURCE, native)
     wrapper = root / 'batch-sha256sum'
     wrapper.write_text(WRAPPER)
     wrapper.chmod(0o755)
@@ -108,11 +112,11 @@ def native_tools():
         raise RuntimeError('Inventory sha256sum test hook not unique')
     injected.write_text(original.replace(needle, 'execv(' + json.dumps(str(wrapper)) + ', arguments);'))
     test_binary = root / 'injected'
-    subprocess.run(BUILD_FLAGS + [str(injected), '-o', str(test_binary)], check=True)
+    compile_sync(injected, test_binary)
     missing = root / 'missing.c'
     missing.write_text(original.replace(needle, 'execv("/no-such-un260-sha256sum", arguments);'))
     missing_binary = root / 'missing'
-    subprocess.run(BUILD_FLAGS + [str(missing), '-o', str(missing_binary)], check=True)
+    compile_sync(missing, missing_binary)
     return native, test_binary, missing_binary
 
 class InventoryTests(unittest.TestCase):

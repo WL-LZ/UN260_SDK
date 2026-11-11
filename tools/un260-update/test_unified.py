@@ -40,6 +40,8 @@ mv() {
 '''
 
 
+@unittest.skipUnless(b'UN260_STORAGE_POLICY_V3' in (SDK / UPDATER_REL).read_bytes(),
+                     "Historical expansion profile; production rejection is covered by test_app_volume_updater.")
 class UnifiedTests(Base):
     def setUp(self):
         super().setUp()

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Real production guard fork/exec/proc tests for startup health ownership."""
+import hashlib
 import os
 from pathlib import Path
 import shlex
@@ -136,7 +137,7 @@ class HealthTests(unittest.TestCase):
         launcher.write_text('#!/bin/sh\necho visual >> '+shlex.quote(str(calls))+'\nexit 0\n')
         launcher.chmod(0o755)
         self.dispatch.write_text('#!/bin/sh\necho "$1" >> '+shlex.quote(str(calls))+'\nexit 1\n')
-        source=self.functions.read_text().replace('/usr/local/bin/un260_boot_launch',str(launcher))
+        source=self.functions.read_text().replace('/usr/local/lib/un260-startup/trial-display',str(launcher))
         source=source.replace('/var/lib/un260-updater/transaction',str(journal))
         self.functions.write_text(source)
         setup=('UPDATE_DISPATCH='+shlex.quote(str(self.dispatch))+'; '
@@ -146,6 +147,7 @@ class HealthTests(unittest.TestCase):
         for visual_status in (0,1):
             launcher.write_text('#!/bin/sh\necho visual >> '+shlex.quote(str(calls))+
                                 '\nexit '+str(visual_status)+'\n')
+            self.functions.write_text(source.replace('@TRIAL_DISPLAY_SHA256@', hashlib.sha256(launcher.read_bytes()).hexdigest()))
             calls.unlink(missing_ok=True)
             result=self.call(setup+'start_ready_impl')
             self.assertNotEqual(result.returncode,0,result.stderr)
@@ -154,6 +156,12 @@ class HealthTests(unittest.TestCase):
             self.assertFalse(self.health.exists())
             self.assertFalse(self.pidfile.exists())
             self.assertFalse((self.base/'confirmed').exists())
+        # A replaced helper is never executed; launch eligibility still runs.
+        launcher.write_text('#!/bin/sh\ntouch '+str(self.base/'wrong-helper')+'\n')
+        calls.unlink()
+        self.call(setup+'start_ready_impl')
+        self.assertEqual(calls.read_text().splitlines(),['--can-launch'])
+        self.assertFalse((self.base/'wrong-helper').exists())
         # Ordinary boots, disabled early display and an existing owner do no extra launch.
         for override in ('early_display_ready(){ return 1; }; ',
                          'boot_light_owner(){ return 0; }; ',

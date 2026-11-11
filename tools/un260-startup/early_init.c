@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mount.h>
+#include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -28,42 +29,6 @@ static void milestone(const char *name)
     dprintf(STDERR_FILENO,"EARLY_INIT uptime_ms=%llu stage=%s\n",milliseconds(),name);
 }
 #ifndef UN260_BOOT_LAUNCH_ONLY
-/* Unified requests remain installed after completion. Defer branding only
- * while their durable receipt is missing, different or unsafe to read. */
-static int request_file(const char *path,size_t bytes)
-{
-    int fd=open(path,O_RDONLY|O_NOFOLLOW|O_CLOEXEC);
-    if(fd<0)return -1;
-    struct stat st;
-    if(fstat(fd,&st)||!S_ISREG(st.st_mode)||st.st_uid!=0||
-       (st.st_mode&(022|S_ISUID|S_ISGID))||st.st_size!=(off_t)bytes) {
-        close(fd);errno=EINVAL;return -1;
-    }
-    return fd;
-}
-static bool digest_line(const char *text)
-{
-    for(unsigned i=0;i<64;i++)
-        if(!((text[i]>='0'&&text[i]<='9')||(text[i]>='a'&&text[i]<='f')))return false;
-    return text[64]=='\n';
-}
-static bool unified_request_pending(void)
-{
-    char request[130],receipt[65],digest[65];
-    int fd=request_file("/etc/un260/unified-request",sizeof(request));
-    if(fd<0)return errno!=ENOENT;
-    bool valid=pread(fd,request,sizeof(request),0)==(ssize_t)sizeof(request)&&
-               digest_line(request)&&digest_line(request+65)&&
-               boot_bundle_sha256_fd(fd,digest);
-    close(fd);
-    if(!valid)return true;
-    fd=request_file("/var/lib/un260-updater/unified.completed",sizeof(receipt));
-    if(fd<0)return true;
-    valid=pread(fd,receipt,sizeof(receipt),0)==(ssize_t)sizeof(receipt)&&
-          digest_line(receipt)&&!memcmp(receipt,digest,64);
-    close(fd);
-    return !valid;
-}
 static void argument(const char *cmd,const char *key,char *out,size_t size)
 {
     size_t n=strlen(key);
@@ -144,6 +109,23 @@ static bool pin_live_bundle(const boot_bundle_t *bundle)
                         BOOT_BUNDLE_ACTIVE_MAGIC,bundle->id,bundle->manifest_sha256);
     return write_ram_record(BOOT_BUNDLE_LIVE_PATH,record,(size_t)length);
 }
+static pid_t spawn_player(boot_bundle_t *bundle,bool preview)
+{
+    pid_t supervisor=getpid();
+    pid_t child=fork();
+    if(child==0) {
+        /* A one-shot must not outlive its supervising helper during shutdown. */
+        if(preview && (prctl(PR_SET_PDEATHSIG,SIGKILL)<0||getppid()!=supervisor))_exit(126);
+        int flags=fcntl(bundle->theme_fd,F_GETFD);
+        if(flags<0||fcntl(bundle->theme_fd,F_SETFD,flags&~FD_CLOEXEC)<0)_exit(126);
+        char fd_text[24];snprintf(fd_text,sizeof(fd_text),"%d",bundle->theme_fd);
+        char *argv[]={"un260_boot_player","--theme-fd",fd_text,"--bundle-id",bundle->id,"--mode",bundle->mode,preview?"--preview":NULL,NULL};
+        fexecve(bundle->player_fd,argv,environ);
+        dprintf(STDERR_FILENO,"EARLY_INIT player_exec_failed errno=%d\n",errno);
+        _exit(127);
+    }
+    return child;
+}
 static pid_t start_visual(bool previous_only,bool *selected_previous)
 {
     boot_bundle_t bundle;
@@ -154,16 +136,7 @@ static pid_t start_visual(bool previous_only,bool *selected_previous)
     }
     dprintf(STDERR_FILENO,"EARLY_INIT bundle=%s source=%s\n",bundle.id,bundle.previous?"previous":"active");
     milestone("player_launch");
-    pid_t child=fork();
-    if(child==0) {
-        int flags=fcntl(bundle.theme_fd,F_GETFD);
-        if(flags<0||fcntl(bundle.theme_fd,F_SETFD,flags&~FD_CLOEXEC)<0)_exit(126);
-        char fd_text[24];snprintf(fd_text,sizeof(fd_text),"%d",bundle.theme_fd);
-        char *argv[]={"un260_boot_player","--theme-fd",fd_text,"--bundle-id",bundle.id,"--mode",bundle.mode,NULL};
-        fexecve(bundle.player_fd,argv,environ);
-        dprintf(STDERR_FILENO,"EARLY_INIT player_exec_failed errno=%d\n",errno);
-        _exit(127);
-    }
+    pid_t child=spawn_player(&bundle,false);
     boot_bundle_close(&bundle);
     if(child<0){milestone("player_fork_failed");return -1;}
     for(unsigned i=0;i<150;i++) {
@@ -230,8 +203,7 @@ int main(void)
     bool off=!strcmp(disable,"0")||access("/etc/un260/boot-light.disabled",F_OK)==0||
              access("/etc/un260/early-display.disabled",F_OK)==0||
              access("/etc/pointercal",F_OK)!=0||
-             !trial_visual_ready()||
-             unified_request_pending();
+             !trial_visual_ready();
     if(!off) {
         bool previous=false;
         pid_t child=start_visual(false,&previous);
@@ -248,6 +220,63 @@ int main(void)
 #else
 /* Late service/restart fallback uses the same version verification and spawn
  * contract as PID 1, never a second compiled copy of customer artwork. */
+/* UPK-owned first-boot helper. Its root runtime is authenticated by the
+ * factory entry. A live visual needs rollback-aware runtimes on both paths;
+ * a synchronous preview has no owner, IPC or version pin to roll back. */
+static int trial_display(void)
+{
+    if(access("/etc/un260/boot-light.disabled",F_OK)==0||
+       access("/etc/un260/early-display.disabled",F_OK)==0||
+       access("/etc/pointercal",F_OK)!=0) {
+        milestone("trial_display_disabled");return 1;
+    }
+    int eligible=boot_trial_visual_read("/var/lib/un260-updater/transaction",
+            "/proc/sys/kernel/random/boot_id",&trial_visual);
+    if(eligible!=1) {
+        milestone(eligible==0?"trial_display_no_transaction":
+            trial_visual.defer_reason?trial_visual.defer_reason:"trial_display_journal_invalid");
+        return 1;
+    }
+    if(!boot_trial_visual_recovery_ready("/usr/local/lib/un260-startup/runtime.sh",
+                                         "/etc/un260/startup-runtime.sha256")) {
+        milestone("trial_display_runtime_unverified");return 1;
+    }
+    if(boot_trial_visual_recovery_ready("/usr/local/lib/un260-updater/rescue/startup.sh",
+                                        "/usr/local/lib/un260-updater/rescue/startup.sha256")) {
+        bool previous=false;
+        return start_visual(false,&previous)>0?0:1;
+    }
+
+    boot_bundle_t bundle;
+    if(!boot_bundle_open(BOOT_BUNDLE_ACTIVE_PATH,BOOT_BUNDLE_VERSIONS_PATH,false,&bundle)) {
+        milestone("trial_preview_bundle_unavailable");return 1;
+    }
+    if(!boot_trial_visual_matches(&trial_visual,&bundle)) {
+        boot_bundle_close(&bundle);milestone("trial_preview_bundle_mismatch");return 1;
+    }
+    pid_t child=spawn_player(&bundle,true);
+    boot_bundle_close(&bundle);
+    if(child<0){milestone("trial_preview_fork_failed");return 1;}
+    for(unsigned i=0;i<150;i++) {
+        int status;
+        pid_t done=waitpid(child,&status,WNOHANG);
+        if(done==child) {
+            bool presented=WIFEXITED(status)&&WEXITSTATUS(status)==0;
+            milestone(presented?"trial_preview_first_frame":"trial_preview_failed");
+            return presented?0:1;
+        }
+        if(done<0&&errno!=EINTR) {
+            milestone("trial_preview_wait_failed");return 1;
+        }
+        usleep(10000);
+    }
+    /* A legacy player rejecting --preview also exits before framebuffer setup.
+     * Bound a stuck renderer and wait for its lease to be released before the
+     * updater lock passes to application checks or recovery. */
+    kill(child,SIGKILL);
+    while(waitpid(child,NULL,0)<0&&errno==EINTR){}
+    milestone("trial_preview_timeout");return 1;
+}
 static int launch_main(int argc,char **argv)
 {
     if(argc==2&&!strcmp(argv[1],"--check")) {
@@ -286,9 +315,11 @@ static int launch_main(int argc,char **argv)
 int main(int argc,char **argv)
 {
     /* --check is also used inside an already-locked upgrade transaction. */
-    if(argc!=1)return launch_main(argc,argv);
-    int lock=boot_trial_visual_lock();if(lock<0)return 1;
-    int result=launch_main(argc,argv);
+    bool trial=argc==2&&!strcmp(argv[1],"--trial-display");
+    if(argc!=1&&!trial)return launch_main(argc,argv);
+    int lock=boot_trial_visual_lock();
+    if(lock<0){if(trial)milestone("trial_display_lock_unavailable");return 1;}
+    int result=trial?trial_display():launch_main(argc,argv);
     close(lock);return result;
 }
 #endif

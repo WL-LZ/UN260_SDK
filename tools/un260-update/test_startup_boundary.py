@@ -3,6 +3,7 @@
 import hashlib
 import os
 from pathlib import Path
+from storage_test_sources import storage_test_sources
 import shlex
 import shutil
 import subprocess
@@ -204,7 +205,7 @@ class BoundaryTests(unittest.TestCase):
         native = self.base / 'native-sync'
         source = HERE.parents[1] / 'source/artinchip/test-lvgl/tools/un260_storage_sync.c'
         subprocess.run(['gcc', '-std=gnu11', '-Wall', '-Wextra', '-Werror',
-                        '-O2', str(source), '-o', str(native)], check=True)
+                        '-O2', str(source), *storage_test_sources(source), '-o', str(native)], check=True)
         shim = self.base / 'direct-refused.c'
         library = self.base / 'direct-refused.so'
         # Fortified glibc open() may use __open_2; both enforce the same

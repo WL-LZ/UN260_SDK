@@ -641,9 +641,6 @@ BATCH SETTING	预置设置	배치 설정	バッチ設定	إعداد الدفعة
 BATCH:%d	预置：%d	배치:%d	バッチ：%d	دفعة:%d
 BATCH:OFF	预置：关	배치:꺼짐	バッチ：オフ	دفعة:معطلة
 Back to count	返回点钞	계수로 돌아가기	計数に戻る	العودة إلى العد
-Bad delta digest	增量摘要错误	증분 해시 오류	差分ハッシュ不正	بصمة التحديث التفاضلي غير صحيحة
-Bad delta mode	增量权限错误	증분 권한 오류	差分の権限不正	أذونات التحديث التفاضلي غير صحيحة
-Bad delta size	增量大小错误	증분 크기 오류	差分サイズ不正	حجم التحديث التفاضلي غير صحيح
 Balanced sensitivity	均衡灵敏度	균형 감도	バランス感度	حساسية متوازنة
 Basic sensitivity	基础灵敏度	기본 감도	基本感度	الحساسية الأساسية
 Batch %d / %d	预置%d / %d	배치 %d / %d	バッチ%d / %d	دفعة %d / %d
@@ -707,16 +704,12 @@ Calibration not sent	校准未发送	보정 미전송	校正未送信	لم تر�
 Calibration timed out	校准超时	보정 시간 초과	校正タイムアウト	انتهت مهلة المعايرة
 Calibration unavailable	校准不可用	보정 불가	校正を利用できません	المعايرة غير متاحة
 Canada	加拿大	캐나다	カナダ	كندا
-Cannot clean unified staging	无法清理统一升级暂存	통합 업데이트 임시 파일 정리 실패	統合更新の一時領域を清掃できません	تعذر تنظيف ملفات التحديث الموحد المؤقتة
 Cannot hash payload	无法计算载荷摘要	업데이트 데이터 해시 계산 실패	更新データのハッシュを計算できません	تعذر حساب بصمة بيانات التحديث
 Cannot measure payload	无法测量载荷大小	업데이트 데이터 크기 확인 실패	更新データの容量を確認できません	تعذر قياس حجم بيانات التحديث
 Cannot read expected target	无法读取预期目标	예상 대상 읽기 실패	予定対象を読み込めません	تعذر قراءة الهدف المتوقع
 Cannot read installed target	无法读取已安装目标	설치된 대상 읽기 실패	インストール済み対象を読み込めません	تعذر قراءة الهدف المثبت
 Cannot remove retired file	无法移除旧文件	이전 파일 제거 실패	旧ファイルを削除できません	تعذر إزالة الملف القديم
-Cannot stage legacy app	无法暂存旧应用	이전 앱 임시 저장 실패	旧アプリを一時保存できません	تعذر تجهيز التطبيق القديم مؤقتا
-Cannot stage legacy library	无法暂存旧库	이전 라이브러리 임시 저장 실패	旧ライブラリを一時保存できません	تعذر تجهيز المكتبة القديمة مؤقتا
 Cannot verify	无法验证	검증 불가	検証できません	تعذر التحقق
-Cannot write bridge result	无法写入升级衔接结果	업데이트 연결 결과 저장 실패	更新引継ぎ結果を書き込めません	تعذر كتابة نتيجة جسر التحديث
 Cannot write update result	无法写入升级结果	업데이트 결과 저장 실패	更新結果を書き込めません	تعذر كتابة نتيجة التحديث
 Capture	采集	수집	取得	التقاط
 Capture complete	采集完成	수집 완료	取得完了	اكتمل الالتقاط
@@ -1239,8 +1232,6 @@ Face value distribution	面额分布	권종 분포	金種別内訳	توزيع ا
 Factory defaults saved	出厂默认设置已保存	공장 기본값 저장됨	出荷時設定を保存しました	حُفظت إعدادات المصنع
 Factory defaults saved. Restart to apply them.	出厂默认设置已保存，重启后生效。	공장 기본값을 저장했습니다. 다시 시작하면 적용됩니다.	出荷時設定を保存しました。再起動すると適用されます。	حُفظت إعدادات المصنع. أعد التشغيل لتطبيقها.
 Factory touch coordinates	出厂触摸坐标	공장 터치 좌표	出荷時タッチ座標	إحداثيات اللمس الأصلية
-Failed to extract upgrade archive	无法解压升级包	업데이트 압축 해제 실패	更新ファイルを展開できません	فشل فك حزمة التحديث
-Failed to mount USB device	无法挂载 USB 设备	USB 장치 마운트 실패	USBをマウントできません	فشل تركيب جهاز USB
 Failed to start the upgrade script. Please try again.	无法启动升级脚本，请重试。	업데이트 스크립트를 시작하지 못했습니다. 다시 시도하세요.	更新スクリプトを起動できません。再試行してください。	تعذر بدء برنامج التحديث. أعد المحاولة.
 Fault location	故障位置	오류 위치	異常位置	موضع العطل
 Favorite currencies	常用币种	즐겨찾는 통화	お気に入り通貨	العملات المفضلة
@@ -2327,7 +2318,6 @@ Updating controller	正在升级主控	제어부 업데이트 중	制御部更�
 Updating system	正在升级系统	시스템 업데이트 중	システム更新中	جارٍ تحديث النظام
 Updating...	升级中…	업데이트 중…	更新中…	جارٍ التحديث…
 Upgrade Now	立即升级	지금 업데이트	今すぐ更新	تحديث الآن
-Upgrade binary not found on USB drive	U 盘中未找到升级程序	USB에서 업데이트 프로그램을 찾지 못했습니다	USBに更新プログラムがありません	لم يُعثر على برنامج التحديث في USB
 Upgrade complete	升级完成	업데이트 완료	更新完了	اكتمل التحديث
 Upgrade completed successfully; reboot is required	升级完成，需要重启	업데이트 완료. 재시작 필요	更新完了。再起動が必要です	اكتمل التحديث بنجاح؛ يلزم إعادة التشغيل
 Upgrade failed	升级失败	업데이트 실패	更新失敗	فشل التحديث
@@ -2925,35 +2915,22 @@ YYYY / YYYYMM / YYYYMMDD. From includes the start; through includes the full mon
 Cannot back up installed file	无法备份已安装文件	설치된 파일을 백업할 수 없습니다	インストール済みファイルをバックアップできません	تعذر نسخ الملف المثبت احتياطياً
 Cannot clear previous USB result	无法清除U盘中的上次结果	USB의 이전 결과를 지울 수 없습니다	USBの前回結果を消去できません	تعذر مسح النتيجة السابقة من USB
 Cannot create recovery journal	无法创建恢复日志	복구 저널을 만들 수 없습니다	復旧ジャーナルを作成できません	تعذر إنشاء سجل الاستعادة
-Cannot create unified completion directory	无法创建统一升级完成目录	통합 업데이트 완료 폴더를 만들 수 없습니다	統合更新の完了ディレクトリを作成できません	تعذر إنشاء مجلد اكتمال التحديث الموحد
-Cannot create unified staging	无法创建统一升级暂存区	통합 업데이트 임시 영역을 만들 수 없습니다	統合更新の一時領域を作成できません	تعذر إنشاء منطقة تجهيز التحديث الموحد
 Cannot create updater state directory	无法创建升级状态目录	업데이트 상태 폴더를 만들 수 없습니다	更新状態のディレクトリを作成できません	تعذر إنشاء مجلد حالة التحديث
-Cannot delete a core upgrade component	不能删除升级核心组件	핵심 업데이트 구성 요소를 삭제할 수 없습니다	更新の中核コンポーネントは削除できません	لا يمكن حذف مكون تحديث أساسي
 Cannot enumerate expected installed tree	无法读取预期安装目录清单	예상 설치 트리 목록을 읽을 수 없습니다	想定するインストールツリーを列挙できません	تعذر سرد شجرة التثبيت المتوقعة
 Cannot enumerate installed static resources	无法读取已安装静态资源清单	설치된 정적 리소스 목록을 읽을 수 없습니다	インストール済み静的リソースを列挙できません	تعذر سرد الموارد الثابتة المثبتة
 Cannot enumerate payload tree	无法读取安装内容目录清单	설치 내용 트리 목록을 읽을 수 없습니다	パッケージ内容のツリーを列挙できません	تعذر سرد شجرة محتويات الحزمة
 Cannot fingerprint selected USB package	无法计算所选U盘升级包指纹	선택한 USB 패키지의 지문을 계산할 수 없습니다	選択したUSBパッケージの識別値を計算できません	تعذر حساب بصمة حزمة USB المحددة
 Cannot flush empty recovery journal	无法将空恢复日志写入存储	빈 복구 저널을 저장 장치에 반영할 수 없습니다	空の復旧ジャーナルをストレージに反映できません	تعذر تثبيت سجل الاستعادة الفارغ على التخزين
 Cannot flush transaction commit	无法将事务提交写入存储	트랜잭션 커밋을 저장 장치에 반영할 수 없습니다	トランザクションの確定をストレージに反映できません	تعذر تثبيت اعتماد المعاملة على التخزين
-Cannot hold USB filesystem for writeback checks	无法保持U盘文件系统以检查回写	쓰기 반영 확인을 위해 USB 파일 시스템을 유지할 수 없습니다	書き戻し確認用にUSBファイルシステムを保持できません	تعذر إبقاء نظام ملفات USB لفحص تثبيت الكتابة
 Cannot measure retired static resource	无法计算旧静态资源大小	폐기할 정적 리소스 크기를 계산할 수 없습니다	廃止する静的リソースのサイズを計算できません	تعذر قياس حجم المورد الثابت القديم
 Cannot persist recovery journal	无法持久保存恢复日志	복구 저널을 영구 저장할 수 없습니다	復旧ジャーナルを永続保存できません	تعذر حفظ سجل الاستعادة بشكل دائم
 Cannot persist transaction commit	无法持久保存事务提交	트랜잭션 커밋을 영구 저장할 수 없습니다	トランザクションの確定を永続保存できません	تعذر حفظ اعتماد المعاملة بشكل دائم
-Cannot persist unified completion; keep USB for retry	无法保存统一升级完成状态，请保留U盘重试	통합 업데이트 완료 상태를 저장할 수 없습니다. 재시도를 위해 USB를 보관하세요	統合更新の完了状態を保存できません。再試行のためUSBを保持してください	تعذر حفظ اكتمال التحديث الموحد؛ احتفظ بوحدة USB لإعادة المحاولة
-Cannot persist unified staging	无法持久保存统一升级暂存内容	통합 업데이트 임시 내용을 영구 저장할 수 없습니다	統合更新の一時内容を永続保存できません	تعذر حفظ محتويات تجهيز التحديث الموحد بشكل دائم
 Cannot prepare install directories	无法准备安装目录	설치 폴더를 준비할 수 없습니다	インストールディレクトリを準備できません	تعذر تجهيز مجلدات التثبيت
-Cannot prepare migrated application volume	无法准备迁移后的应用卷	이전된 앱 볼륨을 준비할 수 없습니다	移行後のアプリ領域を準備できません	تعذر تجهيز وحدة تخزين التطبيق المنقولة
 Cannot preserve original inode	无法保留原文件节点	원본 inode를 보존할 수 없습니다	元のinodeを保持できません	تعذر الاحتفاظ بعقدة الملف الأصلية
 Cannot read app volume free space	无法读取应用卷剩余空间	앱 볼륨의 여유 공간을 읽을 수 없습니다	アプリ領域の空き容量を取得できません	تعذر قراءة المساحة الحرة لوحدة تخزين التطبيق
-Cannot read continuation request	无法读取续升级请求	업데이트 재개 요청을 읽을 수 없습니다	更新再開要求を読み取れません	تعذر قراءة طلب استئناف التحديث
-Cannot read installed bridge component	无法读取已安装的过渡组件	설치된 전환 구성 요소를 읽을 수 없습니다	インストール済み移行コンポーネントを読み取れません	تعذر قراءة مكون الانتقال المثبت
-Cannot read packaged bridge component	无法读取包内过渡组件	패키지의 전환 구성 요소를 읽을 수 없습니다	パッケージ内の移行コンポーネントを読み取れません	تعذر قراءة مكون الانتقال ضمن الحزمة
-Cannot read packaged continuation request	无法读取包内续升级请求	패키지의 업데이트 재개 요청을 읽을 수 없습니다	パッケージ内の更新再開要求を読み取れません	تعذر قراءة طلب استئناف التحديث ضمن الحزمة
 Cannot read retired static resource	无法读取旧静态资源	폐기할 정적 리소스를 읽을 수 없습니다	廃止する静的リソースを読み取れません	تعذر قراءة المورد الثابت القديم
 Cannot replace installed file	无法替换已安装文件	설치된 파일을 교체할 수 없습니다	インストール済みファイルを置換できません	تعذر استبدال الملف المثبت
-Cannot retain inner package on USB	无法在U盘保留内层升级包	USB에 내부 패키지를 보관할 수 없습니다	USBに内部パッケージを保持できません	تعذر الاحتفاظ بالحزمة الداخلية على USB
 Cannot set replacement permissions	无法设置替换文件权限	교체 파일의 권한을 설정할 수 없습니다	置換ファイルの権限を設定できません	تعذر ضبط أذونات الملف البديل
-Cannot stage legacy resources	无法暂存旧版资源	이전 버전 리소스를 임시 저장할 수 없습니다	旧版リソースを一時保存できません	تعذر تجهيز الموارد القديمة مؤقتاً
 Cannot stage replacement file	无法暂存替换文件	교체 파일을 임시 저장할 수 없습니다	置換ファイルを一時保存できません	تعذر تجهيز الملف البديل مؤقتاً
 Cannot verify installed static resources	无法校验已安装静态资源	설치된 정적 리소스를 검증할 수 없습니다	インストール済み静的リソースを検証できません	تعذر التحقق من الموارد الثابتة المثبتة
 Checksum manifest contains an invalid checksum	校验清单含无效校验值	검증 목록에 잘못된 체크섬이 있습니다	検証一覧に無効なチェックサムがあります	تتضمن قائمة التحقق قيمة تحقق غير صالحة
@@ -2962,39 +2939,16 @@ Checksum manifest contains duplicate files	校验清单含重复文件	검증 �
 Checksum manifest references a missing file	校验清单引用的文件缺失	검증 목록이 참조하는 파일이 없습니다	検証一覧が参照するファイルがありません	تشير قائمة التحقق إلى ملف مفقود
 Checksum manifest references an invalid file	校验清单引用了无效文件	검증 목록이 잘못된 파일을 참조합니다	検証一覧が無効なファイルを参照しています	تشير قائمة التحقق إلى ملف غير صالح
 Committed; cleanup requires recovery	已提交，清理需要恢复处理	커밋되었습니다. 정리를 위해 복구가 필요합니다	確定済みです。後処理には復旧が必要です	تم الاعتماد؛ يتطلب التنظيف إجراء الاستعادة
-Delete has a payload	删除项含安装内容	삭제 항목에 설치 내용이 있습니다	削除項目にインストール内容があります	عنصر الحذف يتضمن محتوى للتثبيت
-Delete is absent from baseline	基线中没有待删除项	기준 버전에 삭제 항목이 없습니다	基準版に削除対象がありません	عنصر الحذف غير موجود في الإصدار المرجعي
-Delete is in target	目标版本仍含待删除项	대상 버전에 삭제 항목이 있습니다	対象版に削除対象が残っています	عنصر الحذف موجود في الإصدار الهدف
-Deletes require an incremental package	删除操作需要增量升级包	삭제에는 증분 패키지가 필요합니다	削除には差分パッケージが必要です	تتطلب عمليات الحذف حزمة تحديث تفاضلية
-Delta omits a changed dependency	增量包缺少已变化的依赖项	증분 패키지에 변경된 종속 항목이 누락되었습니다	差分パッケージに変更済み依存項目がありません	أغفلت الحزمة التفاضلية تبعية تغيرت
-Delta payload differs from target	增量内容与目标版本不符	증분 내용이 대상 버전과 다릅니다	差分内容が対象版と一致しません	محتوى الحزمة التفاضلية لا يطابق الإصدار الهدف
-Delta table checksum mismatch	增量清单校验不符	증분 목록 체크섬이 일치하지 않습니다	差分一覧のチェックサムが一致しません	قيمة تحقق جدول الفروق غير مطابقة
 Destination changed during upgrade	升级期间目标发生变化	업데이트 중 대상이 변경되었습니다	更新中に対象が変更されました	تغيرت الوجهة أثناء التحديث
-Duplicate deletion target	删除目标重复	삭제 대상이 중복되었습니다	削除対象が重複しています	هدف حذف مكرر
-Duplicate delta target	增量目标重复	증분 대상이 중복되었습니다	差分対象が重複しています	هدف تفاضلي مكرر
 Duplicate or overlapping install target: %s	安装目标重复或重叠：%s	설치 대상 중복 또는 겹침: %s	インストール対象の重複または重なり：%s	هدف تثبيت مكرر أو متداخل: %s
 Empty install manifest	安装清单为空	설치 목록이 비어 있습니다	インストール一覧が空です	قائمة التثبيت فارغة
 Extracting verified package	正在解压已校验的升级包	검증된 패키지 압축 해제 중	検証済みパッケージを展開中	جارٍ فك الحزمة المتحقق منها
 All files already match; no replacements required	全部文件已匹配，无需替换	모든 파일이 일치하여 교체가 필요 없습니다	すべてのファイルが一致しており、置換は不要です	جميع الملفات متطابقة؛ لا يلزم الاستبدال
 BACKUP   STORAGE   APPLICATION   VERIFY	备份   存储   应用   校验	백업   저장소   앱   검증	バックアップ   ストレージ   アプリ   検証	نسخ احتياطي   تخزين   تطبيق   تحقق
-Bridge is incomplete; run this same package then restart	过渡组件不完整，请运行同一升级包后重启	전환 구성 요소가 불완전합니다. 같은 패키지를 실행한 후 재시작하세요	移行コンポーネントが不完全です。同じパッケージを実行して再起動してください	مكون الانتقال غير مكتمل؛ شغّل الحزمة نفسها ثم أعد التشغيل
-Bridge ready; USB finalization failed	过渡组件已就绪，U盘收尾失败	전환 구성 요소가 준비되었으나 USB 마무리에 실패했습니다	移行の準備は完了しましたが、USBの最終処理に失敗しました	مكون الانتقال جاهز؛ فشل إنهاء عمليات USB
-Bridge ready; restart with the SAME USB to finish the upgrade	过渡组件已就绪，请保留同一U盘并重启完成升级	전환 구성 요소가 준비되었습니다. 같은 USB를 연결한 채 재시작하여 업데이트를 완료하세요	移行の準備ができました。同じUSBを接続したまま再起動して更新を完了してください	مكون الانتقال جاهز؛ أعد التشغيل بوحدة USB نفسها لإكمال التحديث
 CHECKING THE SAME USB PACKAGE	正在核对原U盘升级包	동일한 USB 패키지 확인 중	同じUSBパッケージを確認中	جارٍ التحقق من حزمة USB نفسها
 Files installed; USB finalization failed. Keep power connected and inspect RAM log	文件已安装，U盘收尾失败。请保持供电并检查内存日志	파일은 설치되었으나 USB 마무리에 실패했습니다. 전원을 유지하고 RAM 로그를 확인하세요	ファイルはインストール済みですがUSBの最終処理に失敗しました。電源を維持しRAMログを確認してください	ثُبتت الملفات؛ فشل إنهاء عمليات USB. أبقِ الطاقة متصلة وافحص سجل RAM
 Files installed; completion marker could not be persisted	文件已安装，无法保存完成标记	파일은 설치되었으나 완료 표시를 저장할 수 없습니다	ファイルはインストール済みですが完了マーカーを保存できません	ثُبتت الملفات؛ تعذر حفظ علامة الاكتمال
-Final application storage layout verification failed	最终应用存储布局校验失败	최종 앱 저장소 배치 검증에 실패했습니다	最終的なアプリ保存構成の検証に失敗しました	فشل التحقق من تخطيط تخزين التطبيق النهائي
-Final application volume is not active	最终应用卷未启用	최종 앱 볼륨이 활성화되지 않았습니다	最終アプリ領域が有効ではありません	وحدة تخزين التطبيق النهائية غير فعالة
-Finish the pending storage migration before a normal update	请先完成待处理的存储迁移，再进行正常升级	일반 업데이트 전에 진행 중인 저장소 이전을 완료하세요	通常の更新前に未完了のストレージ移行を完了してください	أكمل نقل التخزين المعلق قبل التحديث العادي
-Incomplete unified bridge	统一升级过渡组件不完整	통합 업데이트 전환 구성 요소가 불완전합니다	統合更新の移行コンポーネントが不完全です	مكون انتقال التحديث الموحد غير مكتمل
-Incremental baseline differs: use matching full package	增量基线不符，请使用匹配的完整包	증분 기준 버전이 다릅니다. 일치하는 전체 패키지를 사용하세요	差分の基準版が一致しません。対応する完全パッケージを使用してください	الإصدار المرجعي للتحديث التفاضلي مختلف؛ استخدم الحزمة الكاملة المطابقة
-Incremental baseline missing: use full package	缺少增量基线，请使用完整包	증분 기준 버전이 없습니다. 전체 패키지를 사용하세요	差分の基準版がありません。完全パッケージを使用してください	الإصدار المرجعي للتحديث التفاضلي مفقود؛ استخدم الحزمة الكاملة
-Inner package digest mismatch	内层升级包摘要不符	내부 패키지 해시가 일치하지 않습니다	内部パッケージのハッシュが一致しません	بصمة الحزمة الداخلية غير مطابقة
-Install guarded bootstrap before migration	迁移前请先安装带保护的引导组件	이전 전에 보호 기능이 있는 부트스트랩을 설치하세요	移行前に保護機能付きブートストラップを導入してください	ثبّت مكون التمهيد المحمي قبل النقل
 Install manifest is missing	缺少安装清单	설치 목록이 없습니다	インストール一覧がありません	قائمة التثبيت مفقودة
-Install matching backed-up legacy storage bridge before migration	迁移前请安装匹配且已备份的旧存储过渡组件	이전 전에 일치하는 백업된 이전 저장소 전환 구성 요소를 설치하세요	移行前に一致するバックアップ済み旧ストレージ移行コンポーネントを導入してください	ثبّت مكون انتقال التخزين القديم المطابق ذي النسخة الاحتياطية قبل النقل
-Install storage bootstrap first	请先安装存储引导组件	저장소 부트스트랩을 먼저 설치하세요	先にストレージのブートストラップを導入してください	ثبّت مكون تمهيد التخزين أولاً
-Install streaming-read repair package before migration	迁移前请安装流式读取修复包	이전 전에 스트리밍 읽기 복구 패키지를 설치하세요	移行前にストリーム読み取り修正パッケージを導入してください	ثبّت حزمة إصلاح القراءة المتدفقة قبل النقل
 Installed destination changed before verification	校验前安装目标已变化	검증 전에 설치 대상이 변경되었습니다	検証前にインストール先が変更されました	تغيرت وجهة التثبيت قبل التحقق
 Installed files verified; USB cleanup failed	已校验安装文件，U盘清理失败	설치 파일은 검증되었으나 USB 정리에 실패했습니다	インストール済みファイルは検証済みですがUSBの後処理に失敗しました	تم التحقق من الملفات المثبتة؛ فشل تنظيف USB
 Installed files verified; storage flush failed	已校验安装文件，存储回写失败	설치 파일은 검증되었으나 저장소 반영에 실패했습니다	インストール済みファイルは検証済みですがストレージへの反映に失敗しました	تم التحقق من الملفات المثبتة؛ فشل تثبيت الكتابة على التخزين
@@ -3008,25 +2962,10 @@ Insufficient USB space for upgrade rollback backup	U盘空间不足，无法备�
 Insufficient app volume space: need %sKB, free %sKB; keep USB log	应用卷空间不足：需要%sKB，剩余%sKB；请保留U盘日志	앱 볼륨 공간 부족: 필요 %sKB, 여유 %sKB. USB 로그를 보관하세요	アプリ領域の容量不足：必要%sKB、空き%sKB。USBログを保持してください	مساحة التطبيق غير كافية: المطلوب %sKB والمتاح %sKB؛ احتفظ بسجل USB
 Insufficient root space: need %sKB, free %sKB; keep USB log for storage service	根分区空间不足：需要%sKB，剩余%sKB；请保留U盘日志供维护	루트 공간 부족: 필요 %sKB, 여유 %sKB. 유지보수를 위해 USB 로그를 보관하세요	ルート領域の容量不足：必要%sKB、空き%sKB。保守用にUSBログを保持してください	مساحة الجذر غير كافية: المطلوب %sKB والمتاح %sKB؛ احتفظ بسجل USB للصيانة
 Invalid checksum manifest	校验清单无效	검증 목록이 잘못되었습니다	検証一覧が無効です	قائمة التحقق غير صالحة
-Invalid continuation request	续升级请求无效	업데이트 재개 요청이 잘못되었습니다	更新再開要求が無効です	طلب استئناف التحديث غير صالح
-Invalid inner package digest	内层升级包摘要无效	내부 패키지 해시가 잘못되었습니다	内部パッケージのハッシュが無効です	بصمة الحزمة الداخلية غير صالحة
 Invalid install manifest column count	安装清单列数无效	설치 목록의 열 수가 잘못되었습니다	インストール一覧の列数が無効です	عدد أعمدة قائمة التثبيت غير صالح
 Invalid install manifest entry type	安装清单项目类型无效	설치 목록 항목 유형이 잘못되었습니다	インストール一覧の項目種別が無効です	نوع عنصر قائمة التثبيت غير صالح
-Invalid migration package	迁移包无效	이전 패키지가 잘못되었습니다	移行パッケージが無効です	حزمة النقل غير صالحة
-Invalid selected package fingerprint	所选升级包指纹无效	선택한 패키지 지문이 잘못되었습니다	選択したパッケージの識別値が無効です	بصمة الحزمة المحددة غير صالحة
-Invalid unified capabilities	统一升级能力声明无效	통합 업데이트 기능 선언이 잘못되었습니다	統合更新の機能宣言が無効です	إعلان قدرات التحديث الموحد غير صالح
-Keep the same USB package used before restart	请保留重启前使用的同一U盘升级包	재시작 전에 사용한 동일한 USB 패키지를 유지하세요	再起動前に使用した同じUSBパッケージを保持してください	احتفظ بحزمة USB نفسها المستخدمة قبل إعادة التشغيل
-Keep the same unified USB package used before restart	请保留重启前使用的同一统一升级U盘包	재시작 전에 사용한 동일한 통합 USB 패키지를 유지하세요	再起動前に使用した同じ統合USBパッケージを保持してください	احتفظ بحزمة USB الموحدة نفسها المستخدمة قبل إعادة التشغيل
-Malformed delta table	增量清单格式错误	증분 목록 형식이 잘못되었습니다	差分一覧の形式が不正です	صيغة جدول الفروق غير سليمة
-Managed app volume requires a current UPK, not loose legacy files	受管应用卷需要新版UPK，不支持旧版散文件	관리되는 앱 볼륨에는 최신 UPK가 필요하며 이전 개별 파일은 지원하지 않습니다	管理対象アプリ領域には現行UPKが必要です。旧版の個別ファイルは使用できません	تتطلب وحدة التطبيق المُدارة حزمة UPK حديثة ولا تدعم الملفات القديمة المنفصلة
-Migration package must not replace application or business data	迁移包不得替换应用或业务数据	이전 패키지는 앱이나 업무 데이터를 교체할 수 없습니다	移行パッケージでアプリや業務データを置換することはできません	يُحظر على حزمة النقل استبدال التطبيق أو بيانات العمل
-Missing delta tables	缺少增量清单	증분 목록이 없습니다	差分一覧がありません	جداول الفروق مفقودة
-Missing explicit deletion	缺少明确的删除声明	명시적 삭제 선언이 없습니다	明示的な削除指定がありません	تعريف الحذف الصريح مفقود
-Missing or unsafe continuation request; inspect installed bridge	续升级请求缺失或不安全，请检查已安装的过渡组件	재개 요청이 없거나 안전하지 않습니다. 설치된 전환 구성 요소를 확인하세요	更新再開要求がないか安全ではありません。導入済み移行コンポーネントを確認してください	طلب الاستئناف مفقود أو غير آمن؛ افحص مكون الانتقال المثبت
 Missing payload file	缺少安装内容文件	설치 내용 파일이 없습니다	パッケージ内容のファイルがありません	ملف من محتويات الحزمة مفقود
 Missing payload tree	缺少安装内容目录	설치 내용 트리가 없습니다	パッケージ内容のツリーがありません	شجرة محتويات الحزمة مفقودة
-Missing target install entry	缺少目标安装项	대상 설치 항목이 없습니다	対象のインストール項目がありません	عنصر التثبيت الهدف مفقود
-Nested unified packages are forbidden	不允许嵌套统一升级包	통합 패키지 중첩은 허용되지 않습니다	統合パッケージの入れ子は禁止されています	يُحظر تداخل حزم التحديث الموحدة
 Original inode flush failed	原文件节点回写失败	원본 inode 반영에 실패했습니다	元のinodeの書き戻しに失敗しました	فشل تثبيت عقدة الملف الأصلية على التخزين
 Package checksums are missing	缺少升级包校验值	패키지 체크섬이 없습니다	パッケージのチェックサムがありません	قيم التحقق للحزمة مفقودة
 Package contains an outdated storage guard component	升级包的存储保护组件过旧	패키지의 저장소 보호 구성 요소가 오래되었습니다	パッケージのストレージ保護コンポーネントが古すぎます	تتضمن الحزمة مكون حماية تخزين قديماً
@@ -3036,7 +2975,6 @@ Package is for another product	升级包适用于其他产品	다른 제품용 �
 Package manifest is missing	缺少升级包清单	패키지 목록이 없습니다	パッケージ一覧がありません	قائمة الحزمة مفقودة
 Package payload is missing	缺少升级包内容	패키지 내용이 없습니다	パッケージ内容がありません	محتويات الحزمة مفقودة
 Package predates USB write protection; use current UPK	升级包不支持U盘写入保护，请使用新版UPK	USB 쓰기 보호 지원 이전 패키지입니다. 최신 UPK를 사용하세요	USB書き込み保護に未対応の旧パッケージです。現行UPKを使用してください	الحزمة أقدم من دعم حماية كتابة USB؛ استخدم UPK حديثة
-Package predates app-volume support; use current full UPK	升级包不支持应用卷，请使用新版完整UPK	앱 볼륨 지원 이전 패키지입니다. 최신 전체 UPK를 사용하세요	アプリ領域に未対応の旧パッケージです。現行の完全UPKを使用してください	الحزمة أقدم من دعم وحدة التطبيق؛ استخدم UPK كاملة حديثة
 Package version is invalid	升级包版本无效	패키지 버전이 잘못되었습니다	パッケージのバージョンが無効です	إصدار الحزمة غير صالح
 Package version is missing	缺少升级包版本	패키지 버전이 없습니다	パッケージのバージョンがありません	إصدار الحزمة مفقود
 Pending recovery must finish first	请先完成待处理的恢复操作	대기 중인 복구를 먼저 완료하세요	先に保留中の復旧を完了してください	يجب إكمال الاستعادة المعلقة أولاً
@@ -3046,11 +2984,7 @@ Replacement flush failed	替换文件回写失败	교체 파일 반영에 실패
 Replacement rename flush failed	替换文件重命名回写失败	교체 파일 이름 변경 반영에 실패했습니다	置換ファイルの名前変更の反映に失敗しました	فشل تثبيت إعادة تسمية الملف البديل
 Replacement verification failed	替换文件校验失败	교체 파일 검증에 실패했습니다	置換ファイルの検証に失敗しました	فشل التحقق من الملف البديل
 Retired file removal flush failed	旧文件删除回写失败	폐기 파일 삭제 반영에 실패했습니다	廃止ファイル削除の反映に失敗しました	فشل تثبيت حذف الملف القديم
-Retired target still exists	旧目标仍然存在	폐기 대상이 아직 존재합니다	廃止対象がまだ存在します	الهدف القديم ما زال موجوداً
 Storage flush failed before commit	提交前存储回写失败	커밋 전 저장소 반영에 실패했습니다	確定前のストレージ書き戻しに失敗しました	فشل تثبيت الكتابة على التخزين قبل الاعتماد
-Storage maintenance failed; original UI unchanged, inspect USB log	存储维护失败，原界面未改变，请检查U盘日志	저장소 유지보수에 실패했습니다. 기존 UI는 변경되지 않았습니다. USB 로그를 확인하세요	ストレージ保守に失敗しました。元のUIは変更されていません。USBログを確認してください	فشلت صيانة التخزين؛ لم تتغير الواجهة الأصلية، افحص سجل USB
-Storage migration paused; keep USB backup and log; no IMG required for diagnosis	存储迁移已暂停，请保留U盘备份及日志；诊断无需刷IMG	저장소 이전이 일시 중지되었습니다. USB 백업과 로그를 보관하세요. 진단에 IMG 설치는 필요 없습니다	ストレージ移行は一時停止中です。USBのバックアップとログを保持してください。診断にIMG書き込みは不要です	توقف نقل التخزين مؤقتاً؛ احتفظ بنسخة USB الاحتياطية والسجل؛ لا يلزم تثبيت IMG للتشخيص
-Storage recovery component too old	存储恢复组件过旧	저장소 복구 구성 요소가 너무 오래되었습니다	ストレージ復旧コンポーネントが古すぎます	مكون استعادة التخزين قديم جداً
 Storage-compatible recovery component missing	缺少兼容存储布局的恢复组件	저장소와 호환되는 복구 구성 요소가 없습니다	ストレージ構成に対応する復旧コンポーネントがありません	مكون الاستعادة المتوافق مع التخزين مفقود
 Symbolic links are not allowed in upgrade payloads	升级内容中不允许符号链接	업데이트 내용에 심볼릭 링크는 허용되지 않습니다	更新内容にシンボリックリンクは使用できません	لا يُسمح بالروابط الرمزية في محتويات التحديث
 Too many changed files	变更文件过多	변경된 파일이 너무 많습니다	変更ファイル数が多すぎます	عدد الملفات المتغيرة كبير جداً
@@ -3058,7 +2992,6 @@ Too many manifest entries	清单项目过多	목록 항목이 너무 많습니�
 USB backup readback failed	U盘备份回读失败	USB 백업 재읽기에 실패했습니다	USBバックアップの読み戻しに失敗しました	فشلت إعادة قراءة نسخة USB الاحتياطية
 USB backup verification failed	U盘备份校验失败	USB 백업 검증에 실패했습니다	USBバックアップの検証に失敗しました	فشل التحقق من نسخة USB الاحتياطية
 USB backup write failed; original retained	U盘备份写入失败，已保留原文件	USB 백업 쓰기에 실패했습니다. 원본은 보존되었습니다	USBバックアップの書き込みに失敗しました。元のファイルは保持されています	فشلت كتابة نسخة USB الاحتياطية؛ حُفظ الأصل
-USB block device not found	未找到U盘块设备	USB 블록 장치를 찾을 수 없습니다	USBブロックデバイスが見つかりません	لم يُعثر على جهاز كتل USB
 USB is not a healthy writable mounted filesystem	U盘文件系统未正常挂载或不可写	USB 파일 시스템이 정상적으로 마운트되지 않았거나 쓰기 불가입니다	USBファイルシステムが正常にマウントされていないか書き込みできません	نظام ملفات USB ليس مركباً بصورة سليمة وقابلة للكتابة
 USB result reset could not be persisted	无法保存U盘结果重置状态	USB 결과 초기화 상태를 저장할 수 없습니다	USB結果のリセット状態を保存できません	تعذر حفظ إعادة ضبط نتيجة USB
 USB staging cleanup failed; preserve backup and check filesystem	U盘暂存清理失败，请保留备份并检查文件系统	USB 임시 영역 정리에 실패했습니다. 백업을 보존하고 파일 시스템을 확인하세요	USB一時領域の後処理に失敗しました。バックアップを保持しファイルシステムを確認してください	فشل تنظيف تجهيز USB؛ احتفظ بالنسخة الاحتياطية وافحص نظام الملفات
@@ -3067,44 +3000,20 @@ USB staging write failed; check filesystem or connection; preserve backup	U盘�
 USB staging writeback failed; check filesystem or connection; preserve backup	U盘暂存回写失败，请检查文件系统或连接并保留备份	USB 임시 쓰기 반영에 실패했습니다. 파일 시스템 또는 연결을 확인하고 백업을 보존하세요	USB一時領域の書き戻しに失敗しました。ファイルシステムや接続を確認しバックアップを保持してください	فشل تثبيت كتابة تجهيز USB؛ افحص نظام الملفات أو الاتصال واحتفظ بالنسخة الاحتياطية
 Unable to determine upgrade storage capacity	无法确定升级存储容量	업데이트 저장 용량을 확인할 수 없습니다	更新用ストレージ容量を判定できません	تعذر تحديد سعة التخزين للتحديث
 Unable to enumerate upgrade payload	无法读取升级内容清单	업데이트 내용 목록을 읽을 수 없습니다	更新内容を列挙できません	تعذر سرد محتويات التحديث
-Unexpected delta payload	增量包含非预期内容	증분 패키지에 예상하지 못한 내용이 있습니다	差分パッケージに想定外の内容があります	محتويات تفاضلية غير متوقعة
-Unexpected unified bridge file set	统一升级过渡组件文件集合不符	통합 전환 구성 요소의 파일 구성이 예상과 다릅니다	統合移行コンポーネントのファイル構成が想定と異なります	مجموعة ملفات مكون الانتقال الموحد غير متوقعة
-Unified application is missing a core runtime target	统一应用包缺少核心运行文件	통합 앱 패키지에 핵심 실행 파일이 없습니다	統合アプリに中核ランタイム対象がありません	تفتقد حزمة التطبيق الموحدة ملف تشغيل أساسياً
-Unified application must be a normal full package	统一应用包必须为普通完整包	통합 앱은 일반 전체 패키지여야 합니다	統合アプリは通常の完全パッケージである必要があります	يجب أن تكون حزمة التطبيق الموحدة حزمة كاملة عادية
-Unified application must own its complete static resource tree	统一应用包必须包含完整静态资源目录	통합 앱 패키지는 정적 리소스 트리 전체를 포함해야 합니다	統合アプリは静的リソースツリー全体を含む必要があります	يجب أن تتضمن حزمة التطبيق الموحدة شجرة مواردها الثابتة كاملة
-Unified bridge may not install application data	统一升级过渡组件不得安装应用数据	통합 전환 구성 요소는 앱 데이터를 설치할 수 없습니다	統合移行コンポーネントはアプリデータを導入できません	يُحظر على مكون الانتقال الموحد تثبيت بيانات التطبيق
-Unified inner package must use full schema	统一升级内层包必须使用完整包格式	통합 내부 패키지는 전체 패키지 스키마를 사용해야 합니다	統合内部パッケージは完全パッケージ形式である必要があります	يجب أن تستخدم الحزمة الداخلية الموحدة بنية الحزمة الكاملة
-Unified migration package is missing its policy	统一迁移包缺少迁移策略	통합 이전 패키지에 정책이 없습니다	統合移行パッケージに移行ポリシーがありません	تفتقد حزمة النقل الموحدة سياستها
-Unified upgrade completed; application is starting	统一升级完成，正在启动应用	통합 업데이트 완료, 앱 시작 중	統合更新が完了しました。アプリを起動中	اكتمل التحديث الموحد؛ جارٍ بدء التطبيق
-Unrecovered deletion artifact	存在未恢复的删除残留	복구되지 않은 삭제 잔여물이 있습니다	未復旧の削除残留物があります	توجد آثار حذف لم تُستعد
 Unrecovered install artifact: %s	存在未恢复的安装残留：%s	복구되지 않은 설치 잔여물: %s	未復旧のインストール残留物：%s	آثار تثبيت لم تُستعد: %s
 Unrecovered static resource artifact	存在未恢复的静态资源残留	복구되지 않은 정적 리소스 잔여물이 있습니다	未復旧の静的リソース残留物があります	توجد آثار موارد ثابتة لم تُستعد
-Unsafe deletion target	删除目标不安全	삭제 대상이 안전하지 않습니다	削除対象が安全ではありません	هدف الحذف غير آمن
-Unsafe delta target	增量目标不安全	증분 대상이 안전하지 않습니다	差分対象が安全ではありません	الهدف التفاضلي غير آمن
-Unsafe inner package destination	内层包目标路径不安全	내부 패키지 대상 경로가 안전하지 않습니다	内部パッケージの保存先が安全ではありません	وجهة الحزمة الداخلية غير آمنة
 Unsafe install destination: %s	安装目标路径不安全：%s	설치 대상 경로가 안전하지 않습니다: %s	インストール先が安全ではありません：%s	وجهة التثبيت غير آمنة: %s
 Unsafe install manifest target	安装清单目标不安全	설치 목록 대상이 안전하지 않습니다	インストール一覧の対象が安全ではありません	هدف قائمة التثبيت غير آمن
 Unsafe installed static resource tree	已安装静态资源目录不安全	설치된 정적 리소스 트리가 안전하지 않습니다	インストール済み静的リソースツリーが安全ではありません	شجرة الموارد الثابتة المثبتة غير آمنة
 Unsafe or damaged archive	压缩包不安全或已损坏	압축 파일이 안전하지 않거나 손상되었습니다	アーカイブが安全でないか破損しています	الأرشيف غير آمن أو تالف
 Unsafe retired static resource	旧静态资源不安全	폐기할 정적 리소스가 안전하지 않습니다	廃止する静的リソースが安全ではありません	المورد الثابت القديم غير آمن
-Unsafe storage maintenance helper	存储维护程序不安全	저장소 유지보수 프로그램이 안전하지 않습니다	ストレージ保守プログラムが安全ではありません	برنامج صيانة التخزين غير آمن
-Unsafe unified staging directory	统一升级暂存目录不安全	통합 임시 폴더가 안전하지 않습니다	統合更新の一時ディレクトリが安全ではありません	مجلد تجهيز التحديث الموحد غير آمن
 Unsupported install permissions	不支持的安装权限	지원되지 않는 설치 권한입니다	未対応のインストール権限です	أذونات التثبيت غير مدعومة
 Unsupported installed static resource entry	已安装静态资源项不受支持	설치된 정적 리소스 항목이 지원되지 않습니다	インストール済み静的リソース項目に対応していません	عنصر المورد الثابت المثبت غير مدعوم
-Unsupported legacy payload types	不支持的旧版安装内容类型	지원되지 않는 이전 설치 내용 유형입니다	旧版のインストール内容種別に対応していません	أنواع محتويات التثبيت القديمة غير مدعومة
 Unsupported package format	不支持的升级包格式	지원되지 않는 패키지 형식입니다	未対応のパッケージ形式です	تنسيق الحزمة غير مدعوم
-Unsupported package schema	不支持的升级包结构	지원되지 않는 패키지 스키마입니다	未対応のパッケージ構造です	بنية الحزمة غير مدعومة
-Unsupported storage migration policy	不支持的存储迁移策略	지원되지 않는 저장소 이전 정책입니다	未対応のストレージ移行ポリシーです	سياسة نقل التخزين غير مدعومة
-Upgrade archive contains an invalid path	升级压缩包含无效路径	업데이트 압축 파일에 잘못된 경로가 있습니다	更新アーカイブに無効なパスがあります	يتضمن أرشيف التحديث مساراً غير صالح
-Upgrade archive contains an unsafe path	升级压缩包含不安全路径	업데이트 압축 파일에 안전하지 않은 경로가 있습니다	更新アーカイブに安全でないパスがあります	يتضمن أرشيف التحديث مساراً غير آمن
-Upgrade archive contains unsupported entry types	升级压缩包含不支持的项目类型	업데이트 압축 파일에 지원되지 않는 항목 유형이 있습니다	更新アーカイブに未対応の項目種別があります	يتضمن أرشيف التحديث أنواع عناصر غير مدعومة
-Upgrade archive entry types cannot be inspected	无法检查升级压缩包项目类型	업데이트 압축 파일의 항목 유형을 검사할 수 없습니다	更新アーカイブの項目種別を検査できません	تعذر فحص أنواع عناصر أرشيف التحديث
-Upgrade archive is damaged or unsupported	升级压缩包损坏或不受支持	업데이트 압축 파일이 손상되었거나 지원되지 않습니다	更新アーカイブが破損しているか未対応です	أرشيف التحديث تالف أو غير مدعوم
 Upgrade checksum manifest does not match payload	升级校验清单与安装内容不符	업데이트 검증 목록이 설치 내용과 일치하지 않습니다	更新の検証一覧が内容と一致しません	قائمة تحقق التحديث لا تطابق المحتويات
 Upgrade payload checksum verification failed	升级内容校验失败	업데이트 내용 체크섬 검증에 실패했습니다	更新内容のチェックサム検証に失敗しました	فشل التحقق من قيم تحقق محتويات التحديث
 Upgrade payload contains an unchecked file	升级内容含未经校验的文件	업데이트 내용에 검증되지 않은 파일이 있습니다	更新内容に未検証のファイルがあります	تتضمن محتويات التحديث ملفاً غير متحقق منه
 Upgrade payload contains an unsafe path	升级内容含不安全路径	업데이트 내용에 안전하지 않은 경로가 있습니다	更新内容に安全でないパスがあります	تتضمن محتويات التحديث مساراً غير آمن
-Wrong incremental type	增量类型错误	증분 유형이 잘못되었습니다	差分の種別が不正です	نوع التحديث التفاضلي غير صحيح
 MG Pos	侧磁位置	측면 자기 위치	側面磁気位置	موضع المغناطيسية الجانبية
 MG Qty	侧磁强度	측면 자기 세기	側面磁気強度	شدة المغناطيسية الجانبية
 MT Code	中磁编码	중앙 자기 코드	中央磁気コード	رمز المغناطيسية المركزية

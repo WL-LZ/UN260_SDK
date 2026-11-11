@@ -18,7 +18,7 @@ def run_case(source, name, commands, *, trace=True, touch=True, calibration=True
              recovery=False, usleep=True, fractional=True, trace_flag=False,
              early=False, early_disabled=False, launcher=False,
              ready_marker=None, owner_comm='un260-boot', owner_alive=True,
-             boot_disabled=False, unified=False, unified_completed=False):
+             boot_disabled=False, storage=False):
     with tempfile.TemporaryDirectory(prefix="un260-startup-test-") as tmp:
         root = pathlib.Path(tmp)
         for sub in ("dev/input", "sys/class/input/event7/device", "etc", "run", "bin", "tmp", "proc/5555"):
@@ -44,18 +44,13 @@ def run_case(source, name, commands, *, trace=True, touch=True, calibration=True
         if owner_alive:
             (root / 'visual-alive').touch()
         (root / 'proc/modules').touch()
-        if unified:
-            (root / 'etc/unified-request').write_text('a'*64+'\n'+'b'*64+'\n')
         (root / "uptime").write_text("3.70 0.00\n")
         executables = {
             "daemon": ('printf \'DAEMON_OUTPUT\\n\'\n'
                        'printf \'%s\\n\' "${UN260_BOOT_LIGHT_ACTIVE-unset}" > "$CASE_ROOT/daemon-visual-env"\n'),
-            "updater": ('# UN260_UNIFIED_1\n'
-                        'case "$1" in\n'
-                        '--unified-pending) [ "${UNIFIED_COMPLETED:-0}" != 1 ] ;;\n'
-                        '--continue-unified) echo continue_unified >> "$CASE_ROOT/events"; [ "${CONTINUE_FAIL:-0}" != 1 ] ;;\n'
-                        '*) echo recover >> "$CASE_ROOT/events"; [ "${RECOVER_FAIL:-0}" != 1 ] ;;\n'
-                        'esac\n'),
+            "updater": ('[ "$1" = --recover ] || exit 1\n'
+                        'echo recover >> "$CASE_ROOT/events"\n'
+                        '[ "${RECOVER_FAIL:-0}" != 1 ]\n'),
             "calibrate": ('echo calibrate >> "$CASE_ROOT/events"\n'
                           '[ "${CALIBRATE_FAIL:-0}" != 1 ] || exit 1\n'
                           '[ "${CALIBRATE_NO_FILE:-0}" = 1 ] || : > "$CASE_ROOT/etc/pointercal"\n'),
@@ -65,31 +60,9 @@ def run_case(source, name, commands, *, trace=True, touch=True, calibration=True
                             'printf \'5555\\n\' > "$CASE_ROOT/visual-ready"\n'
                             'printf \'un260-boot\\n\' > "$CASE_ROOT/proc/5555/comm"\n'
                             ': > "$CASE_ROOT/visual-alive"\n'),
-            "storage": ('case "$1" in\n'
-                        '--prepare) echo storage_prepare >> "$CASE_ROOT/events" ;;\n'
-                        '--can-launch-current) echo can_launch_current >> "$CASE_ROOT/events"; [ "${CURRENT_FAIL:-0}" != 1 ] ;;\n'
-                        '*) exit 1 ;;\nesac\n'),
-            "upgrade_display": r'''
-printf '%s\n' "$$" > "$CASE_ROOT/maintenance-pid"
-mkdir -p "$CASE_ROOT/proc/$$"
-printf 'un260-boot\n' > "$CASE_ROOT/proc/$$/comm"
-printf '%s\n' "$$" > "$CASE_ROOT/visual-ready"
-echo maintenance_started >> "$CASE_ROOT/events"
-cleanup() {
-    echo maintenance_stopped >> "$CASE_ROOT/events"
-    if [ "${MAINT_SWAP_OWNER:-0}" = 1 ]; then
-        printf '5555\n' > "$CASE_ROOT/visual-ready"
-    elif [ "$(cat "$CASE_ROOT/visual-ready" 2>/dev/null)" = "$$" ]; then
-        rm -f "$CASE_ROOT/visual-ready"
-    fi
-    exit 0
-}
-if [ "${MAINT_IGNORE_TERM:-0}" = 1 ]; then trap '' TERM; else trap cleanup TERM; fi
-# Even the stubborn fixture has a bounded natural lifetime; test cleanup
-# never needs to kill an untrusted PID or wait for a real service.
-for tick in $(seq 1 250); do /bin/sleep 0.01; done
-cleanup
-''',
+            "storage": ('[ "$1" = --prepare ] || exit 1\n'
+                        'echo storage_prepare >> "$CASE_ROOT/events"\n'
+                        '[ "${STORAGE_FAIL:-0}" != 1 ]\n'),
         }
         for filename, body in executables.items():
             path = root / "bin" / filename
@@ -97,9 +70,8 @@ cleanup
             path.chmod(0o755)
         if not launcher:
             (root / 'bin/boot_launch').unlink()
-        if not unified:
+        if not storage:
             (root / 'bin/storage').unlink()
-            (root / 'bin/upgrade_display').unlink()
 
         # Redirect every side-effecting resource; keep /dev/null unchanged.
         replacements = {
@@ -118,9 +90,7 @@ cleanup
             '/etc/un260/early-display.disabled': str(root / 'etc/early-display.disabled'),
             '/etc/un260/boot-light.disabled': str(root / 'etc/boot-light.disabled'),
             '/etc/un260/boot-frames.enabled': str(root / 'etc/boot-frames.enabled'),
-            '/etc/un260/unified-request': str(root / 'etc/unified-request'),
             '/usr/local/bin/un260_app_storage': str(root / 'bin/storage'),
-            '/usr/local/bin/un260_upgrade_display': str(root / 'bin/upgrade_display'),
             '/usr/local/bin/un260_boot_launch': str(root / 'bin/boot_launch'),
             '/dev/.un260-boot-light.ready': str(root / 'visual-ready'),
             '/dev/.un260-early.log': str(root / 'early-log-absent'),
@@ -139,8 +109,6 @@ cleanup
 record() { printf '%s\n' "$*" >> "$CASE_ROOT/events"; }
 pause_mock() {
     record "pause $1"
-    # Give only our maintenance fixture child a scheduling opportunity.
-    [ ! -f "$CASE_ROOT/etc/unified-request" ] || /bin/sleep 0.005
     count=0
     [ ! -f "$CASE_ROOT/pause-count" ] || read -r count < "$CASE_ROOT/pause-count"
     count=$((count + 1))
@@ -175,13 +143,6 @@ mdev() {
 }
 sync() { record sync; }
 kill() {
-    owned=""
-    [ ! -r "$CASE_ROOT/maintenance-pid" ] || read -r owned < "$CASE_ROOT/maintenance-pid"
-    if [ -n "$owned" ] && [ "$2" = "$owned" ]; then
-        if [ "$1" != -0 ]; then record "kill $*"; fi
-        command kill "$@"
-        return $?
-    fi
     if [ "$1" != -0 ]; then record "kill $*"; return 0; fi
     case "$2" in
         4242) [ -f "$CASE_ROOT/mdev-ready" ] ;;
@@ -203,7 +164,6 @@ count_event() { grep -c "^$1$" "$CASE_ROOT/events" 2>/dev/null || true; }
         env = {
             'PATH': '/usr/bin:/bin', 'CASE_ROOT': str(root),
             'USLEEP_OK': str(int(usleep)), 'FRACTIONAL_OK': str(int(fractional)),
-            'UNIFIED_COMPLETED': str(int(unified_completed)),
         }
         if trace is not None:
             env['UN260_BOOT_TRACE'] = str(int(trace))
@@ -1011,81 +971,26 @@ wait "$PID"
 expect [ "$(count_event root_launch)" = 0 ]
 expect [ "${UN260_BOOT_LIGHT_ACTIVE-unset}" = unset ]
 ''', {}),
-        ('unified_success_releases_maintenance_before_brand', r'''
+        ('app_volume_prepared_before_transaction_recovery', r"""
 UN260_EARLY_DISPLAY=1
 UN260_MDEV_READY=1
 start
 expect [ "$?" = 0 ]
 wait "$PID"
-expect [ "$(count_event continue_unified)" = 1 ]
-expect [ "$(count_event maintenance_stopped)" = 1 ]
-expect [ "$(count_event root_launch)" = 1 ]
-expect [ -z "$upgrade_visual" ]
-expect [ "$UN260_BOOT_LIGHT_ACTIVE" = 1 ]
-expect awk '/maintenance_stopped/{stopped=NR}/root_launch/{launched=NR}END{exit !(stopped && launched>stopped)}' "$CASE_ROOT/events"
-expect grep -q stage=upgrade_visual_released "$STARTUP_LOG"
-''', {'unified': True, 'launcher': True}),
-        ('unified_verified_current_fallback_releases_maintenance', r'''
+expect [ "$(count_event storage_prepare)" = 1 ]
+expect [ "$(count_event recover)" = 1 ]
+expect awk '/^storage_prepare$/{prepared=NR}/^recover$/{recovered=NR} END{exit !(prepared && recovered>prepared)}' "$CASE_ROOT/events"
+""", {'storage': True, 'recovery': True}),
+        ('app_volume_unavailable_defers_recovery_and_app', r"""
 UN260_EARLY_DISPLAY=1
 UN260_MDEV_READY=1
-export CONTINUE_FAIL=1
-start
-expect [ "$?" = 0 ]
-wait "$PID"
-expect [ "$(count_event can_launch_current)" = 1 ]
-expect [ "$(count_event maintenance_stopped)" = 1 ]
-expect [ "$(count_event root_launch)" = 1 ]
-expect [ "$UN260_BOOT_LIGHT_ACTIVE" = 1 ]
-expect grep -q stage=unified_current_fallback "$STARTUP_LOG"
-''', {'unified': True, 'launcher': True}),
-        ('unified_unlaunchable_current_keeps_maintenance', r'''
-UN260_EARLY_DISPLAY=1
-UN260_MDEV_READY=1
-export CONTINUE_FAIL=1 CURRENT_FAIL=1
+export STORAGE_FAIL=1
 start
 expect [ "$?" = 1 ]
-expect [ "$(count_event root_launch)" = 0 ]
+expect [ "$(count_event storage_prepare)" = 1 ]
+expect [ "$(count_event recover)" = 0 ]
 expect [ ! -e "$PIDFILE" ]
-expect [ "$(count_event "kill -TERM $upgrade_visual")" = 0 ]
-# Explicitly finish the owned fixture after checking production's fail path.
-command kill -TERM "$upgrade_visual"
-wait "$upgrade_visual" 2>/dev/null || true
-''', {'unified': True, 'launcher': True}),
-        ('unified_owned_child_timeout_blocks_second_writer', r'''
-UN260_EARLY_DISPLAY=1
-UN260_MDEV_READY=1
-export MAINT_IGNORE_TERM=1
-start
-expect [ "$?" = 1 ]
-expect [ "$(count_event root_launch)" = 0 ]
-expect [ ! -e "$PIDFILE" ]
-expect [ "$visual_wait" = "$POLL_LIMIT" ]
-''', {'unified': True, 'launcher': True}),
-        ('unified_changed_marker_never_kills_new_owner', r'''
-UN260_EARLY_DISPLAY=1
-UN260_MDEV_READY=1
-export MAINT_SWAP_OWNER=1
-start
-expect [ "$?" = 0 ]
-wait "$PID"
-expect [ "$(count_event "kill -TERM 5555")" = 0 ]
-expect [ "$(count_event maintenance_stopped)" = 1 ]
-expect [ "$(count_event root_launch)" = 0 ]
-expect [ "$light_pid" = 5555 ]
-expect [ "$UN260_BOOT_LIGHT_ACTIVE" = 1 ]
-''', {'unified': True, 'launcher': True}),
-        ('unified_completed_request_reuses_modern_owner', r'''
-UN260_EARLY_DISPLAY=1
-UN260_MDEV_READY=1
-start
-expect [ "$?" = 0 ]
-wait "$PID"
-expect [ "$(count_event maintenance_started)" = 0 ]
-expect [ "$(count_event continue_unified)" = 0 ]
-expect [ "$(count_event root_launch)" = 0 ]
-expect [ "$light_pid" = 5555 ]
-expect [ "$UN260_BOOT_LIGHT_ACTIVE" = 1 ]
-''', {'unified': True, 'unified_completed': True, 'launcher': True, 'ready_marker': '5555\n'}),
+""", {'storage': True, 'recovery': True}),
     ]
     for name, marker, comm, alive in (
             ('dead_pid', '5555\n', 'un260-boot', False),

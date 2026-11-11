@@ -82,29 +82,35 @@ recover_transaction
     for p,(d,m) in expected.items(): assert (dev/p).read_bytes()==d and ((dev/p).stat().st_mode&0o777)==m,(name,p)
     if ok and not crash and name!='nochange': assert not (dev/'usr/local/share/lvgl_data/old.png').exists()
     print('PASS',name)
-run_case('delta',inc,base,True)
-run_case('delta-repeat',inc,target,True)
-run_case('full-single-pass',full,target,True)
-wrong=dict(base);wrong['usr/local/lib/liblvgl.so']=(b'local modified',0o755)
-run_case('wrong-baseline',inc,wrong,False)
-wrong_mode=dict(base);wrong_mode['usr/local/lib/liblvgl.so']=(b'lib',0o644)
-run_case('wrong-mode',inc,wrong_mode,False)
-run_case('delete-crash',inc,base,True,True)
-noop=work/'noop.upk';delta.build(base_upk,base_upk,noop)
-run_case('nochange',noop,base,True)
-missing_core=dict(target);del missing_core['usr/local/bin/test_lvgl']
-bad_full=work/'missing-core.upk';archive(bad_full,missing_core)
-bad_delta=work/'delete-core.upk';delta.build(base_upk,bad_full,bad_delta)
-run_case('delete-core',bad_delta,base,False)
-# Extractor rejects traversal, links, duplicate file, unsupported PAX, checksum
-# errors and gzip truncation before installer root mutation.
-def bad_member(t,name,kind=tarfile.REGTYPE):
-    m=tarfile.TarInfo(name);m.type=kind;m.linkname='/tmp/outside' if kind==tarfile.SYMTYPE else '';m.size=0;t.addfile(m,io.BytesIO())
-for name,member,kind in [('traversal','payload/../../outside',tarfile.REGTYPE),('link','payload/link',tarfile.SYMTYPE),
-                         ('duplicate','manifest.ini',tarfile.REGTYPE),('pax','payload/pax',tarfile.XHDTYPE)]:
-    p=work/(name+'.upk');archive(p,base,lambda t:bad_member(t,member,kind));stage=work/(name+'-stage');stage.mkdir()
-    assert subprocess.run([str(unpack),str(p),str(stage)],capture_output=True).returncode!=0
-    print('PASS extractor',name)
-trunc=work/'truncated.upk';trunc.write_bytes(full.read_bytes()[:-8]);stage=work/'truncated-stage';stage.mkdir()
-assert subprocess.run([str(unpack),str(trunc),str(stage)],capture_output=True).returncode!=0
-print('PASS extractor gzip truncation; artifacts:',work)
+if 'validate_delta_baseline()' not in updater.read_text():
+    run_case('retired-incremental', inc, base, False)
+    installed = work / 'retired-incremental/root/usr/local/bin/test_lvgl'
+    assert installed.read_bytes() == base['usr/local/bin/test_lvgl'][0]
+    print('Production full-package updater refused the archived delta without replacing the application.')
+else:
+    run_case('delta',inc,base,True)
+    run_case('delta-repeat',inc,target,True)
+    run_case('full-single-pass',full,target,True)
+    wrong=dict(base);wrong['usr/local/lib/liblvgl.so']=(b'local modified',0o755)
+    run_case('wrong-baseline',inc,wrong,False)
+    wrong_mode=dict(base);wrong_mode['usr/local/lib/liblvgl.so']=(b'lib',0o644)
+    run_case('wrong-mode',inc,wrong_mode,False)
+    run_case('delete-crash',inc,base,True,True)
+    noop=work/'noop.upk';delta.build(base_upk,base_upk,noop)
+    run_case('nochange',noop,base,True)
+    missing_core=dict(target);del missing_core['usr/local/bin/test_lvgl']
+    bad_full=work/'missing-core.upk';archive(bad_full,missing_core)
+    bad_delta=work/'delete-core.upk';delta.build(base_upk,bad_full,bad_delta)
+    run_case('delete-core',bad_delta,base,False)
+    # Extractor rejects traversal, links, duplicate file, unsupported PAX, checksum
+    # errors and gzip truncation before installer root mutation.
+    def bad_member(t,name,kind=tarfile.REGTYPE):
+        m=tarfile.TarInfo(name);m.type=kind;m.linkname='/tmp/outside' if kind==tarfile.SYMTYPE else '';m.size=0;t.addfile(m,io.BytesIO())
+    for name,member,kind in [('traversal','payload/../../outside',tarfile.REGTYPE),('link','payload/link',tarfile.SYMTYPE),
+                             ('duplicate','manifest.ini',tarfile.REGTYPE),('pax','payload/pax',tarfile.XHDTYPE)]:
+        p=work/(name+'.upk');archive(p,base,lambda t:bad_member(t,member,kind));stage=work/(name+'-stage');stage.mkdir()
+        assert subprocess.run([str(unpack),str(p),str(stage)],capture_output=True).returncode!=0
+        print('PASS extractor',name)
+    trunc=work/'truncated.upk';trunc.write_bytes(full.read_bytes()[:-8]);stage=work/'truncated-stage';stage.mkdir()
+    assert subprocess.run([str(unpack),str(trunc),str(stage)],capture_output=True).returncode!=0
+    print('PASS extractor gzip truncation; artifacts:',work)

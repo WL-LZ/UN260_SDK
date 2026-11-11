@@ -36,6 +36,7 @@ with tempfile.TemporaryDirectory(prefix="un260-history-async-") as directory:
                     str(ROOT / "tools/test_history_async.c"),
                     str(ROOT / "un260/storage/storage_worker.c"),
                         str(ROOT / "un260/history/history_record_snapshot.c"),
+                        str(ROOT / "un260/history/history_object_store.c"),
                         str(ROOT / "un260/history/history_record_reader.c"),
                         str(ROOT / "un260/history/history_read_task.c"),
                         str(ROOT / "un260/history/history_query.c"),

@@ -8,12 +8,11 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from test_storage_bootstrap import archive, SDK, UPDATER_REL, SHELL, OLD_UPDATER
-from build_storage_bootstrap import build as build_bridge, APPROVED
-from build_delta import build as build_delta
+from update_test_fixture import archive, SDK, UPDATER_REL, SHELL, native_unpack
+from build_delta import build as make_historical_delta
 from test_storage_sync import native_tool, ui_fingerprint
 
-CAPABILITY = 'storage_layout=app-volume-v1\nstorage_guard=syncfs-v1\n'
+CAPABILITY = 'package_type=ui\nstorage_layout=app-volume-v1\nstorage_guard=syncfs-v1\n'
 APP = 'usr/local/bin/test_lvgl'
 
 
@@ -25,6 +24,7 @@ class VolumeUpdaterTests(unittest.TestCase):
         self.usb.mkdir(); self.vol.mkdir()
         self.files = {APP: (b'old app', 0o755), 'usr/local/lib/liblvgl.so': (b'old library', 0o755),
             'usr/bin/ui_update.sh': ((SDK / UPDATER_REL).read_bytes(), 0o755),
+            'usr/local/bin/un260_unpack': (native_unpack().read_bytes(), 0o755),
             'usr/local/bin/un260_storage_sync': (native_tool().read_bytes(), 0o755),
             'usr/local/bin/un260_app_storage': ((SDK / 'target/d211/d213_devkitf/rootfs_overlay/usr/local/bin/un260_app_storage').read_bytes(), 0o755),
             'etc/init.d/S00lvgl': ((SDK / 'package/artinchip/test-lvgl/S20test_lvgl').read_bytes(), 0o755)}
@@ -115,6 +115,51 @@ df() {
         self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'old app')
         self.assertEqual((self.root / 'usr/local/lib/liblvgl.so').read_bytes(), b'old library')
 
+    def test_history_space_preflight_calls_only_on_verified_capacity_shortfall(self):
+        call = self.p / 'history-space-call'
+        script = r"""
+TRIAL_ENABLED=1
+BACKUP_REQUIRED_KB=0
+ROOT_PEAK_REQUIRED_KB=64
+APP_PEAK_REQUIRED_KB=128
+mkdir -p "$STAGE_DIR"
+printf 'test-table\n' > "$STAGE_DIR/target.tsv"
+fail_update() { echo "$1" >&2; exit 17; }
+history_space_fixture() {
+    printf '%s\n' "$@" > "$HISTORY_CALL"
+    if [ "$HISTORY_FREES" = 1 ]; then ROOT_FREE=5000; APP_FREE=5000; fi
+    return "$HISTORY_RC"
+}
+SYNC_TOOL=history_space_fixture
+df() {
+    case "$2" in
+        "$USB_MNT") free=$USB_FREE ;;
+        "$APP_VOLUME_DIR") free=$APP_FREE ;;
+        "$ROOT_PREFIX") free=$ROOT_FREE ;;
+        *) return 1 ;;
+    esac
+    printf 'Filesystem Blocks Used Available Percent Mount\nfixture 10000 0 %s 0%% /\n' "$free"
+}
+"""
+        for root, app, usb, frees, helper_rc, called, ok in (
+                (5000, 5000, 8000, 0, 0, False, True),
+                (1000, 5000, 3000, 1, 0, False, False),
+                (1000, 5000, 8000, 1, 0, True, True),
+                (5000, 1000, 8000, 1, 0, True, True),
+                (1000, 5000, 8000, 0, 1, True, False)):
+            with self.subTest(root=root, app=app, usb=usb, frees=frees):
+                if call.exists():
+                    call.unlink()
+                values = (f'ROOT_FREE={root}; APP_FREE={app}; USB_FREE={usb}; '
+                          f'HISTORY_FREES={frees}; HISTORY_RC={helper_rc}; HISTORY_CALL="{call}"\n')
+                self.run_update(extra=values + script, action='validate_storage_space', ok=ok)
+                self.assertEqual(call.exists(), called)
+                if called:
+                    self.assertEqual(call.read_text().splitlines(),
+                                     ['--prepare-history-space',
+                                      str(self.root / 'etc/ui_state/count_history'), str(self.vol),
+                                      '2145', '2176'])
+
     def test_failed_backup_readback_rolls_back(self):
         self.run_update(extra='backup_digest() { return 1; }', ok=False)
         self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'old app')
@@ -158,11 +203,26 @@ df() {
         self.assertEqual((self.vol / 'test_lvgl').read_bytes(), self.files[APP][0])
         self.assertEqual((self.root / 'usr/local/lib/liblvgl.so').read_bytes(), b'new library')
 
-    def test_delta_uses_real_app_not_launcher(self):
-        delta = self.p / 'delta.upk'; build_delta(self.base, self.full, delta)
-        self.run_update(package=delta)
-        self.run_update(package=delta)
-        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), self.files[APP][0])
+    def test_historical_incremental_archive_refused_before_replacement(self):
+        delta = self.p / 'UN260_UPDATE_DELTA.upk'
+        make_historical_delta(self.base, self.full, delta)
+        _, log = self.run_update(package=delta, ok=False)
+        self.assertIn('full UN260 UI package', log)
+        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'old app')
+        self.assertEqual((self.root / 'usr/local/lib/liblvgl.so').read_bytes(), b'old library')
+        self.assertFalse((self.root / 'var/lib/un260-updater/transaction').exists())
+
+    def test_nested_outer_refused_before_replacement(self):
+        self.pack(CAPABILITY.replace('package_type=ui', 'package_type=ui-unified'))
+        _, log = self.run_update(ok=False)
+        self.assertIn('full UN260 UI package', log)
+        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'old app')
+
+    def test_migration_metadata_refused_before_application_replacement(self):
+        self.pack(capability=CAPABILITY + 'storage_migration=old\n')
+        _, log = self.run_update(ok=False)
+        self.assertIn('full UN260 UI package', log)
+        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'old app')
 
     def test_old_package_refused(self):
         self.pack(capability='')
@@ -172,12 +232,6 @@ df() {
     def test_declared_capability_cannot_install_old_recovery(self):
         self.files['usr/bin/ui_update.sh'] = (b'OLD UPDATER', 0o755)
         self.pack(); self.run_update(ok=False)
-        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'old app')
-
-    def test_delete_helper_is_prohibited(self):
-        del self.files['usr/local/bin/un260_app_storage']; self.pack()
-        delta = self.p / 'delta.upk'; build_delta(self.base, self.full, delta)
-        self.run_update(package=delta, ok=False)
         self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'old app')
 
     def test_symlink_volume_destination_refused(self):
@@ -192,48 +246,6 @@ df() {
         self.pack(capability=CAPABILITY + 'storage_migration=BAD\npackage_type=storage-migration\n')
         self.run_update(ok=False)
         self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'old app')
-
-    def test_three_upk_handoff_from_old_installer(self):
-        # The helper's NAND state machine has its own suite; here emulate only
-        # its API to test the real old/new installers and all three real archives.
-        marker = self.root / 'etc/un260/app-storage/active'
-        helper = ('''#!/bin/sh
-# UN260_APP_VOLUME_V1: test fixture only, NO hardware operations.
-# UN260_STORAGE_SYNC_1
-# UN260_MTD_STREAM_1
-set -eu
-case "$1" in
-  --prepare) exit 0 ;;
-  --migrate)
-    [ "$2" = '%s' ]
-    [ ! -f '%s' ] || exit 0
-    mkdir -p '%s'
-    cp '%s' '%s'
-    printf 'FIXED LAUNCHER' > '%s'
-    printf 'UN260_APP_VOLUME_V1\n' > '%s'
-    ;;
-  *) exit 2 ;;
-esac
-''' % (APPROVED, marker, marker.parent, self.launcher, self.vol / 'test_lvgl', self.launcher, marker)).encode()
-        self.files['usr/local/bin/un260_app_storage'] = (helper, 0o755)
-        self.files['usr/local/bin/un260_resource_cleanup'] = (b'#!/bin/sh\nexit 0\n', 0o755)
-        self.pack()
-        bridge = self.p / 'bridge.upk'; migration = self.p / 'migration.upk'
-        build_bridge(self.full, bridge); build_bridge(self.full, migration, migrate=True)
-        old_source = self.p / 'old.sh'; old_source.write_text(OLD_UPDATER)
-        (self.root / 'usr/bin/ui_update.sh').write_text(OLD_UPDATER)
-        (self.root / 'usr/local/bin/un260_app_storage').unlink()
-        self.launcher.write_bytes(b'old app'); (self.vol / 'test_lvgl').unlink()
-        self.run_update(package=bridge, source=old_source, managed=0)
-        self.assertEqual(self.launcher.read_bytes(), b'old app')
-        self.assertFalse(marker.exists())
-        # New on-disk updater handles the explicit migration request.
-        source = self.root / 'usr/bin/ui_update.sh'
-        self.run_update(package=migration, source=source, managed=0, action='prepare_app_storage; install_bundle')
-        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), b'old app')
-        self.run_update(source=source, managed=0, action='prepare_app_storage; install_bundle')
-        self.assertEqual((self.vol / 'test_lvgl').read_bytes(), self.files[APP][0])
-
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

@@ -17,7 +17,7 @@ HERE = Path(__file__).resolve().parent
 SDK = Path(os.environ.get('UN260_TEST_SDK', str(HERE.parents[1])))
 sys.path.insert(0, str(SDK / 'tools/un260-update'))
 import release_resources
-from test_update_trial import TrialTests, APP, RESOURCE, TREE, NEW_BOOT, sha
+from test_update_trial import TrialTests, APP, RESOURCE, TREE, NEW_BOOT, bundle, sha
 
 STATIC = 'usr/local/share/lvgl_data'
 AUDIT = STATIC + '/locale_fonts/manifest.json'
@@ -292,6 +292,57 @@ df() { printf 'FS Size Used Free Use Mount\\nfixture 200000 1 100000 1%% /\\n'; 
         self.engine('recover_transaction')
         self.verify_audit_rollback()
         self.assertEqual(self.destination(APP).read_bytes(),self.old[APP][0])
+
+    def test_manifest_two_upgrades_preserve_an_unrelated_retired_file(self):
+        self.omit_audit()
+        self.install()
+        self.boot_id.write_text(NEW_BOOT+'\n')
+        proc = self.app_process()
+        retired_id, _ = bundle(self.root, 'retired-with-customer-file')
+        foreign = self.root / TREE / retired_id / 'customer-file'
+        self.put(foreign, b'UNKNOWN DATA', 0o600)
+        inode = foreign.stat().st_ino
+        def check_foreign():
+            self.assertEqual(foreign.read_bytes(), b'UNKNOWN DATA')
+            self.assertEqual(foreign.stat().st_ino, inode)
+
+        self.engine('trial_confirm %d' % proc.pid)
+        proc.terminate()
+        proc.wait(timeout=5)
+        self.assertFalse(self.journal.exists())
+        self.assertFalse((self.root / TREE / self.old_a[0]).exists())
+        self.assertTrue((self.root / TREE / self.old_b[0] / 'player').is_file())
+        self.assertEqual(self.engine('recover_transaction && app_launch_after_recovery').stdout.strip(),
+                         str(self.destination(APP)))
+        check_foreign()
+
+        # The next full target has new application resources and a new boot bundle.
+        prior = self.new_c
+        for name in ('manifest', 'player', 'theme.pack'):
+            rel = TREE + '/' + prior[0] + '/' + name
+            del self.new[rel]
+            (self.stage / 'payload' / rel).unlink()
+        self.new_c = bundle(self.stage / 'payload', 'next-boot-version')
+        for name in ('manifest', 'player', 'theme.pack'):
+            rel = TREE + '/' + self.new_c[0] + '/' + name
+            file = self.stage / 'payload' / rel
+            self.new[rel] = (file.read_bytes(), file.stat().st_mode & 0o777)
+        self.new[RESOURCE] = (b'second full upgrade', 0o644)
+        self.put(self.stage / 'payload' / RESOURCE, *self.new[RESOURCE])
+        self.refresh()
+        self.install()
+        self.assertEqual(self.destination(RESOURCE).read_bytes(), b'second full upgrade')
+        self.assertTrue((self.journal / 'trial').is_file())
+        self.boot_id.write_text('33333333-3333-3333-3333-333333333333\n')
+        self.engine('recover_transaction && app_launch_after_recovery')
+        proc = self.app_process()
+        self.engine('trial_confirm %d' % proc.pid)
+        self.assertFalse(self.journal.exists())
+        self.assertEqual(self.destination(RESOURCE).read_bytes(), b'second full upgrade')
+        self.assertTrue((self.root / TREE / self.new_c[0] / 'player').is_file())
+        self.assertTrue((self.root / TREE / prior[0] / 'player').is_file())
+        self.assertFalse((self.root / TREE / self.old_b[0]).exists())
+        check_foreign()
 
     def test_manifest_confirmation_cleanup_cut_resumes(self):
         self.omit_audit();self.install()

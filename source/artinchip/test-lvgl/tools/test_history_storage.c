@@ -71,6 +71,9 @@ static int history_test_open(const char *path, int flags, ...)
     mode_t mode = 0;
     int fd;
     bool index = strstr(path, "/index.cfg.tmp") != NULL;
+    if (!strcmp(path,UI_HISTORY_STORE_DIR "/index.cfg") && (flags&O_ACCMODE)==O_RDONLY && load_open_error) {
+        errno=load_open_error;return -1;
+    }
     if(strstr(path,".abc.tmp") && atomic_load(&fail_detail_open)){errno=EIO;return -1;}
     assert(!pthread_equal(pthread_self(), ui_thread));
     if (flags & O_CREAT) {
@@ -94,15 +97,11 @@ static int history_test_open(const char *path, int flags, ...)
     return fd;
 }
 
-static FILE *history_test_fopen(const char *path, const char *mode)
+static FILE *history_test_fdopen(int fd,const char *mode)
 {
-    assert(!pthread_equal(pthread_self(), ui_thread));
-    if (load_open_error != 0) {
-        errno = load_open_error;
-        return NULL;
-    }
-    load_file = fopen(path, mode);
-    return load_file;
+    FILE *fp=fdopen(fd,mode);
+    if (!strcmp(mode,"r")) load_file=fp;
+    return fp;
 }
 
 static int history_test_ferror(FILE *fp)
@@ -161,7 +160,7 @@ static int history_test_rename(const char *from, const char *to)
 }
 
 #define open history_test_open
-#define fopen history_test_fopen
+#define fdopen history_test_fdopen
 #define ferror history_test_ferror
 #define fflush history_test_fflush
 #define fclose history_test_fclose
@@ -170,7 +169,7 @@ static int history_test_rename(const char *from, const char *to)
 #define storage_worker_init history_test_worker_init
 #include "un260/lv_system/ui_history_data_fs.c"
 #undef open
-#undef fopen
+#undef fdopen
 #undef ferror
 #undef fflush
 #undef fclose
@@ -292,12 +291,12 @@ static void exercise(void)
     assert(strcmp(ui_history_data_get()->records[0].sn_text, "IMMUTABLE123") == 0);
     before_slots = slot_renames;
     wait_saved(append(2), now);
-    assert(slot_renames == before_slots + 1); /* Old slot untouched. */
+    assert(slot_renames == before_slots); /* The index is the single summary. */
     before_slots = slot_renames;
     before_meta = meta_renames;
     assert(ui_history_record_set_selected(0, true));
     wait_saved(ui_history_last_commit_id(), now);
-    assert(slot_renames == before_slots + 1 && meta_renames == before_meta);
+    assert(slot_renames == before_slots && meta_renames == before_meta);
     assert(ui_history_record_set_selected(0, false));
     wait_saved(ui_history_last_commit_id(), now);
 
@@ -439,7 +438,7 @@ static void exercise(void)
     assert(reset_animation_calls == 1);
     assert(reset_island_calls == 1);
     assert(storage_worker_shutdown());
-    puts("PASS: worker-only I/O, immutable bounded jobs, durable completion, failure rollback/retry, incremental mirrors, counting backpressure");
+    puts("PASS: worker-only I/O, immutable bounded jobs, durable completion, failure rollback/retry, single authoritative index, counting backpressure");
 }
 
 static void test_delete_then_count(void)

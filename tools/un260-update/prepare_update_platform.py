@@ -76,6 +76,14 @@ def prepare(repo: Path, target: Path) -> None:
     engine_path = write_owned(target, ROLES['engine'], engine, 0o755)
     subprocess.run(['/bin/sh', '-n', str(engine_path)], check=True)
     runtime = (repo / 'package/artinchip/test-lvgl/S20test_lvgl').read_bytes()
+    launcher = target / 'usr/local/bin/un260_boot_launch'
+    assert launcher.is_file() and not launcher.is_symlink(), 'Missing trial display launcher'
+    helper = launcher.read_bytes()
+    validate_recovery_display(helper)
+    write_owned(target, 'usr/local/lib/un260-startup/trial-display', helper, 0o755)
+    token = b'@TRIAL_DISPLAY_SHA256@'
+    assert runtime.count(token) == 1, 'Missing or repeated trial display hash'
+    runtime = runtime.replace(token, digest(helper).encode('ascii'))
     runtime_path = write_owned(target, 'usr/local/lib/un260-startup/runtime.sh', runtime, 0o755)
     subprocess.run(['/bin/sh', '-n', str(runtime_path)], check=True)
     entry = (tools / 'startup_entry.sh').read_bytes()

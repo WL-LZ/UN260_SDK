@@ -117,7 +117,7 @@ fatal()
     printf 'DISPATCH_FAIL %s\n' "$1" >&2
     if [ "$OWN_LOCK" = 1 ]; then
         printf 'ERR: %s\n' "$1" >> "$LOG"
-        case "$MODE" in update|continue)
+        case "$MODE" in update)
             { printf 'progress=0\nstage=fail\nstep=fail\nsuccess=0\nmessage=%s\nwriter_pid=%s\n' "$1" "$$" &&
                 { if hex16 "$BUNDLE_FNV"; then printf 'bundle_fnv64=%s\n' "$BUNDLE_FNV"; else :; fi; }
             } > "$STATUS_FILE.tmp.$$" &&
@@ -265,7 +265,7 @@ copy_core()
 case "${1:-}" in
     --probe) [ "$#" = 1 ] || exit 2; printf 'UN260_UPDATE_DISPATCH_1\n'; exit 0 ;;
     --recover) [ "$#" = 1 ] || exit 2; MODE=recover ;;
-    --continue-unified) [ "$#" = 1 ] || exit 2; MODE=continue ;;
+    --continue-unified) exit 2 ;;
     --unified-pending) [ "$#" = 1 ] || exit 2; MODE=pending ;;
     --trial-pending) [ "$#" = 1 ] || exit 2; MODE=trial-pending ;;
     --trial-installed) [ "$#" = 1 ] || exit 2; MODE=trial-installed ;;
@@ -299,37 +299,35 @@ trap cleanup 0
 trap 'fatal "Upgrade interrupted"' HUP INT TERM
 private_dir "$LOCK_DIR" && printf '%s\n' "$$" > "$LOCK_DIR/pid" || fatal 'Cannot hold updater lock'
 LOCK_PID_WRITTEN=1
-case "$MODE" in update|continue)
+case "$MODE" in update)
     : > "$LOG" || fatal 'Cannot create updater log'
     rm -f "$STATUS_FILE" "$STATUS_FILE.tmp.$$" || fatal 'Cannot reset updater status'
     ;;
 esac
 exec 7< "$ROOT_DIR" || fatal 'Cannot hold root filesystem for writeback checks'
 "$RESCUE/sync" --fd 7 "$ROOT_DIR" || fatal 'Root filesystem is not healthy and writable'
-case "$MODE" in update|continue) ;; *) read_core installed || read_core rescue || fatal 'Factory updater rescue is invalid or incomplete' ;; esac
-if [ "$MODE" = update ] || [ "$MODE" = continue ]; then
+case "$MODE" in update) ;; *) read_core installed || read_core rescue || fatal 'Factory updater rescue is invalid or incomplete' ;; esac
+if [ "$MODE" = update ]; then
     if mount_usb; then
         BUNDLE=$USB_MNT/update/UN260_UPDATE.upk
-        if [ "$MODE" = update ] || [ -f "$BUNDLE" ]; then
-            safe_file "$USB_MNT" "$BUNDLE" || fatal 'Upgrade package not found or unsafe'
-            BUNDLE_HASH=$(digest "$BUNDLE") || fatal 'Cannot fingerprint selected USB package'
-            BUNDLE_FNV=$("$RESCUE/sync" --hash-fnv64 "$BUNDLE") && hex16 "$BUNDLE_FNV" || fatal 'Cannot fingerprint selected USB package'
-            [ -z "$GUI_FNV" ] || [ "$GUI_FNV" = "$BUNDLE_FNV" ] || fatal 'Selected USB package changed'
-            STAGE=$(mktemp -d "$USB_MNT/update/.un260_dispatch.$$.XXXXXX") || fatal 'Cannot create unique USB staging'
-            unique_name "$STAGE" "$USB_MNT/update/.un260_dispatch.$$." || fatal 'Unsafe dispatcher staging directory'
-            [ -d "$STAGE" ] && [ ! -L "$STAGE" ] || fatal 'Unsafe dispatcher staging directory'
-            "$RESCUE/unpack" "$BUNDLE" "$STAGE" >> "$LOG" 2>&1 && usb_barrier || fatal 'Unsafe or damaged archive'
-            after_hash=$(digest "$BUNDLE") || fatal 'Cannot fingerprint selected USB package'
-            after_fnv=$("$RESCUE/sync" --hash-fnv64 "$BUNDLE") || fatal 'Cannot fingerprint selected USB package'
-            [ "$after_hash" = "$BUNDLE_HASH" ] && [ "$after_fnv" = "$BUNDLE_FNV" ] || fatal 'Selected USB package changed'
-            read_package_core || fatal 'Package engine envelope is invalid or unsupported'
-            CORE_ROOT=$STAGE
-            ENGINE_SOURCE=$STAGE/payload/usr/bin/ui_update.sh
-            SYNC_SOURCE=$STAGE/payload/usr/local/bin/un260_storage_sync
-            UNPACK_SOURCE=$STAGE/payload/usr/local/bin/un260_unpack
-            STORAGE_SOURCE=$STAGE/payload/usr/local/bin/un260_app_storage
-            CLEANUP_SOURCE=$STAGE/payload/usr/local/bin/un260_resource_cleanup
-        else BUNDLE=none; fi
+        safe_file "$USB_MNT" "$BUNDLE" || fatal 'Upgrade package not found or unsafe'
+        BUNDLE_HASH=$(digest "$BUNDLE") || fatal 'Cannot fingerprint selected USB package'
+        BUNDLE_FNV=$("$RESCUE/sync" --hash-fnv64 "$BUNDLE") && hex16 "$BUNDLE_FNV" || fatal 'Cannot fingerprint selected USB package'
+        [ -z "$GUI_FNV" ] || [ "$GUI_FNV" = "$BUNDLE_FNV" ] || fatal 'Selected USB package changed'
+        STAGE=$(mktemp -d "$USB_MNT/update/.un260_dispatch.$$.XXXXXX") || fatal 'Cannot create unique USB staging'
+        unique_name "$STAGE" "$USB_MNT/update/.un260_dispatch.$$." || fatal 'Unsafe dispatcher staging directory'
+        [ -d "$STAGE" ] && [ ! -L "$STAGE" ] || fatal 'Unsafe dispatcher staging directory'
+        "$RESCUE/unpack" "$BUNDLE" "$STAGE" >> "$LOG" 2>&1 && usb_barrier || fatal 'Unsafe or damaged archive'
+        after_hash=$(digest "$BUNDLE") || fatal 'Cannot fingerprint selected USB package'
+        after_fnv=$("$RESCUE/sync" --hash-fnv64 "$BUNDLE") || fatal 'Cannot fingerprint selected USB package'
+        [ "$after_hash" = "$BUNDLE_HASH" ] && [ "$after_fnv" = "$BUNDLE_FNV" ] || fatal 'Selected USB package changed'
+        read_package_core || fatal 'Package engine envelope is invalid or unsupported'
+        CORE_ROOT=$STAGE
+        ENGINE_SOURCE=$STAGE/payload/usr/bin/ui_update.sh
+        SYNC_SOURCE=$STAGE/payload/usr/local/bin/un260_storage_sync
+        UNPACK_SOURCE=$STAGE/payload/usr/local/bin/un260_unpack
+        STORAGE_SOURCE=$STAGE/payload/usr/local/bin/un260_app_storage
+        CLEANUP_SOURCE=$STAGE/payload/usr/local/bin/un260_resource_cleanup
     else fatal 'USB is not a healthy writable mounted filesystem'; fi
 fi
 CTX=$(mktemp -d "$RAM_BASE/un260-update-engine.XXXXXX") || fatal 'Cannot create private package engine context'

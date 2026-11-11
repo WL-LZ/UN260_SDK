@@ -83,7 +83,8 @@ elif '--report' in args:
         self.assertEqual(readme.stat().st_mode & 0o777, 0o644)
         self.assertFalse((self.images / 'UN260_UPK_README.md.tmp').exists())
         self.assertEqual((self.images / 'UN260_UPDATE.upk').read_bytes(), b'DIRECT FULL APPLICATION')
-        self.assertEqual({p.name for p in self.internal.glob('*.upk')}, {'UN260_APPLICATION.upk'})
+        self.assertEqual(list(self.internal.glob('*.upk')), [])
+        self.assertEqual(list(self.internal.glob('release.*')), [])
         self.assertEqual({p.name for p in self.images.glob('*.upk')}, {'UN260_UPDATE.upk', self.customer.name})
         names = [Path(call[0]).name for call in map(json.loads, (self.p / 'calls.jsonl').read_text().splitlines())]
         self.assertNotIn('build_unified.py', names)

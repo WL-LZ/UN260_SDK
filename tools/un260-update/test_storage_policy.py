@@ -12,6 +12,8 @@ MARKER = b'UN260_STORAGE_POLICY_V2'
 MARKER_V3 = b'UN260_STORAGE_POLICY_V3'
 
 
+@unittest.skipUnless(b'UN260_STORAGE_POLICY_V3' in (test_unified.SDK / test_unified.UPDATER_REL).read_bytes(),
+                     "Historical expansion profile; production rejection is covered by test_app_volume_updater.")
 class PolicyTests(unittest.TestCase):
     def setUp(self):
         self.f = test_unified.UnifiedTests()

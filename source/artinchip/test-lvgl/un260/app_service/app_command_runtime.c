@@ -182,6 +182,7 @@ app_ui_upgrade_readiness_t app_command_runtime_prepare_ui_upgrade(void)
                                                    counting_data_mutable(), now_ms);
     (void)counting_history_poll_commit(&g_counting_session,
                                        counting_data_mutable(), now_ms);
+    if (!ui_history_data_return_space(now_ms,true)) return APP_UI_UPGRADE_WAIT;
     storage_job_status_t history = ui_history_data_status();
     storage_job_status_t writes = storage_worker_pending_status();
     if (history == STORAGE_JOB_FAILED || writes == STORAGE_JOB_FAILED)

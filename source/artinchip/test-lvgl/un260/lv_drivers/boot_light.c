@@ -290,6 +290,13 @@ static int display_ioctl(int fd,unsigned long request,void *arg)
     do {result=ioctl(fd,request,arg);} while(result<0&&errno==EINTR&&!stopped);
     return result;
 }
+static bool present_page(int fb,struct fb_var_screeninfo *var,unsigned page)
+{
+    int zero=0;
+    var->yoffset=page*H;
+    return display_ioctl(fb,FBIOPAN_DISPLAY,var)==0 &&
+           display_ioctl(fb,AICFB_WAIT_FOR_VSYNC,&zero)==0;
+}
 static void quiet_pause(void)
 {
     struct timespec remaining={0,16000000};
@@ -325,10 +332,11 @@ int main(void)
     bool frame_trace=frame_trace_env&&!strcmp(frame_trace_env,"1");
     boot_frame_stats_t frame_stats={0};
 #ifdef UN260_BOOT_BUNDLE
-    boot_theme_pack_t bundle={0};bool check_only=false,unified_ready=false;
+    boot_theme_pack_t bundle={0};bool check_only=false,preview=false,unified_ready=false;
     const char *theme_path=NULL,*id_text=NULL;int theme_fd=-1;uint32_t mode_override=0;
     for(int i=1;i<argc;i++) {
         if(!strcmp(argv[i],"--check")){check_only=true;continue;}
+        if(!strcmp(argv[i],"--preview")){preview=true;continue;}
         if(i+1>=argc)goto done;
         if(!strcmp(argv[i],"--theme"))theme_path=argv[++i];
         else if(!strcmp(argv[i],"--theme-fd")) {
@@ -345,6 +353,7 @@ int main(void)
         }
         else goto done;
     }
+    if(preview && check_only)goto done;
     if(theme_fd>=0 ? !boot_theme_pack_load_fd(theme_fd,&bundle) :
        !theme_path || !boot_theme_pack_load_path(theme_path,&bundle))goto done;
     if(theme_fd>=0){close(theme_fd);theme_fd=-1;}
@@ -361,7 +370,7 @@ int main(void)
     if(!boot_theme_pack_freeze(&bundle))goto done;
 #endif
     bool locale_ready=true;
-#ifndef UN260_BOOT_BUNDLE
+#if !defined(UN260_BOOT_BUNDLE) && !defined(UN260_UPDATE_DISPLAY)
     int locale_fd=-1;
     unsigned welcome_index=boot_welcome_read_index(BOOT_WELCOME_LOCALE_PATH);
 #ifdef UN260_EARLY_INIT
@@ -381,9 +390,13 @@ int main(void)
 #else
     if(flock(lease,LOCK_EX|LOCK_NB))goto done;
 #endif
-    unlink(BOOT_LIGHT_READY);
 #ifdef UN260_BOOT_BUNDLE
-    unlink(BOOT_LIGHT_UNIFIED_READY);
+    if(!preview) {
+        unlink(BOOT_LIGHT_READY);
+        unlink(BOOT_LIGHT_UNIFIED_READY);
+    }
+#else
+    unlink(BOOT_LIGHT_READY);
 #endif
 #ifndef UN260_UPDATE_DISPLAY
 #ifdef UN260_BOOT_BUNDLE
@@ -411,6 +424,22 @@ int main(void)
        fix.line_length<W*4||var.yres_virtual<H*2||fix.smem_len<(uint64_t)fix.line_length*H*2)goto done;
     mapped=mmap(NULL,fix.smem_len,PROT_READ|PROT_WRITE,MAP_SHARED,fb,0);
     if(mapped==MAP_FAILED)goto done;
+#ifdef UN260_BOOT_BUNDLE
+    if(preview) {
+        /* The foreground preview leaves one settled frame on scanout. Only the
+         * normal player owns the socket, readiness files and UI handoff. */
+        unsigned page=var.yoffset==0 ? 1U : 0U;
+        frame_state_t frame={0};
+        backlight_service_init();
+        render_bundle(mapped+page*H*fix.line_length,fix.line_length,&bundle,canvas,
+                      bundle.scene.welcome_settled,&frame);
+        if(!stopped && present_page(fb,&var,page)) {
+            trace("preview_frame");
+            status=0;
+        }
+        goto done;
+    }
+#endif
     server=socket(AF_UNIX,SOCK_SEQPACKET|SOCK_CLOEXEC|SOCK_NONBLOCK,0);
     struct sockaddr_un address={.sun_family=AF_UNIX};strcpy(address.sun_path,BOOT_LIGHT_SOCKET);
     unlink(BOOT_LIGHT_SOCKET);
@@ -431,15 +460,13 @@ int main(void)
           &&now_ms()-lifetime_start<20000U
 #endif
     ) {
-#ifndef UN260_BOOT_BUNDLE
+#if !defined(UN260_BOOT_BUNDLE) && !defined(UN260_UPDATE_DISPLAY)
         if(!locale_ready) {
             uint32_t index=0; ssize_t n=read(locale_fd,&index,sizeof(index));
             if(n>=0 || (errno!=EAGAIN && errno!=EINTR)) {
                 welcome_index=n==sizeof(index)&&index<BOOT_WELCOME_COUNT?index:0;
                 close(locale_fd);locale_fd=-1;locale_ready=true;
-#if !defined(UN260_UPDATE_DISPLAY) && !defined(UN260_BOOT_BUNDLE)
                 boot_welcome_native_apply(assets+BG_BYTES+ICON_BYTES+TEXT_BYTES,welcome_index);
-#endif
                 start=now_ms()-450U;
             }
         }
@@ -523,8 +550,7 @@ int main(void)
 #endif
 #endif
         if(frame_trace)work_us=now_us()-work_started_us;
-        var.yoffset=target*H;int zero=0;
-        if(display_ioctl(fb,FBIOPAN_DISPLAY,&var)||display_ioctl(fb,AICFB_WAIT_FOR_VSYNC,&zero))goto done;
+        if(!present_page(fb,&var,target))goto done;
         if(frame_trace)boot_frame_stats_record(&frame_stats,now_us(),work_us);
         visible=target;
         if(!ready) {
@@ -553,7 +579,7 @@ done:
         if(ipc_dir>=0)unlinkat(ipc_dir,strrchr(BOOT_LIGHT_UNIFIED_READY,'/')+1,0);
         else unlink(BOOT_LIGHT_UNIFIED_READY);
     }
-#else
+#elif !defined(UN260_UPDATE_DISPLAY)
     if(locale_fd>=0)close(locale_fd);
 #endif
     if(bound) {

@@ -3,6 +3,7 @@
 import functools
 import os
 from pathlib import Path
+from storage_test_sources import storage_test_sources
 import shlex
 import subprocess
 import tempfile
@@ -24,7 +25,7 @@ def native_tool():
         return binary
     binary = Path(_build.name) / 'un260_storage_sync'
     subprocess.run(['gcc', '-std=gnu11', '-Wall', '-Wextra', '-Werror', '-O2',
-                    str(SDK / 'source/artinchip/test-lvgl/tools/un260_storage_sync.c'),
+                    str(SDK / 'source/artinchip/test-lvgl/tools/un260_storage_sync.c'), *storage_test_sources(SDK / 'source/artinchip/test-lvgl/tools/un260_storage_sync.c'),
                     '-o', str(binary)], check=True)
     return binary
 

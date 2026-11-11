@@ -6,11 +6,11 @@ outside the temporary fixture for the unprivileged host. Journal files, SHA,
 no-follow opens, mode checks and descriptor lifetimes use production code.
 """
 from pathlib import Path
-import hashlib, importlib.util, os, shutil, subprocess, tempfile
+import hashlib, os, shutil, subprocess, sys, tempfile
 
 ROOT=Path(__file__).resolve().parents[2]
-spec=importlib.util.spec_from_file_location('trial_fixture',ROOT/'tools/un260-update/test_update_trial.py')
-trial=importlib.util.module_from_spec(spec);spec.loader.exec_module(trial)
+sys.path.insert(0, str(ROOT / 'tools' / 'un260-update'))
+import test_update_trial as trial
 fixture=r'''
 #define _GNU_SOURCE
 #include "tools/un260-startup/boot_trial.h"

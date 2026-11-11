@@ -4,13 +4,16 @@ set -euo pipefail
 SDK_ROOT=$(pwd)
 BUILDER="$SDK_ROOT/tools/un260-update/build_un260_update.sh"
 INTERNAL_DIR="${BINARIES_DIR}/un260_internal"
-OUTPUT_PACKAGE="${INTERNAL_DIR}/UN260_APPLICATION.upk"
 PUBLIC_PACKAGE="${BINARIES_DIR}/UN260_UPDATE.upk"
 PUBLIC_README="${BINARIES_DIR}/UN260_UPK_README.md"
 EXTRA_ROOT="${TARGET_BOARD_DIR}/update_extra_root"
 
 [ ! -L "$INTERNAL_DIR" ] || { echo "Refusing symlinked internal package directory" >&2; exit 1; }
 mkdir -p "$INTERNAL_DIR"
+# Verify in a staging directory before replacing the public release.
+RELEASE_STAGE=$(mktemp -d "$INTERNAL_DIR/release.XXXXXX")
+trap 'rm -rf -- "$RELEASE_STAGE"' EXIT
+OUTPUT_PACKAGE="$RELEASE_STAGE/UN260_UPDATE.upk"
 [ -x "$BUILDER" ] || { echo "UN260 package builder missing: $BUILDER" >&2; exit 1; }
 PACKAGE_VERSION=$(python3 "$SDK_ROOT/tools/un260-update/release_version.py")
 BUILD_ARGS=(--version "$PACKAGE_VERSION" --output "$OUTPUT_PACKAGE")
@@ -18,9 +21,9 @@ if [ -d "$EXTRA_ROOT" ]; then BUILD_ARGS+=(--extra-root "$EXTRA_ROOT"); fi
 
 # The factory IMG owns the platform and pre-enrolled app volume. Routine
 # updates are one full transaction; migration/delta tools are explicit only.
-"$BUILDER" "${BUILD_ARGS[@]}"
+UN260_UPDATE_PREVIOUS="$PUBLIC_PACKAGE" "$BUILDER" "${BUILD_ARGS[@]}"
 python3 "$SDK_ROOT/tools/un260-update/verify_direct_release.py" \
-    --package "$OUTPUT_PACKAGE" --target "$TARGET_DIR" --report "$INTERNAL_DIR/UN260_RELEASE.json"
+    --package "$OUTPUT_PACKAGE" --target "$TARGET_DIR" --report "$RELEASE_STAGE/release.json"
 BASE_VERSION=$(python3 "$SDK_ROOT/tools/un260-update/release_version.py" --base)
 FACTORY_ARGS=(
     --image "${BINARIES_DIR}/d211_d213_devkitf_page_2k_block_128k_v${BASE_VERSION}.img" \
@@ -72,13 +75,11 @@ cat > "$PUBLIC_README.tmp" <<'EOF'
 `un260_internal/` 中的包、验证报告和历史归档仅供内部使用，不交付客户。
 EOF
 chmod 0644 "$PUBLIC_README.tmp"
-cp "$OUTPUT_PACKAGE" "$PUBLIC_PACKAGE.tmp"
-cmp -s "$OUTPUT_PACKAGE" "$PUBLIC_PACKAGE.tmp"
-mv -f "$PUBLIC_PACKAGE.tmp" "$PUBLIC_PACKAGE"
+mv -f "$OUTPUT_PACKAGE" "$PUBLIC_PACKAGE"
 (cd "$BINARIES_DIR" && sha256sum UN260_UPDATE.upk) > "$PUBLIC_PACKAGE.sha256.tmp"
 mv -f "$PUBLIC_PACKAGE.sha256.tmp" "$PUBLIC_PACKAGE.sha256"
-cp "$INTERNAL_DIR/UN260_RELEASE.json" "$PUBLIC_PACKAGE.release.json.tmp"
+mv -f "$RELEASE_STAGE/release.json" "$PUBLIC_PACKAGE.release.json.tmp"
 mv -f "$PUBLIC_PACKAGE.release.json.tmp" "$PUBLIC_PACKAGE.release.json"
 mv -f "$PUBLIC_README.tmp" "$PUBLIC_README"
 echo "UN260 direct U-disk update ready: $PUBLIC_PACKAGE"
-echo "Verified internal application: $OUTPUT_PACKAGE"
+echo "Release inventory: $PUBLIC_PACKAGE.release.json"

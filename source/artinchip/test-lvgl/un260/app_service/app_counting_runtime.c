@@ -2,6 +2,7 @@
 #include "runtime_guard.h"
 #include "un260/lv_system/ui_i18n.h"
 #include "app_counting_runtime.h"
+#include "upgrade_session.h"
 #include "app_fault_recovery.h"
 #include "app_auto_qr.h"
 #include "un260/app_service/work_mode_service.h"
@@ -708,6 +709,7 @@ void app_counting_runtime_poll_history(counting_session_state_t *session,
      * never touches LVGL. Also handles history-page edits without an active count. */
     if (ui_history_data_poll(now_ms) && ui_manager_get_current_page() == UI_PAGE_HISTORY)
         ui_page_19_history_refresh();
+    if (upgrade_session_owner()==UPGRADE_SESSION_NONE) (void)ui_history_data_return_space(now_ms,false);
     if (session == NULL || sim_data == NULL) {
         return;
     }

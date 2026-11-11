@@ -8,6 +8,7 @@ import hashlib
 import io
 import os
 from pathlib import Path
+from storage_test_sources import storage_test_sources
 import shlex
 import shutil
 import subprocess
@@ -109,6 +110,9 @@ class DispatchTests(unittest.TestCase):
                 source.write_text(text)
             command = ['gcc', '-std=gnu11', '-Wall', '-Wextra', '-Werror', '-O2',
                 str(source), '-o', str(cls.native / role)]
+            if role == 'sync':
+                actual = SDK / 'source/artinchip/test-lvgl/tools/un260_storage_sync.c'
+                command += ['-I'+str(actual.parent), *storage_test_sources(actual)]
             if role == 'unpack':
                 command.append('-lz')
             subprocess.run(command, check=True, capture_output=True)
@@ -260,6 +264,12 @@ class DispatchTests(unittest.TestCase):
         self.assertTrue(all(line.startswith('-rwxr-xr-x') for line in modes[1:5]))
         self.assertTrue(modes[-1].startswith('-rw-------'))  # Actual native unpacked stage.
         self.assertFalse(self.status.exists())  # Dispatcher never claims success.
+        self.clean()
+
+    def test_retired_continuation_cannot_dispatch_a_usb_package(self):
+        self.run_dispatch(['--continue-unified'], ok=False)
+        self.assertFalse((self.p / 'pid').exists())
+        self.assertFalse(self.status.exists())
         self.clean()
 
     def test_all_no_usb_modes_snapshot_rescue_and_forward_action_only(self):

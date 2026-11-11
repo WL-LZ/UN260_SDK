@@ -1,18 +1,12 @@
 #!/bin/sh
 # UN260_APP_VOLUME_V1: logical app path maps to its owned UBIFS volume.
 # UN260_STORAGE_SYNC_1: held-fd writeback barriers before reporting success.
-# UN260_UNIFIED_1: one USB bundle, persistent opt-in, automatic boot continuation.
-# UN260_STORAGE_POLICY_V2: reviewed or erased enrollment and journal compatibility.
-# UN260_STORAGE_POLICY_V3: backed-up legacy enrollment and journal compatibility.
 # UN260_BOOT_BUNDLE_1: immutable root player/theme; activate only after commit.
 # UN260_PACKAGE_ENGINE_V1: package-matched engine with inherited lock and FDs.
 
 USB_MNT=/mnt/usb
 UPDATE_DIR=$USB_MNT/update
 BUNDLE_PATH=$UPDATE_DIR/UN260_UPDATE.upk
-LEGACY_APP_PATH=$UPDATE_DIR/test_lvgl
-LEGACY_LIB_PATH=$UPDATE_DIR/liblvgl.so
-LEGACY_DATA_PATH=$UPDATE_DIR/lvgl_data
 
 STATUS_FILE=/tmp/ui_update.status
 STATUS_TEMP=/tmp/ui_update.status.tmp.$$
@@ -22,8 +16,6 @@ RESULT_FILE=/tmp/UN260_UPDATE_RESULT.txt
 STAGE_DIR=$UPDATE_DIR/.un260_stage
 BACKUP_DIR=$UPDATE_DIR/.un260_backup
 BACKUP_STATE=$BACKUP_DIR/state.tsv
-ARCHIVE_LIST=$UPDATE_DIR/.un260_archive.list
-ARCHIVE_TYPES=$UPDATE_DIR/.un260_archive.types
 SEEN_TARGETS=$UPDATE_DIR/.un260_seen_targets
 CHECKSUM_TARGETS=$UPDATE_DIR/.un260_checksum_targets
 PAYLOAD_FILES=$UPDATE_DIR/.un260_payload_files
@@ -55,7 +47,6 @@ FULL_INVENTORY_FAST=0
 FULL_SCAN_HASH=
 INVENTORY_CAPABILITY=unknown
 package_schema=1
-DELTA_ALREADY_APPLIED=0
 PHASE_TIME=$(date +%s)
 START_TIME=$PHASE_TIME
 GUARDED=0
@@ -64,17 +55,6 @@ USB_FAILED=0
 APP_GUARDED=0
 LOCAL_FAILED=0
 SYNC_TOOL=/usr/local/bin/un260_storage_sync
-UNIFIED_REQUEST=etc/un260/unified-request
-UNIFIED_RUNNING=0
-UNIFIED_RESUME=0
-VERIFY_ONLY=0
-UNIFIED_COMMIT=""
-UNIFIED_BRIDGE=0
-UNIFIED_PROGRESS_BASE=0
-UNIFIED_PROGRESS_SPAN=100
-UNIFIED_PROGRESS_SCALE=100
-STORAGE_POLICY_V2=un260-reviewed-or-erased-v2
-STORAGE_POLICY_V3=un260-backed-up-legacy-v3
 BOOT_BUNDLE_TREE=usr/local/lib/un260-boot/versions
 BOOT_ACTIVE=etc/un260/boot-active
 OWNED_STATIC_TREE=usr/local/share/lvgl_data
@@ -84,6 +64,7 @@ BOOT_REQUEST_HASH=""
 BOOT_OLD_ID=none
 BOOT_OLD_HASH=none
 BOOT_PUBLICATION_DONE=0
+RECOVERED_TRIAL_PENDING=0
 TRIAL_ENABLED=0
 DISPATCH_CONTEXT=
 DISPATCH_STAGE=none
@@ -92,6 +73,14 @@ DISPATCH_MODE=
 APP_STORAGE_TOOL=
 RESOURCE_CLEANUP_TOOL=
 UNPACK_TOOL=
+
+app_check_trace()
+{
+    [ "${UN260_BOOT_TRACE:-0}" = 1 ] && [ "${DISPATCH_MODE:-}" = app-check ] || return 0
+    if read -r check_uptime check_idle < /proc/uptime; then
+        printf 'BOOT_TIME uptime=%s stage=app_check_%s\n' "$check_uptime" "$1" >&2 || :
+    fi
+}
 
 local_barrier()
 {
@@ -120,28 +109,9 @@ backup_digest()
 finish_success()
 {
     completion_message=$1
-    if [ "$UNIFIED_BRIDGE" = 1 ] && [ "$UNIFIED_RUNNING" = 0 ]; then
-        completion_message='Bridge ready; restart with the SAME USB to finish the upgrade'
-    fi
-    if [ "$UNIFIED_RUNNING" = 0 ]; then
-        write_status 96 finish finish "" "Keep USB and power connected; finalizing update"
-    fi
+    write_status 96 finish finish "" "Keep USB and power connected; finalizing update"
     cleanup_usb_work || fail_update 'Installed files verified; USB cleanup failed'
     local_barrier && usb_barrier || fail_update 'Installed files verified; storage flush failed'
-    # An inner phase is not completion of the user's one-package operation.
-    if [ "$UNIFIED_RUNNING" = 1 ]; then
-        write_status 100 sync sync "" ""
-        return 0
-    fi
-    if [ "$UNIFIED_BRIDGE" = 1 ]; then
-        write_result pending "$completion_message" "$package_version" || fail_update 'Cannot write bridge result'
-        if [ "$GUARDED" = 1 ]; then
-            cp "$LOG" "$USB_MNT/ui_update.log" &&
-            cp "$RESULT_FILE" "$USB_MNT/UN260_UPDATE_RESULT.txt" && usb_barrier || fail_update 'Bridge ready; USB finalization failed'
-        fi
-        write_status 96 restart restart -1 "$completion_message" || exit 1
-        return 0
-    fi
     echo "Update verified: version=$package_version; final USB flush pending" >> "$LOG"
     write_result success "$completion_message" "$package_version" || fail_update 'Cannot write update result'
     if [ "$GUARDED" = 1 ]; then
@@ -151,22 +121,7 @@ finish_success()
             fail_update 'Files installed; USB finalization failed. Keep power connected and inspect RAM log'
     fi
     record_installed_bundle && local_barrier || fail_update 'Files installed; completion marker could not be persisted'
-    if [ -n "$UNIFIED_COMMIT" ]; then
-        printf '%s\n' "$UNIFIED_COMMIT" > "$INSTALLED_STATE_DIR/unified.completed.tmp" &&
-        local_barrier && mv -f "$INSTALLED_STATE_DIR/unified.completed.tmp" "$INSTALLED_STATE_DIR/unified.completed" &&
-        local_barrier || fail_update 'Cannot persist unified completion; keep USB for retry'
-    fi
     write_status 100 success success 1 "$completion_message" || { echo 'Cannot publish final status' >&2; exit 1; }
-}
-
-detect_usb_dev()
-{
-    for dev in /dev/sd[a-z][0-9]* /dev/sd[a-z]; do
-        [ -b "$dev" ] || continue
-        echo "$dev"
-        return 0
-    done
-    return 1
 }
 
 write_status()
@@ -176,11 +131,6 @@ write_status()
     step="$3"
     success="$4"
     message="$5"
-    # Each inner package reports local progress in its assigned part of the
-    # same operation. Failure already receives the last published value.
-    if [ "$UNIFIED_RUNNING" = 1 ] && [ "$stage" != fail ]; then
-        progress=$((UNIFIED_PROGRESS_BASE + progress * UNIFIED_PROGRESS_SPAN / UNIFIED_PROGRESS_SCALE))
-    fi
     if [ "$stage" != "$LAST_STAGE" ]; then
         now=$(date +%s)
         echo "UPGRADE_TIME stage=$LAST_STAGE seconds=$((now-PHASE_TIME)) elapsed=$((now-START_TIME))" >> "$LOG"
@@ -217,7 +167,7 @@ is_allowed_target()
 {
     rel="$1"
 
-    # Runtime migration state is never package-owned.
+    # Factory storage state and earlier migration receipts stay outside package ownership.
     case "$rel" in etc/un260/app-storage|etc/un260/app-storage/*|etc/un260/boot-active|etc/un260/boot-active.*) return 1 ;; esac
     case "$rel" in usr/local/bin/un260_update_dispatch|usr/local/lib/un260-updater|usr/local/lib/un260-updater/*|etc/un260/updater-platform) return 1 ;; esac
 
@@ -432,25 +382,47 @@ boot_check_transport_bundle()
     boot_validate_bundle "$boot_check_root" "$2" "$3"
 )
 
+# Use directory metadata before reading bytes. The target BusyBox has ls -ldn,
+# including on noexec FAT transports. An old FIFO or oversized file is never opened.
+boot_member_size()
+{
+    LC_ALL=C ls -ldn "$1" | awk -v mode="$2" -v limit="$3" \
+        -v scope="$boot_validation_scope" -v owner="$boot_member_owner" '
+        NR==1 && $1~/^-/ && (scope=="transport" || $1==mode) &&
+        (owner=="" || ($2==1 && $3==owner)) &&
+        $5~/^[0-9]+$/ && $5+0>0 && $5+0<=limit {print $5; ok=1}
+        END {exit !(NR==1 && ok)}'
+}
+
+boot_id_for_hashes()
+{
+    printf 'player_sha256=%s\ntheme_sha256=%s\nmode=%s\n' "$1" "$2" "$3" | sha256sum | awk '{print $1}'
+}
+
 boot_validate_bundle()
 {
     boot_validation_scope=${4:-installed}
-    case "$boot_validation_scope" in installed|transport) ;; *) return 1 ;; esac
     boot_tree=${1%/}
     boot_id=$2
     boot_expected_manifest=$3
-    boot_hex64 "$boot_id" && boot_hex64 "$boot_expected_manifest" || return 1
+    boot_hex64 "$boot_id" || return 1
+    boot_member_owner=
+    case "$boot_validation_scope" in
+        installed|transport) boot_hex64 "$boot_expected_manifest" || return 1 ;;
+        retired|retired-partial) boot_member_owner=$(id -u) || return 1 ;;
+        *) return 1 ;;
+    esac
     boot_dir=$boot_tree/$BOOT_BUNDLE_TREE/$boot_id
-    for boot_name in manifest player theme.pack; do
-        boot_safe_file "${boot_tree:-/}" "$BOOT_BUNDLE_TREE/$boot_id/$boot_name" || return 1
-    done
     for boot_entry in "$boot_dir"/* "$boot_dir"/.[!.]* "$boot_dir"/..?*; do
         [ -e "$boot_entry" ] || [ -L "$boot_entry" ] || continue
         case "${boot_entry##*/}" in manifest|player|theme.pack) ;; *) return 1 ;; esac
     done
-    [ "$(wc -c < "$boot_dir/manifest")" -le 2048 ] &&
+    boot_safe_file "${boot_tree:-/}" "$BOOT_BUNDLE_TREE/$boot_id/manifest" &&
+        boot_member_size "$boot_dir/manifest" -rw-r--r-- 2048 >/dev/null &&
         [ "$(wc -l < "$boot_dir/manifest")" = 8 ] || return 1
-    [ "$(checked_digest "$boot_dir/manifest")" = "$boot_expected_manifest" ] || return 1
+    if [ -z "$boot_member_owner" ]; then
+        [ "$(checked_digest "$boot_dir/manifest")" = "$boot_expected_manifest" ] || return 1
+    fi
     [ "$(boot_manifest_value "$boot_dir/manifest" schema)" = un260-boot-bundle-v1 ] &&
         [ "$(boot_manifest_value "$boot_dir/manifest" id)" = "$boot_id" ] &&
         [ "$(boot_manifest_value "$boot_dir/manifest" protocol)" = 1 ] || return 1
@@ -465,11 +437,23 @@ boot_validate_bundle()
     [ -n "$boot_player_bytes" ] && [ -n "$boot_theme_bytes" ] &&
         [ "$boot_player_bytes" -gt 0 ] && [ "$boot_player_bytes" -le 2097152 ] &&
         [ "$boot_theme_bytes" -gt 0 ] && [ "$boot_theme_bytes" -le 2097152 ] || return 1
-    [ "$(wc -c < "$boot_dir/player")" = "$boot_player_bytes" ] &&
-        [ "$(wc -c < "$boot_dir/theme.pack")" = "$boot_theme_bytes" ] &&
-        [ "$(checked_digest "$boot_dir/player")" = "$boot_player_hash" ] &&
-        [ "$(checked_digest "$boot_dir/theme.pack")" = "$boot_theme_hash" ] || return 1
-    [ "$(printf 'player_sha256=%s\ntheme_sha256=%s\nmode=%s\n' "$boot_player_hash" "$boot_theme_hash" "$boot_mode" | sha256sum | awk '{print $1}')" = "$boot_id" ] || return 1
+    [ "$(boot_id_for_hashes "$boot_player_hash" "$boot_theme_hash" "$boot_mode")" = "$boot_id" ] || return 1
+    for boot_name in player theme.pack; do
+        boot_member=$boot_dir/$boot_name
+        if [ "$boot_validation_scope" = retired-partial ] && [ ! -e "$boot_member" ] && [ ! -L "$boot_member" ]; then
+            continue
+        fi
+        case "$boot_name" in
+            player) boot_bytes=$boot_player_bytes; boot_hash=$boot_player_hash; boot_permissions=-rwxr-xr-x ;;
+            theme.pack) boot_bytes=$boot_theme_bytes; boot_hash=$boot_theme_hash; boot_permissions=-rw-r--r-- ;;
+        esac
+        boot_safe_file "${boot_tree:-/}" "$BOOT_BUNDLE_TREE/$boot_id/$boot_name" &&
+            [ "$(boot_member_size "$boot_member" "$boot_permissions" 2097152)" = "$boot_bytes" ] &&
+            [ "$(checked_digest "$boot_member")" = "$boot_hash" ] || return 1
+    done
+    # An inactive garbage-collection candidate has no runtime role. Its
+    # content address proves the owned bytes without executing a retired binary.
+    [ -z "$boot_member_owner" ] || return 0
     if [ "$boot_validation_scope" = transport ]; then
         boot_transport_install_modes "$boot_id" || {
             echo 'Boot transport check: invalid or incomplete install mode contract' >> "$LOG"
@@ -478,10 +462,6 @@ boot_validate_bundle()
         boot_check_transport_bundle "$boot_tree" "$boot_id" "$boot_expected_manifest"
         return $?
     fi
-    [ "$(LC_ALL=C ls -ld "$boot_dir/player" | awk '{print $1}')" = -rwxr-xr-x ] &&
-        [ "$(LC_ALL=C ls -ld "$boot_dir/theme.pack" | awk '{print $1}')" = -rw-r--r-- ] &&
-        [ "$(LC_ALL=C ls -ld "$boot_dir/manifest" | awk '{print $1}')" = -rw-r--r-- ] || return 1
-    # Static player validates bounded theme header/CRC/decoding without devices.
     "$boot_dir/player" --theme "$boot_dir/theme.pack" --mode "$boot_mode" --check >> "$LOG" 2>&1
 }
 
@@ -524,8 +504,6 @@ boot_package_request()
     done < "$SEEN_TARGETS"
     if [ -f "$STAGE_DIR/payload/$BOOT_BUNDLE_TREE/$BOOT_REQUEST_ID/manifest" ]; then
         boot_validate_bundle "$STAGE_DIR/payload" "$BOOT_REQUEST_ID" "$BOOT_REQUEST_HASH" transport || return 1
-    elif [ "$package_schema" = 2 ]; then
-        boot_validate_bundle "${ROOT_PREFIX:-/}" "$BOOT_REQUEST_ID" "$BOOT_REQUEST_HASH" || return 1
     else
         return 1
     fi
@@ -575,6 +553,54 @@ boot_prepare_publication()
 }
 
 
+boot_gc_safe_dir()
+{
+    boot_hex64 "$2" && boot_safe_parent "${ROOT_PREFIX:-/}" "$BOOT_BUNDLE_TREE/$2/manifest" &&
+        [ -d "$1" ] && [ ! -L "$1" ] &&
+        [ "$(LC_ALL=C ls -ldn "$1" | awk '{print $3}')" = "$(id -u)" ]
+}
+
+# A new plan may retire only an empty version or a complete verified bundle.
+boot_gc_candidate_valid()
+{
+    boot_gc_safe_dir "$1" "$2" || return 1
+    for boot_gc_entry in "$1"/* "$1"/.[!.]* "$1"/..?*; do
+        [ -e "$boot_gc_entry" ] || [ -L "$boot_gc_entry" ] || continue
+        boot_validate_bundle "${ROOT_PREFIX:-/}" "$2" "" retired
+        return $?
+    done
+    return 0
+}
+
+# A persisted plan can be replayed after only part of a version was removed.
+# Never unlink anything in a directory that now contains an unexpected entry.
+boot_gc_replay_safe()
+{
+    boot_gc_safe_dir "$1" "$2" || return 1
+    boot_gc_remaining=0
+    for boot_gc_entry in "$1"/* "$1"/.[!.]* "$1"/..?*; do
+        [ -e "$boot_gc_entry" ] || [ -L "$boot_gc_entry" ] || continue
+        case "${boot_gc_entry##*/}" in manifest|player|theme.pack) ;; *) return 1 ;; esac
+        [ -f "$boot_gc_entry" ] && [ ! -L "$boot_gc_entry" ] || return 1
+        boot_gc_remaining=$((boot_gc_remaining + 1))
+    done
+    [ "$boot_gc_remaining" != 0 ] || return 0
+    if [ -e "$1/manifest" ]; then
+        boot_validate_bundle "${ROOT_PREFIX:-/}" "$2" "" retired-partial
+        return $?
+    fi
+    # Older engines removed the manifest first. With both payloads the
+    # directory ID still binds their bytes. A lone legacy member is kept.
+    [ "$boot_gc_remaining" = 2 ] || return 2
+    boot_validation_scope=retired
+    boot_member_owner=$(id -u) || return 1
+    boot_member_size "$1/player" -rwxr-xr-x 2097152 >/dev/null &&
+        boot_member_size "$1/theme.pack" -rw-r--r-- 2097152 >/dev/null || return 1
+    boot_gc_player=$(checked_digest "$1/player") && boot_gc_theme=$(checked_digest "$1/theme.pack") || return 1
+    [ "$(boot_id_for_hashes "$boot_gc_player" "$boot_gc_theme" animation)" = "$2" ] ||
+        [ "$(boot_id_for_hashes "$boot_gc_player" "$boot_gc_theme" logo)" = "$2" ]
+}
+
 # Preserve the active/previous versions and the immutable snapshot actually
 # used by this cold boot. Delete only a durably journalled, prevalidated plan.
 boot_collect_versions()
@@ -596,18 +622,16 @@ boot_collect_versions()
         for boot_gc_dir in "$ROOT_PREFIX/$BOOT_BUNDLE_TREE"/*; do
             [ -e "$boot_gc_dir" ] || [ -L "$boot_gc_dir" ] || continue
             boot_gc_id=${boot_gc_dir##*/}
-            boot_hex64 "$boot_gc_id" && [ -d "$boot_gc_dir" ] && [ ! -L "$boot_gc_dir" ] || return 1
-            case "$boot_gc_id" in "$boot_gc_current"|"$boot_gc_previous"|"$boot_gc_live") continue ;; esac
-            boot_gc_empty=1
-            for boot_gc_entry in "$boot_gc_dir"/* "$boot_gc_dir"/.[!.]* "$boot_gc_dir"/..?*; do
-                [ -e "$boot_gc_entry" ] || [ -L "$boot_gc_entry" ] || continue
-                boot_gc_empty=0
-            done
-            # Rollback removes its new files but can leave their empty version
-            # directory. The empty directory is safe to retire without a player.
-            if [ "$boot_gc_empty" = 0 ]; then
-                boot_gc_hash=$(checked_digest "$boot_gc_dir/manifest") || return 1
-                boot_validate_bundle "${ROOT_PREFIX:-/}" "$boot_gc_id" "$boot_gc_hash" || return 1
+            if boot_hex64 "$boot_gc_id"; then
+                case "$boot_gc_id" in "$boot_gc_current"|"$boot_gc_previous"|"$boot_gc_live")
+                    [ -d "$boot_gc_dir" ] && [ ! -L "$boot_gc_dir" ] || return 1
+                    continue ;;
+                esac
+            fi
+            if ! boot_gc_candidate_valid "$boot_gc_dir" "$boot_gc_id"; then
+                [ "${1:-}" = confirmed ] || return 1
+                echo "Keeping unverified retired boot entry: $boot_gc_id" >> "$LOG" || :
+                continue
             fi
             printf '%s\n' "$boot_gc_id" >> "$JOURNAL/boot-gc.tmp" || return 1
         done
@@ -621,16 +645,13 @@ boot_collect_versions()
         case "$boot_gc_id" in "$boot_gc_current"|"$boot_gc_previous"|"$boot_gc_live") continue ;; esac
         boot_gc_dir=$ROOT_PREFIX/$BOOT_BUNDLE_TREE/$boot_gc_id
         [ -e "$boot_gc_dir" ] || [ -L "$boot_gc_dir" ] || continue
-        boot_safe_parent "${ROOT_PREFIX:-/}" "$BOOT_BUNDLE_TREE/$boot_gc_id/player" &&
-            [ -d "$boot_gc_dir" ] && [ ! -L "$boot_gc_dir" ] || return 1
-        # A cut after any unlink is safe: the persisted plan owns this exact
-        # retired version. Unexpected entries are preserved for service.
-        for boot_gc_entry in "$boot_gc_dir"/* "$boot_gc_dir"/.[!.]* "$boot_gc_dir"/..?*; do
-            [ -e "$boot_gc_entry" ] || [ -L "$boot_gc_entry" ] || continue
-            case "${boot_gc_entry##*/}" in manifest|player|theme.pack) ;; *) return 1 ;; esac
-            [ -f "$boot_gc_entry" ] && [ ! -L "$boot_gc_entry" ] || return 1
-        done
-        rm -f "$boot_gc_dir/manifest" "$boot_gc_dir/player" "$boot_gc_dir/theme.pack" && rmdir "$boot_gc_dir" || return 1
+        boot_gc_replay_safe "$boot_gc_dir" "$boot_gc_id" || {
+            boot_gc_rc=$?
+            [ "$boot_gc_rc" = 2 ] || [ "${1:-}" = confirmed ] || return 1
+            echo "Keeping changed retired boot entry: $boot_gc_id" >> "$LOG" || :
+            continue
+        }
+        rm -f "$boot_gc_dir/player" "$boot_gc_dir/theme.pack" "$boot_gc_dir/manifest" && rmdir "$boot_gc_dir" || return 1
         local_barrier || return 1
     done < "$JOURNAL/boot-gc"
     rm -f "$JOURNAL/boot-gc" "$JOURNAL/boot-gc.tmp" && local_barrier
@@ -647,6 +668,7 @@ boot_publish_committed()
     boot_expected_previous_hash=$boot_previous_hash
     boot_validate_bundle "${ROOT_PREFIX:-/}" "$boot_publish_id" "$boot_publish_hash" || return 1
     boot_publish_target=$ROOT_PREFIX/$BOOT_ACTIVE
+    boot_already_published=0
     # Do not put active into install.tsv: it becomes visible only after every
     # application target and the self-contained bundle have committed durably.
     boot_safe_parent "${ROOT_PREFIX:-/}" "$BOOT_ACTIVE" && mkdir -p "$(dirname "$boot_publish_target")" || return 1
@@ -656,22 +678,34 @@ boot_publish_committed()
         boot_safe_file "${ROOT_PREFIX:-/}" "$BOOT_ACTIVE" && boot_read_descriptor "$boot_publish_target" || return 1
         boot_backup_id=$boot_current
         boot_backup_hash=$boot_current_hash
-        boot_validate_bundle "${ROOT_PREFIX:-/}" "$boot_backup_id" "$boot_backup_hash" || return 1
         if [ "$boot_backup_id" != "$boot_publish_id" ] || [ "$boot_backup_hash" != "$boot_publish_hash" ]; then
+            boot_validate_bundle "${ROOT_PREFIX:-/}" "$boot_backup_id" "$boot_backup_hash" || return 1
             [ "$boot_expected_previous" = "$boot_backup_id" ] && [ "$boot_expected_previous_hash" = "$boot_backup_hash" ] || return 1
             printf 'UN260_BOOT_ACTIVE_V1\n%s\n%s\nnone\nnone\n' "$boot_backup_id" "$boot_backup_hash" > "$boot_publish_target.previous.tmp" &&
                 chmod 0644 "$boot_publish_target.previous.tmp" && local_barrier &&
                 mv -f "$boot_publish_target.previous.tmp" "$boot_publish_target.previous" && local_barrier || return 1
         else
-            [ "$(checked_digest "$boot_publish_target")" = "$(checked_digest "$JOURNAL/boot-publish")" ] || return 1
+            # The identical content ID and manifest above already passed the player check.
+            boot_record_hash=$(checked_digest "$JOURNAL/boot-publish") || return 1
+            [ "$(checked_digest "$boot_publish_target")" = "$boot_record_hash" ] || return 1
+            boot_active_stat=$(LC_ALL=C ls -ldn "$boot_publish_target" | awk '{print $1 ":" $2 ":" $3 ":" $4}')
+            if [ ! -e "$boot_publish_target.tmp" ] &&
+               [ "$boot_active_stat" = "-rw-r--r--:1:$(id -u):$(id -g)" ]; then
+                boot_already_published=1
+            fi
         fi
     elif [ -e "$boot_publish_target.previous" ] || [ "$boot_expected_previous" != none ] || [ "$boot_expected_previous_hash" != none ]; then
         return 1
     fi
-    cp "$JOURNAL/boot-publish" "$boot_publish_target.tmp" && chmod 0644 "$boot_publish_target.tmp" &&
-        local_barrier && mv -f "$boot_publish_target.tmp" "$boot_publish_target" && local_barrier || return 1
+    if [ "$boot_already_published" = 0 ]; then
+        cp "$JOURNAL/boot-publish" "$boot_publish_target.tmp" && chmod 0644 "$boot_publish_target.tmp" &&
+            local_barrier && mv -f "$boot_publish_target.tmp" "$boot_publish_target" || return 1
+    fi
+    # Even exact replay may follow a visible rename whose last writeback failed.
+    local_barrier || return 1
     echo "Boot bundle published: $boot_publish_id" >> "$LOG"
-    if [ "$TRIAL_ENABLED" != 1 ] || [ ! -e "$JOURNAL/trial" ]; then
+    if [ "$TRIAL_ENABLED" != 1 ] ||
+       { [ ! -e "$JOURNAL/trial" ] && [ ! -e "$JOURNAL/trial.confirmed" ]; }; then
         boot_collect_versions || return 1
     fi
     BOOT_PUBLICATION_DONE=1
@@ -684,7 +718,7 @@ cleanup_usb_work()
     # Only this invocation's staging files, never the user's package or logs.
     [ "$GUARDED" = 0 ] || usb_barrier || return 1
     rm -rf "$STAGE_DIR" "$BACKUP_DIR" || return 1
-    rm -f "$ARCHIVE_LIST" "$ARCHIVE_TYPES" "$SEEN_TARGETS" \
+    rm -f "$SEEN_TARGETS" \
         "$CHECKSUM_TARGETS" "$PAYLOAD_FILES" "$PLAN_FILE" "$PLAN_FILE.tree" "$PLAN_FILE.retired" "$PLAN_FILE.verify" \
         "$PLAN_FILE.requests" "$PLAN_FILE.inventory" "$PLAN_FILE.retired.pending" \
         "$PLAN_FILE.actual" "$PLAN_FILE.scan"
@@ -695,6 +729,7 @@ cleanup_usb_work()
 # recoverable file transaction, not a partition-level A/B firmware design.
 recover_transaction()
 {
+    RECOVERED_TRIAL_PENDING=0
     [ ! -L "$JOURNAL" ] || return 1
     [ -e "$JOURNAL" ] || return 0
     [ -d "$JOURNAL" ] || return 1
@@ -710,7 +745,11 @@ recover_transaction()
         [ ! -L "$JOURNAL/$journal_control" ] || return 1
         [ ! -e "$JOURNAL/$journal_control" ] || [ -f "$JOURNAL/$journal_control" ] || return 1
     done
-    if [ "$TRIAL_ENABLED" = 1 ]; then trial_recover_prepare || return 1; fi
+    if [ "$TRIAL_ENABLED" = 1 ]; then
+        app_check_trace journal_begin
+        trial_recover_prepare || return 1
+        app_check_trace journal_complete
+    fi
     if [ ! -f "$JOURNAL/committed" ] && [ ! -f "$JOURNAL/rolled-back" ]; then
         echo "Rollback started (local original inodes)" >> "$LOG"
         while IFS='|' read -r present rpath extra; do
@@ -748,11 +787,26 @@ recover_transaction()
         echo "Rollback finished" >> "$LOG"
     fi
     if [ -f "$JOURNAL/committed" ] && [ "$BOOT_PUBLICATION_DONE" = 0 ]; then
+        app_check_trace boot_publish_begin
         boot_publish_committed || return 1
+        app_check_trace boot_publish_complete
     fi
-    if [ "$TRIAL_ENABLED" = 1 ] && [ -e "$JOURNAL/trial" ] && [ -f "$JOURNAL/committed" ]; then
-        trial_is_committed || return 1
+    # trial_recover_prepare checked the journal, decision, target table and snapshots
+    # under this lock. Publication does not modify a committed pending trial.
+    if [ "$TRIAL_ENABLED" = 1 ] && [ "$trial_kind" = trial ] && [ -f "$JOURNAL/committed" ]; then
+        RECOVERED_TRIAL_PENDING=1
         return 0
+    fi
+    if [ "$TRIAL_ENABLED" = 1 ] && [ "$trial_kind" = trial.confirmed ] && [ "$trial_boot_id" != none ]; then
+        # Activation/confirmation is mandatory. Retirement of unrelated old versions is not.
+        if [ "$BOOT_PUBLICATION_DONE" = 1 ]; then
+            [ "$boot_publish_id" = "$trial_boot_id" ] && [ "$boot_publish_hash" = "$trial_boot_sha" ] || return 1
+        else
+            trial_active_boot_valid || return 1
+        fi
+        if ! boot_collect_versions confirmed; then
+            echo 'Old boot version cleanup incomplete; preserving remaining versions' >> "$LOG" || :
+        fi
     fi
     while IFS='|' read -r present rpath extra; do
         [ -z "$extra" ] && safe_destination "$rpath" || return 1
@@ -800,33 +854,6 @@ fail_update()
 interrupt_update()
 {
     fail_update "Upgrade interrupted"
-}
-
-validate_archive_paths()
-{
-    if ! tar -tzf "$BUNDLE_PATH" > "$ARCHIVE_LIST" 2>> "$LOG"; then
-        fail_update "Upgrade archive is damaged or unsupported"
-    fi
-
-    while IFS= read -r entry; do
-        case "$entry" in
-            manifest.ini|checksums.sha256|install.tsv|baseline.tsv|target.tsv|payload|payload/*) ;;
-            *) fail_update "Upgrade archive contains an invalid path" ;;
-        esac
-        case "$entry" in
-            /*|*..*|*\\*) fail_update "Upgrade archive contains an unsafe path" ;;
-        esac
-    done < "$ARCHIVE_LIST"
-
-    if ! tar -tvzf "$BUNDLE_PATH" > "$ARCHIVE_TYPES" 2>> "$LOG"; then
-        fail_update "Upgrade archive entry types cannot be inspected"
-    fi
-    while IFS= read -r detail; do
-        case "$detail" in
-            -*|d*) ;;
-            *) fail_update "Upgrade archive contains unsupported entry types" ;;
-        esac
-    done < "$ARCHIVE_TYPES"
 }
 
 validate_payload_checksums()
@@ -1132,10 +1159,7 @@ validate_install_manifest()
                 ;;
             tree)
                 [ -d "$STAGE_DIR/payload/$rel" ] || fail_update "Missing payload tree"
-                if [ "$package_schema" = 1 ] && [ "$rel" = "$OWNED_STATIC_TREE" ] &&
-                    [ -z "${storage_migration:-}" ] && [ "$(manifest_value package_type)" != ui-unified ]; then
-                    PRUNE_STATIC_TREE=1
-                fi
+                if [ "$rel" = "$OWNED_STATIC_TREE" ]; then PRUNE_STATIC_TREE=1; fi
                 scan_regular_tree "$STAGE_DIR/payload/$rel" "$PLAN_FILE.tree" ||
                     fail_update "Cannot enumerate payload tree"
                 while IFS= read -r tree_file; do
@@ -1143,37 +1167,12 @@ validate_install_manifest()
                     request_install_file "$tree_rel" 0644
                 done < "$PLAN_FILE.tree"
                 ;;
-            delete)
-                case "$rel" in usr/local/bin/test_lvgl|usr/local/lib/liblvgl.so|usr/local/bin/un260_unpack|usr/local/bin/un260_storage_sync|usr/local/bin/un260_resource_cleanup|usr/local/bin/un260_app_storage|usr/bin/ui_update.sh|etc/init.d/S00lvgl) fail_update "Cannot delete a core upgrade component" ;; esac
-                [ "$package_schema" = 2 ] || fail_update "Deletes require an incremental package"
-                [ ! -e "$STAGE_DIR/payload/$rel" ] || fail_update "Delete has a payload"
-                awk -F '|' -v p="$rel" '$4==p {found=1} END {exit !found}' "$STAGE_DIR/baseline.tsv" || fail_update "Delete is absent from baseline"
-                if awk -F '|' -v p="$rel" '$4==p {found=1} END {exit !found}' "$STAGE_DIR/target.tsv"; then fail_update "Delete is in target"; fi
-                safe_destination "$rel" || fail_update "Unsafe deletion target"
-                for suffix in old new restore; do
-                    [ ! -e "$ROOT_PREFIX/$rel.un260-$suffix" ] && [ ! -L "$ROOT_PREFIX/$rel.un260-$suffix" ] || fail_update "Unrecovered deletion artifact"
-                done
-                grep -Fx "$rel" "$SEEN_TARGETS" >/dev/null && fail_update "Duplicate deletion target"
-                echo "$rel" >> "$SEEN_TARGETS"
-                if [ "$DELTA_ALREADY_APPLIED" = 1 ] && [ ! -e "$ROOT_PREFIX/$rel" ] && [ ! -L "$ROOT_PREFIX/$rel" ]; then
-                    # The complete target table and retired dependencies have
-                    # already matched. Repeated deltas verify deletion below,
-                    # without backing up a file that is already absent.
-                    continue
-                fi
-                delete_hash=$(sha256sum "$ROOT_PREFIX/$rel" | awk '{print $1}')
-                delete_bytes=$(wc -c < "$ROOT_PREFIX/$rel")
-                BACKUP_REQUIRED_KB=$((BACKUP_REQUIRED_KB + (delete_bytes+1023)/1024+4))
-                printf 'delete|%s|%s|-|%s|0\n' "$mode" "$rel" "$delete_hash" >> "$PLAN_FILE"
-                INSTALL_ENTRY_COUNT=$((INSTALL_ENTRY_COUNT+1))
-                ;;
             *) fail_update "Invalid install manifest entry type" ;;
         esac
         manifest_count=$((manifest_count + 1))
-        if [ "$package_schema" = 2 ]; then manifest_limit=8192; else manifest_limit=256; fi
-        [ "$manifest_count" -le "$manifest_limit" ] || fail_update "Too many manifest entries"
+        [ "$manifest_count" -le 256 ] || fail_update "Too many manifest entries"
     done < "$STAGE_DIR/install.tsv"
-    [ "$manifest_count" -gt 0 ] || [ "$package_schema" = 2 ] || fail_update "Empty install manifest"
+    [ "$manifest_count" -gt 0 ] || fail_update "Empty install manifest"
     if [ "$package_schema" = 1 ] && [ -n "${FULL_TARGET_ID:-}" ]; then
         prepare_full_inventory
         [ "$(wc -l < "$SEEN_TARGETS" | tr -d ' ')" = "$checksum_count" ] || fail_update 'Full install manifest does not cover its complete payload'
@@ -1267,7 +1266,6 @@ verify_installed_targets()
                     verify_installed_file "${verified_file#"$STAGE_DIR/payload/"}" 0644
                 done < "$PLAN_FILE.verify"
                 ;;
-            delete) [ ! -e "$ROOT_PREFIX/$verified_path" ] && [ ! -L "$ROOT_PREFIX/$verified_path" ] || fail_update 'Retired target still exists' ;;
         esac
     done < "$STAGE_DIR/install.tsv"
     fi
@@ -1280,10 +1278,7 @@ verify_installed_targets()
             {if(substr($0,1,length(prefix))!=prefix || !(substr($0,length(prefix)+1) in seen)) bad=1}
             END {exit bad}' "$SEEN_TARGETS" "$PLAN_FILE.verify" || fail_update 'Installed static resources differ from package'
     fi
-    if [ "$UNIFIED_RUNNING" = 1 ] && [ "$UNIFIED_BRIDGE" = 0 ] && [ -z "${storage_migration:-}" ]; then
-        [ "$APP_VOLUME" = 1 ] || fail_update 'Final application volume is not active'
-        sh "${APP_STORAGE_TOOL:-$ROOT_PREFIX/usr/local/bin/un260_app_storage}" --verify-layout >> "$LOG" 2>&1 || fail_update 'Final application storage layout verification failed'
-    fi
+
 }
 
 validate_storage_space()
@@ -1308,8 +1303,6 @@ validate_storage_space()
     root_required_kb=$((ROOT_PEAK_REQUIRED_KB + trial_required_kb + 2048))
     usb_required_kb=$((BACKUP_REQUIRED_KB + 4096))
     echo "Storage preflight: root_free=${root_free_kb}KB root_peak=${ROOT_PEAK_REQUIRED_KB}KB root_required=${root_required_kb}KB usb_free=${usb_free_kb}KB backup_required=${BACKUP_REQUIRED_KB}KB" >> "$LOG"
-    [ "$root_free_kb" -ge "$root_required_kb" ] ||
-        fail_update "Insufficient root space: need ${root_required_kb}KB, free ${root_free_kb}KB; keep USB log for storage service"
     [ "$usb_free_kb" -ge "$usb_required_kb" ] ||
         fail_update "Insufficient USB space for upgrade rollback backup"
     if [ "$APP_VOLUME" = 1 ]; then
@@ -1317,6 +1310,22 @@ validate_storage_space()
         case "$app_free_kb" in ''|*[!0-9]*) fail_update 'Cannot read app volume free space' ;; esac
         app_required_kb=$((APP_PEAK_REQUIRED_KB + 2048))
         echo "App preflight: free=${app_free_kb}KB peak=${APP_PEAK_REQUIRED_KB}KB required=${app_required_kb}KB" >> "$LOG"
+        if [ "$TRIAL_ENABLED" = 1 ] &&
+           { [ "$root_free_kb" -lt "$root_required_kb" ] || [ "$app_free_kb" -lt "$app_required_kb" ]; }; then
+            if [ "$root_free_kb" -lt "$root_required_kb" ]; then
+                run_resource_maintenance || echo 'SDK maintenance incomplete; checking actual capacity' >> "$LOG"
+            fi
+            "$SYNC_TOOL" --prepare-history-space "${ROOT_PREFIX%/}/etc/ui_state/count_history" "$APP_VOLUME_DIR" \
+                "$root_required_kb" "$app_required_kb" >> "$LOG" 2>&1 ||
+                echo 'History space preparation incomplete; checking actual capacity' >> "$LOG"
+            root_free_kb=$(df -Pk "${ROOT_PREFIX:-/}" | awk 'NR==2 {print $4}')
+            app_free_kb=$(df -Pk "$APP_VOLUME_DIR" | awk 'NR==2 {print $4}')
+            case "$root_free_kb:$app_free_kb" in :*|*:|*[!0-9:]*) fail_update 'Unable to determine upgrade storage capacity' ;; esac
+        fi
+    fi
+    [ "$root_free_kb" -ge "$root_required_kb" ] ||
+        fail_update "Insufficient root space: need ${root_required_kb}KB, free ${root_free_kb}KB; keep USB log for storage service"
+    if [ "$APP_VOLUME" = 1 ]; then
         [ "$app_free_kb" -ge "$app_required_kb" ] || fail_update "Insufficient app volume space: need ${app_required_kb}KB, free ${app_free_kb}KB; keep USB log"
     fi
 }
@@ -1372,47 +1381,33 @@ run_resource_maintenance()
 {
     maintenance_rel=usr/local/bin/un260_resource_cleanup
     maintenance=${RESOURCE_CLEANUP_TOOL:-$ROOT_PREFIX/$maintenance_rel}
+    demo_present=0
+    for demo in "$ROOT_PREFIX/usr/local/share/ge_data" "$ROOT_PREFIX"/usr/local/bin/ge_*; do
+        [ ! -e "$demo" ] || { demo_present=1; break; }
+    done
+    [ "$demo_present" = 1 ] || return 0
     if [ ! -e "$maintenance" ]; then
         echo 'Storage maintenance: not installed; bootstrap package needed for automatic cleanup' >> "$LOG"
         return 0
     fi
-    safe_destination "$maintenance_rel" && [ -f "$maintenance" ] || fail_update 'Unsafe storage maintenance helper'
+    safe_destination "$maintenance_rel" && [ -f "$maintenance" ] || return 1
     grep -q 'UN260_STORAGE_SYNC_1' "$maintenance" || { echo 'Skip old maintenance helper until guarded bootstrap is installed' >> "$LOG"; return 0; }
-    # Do not retire a file explicitly owned by this package or its delta base.
-    for table in install.tsv baseline.tsv target.tsv; do
+    # Never retire a file explicitly owned by the incoming package.
+    for table in install.tsv target.tsv; do
         [ -f "$STAGE_DIR/$table" ] || continue
         if grep -Eq 'usr/local/(share/ge_data(/|$)|bin/ge_)' "$STAGE_DIR/$table"; then
             echo 'Storage maintenance: skipped; package references SDK demo files' >> "$LOG"
             return 0
         fi
     done
-    echo 'Storage maintenance: backup and exact-hash cleanup before space preflight' >> "$LOG"
-    sh "$maintenance" --apply --updater "$$" >> "$LOG" 2>&1 || fail_update 'Storage maintenance failed; original UI unchanged, inspect USB log'
+    echo 'Storage maintenance: low root space, checking known SDK files' >> "$LOG"
+    sh "$maintenance" --apply --updater "$$" >> "$LOG" 2>&1
 }
 
 execute_plan()
 {
     validate_install_manifest
     boot_package_request || fail_update "Invalid or incomplete boot bundle publication"
-    if [ -n "${storage_migration:-}" ]; then
-        validate_migration_plan
-        validate_storage_space
-        [ -f "$ROOT_PREFIX/usr/local/bin/un260_app_storage" ] || fail_update 'Install storage bootstrap first'
-        grep -q 'UN260_STORAGE_SYNC_1' "$ROOT_PREFIX/usr/local/bin/un260_app_storage" || fail_update 'Install guarded bootstrap before migration'
-        grep -q 'UN260_MTD_STREAM_1' "$ROOT_PREFIX/usr/local/bin/un260_app_storage" || fail_update 'Install streaming-read repair package before migration'
-        if [ "$storage_migration" = "$STORAGE_POLICY_V2" ]; then
-            if ! grep -q 'UN260_STORAGE_POLICY_V2' "$ROOT_PREFIX/usr/local/bin/un260_app_storage"; then
-                echo 'Install the matching storage compatibility bridge before migration' >> "$LOG"
-                fail_update 'Storage recovery component too old'
-            fi
-        fi
-        if [ "$storage_migration" = "$STORAGE_POLICY_V3" ]; then
-            grep -q 'UN260_STORAGE_POLICY_V3' "$ROOT_PREFIX/usr/local/bin/un260_app_storage" || fail_update 'Install matching backed-up legacy storage bridge before migration'
-        fi
-        sh "$ROOT_PREFIX/usr/local/bin/un260_app_storage" --migrate "$storage_migration" >> "$LOG" 2>&1 || fail_update 'Storage migration paused; keep USB backup and log; no IMG required for diagnosis'
-        prepare_app_storage || fail_update 'Cannot prepare migrated application volume'
-    fi
-    run_resource_maintenance
     if [ "$INSTALL_ENTRY_COUNT" = 0 ] && { [ -z "$BOOT_REQUEST_ID" ] || { [ "$BOOT_REQUEST_ID" = "$BOOT_OLD_ID" ] && [ "$BOOT_REQUEST_HASH" = "$BOOT_OLD_HASH" ]; }; }; then
         write_status 94 verify verify_installed "" "Verifying installed files and storage layout"
         verify_installed_targets
@@ -1455,19 +1450,6 @@ execute_plan()
     finish_success 'Upgrade completed successfully; reboot is required'
 }
 
-validate_migration_plan()
-{
-    [ "$package_schema" = 1 ] && [ "$(manifest_value package_type)" = storage-migration ] || fail_update 'Invalid migration package'
-    case "$storage_migration" in "$STORAGE_POLICY_V2"|"$STORAGE_POLICY_V3"|e19b211e20f31ce8d82c1e40b6fe3feca04e758f887c17beb976e444ab964b17) ;;
-        *) fail_update 'Unsupported storage migration policy' ;;
-    esac
-    while IFS= read -r migration_rel; do
-        case "$migration_rel" in usr/local/bin/un260_storage_sync|usr/local/bin/un260_resource_cleanup|usr/local/bin/un260_app_storage|usr/bin/ui_update.sh|etc/init.d/S00lvgl) ;;
-            *) fail_update 'Migration package must not replace application or business data' ;;
-        esac
-    done < "$SEEN_TARGETS"
-}
-
 prepare_usb_work()
 {
     # Older installer backups with actual entries need review, never discard.
@@ -1485,87 +1467,6 @@ prepare_usb_work()
         fail_update 'USB staging marker write failed; check filesystem; preserve backup'
     fi
     usb_barrier || fail_update 'USB staging writeback failed; check filesystem or connection; preserve backup'
-}
-
-validate_delta_table()
-{
-    table=$1
-    : > "$SEEN_TARGETS"
-    while IFS='|' read -r dh dm ds dp extra; do
-        [ -n "$dh" ] && [ -z "$extra" ] || fail_update "Malformed delta table"
-        echo "$dh" | grep -Eq '^[0-9a-f]{64}$' || fail_update "Bad delta digest"
-        case "$dm" in 0644|0755) ;; *) fail_update "Bad delta mode" ;; esac
-        case "$ds" in ''|*[!0-9]*) fail_update "Bad delta size" ;; esac
-        is_safe_relative_path "$dp" && is_allowed_target "$dp" && safe_destination "$dp" || fail_update "Unsafe delta target"
-        grep -Fx "$dp" "$SEEN_TARGETS" >/dev/null && fail_update "Duplicate delta target"
-        echo "$dp" >> "$SEEN_TARGETS"
-    done < "$table"
-}
-
-delta_target_matches()
-{
-    while IFS='|' read -r mh mm ms mp; do
-        match_dest=$(destination_for "$mp")
-        [ -f "$match_dest" ] || return 1
-        [ "$(sha256sum "$match_dest" | awk '{print $1}')" = "$mh" ] || return 1
-        [ "$(wc -c < "$match_dest" | tr -d ' ')" = "$ms" ] || return 1
-        case "$mm" in 0755) match_mode=-rwxr-xr-x ;; *) match_mode=-rw-r--r-- ;; esac
-        [ "$(LC_ALL=C ls -ld "$match_dest" | awk '{print $1}')" = "$match_mode" ] || return 1
-    done < "$STAGE_DIR/target.tsv"
-    while IFS='|' read -r mh mm ms mp; do
-        case "$mp" in "$BOOT_BUNDLE_TREE"/*) continue ;; esac
-        if ! awk -F '|' -v p="$mp" '$4==p {found=1} END {exit !found}' "$STAGE_DIR/target.tsv"; then
-            [ ! -e "$ROOT_PREFIX/$mp" ] || return 1
-        fi
-    done < "$STAGE_DIR/baseline.tsv"
-}
-
-validate_delta_baseline()
-{
-    [ "$(manifest_value package_type)" = ui-delta ] || fail_update "Wrong incremental type"
-    [ -f "$STAGE_DIR/baseline.tsv" ] && [ -f "$STAGE_DIR/target.tsv" ] || fail_update "Missing delta tables"
-    for name in baseline target; do
-        expected=$(manifest_value "${name}_id")
-        actual=$(sha256sum "$STAGE_DIR/$name.tsv" | awk '{print $1}')
-        [ -n "$expected" ] && [ "$expected" = "$actual" ] || fail_update "Delta table checksum mismatch"
-        validate_delta_table "$STAGE_DIR/$name.tsv"
-    done
-    if delta_target_matches; then
-        DELTA_ALREADY_APPLIED=1
-        echo "Delta target already verified on disk; no replacements required" >> "$LOG"
-        return 0
-    fi
-    # Every immutable packaged dependency is checked on disk, not merely a
-    # stored version marker. Local settings outside this inventory are untouched.
-    while IFS='|' read -r bh bm bs bp; do
-        baseline_dest=$(destination_for "$bp")
-        [ -f "$baseline_dest" ] || fail_update "Incremental baseline missing: use full package"
-        current=$(sha256sum "$baseline_dest" | awk '{print $1}')
-        current_size=$(wc -c < "$baseline_dest" | tr -d ' ')
-        current_mode=$(LC_ALL=C ls -ld "$baseline_dest" | awk '{print $1}')
-        case "$bm" in 0755) mode_text=-rwxr-xr-x ;; *) mode_text=-rw-r--r-- ;; esac
-        [ "$current" = "$bh" ] && [ "$current_size" = "$bs" ] && [ "$current_mode" = "$mode_text" ] ||
-            fail_update "Incremental baseline differs: use matching full package"
-        case "$bp" in "$BOOT_BUNDLE_TREE"/*) continue ;; esac
-        if ! awk -F '|' -v p="$bp" '$4==p {found=1} END {exit !found}' "$STAGE_DIR/target.tsv"; then
-            grep -Fx "delete|$bm|$bp" "$STAGE_DIR/install.tsv" >/dev/null || fail_update "Missing explicit deletion"
-        fi
-    done < "$STAGE_DIR/baseline.tsv"
-    while IFS='|' read -r th tm ts tp; do
-        if [ -f "$STAGE_DIR/payload/$tp" ]; then
-            payload_digest=$(awk -v p="payload/$tp" '$2==p {print $1}' "$STAGE_DIR/checksums.sha256")
-            [ "$payload_digest" = "$th" ] && [ "$(wc -c < "$STAGE_DIR/payload/$tp" | tr -d ' ')" = "$ts" ] || fail_update "Delta payload differs from target"
-            grep -Fx "file|$tm|$tp" "$STAGE_DIR/install.tsv" >/dev/null || fail_update "Missing target install entry"
-        else
-            grep -Fx "$th|$tm|$ts|$tp" "$STAGE_DIR/baseline.tsv" >/dev/null || fail_update "Delta omits a changed dependency"
-        fi
-    done < "$STAGE_DIR/target.tsv"
-    while read -r ph pp; do
-        [ -n "$ph" ] || continue
-        pr=${pp#payload/}
-        awk -F '|' -v p="$pr" '$4==p {found=1} END {exit !found}' "$STAGE_DIR/target.tsv" || fail_update "Unexpected delta payload"
-    done < "$STAGE_DIR/checksums.sha256"
-    echo "Delta baseline verified: all dependency hashes and modes match" >> "$LOG"
 }
 
 record_installed_bundle()
@@ -1606,7 +1507,8 @@ validate_updater_contract()
         : > "$SEEN_TARGETS"
         full_consumed=0
         while IFS='|' read -r full_hash full_mode full_bytes full_path; do
-            safe_destination "$full_path" || fail_update "Unsafe delta target"
+            [ "$full_path" != etc/un260/unified-request ] || fail_update 'A full UN260 UI package is required'
+            safe_destination "$full_path" || fail_update "Unsafe full-package target"
             echo "$full_path" >> "$SEEN_TARGETS"
             full_consumed=$((full_consumed+1))
         done < "$STAGE_DIR/target.tsv" || fail_update 'Full target inventory differs from payload'
@@ -1667,23 +1569,8 @@ validate_boot_compatibility()
         [ "$boot_package_guard" = syncfs-boot-bundle-v1 ] ||
             fail_update 'Package would downgrade boot bundle recovery'
         boot_platform_required=1
-        case "$(manifest_value package_type)" in
-            ui-unified|ui-maintenance|storage-migration)
-                # The small compatibility bridge owns no app or boot resources.
-                [ -z "$boot_declared_id$boot_declared_hash" ] || fail_update 'Invalid or incomplete boot bundle publication'
-                validate_install_manifest
-                while IFS= read -r boot_bridge_target; do
-                    case "$boot_bridge_target" in
-                        usr/local/bin/un260_storage_sync|usr/local/bin/un260_resource_cleanup|usr/local/bin/un260_app_storage|usr/bin/ui_update.sh|etc/init.d/S00lvgl) ;;
-                        usr/local/bin/un260_upgrade_display|etc/un260/unified-request)
-                            [ "$(manifest_value package_type)" = ui-unified ] || fail_update 'Package would downgrade boot bundle recovery' ;;
-                        *) fail_update 'Package would downgrade boot bundle recovery' ;;
-                    esac
-                done < "$SEEN_TARGETS"
-                ;;
-            *) [ -n "$boot_declared_id" ] && [ -n "$boot_declared_hash" ] ||
-                fail_update 'Package would downgrade boot bundle recovery' ;;
-        esac
+        [ -n "$boot_declared_id" ] && [ -n "$boot_declared_hash" ] ||
+            fail_update 'Package would downgrade boot bundle recovery'
     fi
     if [ "$boot_package_guard" = syncfs-boot-bundle-v1 ]; then boot_platform_required=1; fi
     [ "$boot_platform_required" = 1 ] || return 0
@@ -1706,55 +1593,12 @@ validate_boot_compatibility()
     fi
 }
 
-validate_storage_policy_components()
-{
-    if [ -f "$ROOT_PREFIX/$BOOT_ACTIVE" ] && [ -f "$STAGE_DIR/payload/usr/bin/ui_update.sh" ] &&
-        ! grep -q UN260_BOOT_BUNDLE_1 "$STAGE_DIR/payload/usr/bin/ui_update.sh"; then
-        fail_update 'Package would downgrade boot bundle recovery'
-    fi
-    # A v2 journal must never be handed to a v1 helper. Check all package
-    # routes, including the outer bridge before its early execute_plan path.
-    policy_v2_required=0
-    installed_helper=$ROOT_PREFIX/usr/local/bin/un260_app_storage
-    if [ -f "$installed_helper" ] && grep -q 'UN260_STORAGE_POLICY_V2' "$installed_helper"; then
-        policy_v2_required=1
-    fi
-    if [ "$(manifest_value storage_migration)" = "$STORAGE_POLICY_V2" ]; then
-        policy_v2_required=1
-    fi
-    payload_helper=$STAGE_DIR/payload/usr/local/bin/un260_app_storage
-    policy_markers=UN260_STORAGE_POLICY_V2
-    if { [ -f "$installed_helper" ] && grep -q 'UN260_STORAGE_POLICY_V3' "$installed_helper"; } ||
-        { [ -f "$payload_helper" ] && grep -q 'UN260_STORAGE_POLICY_V3' "$payload_helper"; } ||
-        [ "$(manifest_value storage_migration)" = "$STORAGE_POLICY_V3" ]; then
-        policy_v2_required=1
-        policy_markers='UN260_STORAGE_POLICY_V2 UN260_STORAGE_POLICY_V3'
-    fi
-    if [ -f "$payload_helper" ] && grep -q 'UN260_STORAGE_POLICY_V2' "$payload_helper"; then
-        policy_v2_required=1
-    fi
-    [ "$policy_v2_required" = 1 ] || return 0
-    for policy_component in usr/local/bin/un260_app_storage usr/bin/ui_update.sh etc/init.d/S00lvgl; do
-        if [ -e "$STAGE_DIR/payload/$policy_component" ]; then
-            for policy_marker in $policy_markers; do
-                if ! grep -q "$policy_marker" "$STAGE_DIR/payload/$policy_component"; then
-                    echo 'Package would downgrade storage recovery; use matching compatibility components' >> "$LOG"
-                    fail_update 'Storage recovery component too old'
-                fi
-            done
-        fi
-    done
-}
-
 install_bundle()
 {
-    # Capture the original USB archive, never an inner package later moved or
-    # deleted by unified continuation. Manual/boot upgrades have no UI-supplied
-    # --bundle-fnv; they must publish the same installed identity after success.
-    if [ "$UNIFIED_RUNNING" = 0 ]; then
+    # The V1 dispatcher verifies the selected archive before and after extraction.
+    if [ -z "$DISPATCH_CONTEXT" ]; then
         BUNDLE_FNV=$("$SYNC_TOOL" --hash-fnv64 "$BUNDLE_PATH" 2>> "$LOG") ||
             fail_update 'Cannot fingerprint selected USB package'
-        echo "$BUNDLE_FNV" | grep -Eq '^[0-9a-f]{16}$' || fail_update 'Invalid selected package fingerprint'
     fi
     write_status 5 verify "verify_archive" "" ""
     prepare_usb_work
@@ -1769,9 +1613,7 @@ install_bundle()
         write_status 10 extract "extract" "" ""
         "$unpacker" "$BUNDLE_PATH" "$STAGE_DIR" >> "$LOG" 2>&1 || fail_update "Unsafe or damaged archive"
     else
-        validate_archive_paths
-        write_status 10 extract "extract" "" ""
-        tar -xzf "$BUNDLE_PATH" -C "$STAGE_DIR" >> "$LOG" 2>&1 || fail_update "Failed to extract upgrade archive"
+        fail_update 'A matched package extractor is required'
     fi
 
     write_status 18 verify "verify_manifest" "" ""
@@ -1789,7 +1631,8 @@ install_bundle()
     package_id=$(manifest_value package_id)
 
     [ "$package_format" = "UN260_UPGRADE" ] || fail_update "Unsupported package format"
-    case "$package_schema" in 1|2) ;; *) fail_update "Unsupported package schema" ;; esac
+    [ "$package_schema" = 1 ] && [ "$(manifest_value package_type)" = ui ] &&
+        [ -z "$(manifest_value storage_migration)" ] || fail_update 'A full UN260 UI package is required'
     [ "$package_product" = "UN260" ] || fail_update "Package is for another product"
     [ -n "$package_version" ] || fail_update "Package version is missing"
     echo "$package_version" | grep -Eq '^[A-Za-z0-9._-]{1,48}$' ||
@@ -1805,27 +1648,6 @@ install_bundle()
     validate_payload_checksums
     validate_updater_contract
     validate_boot_compatibility
-    validate_storage_policy_components
-    if [ "$UNIFIED_RESUME" = 1 ] && [ "$UNIFIED_RUNNING" = 0 ]; then
-        [ "$(manifest_value package_type)" = ui-unified ] || fail_update 'Keep the same unified USB package used before restart'
-    fi
-    if [ "$(manifest_value package_type)" = ui-unified ]; then
-        [ "$UNIFIED_RUNNING" = 0 ] && [ "$VERIFY_ONLY" = 0 ] || fail_update 'Nested unified packages are forbidden'
-        storage_migration=""
-        validate_unified_bridge
-        if [ "$UNIFIED_RESUME" = 1 ]; then
-            continue_unified
-        elif [ "$APP_VOLUME" = 1 ]; then
-            complete_unified_explicit
-        else
-            # Old and new installers use this same tiny first-pass manifest.
-            # No app, nested package or partition initialization reaches root.
-            UNIFIED_BRIDGE=1
-            execute_plan
-        fi
-        return 0
-    fi
-    storage_migration=$(manifest_value storage_migration)
     if [ "$GUARDED" = 1 ]; then
         boot_guard_supported || fail_update 'Package predates USB write protection; use current UPK'
         for guarded_component in usr/bin/ui_update.sh usr/local/bin/un260_app_storage usr/local/bin/un260_resource_cleanup usr/local/bin/un260_storage_sync; do
@@ -1834,29 +1656,16 @@ install_bundle()
             fi
         done
     fi
-    if [ "$VERIFY_ONLY" = 0 ] && [ -e "$ROOT_PREFIX/etc/un260/app-storage/pending" ] && [ -z "$storage_migration" ]; then
-        fail_update 'Finish the pending storage migration before a normal update'
+    [ "$APP_VOLUME" = 1 ] && [ "$(manifest_value storage_layout)" = app-volume-v1 ] ||
+        fail_update 'Package requires the factory application volume'
+    for component in usr/bin/ui_update.sh usr/local/bin/un260_app_storage etc/init.d/S00lvgl; do
+        [ -f "$STAGE_DIR/payload/$component" ] &&
+            grep -q 'UN260_APP_VOLUME_V1' "$STAGE_DIR/payload/$component" ||
+            fail_update 'Storage-compatible recovery component missing'
+    done
+    if [ -e "$ROOT_PREFIX/etc/un260/app-storage/pending" ] || [ -L "$ROOT_PREFIX/etc/un260/app-storage/pending" ]; then
+        fail_update 'Existing storage migration requires service'
     fi
-    if [ "$APP_VOLUME" = 1 ] || [ -n "$storage_migration" ]; then
-        [ "$(manifest_value storage_layout)" = app-volume-v1 ] || fail_update 'Package predates app-volume support; use current full UPK'
-        # Do not allow a declared capability to downgrade the actual recovery
-        # components. These exact small files are required in full/migration.
-        for component in usr/bin/ui_update.sh usr/local/bin/un260_app_storage etc/init.d/S00lvgl; do
-            if [ "$package_schema" = 1 ] || [ -e "$STAGE_DIR/payload/$component" ]; then
-                [ -f "$STAGE_DIR/payload/$component" ] || fail_update 'Storage-compatible recovery component missing'
-                grep -q 'UN260_APP_VOLUME_V1' "$STAGE_DIR/payload/$component" || fail_update 'Storage recovery component too old'
-            fi
-        done
-    fi
-    if [ "$package_schema" = 2 ]; then validate_delta_baseline; fi
-    if [ "$VERIFY_ONLY" = 1 ]; then
-        [ "$package_schema" = 1 ] || fail_update 'Unified inner package must use full schema'
-        validate_install_manifest
-        boot_package_request || fail_update "Invalid or incomplete boot bundle publication"
-        if [ -n "$storage_migration" ]; then validate_migration_plan; fi
-        return 0
-    fi
-
     write_status 34 preflight "preflight" "" ""
     execute_plan
 }
@@ -1869,155 +1678,30 @@ checked_digest()
     printf '%s\n' "$digest_value"
 }
 
-validate_unified_bridge()
+legacy_request_pending()
 {
-    [ "$package_schema" = 1 ] && boot_guard_supported &&
-        [ "$(manifest_value storage_layout)" = app-volume-v1 ] && [ -z "$(manifest_value storage_migration)" ] || fail_update 'Invalid unified capabilities'
-    validate_install_manifest
-    [ "$(wc -l < "$SEEN_TARGETS" | tr -d ' ')" = 7 ] || fail_update 'Incomplete unified bridge'
-    for bridge_required in usr/local/bin/un260_storage_sync usr/local/bin/un260_resource_cleanup usr/local/bin/un260_app_storage usr/local/bin/un260_upgrade_display usr/bin/ui_update.sh etc/init.d/S00lvgl etc/un260/unified-request; do
-        grep -Fx "$bridge_required" "$SEEN_TARGETS" >/dev/null || fail_update 'Unexpected unified bridge file set'
-    done
-}
-
-unified_pending()
-{
-    [ -e "$ROOT_PREFIX/$UNIFIED_REQUEST" ] || return 1
-    safe_destination "$UNIFIED_REQUEST" && [ -f "$ROOT_PREFIX/$UNIFIED_REQUEST" ] || return 0
-    request_id=$(checked_digest "$ROOT_PREFIX/$UNIFIED_REQUEST") || return 0
-    [ -f "$INSTALLED_STATE_DIR/unified.completed" ] &&
+    old_request=etc/un260/unified-request
+    [ -e "$ROOT_PREFIX/$old_request" ] || [ -L "$ROOT_PREFIX/$old_request" ] || return 1
+    boot_safe_file "${ROOT_PREFIX:-/}" "$old_request" || return 0
+    request_id=$(checked_digest "$ROOT_PREFIX/$old_request") || return 0
+    [ -f "$INSTALLED_STATE_DIR/unified.completed" ] && [ ! -L "$INSTALLED_STATE_DIR/unified.completed" ] &&
         [ "$(cat "$INSTALLED_STATE_DIR/unified.completed")" = "$request_id" ] && return 1
     return 0
 }
 
-continue_unified()
+# Called only after successful recovery in this invocation of the locked engine.
+app_launch_after_recovery()
 {
-    [ "$package_schema" = 1 ] && boot_guard_supported &&
-        [ "$(manifest_value storage_layout)" = app-volume-v1 ] || fail_update 'Invalid unified capabilities'
-    safe_destination "$UNIFIED_REQUEST" && [ -f "$ROOT_PREFIX/$UNIFIED_REQUEST" ] ||
-        fail_update 'Missing or unsafe continuation request; inspect installed bridge'
-    UNIFIED_COMMIT=$(checked_digest "$ROOT_PREFIX/$UNIFIED_REQUEST") || fail_update 'Cannot read continuation request'
-    bridge_request_hash=$(checked_digest "$STAGE_DIR/payload/$UNIFIED_REQUEST") || fail_update 'Cannot read packaged continuation request'
-    [ "$UNIFIED_COMMIT" = "$bridge_request_hash" ] || fail_update 'Keep the same USB package used before restart'
-    # Check exact installed bridge bytes: never run an obsolete helper simply
-    # because a marker string or a successful first-pass status was present.
-    validate_install_manifest
-    while IFS= read -r bridge_rel; do
-        case "$bridge_rel" in usr/local/bin/un260_storage_sync|usr/local/bin/un260_resource_cleanup|usr/local/bin/un260_app_storage|usr/local/bin/un260_upgrade_display|usr/bin/ui_update.sh|etc/init.d/S00lvgl|etc/un260/unified-request) ;;
-            *) fail_update 'Unified bridge may not install application data' ;; esac
-        # The deployed minimal system has sha256sum but no cmp applet.
-        bridge_installed_hash=$(checked_digest "$ROOT_PREFIX/$bridge_rel") || fail_update 'Cannot read installed bridge component'
-        bridge_payload_hash=$(checked_digest "$STAGE_DIR/payload/$bridge_rel") || fail_update 'Cannot read packaged bridge component'
-        [ "$bridge_installed_hash" = "$bridge_payload_hash" ] || fail_update 'Bridge is incomplete; run this same package then restart'
-        case "$bridge_rel" in "$UNIFIED_REQUEST") bridge_mode=0644 ;; *) bridge_mode=0755 ;; esac
-        verify_installed_file "$bridge_rel" "$bridge_mode"
-    done < "$SEEN_TARGETS"
-    stage_unified_packages "$ROOT_PREFIX/$UNIFIED_REQUEST"
-    UNIFIED_RUNNING=1
-    install_unified_inner_packages
-}
-
-complete_unified_explicit()
-{
-    # A manual UI retry is allowed to install a new request after the old file
-    # transaction has recovered. Boot continuation remains bound to its request.
-    UNIFIED_COMMIT=$(checked_digest "$STAGE_DIR/payload/$UNIFIED_REQUEST") || fail_update 'Cannot read packaged continuation request'
-    stage_unified_packages "$STAGE_DIR/payload/$UNIFIED_REQUEST"
-    UNIFIED_RUNNING=1
-    UNIFIED_BRIDGE=1
-    unified_progress_phase 24 10 100
-    execute_plan
-    UNIFIED_BRIDGE=0
-    install_unified_inner_packages
-}
-
-unified_progress_phase()
-{
-    UNIFIED_PROGRESS_BASE=$1
-    UNIFIED_PROGRESS_SPAN=$2
-    UNIFIED_PROGRESS_SCALE=$3
-}
-
-stage_unified_packages()
-{
-    unified_request_path=$1
-    unified_work=$UPDATE_DIR/.un260_unified
-    [ ! -L "$unified_work" ] || fail_update 'Unsafe unified staging directory'
-    mkdir -p "$unified_work" || fail_update 'Cannot create unified staging'
-    # Request has exactly two ordered digest lines, not executable shell input.
-    [ "$(wc -l < "$unified_request_path" | tr -d ' ')" = 2 ] || fail_update 'Invalid continuation request'
-    for inner in migration application; do
-        if [ "$inner" = migration ]; then line=1; else line=2; fi
-        expected=$(sed -n "${line}p" "$unified_request_path")
-        echo "$expected" | grep -Eq '^[0-9a-f]{64}$' || fail_update 'Invalid inner package digest'
-        inner_src=$STAGE_DIR/payload/usr/local/share/un260-unified/$inner.upk
-        [ "$(checked_digest "$inner_src")" = "$expected" ] || fail_update 'Inner package digest mismatch'
-        [ ! -L "$unified_work/$inner.upk" ] || fail_update 'Unsafe inner package destination'
-        mv -f "$inner_src" "$unified_work/$inner.upk" || fail_update 'Cannot retain inner package on USB'
-    done
-    usb_barrier || fail_update 'Cannot persist unified staging'
-}
-
-install_unified_inner_packages()
-{
-    BUNDLE_PATH=$unified_work/application.upk
-    VERIFY_ONLY=1
-    unified_progress_phase 34 12 24
-    install_bundle
-    [ -z "$storage_migration" ] || fail_update 'Unified application must be a normal full package'
-    grep -Fx usr/local/bin/test_lvgl "$SEEN_TARGETS" >/dev/null &&
-        grep -Fx usr/local/lib/liblvgl.so "$SEEN_TARGETS" >/dev/null || fail_update 'Unified application is missing a core runtime target'
-    if [ "$(manifest_value package_type)" = ui ]; then
-        [ "$PRUNE_STATIC_TREE" = 1 ] || fail_update 'Unified application must own its complete static resource tree'
-    fi
-    BUNDLE_PATH=$unified_work/migration.upk
-    unified_progress_phase 46 4 24
-    install_bundle
-    [ -n "$storage_migration" ] || fail_update 'Unified migration package is missing its policy'
-    VERIFY_ONLY=0
-    # Only after the entire final application package passes validation may
-    # the separately journaled, fingerprint-approved migration run.
-    if [ "$APP_VOLUME" = 0 ]; then
-        BUNDLE_PATH=$unified_work/migration.upk
-        unified_progress_phase 50 15 100
-        install_bundle
+    [ "$APP_VOLUME" = 1 ] && [ -f "$APP_VOLUME_DIR/test_lvgl" ] &&
+        [ ! -L "$APP_VOLUME_DIR/test_lvgl" ] && [ -x "$APP_VOLUME_DIR/test_lvgl" ] || return 1
+    if [ "$RECOVERED_TRIAL_PENDING" = 1 ]; then
+        app_check_trace runtime_files_begin
+        trial_runtime_files_valid || return 1
+        app_check_trace runtime_files_complete
     else
-        echo 'Unified routing: existing managed application volume; no partition initialization' >> "$LOG"
+        [ ! -e "$JOURNAL" ] && [ ! -L "$JOURNAL" ] || return 1
     fi
-    BUNDLE_PATH=$unified_work/application.upk
-    unified_progress_phase 65 29 100
-    install_bundle
-    rm -f "$unified_work/migration.upk" "$unified_work/application.upk" && rmdir "$unified_work" || fail_update 'Cannot clean unified staging'
-    UNIFIED_RUNNING=0
-    mkdir -p "$INSTALLED_STATE_DIR" || fail_update 'Cannot create unified completion directory'
-    finish_success 'Unified upgrade completed; application is starting'
-}
-
-install_legacy_package()
-{
-    [ ! -e "$ROOT_PREFIX/$BOOT_ACTIVE" ] && [ ! -L "$ROOT_PREFIX/$BOOT_ACTIVE" ] &&
-        [ ! -e "$ROOT_PREFIX/dev/.un260-boot-platform" ] || fail_update 'Package would downgrade boot bundle recovery'
-    [ "$APP_VOLUME" = 0 ] || fail_update 'Managed app volume requires a current UPK, not loose legacy files'
-    [ -f "$LEGACY_APP_PATH" ] || fail_update "Upgrade binary not found on USB drive"
-    prepare_usb_work
-    mkdir -p "$STAGE_DIR/payload/usr/local/bin" "$STAGE_DIR/payload/usr/local/lib" \
-        "$STAGE_DIR/payload/usr/local/share"
-    cp "$LEGACY_APP_PATH" "$STAGE_DIR/payload/usr/local/bin/test_lvgl" ||
-        fail_update "Cannot stage legacy app"
-    printf 'file|0755|usr/local/bin/test_lvgl\n' > "$STAGE_DIR/install.tsv"
-    if [ -f "$LEGACY_LIB_PATH" ]; then
-        cp "$LEGACY_LIB_PATH" "$STAGE_DIR/payload/usr/local/lib/liblvgl.so" ||
-            fail_update "Cannot stage legacy library"
-        printf 'file|0755|usr/local/lib/liblvgl.so\n' >> "$STAGE_DIR/install.tsv"
-    fi
-    if [ -d "$LEGACY_DATA_PATH" ]; then
-        cp -R "$LEGACY_DATA_PATH" "$STAGE_DIR/payload/usr/local/share/lvgl_data" ||
-            fail_update "Cannot stage legacy resources"
-        printf 'tree|0755|usr/local/share/lvgl_data\n' >> "$STAGE_DIR/install.tsv"
-    fi
-    scan_regular_tree "$STAGE_DIR/payload" "$PAYLOAD_FILES" || fail_update "Unsupported legacy payload types"
-    package_version=legacy
-    execute_plan
+    printf '%s/test_lvgl\n' "$APP_VOLUME_DIR"
 }
 
 # UN260_ENGINE_CONTEXT_MODULE
@@ -2025,58 +1709,40 @@ install_legacy_package()
 
 # Host tests load definitions, then redirect paths into a temporary fixture.
 if [ "${UN260_UPDATER_LIBRARY_ONLY:-0}" = 1 ]; then return 0; fi
-if [ "${1:-}" != --dispatch-context ] && { [ -e /etc/un260/updater-platform ] || [ -L /etc/un260/updater-platform ]; }; then
+if [ "${1:-}" != --dispatch-context ]; then
+    [ -x /usr/local/bin/un260_update_dispatch ] || { echo 'Factory V1 updater required' >&2; exit 1; }
     exec /usr/local/bin/un260_update_dispatch "$@"
 fi
-if [ "${1:-}" = --dispatch-context ]; then
-    [ "$#" = 2 ] && [ "$0" = "$2/engine.sh" ] || exit 2
-    if ! dispatch_context_load "$2"; then
-        echo 'Package engine context is invalid; no installation attempted' >&2
-        if [ "$DISPATCH_OWNERSHIP_VERIFIED" = 1 ]; then
-            trap dispatch_engine_cleanup 0
-        fi
-        exit 1
-    fi
-    trap dispatch_engine_cleanup 0
+[ "$#" = 2 ] && [ "$0" = "$2/engine.sh" ] || exit 2
+if ! dispatch_context_load "$2"; then
+    echo 'Package engine context is invalid; no installation attempted' >&2
+    if [ "$DISPATCH_OWNERSHIP_VERIFIED" = 1 ]; then trap dispatch_engine_cleanup 0; fi
+    exit 1
 fi
-if [ "${1:-}" = --unified-pending ]; then unified_pending; exit $?; fi
-[ -x "$SYNC_TOOL" ] && [ "$("$SYNC_TOOL" --probe)" = UN260_STORAGE_SYNC_1 ] || { echo 'Storage guard missing; install matching repair bootstrap' >&2; exit 1; }
-if [ -z "$DISPATCH_CONTEXT" ]; then
-    exec 7< / || exit 1
-    GUARDED=1
-    if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-        echo "Updater already running or stale lock: $LOCK_DIR" >&2
-        exit 1
-    fi
-    printf '%s\n' "$$" > "$LOCK_DIR/pid" || { rmdir "$LOCK_DIR" 2>/dev/null; exit 1; }
-    trap 'rm -f "$LOCK_DIR/pid"; rmdir "$LOCK_DIR" 2>/dev/null' EXIT
-fi
+trap dispatch_engine_cleanup 0
+# Old V1 factory launchers may still query continuation. Preserve unfinished
+# records for service, and never run or advance a migration from this engine.
+case "$DISPATCH_MODE" in
+    pending) legacy_request_pending; exit $? ;;
+    continue) echo 'Legacy storage migration requires service' >&2; exit 1 ;;
+esac
+app_check_trace storage_begin
 if ! prepare_app_storage; then
     echo 'Application storage unavailable; no update or recovery writes attempted' >&2
     exit 1
 fi
+app_check_trace recovery_begin
 if ! recover_transaction; then
     echo "Recovery failed; keep $JOURNAL and USB backup" >&2
     exit 1
 fi
+app_check_trace recovery_complete
 case "$DISPATCH_MODE" in
-    pending) unified_pending; exit $? ;;
     trial-installed) trial_is_committed; exit $? ;;
     trial-pending) trial_is_committed && trial_boot_eligible; exit $? ;;
     trial-confirm) trial_confirm "$DISPATCH_ACTION_ARG"; exit $? ;;
     trial-rollback) trial_rollback; exit $? ;;
-    app-check)
-        [ "$APP_VOLUME" = 1 ] && [ -f "$APP_VOLUME_DIR/test_lvgl" ] &&
-            [ ! -L "$APP_VOLUME_DIR/test_lvgl" ] && [ -x "$APP_VOLUME_DIR/test_lvgl" ] || exit 1
-        if trial_is_committed; then
-            trial_runtime_valid || exit 1
-        else
-            trial_check_rc=$?
-            [ "$trial_check_rc" = 1 ] || exit 1
-            [ ! -e "$JOURNAL" ] || exit 1
-        fi
-        printf '%s/test_lvgl\n' "$APP_VOLUME_DIR"
-        exit 0 ;;
+    app-check) app_launch_after_recovery; exit $? ;;
     recover) exit 0 ;;
 esac
 if [ "$TRIAL_ENABLED" = 1 ] && trial_is_committed; then
@@ -2084,66 +1750,17 @@ if [ "$TRIAL_ENABLED" = 1 ] && trial_is_committed; then
     write_result pending 'Restart to complete the previous upgrade before installing another package' '' || exit 1
     exit 0
 fi
-if [ "${1:-}" = "--recover" ]; then exit 0; fi
-if [ "${1:-}" = --continue-unified ] || [ "$DISPATCH_MODE" = continue ]; then
-    unified_pending || exit 0
-    UNIFIED_RESUME=1
+[ "$DISPATCH_MODE" = update ] || exit 2
+if legacy_request_pending; then
+    fail_update 'Existing storage migration requires service'
 fi
-
-if [ "${1:-}" = "--bundle-fnv" ]; then
-    BUNDLE_FNV="${2:-}"
-fi
-
-mkdir -p "$USB_MNT"
 rm -f "$STATUS_FILE" "$STATUS_TEMP"
-
-if grep -q " $USB_MNT " /proc/mounts 2>/dev/null; then
-    USB_DEV="$(awk -v m="$USB_MNT" '$2 == m {print $1; exit}' /proc/mounts)"
-fi
-if [ -z "$USB_DEV" ]; then
-    USB_DEV="$(detect_usb_dev)"
-fi
-if [ "$UNIFIED_RESUME" = 1 ]; then
-    # USB enumeration may finish after the early-display startup service.
-    usb_wait=0
-    while [ -z "$USB_DEV" ] && [ "$usb_wait" -lt 15 ]; do
-        sleep 1
-        USB_DEV="$(detect_usb_dev)"
-        usb_wait=$((usb_wait + 1))
-    done
-fi
-if [ -z "$USB_DEV" ] || [ ! -b "$USB_DEV" ]; then
-    fail_update "USB block device not found"
-fi
-if ! grep -q " $USB_MNT " /proc/mounts 2>/dev/null; then
-    mount "$USB_DEV" "$USB_MNT" >> "$LOG" 2>&1 ||
-        fail_update "Failed to mount USB device"
-fi
-
-if [ "$USB_GUARDED" = 0 ]; then
-    exec 8< "$USB_MNT" || fail_update 'Cannot hold USB filesystem for writeback checks'
-    USB_GUARDED=1
-fi
 usb_barrier || fail_update 'USB is not a healthy writable mounted filesystem'
-if [ -z "$DISPATCH_CONTEXT" ]; then : > "$LOG"; fi
 rm -f "$RESULT_FILE" "$USB_MNT/UN260_UPDATE_RESULT.txt" || fail_update 'Cannot clear previous USB result'
 usb_barrier || fail_update 'USB result reset could not be persisted'
 echo "ui_update start: $(date)" >> "$LOG"
 write_status 2 prepare "prepare" "" ""
 
-# Full package wins if both exist, matching UI detection. Never accidentally
-# apply a stale delta while a full repair package is present.
-if [ ! -f "$BUNDLE_PATH" ] && [ -f "$UPDATE_DIR/UN260_UPDATE_DELTA.upk" ]; then
-    BUNDLE_PATH=$UPDATE_DIR/UN260_UPDATE_DELTA.upk
-fi
 echo "Selected package: $BUNDLE_PATH" >> "$LOG"
-
-if [ -f "$BUNDLE_PATH" ]; then
-    install_bundle
-elif [ -f "$LEGACY_APP_PATH" ]; then
-    install_legacy_package
-else
-    fail_update "No supported UN260 upgrade package was found"
-fi
-
-exit 0
+[ -f "$BUNDLE_PATH" ] || fail_update "No supported UN260 upgrade package was found"
+install_bundle

@@ -26,6 +26,14 @@ def verify(package, target, legacy_test=False):
     with tarfile.open(package) as archive:
         verify_envelope(meta, files, archive.extractfile('target.tsv').read(), require_envelope=not legacy_test)
         plan = archive.extractfile('install.tsv').read().decode().splitlines()
+        if not legacy_test:
+            helper = 'usr/local/lib/un260-startup/trial-display'
+            runtime = files['usr/local/lib/un260-startup/runtime.sh'][0]
+            # Earlier V1 runtimes do not use a separately packaged trial display.
+            if b'TRIAL_DISPLAY_SHA256=' in runtime or helper in files:
+                assert helper in files and 'file|0755|' + helper in plan, 'Trial display missing from install plan'
+                expected = hashlib.sha256(files[helper][0]).hexdigest()
+                assert ('TRIAL_DISPLAY_SHA256=' + expected).encode() in runtime.splitlines(), 'Trial display/runtime mismatch'
         assert 'file|0755|usr/local/bin/test_lvgl' in plan, 'Application must be installed in this transaction'
     for name, (data, mode) in files.items():
         if name == 'etc/un260/package-version':

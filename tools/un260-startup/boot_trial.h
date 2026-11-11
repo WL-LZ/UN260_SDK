@@ -5,6 +5,7 @@
 
 typedef struct {
     bool pending;
+    const char *defer_reason; /* Static milestone when the trial cannot be read. */
     char bundle_id[65];
     char manifest_sha256[65];
 } boot_trial_visual_t;

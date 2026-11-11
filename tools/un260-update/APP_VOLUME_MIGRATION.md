@@ -1,3 +1,5 @@
+历史记录。以下迁移或增量命令属于原有工程与对应旧版测试。当前 V1 设备的正式完整 UPK 流程见 [FACTORY_FLEET.md](FACTORY_FLEET.md)。
+
 历史方案记录。当前正式 V1 基座与单个全量 UPK 流程以 README.md、FACTORY_FLEET.md 为准；下文旧迁移入口和预算不作为日常发布指引。
 
 # Application volume v1

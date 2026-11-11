@@ -9,7 +9,7 @@ set(UN260_I18N_SOURCES
 add_executable(un260_unpack tools/un260_unpack.c)
 target_link_libraries(un260_unpack z)
 install(TARGETS un260_unpack RUNTIME DESTINATION bin)
-add_executable(un260_storage_sync tools/un260_storage_sync.c)
+add_executable(un260_storage_sync tools/un260_storage_sync.c tools/un260_history_space.c un260/history/history_object_store.c)
 install(TARGETS un260_storage_sync RUNTIME DESTINATION bin)
 add_executable(un260_upgrade_display un260/lv_drivers/boot_light.c un260/lv_system/backlight_service.c
     un260/lv_system/ui_update_message.c un260/lv_system/ui_update_catalog.c)
@@ -345,6 +345,7 @@ add_executable(${PROJECT_NAME} main.c
     un260/history/history_export_sn_parser.c
     un260/history/history_record_detail.c
     un260/history/history_record_snapshot.c
+    un260/history/history_object_store.c
     un260/history/history_record_reader.c
     un260/history/history_read_task.c
     un260/history/history_query.c

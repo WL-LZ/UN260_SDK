@@ -9,6 +9,8 @@
 #include <unistd.h>
 #include <inttypes.h>
 #include "un260/history/history_read_task.h"
+#include "un260/history/history_object_store.h"
+#include "un260/history/history_work_file.h"
 
 #include "un260/lv_system/machine_time.h"
 #include "un260/currency/currency_state.h"
@@ -18,8 +20,6 @@
 #define UI_HISTORY_STORE_DIR         "/etc/ui_state/count_history"
 #endif
 #define UI_HISTORY_INDEX_PATH        UI_HISTORY_STORE_DIR "/index.cfg"
-#define UI_HISTORY_META_PATH         UI_HISTORY_STORE_DIR "/meta.cfg"
-#define UI_HISTORY_SLOT_PATH_FMT     UI_HISTORY_STORE_DIR "/%02u.rec"
 #define UI_HISTORY_MAGIC             0x48495354u
 #define UI_HISTORY_VERSION           5u
 #define UI_HISTORY_LINE_BUFFER_SIZE  8192u
@@ -35,15 +35,17 @@ static ui_history_store_t *g_history_load_result;
 static bool g_history_load_valid;
 static ui_history_store_t g_history_durable;
 static bool g_history_failed_view;
-/* Worker-only mirror cache; the self-contained v2 index remains authoritative. */
-static uint64_t g_mirror_fingerprints[UI_HISTORY_MAX_RECORDS];
-static bool g_mirror_valid[UI_HISTORY_MAX_RECORDS];
 static bool g_index_needs_directory_sync;
+static bool g_index_recovery_active;
+/* Optional recovery housekeeping. Workers publish the retry decision only
+ * through the corresponding completed job, separately from business jobs. */
+static bool g_return_lock_busy;
+static bool g_return_deferred;
+static bool g_return_requested;
+static unsigned g_return_attempts;
+static uint32_t g_return_tick;
+static storage_job_id_t g_return_job;
 static bool g_history_parent_synced;
-static bool g_meta_valid;
-static uint32_t g_meta_total;
-static uint32_t g_meta_next_record;
-static uint16_t g_meta_next_slot;
 static storage_job_id_t g_history_jobs[STORAGE_WORKER_CAPACITY];
 static size_t g_history_job_sizes[STORAGE_WORKER_CAPACITY];
 static storage_job_id_t g_capacity_job;
@@ -81,14 +83,6 @@ static void history_copy_store(ui_history_store_t *dst,const ui_history_store_t 
      * full 1000-record reserve on the UI thread. Inactive tail is never read. */
     memcpy(dst,src,history_snapshot_size(src));
 }
-static uint64_t history_fingerprint(const ui_history_record_t *record)
-{
-    const unsigned char *p=(const unsigned char *)record;
-    uint64_t hash=UINT64_C(14695981039346656037);
-    for(size_t i=0;i<sizeof(*record);i++) hash=(hash^p[i])*UINT64_C(1099511628211);
-    return hash;
-}
-
 static void history_ensure_loaded(void);
 
 static void history_store_reset(ui_history_store_t *store)
@@ -138,28 +132,22 @@ static int history_commit_atomic_file(FILE *fp, int fd,
                                       const char *tmp_path, const char *path,
                                       bool sync_directory)
 {
-    bool write_failed;
-
-    if (fp == NULL || fd < 0 || tmp_path == NULL || path == NULL) {
-        return -1;
-    }
-
-    write_failed = ferror(fp) != 0;
-    if (fflush(fp) != 0) {
-        write_failed = true;
-    }
-    if (!write_failed && fsync(fd) != 0) {
-        write_failed = true;
-    }
-    if (fclose(fp) != 0) {
-        write_failed = true;
-    }
-    if (write_failed) {
+    if (fp == NULL || fd < 0 || tmp_path == NULL || path == NULL) return -1;
+    int error=ferror(fp)?(errno?errno:EIO):0;
+    if (fflush(fp) && !error) error=errno;
+    if (!error && fsync(fd)) error=errno;
+    struct stat written,current;
+    bool identified=fstat(fd,&written)==0;
+    if (!identified && !error) error=errno;
+    if (fclose(fp) && !error) error=errno;
+    bool same=identified && !lstat(tmp_path,&current) && S_ISREG(current.st_mode) &&
+              current.st_nlink==1 && current.st_uid==geteuid() &&
+              current.st_ino==written.st_ino && current.st_dev==written.st_dev;
+    if (!same) { errno=error?error:ESTALE; return -1; }
+    if (error || rename(tmp_path,path)) {
+        if (!error) error=errno;
         (void)unlink(tmp_path);
-        return -1;
-    }
-    if (rename(tmp_path, path) != 0) {
-        (void)unlink(tmp_path);
+        errno=error;
         return -1;
     }
 
@@ -506,49 +494,6 @@ static void history_write_detail_ref(FILE *fp,const char *prefix,const ui_histor
     fputc('\n',fp);
 }
 
-static void history_write_kv(FILE *fp, uint16_t slot_no, const ui_history_record_t *rec)
-{
-    char buf[128];
-    char prefix[32];
-
-    if (fp == NULL || rec == NULL) {
-        return;
-    }
-
-    snprintf(buf, sizeof(buf), "slot%02u_valid=%d\n", (unsigned)slot_no, rec->valid ? 1 : 0);
-    fputs(buf, fp);
-    snprintf(buf, sizeof(buf), "slot%02u_selected=%d\n", (unsigned)slot_no, rec->selected ? 1 : 0);
-    fputs(buf, fp);
-    snprintf(buf, sizeof(buf), "slot%02u_slot_no=%u\n", (unsigned)slot_no, (unsigned)rec->slot_no);
-    fputs(buf, fp);
-    snprintf(buf, sizeof(buf), "slot%02u_record_no=%u\n", (unsigned)slot_no, (unsigned)rec->record_no);
-    fputs(buf, fp);
-    snprintf(buf, sizeof(buf), "slot%02u_pcs=%u\n", (unsigned)slot_no, (unsigned)rec->pcs);
-    fputs(buf, fp);
-    snprintf(buf, sizeof(buf), "slot%02u_amount=%u\n", (unsigned)slot_no, (unsigned)rec->amount);
-    fputs(buf, fp);
-    snprintf(buf, sizeof(buf), "slot%02u_currency=%s\n", (unsigned)slot_no, rec->currency);
-    fputs(buf, fp);
-    snprintf(buf, sizeof(buf), "slot%02u_time=%04u-%02u-%02u %02u:%02u:%02u\n",
-                (unsigned)slot_no,
-                (unsigned)rec->year, (unsigned)rec->month, (unsigned)rec->day,
-                (unsigned)rec->hour, (unsigned)rec->minute, (unsigned)rec->second);
-    fputs(buf, fp);
-
-    snprintf(prefix, sizeof(prefix), "slot%02u_", (unsigned)slot_no);
-    history_write_multi(fp,prefix,&rec->multi);
-    fprintf(fp,"%soperator_id=%u\n",prefix,rec->operator_id);
-    history_write_escaped_field(fp,prefix,"operator_name",rec->operator_name);
-    history_write_escaped_field(fp, prefix, "denom", rec->denom_text);
-    history_write_escaped_field(fp, prefix, "sn", rec->sn_text);
-    history_write_escaped_field(fp, prefix, "sn_detail", rec->sn_detail_text);
-    history_write_escaped_field(fp, prefix, "err", rec->error_frame_text);
-    history_write_escaped_field(fp, prefix, "start", rec->start_frame_text);
-    history_write_escaped_field(fp, prefix, "end", rec->end_frame_text);
-    history_write_escaped_field(fp, prefix, "log", rec->session_log);
-    history_write_detail_ref(fp,prefix,rec);
-}
-
 static int history_write_file(const char *path, const ui_history_record_t *rec, uint32_t total_notes,
                               uint32_t next_record_no, uint16_t next_slot_no, uint16_t record_count, uint16_t capacity)
 {
@@ -561,16 +506,26 @@ static int history_write_file(const char *path, const ui_history_record_t *rec, 
         return -1;
     }
 
+    struct stat prior;
+    if (lstat(path,&prior)==0) {
+        if (S_ISLNK(prior.st_mode)) {
+            int previous=history_read_recovery_index(UI_HISTORY_STORE_DIR);
+            if (previous<0) return -1;
+            close(previous);
+            g_index_recovery_active=true;
+        } else if (!S_ISREG(prior.st_mode) || prior.st_nlink!=1 || prior.st_uid!=geteuid()) {
+            errno=EINVAL; return -1;
+        }
+    } else if (errno!=ENOENT) return -1;
     snprintf(tmp, sizeof(tmp), "%s.tmp", path);
-    fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    fd = history_open_work_file(tmp,sizeof(tmp), "magic=1212765012\n");
     if (fd < 0) {
         return -1;
     }
 
     fp = fdopen(fd, "w");
     if (fp == NULL) {
-        close(fd);
-        (void)unlink(tmp);
+        int error=errno; close(fd); errno=error;
         return -1;
     }
 
@@ -612,67 +567,15 @@ static int history_write_file(const char *path, const ui_history_record_t *rec, 
     return history_commit_atomic_file(fp, fd, tmp, path, true);
 }
 
-static int history_write_slot_file(const ui_history_record_t *rec)
-{
-    char path[128];
-    FILE *fp;
-    int fd;
-    char tmp[160];
-
-    if (rec == NULL || rec->slot_no == 0 || rec->slot_no > UI_HISTORY_MAX_RECORDS) {
-        return -1;
-    }
-
-    snprintf(path, sizeof(path), UI_HISTORY_SLOT_PATH_FMT, (unsigned)rec->slot_no);
-    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
-    fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd < 0) {
-        return -1;
-    }
-    fp = fdopen(fd, "w");
-    if (fp == NULL) {
-        close(fd);
-        (void)unlink(tmp);
-        return -1;
-    }
-
-    history_write_kv(fp, rec->slot_no, rec);
-    return history_commit_atomic_file(fp, fd, tmp, path, false);
-}
-
-static int history_write_meta_file(const ui_history_store_t *store)
-{
-    FILE *fp;
-    int fd;
-    char tmp[160];
-
-    snprintf(tmp, sizeof(tmp), "%s.tmp", UI_HISTORY_META_PATH);
-    fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd < 0) {
-        return -1;
-    }
-    fp = fdopen(fd, "w");
-    if (fp == NULL) {
-        close(fd);
-        (void)unlink(tmp);
-        return -1;
-    }
-
-    fprintf(fp, "magic=%u\nversion=%u\n", UI_HISTORY_MAGIC, UI_HISTORY_VERSION);
-    fprintf(fp, "total_notes_counted=%u\n", (unsigned)store->total_notes_counted);
-    fprintf(fp, "next_record_no=%u\n", (unsigned)store->next_record_no);
-    fprintf(fp, "next_slot_no=%u\n", (unsigned)store->next_slot_no);
-    return history_commit_atomic_file(fp, fd, tmp, UI_HISTORY_META_PATH, false);
-}
-
 static void history_update_detail_refs(const ui_history_store_t *store,bool prune)
 {
     if(prune)for(unsigned i=0;i<g_detail_ref_count;i++){
         bool referenced=false;
         for(unsigned j=0;j<store->record_count;j++)if(store->records[j].record_no==g_detail_refs[i].id && store->records[j].detail_hash==g_detail_refs[i].hash){referenced=true;break;}
         if(!referenced){
-            char path[256];snprintf(path,sizeof(path),UI_HISTORY_STORE_DIR "/detail-%u-%016" PRIx64 ".abc",g_detail_refs[i].id,g_detail_refs[i].hash);
-            (void)unlink(path);
+            char name[96];
+            snprintf(name,sizeof(name),"detail-%u-%016" PRIx64 ".abc",g_detail_refs[i].id,g_detail_refs[i].hash);
+            history_remove_detail(UI_HISTORY_STORE_DIR,name);
         }
     }
     g_detail_ref_count=0;
@@ -693,23 +596,22 @@ static bool history_write_full_detail(const ui_history_store_t *store,const unsi
     if(!history_record_snapshot_decode(bytes,size,hash,record->pcs,&detail))return false;
     history_record_detail_release(&detail);
     char path[256],tmp[272];
-    snprintf(path,sizeof(path),UI_HISTORY_STORE_DIR "/detail-%u-%016" PRIx64 ".abc",record->record_no,hash);
+    char name[96];
+    snprintf(name,sizeof(name),"detail-%u-%016" PRIx64 ".abc",record->record_no,hash);
+    int placed=history_place_new_detail(UI_HISTORY_STORE_DIR,name,bytes,size);
+    if (placed!=0) return placed>0;
+    snprintf(path,sizeof(path),UI_HISTORY_STORE_DIR "/%s",name);
     snprintf(tmp,sizeof(tmp),"%s.tmp",path);
-    int fd=open(tmp,O_WRONLY|O_CREAT|O_TRUNC,0644);if(fd<0)return false;
+    int fd=history_open_work_file(tmp,sizeof(tmp),"ABC1");if(fd<0)return false;
     FILE *fp=fdopen(fd,"wb");if(!fp){close(fd);return false;}
     if(fwrite(bytes,1,size,fp)!=size){fclose(fp);return false;}
     return history_commit_atomic_file(fp,fd,tmp,path,true)==0;
 }
 
-/* Worker-owned knowledge of diagnostic mirrors already absent on disk. */
-static bool g_mirror_absent[UI_HISTORY_MAX_RECORDS];
-
 static bool history_save_snapshot(const void *snapshot, size_t size)
 {
     const ui_history_store_t *store = snapshot;
-    int i;
     int result;
-    bool slot_present[UI_HISTORY_MAX_RECORDS + 1] = { false };
 
     if (size < offsetof(ui_history_store_t,records) ||
         store->record_count > UI_HISTORY_MAX_RECORDS || size < history_snapshot_size(store) ||
@@ -720,59 +622,44 @@ static bool history_save_snapshot(const void *snapshot, size_t size)
     size_t summary=history_snapshot_size(store);
     if(size>summary && !history_write_full_detail(store,(const unsigned char *)snapshot+summary,size-summary))return false;
 
-    if (g_index_needs_directory_sync) {
-        if (history_sync_store_dir() != 0) return false;
-        g_index_needs_directory_sync = false;
-    } else {
-        result = history_write_file(UI_HISTORY_INDEX_PATH, store->records,
-                                    store->total_notes_counted, store->next_record_no,
-                                    store->next_slot_no, store->record_count, store->capacity);
-        if (result != 0) {
-            g_index_needs_directory_sync = result == -2;
-            return false;
-        }
+    /* Only a borrowed index needs the updater gate. Never compete with the
+     * dispatcher on the normal root save path. Hold the same lock through
+     * the retry, durable replacement and return of the temporary app bytes. */
+    int gate=-1;
+    result=0;
+    struct stat active;
+    if (g_index_recovery_active && !lstat(UI_HISTORY_INDEX_PATH,&active) && S_ISLNK(active.st_mode)) {
+        gate=history_index_upgrade_lock();
+        if (gate<0) return false;
     }
-
-    history_update_detail_refs(store,true);
-
-    /* Only dirty mirrors are rewritten. Mirrors are diagnostic exports, not a
-     * second authority: an interrupted mirror update cannot invalidate index. */
-    for (i = 0; i < store->record_count; i++) {
-        const ui_history_record_t *record = &store->records[i];
-        uint16_t slot_no = record->slot_no;
-        uint64_t fingerprint = history_fingerprint(record);
-
-        if (slot_no > 0 && slot_no <= UI_HISTORY_MAX_RECORDS) {
-            slot_present[slot_no] = true;
-            g_mirror_absent[slot_no - 1] = false;
-            if ((!g_mirror_valid[slot_no - 1] ||
-                 g_mirror_fingerprints[slot_no - 1] != fingerprint) &&
-                history_write_slot_file(record) == 0) {
-                g_mirror_fingerprints[slot_no - 1] = fingerprint;
-                g_mirror_valid[slot_no - 1] = true;
+    if (g_index_needs_directory_sync) {
+        if (history_sync_store_dir()!=0) result=-2;
+        else g_index_needs_directory_sync=false;
+    } else {
+        result=history_write_file(UI_HISTORY_INDEX_PATH,store->records,store->total_notes_counted,
+                                  store->next_record_no,store->next_slot_no,store->record_count,store->capacity);
+        if (result==-1 && errno==ENOSPC) {
+            if (gate<0) gate=history_index_upgrade_lock();
+            if (gate>=0) {
+                g_index_recovery_active=true;
+                if (history_release_index_headroom(UI_HISTORY_STORE_DIR))
+                    result=history_write_file(UI_HISTORY_INDEX_PATH,store->records,store->total_notes_counted,
+                                              store->next_record_no,store->next_slot_no,store->record_count,store->capacity);
             }
         }
+        g_index_needs_directory_sync=result==-2;
     }
-
-    for (i = 1; i <= UI_HISTORY_MAX_RECORDS; i++) {
-        if (!slot_present[i] && !g_mirror_absent[i - 1]) {
-            char slot_path[128];
-
-            snprintf(slot_path, sizeof(slot_path), UI_HISTORY_SLOT_PATH_FMT, (unsigned)i);
-            if (unlink(slot_path) == 0 || errno == ENOENT)
-                g_mirror_absent[i - 1] = true;
-            g_mirror_valid[i - 1] = false;
+    if (g_index_recovery_active) {
+        if (!result) {
+            if (gate<0) gate=history_index_upgrade_lock();
+            if (gate>=0) history_finish_index_headroom(UI_HISTORY_STORE_DIR);
         }
+        g_index_recovery_active=history_has_index_recovery(UI_HISTORY_STORE_DIR);
     }
+    if (gate>=0) close(gate);
+    if (result) return false;
+    history_update_detail_refs(store,true);
 
-    if ((!g_meta_valid || g_meta_total != store->total_notes_counted ||
-         g_meta_next_record != store->next_record_no ||
-         g_meta_next_slot != store->next_slot_no) && history_write_meta_file(store) == 0) {
-        g_meta_total = store->total_notes_counted;
-        g_meta_next_record = store->next_record_no;
-        g_meta_next_slot = store->next_slot_no;
-        g_meta_valid = true;
-    }
     (void)history_sync_store_dir();
     return true;
 }
@@ -1012,6 +899,25 @@ static bool history_loaded_records_valid(const ui_history_store_t *store)
            store->next_record_no > max_record_no;
 }
 
+/* The already validated index stays readable while optional space recovery
+ * waits for an in-flight upgrade. A genuine storage fault is not busy. */
+static bool history_return_job(const void *snapshot,size_t size)
+{
+    (void)snapshot;
+    (void)size;
+    g_return_lock_busy=false;
+    if (!g_index_recovery_active) return true;
+    int gate=history_index_upgrade_lock();
+    if (gate<0) {
+        g_return_lock_busy=errno==EBUSY || errno==EWOULDBLOCK || errno==EAGAIN;
+        return true;
+    }
+    history_finish_index_headroom(UI_HISTORY_STORE_DIR);
+    g_index_recovery_active=history_has_index_recovery(UI_HISTORY_STORE_DIR);
+    close(gate);
+    return true;
+}
+
 static bool history_load_from_file(ui_history_store_t *store)
 {
     FILE *fp;
@@ -1030,12 +936,30 @@ static bool history_load_from_file(ui_history_store_t *store)
 
     history_store_reset(store);
 
-    fp = fopen(UI_HISTORY_INDEX_PATH, "r");
-    if (fp == NULL) {
-        /* Only a genuinely absent index is a new empty store. Treating a
-         * permission/device error as empty would overwrite saved history. */
-        return errno == ENOENT;
+    struct stat active_index;
+    int fd=open(UI_HISTORY_INDEX_PATH,O_RDONLY|O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC);
+    if (fd<0) {
+        /* A missing index is a fresh store. Dangling/foreign links and
+         * media or permission errors never create a new empty history. */
+        if (errno==ENOENT) return true;
+        if (errno!=ELOOP) return false;
+        fd=history_read_recovery_index(UI_HISTORY_STORE_DIR);
+        if (fd<0) return false;
+        g_index_recovery_active=true;
+        if (lstat(UI_HISTORY_INDEX_PATH,&active_index) || !S_ISLNK(active_index.st_mode)) {
+            close(fd); return false;
+        }
+    } else {
+        struct stat opened;
+        if (fstat(fd,&opened) || lstat(UI_HISTORY_INDEX_PATH,&active_index) ||
+            !S_ISREG(active_index.st_mode) || opened.st_dev!=active_index.st_dev ||
+            opened.st_ino!=active_index.st_ino || active_index.st_uid!=geteuid() || active_index.st_nlink!=1) {
+            close(fd); return false;
+        }
+        g_index_recovery_active=history_has_index_recovery(UI_HISTORY_STORE_DIR);
     }
+    fp=fdopen(fd,"r");
+    if (!fp) { close(fd); return false; }
 
     while (fgets(line, sizeof(line), fp) != NULL) {
         char *eq = strchr(line, '=');
@@ -1149,7 +1073,10 @@ static bool history_load_from_file(ui_history_store_t *store)
 
     if (!file_valid) {
         history_store_reset(store);
-    } else history_update_detail_refs(store,false);
+    } else {
+        history_update_detail_refs(store,false);
+        (void)history_return_job(NULL,0);
+    }
 
     return file_valid;
 }
@@ -1195,6 +1122,8 @@ bool ui_history_data_init_poll(void)
         history_store_reset(&g_history_store);
     }
     g_history_loaded = g_history_load_valid;
+    g_return_deferred = g_return_lock_busy;
+    g_return_attempts = g_return_deferred ? 30U : 0U;
     history_copy_store(&g_history_durable,&g_history_store);
     (void)storage_worker_release(g_history_load_job);
     g_history_load_job = 0;
@@ -1223,10 +1152,35 @@ static void history_ensure_loaded(void)
     if (!g_history_load_attempted) ui_history_data_init();
 }
 
+/* Main-thread scheduling. The caller grants an idle window or requests
+ * one attempt for the current upgrade. A new request can resume recovery
+ * after prolonged contention without an open-ended filesystem retry. */
+bool ui_history_data_return_space(uint32_t now_ms,bool requested)
+{
+    bool first=requested && !g_return_requested;
+    g_return_requested=requested;
+    if (!g_return_deferred || g_return_job || g_history_job_count) return true;
+    if (!first && (requested || !g_return_attempts || (uint32_t)(now_ms-g_return_tick)<2000U)) return true;
+    const char request=0;
+    g_return_tick=now_ms;
+    if (!storage_worker_submit(history_return_job,&request,sizeof(request),&g_return_job)) {
+        if (requested) g_return_requested=false;
+        return !requested;
+    }
+    if (g_return_attempts) --g_return_attempts;
+    return true;
+}
+
 bool ui_history_data_poll(uint32_t now_ms)
 {
     history_read_poll_discarded();
     bool changed = !g_history_initialized && ui_history_data_init_poll();
+    if (g_return_job && storage_worker_status(g_return_job)==STORAGE_JOB_SUCCEEDED) {
+        (void)storage_worker_release(g_return_job);
+        g_return_job=0;
+        g_return_deferred=g_return_lock_busy;
+        if (!g_return_deferred) g_return_attempts=0;
+    }
     while (g_history_job_count > 0) {
         storage_job_id_t id = g_history_jobs[0];
         storage_job_status_t status = storage_worker_status(id);

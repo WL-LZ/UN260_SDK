@@ -68,6 +68,8 @@ bool ui_history_data_is_initialized(void);
  * These APIs and the view are owned by the UI thread. Writes are rejected until
  * a successful initial load; an unfinished read is not an empty database. */
 bool ui_history_data_poll(uint32_t now_ms);
+/* Schedule optional recovery while idle or once before an accepted upgrade. */
+bool ui_history_data_return_space(uint32_t now_ms,bool requested);
 storage_job_id_t ui_history_last_commit_id(void);
 storage_job_status_t ui_history_commit_status(storage_job_id_t id);
 storage_job_status_t ui_history_data_status(void);
