@@ -11,8 +11,6 @@
 
 #define PAGE07_CURR_MAX_ITEMS MAX_CURRENCIES
 #define LV_OBJ_FLAG_HIDDEN 1U
-#define LV_ANIM_OFF 0
-#define CURR_TEXT_SEL 0x0073FF
 #include "currency_resume_types.inc"
 
 typedef struct { unsigned flags; int index; } lv_obj_t;
@@ -35,7 +33,7 @@ static lv_timer_t *g_curr_snapshot_prewarm_timer = &prewarm_timer;
 static int g_curr_grid_styled_abs_idx = -1;
 static ui_state_page07_t saved;
 static unsigned rebuilds, saves, snaps, foregrounds;
-static int left_index, revealed_grid_index;
+static int left_index, revealed_grid_index, revealed_grid_page;
 static bool profile;
 
 void page07_curr_model_save(void);
@@ -51,19 +49,16 @@ static bool lv_obj_is_valid(lv_obj_t *obj) { return obj != NULL; }
 static void lv_obj_clear_flag(lv_obj_t *obj, unsigned flag) { assert(obj); obj->flags &= ~flag; }
 static void lv_obj_add_flag(lv_obj_t *obj, unsigned flag) { assert(obj); obj->flags |= flag; }
 static void lv_obj_move_foreground(lv_obj_t *obj) { assert(obj); foregrounds++; }
-static void lv_obj_update_layout(lv_obj_t *obj) { assert(obj == &grid_object); }
-static void lv_obj_scroll_to_view(lv_obj_t *obj, int animate)
-{
-    assert(obj && animate == LV_ANIM_OFF);
-    revealed_grid_index = obj->index;
-}
-static void lv_obj_set_style_text_color(lv_obj_t *obj, unsigned color, int selector)
-{ (void)color; (void)selector; assert(obj); }
-static unsigned lv_color_hex(unsigned value) { return value; }
-static void page07_curr_view_set_image_selected_style(lv_obj_t *obj) { assert(obj); }
-static void page07_curr_view_set_image_unselected_style(lv_obj_t *obj) { assert(obj); }
 static void curr_update_grid_fav_ui(int index) { assert(index >= 0); }
 static void page07_curr_overview_selection(void *ctx) { assert(ctx == &g_page07_curr); }
+static void page07_curr_overview_reveal_selection(void *ctx)
+{
+    assert(ctx == &g_page07_curr);
+    int visible = page07_curr_model_find_visible_pos(g_page07_curr.model.selected_abs_idx);
+    assert(visible >= 0);
+    revealed_grid_index = g_page07_curr.model.visible_indices[visible];
+    revealed_grid_page = visible / 32;
+}
 static void page07_curr_overview_set_active(void *ctx, bool active) { assert(ctx == &g_page07_curr); (void)active; }
 static void curr_set_left_info_by_abs(int index) { left_index = index; }
 static void curr_refresh_left_buttons(void) {}
@@ -140,6 +135,8 @@ static void assert_selected_focus(void)
         assert(g_page07_curr.carousel.motion.position == focused * 228.0f);
     } else {
         assert(revealed_grid_index == index);
+        assert(g_page07_curr.model.selected_visible_idx >= revealed_grid_page * 32);
+        assert(g_page07_curr.model.selected_visible_idx < (revealed_grid_page + 1) * 32);
     }
 }
 static void setup(bool favorites, int mode)
@@ -153,7 +150,7 @@ static void setup(bool favorites, int mode)
     curr_page = &page_object; page_object.flags = LV_OBJ_FLAG_HIDDEN;
     page_07_curr_img_refre();
     snaps = rebuilds = saves = foregrounds = 0;
-    revealed_grid_index = -1;
+    revealed_grid_index = revealed_grid_page = -1;
 }
 static void browse_then_reenter(unsigned destination)
 {

@@ -421,6 +421,38 @@ const char* get_currency_img(const char* code)
         return img_path;
     }
         
+    else if (strcmp(code, "AFN") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_AFN.png");
+        return img_path;
+    }
+    else if (strcmp(code, "KWD") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_KWD.png");
+        return img_path;
+    }
+    else if (strcmp(code, "TMT") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_TMT.png");
+        return img_path;
+    }
+    else if (strcmp(code, "GEL") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_GEL.png");
+        return img_path;
+    }
+    else if (strcmp(code, "BHD") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_BHD.png");
+        return img_path;
+    }
+    else if (strcmp(code, "YER") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_YER.png");
+        return img_path;
+    }
+    else if (strcmp(code, "SYP") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_SYP.png");
+        return img_path;
+    }
+    else if (strcmp(code, "NZD") == 0) {
+        snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_NZD.png");
+        return img_path;
+    }
     else {
         snprintf(img_path, sizeof(img_path), "L:/usr/local/share/lvgl_data/%s","CURR_IQD.png");
         return img_path;

@@ -11,7 +11,7 @@ typedef struct {
 static const currency_metadata_t g_currency_metadata[] = {
     {"EUR", "€"}, {"USD", "$"}, {"CNY", "¥"}, {"RUB", "₽"},
     {"TRY", "₺"}, {"GBP", "£"}, {"MXN", "$"}, {"CAD", "$"},
-    {"ILS", "₪"}, {"AED", "د.ا"}, {"SAR", "ر.س"}, {"IRR", "﷼"},
+    {"ILS", "₪"}, {"AED", "د.إ"}, {"SAR", "ر.س"}, {"IRR", "﷼"},
     {"JPY", "¥"}, {"HKD", "$"}, {"AUD", "$"}, {"SGD", "$"},
     {"CHF", "Fr"}, {"ZAR", "R"}, {"IDR", "Rp"}, {"MOP", "P"},
     {"PKR", "₨"}, {"QAR", "ر.ق"}, {"THB", "฿"}, {"XOF", "Fr"},
@@ -19,7 +19,9 @@ static const currency_metadata_t g_currency_metadata[] = {
     {"AZN", "₼"}, {"LBP", "ل.ل"}, {"EGP", "ج.م"}, {"KRW", "₩"},
     {"PHP", "₱"}, {"INR", "₹"}, {"ISK", "kr"}, {"SOS", "Sh"},
     {"MAD", "د.م."}, {"DZD", "د.ج"}, {"OMR", "ر.ع."},
-    {"IQD", "ع.د"}, {"PLN", "zł"},
+    {"IQD", "ع.د"}, {"PLN", "zł"}, {"AFN", "؋"}, {"KWD", "د.ك"},
+    {"TMT", "m"}, {"GEL", "₾"}, {"BHD", "ب.د"}, {"YER", "﷼"},
+    {"SYP", "ل.س"}, {"NZD", "$"},
 };
 
 static const currency_metadata_t *currency_metadata_find(const char *code)

@@ -128,7 +128,7 @@ def main():
         (work / "history").mkdir(exist_ok=True)
         executable = work / "test-history-view"
         sources = with_i18n(sources, ROOT)
-        command = [compiler, '-DUN260_LOCALE_FONT_DIR="S:'+str(ROOT/'aic_ui/lvgl_data/locale_fonts')+'/"', '-DUI_HISTORY_STORE_DIR="'+str(work/"history")+'"', "-D_GNU_SOURCE", '-DUI_STATE_DIR="/tmp/un260-i18n-tests"', "-pthread", "-std=c11", "-O1", "-g", "-Wall", "-Wextra",
+        command = [compiler, '-DUN260_LOCALE_FONT_DIR="S:'+str(ROOT/'aic_ui/lvgl_data/locale_fonts')+'/"', '-DUI_HISTORY_STORE_DIR="'+str(work/"history")+'"', "-D_GNU_SOURCE", f'-DUI_STATE_DIR="{work / "state"}"', "-pthread", "-std=c11", "-O1", "-g", "-Wall", "-Wextra",
                    "-DLV_DRV_CONF_H", '-DLVGL_DIR="L:/usr/local/share/lvgl_data/"',
                    "-fsanitize=address,undefined" if args.asan else "-fsanitize=undefined", "-fno-sanitize-recover=all",
                    f"-I{work}", f"-I{ROOT}", f"-I{lvgl}", f"-DLV_CONF_PATH={conf}",
@@ -149,7 +149,7 @@ def main():
             with Image.open(ROOT / 'aic_ui/lvgl_data/backgrounds' / (name+'.png')) as image:
                 (work / (name+'.bgra')).write_bytes(image.convert('RGBA').tobytes('raw','BGRA'))
         environment = os.environ.copy()
-        for name in ('CURR_USD.png','CURR_CNY.png'):
+        for name in ('CURR_USD.png','CURR_CNY.png','CURR_AED.png'):
             with Image.open(ROOT/'aic_ui/lvgl_data'/name) as im:
                 assert im.size==(182,103)
                 (work/(name+'.bgra')).write_bytes(im.convert('RGBA').tobytes('raw','BGRA'))

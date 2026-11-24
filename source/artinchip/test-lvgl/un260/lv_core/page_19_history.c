@@ -597,9 +597,17 @@ static void multi_render(void)
         lv_obj_t *symbol_label=label(row,symbol_x,14,48,26,
             symbol?&history->multi_symbol_font.font:&lv_font_instrument_sans_medium_14,HISTORY_MUTED,LV_TEXT_ALIGN_LEFT);
         text_set(symbol_label,symbol?symbol:code);
+        int value_offset=48;
+        if(symbol && symbol_label) {
+            lv_point_t size;
+            lv_txt_get_size(&size,lv_label_get_text(symbol_label),lv_obj_get_style_text_font(symbol_label,0),
+                lv_obj_get_style_text_letter_space(symbol_label,0),0,LV_COORD_MAX,LV_TEXT_FLAG_NONE);
+            lv_obj_set_width(symbol_label,size.x);
+            value_offset=LV_MAX(28,size.x+8);
+        }
         for(unsigned j=0;j<3;j++) {
             int value_x=j==0&&!g?68:x[j]-12;
-            if((g&&j==0)||(!g&&j==2))value_x+=symbol?28:48;
+            if((g&&j==0)||(!g&&j==2))value_x+=value_offset;
             lv_obj_t *l=label(row,value_x,10,j?210:400,30,
                 &lv_font_instrument_sans_semibold_20,HISTORY_BODY,LV_TEXT_ALIGN_LEFT);
             text_set(l,values[j]);

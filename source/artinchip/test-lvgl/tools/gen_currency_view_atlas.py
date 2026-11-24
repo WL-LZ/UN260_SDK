@@ -12,7 +12,7 @@ import json
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-WIDTH, HEIGHT, COLUMNS = 96, 54, 8
+WIDTH, HEIGHT, COLUMNS = 50, 33, 8
 
 
 def save(path, data, check):

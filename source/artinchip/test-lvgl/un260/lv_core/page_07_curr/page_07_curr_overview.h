@@ -17,6 +17,8 @@ typedef struct {
 void page07_curr_overview_build(page07_curr_context_t *ctx,
                                const page07_curr_overview_actions_t *actions);
 void page07_curr_overview_selection(page07_curr_context_t *ctx);
+/* Reveal the confirmed selection without submitting a currency request. */
+void page07_curr_overview_reveal_selection(page07_curr_context_t *ctx);
 /* One decoded atlas is pinned only while VIEW is active. No per-frame work. */
 void page07_curr_overview_set_active(page07_curr_context_t *ctx, bool active);
 

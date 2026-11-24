@@ -353,10 +353,14 @@ static void test_main(void)
     assert(lv_obj_get_style_text_font(s_total_amount_label,0)==&lv_font_manrope_bold_32);
     assert_labels(main_page);write_bmp("main-large-values");
     fixture(false);ui_refresh_main_page();
-    const char *currencies[]={"CNY","EUR","KRW","TRY","INR","PHP","GBP","PKR","ISK","SOS","MAD","DZD","AED","SAR","OMR","QAR","IQD"};
+    const char *currencies[]={"CNY","EUR","KRW","TRY","INR","PHP","GBP","PKR","ISK","SOS","MAD","DZD","AED","SAR","OMR","QAR","IQD",
+                              "AFN","KWD","TMT","GEL","BHD","YER","SYP","NZD"};
+    assert(!strcmp(currency_metadata_symbol("AED"), "د.إ"));
     for(unsigned i=0;i<sizeof(currencies)/sizeof(currencies[0]);++i) {
         assert(currency_state_confirm_active_code(currencies[i]));ui_refresh_main_page();render();
-        lv_obj_t *symbol_probe=lv_label_create(lv_scr_act());lv_label_set_text(symbol_probe,currency_metadata_symbol(currencies[i]));
+        const char *expected_symbol=currency_metadata_symbol(currencies[i]);
+        assert(expected_symbol && expected_symbol[0]);
+        lv_obj_t *symbol_probe=lv_label_create(lv_scr_act());lv_label_set_text(symbol_probe,expected_symbol);
         assert(!strcmp(lv_label_get_text(s_curr_label),lv_label_get_text(symbol_probe)));lv_obj_del(symbol_probe);
         check_single_line(s_curr_label);
         assert(lv_obj_is_visible(s_curr_label) && !lv_obj_is_visible(s_amount_unit_icon));
@@ -622,6 +626,33 @@ static void test_multi_expanded(void)
     tick(40);ui_detail_reveal_update(&reveal,true);assert(!reveal.active&&!reveal.orbit);
     ui_detail_reveal_cancel(&reveal);lv_obj_del(container);
 }
+static void test_multi_aed_symbol(void)
+{
+    unsigned baseline=timers();
+    counting_multi_reset();counting_multi_begin(false);
+    uint8_t live[16]={0xfd,0xdf,16,14,'A','E','D',0,0,0,5,0,1,0,1,0};
+    uint8_t end[13]={0xfd,0xdf,13,14,0,0,0,0,0,0,0,2,0};
+    assert(counting_multi_info(live,16));assert(counting_multi_info(end,13));
+    ui_multi_detail_t *view=ui_multi_detail_create(lv_scr_act(),false,NULL,NULL);assert(view);
+    ui_multi_detail_visible(view,true);tick(80);
+    lv_obj_t *probe=lv_label_create(lv_scr_act());lv_label_set_text(probe,"د.إ");
+    lv_obj_t *row=lv_obj_get_child(ui_multi_detail_scroll(view),0);
+    lv_obj_t *symbol=lv_obj_get_child(row,4);
+    assert(!strcmp(lv_label_get_text(symbol),lv_label_get_text(probe)));
+    check_single_line(symbol);
+    ui_multi_detail_select(view,0,0);
+    uint8_t denom[16]={0xfd,0xdf,16,11};counting_multi_denom(denom,16,lv_tick_get());
+    memcpy(denom+4,"       5  1",11);counting_multi_denom(denom,16,lv_tick_get());
+    memset(denom+4,255,11);counting_multi_denom(denom,16,lv_tick_get());
+    tick(1000);
+    row=lv_obj_get_child(ui_multi_detail_scroll(view),0);
+    symbol=lv_obj_get_child(row,4);
+    assert(!strcmp(lv_label_get_text(symbol),lv_label_get_text(probe)));
+    check_single_line(symbol);
+    lv_obj_del(probe);ui_multi_detail_destroy(view);counting_multi_reset();tick(200);
+    assert(timers()==baseline);
+}
+
 static void assert_main_denom_row(unsigned row,const char *value,const char *pcs,const char *amount)
 {
     lv_obj_t *viewport=lv_recycled_list_object(detail_view->section[0].list);
@@ -883,7 +914,7 @@ int main(void)
     lv_indev_t *indev=lv_indev_drv_register(&driver);assert(indev);
     g_pointer_indev=indev;app_touch_sound_init();
     assert(page_01_main_layout_is_enabled()==(UI_MAIN_LAYOUT_EDIT_DEFAULT_ENABLED!=0));
-    test_list_initial_font();test_main();test_live_denom_projection();test_no_note_motion();test_lifecycle();test_multi_expanded();
+    test_list_initial_font();test_main();test_live_denom_projection();test_no_note_motion();test_lifecycle();test_multi_expanded();test_multi_aed_symbol();
     test_main_layout();
     test_main_footer_layout();
     test_main_quick();

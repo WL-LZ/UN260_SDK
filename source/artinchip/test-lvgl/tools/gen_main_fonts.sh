@@ -28,7 +28,7 @@ source = (root / 'un260/currency/currency_metadata.c').read_text(encoding='utf-8
 symbols = [json.loads(s) for s in re.findall(r'\{"[A-Z]{3}",\s*("(?:[^"\\]|\\.)*")\}', source)]
 assert symbols, 'No currency metadata parsed'
 assert len(symbols) == len(re.findall(r'\{"[A-Z]{3}",', source)), 'Unparsed currency metadata'
-points = {ord(ch) for symbol in symbols for ch in symbol} - {0xFDFC, 0x20BC}
+points = {ord(ch) for symbol in symbols for ch in symbol} - {0x060B, 0xFDFC, 0x20BC, 0x20BE}
 font = TTFont(root / 'aic_ui/font/DejaVuSans-CurrencySource.ttf')
 missing = points - set(font.getBestCmap())
 assert not missing, 'Currency source font lacks ' + repr(sorted(missing))
@@ -41,8 +41,8 @@ currency_font() {
   "${LV_FONT_CONV_CMD[@]}" --no-compress --no-prefilter --bpp 4 --size "$size" \
   --font "$ROOT_DIR/aic_ui/font/DejaVuSans-CurrencySource.ttf" \
   -r "$CURRENCY_RANGE" \
-  --font /usr/share/fonts/truetype/freefont/FreeSerif.ttf -r 0xFDFC \
-  --font "$NOTO_SANS_FONT" -r 0x20BC \
+  --font /usr/share/fonts/truetype/freefont/FreeSerif.ttf -r 0x060B,0xFDFC \
+  --font "$NOTO_SANS_FONT" -r 0x20BC,0x20BE \
   --format lvgl --lv-font-name "$name" \
   -o "$ROOT_DIR/un260/font/$name.c"
 }

@@ -31,6 +31,7 @@
 #include "un260/lv_system/app_clock.h"
 #include "aic_ui/perf_stats.h"
 #include "un260/lv_core/page_07_curr/page_07_curr_star.h"
+#include "un260/lv_core/page_07_curr/page_07_curr_view_icons.h"
 
 static lv_obj_t* curr_page = NULL;
 static currency_state_snapshot_t g_curr_page_snapshot;
@@ -148,21 +149,27 @@ static void curr_set_left_info_by_abs(int abs_idx)
 
 static void curr_style_view_button(void)
 {
-    if (g_page07_curr.objects.btn_view == NULL || g_page07_curr.objects.btn_view_label == NULL) return;
+    lv_obj_t *button = g_page07_curr.objects.btn_view;
+    lv_obj_t *label = g_page07_curr.objects.btn_view_label;
+    lv_obj_t *icon = g_page07_curr.objects.btn_view_icon;
+    if (button == NULL || label == NULL || icon == NULL) return;
 
-    lv_obj_set_style_radius(g_page07_curr.objects.btn_view, 10, 0);
-    lv_obj_set_style_bg_opa(g_page07_curr.objects.btn_view, LV_OPA_COVER, 0);
-    lv_damped_button_set_palette(g_page07_curr.objects.btn_view,
-                                 lv_color_hex(0x0073FF), lv_color_hex(0x005DDB));
-    lv_obj_set_style_border_width(g_page07_curr.objects.btn_view, 0, 0);
-    lv_obj_set_style_shadow_width(g_page07_curr.objects.btn_view, 12, 0);
-    lv_obj_set_style_shadow_opa(g_page07_curr.objects.btn_view, LV_OPA_10, 0);
-    lv_obj_set_style_text_color(g_page07_curr.objects.btn_view_label, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_text_font(g_page07_curr.objects.btn_view_label,
+    lv_obj_set_style_radius(button, 10, 0);
+    lv_obj_set_style_pad_all(button, 0, 0);
+    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
+    lv_damped_button_set_palette(button, lv_color_hex(0xD8E7F5),
+                                 lv_damped_button_pressed_color(lv_color_hex(0xD8E7F5)));
+    lv_obj_set_style_border_width(button, 0, 0);
+    lv_obj_set_style_shadow_width(button, 0, 0);
+    lv_obj_set_style_text_color(label, lv_color_hex(0x516879), 0);
+    lv_obj_set_style_text_font(label,
                               ui_message_font(&lv_font_instrument_sans_medium_16), 0);
-    lv_label_set_text(g_page07_curr.objects.btn_view_label,
-                      (g_page07_curr.model.view_mode == PAGE07_CURR_VIEW_CARD) ? ui_tr("CARD") : ui_tr("VIEW"));
-    lv_obj_center(g_page07_curr.objects.btn_view_label);
+    lv_label_set_text(label, ui_trc("Currency view", "Grid"));
+    lv_obj_update_layout(label);
+    int group_width = lv_obj_get_width(icon) + 4 + lv_obj_get_width(label);
+    lv_obj_align(icon, LV_ALIGN_LEFT_MID,
+                 (lv_obj_get_width(button) - group_width) / 2, 0);
+    lv_obj_align_to(label, icon, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
 }
 
 static void curr_style_fav_button(void)
@@ -323,7 +330,7 @@ static void curr_update_grid_fav_ui(int i)
     }
 
     lv_obj_set_style_bg_opa(g_page07_curr.grid_items[i].fav_btn, LV_OPA_TRANSP, 0);
-    lv_img_set_src(g_page07_curr.grid_items[i].fav_icon, fav ? (const void *)"L:/usr/local/share/lvgl_data/fav.png" : (const void *)&curr_star_outline);
+    lv_img_set_src(g_page07_curr.grid_items[i].fav_icon, fav ? (const void *)&curr_view_star_filled : (const void *)&curr_view_star_outline);
 }
 
 static void curr_fav_press_feedback_cb(lv_event_t* e)
@@ -472,6 +479,7 @@ static void curr_grid_fav_click_cb(lv_event_t* e)
     }
 
     curr_update_grid_fav_ui(vis_idx);
+    page07_curr_overview_selection(&g_page07_curr);
 }
 
 static void curr_grid_item_click_cb(lv_event_t* e)
@@ -799,6 +807,9 @@ static void curr_switch_cached_view(void)
         curr_scroll_to_visible_idx(
             g_page07_curr.model.selected_visible_idx, false);
         curr_update_track_by_scroll();
+    } else {
+        page07_curr_overview_selection(&g_page07_curr);
+        page07_curr_overview_reveal_selection(&g_page07_curr);
     }
 }
 
@@ -920,6 +931,7 @@ void page_07_curr_img_reset(void)
 
     g_page07_curr.objects.btn_view = NULL;
     g_page07_curr.objects.btn_view_label = NULL;
+    g_page07_curr.objects.btn_view_icon = NULL;
     g_page07_curr.objects.btn_favorite = NULL;
     g_page07_curr.objects.btn_favorite_label = NULL;
     g_page07_curr.objects.btn_back = NULL;
@@ -1017,10 +1029,12 @@ void page_07_curr_img_refre(void)
     lv_obj_set_pos(g_page07_curr.objects.btn_view, CURR_VIEW_BTN_X, CURR_BTN_Y);
     lv_obj_add_event_cb(g_page07_curr.objects.btn_view, curr_view_btn_click_cb, LV_EVENT_CLICKED, NULL);
     g_page07_curr.objects.btn_view_label = lv_label_create(g_page07_curr.objects.btn_view);
-    lv_label_set_text(g_page07_curr.objects.btn_view_label, ui_tr("CARD"));
-    lv_obj_center(g_page07_curr.objects.btn_view_label);
+    g_page07_curr.objects.btn_view_icon = lv_img_create(g_page07_curr.objects.btn_view);
+    lv_img_set_src(g_page07_curr.objects.btn_view_icon, &curr_view_grid_icon);
+    lv_obj_clear_flag(g_page07_curr.objects.btn_view_icon, LV_OBJ_FLAG_CLICKABLE);
     lv_damped_button_register(g_page07_curr.objects.btn_view,
-                              lv_color_hex(0x0073FF), lv_color_hex(0x005DDB));
+                              lv_color_hex(0xD8E7F5),
+                              lv_damped_button_pressed_color(lv_color_hex(0xD8E7F5)));
 
     g_page07_curr.objects.btn_favorite = lv_btn_create(g_page07_curr.objects.left_panel);
     lv_obj_set_size(g_page07_curr.objects.btn_favorite, CURR_BTN_W, CURR_BTN_H);
@@ -1146,24 +1160,8 @@ static void curr_refresh_cached_selection(void)
         return;
     }
 
-    for (int i = 0; i < g_page07_curr.model.visible_count; i++) {
-        int abs_idx = g_page07_curr.grid_items[i].abs_idx;
-        bool selected = abs_idx == g_page07_curr.model.selected_abs_idx;
-
-        if (selected) {
-            lv_obj_clear_flag(g_page07_curr.grid_items[i].selected_mark,
-                              LV_OBJ_FLAG_HIDDEN);
-            page07_curr_view_set_image_selected_style(g_page07_curr.grid_items[i].img);
-        } else {
-            lv_obj_add_flag(g_page07_curr.grid_items[i].selected_mark,
-                            LV_OBJ_FLAG_HIDDEN);
-            page07_curr_view_set_image_unselected_style(g_page07_curr.grid_items[i].img);
-        }
-        lv_obj_set_style_text_color(g_page07_curr.grid_items[i].name,
-                                    selected ? lv_color_hex(0x1462CC)
-                                             : lv_color_hex(0x1D2B34), 0);
+    for (int i = 0; i < g_page07_curr.model.visible_count; i++)
         curr_update_grid_fav_ui(i);
-    }
     page07_curr_overview_selection(&g_page07_curr);
     g_curr_grid_styled_abs_idx = g_page07_curr.model.selected_abs_idx;
 }
@@ -1189,15 +1187,7 @@ static void curr_focus_confirmed_selection_on_entry(void)
         curr_scroll_to_visible_idx(g_page07_curr.model.selected_visible_idx,
                                    false);
     } else {
-        for (int i = 0; i < g_page07_curr.model.visible_count; i++) {
-            if (g_page07_curr.grid_items[i].abs_idx == selected &&
-                g_page07_curr.grid_items[i].item != NULL) {
-                lv_obj_update_layout(g_page07_curr.objects.grid_scroll);
-                lv_obj_scroll_to_view(g_page07_curr.grid_items[i].item,
-                                      LV_ANIM_OFF);
-                break;
-            }
-        }
+        page07_curr_overview_reveal_selection(&g_page07_curr);
     }
 }
 

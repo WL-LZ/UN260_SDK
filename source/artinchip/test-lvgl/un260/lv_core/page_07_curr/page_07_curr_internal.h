@@ -59,10 +59,17 @@ typedef struct {
     lv_obj_t *current_code;
     lv_obj_t *position;
     lv_obj_t *filter[2];
+    lv_obj_t *filter_label[2];
+    lv_obj_t *page_prev;
+    lv_obj_t *page_next;
+    lv_obj_t *pressed;
+    lv_point_t press_point;
+    bool click_cancelled;
+    int page_index;
+    int page_count;
     lv_obj_t *card_button;
     lv_obj_t *back_button;
     _lv_img_cache_entry_t *atlas_pin;
-    int visible_range_key;
 } page07_curr_overview_refs_t;
 
 typedef struct {
@@ -87,6 +94,7 @@ typedef struct {
     lv_obj_t *left_no;
     lv_obj_t *btn_view;
     lv_obj_t *btn_view_label;
+    lv_obj_t *btn_view_icon;
     lv_obj_t *btn_favorite;
     lv_obj_t *btn_favorite_label;
     lv_obj_t *btn_back;

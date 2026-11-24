@@ -157,10 +157,10 @@ uint32_t app_clock_uptime_ms(void) { return lv_tick_get(); }
  * it does not synthesize icons or pretend to validate DMA/GE decoding. */
 static const un260_compiled_asset_t *history_test_asset(const char *src)
 {
-    static unsigned char pixels[2][182*103*4];
-    static un260_compiled_asset_t flags[2];
-    const char *names[]={"CURR_USD.png","CURR_CNY.png"};
-    for(unsigned i=0;i<2;i++)if(strstr(src,names[i])) {
+    static unsigned char pixels[3][182*103*4];
+    static un260_compiled_asset_t flags[3];
+    const char *names[]={"CURR_USD.png","CURR_CNY.png","CURR_AED.png"};
+    for(unsigned i=0;i<3;i++)if(strstr(src,names[i])) {
         if(!flags[i].pixels) {
             char path[512];snprintf(path,sizeof(path),"%s/%s.bgra",getenv("UN260_BACKGROUND_DIR"),names[i]);
             FILE *fp=fopen(path,"rb");assert(fp);
@@ -776,15 +776,21 @@ static void history_test_inertia_tap(unsigned baseline_timers)
     puts("PASS: touching to stop inertia cannot open or select a record; a fresh stationary tap works");
 }
 
+static void check_single_line(lv_obj_t *o);
+
 static void history_test_multi(unsigned baseline)
 {
     history_test_fixtures(2);
     ui_history_record_t *r=&test_store.records[0];
-    memcpy(r->currency,"MUL",4);r->pcs=16;r->amount=0;
-    r->multi=(history_multi_t){.enabled=true,.count=2,.rejects=9,.passes=1};
+    memcpy(r->currency,"MUL",4);r->pcs=17;r->amount=0;
+    r->multi=(history_multi_t){.enabled=true,.count=4,.rejects=9,.passes=1};
     r->multi.currencies[0]=(history_multi_currency_t){.code="USD",.pcs=14,.amount=532,.complete=true,.count=6,
         .denoms={{100,3},{50,3},{20,2},{10,3},{5,2},{2,1}}};
     r->multi.currencies[1]=(history_multi_currency_t){.code="CNY",.pcs=2,.amount=10};
+    r->multi.currencies[2]=(history_multi_currency_t){.code="SYP",.pcs=1,.amount=500,.complete=true,.count=1,
+        .denoms={{500,1}}};
+    r->multi.currencies[3]=(history_multi_currency_t){.code="AED",.pcs=1,.amount=5,.complete=true,.count=1,
+        .denoms={{5,1}}};
     ui_page_19_history_create(lv_scr_act());history_test_tick(100);
     history_test_bmp("history-multi-list");
     show_record(r->record_no);history_test_tick(100);
@@ -793,6 +799,29 @@ static void history_test_multi(unsigned baseline)
     history_test_click(history->actions[2]);
     assert(test_exported_count==1 && test_exported_ids[0]==history->current_id);
     lv_obj_t *body=lv_obj_get_child(history->multi_panel,3);
+    lv_obj_t *aed_probe=lv_label_create(lv_scr_act());lv_label_set_text(aed_probe,"د.إ");
+    lv_obj_t *aed_row=lv_obj_get_child(body,3);
+    assert(strstr((const char *)lv_img_get_src(lv_obj_get_child(aed_row,0)),"CURR_AED.png"));
+    lv_obj_t *aed_symbol=lv_obj_get_child(aed_row,2);
+    assert(!strcmp(lv_label_get_text(aed_symbol),lv_label_get_text(aed_probe)));
+    check_single_line(aed_symbol);
+    history_test_click(aed_row);history_test_tick(100);
+    lv_obj_t *aed_denom=lv_obj_get_child(lv_obj_get_child(history->multi_panel,3),0);
+    aed_symbol=lv_obj_get_child(aed_denom,0);
+    assert(!strcmp(lv_label_get_text(aed_symbol),lv_label_get_text(aed_probe)));
+    check_single_line(aed_symbol);lv_obj_del(aed_probe);
+    history_test_click(history->actions[3]);history_test_tick(100);
+    body=lv_obj_get_child(history->multi_panel,3);
+    lv_obj_t *syrian_row=lv_obj_get_child(body,2);
+    lv_obj_t *symbol=lv_obj_get_child(syrian_row,2);
+    lv_obj_t *number=lv_obj_get_child(syrian_row,5);
+    assert(lv_obj_get_width(symbol)>28 && lv_obj_get_x(number)>=lv_obj_get_x(symbol)+lv_obj_get_width(symbol)+8);
+    history_test_click(syrian_row);history_test_tick(100);
+    lv_obj_t *denom=lv_obj_get_child(lv_obj_get_child(history->multi_panel,3),0);
+    symbol=lv_obj_get_child(denom,0);number=lv_obj_get_child(denom,1);
+    assert(lv_obj_get_width(symbol)>28 && lv_obj_get_x(number)>=lv_obj_get_x(symbol)+lv_obj_get_width(symbol)+8);
+    history_test_click(history->actions[3]);history_test_tick(100);
+    body=lv_obj_get_child(history->multi_panel,3);
     history_test_click(lv_obj_get_child(body,0));history_test_tick(100);
     assert(history->multi_selected==0);history_test_bmp("history-multi-usd");
     body=lv_obj_get_child(history->multi_panel,3);
