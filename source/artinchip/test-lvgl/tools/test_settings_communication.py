@@ -52,6 +52,7 @@ code = r'''
 #include "un260/print/print_config.h"
 #include "un260/cfd/cfd.h"
 #include "un260/protocol/auxiliary_reply.h"
+#include "un260/protocol/protocol_request.h"
 #include "tools/test_notice_sink.h"
 static uint64_t now_ms;
 static int send_result;
@@ -63,6 +64,20 @@ int protocol_send(uint8_t cmd, const uint8_t *payload, uint16_t len) {
     sends++; last_cmd=cmd; assert(len<=sizeof(last_payload));
     memcpy(last_payload, payload, len); return send_result;
 }
+
+static bool feedback_busy;
+int protocol_send_when_feedback_clear(uint8_t cmd, const uint8_t *payload, uint16_t len)
+{
+    if (feedback_busy) return 0;
+    return protocol_send(cmd, payload, len);
+}
+
+int protocol_send_stop_when_feedback_clear(uint8_t cmd, const uint8_t *payload, uint16_t len)
+{
+    if (feedback_busy) return 0;
+    return protocol_send(cmd, payload, len);
+}
+
 static void uart_debug_printf(const char *fmt, ...) { (void)fmt; }
 static void ui_page_20_set_print_on_reply(const print_config_request_result_t *r) {
     print_replies++; last_print=*r;
@@ -218,6 +233,42 @@ static void motor_poll(void) { now_ms+=81;motor_test_service_poll((uint32_t)now_
 static void test_motor(void) {
     send_result=7;
     motor_gate=false;assert(!motor_test_service_request(0,true));motor_gate=true;
+    unsigned tx_before = sends;
+    feedback_busy = true;
+    assert(motor_test_service_request(0,true)); motor_poll();
+    assert(sends == tx_before && motor_test_service_get(0).queued);
+    motor_test_service_on_reply(0x52,1);
+    assert(!motor_test_service_get(0).running);
+    assert(motor_test_service_request(0,false));
+    motor_test_service_stop_all(); feedback_busy = false; motor_poll();
+    assert(sends == tx_before && !motor_test_service_busy());
+    assert(motor_test_service_request(0,true)); motor_poll();
+    uint64_t start_ms = now_ms;
+    protocol_request_result_context_begin(start_ms-1);
+    motor_test_service_on_reply(0x52,1);
+    protocol_request_result_context_end();
+    assert(motor_test_service_get(0).phase == MOTOR_STARTING);
+    feedback_busy = true; assert(motor_test_service_request(0,false)); motor_poll();
+    assert(sends == tx_before+1 && motor_test_service_get(0).queued);
+    protocol_request_result_context_begin(start_ms);
+    motor_test_service_on_reply(0x52,1); protocol_request_result_context_end();
+    assert(motor_test_service_get(0).running && motor_test_service_get(0).queued);
+    feedback_busy = false; motor_poll();
+    assert(sends == tx_before+2 && last_payload[0]==0 && last_payload[1]==0);
+    protocol_request_result_context_begin(now_ms-1);
+    motor_test_service_on_reply(0x52,1); protocol_request_result_context_end();
+    assert(motor_test_service_get(0).pending);
+    motor_test_service_on_reply(0x52,1); assert(!motor_test_service_busy() && !motor_holds);
+
+    /* Two already-queued old START replies delivered after a Stop write
+     * cannot satisfy the one Stop confirmation. */
+    assert(motor_test_service_request(0,true)); motor_poll();
+    start_ms = now_ms; ++now_ms; assert(motor_test_service_request(0,false));
+    protocol_request_result_context_begin(start_ms);
+    motor_test_service_on_reply(0x52,1); motor_test_service_on_reply(0x52,1);
+    assert(motor_test_service_get(0).pending && motor_holds);
+    protocol_request_result_context_end(); motor_test_service_on_reply(0x52,1);
+    assert(!motor_test_service_busy() && !motor_holds);
     send_result=-1;assert(motor_test_service_request(0,true));motor_poll();
     assert(motor_test_service_get(0).phase==MOTOR_SEND_FAILED&&!motor_holds);
     send_result=7;

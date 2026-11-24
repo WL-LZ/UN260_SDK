@@ -21,6 +21,8 @@ static bool app_add_runtime_retry_clear(void) { ++add_retries; return add_retry_
 
 static counting_session_state_t g_counting_session;
 static bool g_no_note_motor_active;
+static bool g_start_queued;
+static void app_command_runtime_revoke_result_replies(void) {}
 static counting_sim_t data;
 static bool reset_allowed, send_ok, observed_busy, transport_ready, guard_fault;
 static unsigned sequence, reset_projection_at, finish_start_at, begin_clear_at;

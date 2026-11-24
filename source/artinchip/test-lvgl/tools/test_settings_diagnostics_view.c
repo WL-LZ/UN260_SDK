@@ -49,6 +49,17 @@ void machine_state_confirm_aging_running(bool v){aging=v;}
 bool settings_detail_send_command(uint8_t cmd,const uint8_t *sub,uint16_t len){sends++;sent_cmd=cmd;sent_sub=(sub&&len)?sub[0]:0;return send_ok;}
 bool setting_service_request_aging_start(void){sends++;sent_cmd=0x46;return send_ok;}
 int protocol_send(uint8_t cmd,const uint8_t *sub,uint16_t len){return settings_detail_send_command(cmd,sub,len)?len+5:-1;}
+
+int protocol_send_when_feedback_clear(uint8_t cmd, const uint8_t *payload, uint16_t len)
+{
+    return protocol_send(cmd, payload, len);
+}
+
+int protocol_send_stop_when_feedback_clear(uint8_t cmd, const uint8_t *payload, uint16_t len)
+{
+    return protocol_send(cmd, payload, len);
+}
+
 void ui_manager_push_page(ui_page_t p){(void)p;}
 static uint64_t capture_nav_locks, capture_gesture_locks;
 void ui_manager_hold_navigation(ui_page_t owner,bool hold){uint64_t bit=UINT64_C(1)<<owner;if(hold)capture_nav_locks|=bit;else capture_nav_locks&=~bit;}

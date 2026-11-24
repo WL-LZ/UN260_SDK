@@ -92,3 +92,26 @@ with tempfile.TemporaryDirectory(prefix='un260-sound-busy-') as temp:
  if (root/'un260/protocol/protocol_tx_gate.c').exists():sources+=['un260/protocol/protocol_tx_gate.c']
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-fsanitize=undefined','-fno-sanitize-recover=all','-I'+str(root),str(p),*[str(root/f) for f in sources],'-pthread','-o',str(exe)],check=True)
  subprocess.run([str(exe)],check=True)
+
+# Keep the service owners, UART observer and frame parser in the test binary.
+with tempfile.TemporaryDirectory(prefix='un260-touch-business-') as temp:
+    sources = [
+        'tools/test_touch_business_wire.c',
+        'un260/app_service/buzzer_service.c',
+        'un260/app_service/setting_service.c',
+        'un260/app_service/motor_test_service.c',
+        'un260/counting/counting_action_service.c',
+        'un260/protocol/protocol_rx_service.c',
+        'un260/protocol/protocol_frame_parser.c',
+        'un260/protocol/protocol_frame.c',
+        'un260/protocol/stream_data_reply.c',
+        'un260/protocol/protocol_tx_gate.c',
+        'un260/protocol/protocol_request.c',
+    ]
+    exe = Path(temp) / 'touch-business'
+    subprocess.run(['cc', '-std=gnu11', '-O2', '-Wall', '-Wextra', '-Werror',
+                    '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                    '-ffunction-sections', '-fdata-sections', '-Wl,--gc-sections',
+                    '-I' + str(root), *(str(root / f) for f in sources),
+                    '-pthread', '-o', str(exe)], check=True)
+    subprocess.run([str(exe)], check=True)

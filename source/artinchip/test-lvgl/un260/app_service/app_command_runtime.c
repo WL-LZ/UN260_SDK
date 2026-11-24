@@ -63,6 +63,7 @@ static uint32_t g_count_end_generation;
 /* Empty-feeder motion owns the input lock, never a counting session.
  * New controllers finish with 0x0E; older controllers use 0x37. */
 static bool g_no_note_motor_active;
+static ui_page_t g_start_request_page;
 static bool g_no_note_denom_pending;
 /* After an acknowledged explicit group reset, idle late data cannot publish.
  * Currency refresh or the next real START establishes the next result scope. */
@@ -132,6 +133,7 @@ bool app_command_runtime_request_count_start(void)
         uart_debug_printf("count start request rejected or send failed\n");
         return false;
     }
+    g_start_request_page = ui_manager_get_current_page();
     page_01_main_set_counting_locked(true);
     page_01_main_refresh_start_state();
     return true;
@@ -633,10 +635,25 @@ void app_command_runtime_poll(uint32_t now_ms)
     motor_test_service_poll(now_ms);
     app_fault_recovery_poll();
     boot_stage_t stage = boot_service_get_stage();
+    /* Do not replay an unsent tap after navigation, a real hardware START,
+     * or a change to an admission condition while feedback was on the wire. */
+    bool cancelled = counting_action_start_queued() &&
+        (g_start_request_page != ui_manager_get_current_page() || g_no_note_motor_active ||
+         g_counting_session.start_confirmed || g_counting_session.phase == COUNTING_SESSION_ACTIVE ||
+         ui_factory_reset_blocks_navigation() || touch_calibration_busy() || count_mode_service_busy() ||
+         app_add_runtime_busy() || upgrade_session_owner() != UPGRADE_SESSION_NONE ||
+         !counting_history_can_start());
+    if (cancelled) counting_action_cancel_queued_start();
     uint32_t action_timeouts = counting_action_take_timeouts();
 
     if ((action_timeouts & COUNTING_ACTION_TIMEOUT_START) != 0U) {
         uart_debug_printf("count start request timeout\n");
+    }
+    if (action_timeouts & COUNTING_ACTION_SEND_FAILED_START) {
+        uart_debug_printf("count start request send failed\n");
+        ui_notice_post_text(UI_NOTICE_WARNING, "count.start", UI_N_("Start"), UI_N_("Could not send"));
+    }
+    if (cancelled || (action_timeouts & (COUNTING_ACTION_TIMEOUT_START | COUNTING_ACTION_SEND_FAILED_START))) {
         if (!app_command_runtime_count_start_busy()) page_01_main_set_counting_locked(false);
         page_01_main_refresh_start_state();
     }

@@ -24,6 +24,12 @@ int protocol_send(uint8_t command, const uint8_t *payload, uint16_t length)
     return send_fails ? -1 : 6;
 }
 
+int protocol_send_when_feedback_clear(uint8_t cmd, const uint8_t *payload, uint16_t len)
+{
+    return protocol_send(cmd, payload, len);
+}
+
+
 static bool pending_reply_probe(uint8_t command, uint64_t started,
                                 uint64_t deadline)
 {

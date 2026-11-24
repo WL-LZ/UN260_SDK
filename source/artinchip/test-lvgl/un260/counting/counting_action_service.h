@@ -8,6 +8,7 @@ typedef enum {
     COUNTING_ACTION_TIMEOUT_NONE = 0,
     COUNTING_ACTION_TIMEOUT_START = 1U << 0,
     COUNTING_ACTION_TIMEOUT_CLEAR = 1U << 1,
+    COUNTING_ACTION_SEND_FAILED_START = 1U << 2,
 } counting_action_timeout_t;
 
 typedef enum {
@@ -26,6 +27,8 @@ uint32_t counting_action_take_timeouts(void);
 counting_clear_result_t counting_action_take_clear_result(void);
 bool counting_action_clear_pending(void);
 bool counting_action_start_pending(void);
+bool counting_action_start_queued(void);
+void counting_action_cancel_queued_start(void);
 void counting_action_cancel_all(void);
 
 #endif

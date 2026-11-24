@@ -20,6 +20,9 @@ head = r'''
 #include "un260/counting/counting_session_state.h"
 #include "un260/storage/storage_worker.h"
 #include "tools/test_maintenance_state.h"
+#include "un260/lv_core/lv_page_manager.h"
+static ui_page_t g_start_request_page;
+ui_page_t ui_manager_get_current_page(void) { return UI_PAGE_MAIN; }
 static counting_session_state_t g_counting_session;
 static bool g_no_note_motor_active;
 #define app_add_runtime_busy() false
@@ -109,7 +112,9 @@ int main(void){
  mock_writes=STORAGE_JOB_SUCCEEDED;assert(app_command_runtime_prepare_ui_upgrade()==APP_UI_UPGRADE_READY);
  assert(app_command_runtime_prepare_ui_upgrade()==APP_UI_UPGRADE_READY && captures==1);
  upgrade_owner=1;assert(!app_command_runtime_request_count_start() && starts==0);
+ assert(g_start_request_page==UI_PAGE_BOOT_ANIM);
  upgrade_owner=0;assert(app_command_runtime_request_count_start() && starts==1 && refreshes==1);
+ assert(g_start_request_page==UI_PAGE_MAIN);
  assert(data.pcs==10 && data.record_no==123);
  puts("PASS upgrade preservation: freeze once, wait durability, keep records, failed writes block, upgrade lease blocks new UI Start");
 }

@@ -17,6 +17,8 @@ typedef enum {
 workspace_apply_result_t workspace_service_apply_result(void);
 bool workspace_service_owns_command(uint8_t command);
 /* Only a matched negative ACK for the current step may end the profile. */
+bool workspace_service_batch_wire_allowed(void);
+bool workspace_service_batch_send_failed(uint8_t command);
 bool workspace_service_reject_command(uint8_t command);
 void workspace_service_cancel_apply(void);
 const char *workspace_service_apply_message(void);

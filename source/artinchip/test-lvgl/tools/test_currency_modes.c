@@ -61,6 +61,10 @@ int protocol_send(uint8_t cmd, const uint8_t *payload, uint16_t length)
     memcpy(last_payload, payload, length);
     return send_fails ? -1 : (int)length;
 }
+int protocol_send_when_feedback_clear(uint8_t cmd, const uint8_t *payload, uint16_t length)
+{
+    return protocol_send(cmd, payload, length);
+}
 void ui_state_page07_get(ui_state_page07_t *state) { *state = saved; }
 void ui_state_save_page07(const ui_state_page07_t *state) { saved = *state; saves++; }
 static void ui_manager_switch(int page) { assert(page == UI_PAGE_MAIN); navigations++; }

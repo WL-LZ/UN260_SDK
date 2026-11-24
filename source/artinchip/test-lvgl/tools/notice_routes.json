@@ -30,6 +30,12 @@
     "args": "UI_NOTICE_WARNING, \"count.add-reset\", UI_N_(\"Clear\"), UI_N_(\"Please try again.\")"
   },
   {
+    "file": "un260/app_service/app_command_runtime.c",
+    "line": 653,
+    "api": "ui_notice_post_text",
+    "args": "UI_NOTICE_WARNING, \"count.start\", UI_N_(\"Start\"), UI_N_(\"Could not send\")"
+  },
+  {
     "file": "un260/app_service/app_counting_runtime.c",
     "line": 236,
     "api": "ui_notice_post_text",
@@ -286,6 +292,12 @@
     "line": 175,
     "api": "app_setting_notice_timeout",
     "args": "notices[i].key, notices[i].title"
+  },
+  {
+    "file": "un260/app_service/app_setting_runtime.c",
+    "line": 185,
+    "api": "ui_notice_post_text",
+    "args": "UI_NOTICE_ERROR, key, amount ? UI_N_(\"VBatch\") : UI_N_(\"Batch\"), UI_N_(\"Setting not sent. Finish the current operation and try again.\")"
   },
   {
     "file": "un260/app_service/app_setting_runtime.c",

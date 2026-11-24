@@ -56,7 +56,7 @@ def main():
     # Compile the actual mode reply block and its real request ownership. Other
     # settings branches are unrelated to the result visibility transition.
     mode_begin = setting.index("    case 0x04:")
-    mode_end = setting.index("    case 0x06:", mode_begin)
+    mode_end = setting.index("    case ", mode_begin + len("    case 0x04:"))
     mode = """static app_setting_reply_action_t mode_reply(uint8_t cmd,
         const uint8_t *buf, uint8_t len) {
         app_setting_reply_action_t actions = APP_SETTING_REPLY_ACTION_NONE;

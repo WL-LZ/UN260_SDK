@@ -81,7 +81,7 @@ static void flush(lv_disp_drv_t *driver,const lv_area_t *area,lv_color_t *pixels
     lv_disp_flush_ready(driver);
 }
 static void tick(unsigned ms)
-{ for(unsigned i=0;i<ms;i+=20) { lv_tick_inc(20);ui_frame_commit_flush();lv_timer_handler();app_touch_sound_poll(); } }
+{ for(unsigned i=0;i<ms;i+=20) { lv_tick_inc(20);ui_frame_commit_flush();lv_timer_handler();app_touch_sound_poll(false); } }
 static void render(void)
 { lv_obj_update_layout(lv_scr_act());lv_obj_invalidate(lv_scr_act());lv_refr_now(NULL); }
 static void write_bmp(const char *name)

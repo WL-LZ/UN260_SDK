@@ -32,6 +32,10 @@ int protocol_send(uint8_t command,const uint8_t *payload,uint16_t size)
  assert(last_tx_len>0);
  return fail_send?-1:last_tx_len;
 }
+int protocol_send_when_feedback_clear(uint8_t command,const uint8_t *payload,uint16_t size)
+{return protocol_send(command,payload,size);}
+static bool workspace_service_batch_wire_allowed(void){return true;}
+static bool workspace_service_batch_send_failed(uint8_t command){(void)command;return false;}
 static void request_accepted(uint8_t command){++accepted[command];}
 static setting_impeller_result_t page_result;
 static void ui_page_40_set_impeller_on_update(const setting_impeller_result_t *result)
@@ -41,11 +45,11 @@ static void app_setting_notice_result(const char *key,const char *title,bool suc
 static void app_setting_notice_timeout(const char *key,const char *title)
 {assert(!strcmp(key,"settings.impeller")&&!strcmp(title,"Impeller motor speed"));++timeouts;}
 static bool app_setting_notice_allowed(const char *key){(void)key;return page_alive;}
-enum {UI_NOTICE_WARNING=1};
+enum {UI_NOTICE_WARNING=1, UI_NOTICE_ERROR};
 static void ui_notice_post_text(int kind,const char *key,const char *title,const char *body)
 {assert(kind==UI_NOTICE_WARNING);assert(key&&title&&body);++warnings;}
 static void ui_notice_clear(const char *key){assert(key);++clears;}
-static void protocol_tx_gate_on_reply(uint8_t command){(void)command;++gate_replies;}
+static void protocol_tx_gate_on_reply(const uint8_t *frame,uint16_t len){assert(frame&&len>=6);++gate_replies;}
 static void buzzer_service_on_reply(uint8_t status){++sound_acks;sound_status=status;}
 static bool pending_reply(uint8_t command,uint64_t started,uint64_t deadline)
 {assert(command==0x4B&&deadline-started==800);return queued_reply;}

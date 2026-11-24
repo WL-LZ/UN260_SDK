@@ -7,6 +7,9 @@ source=(root/'un260/app_service/app_touch_sound.c').read_text()
 source=re.sub(r'^#include[^\n]*\n','',source,flags=re.M)
 head=r"""
 #include <stdbool.h>
+#include <stdint.h>
+static uint32_t tick;
+#define lv_tick_get() tick
 #include <assert.h>
 #include <stdio.h>
 typedef int ui_page_t;
@@ -35,21 +38,25 @@ static void lv_port_indev_set_feedback_observer(void (*f)(void)){(void)f;}
 """
 tail=r"""
 int main(void){
- app_touch_sound_init();app_touch_sound_poll();assert(!sounds);
- request_click();app_touch_sound_poll();assert(sounds==1);app_touch_sound_poll();assert(sounds==1);
+ app_touch_sound_init();app_touch_sound_poll(false);assert(!sounds);
+ request_click();app_touch_sound_poll(false);assert(sounds==1);app_touch_sound_poll(false);assert(sounds==1);
  bool *blocks[]={&muted,&offline};
  for(unsigned i=0;i<2;i++){
-  request_click();*blocks[i]=true;app_touch_sound_poll();assert(sounds==1);*blocks[i]=false;app_touch_sound_poll();assert(sounds==1);
+  request_click();*blocks[i]=true;app_touch_sound_poll(false);assert(sounds==1);*blocks[i]=false;app_touch_sound_poll(false);assert(sounds==1);
  }
- muted=true;unsigned cancellations=cancels;app_touch_sound_poll();assert(cancels==cancellations+1);muted=false;
+ muted=true;unsigned cancellations=cancels;app_touch_sound_poll(false);assert(cancels==cancellations+1);muted=false;
  /* An accepted button remains audible when its action changes machine/page
     state. Disabled controls and gestures are filtered by the input owner. */
  bool *states[]={&counting,&aging,&fault,&operation,&upgrading,&resetting,&calibrating,&boot};
  for(unsigned i=0;i<sizeof(states)/sizeof(*states);i++){
-  unsigned before=sounds;request_click();*states[i]=true;app_touch_sound_poll();assert(sounds==before+1);*states[i]=false;
+  unsigned before=sounds;request_click();*states[i]=true;app_touch_sound_poll(false);assert(sounds==before+1);*states[i]=false;
  }
- for(test_page=UI_PAGE_BOOT;test_page<=UI_PAGE_STANDBY;test_page++){unsigned before=sounds;request_click();app_touch_sound_poll();assert(sounds==before+1);}
- unsigned before=sounds;request_click();request_click();request_click();app_touch_sound_poll();assert(sounds==before+1);
+ for(test_page=UI_PAGE_BOOT;test_page<=UI_PAGE_STANDBY;test_page++){unsigned before=sounds;request_click();app_touch_sound_poll(false);assert(sounds==before+1);}
+ unsigned before=sounds;request_click();request_click();request_click();app_touch_sound_poll(false);assert(sounds==before+1);
+ before=sounds;request_click();app_touch_sound_poll(true);assert(sounds==before);
+ tick+=20;app_touch_sound_poll(false);assert(sounds==before+1);
+ before=sounds;request_click();tick+=60;app_touch_sound_poll(true);assert(sounds==before+1);
+ app_touch_sound_poll(false);assert(sounds==before+1);
  puts("PASS uniform accepted-tap policy: independent mute/offline only, no action/page-dependent omissions, no stale replay, coalescing");
 }
 """

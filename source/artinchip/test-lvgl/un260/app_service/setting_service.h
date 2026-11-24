@@ -75,6 +75,9 @@ bool setting_service_request_batch_switch(bool target_enable, uint8_t sent_num, 
 /* The UI uses zero for Off in either mode. A pending Batch write owns both
  * modes because the accepted command also selects the machine's active mode. */
 bool setting_service_request_batch_value(uint8_t mode, uint32_t value);
+/* Poll an accepted, unsent selection. Recheck eligibility just before writing. True reports a selection that could not be sent. */
+bool setting_service_batch_poll_send(setting_batch_result_t *failed, bool (*eligible)(void));
+void setting_service_cancel_unsent_batch(void);
 bool setting_service_batch_take_result(uint8_t command, uint8_t status, setting_batch_result_t *result);
 bool setting_service_batch_take_timeout(setting_batch_result_t *result);
 

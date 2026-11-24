@@ -43,6 +43,8 @@ void ui_notice_post_text(ui_notice_kind_t kind,const char *key,const char *title
 void currency_state_get_selected_code(char out[4]){memcpy(out,"USD",4);}
 #include "un260/machine_state/machine_state.h"
 #include "tools/test_maintenance_state.h"
+static int g_start_request_page;
+#define ui_manager_get_current_page() 0
 static uint64_t now;static unsigned tx,refresh,resolved,repeated;static uint8_t cmds[64];
 static bool history_ready=true,busy,modal,auto_popup;static uint8_t fail_cmd;
 static bool add_busy;
@@ -67,6 +69,12 @@ bool app_command_runtime_count_start_busy(void){return busy||counting_action_sta
 static void page_01_main_refresh_start_state(void){++refresh;}
 void uart_debug_printf(const char *s,...){(void)s;}
 int protocol_send(uint8_t cmd,const uint8_t *data,uint16_t len){assert(len==1&&data&&tx<sizeof(cmds));if(cmd==0x3D||cmd==0x0A)assert(*data==1);cmds[tx++]=cmd;return cmd==fail_cmd?-1:6;}
+
+int protocol_send_when_feedback_clear(uint8_t cmd, const uint8_t *payload, uint16_t len)
+{
+    return protocol_send(cmd, payload, len);
+}
+
 bool diagnostic_calibration_feed_failed(uint8_t type,uint8_t code){(void)type;(void)code;return false;}
 void work_mode_service_hold_operation(uint32_t owner,bool active){(void)owner;(void)active;assert(false);}
 void cis_calib_ui_refresh(void){assert(false);}

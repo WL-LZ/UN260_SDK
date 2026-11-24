@@ -3,6 +3,7 @@
 #include "app_setting_runtime.h"
 #include "count_mode_service.h"
 #include "app_add_runtime.h"
+#include "workspace_service.h"
 #include "app_setting_notice.h"
 #include "app_fault_recovery.h"
 #include "ui_factory_reset_service.h"
@@ -176,6 +177,14 @@ void app_setting_runtime_poll(uint32_t now_ms)
         page_03_update_menu_button_states_refresh();
     }
 
+    if (setting_service_batch_poll_send(&batch_result, workspace_service_batch_wire_allowed)) {
+        const bool amount = batch_result.type == SETTING_BATCH_REQUEST_AMOUNT;
+        const char *key = amount ? "settings.value_batch" : "settings.batch";
+        page_03_batch_set_result(false, &batch_result);
+        if (!workspace_service_batch_send_failed(amount ? 0x07 : 0x06) && app_setting_notice_allowed(key))
+            ui_notice_post_text(UI_NOTICE_ERROR, key, amount ? UI_N_("VBatch") : UI_N_("Batch"),
+                                UI_N_("Setting not sent. Finish the current operation and try again."));
+    }
     if (setting_service_batch_take_timeout(&batch_result)) {
         const bool amount = batch_result.type == SETTING_BATCH_REQUEST_AMOUNT;
         machine_state_invalidate_batch(amount ? AMOUNT_BATCH_MODE : PCS_BATCH_MODE);

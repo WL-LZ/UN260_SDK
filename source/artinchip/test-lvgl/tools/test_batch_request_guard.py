@@ -24,17 +24,19 @@ HEAD = r'''
 #include "un260/lv_system/user_cfg.h"
 #define SETTING_BATCH_TRACE_ENABLE 0
 static uint64_t now=100;
-static bool fail_send,queued;
+static bool fail_send,queued,feedback_in_flight;
 static unsigned sends,accepted;
 static uint8_t sent,cmd;
 static uint32_t amount;
 uint64_t app_clock_monotonic_ms(void){return now;}
-int protocol_send(uint8_t command,const uint8_t *payload,uint16_t size){
+int protocol_send_when_feedback_clear(uint8_t command,const uint8_t *payload,uint16_t size){
+ if(feedback_in_flight)return 0;
  assert((command==6&&size==1)||(command==7&&size==4));sends++;sent=payload[0];cmd=command;
  if(command==7)amount=(uint32_t)payload[0]<<24|(uint32_t)payload[1]<<16|(uint32_t)payload[2]<<8|payload[3];
  return fail_send?-1:6;
 }
 static void setting_request_accepted(uint8_t command){assert(command==6||command==7);accepted++;}
+static bool no_longer_eligible(void){return false;}
 static bool pending_reply(uint8_t command,uint64_t start,uint64_t deadline){
  assert(command==6&&start==1000&&deadline==1800);return queued;
 }
@@ -106,6 +108,29 @@ int main(void){
  assert(!machine_state_batch_confirmed(AMOUNT_BATCH_MODE)&&machine_state_batch_saved_value(AMOUNT_BATCH_MODE)==0x12345678);
  assert(setting_service_request_batch_value(AMOUNT_BATCH_MODE,0x12345678)&&cmd==7);
  assert(setting_service_batch_take_result(7,1,&result));
+ feedback_in_flight=true;prior=sends;now=5000;
+ assert(setting_service_request_batch_number(95,true,20));
+ assert(!setting_service_request_batch_number(61,true,20));
+ assert(!setting_service_batch_take_result(6,1,&result)&&sends==prior);
+ now+=900;assert(!setting_service_batch_take_timeout(&result));
+ assert(!setting_service_batch_poll_send(&result,NULL)&&sends==prior);
+ feedback_in_flight=false;assert(!setting_service_batch_poll_send(&result,NULL)&&sends==prior+1);
+ assert(!setting_service_batch_take_timeout(&result));
+ assert(setting_service_batch_take_result(6,1,&result)&&result.target.num==95);
+ feedback_in_flight=true;assert(setting_service_request_batch_number(61,true,95));
+ setting_service_cancel_unsent_batch();feedback_in_flight=false;
+ assert(!setting_service_batch_poll_send(&result,NULL)&&sends==prior+1);
+ feedback_in_flight=true;assert(setting_service_request_batch_number(61,true,95));
+ feedback_in_flight=false;fail_send=true;
+ assert(setting_service_batch_poll_send(&result,NULL)&&result.target.num==61&&result.previous.num==95);
+ assert(!setting_service_batch_take_timeout(&result));fail_send=false;
+ assert(setting_service_request_batch_number(61,true,95));
+ setting_service_cancel_unsent_batch(); /* No effect on a command already on wire. */
+ assert(setting_service_batch_take_result(6,1,&result));
+ prior=sends;feedback_in_flight=true;assert(setting_service_request_batch_number(20,true,61));
+ feedback_in_flight=false;assert(setting_service_batch_poll_send(&result,no_longer_eligible));
+ assert(sends==prior&&result.target.num==20&&!setting_service_batch_take_timeout(&result));
+ puts("PASS deferred batch: single-flight, no early ACK/deadline, cancel before wire, write failure recovery");
  puts("PASS 32-bit high-byte-first VBatch/OFF, cross-mode OFF, command-bound ACK, unchanged-value recovery and independent cached values.");
  puts("PASS actual Batch request owner + protocol_request: numeric/OFF single-flight, no-data/Batch-full/old reply exclusion, send failure release, matched ACK, queued on-time response, true timeout release");
  return 0;
@@ -120,7 +145,7 @@ def main():
     begin=source.index('typedef struct {\n    protocol_request_t request;\n    setting_batch_request_type_t type;')
     end=source.index('\ntypedef struct {',begin+1)
     timeout=re.search(r'^#define SETTING_REQUEST_TIMEOUT_MS .*$',source,re.M).group()
-    functions='\n'.join(function(source,name) for name in ('setting_batch_request_begin',
+    functions='\n'.join(function(source,name) for name in ('setting_batch_try_send','setting_batch_request_begin','setting_batch_finish','setting_service_batch_poll_send','setting_service_cancel_unsent_batch',
         'setting_service_request_batch_number','setting_service_request_batch_switch','setting_service_request_batch_value',
         'setting_service_batch_take_result','setting_service_batch_take_timeout'))
     for optimization in ('-O0','-O2'):

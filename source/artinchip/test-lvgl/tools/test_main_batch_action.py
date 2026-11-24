@@ -169,7 +169,10 @@ int main(void){
  before=commands;
  running=true;page_01_bottom_batch_btn_event_cb(&event);running=false;assert(commands==before);
  diagnostic=true;page_01_bottom_batch_btn_event_cb(&event);diagnostic=false;assert(commands==before);
- capacity=false;page_01_bottom_batch_btn_event_cb(&event);capacity=true;assert(commands==before);
+ // A history writer does not own Batch. The next OFF command still needs its ACK.
+ capacity=false;page_01_bottom_batch_btn_event_cb(&event);capacity=true;
+ assert(commands==before+1&&last_step==3&&last_value==0&&actuals[3]==150);
+ before=commands;
  ready=false;page_01_bottom_batch_btn_event_cb(&event);ready=true;assert(commands==before);
  busy=true;page_01_bottom_batch_btn_event_cb(&event);busy=false;assert(commands==before);
  batch_save.pending=true;page_01_bottom_batch_btn_event_cb(&event);batch_save.pending=false;assert(commands==before);

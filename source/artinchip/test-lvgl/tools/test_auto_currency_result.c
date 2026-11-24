@@ -46,6 +46,12 @@ int protocol_send(uint8_t cmd, const uint8_t *payload, uint16_t len)
     if (cmd == 0x3B) ++clear_sends;
     return send_failure ? -1 : (int)len;
 }
+
+int protocol_send_when_feedback_clear(uint8_t cmd, const uint8_t *payload, uint16_t len)
+{
+    return protocol_send(cmd, payload, len);
+}
+
 static bool protocol_send_is_ready(void) { return transport_ready; }
 static bool runtime_guard_has_fault(void) { return transport_fault; }
 bool counting_history_discard_pending(counting_session_state_t *session)

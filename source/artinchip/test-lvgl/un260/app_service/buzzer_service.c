@@ -6,10 +6,11 @@
 
 #define CLICK_MS 35U
 #define CLICK_MAX_AGE_MS 250U
-#define ON_ACK_MS 120U
+/* Allow a click's own business callback to claim the link first. Slower
+ * asynchronous owners still use atomic feedback-aware send admission. */
+#define TOUCH_YIELD_MS 12U
 #define SLOT_POLL_MS 5U
 #define MIN_INTERVAL_MS 120U
-#define OFF_ACK_MS 120U
 #define OFF_ATTEMPTS 3U
 #define RECOVERY_INTERVAL_MS 1000U
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -54,6 +55,7 @@ static bool open_when_idle(void)
 {
     uint64_t deadline = last_click + CLICK_MAX_AGE_MS;
     on_ack = false;
+    wait_until(last_click + TOUCH_YIELD_MS, false);
     while(running && !disabled && !cancelled && now_ms() < deadline) {
         phase = ON;
         uint8_t state = 1;
@@ -69,7 +71,7 @@ static bool open_when_idle(void)
 }
 static void wait_open_ack(void)
 {
-    uint64_t deadline = now_ms() + ON_ACK_MS;
+    uint64_t deadline = now_ms() + PROTOCOL_FEEDBACK_REPLY_MS;
     struct timespec t = {deadline / 1000, (deadline % 1000) * 1000000};
     while(running && !disabled && !cancelled && !on_ack && now_ms() < deadline) {
         int rc = pthread_cond_timedwait(&condition, &mutex, &t);
@@ -77,6 +79,25 @@ static void wait_open_ack(void)
         if(rc) { disabled = true; break; }
     }
     if(on_ack && !disabled) wait_until(on_ack_ms + CLICK_MS, false);
+}
+/* OFF still has a real closure deadline. For a normal business reply it waits
+ * in this worker; losing that reply cannot leave the buzzer sounding forever.
+ * An ACK for a previous OFF attempt can finish closure during this wait. */
+static bool close_when_idle(void)
+{
+    uint64_t deadline = now_ms() + PROTOCOL_FEEDBACK_REPLY_MS;
+    const uint8_t state = 2;
+    for (;;) {
+        bool force = !running || now_ms() >= deadline;
+        pthread_mutex_unlock(&mutex);
+        int result = force ? protocol_send(0x4A, &state, 1) : protocol_send_if_idle(0x4A, &state, 1);
+        pthread_mutex_lock(&mutex);
+        if (result != 0 || force) return result == 6;
+        if (off_ack) return true;
+        uint64_t next = now_ms() + SLOT_POLL_MS;
+        wait_until(next < deadline ? next : deadline, true);
+        if (off_ack) return true;
+    }
 }
 static void *run(void *unused)
 {
@@ -94,11 +115,8 @@ static void *run(void *unused)
         phase = WAIT_OFF;
         off_ack = false;
         for(unsigned attempt = 0; attempt < OFF_ATTEMPTS; ++attempt) {
-            pthread_mutex_unlock(&mutex);
-            bool closed = send_state(2);
-            pthread_mutex_lock(&mutex);
-            if(!closed) { disabled = true; break; }
-            wait_until(now_ms() + OFF_ACK_MS, true);
+            if(!close_when_idle()) { disabled = true; break; }
+            wait_until(now_ms() + PROTOCOL_FEEDBACK_REPLY_MS, true);
             if(off_ack) { owned = disabled = false; break; }
             if(!running) break;
         }

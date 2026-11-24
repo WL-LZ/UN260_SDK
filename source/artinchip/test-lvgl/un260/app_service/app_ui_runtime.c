@@ -171,7 +171,6 @@ static void app_ui_runtime_poll_upgrade(uint32_t now_ms)
 
 void app_ui_runtime_poll(uint32_t now_ms)
 {
-    app_touch_sound_poll();
     /* The service owns its writer even if an upgrade view is destroyed. */
     if ((uint32_t)(now_ms - g_upgrade_poll_tick) >= APP_UI_UPGRADE_POLL_INTERVAL_MS) {
         g_upgrade_poll_tick = now_ms;
@@ -192,6 +191,10 @@ void app_ui_runtime_poll(uint32_t now_ms)
     app_setting_runtime_poll(now_ms);
     page_collection_poll();
     page_protocol_log_poll();
+    /* A just-finished local save publishes its application callback at frame
+     * commit. Give that callback this tick before starting the same tap's sound. */
+    const bool applying_preset = g_operation_notice.workspace &&
+                                 g_operation_notice.workspace_operation == APP_UI_NOTICE_BATCH_APPLY;
     if (workspace_service_poll(now_ms))
         ui_manager_publish_data_changed(UI_DATA_TOPIC_MACHINE_SETTINGS);
     app_ui_runtime_poll_operation_notices();
@@ -207,4 +210,6 @@ void app_ui_runtime_poll(uint32_t now_ms)
     app_auto_qr_poll(now_ms);
     app_ui_runtime_poll_upgrade(now_ms);
     app_standby_runtime_poll(now_ms);
+    /* Dispatch this tick's business work before offering a touch pulse. */
+    app_touch_sound_poll(applying_preset);
 }

@@ -29,6 +29,9 @@ static counting_sim_t data;
 static bool g_no_note_motor_active, g_no_note_denom_pending, diagnostic, locked, multi_query;
 static bool g_add_result_cleared;
 static bool add_commit_deferred;
+static void count_mode_service_count_started(void){}
+static void app_setting_runtime_cancel_mode_clear(void){}
+static void counting_denom_reply_begin_count(counting_detail_state_t *state){assert(state==&g_counting_detail_state);}
 static bool app_add_runtime_before_count_start(void){return !add_commit_deferred;}
 static void app_add_runtime_poll(void){}
 static bool counting_denom_query_complete(counting_detail_state_t *state)
@@ -54,6 +57,12 @@ bool counting_history_can_start(void){return true;}
 int protocol_send(uint8_t cmd,const uint8_t *payload,uint16_t len){
  assert(cmd==0x0A&&len==1&&payload[0]==1);return 6;
 }
+
+int protocol_send_when_feedback_clear(uint8_t cmd, const uint8_t *payload, uint16_t len)
+{
+    return protocol_send(cmd, payload, len);
+}
+
 static bool work_mode_service_diagnostic_active(void){return diagnostic;}
 static bool counting_multi_query_busy(void){return multi_query;}
 static void page_01_main_set_counting_locked(bool v){locked=v;}

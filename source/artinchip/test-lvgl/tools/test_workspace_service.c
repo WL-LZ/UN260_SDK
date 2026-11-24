@@ -47,7 +47,14 @@ static bool batch_confirmed=true;
 uint8_t machine_state_batch_mode(void){return batch_mode;}
 uint32_t machine_state_batch_saved_value(uint8_t mode){return mode==AMOUNT_BATCH_MODE?amount_target:actuals[3];}
 bool machine_state_batch_confirmed(uint8_t mode){return batch_confirmed && mode==batch_mode;}
-bool setting_service_request_batch_value(uint8_t mode, uint32_t n){requested_batch_mode=mode;return send(3,n);}
+static bool defer_batch, unsent_batch;
+bool setting_service_request_batch_value(uint8_t mode, uint32_t value)
+{
+    requested_batch_mode = mode;
+    if (defer_batch) { unsent_batch = true; return true; }
+    return send(3, value);
+}
+void setting_service_cancel_unsent_batch(void) { unsent_batch = false; }
 bool count_mode_service_request(uint8_t n){return send(6,n==MODE_SDC?2:n==MODE_CNT?3:1);}
 bool setting_service_request_speed(uint8_t n){return send(0,n);}
 bool setting_service_request_fo_mode(uint8_t n){return send(1,n);}
@@ -202,5 +209,22 @@ int main(void)
     assert(commands==before+1 && last_value==10 && requested_batch_mode==AMOUNT_BATCH_MODE);
     assert(!workspace_service_owns_command(0x06)&&workspace_service_owns_command(0x07));
     assert(workspace_service_reject_command(0x07));
+    /* Leaving a profile removes its accepted but unwritten Batch selection.
+     * A new machine conflict while it is waiting must remove it as well. */
+    before = commands;
+    defer_batch = true;
+    assert(workspace_service_apply(&p,12000));
+    workspace_service_poll(12001);
+    assert(unsent_batch && commands == before);
+    workspace_service_cancel_apply();
+    assert(!unsent_batch && workspace_service_apply_result() == WORKSPACE_APPLY_CANCELLED);
+    assert(workspace_service_apply(&p,12100));
+    workspace_service_poll(12101);
+    assert(unsent_batch && commands == before);
+    running = true;
+    workspace_service_poll(12102);
+    assert(!unsent_batch && workspace_service_apply_result() == WORKSPACE_APPLY_UNCONFIRMED);
+    running = false;
+    defer_batch = false;
     puts("PASS workspace service: profile apply + active Batch edit save/send/ACK boundaries, non-active/OFF/delete, ADD, storage/send failure, changed state, lifecycle and no delayed retry");
 }

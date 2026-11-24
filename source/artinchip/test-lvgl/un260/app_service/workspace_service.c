@@ -133,6 +133,14 @@ static bool profile_step_matches(void)
     if (apply.step == 6 && !count_mode_service_confirmed()) return false;
     return actual(apply.step) == value(apply.step, &apply.target);
 }
+static void profile_send_failed(void)
+{
+    ui_message_text_uint(&apply_message_info,UI_N_("%s could not be sent. %u changes confirmed; remaining steps were not sent."),steps[apply.step],apply.confirmed);
+    apply.active = false;
+    apply.waiting = false;
+    apply_result = WORKSPACE_APPLY_FAILED;
+}
+
 bool workspace_service_poll(uint32_t now)
 {
     bool changed=workspace_store_poll();
@@ -146,13 +154,14 @@ bool workspace_service_poll(uint32_t now)
     if(apply.step==7) {apply.active=false;apply_result=WORKSPACE_APPLY_SUCCEEDED;ui_message_key(&apply_message_info,UI_N_("Profile applied. Device values confirmed."));return true;}
     const char *blocked=machine_blocker();
     if(blocked||(apply.waiting&&(uint32_t)(now-apply.since)>1800)) {
+        if (apply.step == 3 && apply.waiting) setting_service_cancel_unsent_batch();
         ui_message_text_uint(&apply_message_info,UI_N_("Stopped at %s. %u changes confirmed. Check actual values before retrying.") ,steps[apply.step],apply.confirmed);
         apply.active=false;apply_result=WORKSPACE_APPLY_UNCONFIRMED;return true;
     }
     if(!apply.waiting) {
         if(!request(apply.step,value(apply.step,&apply.target))) {
-            ui_message_text_uint(&apply_message_info,UI_N_("%s could not be sent. %u changes confirmed; remaining steps were not sent."),steps[apply.step],apply.confirmed);
-            apply.active=false;apply_result=WORKSPACE_APPLY_FAILED;return true;
+            profile_send_failed();
+            return true;
         }
         apply.waiting=true;apply.since=now;ui_message_text(&apply_message_info,UI_N_("Waiting for %s confirmation...") ,steps[apply.step]);changed=true;
     }return changed;
@@ -163,6 +172,7 @@ workspace_apply_result_t workspace_service_apply_result(void){return apply_resul
 void workspace_service_cancel_apply(void)
 {
     if(!apply.active)return;
+    if (apply.step == 3 && apply.waiting) setting_service_cancel_unsent_batch();
     apply.active=false;apply_result=WORKSPACE_APPLY_CANCELLED;ui_message_key(&apply_message_info,UI_N_("Remaining steps cancelled. An already-sent command may still complete."));
 }
 const char *workspace_service_apply_message(void){ui_message_render(&apply_message_info,apply.message,sizeof(apply.message));return apply.message;}
@@ -256,6 +266,20 @@ bool workspace_service_owns_command(uint8_t command)
     return commands[apply.step] == command;
 }
 
+/* Hardware may have started counting while a selection waited for the wire. */
+bool workspace_service_batch_wire_allowed(void)
+{
+    if (apply.active && apply.step == 3 && apply.waiting)
+        return !machine_blocker();
+    return !machine_operation_blocker();
+}
+
+bool workspace_service_batch_send_failed(uint8_t command)
+{
+    if (!workspace_service_owns_command(command)) return false;
+    profile_send_failed();
+    return true;
+}
 bool workspace_service_reject_command(uint8_t command)
 {
     if (!workspace_service_owns_command(command)) return false;

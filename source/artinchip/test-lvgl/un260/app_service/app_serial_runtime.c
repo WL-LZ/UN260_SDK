@@ -28,7 +28,7 @@ static int fd6 = -1;
 
 static void app_serial_runtime_observe_reply(const uint8_t *frame, uint16_t len)
 {
-    protocol_tx_gate_on_reply(frame[3]);
+    protocol_tx_gate_on_reply(frame, len);
     if(len == 6 && frame[3] == 0x4A && frame[4] <= 2)
         buzzer_service_on_reply(frame[4]);
 }
@@ -58,7 +58,7 @@ static int protocol_write_frame(const uint8_t *buf, uint16_t frame_len)
     uart_log_hex(fd6, log_prefix, buf, frame_len, frame_len);
     return uart_send(fd4, (const char *)buf, frame_len);
 }
-static int protocol_send_frame(uint8_t cmd_g, const uint8_t *cmd_s, uint16_t cmd_s_len, bool optional)
+static int protocol_send_frame(uint8_t cmd_g, const uint8_t *cmd_s, uint16_t cmd_s_len, protocol_tx_policy_t policy)
 {
     uint8_t buf[PROTOCOL_FRAME_MAX_SIZE];
     int frame_len;
@@ -74,15 +74,23 @@ static int protocol_send_frame(uint8_t cmd_g, const uint8_t *cmd_s, uint16_t cmd
         return -1;
     }
 
-    return protocol_tx_gate_send(buf, (uint16_t)frame_len, optional, protocol_write_frame);
+    return protocol_tx_gate_send(buf, (uint16_t)frame_len, policy, protocol_write_frame);
 }
 int protocol_send(uint8_t cmd_g, const uint8_t *cmd_s, uint16_t cmd_s_len)
 {
-    return protocol_send_frame(cmd_g,cmd_s,cmd_s_len,false);
+    return protocol_send_frame(cmd_g, cmd_s, cmd_s_len, PROTOCOL_TX_IMMEDIATE);
 }
 int protocol_send_if_idle(uint8_t cmd_g, const uint8_t *cmd_s, uint16_t cmd_s_len)
 {
-    return protocol_send_frame(cmd_g,cmd_s,cmd_s_len,true);
+    return protocol_send_frame(cmd_g, cmd_s, cmd_s_len, PROTOCOL_TX_FEEDBACK_IF_IDLE);
+}
+int protocol_send_when_feedback_clear(uint8_t cmd_g, const uint8_t *cmd_s, uint16_t cmd_s_len)
+{
+    return protocol_send_frame(cmd_g, cmd_s, cmd_s_len, PROTOCOL_TX_AFTER_FEEDBACK);
+}
+int protocol_send_stop_when_feedback_clear(uint8_t cmd_g, const uint8_t *cmd_s, uint16_t cmd_s_len)
+{
+    return protocol_send_frame(cmd_g, cmd_s, cmd_s_len, PROTOCOL_TX_STOP_AFTER_FEEDBACK);
 }
 
 static void app_serial_runtime_close_devices(void)

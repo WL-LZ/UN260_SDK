@@ -100,6 +100,8 @@ int main(void)
         /* Startup resets the lane, each business request gates optional ON,
            and only the matching RX reply releases it after settling. */
         assert(protocol_send_if_idle(0x4A, &sub, 1) == 6);
+        const uint8_t sound_reply[] = {0xFD,0xDF,6,0x4A,1,0x50};
+        assert(observer); observer(sound_reply,sizeof(sound_reply));
         assert(protocol_send(0x01, &sub, 1) == 6);
         fake_ms += 50;
         assert(protocol_send_if_idle(0x4A, &sub, 1) == 0);

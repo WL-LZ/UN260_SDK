@@ -37,6 +37,10 @@ static bool work_mode_pending;
 void work_mode_service_get_snapshot(work_mode_snapshot_t *mode){*mode=(work_mode_snapshot_t){.pending=work_mode_pending};}
 int protocol_send(uint8_t command,const uint8_t *payload,uint16_t length)
 {assert(payload&&length&&command!=0x3D&&command!=0x0A);++sends;sent_command=command;sent_value=payload[0];return send_failed?-1:length;}
+int protocol_send_when_feedback_clear(uint8_t cmd, const uint8_t *payload, uint16_t length)
+{
+    return protocol_send(cmd, payload, length);
+}
 static ui_page_t ui_manager_get_current_page(void){return page;}
 static bool workspace_service_owns_command(uint8_t command){return profile_owned&&(command==4||command==0x3A);}
 static void workspace_service_reject_command(uint8_t command){assert(command==4||command==0x3A);++profile_rejections;profile_owned=false;}
