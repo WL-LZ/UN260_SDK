@@ -17,7 +17,8 @@ void app_fault_recovery_stacker_cleared(void);
 /* Timeout releases only the in-flight request; it never reopens a read guide. */
 void app_fault_recovery_poll(void);
 /* Full pockets 0x0A/02/{05,07,08}, jams 0x0F/01..05 and preset 0x06/04 use
- * 0x3D. A full-pocket ACK releases the latch without proving physical recovery. */
+ * 0x3D. Notes Batch sends at most once per confirmed run. The ACK releases
+ * the latch without proving that any physical pocket was emptied. */
 bool app_fault_recovery_request_clear(machine_fault_key_t key);
 void app_fault_recovery_handle_clear_result(uint8_t result);
 /* Explicit START releases a known clearable controller fault latch first. */

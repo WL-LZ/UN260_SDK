@@ -26,7 +26,7 @@ bool fault_popup_show_key(machine_fault_key_t k){assert(machine_fault_find(k,NUL
 void fault_popup_repeat_notice(machine_fault_key_t k){(void)k;++repeated;}
 void fault_popup_resolve_key(machine_fault_key_t k){machine_fault_clear_key(k);++resolved;}
 void smart_island_register_fault_phase_cb(smart_island_fault_phase_cb_t cb){phase=cb;}
-int protocol_send(uint8_t cmd,const uint8_t *data,uint16_t size){assert(cmd==0x3D&&size==1&&*data==1);++tx;return fail?-1:0;}
+int protocol_send(uint8_t cmd,const uint8_t *data,uint16_t size){assert(cmd==0x3D&&size==1&&*data==1);++tx;return fail?-1:6;}
 static void elapsed(uint32_t ms){now+=ms;app_fault_recovery_poll();}
 static void fixture(machine_fault_key_t fault,bool automatic)
 {
@@ -273,77 +273,70 @@ static void batch_report(void)
  app_fault_recovery_report(batch_full);
  machine_fault_report_event(batch_full);
 }
-static void test_batch_authorization_and_retry(void)
+static void test_batch_one_release_per_full_pocket(void)
 {
- /* Hidden/cancelled presentation cannot begin recovery by itself. */
- fixture(batch_full,false);batch_report();unsigned before=tx;
- phase(batch_full,SMART_ISLAND_FAULT_CANCEL);elapsed(30000);
- phase(batch_full,SMART_ISLAND_FAULT_BEGIN);elapsed(30000);
- assert(tx==before&&machine_fault_find(batch_full,NULL));
- phase(batch_full,SMART_ISLAND_FAULT_END);assert(tx==before+1);
- phase(batch_full,SMART_ISLAND_FAULT_END);app_fault_recovery_poll();assert(tx==before+1);
- elapsed(2999);assert(tx==before+1);
- elapsed(1);assert(tx==before+2); /* No 3D reply: continue the authorised Batch handshake. */
- for(unsigned retry=0;retry<5;++retry){
-  unsigned attempts=tx;batch_report();phase(batch_full,SMART_ISLAND_FAULT_END);
-  elapsed(2999);assert(tx==attempts);elapsed(1);assert(tx==attempts+1);
+ /* The first eligible island END or popup Confirm keeps its existing timing. */
+ for(unsigned popup=0;popup<2;++popup)for(unsigned outcome=0;outcome<3;++outcome){
+  fixture(batch_full,popup!=0);batch_report();unsigned before=tx;
+  phase(batch_full,SMART_ISLAND_FAULT_CANCEL);elapsed(30000);
+  phase(batch_full,SMART_ISLAND_FAULT_BEGIN);elapsed(30000);
+  assert(tx==before&&machine_fault_find(batch_full,NULL));
+  modal=popup!=0;phase(batch_full,SMART_ISLAND_FAULT_END);
+  if(popup){
+   elapsed(3000);assert(tx==before);
+   assert(app_fault_recovery_request_clear(batch_full));machine_fault_acknowledge(batch_full);modal=false;
+  }
+  assert(tx==before+1);
+  if(outcome<2)app_fault_recovery_handle_clear_result(outcome==0?1:2);
+  for(unsigned period=0;period<32;++period){
+   if(period<3){batch_report();phase(batch_full,SMART_ISLAND_FAULT_END);}
+   elapsed(3000);assert(tx==before+1&&machine_fault_find(batch_full,NULL));
+  }
+  /* A button press and a new Run are still accepted after an unconfirmed response. */
+  assert(app_fault_recovery_request_clear(batch_full));
+  assert(app_fault_recovery_prepare_start()&&tx==before+1);
+  app_fault_recovery_stacker_cleared();app_fault_recovery_stacker_cleared();elapsed(30000);
+  assert(!machine_fault_find(batch_full,NULL)&&tx==before+1);
+  batch_report();assert(app_fault_recovery_request_clear(batch_full)&&tx==before+1); /* Late full report before a real START. */
  }
- /* Popup ON has no END authorization; Confirm arms recovery despite read acknowledgement. */
- fixture(batch_full,true);batch_report();before=tx;modal=true;
- phase(batch_full,SMART_ISLAND_FAULT_END);elapsed(30000);assert(tx==before);
- assert(app_fault_recovery_request_clear(batch_full)&&tx==before+1);
- machine_fault_acknowledge(batch_full);modal=false;
- phase(batch_full,SMART_ISLAND_FAULT_END);elapsed(2999);assert(tx==before+1);
- elapsed(1);assert(tx==before+2&&machine_fault_find(batch_full,NULL));
- app_fault_recovery_clear();elapsed(30000);assert(tx==before+2); /* Real START owns this same cancellation. */
- /* Preparing an explicit START preserves the established release-before-START path. */
- fixture(batch_full,false);batch_report();before=tx;
- assert(app_fault_recovery_prepare_start()&&tx==before+1);
- elapsed(3000);assert(tx==before+2);
- app_fault_recovery_handle_clear_result(1);
- assert(machine_fault_find(batch_full,NULL));elapsed(2999);assert(tx==before+2);
- elapsed(1);assert(tx==before+3);app_fault_recovery_stacker_cleared();
- elapsed(30000);assert(tx==before+3);
 }
-static void test_batch_failure_and_result_ordering(void)
+
+static void test_batch_failed_write_and_wrap(void)
 {
- for(unsigned automatic=0;automatic<2;++automatic){
-  fixture(batch_full,automatic!=0);batch_report();unsigned before=tx;
+ for(unsigned popup=0;popup<2;++popup){
+  fixture(batch_full,popup!=0);batch_report();unsigned before=tx;
   fail=true;assert(!app_fault_recovery_request_clear(batch_full)&&tx==before+1);
-  /* A failed transport attempt consumes the same budget, even when polls are frequent. */
-  for(unsigned i=0;i<2999;++i)elapsed(1);
-  assert(tx==before+1);elapsed(1);assert(tx==before+2);
-  fail=false;elapsed(2999);assert(tx==before+2);elapsed(1);assert(tx==before+3);
-  elapsed(2500);app_fault_recovery_handle_clear_result(2);assert(tx==before+3);
-  elapsed(499);assert(tx==before+3);elapsed(1);assert(tx==before+4);
-  /* Repeated 06/04 is a newer controller report; an older untagged ACK cannot erase it. */
-  batch_report();app_fault_recovery_handle_clear_result(1);
-  assert(machine_fault_find(batch_full,NULL)&&tx==before+4);
-  elapsed(2999);assert(tx==before+4);elapsed(1);assert(tx==before+5);
-  app_fault_recovery_handle_clear_result(1);assert(machine_fault_find(batch_full,NULL));
-  elapsed(2999);assert(tx==before+5);elapsed(1);assert(tx==before+6);
-  app_fault_recovery_stacker_cleared();elapsed(30000);assert(tx==before+6);
+  fail=false;
+  for(unsigned period=0;period<32;++period){elapsed(3000);assert(tx==before+1);}
+  /* No successful write yet. The user's next attempt can send the release. */
+  assert(app_fault_recovery_request_clear(batch_full)&&tx==before+2);
+  batch_report();app_fault_recovery_handle_clear_result(1);elapsed(6000);
+  assert(machine_fault_find(batch_full,NULL)&&tx==before+2);
+  app_fault_recovery_stacker_cleared();
  }
- /* The deadline uses modular arithmetic through the uptime wrap. */
  fixture(batch_full,false);batch_report();now=UINT32_MAX-999;unsigned before=tx;
- assert(app_fault_recovery_request_clear(batch_full));elapsed(2999);assert(tx==before+1);
- elapsed(1);assert(tx==before+2);app_fault_recovery_stacker_cleared();
+ assert(app_fault_recovery_prepare_start()&&tx==before+1);
+ elapsed(2999);elapsed(1);elapsed(30000);
+ assert(app_fault_recovery_prepare_start()&&tx==before+1);
+ app_fault_recovery_stacker_cleared();
 }
+
 static void test_batch_physical_clear_and_other_faults(void)
 {
  for(unsigned automatic=0;automatic<2;++automatic){
   fixture(batch_full,automatic!=0);batch_report();unsigned before=tx;
   assert(app_fault_recovery_request_clear(batch_full)&&tx==before+1);
-  elapsed(3000);assert(tx==before+2); /* Late cash removal still has an active release handshake. */
+  elapsed(90000);assert(tx==before+1); /* Late cash removal is independent of a wire ACK. */
   app_fault_recovery_stacker_cleared();app_fault_recovery_stacker_cleared();
-  assert(!machine_fault_find(batch_full,NULL));elapsed(30000);assert(tx==before+2);
-  /* 51 retains the old transaction. A new Batch must not consume its delayed ACK. */
+  assert(!machine_fault_find(batch_full,NULL));elapsed(30000);assert(tx==before+1);
+  /* After 51, a late full report and a delayed ACK belong to the old group. */
   fixture(batch_full,automatic!=0);batch_report();before=tx;
   assert(app_fault_recovery_request_clear(batch_full));app_fault_recovery_stacker_cleared();
   batch_report();assert(app_fault_recovery_request_clear(batch_full)&&tx==before+1);
-  app_fault_recovery_handle_clear_result(1);assert(machine_fault_find(batch_full,NULL)&&tx==before+1);
-  elapsed(3000);assert(tx==before+2);app_fault_recovery_stacker_cleared();
-  /* A jam terminates only Batch retries; the jam retains its own original END policy. */
+  app_fault_recovery_handle_clear_result(1);elapsed(1);
+  assert(machine_fault_find(batch_full,NULL)&&tx==before+1);
+  elapsed(6000);assert(tx==before+1);app_fault_recovery_stacker_cleared();
+  /* A new jam retains its own END policy and cannot retransmit the Batch release. */
   fixture(batch_full,false);batch_report();before=tx;phase(batch_full,SMART_ISLAND_FAULT_END);
   machine_fault_key_t jam={MACHINE_FAULT_RUNTIME,0,2};
   app_fault_recovery_report(jam);machine_fault_report(jam);elapsed(3000);assert(tx==before+1);
@@ -367,6 +360,24 @@ static void test_batch_physical_clear_and_other_faults(void)
  }
 }
 
+
+static void test_batch_behind_queued_full_pocket(void)
+{
+ /* Wire commands have no fault key. Check each distinct pending owner by
+  * coalescing an explicit request for its key while its ACK is outstanding. */
+ const machine_fault_key_t jam={MACHINE_FAULT_RUNTIME,0,2}, pocket={MACHINE_FAULT_START,2,7};
+ fixture(jam,false);app_fault_recovery_report(jam);unsigned before=tx;
+ assert(app_fault_recovery_request_clear(jam)&&tx==before+1);
+ machine_fault_report_event(pocket);app_fault_recovery_report(pocket);
+ batch_report();assert(!app_fault_recovery_request_clear(batch_full)&&tx==before+1);
+ app_fault_recovery_handle_clear_result(1);assert(tx==before+2);
+ assert(app_fault_recovery_request_clear(pocket)&&tx==before+2);
+ app_fault_recovery_handle_clear_result(1);assert(tx==before+3);
+ assert(app_fault_recovery_request_clear(batch_full)&&tx==before+3);
+ app_fault_recovery_handle_clear_result(1);elapsed(90000);assert(tx==before+3);
+ assert(!machine_fault_find(jam,NULL)&&machine_fault_find(pocket,NULL)&&machine_fault_find(batch_full,NULL));
+ app_fault_recovery_stacker_cleared();assert(!machine_fault_find(pocket,NULL)&&!machine_fault_find(batch_full,NULL));
+}
 
 static void test_batch_new_sensor_boot_isolation(void)
 {
@@ -404,8 +415,8 @@ static void test_batch_new_sensor_boot_isolation(void)
 
 int main(void){
  app_fault_recovery_init();auto_popup=false;
- test_batch_new_sensor_boot_isolation();
- test_batch_authorization_and_retry();test_batch_failure_and_result_ordering();test_batch_physical_clear_and_other_faults();
+ test_batch_behind_queued_full_pocket();test_batch_new_sensor_boot_isolation();
+ test_batch_one_release_per_full_pocket();test_batch_failed_write_and_wrap();test_batch_physical_clear_and_other_faults();
  app_fault_recovery_clear();machine_fault_clear();tx=shown=resolved=repeated=now=0;
  machine_fault_key_t jam={MACHINE_FAULT_RUNTIME,0,2};
  machine_fault_report(jam);app_fault_recovery_report(jam);
@@ -446,7 +457,7 @@ int main(void){
  /* Batch clear waits for the report that was already sent, not a 3s retry. */
  fixture((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4},false);
  app_fault_recovery_report(key);before=tx;report_active=true;
- phase(key,SMART_ISLAND_FAULT_END);elapsed(100);assert(tx==before);
+ phase(key,SMART_ISLAND_FAULT_END);elapsed(9000);batch_report();phase(key,SMART_ISLAND_FAULT_END);assert(tx==before);
  report_active=false;elapsed(1);assert(tx==before+1);
  app_fault_recovery_stacker_cleared();elapsed(3001);assert(tx==before+1);
  /* Explicit Confirm after transfer completion consumes the queued send once. */
@@ -467,5 +478,5 @@ int main(void){
  test_latched_popup_modes();
  test_pocket_modes();test_pending_coalescing();test_pocket_send_failure();test_pocket_timeout_ordering();test_waiting_pocket();
  test_confirmed_pocket_no_replay();test_superseded_failure_no_old_presentation();
- puts("PASS recovery service: Batch END/Confirm/prestart authorization, bounded 3s retry without ACK, repeated 06/04, failed sends, superseded ACK, late/duplicate 51 and START cancellation, unrelated-fault isolation;  acknowledged 05/07/08 never replay after timeout/FAIL; superseded FAIL cannot present old generation; timeout releases in-flight only; one END budget with explicit retry; full pockets 05/07/08 auto-handshake in both Popup modes and while hidden; latch ACK retains physical faults; same-key pending coalescing; waiting pocket/generation survives old ACK/failure/timeout; 51 clears only genuine-pocket 07 and Batch; jam policy, no-command faults and send failure retained");
+ puts("PASS recovery service: Batch END/Confirm/prestart authorization, one wire release through 32 elapsed 3s periods without ACK, repeated 06/04, failed sends, superseded ACK, late/duplicate 51 and START cancellation, unrelated-fault isolation;  acknowledged 05/07/08 never replay after timeout/FAIL; superseded FAIL cannot present old generation; timeout releases in-flight only; one END budget with explicit retry; full pockets 05/07/08 auto-handshake in both Popup modes and while hidden; latch ACK retains physical faults; same-key pending coalescing; waiting pocket/generation survives old ACK/failure/timeout; 51 clears only genuine-pocket 07 and Batch; jam policy, no-command faults and send failure retained");
 }

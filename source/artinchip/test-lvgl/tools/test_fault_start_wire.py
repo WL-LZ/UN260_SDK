@@ -102,7 +102,7 @@ void ui_message_uint(ui_message_t *message,const char *key,uint32_t value){(void
 void ui_notice_post_message(ui_notice_kind_t kind,const char *key,const char *title,const ui_message_t *message){(void)kind;(void)key;(void)title;(void)message;assert(false);}
 bool counting_history_discard_pending(counting_session_state_t *session){(void)session;return false;}
 static void control_error(const char *tag,const uint8_t *buf,uint8_t len){(void)tag;(void)buf;(void)len;}
-static void control_started(const uint8_t *buf,uint8_t len){(void)buf;(void)len;++controller_starts;app_fault_recovery_clear();fault_popup_clear_runtime();}
+static void control_started(const uint8_t *buf,uint8_t len){(void)buf;(void)len;++controller_starts;app_fault_recovery_clear();fault_popup_clear_runtime();machine_fault_clear_source(MACHINE_FAULT_PRESET);}
 static void page_01_mode_switch_refre(void){}
 static void page_01_bottom_a_refresh_mode(bool animate){(void)animate;}
 static void page_01_curr_img_refre(void){}
@@ -162,6 +162,37 @@ static void clear_before_start(machine_fault_key_t key){
   assert(!machine_fault_find(key,NULL)&&tx==before); /* Physical recovery stops Batch retries; duplicate 51 is inert. */
  }
 }
+static void batch_release_across_controller_starts(void)
+{
+ const machine_fault_key_t batch={MACHINE_FAULT_PRESET,MACHINE_PRESET_NOTES,4};
+ const uint8_t started[]={0xFD,0xDF,7,0x0A,1,1,0x26};
+ for(unsigned take=0; take<2; ++take){
+  reset();counting_session_state_t session={0};
+  report(batch);assert(app_fault_recovery_request_clear(batch)&&tx==1&&cmds[0]==0x3D);
+  now+=60;app_fault_recovery_report(batch);machine_fault_report_event(batch);
+  assert(app_fault_recovery_request_clear(batch)&&tx==1);
+  if(take){app_fault_recovery_stacker_cleared();app_fault_recovery_stacker_cleared();}
+  /* A confirmed controller start, without a UI RUN or prior 3D ACK, opens
+   * the next group in under 3s. Its first release must not wait on the old one. */
+  now+=450;app_counting_runtime_handle_control(0x0A,&session,started,sizeof(started));
+  assert(controller_starts==1&&session.start_confirmed&&!machine_fault_find(batch,NULL)&&tx==1);
+  now+=120;report(batch);
+  assert(app_fault_recovery_request_clear(batch)&&tx==2&&cmds[1]==0x3D);
+  for(unsigned i=0;i<32;++i){now+=3000;app_fault_recovery_poll();}
+  assert(tx==2&&machine_fault_find(batch,NULL));
+  app_fault_recovery_handle_clear_result(1);app_fault_recovery_stacker_cleared();
+  assert(!machine_fault_find(batch,NULL)&&tx==2);
+ }
+ /* After a long wait without a reply, genuine removal and auto START do not
+  * require another user gesture or a display-generated start request. */
+ reset();counting_session_state_t session={0};
+ report(batch);assert(app_fault_recovery_request_clear(batch)&&tx==1);
+ for(unsigned i=0;i<32;++i){now+=3000;app_fault_recovery_poll();}
+ assert(tx==1);app_fault_recovery_stacker_cleared();
+ app_counting_runtime_handle_control(0x0A,&session,started,sizeof(started));
+ assert(controller_starts==1&&session.start_confirmed&&tx==1&&!machine_fault_find(batch,NULL));
+}
+
 static void start_gates(void){
  reset();report((machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,2});
  history_ready=false;assert(!app_command_runtime_request_count_start()&&!tx);history_ready=true;
@@ -299,8 +330,9 @@ int main(void){
  for(uint8_t code=6;code<=7;++code)direct_start((machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,code});
  for(uint8_t code=1;code<=5;++code)clear_before_start((machine_fault_key_t){MACHINE_FAULT_RUNTIME,0,code});
  clear_before_start((machine_fault_key_t){MACHINE_FAULT_PRESET,0,4});
+ batch_release_across_controller_starts();
  start_gates();clear_failures();send_and_clear_guards();upgrade_start_gate();maintenance_start_gate();full_pocket_control();
- puts("PASS production CONTROL+START wire: real 0A success preserves pending04; late04/02 defers presentation without committing, late04/01 still confirms; RX full pockets 05/07/08 auto-send only 3D in both Popup modes without Confirm; repeated pending reports coalesce, old ACK cannot clear new generation; latch ACK retains physical fault until 0F00/real START; non-pocket direct 0A, jam policy, Batch ACK retains record until 51 and stops retries, upgrade/maintenance gates, send failure and timeouts retained");
+ puts("PASS production CONTROL+START wire: real 0A success preserves pending04; late04/02 defers presentation without committing, late04/01 still confirms; RX full pockets 05/07/08 auto-send only 3D in both Popup modes without Confirm; repeated pending reports coalesce, old ACK cannot clear new generation; latch ACK retains physical fault until 0F00/real START; non-pocket direct 0A, jam policy, one Batch release until 51/real START; rapid next group sends without an old ACK, upgrade/maintenance gates, send failure and timeouts retained");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='un260-start-wire-') as d:

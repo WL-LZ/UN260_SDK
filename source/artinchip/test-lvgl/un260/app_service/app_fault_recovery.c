@@ -10,17 +10,27 @@
 #include "un260/currency/currency_service.h"
 #include <string.h>
 
-#define BATCH_RECOVERY_RETRY_MS 3000U
+/* Controller START begins a new notes batch. Clearing the stacker completes
+ * an already reported batch but cannot authorize late repeats from that run. */
+typedef enum {
+    BATCH_CLEAR_NOT_REPORTED,
+    BATCH_CLEAR_AVAILABLE,
+    BATCH_CLEAR_WAITING,
+    BATCH_CLEAR_SEND_FAILED,
+    BATCH_CLEAR_SENT,
+    BATCH_CLEAR_TAKEN
+} batch_clear_phase_t;
 
 /* 0x3D/01 has no fault id. Keep at most one command awaiting a result so a
  * response cannot resolve a later, unrelated report. Both UI Confirm and a
- * completed island animation use this sender. Batch-only retries stay here. */
+ * completed island animation use this sender. */
 static struct {
     machine_fault_key_t key, pending_key, waiting_key;
     bool valid, needs_clear, pending, auto_popup, pending_auto_popup;
     bool pending_superseded, waiting_clear, waiting_auto_popup, notice_end_pending;
-    bool batch_retry_armed;
-    uint32_t sent_tick, batch_attempt_tick;
+    batch_clear_phase_t batch;
+    bool batch_waiting_auto_popup;
+    uint32_t sent_tick;
 } recovery;
 
 static struct {
@@ -112,7 +122,7 @@ static bool pocket_full(machine_fault_key_t key)
 
 static bool batch_full(machine_fault_key_t key)
 {
-    /* 0x3D latch clears and timed retries are specified for the notes preset. */
+    /* The notes preset owns this handshake; amount presets have a separate ABI. */
     return machine_fault_is_preset_full(key) && key.type == MACHINE_PRESET_NOTES;
 }
 
@@ -129,8 +139,11 @@ static bool clearable(machine_fault_key_t key)
 static bool send_clear(machine_fault_key_t key, bool auto_popup)
 {
     const uint8_t payload = 0x01;
-    if (batch_full(key)) recovery.batch_attempt_tick = app_clock_uptime_ms();
-    if (protocol_send(0x3D, &payload, 1) < 0) return false;
+    if (protocol_send(0x3D, &payload, 1) < 0) {
+        if (batch_full(key)) recovery.batch = BATCH_CLEAR_SEND_FAILED;
+        return false;
+    }
+    if (batch_full(key)) recovery.batch = BATCH_CLEAR_SENT;
     recovery.pending_key = key;
     recovery.pending_auto_popup = auto_popup;
     recovery.pending = true;
@@ -142,13 +155,20 @@ static bool send_clear(machine_fault_key_t key, bool auto_popup)
 bool app_fault_recovery_request_clear(machine_fault_key_t key)
 {
     if (!clearable(key)) return true;
-    /* Batch can be reported again instead of a clear ACK while notes remain.
-     * END/Confirm authorizes its bounded retries, never CLEAR or START. */
-    if (batch_full(key)) recovery.batch_retry_armed = true;
+    const bool batch = batch_full(key);
+    if (batch && (recovery.batch == BATCH_CLEAR_SENT || recovery.batch == BATCH_CLEAR_TAKEN))
+        return true;
     /* The reply carries no fault identity. A different fault must wait for
      * the previous reply or timeout; Confirm then stays open for retry. */
     bool auto_popup = recovery.valid && machine_fault_key_equal(recovery.key,key)
         ? recovery.auto_popup : fault_popup_get_auto_enabled();
+    /* An authorized Batch is independent of other clearable faults. A full
+     * pocket already waiting for the same unnumbered wire slot goes first. */
+    if (batch && (recovery.pending || recovery.waiting_clear || counting_report_transfer_active())) {
+        if (recovery.batch != BATCH_CLEAR_WAITING) recovery.batch_waiting_auto_popup = auto_popup;
+        recovery.batch = BATCH_CLEAR_WAITING;
+        return !recovery.pending || machine_fault_key_equal(recovery.pending_key, key);
+    }
     if (recovery.pending) {
         bool same_key = machine_fault_key_equal(recovery.pending_key, key);
         if (pocket_full(key) && (!same_key || recovery.pending_superseded)) {
@@ -157,12 +177,6 @@ bool app_fault_recovery_request_clear(machine_fault_key_t key)
             recovery.waiting_clear = true;
         }
         return same_key;
-    }
-    if (batch_full(key) && counting_report_transfer_active()) {
-        recovery.waiting_key = key;
-        recovery.waiting_auto_popup = auto_popup;
-        recovery.waiting_clear = true;
-        return true;
     }
     if (recovery.waiting_clear && machine_fault_key_equal(recovery.waiting_key, key))
         recovery.waiting_clear = false;
@@ -185,7 +199,7 @@ static void notice_phase(machine_fault_key_t key, smart_island_fault_phase_t pha
     /* Consume this report's END opportunity before a failed send can replay
      * its guide. Confirmed reports cannot authorize another automatic send. */
     recovery.notice_end_pending = false;
-    if (record.acknowledged) return;
+    if (record.acknowledged || (batch_full(key) && recovery.batch == BATCH_CLEAR_SEND_FAILED)) return;
     if (!app_fault_recovery_request_clear(key))
         fault_popup_repeat_notice(key);
 }
@@ -206,8 +220,8 @@ void app_fault_recovery_clear(void)
 void app_fault_recovery_stacker_cleared(void)
 {
     app_fault_recovery_cancel_setting_presentation();
-    recovery.batch_retry_armed = false;
-    if (recovery.waiting_clear && batch_full(recovery.waiting_key)) recovery.waiting_clear = false;
+    if (recovery.batch != BATCH_CLEAR_NOT_REPORTED) recovery.batch = BATCH_CLEAR_TAKEN;
+    if (recovery.pending && batch_full(recovery.pending_key)) recovery.pending_superseded = true;
     if (recovery.valid && batch_full(recovery.key)) {
         recovery.valid = false;
         recovery.needs_clear = false;
@@ -224,12 +238,13 @@ void app_fault_recovery_stacker_cleared(void)
 
 void app_fault_recovery_report(machine_fault_key_t key)
 {
-    if (!batch_full(key) && recovery.waiting_clear && batch_full(recovery.waiting_key))
-        recovery.waiting_clear = false;
+    if (batch_full(key) && recovery.batch == BATCH_CLEAR_NOT_REPORTED)
+        recovery.batch = BATCH_CLEAR_AVAILABLE;
+    if (!batch_full(key) && recovery.batch == BATCH_CLEAR_WAITING)
+        recovery.batch = BATCH_CLEAR_AVAILABLE;
     if (key.source == MACHINE_FAULT_BOOT || key.source == MACHINE_FAULT_SENSOR) {
         /* These reports enter outside counting recovery. A new physical
-         * guide must stop only Batch's retries and its older failure reply. */
-        recovery.batch_retry_armed = false;
+         * guide must supersede Batch's older failure reply. */
         if (recovery.pending && batch_full(recovery.pending_key))
             recovery.pending_superseded = true;
         if (recovery.valid && batch_full(recovery.key)) {
@@ -245,7 +260,6 @@ void app_fault_recovery_report(machine_fault_key_t key)
         key.source == MACHINE_FAULT_PRESET;
     if (known || (key.source == MACHINE_FAULT_RUNTIME && !key.code))
         app_fault_recovery_cancel_setting_presentation();
-    if (!batch_full(key)) recovery.batch_retry_armed = false;
     if (!known) { recovery.valid = false; return; }
     bool new_report = !recovery.valid || !machine_fault_key_equal(recovery.key,key) ||
         key.source == MACHINE_FAULT_START || batch_full(key) || !machine_fault_find(key,NULL);
@@ -281,13 +295,18 @@ static void present_unresolved(machine_fault_key_t key,bool auto_popup)
 
 static void request_waiting_clear(void)
 {
-    if (recovery.pending || !recovery.waiting_clear) return;
-    machine_fault_key_t key = recovery.waiting_key;
-    bool auto_popup = recovery.waiting_auto_popup;
-    if (batch_full(key) && counting_report_transfer_active()) return;
-    recovery.waiting_clear = false;
-    if (machine_fault_find(key, NULL) && !send_clear(key, auto_popup))
-        present_unresolved(key, auto_popup);
+    if (recovery.pending) return;
+    if (recovery.waiting_clear) {
+        machine_fault_key_t key = recovery.waiting_key;
+        recovery.waiting_clear = false;
+        if (machine_fault_find(key, NULL) && !send_clear(key, recovery.waiting_auto_popup))
+            present_unresolved(key, recovery.waiting_auto_popup);
+    }
+    if (recovery.pending || recovery.batch != BATCH_CLEAR_WAITING || counting_report_transfer_active()) return;
+    const machine_fault_key_t batch = {MACHINE_FAULT_PRESET, MACHINE_PRESET_NOTES, 4};
+    recovery.batch = BATCH_CLEAR_AVAILABLE;
+    if (machine_fault_find(batch, NULL) && !send_clear(batch, recovery.batch_waiting_auto_popup))
+        present_unresolved(batch, recovery.batch_waiting_auto_popup);
 }
 
 void app_fault_recovery_handle_clear_result(uint8_t result)
@@ -332,20 +351,8 @@ void app_fault_recovery_poll(void)
     if (recovery.pending && (uint32_t)(now - recovery.sent_tick) >= 3000U) {
         /* Missing ACKs do not prove recovery or authorize another guide. */
         recovery.pending = false;
-        request_waiting_clear();
     }
     request_waiting_clear();
-    if (!recovery.batch_retry_armed || recovery.waiting_clear) return;
-    if (!recovery.valid || !batch_full(recovery.key) ||
-        !machine_fault_find(recovery.key, NULL)) {
-        recovery.batch_retry_armed = false;
-        return;
-    }
-    /* Only a Batch END/Confirm authorizes this path. Preserve the shared
-     * in-flight transaction and throttle failed sends as well as missing ACKs. */
-    if (!recovery.pending && !counting_report_transfer_active() &&
-        (uint32_t)(now - recovery.batch_attempt_tick) >= BATCH_RECOVERY_RETRY_MS)
-        (void)send_clear(recovery.key, recovery.auto_popup);
 }
 
 bool app_fault_recovery_prepare_start(void)

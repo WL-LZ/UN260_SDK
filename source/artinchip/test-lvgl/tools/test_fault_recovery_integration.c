@@ -30,7 +30,8 @@ bool lv_qr_popup_is_showing(void){return false;}
 
 /* Page fixtures keep their existing sink; the separately linked recovery
  * service must send only the latch handshake, never CLEAR or START. */
-static bool recovery_send_failed;
+static bool recovery_send_failed, report_transfer_active;
+bool counting_report_transfer_active(void){return report_transfer_active;}
 static unsigned recovery_command_calls;
 int protocol_send(uint8_t cmd,const uint8_t *data,uint16_t size)
 {
@@ -636,7 +637,7 @@ static const machine_fault_key_t batch_full_key={MACHINE_FAULT_PRESET,0,4};
 static void batch_test_reset(bool automatic)
 {
     hide_fault_popup();machine_fault_clear();app_fault_recovery_clear();smart_island_faults_changed();
-    recovery_send_failed=false;recovery_clock_offset=0;fault_popup_set_auto_enabled(automatic);
+    recovery_send_failed=false;recovery_clock_offset=0;report_transfer_active=false;fault_popup_set_auto_enabled(automatic);
 }
 static void batch_test_report(void)
 {
@@ -669,13 +670,13 @@ static void test_batch_real_popup_and_island(void)
             confirm(NULL);assert(!popup.overlay&&protocol_calls==tx+1); /* The pending wire request is shared. */
             app_fault_recovery_handle_clear_result(1);assert(machine_fault_find(batch_full_key,NULL));
         }else{
-            batch_test_tick(5000);assert(protocol_calls>=tx+1);
-            batch_test_report(); /* The same report must recover beyond the previous two island notices. */
+            batch_test_tick(5000);assert(protocol_calls==tx+1);
+            batch_test_report(); /* A repeated full report may be shown without issuing another release. */
             assert(!popup.overlay&&g_si_ctx.view.scene==SMART_ISLAND_SCENE_WARNING);
         }
         unsigned attempts=protocol_calls;batch_test_tick(3000);
-        assert(protocol_calls==attempts+1&&machine_fault_find(batch_full_key,NULL));
-        attempts=protocol_calls;batch_test_tick(3000);assert(protocol_calls==attempts+1);
+        assert(attempts==tx+1&&protocol_calls==attempts&&machine_fault_find(batch_full_key,NULL));
+        batch_test_tick(3000);assert(protocol_calls==attempts);
         app_fault_recovery_stacker_cleared();app_fault_recovery_stacker_cleared();attempts=protocol_calls;
         assert(!machine_fault_find(batch_full_key,NULL)&&!popup.overlay);
         assert(!g_si_ctx.warning.fault.valid||g_si_ctx.warning.fault.source!=MACHINE_FAULT_PRESET);
@@ -685,15 +686,15 @@ static void test_batch_real_popup_and_island(void)
     batch_test_reset(false);unsigned tx=protocol_calls;batch_test_report();tick(600);
     app_fault_recovery_stacker_cleared();batch_test_tick(10000);
     assert(protocol_calls==tx&&!machine_fault_find(batch_full_key,NULL));
-    /* Hidden CANCEL cannot start an unrequested Batch retry. */
+    /* Hidden CANCEL cannot authorize an automatic wire release. */
     batch_test_reset(false);tx=protocol_calls;page_01_main_suspend();batch_test_report();
     batch_test_tick(20000);assert(protocol_calls==tx&&machine_fault_find(batch_full_key,NULL));
     app_fault_recovery_stacker_cleared();assert(page_01_main_resume());batch_test_tick(10000);
     assert(protocol_calls==tx&&!machine_fault_find(batch_full_key,NULL));
-    /* Once END authorises recovery, hiding Main cannot strand a controller latch. */
+    /* Hiding and resuming Main does not replay an already transmitted release. */
     batch_test_reset(false);tx=protocol_calls;batch_test_report();batch_test_tick(5000);
-    assert(protocol_calls>=tx+1);tx=protocol_calls;page_01_main_suspend();batch_test_tick(3000);
-    assert(protocol_calls==tx+1);app_fault_recovery_stacker_cleared();tx=protocol_calls;
+    assert(protocol_calls==tx+1);tx=protocol_calls;page_01_main_suspend();batch_test_tick(3000);
+    assert(protocol_calls==tx);app_fault_recovery_stacker_cleared();tx=protocol_calls;
     assert(page_01_main_resume());batch_test_tick(10000);assert(protocol_calls==tx);
     batch_test_reset(false);
 }
@@ -747,12 +748,26 @@ static void test_value_batch_real_popup_and_island(void)
     fault_popup_report_preset_full(amount);fault_popup_report_preset_full(amount);
     assert(protocol_calls==tx+1&&machine_fault_find(amount,NULL)&&machine_fault_find(batch_full_key,NULL));
     app_fault_recovery_handle_clear_result(1);batch_test_tick(3000);
-    assert(protocol_calls==tx+2&&machine_fault_find(amount,NULL)&&machine_fault_find(batch_full_key,NULL));
+    assert(protocol_calls==tx+1&&machine_fault_find(amount,NULL)&&machine_fault_find(batch_full_key,NULL));
     app_fault_recovery_stacker_cleared();batch_test_tick(6000);
-    assert(protocol_calls==tx+2&&!machine_fault_find(amount,NULL)&&!machine_fault_find(batch_full_key,NULL));
+    assert(protocol_calls==tx+1&&!machine_fault_find(amount,NULL)&&!machine_fault_find(batch_full_key,NULL));
     batch_test_reset(saved_auto);ui_notice_deinit();ui_notice_set_enabled(saved_top);
     machine_state_confirm_batch_amount(saved_amount);machine_state_confirm_batch_mode(saved_mode);
     ui_lang_set(saved_lang);page_01_update_language_texts();page_01_batch_refre();
+}
+static void test_batch_real_report_deferral(void)
+{
+    for(unsigned taken=0;taken<2;++taken){
+        batch_test_reset(true);unsigned tx=protocol_calls;
+        report_transfer_active=true;batch_test_report();
+        confirm(NULL);assert(!popup.overlay&&protocol_calls==tx);
+        batch_test_tick(9000);assert(protocol_calls==tx);
+        if(taken)app_fault_recovery_stacker_cleared();
+        report_transfer_active=false;batch_test_tick(100);
+        assert(protocol_calls==tx+(taken?0u:1u));
+        batch_test_tick(9000);assert(protocol_calls==tx+(taken?0u:1u));
+        app_fault_recovery_stacker_cleared();
+    }
 }
 static void test_batch_real_generation_and_failure(void)
 {
@@ -763,19 +778,19 @@ static void test_batch_real_generation_and_failure(void)
         assert(fault_popup_is_showing()==(automatic!=0));
         assert(app_fault_recovery_request_clear(batch_full_key)&&protocol_calls==tx+1);
         app_fault_recovery_handle_clear_result(1);assert(machine_fault_find(batch_full_key,NULL));
-        batch_test_tick(3000);assert(protocol_calls==tx+2);
+        batch_test_tick(3000);assert(protocol_calls==tx+1); /* 51 closed the old group; no new START yet. */
         app_fault_recovery_clear();fault_popup_clear_preset();tx=protocol_calls;
         batch_test_tick(10000);assert(protocol_calls==tx&&!machine_fault_find(batch_full_key,NULL));
     }
     batch_test_reset(true);batch_test_report();unsigned tx=protocol_calls;lv_obj_t *overlay=popup.overlay;
     recovery_send_failed=true;confirm(NULL);machine_fault_record_t record;
     assert(popup.overlay==overlay&&protocol_calls==tx+1&&machine_fault_find(batch_full_key,&record)&&!record.acknowledged);
-    batch_test_tick(2980);assert(protocol_calls==tx+1);batch_test_tick(20);assert(protocol_calls==tx+2);
-    recovery_send_failed=false;batch_test_tick(3000);assert(protocol_calls==tx+3);
+    batch_test_tick(6000);assert(protocol_calls==tx+1&&popup.overlay==overlay);
+    recovery_send_failed=false;confirm(NULL);assert(protocol_calls==tx+2&&!popup.overlay);
     /* A newer jam keeps its modal/animation while the older Batch timer is cancelled. */
     const machine_fault_key_t jam={MACHINE_FAULT_RUNTIME,0,2};
     app_fault_recovery_report(jam);fault_popup_report_runtime_fault(2);overlay=popup.overlay;
-    batch_test_tick(4000);assert(protocol_calls==tx+3&&popup.overlay==overlay&&machine_fault_key_equal(popup.key,jam));
+    batch_test_tick(4000);assert(protocol_calls==tx+2&&popup.overlay==overlay&&machine_fault_key_equal(popup.key,jam));
     batch_test_reset(false);
 }
 
@@ -1015,7 +1030,7 @@ int main(void)
     fault_test_progress("Batch isolation from fresh sensor / boot guides");
     test_batch_real_sensor_boot_isolation();
     fault_test_progress("Batch real Popup / island replay and bounded controller recovery");
-    test_batch_real_visuals();test_batch_real_popup_and_island();test_value_batch_real_popup_and_island();test_batch_real_generation_and_failure();
+    test_batch_real_visuals();test_batch_real_popup_and_island();test_value_batch_real_popup_and_island();test_batch_real_report_deferral();test_batch_real_generation_and_failure();
     fault_test_progress("Confirm without new START or controller reply");
     test_confirmed_pockets_without_new_start();
     test_confirm_send_failure_retry();
@@ -1081,5 +1096,5 @@ int main(void)
     fault(7);tx=protocol_calls;ui_main_destroy();tick(18000);app_fault_recovery_poll();assert(protocol_calls==tx);
     counting_data_clear_serials(counting_data_mutable());counting_data_clear_errors(counting_data_mutable());
     ui_notice_deinit();lv_img_decoder_delete(decoder);lv_deinit();host_external_assets_release();
-    puts("PASS real notice+island+popup+recovery: Batch pauses running display without FINISHED, preserves transport/history for late 02..05, keeps ordinary warning resume; Batch recurring 06/04 reopens Confirm, duplicate unread preserves live UI, bounded no-ACK recovery, quick/late cash removal, pending-generation isolation, failed-send retry and hidden authorization;  actual Confirm without START suppresses 05/07/08 timeout/FAIL replay in both Popup modes; superseded FAIL preserves the new live guide; failed Confirm retries; non-Batch END cannot self-retry; full pockets 05/07/08 automatically handshake in both Popup modes and while hidden without Confirm/Clear/START; ACK retains physical guide, 51 clears only 07; pending coalescing, preference ownership, runtime policy and suspend/destroy retained");
+    puts("PASS real notice+island+popup+recovery: Batch pauses running display without FINISHED, preserves transport/history for late 02..05, keeps ordinary warning resume; Batch recurring 06/04 reopens Confirm, duplicate unread preserves live UI, one release without an ACK, quick/late cash removal, pending-generation isolation, failed-send retry and hidden authorization;  actual Confirm without START suppresses 05/07/08 timeout/FAIL replay in both Popup modes; superseded FAIL preserves the new live guide; failed Confirm retries; non-Batch END cannot self-retry; full pockets 05/07/08 automatically handshake in both Popup modes and while hidden without Confirm/Clear/START; ACK retains physical guide, 51 clears only 07; pending coalescing, preference ownership, runtime policy and suspend/destroy retained");
 }
